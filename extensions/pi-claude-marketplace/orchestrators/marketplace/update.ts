@@ -31,7 +31,9 @@
 //  (`err.retryHint` remains on the error for programmatic inspection).
 //  - invalid GitHub base override: an `InvalidGitHubBaseUrlError` from the
 //  refresh or from a cascade plugin update fails the whole command; no row is
-//  rendered (GHB-03).
+//  rendered (GHB-03). A throw out of the missing-dependency step after the
+//  updates reaches the command only after the marketplace's update rows and
+//  notices are reported (D-PL2-21).
 //  - empty targets (no marketplaces configured): `{ marketplaces: [] }`
 //  renders the `(no marketplaces)` sentinel.
 //  - post-success cache cleanup: a `rm` runs to drop the stale completion
@@ -169,7 +171,12 @@ import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
+import type {
+  PluginUpdateFn,
+  PluginUpdateOutcome,
+  ScopeDependencyInstallFn,
+  ScopeDependencyInstallResult,
+} from "../types.ts";
 
 export interface UpdateMarketplaceOptions {
   readonly completionCache: CompletionCache;
@@ -184,6 +191,13 @@ export interface UpdateMarketplaceOptions {
    * is a NO-OP (tests inject a mock).
    */
   readonly pluginUpdate?: PluginUpdateFn;
+  /**
+   * D-PL2-10: `apply`'s missing-dependency step over the marketplace's scope.
+   * The autoupdate cascade runs it after its plugin updates, for missing
+   * dependencies of this marketplace's plugins, as Claude Code does after a
+   * background autoupdate. When omitted, the cascade runs no such step.
+   */
+  readonly installMissingDependencies?: ScopeDependencyInstallFn;
   /**
    * D-05: the command's run. Every emission renders from its soft-dependency
    * snapshot, and the `{requires ...}` markers are composed from it in the
@@ -221,6 +235,8 @@ export interface UpdateAllMarketplacesOptions {
   readonly cwd: string;
   readonly gitOps?: GitOps;
   readonly pluginUpdate?: PluginUpdateFn;
+  /** See `UpdateMarketplaceOptions.installMissingDependencies`. */
+  readonly installMissingDependencies?: ScopeDependencyInstallFn;
   /** See `UpdateMarketplaceOptions.run`. */
   readonly run: NotificationRun;
   /**
@@ -260,11 +276,16 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
     cardinality: "single",
     name: opts.name,
     scope: resolved.scope,
+    cwd: opts.cwd,
     locations: resolved.locations,
     gitOps,
     credentialOps,
+    reportedDependencies: new Set(),
     ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     ...(opts.pluginUpdate !== undefined && { pluginUpdate: opts.pluginUpdate }),
+    ...(opts.installMissingDependencies !== undefined && {
+      installMissingDependencies: opts.installMissingDependencies,
+    }),
     ...(opts.stateTransaction !== undefined && { stateTransaction: opts.stateTransaction }),
   });
 }
@@ -302,6 +323,9 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
     return;
   }
 
+  // WR-04: one set for the whole command, so a dependency that two
+  // autoupdated marketplaces of one scope declare is tried and reported once.
+  const reportedDependencies = new Set<string>();
   // Process sequentially.
   for (const t of targets) {
     // eslint-disable-next-line no-await-in-loop -- each refresh locks the scope and notifies in order
@@ -312,11 +336,16 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
       cardinality: "plural",
       name: t.name,
       scope: t.scope,
+      cwd: opts.cwd,
       locations: t.locations,
       gitOps,
       credentialOps,
+      reportedDependencies,
       ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
       ...(opts.pluginUpdate !== undefined && { pluginUpdate: opts.pluginUpdate }),
+      ...(opts.installMissingDependencies !== undefined && {
+        installMissingDependencies: opts.installMissingDependencies,
+      }),
     });
   }
 }
@@ -327,13 +356,26 @@ interface RefreshOneArgs {
   readonly cardinality: "single" | "plural";
   readonly name: string;
   readonly scope: Scope;
+  /** The command's working directory, which roots the project scope of the missing-dependency step. */
+  readonly cwd: string;
   readonly locations: ScopedLocations;
   readonly gitOps: GitOps;
   readonly pluginUpdate?: PluginUpdateFn;
+  readonly installMissingDependencies?: ScopeDependencyInstallFn;
+  /**
+   * D-PL2-01 / WR-04: the dependency rows this command already reported, as
+   * `dependencyRowKey` keys. The missing-dependency step adds its own.
+   */
+  readonly reportedDependencies: Set<string>;
   readonly run: NotificationRun;
   readonly credentialOps: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly stateTransaction?: LockedStateTransactionDeps;
+}
+
+/** A dependency row's key in `reportedDependencies`: the same key in two scopes is two installs. */
+function dependencyRowKey(scope: Scope, name: string): string {
+  return `${scope}:${name}`;
 }
 
 /**
@@ -576,14 +618,32 @@ async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapsh
   );
 }
 
+/** What the autoupdate cascade did: its plugin updates, then its missing-dependency installs. */
+interface AutoupdateCascade {
+  readonly outcomes: readonly PluginUpdateOutcome[];
+  readonly installs: ScopeDependencyInstallResult;
+}
+
+const NO_DEPENDENCY_INSTALLS: ScopeDependencyInstallResult = { rows: [], mcpConfigNotices: [] };
+
+const NO_AUTOUPDATE_CASCADE: AutoupdateCascade = { outcomes: [], installs: NO_DEPENDENCY_INSTALLS };
+
+/**
+ * The autoupdate cascade: each installed plugin's update, then (D-PL2-10) the
+ * missing-dependency step, so the step sees the versions the updates landed
+ * (E4 order). `report` gets the cascade before a throw out of the step leaves
+ * it, so the updates that committed are reported first (D-PL2-21). A throw
+ * out of a plugin update leaves without a report.
+ */
 async function cascadeAutoupdates(
   snapshot: RefreshSnapshot,
-  name: string,
-  scope: Scope,
-  pluginUpdate: PluginUpdateFn | undefined,
-): Promise<readonly PluginUpdateOutcome[]> {
+  args: RefreshOneArgs,
+  report: (cascade: AutoupdateCascade) => void,
+): Promise<void> {
+  const { name, scope, pluginUpdate } = args;
   if (!snapshot.autoupdate || pluginUpdate === undefined) {
-    return [];
+    report(NO_AUTOUPDATE_CASCADE);
+    return;
   }
 
   const outcomes: PluginUpdateOutcome[] = [];
@@ -628,7 +688,51 @@ async function cascadeAutoupdates(
     }
   }
 
-  return outcomes;
+  let installs = NO_DEPENDENCY_INSTALLS;
+  try {
+    installs = await installAutoupdateDependencies(args, outcomes);
+  } finally {
+    report({ outcomes, installs });
+  }
+}
+
+/**
+ * D-PL2-10: the missing-dependency step after an autoupdate, in the
+ * marketplace's scope, for missing dependencies that a plugin of this
+ * marketplace declares, as Claude Code limits it to declarers whose
+ * marketplace has autoupdate on (E1). A dependency this command already
+ * reported a row for, in an update of any cascade or in an earlier step, is
+ * not tried again, so one command reports one row per dependency (D-PL2-01,
+ * D-PL2-19, WR-04).
+ */
+async function installAutoupdateDependencies(
+  args: RefreshOneArgs,
+  outcomes: readonly PluginUpdateOutcome[],
+): Promise<ScopeDependencyInstallResult> {
+  const { installMissingDependencies, name, reportedDependencies, scope } = args;
+  for (const row of outcomes.flatMap((o) => o.dependencyRows ?? [])) {
+    reportedDependencies.add(dependencyRowKey(scope, row.name));
+  }
+
+  if (installMissingDependencies === undefined) {
+    return NO_DEPENDENCY_INSTALLS;
+  }
+
+  const installs = await installMissingDependencies({
+    ctx: args.ctx,
+    run: args.run,
+    scope,
+    cwd: args.cwd,
+    select: (install) =>
+      !reportedDependencies.has(
+        dependencyRowKey(scope, `${install.plugin}@${install.marketplace}`),
+      ) && install.declarers.some((declarer) => declarer.endsWith(`@${name}`)),
+  });
+  for (const row of installs.rows) {
+    reportedDependencies.add(dependencyRowKey(scope, row.name));
+  }
+
+  return installs;
 }
 
 /**
@@ -721,7 +825,7 @@ function surfaceCascadePackageNotes(
 }
 
 async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
-  const { ctx, cardinality, name, scope, locations, pluginUpdate, run } = args;
+  const { ctx, cardinality, name, scope, locations, run } = args;
 
   let snapshot: RefreshSnapshot | undefined;
   try {
@@ -788,7 +892,19 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
 
   // CASCADE OUTSIDE the outer guard. Honors MU-4 literal
   // "persisted before any plugin cascade runs".
-  const outcomes = await cascadeAutoupdates(snapshot, name, scope, pluginUpdate);
+  await cascadeAutoupdates(snapshot, args, (cascade) => {
+    notifyRefreshed(args, snapshot, cascade);
+  });
+}
+
+/** The refreshed marketplace's notification and the MCP config notices of its cascade. */
+function notifyRefreshed(
+  args: RefreshOneArgs,
+  snapshot: RefreshSnapshot,
+  cascade: AutoupdateCascade,
+): void {
+  const { ctx, cardinality, name, scope, pluginUpdate, run } = args;
+  const { outcomes, installs } = cascade;
 
   // CMC-32 / UXG-05 binding: BOTH the autoupdate-OFF (manifest-only refresh)
   // and the autoupdate-ON (cascade) paths now DISTINGUISH a no-op from a
@@ -846,7 +962,9 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   // stopped making. Catalog state `update-autoupdate-disabled-repin`.
   // When both hold, emit the SAME `(skipped) {up-to-date}` payload as the OFF
   // no-op (plugins:[] -> shouldEmitReloadHint stays false, warning severity).
-  const cascadeIsNoOp = outcomes.every((o) => o.partition === "unchanged");
+  // D-PL2-10: a missing-dependency install is a change too.
+  const cascadeIsNoOp =
+    outcomes.every((o) => o.partition === "unchanged") && installs.rows.length === 0;
   if (!snapshot.changed && cascadeIsNoOp) {
     // OUT-07 / D-12: autoupdate-ON no-op collapses to the OFF no-op shape
     // (plugins:[]) -> Single, one marketplace block.
@@ -877,10 +995,14 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       // construction, so the mapped rows are the narrowed Msg the
       // UPDATE_CONTEXT requires with no cast.
       // UPD-DEP-D1: the dependencies an update changed render beside its row.
-      plugins: outcomes.flatMap((o) => [
-        outcomeToCascadePluginMessage(o, scope),
-        ...(o.dependencyRows ?? []),
-      ]),
+      // D-PL2-10: the missing-dependency step's rows follow the update rows.
+      plugins: [
+        ...outcomes.flatMap((o) => [
+          outcomeToCascadePluginMessage(o, scope),
+          ...(o.dependencyRows ?? []),
+        ]),
+        ...installs.rows,
+      ],
     },
   ];
   notifyWithContext(ctx, run, UPDATE_CONTEXT, cascadeRows, undefined, cardinality);
@@ -889,11 +1011,10 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   // explain. A failed update can carry them too: its MCP commit succeeded
   // before a later bridge or the finalize failed. The no-op paths above have
   // only `unchanged` outcomes, which carry none.
-  notifyMcpConfigNotices(
-    ctx,
-    run,
-    outcomes.flatMap((o) =>
+  notifyMcpConfigNotices(ctx, run, [
+    ...outcomes.flatMap((o) =>
       o.partition === "updated" || o.partition === "failed" ? (o.mcpConfigNotices ?? []) : [],
     ),
-  );
+    ...installs.mcpConfigNotices,
+  ]);
 }

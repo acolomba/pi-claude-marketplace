@@ -14,25 +14,34 @@
 //   - Per-scope APPLY PASS with NO outer lock (CR-01 lesson preserved): for
 //     each scope's plan (skip when invalid-config aborted the read pass),
 //     drive the orchestrators (uninstallPlugin, removeMarketplace,
-//     addMarketplace, installPlugin, the missing-dependency install,
-//     setPluginEnabled) in fixed order so each step's precondition
-//     is established by the previous step:
+//     addMarketplace, installPlugin, setPluginEnabled, the catalog moves,
+//     the missing-dependency install) in fixed order so each step's
+//     precondition is established by the previous step (D-PL2-01):
 //
-//        uninstall -> remove -> add -> install -> install missing deps
-//                  -> [D-09-07 re-plan when something landed] -> enable -> disable
-//                  -> dependency-disable (LOAD-01)
+//        uninstall -> remove -> add -> install
+//                  -> [D-09-07 re-plan when a config install landed]
+//                  -> enable -> disable -> dependency-disable (LOAD-01)
 //                  -> source-mismatch (report-only)
-//                  -> converge
+//                  -> converge (catalog moves and deferred enables)
+//                  -> install missing deps -> the enables that waited on them
+//                  -> judgement
 //
 //     MISS-01 / D-09-06: `applyDependencyInstalls` installs a recorded
 //     plugin's missing declared dependency on every apply, because `apply` is
 //     the explicit command that changes state (D-02 supersedes D-09-13). It
 //     drives the SAME cascade `installPlugin` drives, rooted at each missing
-//     dependency instead of at a user-typed plugin. When it, or the install
-//     step before it, materialized or found already-recorded at
-//     least one key, D-09-07's `refreshTogglePlan` re-runs the read pass for
-//     this scope and substitutes ONLY the fresh plan's `pluginsToEnable`,
-//     `pluginsToDisable` and `pluginsToDependencyDisable` before the toggle
+//     dependency instead of at a user-typed plugin. D-PL2-01: it runs after
+//     the catalog moves, so a dependency a moved version needs, or one that
+//     needs a version a move lands, installs in the same apply. The plan
+//     counts the installs it schedules as landed (D-PL2-02), so the toggle
+//     step holds down no dependent that only waits on one, and the enables
+//     that wait on one run after it (D-PL2-16). The judgement over the
+//     final state then disables any dependent an install failed to satisfy
+//     (APPLY1-D1); it supersedes D-09-07's re-plan after a dependency
+//     install (D-PL2-04). When the install step materialized a plugin,
+//     D-09-07's `refreshTogglePlan` re-runs the read pass for this scope and
+//     substitutes ONLY the fresh plan's toggle buckets, its
+//     missing-dependency bucket and the enables that wait, before the toggle
 //     steps run -- the round-1 plan's uninstall / remove / add / install
 //     buckets and its source-mismatch rows are never re-driven.
 //
@@ -53,7 +62,8 @@
 //   - CONVERGE per readable scope, after the apply pass (APL-02 / D-08):
 //     `convergeScope` runs the planner `pending` uses over the scope as the
 //     pass left it and materializes each revision move through the update
-//     runner's converge entry (D-26), not reinstall. A move the planner holds
+//     runner's converge entry (D-26), not reinstall, then runs the
+//     missing-dependency install and the judgement. A move the planner holds
 //     or declines is reported with the row `pending` lists and is not run
 //     (D-12); a move that fails reports `(failed)` and the next move still
 //     runs (D-13).
@@ -89,7 +99,11 @@ import {
   notifyDiagnostic,
   notifyMcpConfigNotices,
 } from "../../shared/notification-dispatch.ts";
-import { type ContentReason, type Reason } from "../../shared/notification-types.ts";
+import {
+  type ContentReason,
+  type McpConfigNotice,
+  type Reason,
+} from "../../shared/notification-types.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import {
   redactAbsolutePaths,
@@ -125,15 +139,24 @@ import {
   dependenciesFirst,
   installedCopyReader,
   isPinnedCopy,
+  movesAfterInstalls,
   planConvergenceCascade,
+  stepsAfterInstalls,
 } from "./convergence.ts";
+import { reportDeclarerFailure } from "./delisted-plugins.ts";
 import { buildScopeSatisfactionVerdict, judgeFinalScope } from "./dependency-verdict.ts";
-import { blockedMoveOutcomes, convergedMoveOutcomes, enabledMoveOutcome } from "./notify.ts";
+import {
+  blockedMoveOutcomes,
+  convergedMoveOutcomes,
+  dependencyInstallRows,
+  enabledMoveOutcome,
+} from "./notify.ts";
 import {
   closeScopePass,
   notifyScopePasses,
   openScopePass,
   readPassForScope,
+  readPlainPlanForScope,
   runScopeIsolated,
 } from "./read-pass.ts";
 
@@ -144,12 +167,13 @@ import type {
   PluginEnableFailedOutcome,
   PluginInstallFailedOutcome,
 } from "./apply-outcomes.ts";
-import type { ConvergenceCascade, PlannedMove } from "./convergence.ts";
+import type { CascadeStep, ConvergenceCascade, PlannedMove } from "./convergence.ts";
 import type { ScopeSatisfactionVerdict, UnsatisfiedDeclaration } from "./dependency-verdict.ts";
 import type { ReconcileStateReader, ScopePassAccumulators } from "./read-pass.ts";
 import type {
   ApplyReconcileOptions,
   PlannedDependencyDisable,
+  PlannedDependencyInstall,
   PlannedPluginEnable,
   PlannedPluginUninstall,
   ReconcilePlan,
@@ -158,9 +182,10 @@ import type {
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { IndexFailure } from "../plugin/dependency-index.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 import type { UninstallPluginOperation } from "../plugin/uninstall.ts";
-import type { MovedDependency, PluginUpdateOutcome } from "../types.ts";
+import type { MovedDependency, PluginUpdateOutcome, ScopeDependencyInstallFn } from "../types.ts";
 
 /**
  * Apply one plan's marketplacesToRemove bucket. NO outer lock around the
@@ -764,7 +789,12 @@ async function applyPluginInstalls(
 
 /**
  * MISS-01 / MISS-02 / D-09-06: drive the missing-dependency install for
- * every entry the read pass's `pluginsToDependencyInstall` bucket planned.
+ * every entry of a plan's `pluginsToDependencyInstall` bucket.
+ *
+ * D-PL2-01: it runs after the catalog moves, so it sees the versions they
+ * landed and keeps RESV-05's refusal of an out-of-range installed dependency.
+ * D-PL2-11: a refusal keeps its `(failed)` row, where Claude Code only logs
+ * it; the dependent's `(disabled)` row comes from the judgement after it.
  *
  * D-09-09: on `installed`, one `plugin-installed` outcome is pushed PER
  * cascade member -- every materialized member gets a row under its own
@@ -779,13 +809,12 @@ async function applyPluginInstalls(
  * `redactedDependencyCascadeError` verbatim -- the same reused path
  * `applyPluginInstalls`'s failure arm already uses (D-09-10).
  *
- * Returns whether ANY entry was installed or skipped: both mean the
- * read-pass toggle verdict predates this step and is stale for that key
- * (D-09-07).
+ * Returns whether ANY entry was installed or found already present: both
+ * mean the enables that wait on it read the scope again (D-PL2-16).
  */
 async function applyDependencyInstalls(
   opts: ApplyReconcileOptions,
-  plan: ReconcilePlan,
+  installs: readonly PlannedDependencyInstall[],
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
   const installMissingDependency = createDependencyInstallOperation(
@@ -793,7 +822,7 @@ async function applyDependencyInstalls(
     opts.completionCache,
   );
   let satisfied = false;
-  for (const op of plan.pluginsToDependencyInstall) {
+  for (const op of installs) {
     const rootKey = `${op.plugin}@${op.marketplace}`;
     // eslint-disable-next-line no-await-in-loop -- each install locks the scope (retries: 0)
     const result = await installMissingDependency({
@@ -866,27 +895,25 @@ async function applyDependencyInstalls(
 }
 
 /**
- * D-09-07: after `applyPluginInstalls` installed a plugin, or
- * `applyDependencyInstalls` materialized or found already present at least one
- * key, the round-1 read pass's toggle buckets predate that change -- its
- * `pluginsToDependencyDisable` still holds a dependent these steps just
+ * D-09-07: after `applyPluginInstalls` installed a plugin, the round-1 read
+ * pass's toggle buckets predate that change -- its
+ * `pluginsToDependencyDisable` still holds a dependent the install just
  * satisfied and its `pluginsToEnable` still excludes it (D-06-03).
- * Re-running `readPassForScope` for this scope and taking ONLY
- * `pluginsToEnable`, `pluginsToDisable` and `pluginsToDependencyDisable` from
- * the fresh plan is what lets a marker-held dependent come back up in the
- * SAME reload. The uninstall / remove / add / install buckets of the fresh
- * plan are NEVER re-driven (a round-1 failure would be retried and
+ * Re-running `readPassForScope` for this scope and taking ONLY the toggle
+ * buckets, the missing-dependency bucket, and the enables that wait on a move
+ * or on that bucket from the fresh plan is what lets such a dependent stay up
+ * in the SAME apply. The uninstall / remove / add / install buckets of the
+ * fresh plan are NEVER re-driven (a round-1 failure would be retried and
  * double-reported), and source-mismatch rows stay round-1's.
  *
  * `readPassForScope` acquires and releases its own lock; the apply region
- * holds none, and `applyDependencyInstalls`'s entry point released its own
- * lock before returning, so this second read never re-enters
- * `proper-lockfile`. A throw (or a config that turned invalid between passes)
- * is coerced by `runScopeIsolated` into the `state.json` row the other
- * isolated apply steps produce, and this function returns the round-1 plan
- * untouched -- there is no third arm: `readPassForScope` cannot answer with
- * neither a plan nor an invalid-config row for a scope this step just wrote
- * to.
+ * holds none, and `applyPluginInstalls`'s entry point released its own lock
+ * before returning, so this second read never re-enters `proper-lockfile`.
+ * A throw (or a config that turned invalid between passes) is coerced by
+ * `runScopeIsolated` into the `state.json` row the other isolated apply steps
+ * produce, and this function returns the round-1 plan untouched -- there is
+ * no third arm: `readPassForScope` cannot answer with neither a plan nor an
+ * invalid-config row for a scope this step just wrote to.
  */
 async function refreshTogglePlan(
   reader: ReconcileStateReader,
@@ -909,15 +936,21 @@ async function refreshTogglePlan(
           pluginsToEnable: fresh.plan.pluginsToEnable,
           pluginsToDisable: fresh.plan.pluginsToDisable,
           pluginsToDependencyDisable: fresh.plan.pluginsToDependencyDisable,
+          pluginsToDependencyInstall: fresh.plan.pluginsToDependencyInstall,
         },
         deferredEnables: fresh.deferredEnables ?? [],
+        enablesAfterInstalls: fresh.enablesAfterInstalls ?? [],
       };
 }
 
-/** A plan's toggles and the enables that wait on its catalog moves (APPLY1-01). */
+/**
+ * A plan's toggles, the enables that wait on its catalog moves (APPLY1-01),
+ * and the enables that wait on its missing-dependency install (D-PL2-16).
+ */
 interface TogglePlan {
   readonly plan: ReconcilePlan;
   readonly deferredEnables: readonly PlannedPluginEnable[];
+  readonly enablesAfterInstalls: readonly PlannedPluginEnable[];
 }
 
 interface PluginToggleAxes {
@@ -1180,11 +1213,10 @@ const ENABLE_AXES: PluginToggleAxes = {
 
 /**
  * The two `applyPluginToggles` calls and the LOAD-01 dependency-disable step,
- * extracted out of `applyPlan` so it can run this once against round 1's plan
- * (nothing satisfied by step 5) or once against `refreshTogglePlan`'s D-09-07
- * replacement plan (something was). Unchanged otherwise: WR-02-style
- * isolation still wraps the dependency-disable step's own stamp write, whose
- * throw would otherwise discard every outcome accumulated for both scopes.
+ * run against round 1's plan (no config install landed) or against
+ * `refreshTogglePlan`'s D-09-07 replacement plan (one did). WR-02-style
+ * isolation wraps the dependency-disable step's own stamp write, whose throw
+ * would otherwise discard every outcome accumulated for both scopes.
  */
 async function applyToggleSteps(
   opts: ApplyReconcileOptions,
@@ -1228,49 +1260,47 @@ async function applyToggleSteps(
  *      remaining plugins under them as a single transaction).
  *   3. add new marketplaces BEFORE installing into them.
  *   4. install new plugins under the marketplaces from step 3.
- *   5. MISS-01 / D-09-06: install every missing declared dependency of an
- *      eligible dependent, ROOTED AT THE DEPENDENCY -- on every apply (D-02).
- *      A config-declared install from step 4 that already claimed this key
- *      answers idempotently (D-09-06).
- *   5a. D-09-07: when step 4 installed a plugin, or step 5 materialized or
- *      found already-present at least one key, re-run the read pass for this
- *      scope and take ONLY
- *      `pluginsToEnable`, `pluginsToDisable` and `pluginsToDependencyDisable`
- *      from the fresh plan -- the round-1 plan's own uninstall / remove / add
- *      / install buckets and its source-mismatch rows are never re-driven.
- *      This is what lets a dependent steps 4 and 5 just satisfied stay up (or
- *      come back up) in the SAME reload instead of the next one; steps 4 and
- *      5 installing nothing leave the round-1 plan standing and cost nothing
- *      extra.
- *   6. enable plugins newly declared enabled (round-1 or 5a's replacement).
- *   7. disable plugins newly declared disabled (round-1 or 5a's replacement).
- *   8. disable plugins the load-time check holds down (LOAD-01, round-1 or
- *      5a's replacement). It runs AFTER both toggle steps so a record the
- *      config already disabled in step 7 answers this step idempotently and
+ *   4a. D-09-07: when step 4 installed a plugin, re-run the read pass for this
+ *      scope and take ONLY its toggle buckets, its missing-dependency bucket,
+ *      and the enables that wait -- the round-1 plan's own uninstall / remove
+ *      / add / install buckets and its source-mismatch rows are never
+ *      re-driven. This is what lets a dependent step 4 just satisfied stay up
+ *      in the SAME apply; step 4 installing nothing leaves the round-1 plan
+ *      standing and costs nothing extra.
+ *   5. enable plugins newly declared enabled (round-1 or 4a's replacement).
+ *   6. disable plugins newly declared disabled (round-1 or 4a's replacement).
+ *   7. disable plugins the load-time check holds down (LOAD-01, round-1 or
+ *      4a's replacement). It runs AFTER both toggle steps so a record the
+ *      config already disabled in step 6 answers this step idempotently and
  *      is left unstamped (D-06-02). WR-05: a plugin INSTALLED by step 4 is
  *      not held down by the round-1 bucket, which the read pass built from a
  *      verdict over the pre-install snapshot, where that plugin has no record
- *      and is therefore no declarer; step 5a's re-plan holds it down.
- *   9. source-mismatch / dangling rows (report-only), ALWAYS from the
+ *      and is therefore no declarer; step 4a's re-plan holds it down. D-PL2-02:
+ *      a dependent whose unmet need is a planned install is not held down
+ *      here, since that install runs later in the same apply.
+ *   8. source-mismatch / dangling rows (report-only), ALWAYS from the
  *      round-1 plan (D-09-07) -- folded last.
+ *
+ * D-PL2-01: the missing-dependency install (MISS-01) is not a step of this
+ * pass. It runs in `convergeScope` after the catalog moves, so it sees the
+ * versions they land, and the enables that wait on it run after it. Returns
+ * the toggles plan the convergence starts from.
  */
 async function applyPlan(
   reader: ReconcileStateReader,
   opts: ApplyReconcileOptions,
   round1: TogglePlan,
   outcomes: PerEntryOutcome[],
-): Promise<readonly PlannedPluginEnable[]> {
+): Promise<TogglePlan> {
   const plan = round1.plan;
   await applyPluginUninstalls(opts, plan, outcomes);
   await applyMarketplaceRemoves(opts, plan, outcomes);
   await applyMarketplaceAdds(opts, plan, outcomes);
   const installed = await applyPluginInstalls(opts, plan, outcomes);
-  const satisfied = await applyDependencyInstalls(opts, plan, outcomes);
-  const toggles =
-    installed || satisfied ? await refreshTogglePlan(reader, opts, round1, outcomes) : round1;
+  const toggles = installed ? await refreshTogglePlan(reader, opts, round1, outcomes) : round1;
   await applyToggleSteps(opts, toggles.plan, outcomes);
   outcomes.push(...sourceMismatchOutcomes(plan));
-  return toggles.deferredEnables;
+  return toggles;
 }
 
 /**
@@ -1284,26 +1314,35 @@ async function applyPlan(
  * scope's moves stay pending (NFR-3).
  *
  * APPLY1-01: the moves run as one cascade, dependencies first (D-26), with
- * each deferred enable in its place (`runCascade`). Whatever lands, the scope
- * is then judged as it stands (`judgeScopeAfterCascade`), so no `apply`
- * leaves an enabled plugin on an unmet or disabled dependency. The judgement,
- * the hold rows and the rows of the steps that ran also go out when the
- * cascade ends on an `InvalidGitHubBaseUrlError` (GHB-03), which still ends
- * the pass.
+ * each deferred enable in its place (`runCascade`). D-PL2-01: the
+ * missing-dependency install and the enables that wait on it follow
+ * (`installAfterMoves`). Whatever lands, the scope is then judged as it
+ * stands (`judgeScopeAfterCascade`), so no `apply` leaves an enabled plugin
+ * on an unmet or disabled dependency. The judgement, the hold rows and the
+ * rows of the steps that ran also go out when the pass ends on an
+ * `InvalidGitHubBaseUrlError` (GHB-03), which still ends the pass.
+ *
+ * D-PL2-16: the cascade is planned with the enables that wait on the install
+ * too, so a waiting record's own move is planned; only the deferred enables
+ * run as cascade steps. WR-06: a step that declares a waiting record's move
+ * waits with it (`movesAfterInstalls`), so the steps after the install keep
+ * the dependencies-first order (D-26).
  */
 async function convergeScope(
   reader: ReconcileStateReader,
   opts: ApplyReconcileOptions,
   scope: Scope,
-  deferred: readonly PlannedPluginEnable[],
+  toggles: TogglePlan,
   outcomes: PerEntryOutcome[],
   failures: PerEntryOutcome[],
 ): Promise<void> {
   const locations = locationsFor(scope, opts.cwd);
+  const deferred = toggles.deferredEnables;
+  const waiting = new Set(toggles.enablesAfterInstalls.map(pluginKey));
   const planned: { cascade?: ConvergenceCascade; before?: CascadeStart } = {};
   await runScopeIsolated(scope, failures, async () => {
     const state = await reader.loadState(locations.extensionRoot);
-    const enable = new Set(deferred.map(pluginKey));
+    const enable = new Set([...deferred.map(pluginKey), ...waiting]);
     planned.cascade = await planConvergenceCascade({ scope, state, locations, enable });
     const verdict = await buildScopeSatisfactionVerdict({ state, locations });
     planned.before = { state, unsatisfied: verdict.ok ? verdict.unsatisfied : [] };
@@ -1320,29 +1359,173 @@ async function convergeScope(
     own: new Set(),
   };
   const reports: StepReport[] = [];
+  const after: AfterMoves = { rows: [], steps: [], landed: false };
   try {
-    await runCascade(opts, cascade, { scope, deferred, before: before.state, failed, reports });
+    const run = {
+      scope,
+      deferred,
+      waiting,
+      afterInstalls: movesAfterInstalls(cascade, waiting),
+      before: before.state,
+      failed,
+      reports,
+      sink: outcomes,
+    };
+    await runCascade(opts, cascade, run);
+    await installAfterMoves(reader, opts, toggles, { ...run, cascade, after });
   } finally {
     const disabled: PluginRow[] = [];
     const enabledAtEnd = new Set<string>();
+    const trailing = new Set<string>();
+    const copyFailures: IndexFailure[] = [];
     await runScopeIsolated(scope, outcomes, () =>
       judgeScopeAfterCascade(reader, opts, scope, {
         cascade,
         before,
         failed,
-        ran: reports.length > 0,
+        // D-PL2-01: an install or enable after the moves changed the scope too.
+        ran: reports.length > 0 || after.landed,
         refused: refusedDisables(outcomes, scope),
         disabled,
         enabledAtEnd,
+        refusedInstalls: new Set(
+          after.rows.flatMap((row) =>
+            row.kind === "plugin-install-failed" ? [pluginKey(row)] : [],
+          ),
+        ),
+        trailing,
+        copyFailures,
       }),
     );
+    reportRefusedCopies(scope, [cascade.installedCopyFailure, ...copyFailures], outcomes);
+    const kept = withoutUndoneEnables(outcomes, scope, disabled);
+    const steps = withoutUndoneStepEnables(after.steps, scope, kept);
     outcomes.push(
       ...cascadeRows(cascade, reports, {
-        disabled: withoutUndoneEnables(outcomes, scope, disabled),
+        after: after.rows,
+        afterSteps: steps.reports,
+        disabled: withoutUndoneEnables(after.rows, scope, steps.disabled),
         enabledAtEnd,
+        trailing,
       }),
     );
   }
+}
+
+/**
+ * The rows the steps after the catalog moves report, and whether one may have
+ * changed the scope.
+ */
+interface AfterMoves {
+  readonly rows: PerEntryOutcome[];
+  /** The reports of the steps after the install, which follow `rows`. */
+  readonly steps: StepReport[];
+  landed: boolean;
+}
+
+/** What `installAfterMoves` reads besides the toggles plan. */
+interface AfterMovesRun extends CascadeRun {
+  readonly cascade: ConvergenceCascade;
+  readonly after: AfterMoves;
+}
+
+/**
+ * D-PL2-01 / D-PL2-16: the steps after the catalog moves. MISS-01 installs
+ * the toggles plan's bucket, or, once a cascade step ran, the bucket of the
+ * scope as the moves left it, so a dependency a moved version needs is
+ * installed in this apply. When it installed or found anything, or an enable
+ * waits on it, the scope is read again and each record the fresh plan
+ * enables that waited on the install is enabled, right after its own catalog
+ * move. A waiting record's move whose enable did not come reports why it did
+ * not run (D-PL2-18). A read that fails becomes the `state.json` row and
+ * leaves the rest to the judgement.
+ */
+async function installAfterMoves(
+  reader: ReconcileStateReader,
+  opts: ApplyReconcileOptions,
+  toggles: TogglePlan,
+  run: AfterMovesRun,
+): Promise<void> {
+  const { after, scope } = run;
+  let bucket = toggles.plan.pluginsToDependencyInstall;
+  if (run.reports.length > 0) {
+    const moved = await readPlainPlan(reader, opts, scope, after.rows);
+    // WR-05: the toggles plan's bucket predates the moves, so a read that
+    // fails installs nothing; its row reports it once.
+    if (moved.plan === undefined) {
+      return;
+    }
+
+    bucket = moved.plan.pluginsToDependencyInstall;
+  }
+
+  // WR-01: an install can commit before a later one throws (GHB-03), so the
+  // judgement reads the scope again once any install or enable is tried.
+  after.landed = bucket.length > 0;
+  const satisfied = await applyDependencyInstalls(opts, bucket, after.rows);
+  if (!satisfied && run.waiting.size === 0) {
+    return;
+  }
+
+  // The waiting records are neither in the toggles plan's enables nor
+  // deferred, so no enable runs twice.
+  const fresh = await readPlainPlan(reader, opts, scope, after.rows);
+  const enables = (fresh.plan?.pluginsToEnable ?? []).filter((op) =>
+    run.waiting.has(pluginKey(op)),
+  );
+  const steps = stepsAfterInstalls(run.cascade, run, enables);
+  after.landed ||= steps.length > 0;
+  await runAfterInstallSteps(opts, steps, { ...run, reports: after.steps });
+}
+
+/**
+ * Runs the steps after the missing-dependency install, in the order
+ * `stepsAfterInstalls` gives them. D-PL2-18: a waiting record's move whose
+ * enable did not come does not run and reports `(skipped) {dependency
+ * failed}`. WR-06: a step that declares such a move, or a step that did not
+ * land, does not run either, as in the cascade, and reports what the cascade
+ * reports for it; the judgement's `(disabled)` row replaces that row for an
+ * enabled record it held. A waiting record's step whose enable came is not
+ * held by its dependencies: the fresh plan already judged that enable.
+ */
+async function runAfterInstallSteps(
+  opts: ApplyReconcileOptions,
+  steps: readonly CascadeStep[],
+  run: AfterMovesRun,
+): Promise<void> {
+  const unreleased = new Set(
+    steps.filter((step) => step.waiting === true && step.enable === undefined).map((s) => s.key),
+  );
+  // WR-08: a step that does not run reports what the cascade reports for it.
+  await runSteps(
+    opts,
+    steps,
+    run,
+    (step) =>
+      unreleased.has(step.key) ||
+      (!run.waiting.has(step.key) &&
+        cascadeDependencies(run.cascade, step.key).some(
+          (dep) => unreleased.has(dep) || run.failed.all.has(dep),
+        )),
+  );
+}
+
+/**
+ * `readPlainPlanForScope` for `apply` after its moves, isolated: a throw or a
+ * config that turned invalid becomes its rows in `rows` and answers no plan.
+ */
+async function readPlainPlan(
+  reader: ReconcileStateReader,
+  opts: ApplyReconcileOptions,
+  scope: Scope,
+  rows: PerEntryOutcome[],
+): Promise<ScopeReadResult> {
+  let fresh: ScopeReadResult = { plan: undefined, invalidOutcomes: [] };
+  await runScopeIsolated(scope, rows, async () => {
+    fresh = await readPlainPlanForScope(reader, scope, opts.cwd);
+  });
+  rows.push(...fresh.invalidOutcomes);
+  return fresh;
 }
 
 /**
@@ -1365,6 +1548,27 @@ function withoutUndoneEnables(
   const undone = new Set(outcomes.filter(isUndone).map(pluginKey));
   outcomes.splice(0, outcomes.length, ...outcomes.filter((outcome) => !isUndone(outcome)));
   return disabled.filter((row) => !undone.has(pluginKey(row)));
+}
+
+/**
+ * WR-B over the reports of the steps after the install: an enable the
+ * judgement undid reports neither row, as `withoutUndoneEnables` drops them.
+ */
+function withoutUndoneStepEnables(
+  reports: readonly StepReport[],
+  scope: Scope,
+  disabled: readonly PluginRow[],
+): { readonly reports: StepReport[]; readonly disabled: PluginRow[] } {
+  const rows = reports.flatMap((report) => report.rows);
+  const remaining = withoutUndoneEnables(rows, scope, disabled);
+  const kept = new Set(rows);
+  return {
+    reports: reports.map((report) => ({
+      ...report,
+      rows: report.rows.filter((row) => kept.has(row)),
+    })),
+    disabled: remaining,
+  };
 }
 
 function failedEnables(outcomes: readonly PerEntryOutcome[], scope: Scope): readonly string[] {
@@ -1413,11 +1617,6 @@ interface StepReport {
   readonly replaceable?: true;
 }
 
-/** One cascade step: a catalog move, a deferred enable, or both. */
-type CascadeStep =
-  | { readonly key: string; readonly move: PlannedMove; readonly enable?: PlannedPluginEnable }
-  | { readonly key: string; readonly move?: undefined; readonly enable: PlannedPluginEnable };
-
 /**
  * IN-C: whether a move landed. A deferred record's move only refreshes its pin
  * and answers `{already disabled}`; its enable decides. A move that landed on
@@ -1435,20 +1634,25 @@ function moveLanded(result: PluginUpdateOutcome, deferred: boolean): boolean {
 /**
  * APPLY1-01: the cascade's steps in order, dependencies first: each move, and
  * each deferred enable, which follows its own move (CR-03) or, with no move of
- * its own, the steps it waits on.
+ * its own, the steps it waits on. D-PL2-16: the move of a record whose enable
+ * waits on the missing-dependency install runs with that enable, after it.
+ * WR-06: so does each move that declares such a move, with its own deferred
+ * enable (`movesAfterInstalls`).
  */
 function cascadeSteps(
   cascade: ConvergenceCascade,
-  deferred: readonly PlannedPluginEnable[],
+  run: Pick<CascadeRun, "deferred" | "afterInstalls">,
 ): readonly CascadeStep[] {
+  const { deferred, afterInstalls } = run;
   const enables = new Map(deferred.map((op) => [pluginKey(op), op]));
-  const moved = cascade.plan.moves.map((move): CascadeStep => {
+  const ready = cascade.plan.moves.filter((move) => !afterInstalls.has(pluginKey(move)));
+  const moved = ready.map((move): CascadeStep => {
     const enable = enables.get(pluginKey(move));
     return { key: pluginKey(move), move, ...(enable !== undefined && { enable }) };
   });
   const movedKeys = new Set(moved.map((step) => step.key));
   const alone = deferred
-    .filter((op) => !movedKeys.has(pluginKey(op)))
+    .filter((op) => !movedKeys.has(pluginKey(op)) && !afterInstalls.has(pluginKey(op)))
     .map((op): CascadeStep => ({ key: pluginKey(op), enable: op }));
   return dependenciesFirst([...moved, ...alone], (step) => step.key, cascade.declarations);
 }
@@ -1457,29 +1661,51 @@ function cascadeSteps(
 interface CascadeRun {
   readonly scope: Scope;
   readonly deferred: readonly PlannedPluginEnable[];
+  /** D-PL2-16: the records whose enable waits on the missing-dependency install. */
+  readonly waiting: ReadonlySet<string>;
+  /** WR-06: the moves that run after that install (`movesAfterInstalls`). */
+  readonly afterInstalls: ReadonlySet<string>;
   /** The scope before the cascade, whose pins a failed deferred enable restores. */
   readonly before: ExtensionState;
   readonly failed: FailedSteps;
   readonly reports: StepReport[];
+  /** Where a fault in a step's restore or collection tail is reported (`runScopeIsolated`). */
+  readonly sink: PerEntryOutcome[];
 }
 
 /**
  * APPLY1-01: runs the cascade's steps in order. A step that declares one that
- * did not land is not run. A move reports `(skipped) {dependency failed}`; a
- * deferred enable that does not run leaves its record as it was and reports
- * nothing (WR-B).
+ * did not land is not run (`runSteps`).
  */
 async function runCascade(
   opts: ApplyReconcileOptions,
   cascade: ConvergenceCascade,
   run: CascadeRun,
 ): Promise<void> {
-  const convergePlugin = createConvergeOperation(opts.hooksRouting, opts.completionCache);
-  for (const step of cascadeSteps(cascade, run.deferred)) {
-    if (
+  await runSteps(
+    opts,
+    cascadeSteps(cascade, run),
+    run,
+    (step) =>
       run.failed.all.has(step.key) ||
-      cascadeDependencies(cascade, step.key).some((dep) => run.failed.all.has(dep))
-    ) {
+      cascadeDependencies(cascade, step.key).some((dep) => run.failed.all.has(dep)),
+  );
+}
+
+/**
+ * Runs `steps` in order. A step `blocked` holds back is not run and did not
+ * land: a move reports `(skipped) {dependency failed}`; a deferred enable
+ * leaves its record as it was and reports nothing (WR-B).
+ */
+async function runSteps(
+  opts: ApplyReconcileOptions,
+  steps: readonly CascadeStep[],
+  run: CascadeRun,
+  blocked: (step: CascadeStep) => boolean,
+): Promise<void> {
+  const convergePlugin = createConvergeOperation(opts.hooksRouting, opts.completionCache);
+  for (const step of steps) {
+    if (blocked(step)) {
       run.failed.all.add(step.key);
       run.reports.push({ key: step.key, rows: dependencyFailedRows(step), replaceable: true });
       continue;
@@ -1491,11 +1717,12 @@ async function runCascade(
 }
 
 /**
- * The `(skipped) {dependency failed}` row of an enabled record's move whose
- * dependency did not land.
+ * The `(skipped) {dependency failed}` row of a move whose dependency did not
+ * land: an enabled record's move, or a waiting record's whose enable did not
+ * come (D-PL2-18).
  */
 function dependencyFailedRows(step: CascadeStep): PerEntryOutcome[] {
-  // A deferred record stays disabled, as it was: no row (WR-B).
+  // A deferred enable that did not run leaves its record as it was: no row (WR-B).
   return step.move === undefined || step.enable !== undefined
     ? []
     : convergedMoveOutcomes(step.move, {
@@ -1529,8 +1756,8 @@ function failedMoveRows(move: PlannedMove, reasons: readonly ContentReason[]): P
  * Runs one step and records its rows and whether it landed. A deferred
  * record's move refreshes its pin and its enable then materializes the new
  * version, so a failed enable is a failed move: its pin goes back to what it
- * was (WR-C), and it reports the move's `(failed)` row. A landed one reports
- * the net `(updated)` row (WR-02).
+ * was, and it reports the move's `(failed)` row. A landed one reports
+ * the rows `landedStepRows` gives.
  */
 async function runStep(
   opts: ApplyReconcileOptions,
@@ -1580,28 +1807,54 @@ async function runStep(
 
   const enabled: PerEntryOutcome[] = [];
   const landed = await enableStep(opts, enable, enabled);
-  if (!landed) {
-    await restorePin(opts, run.scope, move, run.before);
-  }
-
-  if (collect.requested) {
-    await collectClones(locationsFor(run.scope, opts.cwd));
-  }
-
+  // The step's rows are recorded before the tail that can throw, so a fault in
+  // the restore or the collection cannot lose them or the failed key.
   if (landed) {
-    // A growth-only move keeps the version, so its enable row is the net row.
-    run.reports.push({ key: step.key, rows: rematerialize ? enabled : [enabledMoveOutcome(move)] });
-    return;
+    run.reports.push({ key: step.key, rows: landedStepRows(step, move, enabled) });
+  } else {
+    const reasons = enabled
+      .filter(
+        (outcome): outcome is PluginEnableFailedOutcome => outcome.kind === "plugin-enable-failed",
+      )
+      .map((outcome) => outcome.reason)
+      .filter(isContentReason);
+    run.failed.all.add(step.key);
+    run.reports.push({ key: step.key, rows: failedMoveRows(move, reasons) });
   }
 
-  const reasons = enabled
-    .filter(
-      (outcome): outcome is PluginEnableFailedOutcome => outcome.kind === "plugin-enable-failed",
-    )
-    .map((outcome) => outcome.reason)
-    .filter(isContentReason);
-  run.failed.all.add(step.key);
-  run.reports.push({ key: step.key, rows: failedMoveRows(move, reasons) });
+  await runScopeIsolated(run.scope, run.sink, async () => {
+    if (!landed) {
+      await (
+        opts.restoreDeferredPin ?? ((scope, key, before) => restorePin(opts, scope, key, before))
+      )(run.scope, pluginKey(move), run.before);
+    }
+
+    if (collect.requested) {
+      await collectClones(locationsFor(run.scope, opts.cwd));
+    }
+  });
+}
+
+/**
+ * The rows of a step whose move and enable both landed. A waiting record's
+ * step reports the move's row and then the enable's own rows (D-PL2-18). A
+ * deferred record's step reports one net row (WR-02): the enable's rows for a
+ * growth-only move, which keeps the version, else the move's `(updated)` row.
+ */
+function landedStepRows(
+  step: CascadeStep,
+  move: PlannedMove,
+  enabled: readonly PerEntryOutcome[],
+): readonly PerEntryOutcome[] {
+  if (step.waiting === true) {
+    return [enabledMoveOutcome(move), ...enabled];
+  }
+
+  if (!move.revisionChanged) {
+    return enabled;
+  }
+
+  return [enabledMoveOutcome(move)];
 }
 
 /**
@@ -1616,7 +1869,7 @@ function deferCollection(collect: { requested: boolean }): () => Promise<void> {
 }
 
 /**
- * D-19-01 / Review 4 WR-2: clone cleanup is hygienic, as the runner's own is
+ * D-19-01: clone cleanup is hygienic, as the runner's own is
  * (`update-preflight.ts::refreshDisabledPluginUpdate`): a failure is traced and
  * a later lifecycle operation retries it. D-PL7-05: the GC takes a fresh scope
  * lock, so a held lock is such a failure.
@@ -1659,17 +1912,16 @@ const PIN_FIELDS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * WR-C: puts back the pin a deferred record had before its move refreshed it,
+ * Puts back the pin a deferred record had before its move refreshed it,
  * when its enable then failed, so the record keeps naming the version it
  * holds, as a record lifted in the toggle step does.
  */
 async function restorePin(
   opts: ApplyReconcileOptions,
   scope: Scope,
-  move: PlannedMove,
+  key: string,
   before: ExtensionState,
 ): Promise<void> {
-  const key = pluginKey(move);
   const pins = new Map(
     Object.values(before.marketplaces).flatMap((mp) =>
       Object.entries(mp.plugins).map(([plugin, record]) => [
@@ -1702,6 +1954,29 @@ interface CascadeJudgement {
   readonly disabled: PluginRow[];
   /** Filled with the plugins that end the apply enabled. */
   readonly enabledAtEnd: Set<string>;
+  /** The dependencies the missing-dependency install failed to install. */
+  readonly refusedInstalls: ReadonlySet<string>;
+  /** Filled with the plugins disabled for one of them (D-PL2-11). */
+  readonly trailing: Set<string>;
+  /** Filled with each record whose installed copy the judgement could not use (D-PL2-25). */
+  readonly copyFailures: IndexFailure[];
+}
+
+/**
+ * D-PL2-25 / REC-05: reports each record whose installed copy the cascade
+ * plan or the final judgement could not use, once, as the read pass reports
+ * an unreadable declarer.
+ */
+function reportRefusedCopies(
+  scope: Scope,
+  failures: readonly (IndexFailure | null)[],
+  outcomes: PerEntryOutcome[],
+): void {
+  for (const failure of failures) {
+    if (failure !== null) {
+      reportDeclarerFailure(scope, failure, outcomes);
+    }
+  }
 }
 
 /**
@@ -1718,7 +1993,9 @@ interface CascadeJudgement {
  * unknown, and it is held when the dependency it needed moved for it (its
  * catalog range was unmet before). A plugin whose disable this apply already
  * tried and was refused is not tried again. A judgement whose walk fails
- * disables nothing, as the load-time check does (D-05-07).
+ * disables nothing, as the load-time check does (D-05-07). A record whose
+ * installed copy cannot be used fails it the same way, and is reported
+ * (D-PL2-25).
  */
 async function judgeScopeAfterCascade(
   reader: ReconcileStateReader,
@@ -1733,20 +2010,29 @@ async function judgeScopeAfterCascade(
   for (const mp of Object.values(state.marketplaces)) {
     for (const [plugin, record] of Object.entries(mp.plugins)) {
       const key = `${plugin}@${mp.name}`;
-      // eslint-disable-next-line no-await-in-loop -- one copy check per failed dependent
-      if (failed.own.has(key) && !(await isPinnedCopy(locations, record.resolvedSource))) {
+      if (failed.own.has(key) && !isPinnedCopy(locations, record.resolvedSource)) {
         seeded.push(...movedFor(key, cascade, before.unsatisfied, failed));
       }
     }
   }
 
+  const readCopy = installedCopyReader(locations);
   const after = await judgeFinalScope({
     state,
     locations,
-    installedDeclarations: installedCopyReader(locations),
+    installedDeclarations: async (mp, plugin, record) => {
+      const copy = await readCopy(mp, plugin, record);
+      if (!copy.ok) {
+        judged.copyFailures.push(copy);
+      }
+
+      return copy;
+    },
     seeded,
   });
   const ops = enabledHolds(after, state, scope).filter((op) => !judged.refused.has(pluginKey(op)));
+  addTrailing(ops, judged.refusedInstalls, judged.trailing);
+
   const enabledNow = Object.values(state.marketplaces).flatMap((mp) =>
     Object.entries(mp.plugins).flatMap(([plugin, record]) =>
       record.enabled ? [`${plugin}@${mp.name}`] : [],
@@ -1767,6 +2053,27 @@ async function judgeScopeAfterCascade(
   for (const key of enabledNow.filter((key) => !disabledNow.has(key))) {
     judged.enabledAtEnd.add(key);
   }
+}
+
+/**
+ * D-PL2-11: adds to `trailing` each plugin the judgement disables for a
+ * dependency the missing-dependency install failed to install, or for one
+ * such plugin, to a fixpoint. The set only grows and is bounded by `ops`.
+ */
+function addTrailing(
+  ops: readonly PlannedDependencyDisable[],
+  refusedInstalls: ReadonlySet<string>,
+  trailing: Set<string>,
+): void {
+  let size: number;
+  do {
+    size = trailing.size;
+    for (const op of ops) {
+      if (refusedInstalls.has(op.dependency) || trailing.has(op.dependency)) {
+        trailing.add(pluginKey(op));
+      }
+    }
+  } while (trailing.size > size);
 }
 
 /**
@@ -1793,12 +2100,21 @@ function movedFor(
 /**
  * WR-B: the cascade's rows, one per plugin and outcome. A plugin the judgement
  * disabled reports its `(disabled)` row in place of a step that did not run;
- * a hold or decline row is kept only for a plugin that ends enabled.
+ * a hold or decline row is kept only for a plugin that ends enabled. D-PL2-01:
+ * the rows of the steps after the moves follow the step rows. D-PL2-11: the
+ * disable of a dependent whose missing dependency failed to install follows
+ * that install's `(failed)` row, also when the dependent moved.
  */
 function cascadeRows(
   cascade: ConvergenceCascade,
   reports: readonly StepReport[],
-  judged: { readonly disabled: readonly PluginRow[]; readonly enabledAtEnd: ReadonlySet<string> },
+  judged: {
+    readonly after: readonly PerEntryOutcome[];
+    readonly afterSteps: readonly StepReport[];
+    readonly disabled: readonly PluginRow[];
+    readonly enabledAtEnd: ReadonlySet<string>;
+    readonly trailing: ReadonlySet<string>;
+  },
 ): PerEntryOutcome[] {
   const { disabled, enabledAtEnd } = judged;
   const byKey = new Map<string, PluginRow[]>();
@@ -1806,18 +2122,51 @@ function cascadeRows(
     byKey.set(pluginKey(row), [...(byKey.get(pluginKey(row)) ?? []), row]);
   }
 
+  const rows = reportRows(reports, byKey, judged.trailing);
+  // WR-08: a step after the install that did not run gives way the same way.
+  const afterSteps = reportRows(judged.afterSteps, byKey, judged.trailing);
+  const holds = blockedMoveOutcomes(cascade.plan).filter((row) => enabledAtEnd.has(pluginKey(row)));
+  // D-PL2-11: the trailing disables follow their dependencies' disables.
+  const leftovers = [...byKey];
+  const trailing = dependenciesFirst(
+    leftovers.filter(([key]) => judged.trailing.has(key)),
+    ([key]) => key,
+    cascade.declarations,
+  );
+  const others = leftovers.filter(([key]) => !judged.trailing.has(key));
+  return [
+    ...rows,
+    ...judged.after,
+    ...afterSteps,
+    ...holds,
+    ...[...others, ...trailing].flatMap(([, r]) => r),
+  ];
+}
+
+/**
+ * The rows of `reports` in order. A plugin the judgement disabled reports its
+ * `(disabled)` row from `byKey` in place of a step that did not run; a
+ * trailing disable stays in `byKey` to follow the steps (D-PL2-11).
+ */
+function reportRows(
+  reports: readonly StepReport[],
+  byKey: Map<string, PluginRow[]>,
+  trailing: ReadonlySet<string>,
+): PerEntryOutcome[] {
   const rows: PerEntryOutcome[] = [];
   for (const report of reports) {
     const replacement = byKey.get(report.key) ?? [];
-    rows.push(
-      ...(report.replaceable === true && replacement.length > 0 ? [] : report.rows),
-      ...replacement,
-    );
+    const replaces = report.replaceable === true && replacement.length > 0;
+    if (!replaces && trailing.has(report.key)) {
+      rows.push(...report.rows);
+      continue;
+    }
+
+    rows.push(...(replaces ? [] : report.rows), ...replacement);
     byKey.delete(report.key);
   }
 
-  const holds = blockedMoveOutcomes(cascade.plan).filter((row) => enabledAtEnd.has(pluginKey(row)));
-  return [...rows, ...holds, ...[...byKey.values()].flat()];
+  return rows;
 }
 
 /** A row that names one plugin, as every disable row does. */
@@ -1997,13 +2346,17 @@ async function applyAndConverge(
     return;
   }
 
-  const deferred = await applyPlan(
+  const toggles = await applyPlan(
     reader,
     opts,
-    { plan: readResult.plan, deferredEnables: readResult.deferredEnables ?? [] },
+    {
+      plan: readResult.plan,
+      deferredEnables: readResult.deferredEnables ?? [],
+      enablesAfterInstalls: readResult.enablesAfterInstalls ?? [],
+    },
     sinks.outcomes,
   );
-  await convergeScope(reader, opts, scope, deferred, sinks.outcomes, sinks.convergeFailures);
+  await convergeScope(reader, opts, scope, toggles, sinks.outcomes, sinks.convergeFailures);
 }
 
 /**
@@ -2054,6 +2407,46 @@ export function createApplyReconcile(
 ): (opts: ApplyReconcileOptions) => Promise<void> {
   return async function applyReconcile(opts: ApplyReconcileOptions): Promise<void> {
     await applyReconcileWithReader(reader, opts);
+  };
+}
+
+/**
+ * D-PL2-09: creates `apply`'s missing-dependency step over one scope, for the
+ * commands that run it after a marketplace add. It plans the scope as `apply`
+ * does once its moves ran (`readPlainPlanForScope`), keeps the planned
+ * installs the request selects, and drives them through
+ * `applyDependencyInstalls`, so the eligibility rule (D-09-01), the operation
+ * and the rows are `apply`'s, a refusal's `(failed)` row included (D-PL2-11).
+ * It installs only: a dependent a marker holds down stays down, and the next
+ * `apply` enables it.
+ *
+ * The caller's state commit already happened, so a read that throws answers
+ * the `state.json` `(failed)` row `apply` reports for the same throw
+ * (`runScopeIsolated`, D-PL2-20) and installs nothing; the next `apply`
+ * installs the dependency (NFR-3). Only the read is isolated, so a throw out
+ * of an install still reaches the caller. The single production composition
+ * lives in the extension entry point, beside `createApplyReconcile`.
+ */
+export function createScopeDependencyInstall(
+  reader: ReconcileStateReader,
+  lifecycle: Pick<ApplyReconcileOptions, "hooksRouting" | "completionCache">,
+): ScopeDependencyInstallFn {
+  return async function installMissingDependencies(request) {
+    const outcomes: PerEntryOutcome[] = [];
+    let read: ScopeReadResult = { plan: undefined, invalidOutcomes: [] };
+    await runScopeIsolated(request.scope, outcomes, async () => {
+      read = await readPlainPlanForScope(reader, request.scope, request.cwd);
+    });
+    const installs = (read.plan?.pluginsToDependencyInstall ?? []).filter(request.select);
+    await applyDependencyInstalls(
+      { ctx: request.ctx, run: request.run, cwd: request.cwd, ...lifecycle },
+      installs,
+      outcomes,
+    );
+    return {
+      rows: dependencyInstallRows(outcomes),
+      mcpConfigNotices: carriedOutcomeNotices(outcomes),
+    };
   };
 }
 
@@ -2118,15 +2511,16 @@ function surfaceMcpConfigNotices(
   opts: ApplyReconcileOptions,
   outcomes: readonly PerEntryOutcome[],
 ): void {
-  notifyMcpConfigNotices(
-    opts.ctx,
-    opts.run,
-    outcomes.flatMap((outcome) =>
-      outcome.kind === "invalid-block" ||
-      outcome.kind === "layer-marketplace-gap" ||
-      outcome.kind === "source-mismatch"
-        ? []
-        : (outcome.mcpConfigNotices ?? []),
-    ),
+  notifyMcpConfigNotices(opts.ctx, opts.run, carriedOutcomeNotices(outcomes));
+}
+
+/** AFILE-04: the MCP config notices the outcomes carry, in outcome order. */
+function carriedOutcomeNotices(outcomes: readonly PerEntryOutcome[]): McpConfigNotice[] {
+  return outcomes.flatMap((outcome) =>
+    outcome.kind === "invalid-block" ||
+    outcome.kind === "layer-marketplace-gap" ||
+    outcome.kind === "source-mismatch"
+      ? []
+      : (outcome.mcpConfigNotices ?? []),
   );
 }

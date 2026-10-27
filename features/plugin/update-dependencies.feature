@@ -191,6 +191,107 @@ Feature: Plugin update dependencies
       | widget@tools | 1.1.0   | true    |
       | zcore@tools  | 1.0.0   | true    |
 
+  Scenario: Autoupdating a marketplace installs a missing dependency an unchanged plugin now declares
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   |              |
+      | zcore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   | zcore        |
+      | zcore  | 1.0.0   |              |
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id           | name        | status    | reasons              | scope   | version |
+      | tools            | project           | updated            | widget@tools | widget      | skipped   | up-to-date           | project |         |
+      | tools            | project           | updated            | zcore@tools  | zcore@tools | installed | dependency installed | project | 1.0.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | widget@tools | 1.0.0   | true    |
+      | zcore@tools  | 1.0.0   | true    |
+
+  Scenario: A bare marketplace update reports once a missing dependency that two autoupdated marketplaces declare
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   |              |
+      | lib    | 1.0.0   | core         |
+    Given the marketplace "kits" is published as a dir source
+    Given the marketplace "kits" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | gadget | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "kits" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the user has run "/claude:plugin install gadget@kits --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate kits --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   | lib          |
+      | lib    | 1.0.0   | core         |
+    Given the marketplace "kits" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | gadget | 1.0.0   | lib@tools    |
+    Given the marketplace "kits" allows dependencies on the marketplace "tools"
+    When the user runs "/claude:plugin marketplace update --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload | summary                        | tally label        | tally failures | tally warnings | tally success count |
+      | cascade | error    | false        | A plugin operation has failed. | Marketplace update | 1              | 0              | 2                   |
+      | cascade | info     | false        |                                | Marketplace update | 0              | 0              | 2                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id           | name      | status  | reasons           | scope   | cause chain                                                 | cause truncated | leaks | rollback partial |
+      | tools            | project           | updated            | widget@tools | widget    | skipped | up-to-date        | project |                                                             |                 |       |                  |
+      | tools            | project           | updated            | lib@tools    | lib@tools | failed  | dependency failed | project | Dependency "core@tools" is not declared by its marketplace. | false           |       |                  |
+      | kits             | project           | updated            | gadget@kits  | gadget    | skipped | up-to-date        | project |                                                             |                 |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | gadget@kits  | 1.0.0   | true    |
+      | widget@tools | 1.0.0   | true    |
+
+  Scenario: An autoupdate that an invalid GitHub base address stops reports the plugin updates it made before stopping
+    Given pi runs with the github base address "http://example.invalid"
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | gadget | 1.0.0   |              |
+      | widget | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install gadget@tools --scope project"
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the git repository "zvault" holds these plugins:
+      | name   | version | path |
+      | zvault | 1.0.0   |      |
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | gadget | 1.1.0   |              |
+      | widget | 1.0.0   | zvault       |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name   | source kind | repository | pinned |
+      | zvault | github      | zvault     | false  |
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the command reports these results:
+      | kind           | severity | needs reload | summary                      | cause chain                                                       | cause truncated |
+      | cascade        | info     | true         |                              |                                                                   |                 |
+      | internal-error | error    | true         | Command failed unexpectedly. | PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme. | false           |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id           | name   | status  | reasons    | scope   | from  | to    |
+      | tools            | project           | updated            | gadget@tools | gadget | updated |            | project | 1.0.0 | 1.1.0 |
+      | tools            | project           | updated            | widget@tools | widget | skipped | up-to-date | project |       |       |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | gadget@tools | 1.1.0   | true    |
+      | widget@tools | 1.0.0   | true    |
+
   Scenario: Updating a plugin whose new version needs a newer version of a git-source dependency moves the dependency first
     Given the git repository "lib" holds these plugins:
       | name | version | path |
@@ -226,6 +327,43 @@ Feature: Plugin update dependencies
       | id        | version | enabled |
       | app@tools | 1.1.0   | true    |
       | lib@tools | 2.0.0   | true    |
+
+  Scenario: Updating a dependency is held by the range a git-source plugin's installed copy declares
+    Given the git repository "app" holds these plugins:
+      | name | version | path | dependencies |
+      | app  | 1.0.0   |      | lib@^1.0.0   |
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | app  | url         | app        | true   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install lib@tools --scope project"
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the git repository "app" holds these plugins:
+      | name | version | path |
+      | app  | 1.0.0   |      |
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | lib  | 2.0.0   |              |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | app  | url         | app        | true   |
+    When the user runs "/claude:plugin update lib@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | warning                             |
+      | needs reload | false                               |
+      | summary      | A plugin operation needs attention. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status  | reasons              | scope   | version | cause chain                                                                                    | cause truncated | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | skipped | dependents constrain | project | 1.0.0   | version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools" | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | app@tools | 1.0.0   | true    |
+      | lib@tools | 1.0.0   | true    |
 
   Scenario: Updating a dependency recorded at the highest release tag its range admits leaves it up to date
     Given the git repository "lib" holds these plugins:

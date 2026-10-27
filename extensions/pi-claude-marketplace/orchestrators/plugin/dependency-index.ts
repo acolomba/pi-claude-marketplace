@@ -70,6 +70,8 @@
 // rather than a flag on the neighbour, and keeping it in this file inherits
 // the file's network-free gate entry.
 
+import { parseDeclaredDependencies } from "../../domain/dependencies.ts";
+import { toClosureLookupResult } from "../../domain/dependency-closure.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
@@ -78,13 +80,20 @@ import { ownValue } from "../../shared/own-key.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 
 import {
+  installedCopyReadOptions,
   readDependencyDeclaration,
   readInstalledCopyDeclaration,
 } from "./dependency-declaration-read.ts";
 
-import type { DependencyDeclarationReader } from "./dependency-declaration-read.ts";
+import type {
+  DependencyDeclarationReader,
+  OwnManifestRefusal,
+} from "./dependency-declaration-read.ts";
 import type { DeclaredDependency } from "../../domain/dependencies.ts";
+import type { DeclarationLookupResult } from "../../domain/dependency-closure.ts";
 import type { DeclarationIndex, OrphanCandidate } from "../../domain/dependency-orphans.ts";
+import type { ManifestPluginEntry } from "../../domain/manifest-lookup.ts";
+import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Reason } from "../../shared/notification-types.ts";
@@ -235,30 +244,77 @@ function manifestLoadPhrase(err: unknown): string {
     : "its marketplace manifest cannot be read";
 }
 
-/**
- * What one record declares, in the D-05-06 read order, with every declaration
- * addressed. A declaration naming no marketplace resolves in the declaring
- * record's own -- the same fill rule the closure walk applies -- so the keys
- * derived here compare exactly against the keys the callers ask about.
- *
- * Exported so a caller that needs ONE record's declarations (rather than the
- * whole scope's) can reuse the identical D-05-06 read order and fail-closed
- * shape without re-deriving it -- `enable-disable.ts`'s own per-key lazy
- * cascade lookup is the first such caller (WR-03).
- */
-export async function readRecordDeclarations(
+/** The record's marketplace manifest, or the failure that names the record. */
+async function loadDeclarerManifest(
   options: ScopeDeclarationDetailOptions,
   marketplace: MarketplaceStateRecord,
-  name: string,
-): Promise<RecordDeclarations> {
-  const key = `${name}@${marketplace.name}`;
-  let manifest: Awaited<ReturnType<typeof loadMarketplaceManifest>>;
+  key: string,
+): Promise<{ readonly ok: true; readonly manifest: MarketplaceManifest } | IndexFailure> {
   try {
-    manifest = await (options.loadManifest ?? loadMarketplaceManifest)(marketplace.manifestPath);
+    const load = options.loadManifest ?? loadMarketplaceManifest;
+    return { ok: true, manifest: await load(marketplace.manifestPath) };
   } catch (err) {
     return unreadableDeclarer(key, narrowProbeError(err), manifestLoadPhrase(err));
   }
+}
 
+/**
+ * D-05-07: a declaration read that answered unusable -- a present-but-unusable
+ * own manifest, or a declaration the parser rejects. Convergence reports a
+ * refused installed copy through the same arm (D-PL2-25), so the cause wording
+ * has this one home.
+ */
+export function unusableDeclaration(
+  key: string,
+  read: Extract<DeclarationLookupResult | OwnManifestRefusal, { readonly kind: "unusable" }>,
+): IndexFailure {
+  return unreadableDeclarer(
+    key,
+    "ownManifest" in read ? "unreadable manifest" : "invalid manifest",
+    read.detail,
+  );
+}
+
+/**
+ * D-05-07: the failure of a record its marketplace does not list and whose
+ * installed copy answers nothing.
+ */
+function notInManifest(key: string): IndexFailure {
+  return unreadableDeclarer(
+    key,
+    "not in manifest",
+    "not declared by its marketplace, and its installed copy cannot be read",
+  );
+}
+
+/** `dependencies`, each addressed in the declaring record's marketplace where it names none. */
+function addressedDeclarations(
+  dependencies: readonly DeclaredDependency[],
+  marketplace: MarketplaceStateRecord,
+  delisted: boolean,
+): RecordDeclarations {
+  return {
+    ok: true,
+    declared: dependencies.map((dep) => ({
+      ...dep,
+      marketplace: dep.marketplace ?? marketplace.name,
+    })),
+    ...(delisted && { delisted: true }),
+  };
+}
+
+/**
+ * The catalog read of one record against its loaded marketplace manifest, in
+ * the D-05-06 order: the entry's plugin root (own manifest first, entry
+ * second), or the installed copy of a record the manifest no longer lists.
+ */
+async function readCatalogDeclarations(
+  options: ScopeDeclarationDetailOptions,
+  marketplace: MarketplaceStateRecord,
+  name: string,
+  manifest: MarketplaceManifest,
+): Promise<RecordDeclarations> {
+  const key = `${name}@${marketplace.name}`;
   const declared = lookupDeclaredPlugin(manifest, name);
   const read =
     declared.kind === "absent"
@@ -271,35 +327,112 @@ export async function readRecordDeclarations(
           refuseUnusableOwnManifest: true,
         });
   if (read.kind === "absent") {
-    return unreadableDeclarer(
-      key,
-      "not in manifest",
-      "not declared by its marketplace, and its installed copy cannot be read",
-    );
+    return notInManifest(key);
   }
 
   if (read.kind === "unusable") {
-    return unreadableDeclarer(
-      key,
-      "ownManifest" in read ? "unreadable manifest" : "invalid manifest",
-      read.detail,
-    );
+    return unusableDeclaration(key, read);
   }
 
-  return {
-    ok: true,
-    declared: read.dependencies.map((dep) => ({
-      ...dep,
-      marketplace: dep.marketplace ?? marketplace.name,
-    })),
-    ...(declared.kind === "absent" && { delisted: true }),
-  };
+  return addressedDeclarations(read.dependencies, marketplace, declared.kind === "absent");
+}
+
+/** D-PL2-22: what one marketplace entry's `dependencies` declare, read alone. */
+function entryDeclarations(
+  key: string,
+  entry: ManifestPluginEntry,
+  marketplace: MarketplaceStateRecord,
+): RecordDeclarations {
+  const read = toClosureLookupResult(parseDeclaredDependencies(entry.dependencies));
+  return read.kind === "unusable"
+    ? unusableDeclaration(key, read)
+    : addressedDeclarations(read.dependencies, marketplace, false);
+}
+
+/**
+ * What one record declares, in the D-05-06 read order, with every declaration
+ * addressed. A declaration naming no marketplace resolves in the declaring
+ * record's own -- the same fill rule the closure walk applies -- so the keys
+ * derived here compare exactly against the keys the callers ask about.
+ *
+ * Exported so a caller that needs ONE record's declarations (rather than the
+ * whole scope's) can reuse the identical D-05-06 read order and fail-closed
+ * shape without re-deriving it.
+ */
+export async function readRecordDeclarations(
+  options: ScopeDeclarationDetailOptions,
+  marketplace: MarketplaceStateRecord,
+  name: string,
+): Promise<RecordDeclarations> {
+  const loaded = await loadDeclarerManifest(options, marketplace, `${name}@${marketplace.name}`);
+  return loaded.ok ? readCatalogDeclarations(options, marketplace, name, loaded.manifest) : loaded;
+}
+
+/**
+ * D-PL2-06: what one record declares, read from the copy it installed, as
+ * Claude Code reads an installed plugin's own `plugin.json` (E2). Only the
+ * enable closure and the update preflight's holder walk read this way; every
+ * other caller keeps `readRecordDeclarations`.
+ *
+ * A record with `resolvedSha` has its `resolvedSource` read, admitted only
+ * inside the one clone root that owns the record, as `installedCopyReadOptions`
+ * chooses it (NFR-10), and bounded as D-PL2-17 says. A readable copy answers,
+ * still flagged `delisted` when the loaded manifest no longer lists the
+ * record, so the enable root's DLS-01 exemption keeps working. A
+ * present-but-unusable copy, or a refused one, fails closed (D-05-07).
+ *
+ * D-PL2-22: a copy that holds no manifest answers its marketplace entry's
+ * `dependencies` alone. Claude Code makes the entry the whole manifest of a
+ * copy with no `plugin.json` (E2), so the catalog copy's own manifest is never
+ * read. A copy that is gone takes the same answer, because this read cannot
+ * download it again (NFR-5). A delisted record has no entry, so it fails as
+ * `not in manifest` (D-05-07).
+ *
+ * D-PL2-07: a record without `resolvedSha` is a path source whose installed
+ * copy IS the marketplace tree; this extension keeps no copy of its old
+ * `plugin.json`, so it reads the catalog unchanged (DECLREC-01 is deferred).
+ */
+export async function readInstalledRecordDeclarations(
+  options: ScopeDeclarationDetailOptions,
+  marketplace: MarketplaceStateRecord,
+  name: string,
+): Promise<RecordDeclarations> {
+  const key = `${name}@${marketplace.name}`;
+  const loaded = await loadDeclarerManifest(options, marketplace, key);
+  if (!loaded.ok) {
+    return loaded;
+  }
+
+  const record = ownValue(marketplace.plugins, name);
+  if (record?.resolvedSha === undefined) {
+    return readCatalogDeclarations(options, marketplace, name, loaded.manifest);
+  }
+
+  const copy = await readInstalledCopyDeclaration({
+    ...installedCopyReadOptions(record, {
+      marketplaceRoot: marketplace.marketplaceRoot,
+      pluginClonesDir: options.locations.pluginClonesDir,
+    }),
+    ...(options.reader !== undefined && { reader: options.reader }),
+  });
+  const declared = lookupDeclaredPlugin(loaded.manifest, name);
+  switch (copy.kind) {
+    case "absent":
+      return declared.kind === "absent"
+        ? notInManifest(key)
+        : entryDeclarations(key, declared.entry, marketplace);
+    case "unusable":
+      return unusableDeclaration(key, copy);
+    case "found":
+      return addressedDeclarations(copy.dependencies, marketplace, declared.kind === "absent");
+  }
 }
 
 /**
  * DLS-01: a delisted record's declarations come from its installed copy, the
- * root its install recorded (`resolvedSource`), admitted only inside the
- * marketplace clone or the scope's `plugin-clones/` (NFR-10).
+ * root its install recorded (`resolvedSource`), admitted only inside the one
+ * clone root that owns the record (NFR-10, D-PL2-12) and read inside Claude
+ * Code's boundary (D-PL2-17).
  */
 async function readInstalledCopy(
   options: ScopeDeclarationDetailOptions,
@@ -312,8 +445,10 @@ async function readInstalledCopy(
   }
 
   return readInstalledCopyDeclaration({
-    pluginRoot: record.resolvedSource,
-    ownerRoots: [marketplace.marketplaceRoot, options.locations.pluginClonesDir],
+    ...installedCopyReadOptions(record, {
+      marketplaceRoot: marketplace.marketplaceRoot,
+      pluginClonesDir: options.locations.pluginClonesDir,
+    }),
     ...(options.reader !== undefined && { reader: options.reader }),
   });
 }
@@ -341,6 +476,8 @@ export async function buildScopeDeclarationIndex(
 
       // eslint-disable-next-line no-await-in-loop -- the first unreadable record stops the index
       const read = await readRecordDeclarations(options, marketplace, name);
+      // D-PL2-05: the whole scope fails closed on the first unreadable record
+      // (D-05-07), as Claude Code aborts prune and the orphan scan (E6).
       if (!read.ok) {
         return read;
       }
@@ -353,18 +490,24 @@ export async function buildScopeDeclarationIndex(
   return { ok: true, index, candidates };
 }
 
+/** One record's declaration read, as the two detail walks pass it. */
+type RecordDeclarationRead = typeof readRecordDeclarations;
+
 /**
- * Maps every record in the scope to what it declares, constraints intact,
- * stopping at the FIRST record whose declarations cannot be established.
+ * Maps every record in the scope to what `readRecord` says it declares,
+ * constraints intact, stopping at the FIRST record whose declarations cannot
+ * be established.
  */
-export async function buildScopeDeclarationDetail(
+async function walkScopeDeclarationDetail(
   options: ScopeDeclarationDetailOptions,
+  readRecord: RecordDeclarationRead,
 ): Promise<ScopeDeclarationDetailResult> {
   const declarations = new Map<string, readonly AddressedDependency[]>();
   for (const marketplace of Object.values(options.state.marketplaces)) {
     for (const name of Object.keys(marketplace.plugins)) {
       // eslint-disable-next-line no-await-in-loop -- the first unreadable record stops the index
-      const read = await readRecordDeclarations(options, marketplace, name);
+      const read = await readRecord(options, marketplace, name);
+      // D-PL2-05: the whole scope fails closed on the first unreadable record.
       if (!read.ok) {
         return read;
       }
@@ -374,6 +517,28 @@ export async function buildScopeDeclarationDetail(
   }
 
   return { ok: true, declarations };
+}
+
+/**
+ * Maps every record in the scope to what it declares, constraints intact,
+ * read catalog-first (D-05-06), stopping at the FIRST record whose
+ * declarations cannot be established.
+ */
+export function buildScopeDeclarationDetail(
+  options: ScopeDeclarationDetailOptions,
+): Promise<ScopeDeclarationDetailResult> {
+  return walkScopeDeclarationDetail(options, readRecordDeclarations);
+}
+
+/**
+ * D-PL2-06: the same walk with each record read from its installed copy
+ * (`readInstalledRecordDeclarations`). The update preflight's holder walk uses
+ * it, so an update is held by the range an installed plugin runs with.
+ */
+export function buildInstalledScopeDeclarationDetail(
+  options: ScopeDeclarationDetailOptions,
+): Promise<ScopeDeclarationDetailResult> {
+  return walkScopeDeclarationDetail(options, readInstalledRecordDeclarations);
 }
 
 /**

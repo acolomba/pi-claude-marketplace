@@ -89,6 +89,17 @@ describe("narrowResolverNotes", () => {
     assert.deepStrictEqual(reasons, ["source missing"]);
   });
 
+  test("D-PL2-24: classifies a manifest link outside its boundary as unreadable manifest", () => {
+    // arrange
+    const notes = ["plugin manifest resolves outside the plugin directory"];
+
+    // act
+    const reasons = narrowResolverNotes(notes);
+
+    // assert
+    assert.deepStrictEqual(reasons, ["unreadable manifest"]);
+  });
+
   test("classifies an unmatched note as unsupported source", () => {
     // arrange
     const notes = ["unsupported source kind: npm"];

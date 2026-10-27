@@ -68,6 +68,14 @@ const CONVERGE_POLICY = {
   searchReleaseTags: false,
 } satisfies MaterializationPolicy;
 
+/**
+ * D-PL2-12: these fixtures record a commit with a copy outside the plugin
+ * clones, which the production gate refuses as an unreadable declarer. A case
+ * about the refresh itself, not the gate, admits it with this gate.
+ */
+const ADMITTING_GATE: PreparePluginUpdateOptions["constraintGate"] = () =>
+  Promise.resolve({ kind: "unconstrained" });
+
 function pluginRecord(version: string, enabled = true): PluginRecord {
   return {
     version,
@@ -740,7 +748,7 @@ test("WR-01: refreshing a disabled path-source pin drops a stale resolvedSha the
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
 
   // act
-  await prepare(seed);
+  await prepare(seed, { constraintGate: ADMITTING_GATE });
 
   // assert
   const refreshed = (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
@@ -791,7 +799,7 @@ test("WR-02: clears a stale resolvedSha even when nothing else about the disable
   await saveState(seed.locations.extensionRoot, state);
 
   // act
-  await prepare(seed);
+  await prepare(seed, { constraintGate: ADMITTING_GATE });
 
   // assert
   const refreshed = (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
@@ -2027,6 +2035,7 @@ test("swallows disabled clone cleanup failure after persisting the new pin", asy
 
   // act
   const outcome = await prepare(seed, {
+    constraintGate: ADMITTING_GATE,
     cloneCacheSeam,
     cleanupClones: () => Promise.reject(new Error("cleanup failed")),
   });
@@ -2059,6 +2068,7 @@ test("cleans obsolete clones after persisting a disabled git pin", async (t) => 
 
   // act
   await prepare(seed, {
+    constraintGate: ADMITTING_GATE,
     cloneCacheSeam,
     cleanupClones: () => {
       cleanupCalls += 1;
@@ -2082,6 +2092,7 @@ test("WR-05: sweeps clones when a disabled refresh clears the record's resolvedS
 
   // act
   await prepare(seed, {
+    constraintGate: ADMITTING_GATE,
     cleanupClones: () => {
       cleanupCalls += 1;
       return Promise.resolve();
@@ -2471,7 +2482,7 @@ for (const { label, recordedSha, partition } of [
     };
 
     // act
-    const outcome = await prepare(seed, { cloneCacheSeam });
+    const outcome = await prepare(seed, { cloneCacheSeam, constraintGate: ADMITTING_GATE });
 
     // assert
     assert.strictEqual("partition" in outcome ? outcome.partition : undefined, partition);
@@ -2512,7 +2523,7 @@ for (const { label, recordedSha, source } of [
     };
 
     // act
-    const outcome = await prepare(seed, { cloneCacheSeam });
+    const outcome = await prepare(seed, { cloneCacheSeam, constraintGate: ADMITTING_GATE });
 
     // assert
     assert.ok(!("partition" in outcome));

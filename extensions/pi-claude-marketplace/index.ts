@@ -16,7 +16,10 @@ import { DEFAULT_GIT_OPS, runWithGitAbortSignal } from "./orchestrators/marketpl
 import { updateMarketplace } from "./orchestrators/marketplace/update.ts";
 import { createUpdateOperations } from "./orchestrators/plugin/operations.ts";
 import { recomputePluginPath } from "./orchestrators/plugin-path.ts";
-import { createApplyReconcile } from "./orchestrators/reconcile/apply.ts";
+import {
+  createApplyReconcile,
+  createScopeDependencyInstall,
+} from "./orchestrators/reconcile/apply.ts";
 import { createLoadReconcile } from "./orchestrators/reconcile/load.ts";
 import { locationsFor } from "./persistence/locations.ts";
 import { loadState } from "./persistence/state-io.ts";
@@ -94,9 +97,15 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   // installation state (APL-03 / D-02) unless the configs turn `autoapply` on,
   // when it runs the same apply operation before resource discovery (AAP-02).
   // Constructing them here keeps each binding at extension lifetime rather
-  // than rebuilding it on every event.
+  // than rebuilding it on every event. D-PL2-09: `marketplace add` runs the
+  // apply operation's missing-dependency step over its own scope, injected
+  // because no marketplace orchestrator may import the apply operation.
   const applyReconcile = createApplyReconcile({ loadState });
   const loadReconcile = createLoadReconcile({ loadState }, applyReconcile);
+  const installMissingDependencies = createScopeDependencyInstall(
+    { loadState },
+    { hooksRouting, completionCache },
+  );
 
   // DISP-01 / DISP-02 / D-59-02 / D-59-03: register the hooks bridge at
   // factory time. The bridge's signature requires a `cwd`, which does not
@@ -228,6 +237,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
       completionCache,
       beginPluginUpdateRun: pluginUpdateOperations.beginPluginUpdateRun,
       updateMarketplace,
+      installMissingDependencies,
       runWithAbortSignal: runWithGitAbortSignal,
     }),
     env: process.env,
@@ -244,6 +254,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
       gitOps: DEFAULT_GIT_OPS,
       beginPluginUpdateRun: pluginUpdateOperations.beginPluginUpdateRun,
       applyReconcile,
+      installMissingDependencies,
     },
     hooksRouting,
     pluginUpdateOperations.updatePlugins,

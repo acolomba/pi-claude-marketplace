@@ -9375,7 +9375,7 @@ for (const { label, createObstacle, expected } of [
       await mkdir(path.join(root, ".claude-plugin"));
       await symlink(devNull, path.join(root, ".claude-plugin", "plugin.json"));
     },
-    expected: "  ○ host (available)\n    dependencies: bare-dep@mp",
+    expected: "  ⊘ host (unavailable) {unreadable manifest}",
   },
   {
     label: "a directory instead of plugin.json",

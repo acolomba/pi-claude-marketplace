@@ -32,7 +32,10 @@
 //     precondition, a different source under the official name included, is
 //     rendered by `notifyAddFailure`, byte-identical to `marketplace add` for
 //     the same source (reason and cause), and the autoupdate step is skipped.
-//     An error that is not an add precondition propagates.
+//     An error that is not an add precondition propagates. A throw of the
+//     missing-dependency step comes after the add committed, so it is not an
+//     add failure: the autoupdate step runs, then the error propagates as a
+//     `BootstrapStepError`.
 //   - ATTR-07: bootstrap passes `rethrowPreconditionErrors: true` so a failed
 //     add reaches the catch below, which is how it knows to skip the
 //     autoupdate step.
@@ -45,6 +48,7 @@ import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { AddMarketplaceOptions } from "../marketplace/add.ts";
 import type { GitOps } from "../marketplace/shared.ts";
+import type { ScopeDependencyInstallFn } from "../types.ts";
 
 /**
  * Hard-coded GitHub shorthand for the canonical Anthropic marketplace.
@@ -64,6 +68,19 @@ const BOOTSTRAP_SOURCE = "anthropics/claude-plugins-official";
  */
 export const BOOTSTRAP_MARKETPLACE_NAME = "claude-plugins-official";
 
+/**
+ * WR-02 / D-PL2-09: a step after the official marketplace's add committed
+ * threw. The add already reported `(added)` and the autoupdate step ran, so
+ * this is not a failed add: the handler lets `cause` reach the command, as
+ * `marketplace add` does for the same step.
+ */
+export class BootstrapStepError extends Error {
+  constructor(cause: unknown) {
+    super("a step after the bootstrap marketplace add failed", { cause });
+    this.name = "BootstrapStepError";
+  }
+}
+
 export interface BootstrapOptions {
   readonly ctx: ExtensionContext;
   /**
@@ -75,6 +92,12 @@ export interface BootstrapOptions {
   readonly completionCache: CompletionCache;
   /** D-12 injection seam. Always provided by the edge handler via EdgeDeps. */
   readonly gitOps: GitOps;
+  /**
+   * D-PL2-09: bootstrap runs the missing-dependency step through its add, in
+   * the user scope, and the add selects only the official marketplace's
+   * dependencies. Its rows render under the add's `(added)` row.
+   */
+  readonly installMissingDependencies: ScopeDependencyInstallFn;
 }
 
 /**
@@ -98,6 +121,7 @@ export interface BootstrapOptions {
  * without a clone (LAYER-01).
  */
 export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<void> {
+  const add: { committed: boolean } = { committed: false };
   const addOptions: AddMarketplaceOptions = {
     ctx: opts.ctx,
     run: opts.run,
@@ -106,17 +130,31 @@ export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<voi
     rawSource: BOOTSTRAP_SOURCE,
     completionCache: opts.completionCache,
     gitOps: opts.gitOps,
+    installMissingDependencies: (request) => {
+      // The add runs the step only after its state commit.
+      add.committed = true;
+      return opts.installMissingDependencies(request);
+    },
     // ATTR-07: re-throw the typed precondition instead of emitting a
     // `(failed)` row, so the catch below can skip the autoupdate step.
     rethrowPreconditionErrors: true,
   };
+  let stepFailure: { readonly err: unknown } | undefined;
   try {
     await addMarketplace(addOptions);
   } catch (err) {
-    // A failed add reports its reason and cause as `marketplace add` does for
-    // the same source, and there is nothing to autoupdate.
-    notifyAddFailure(addOptions, err);
-    return;
+    if (!add.committed) {
+      // A failed add reports its reason and cause as `marketplace add` does
+      // for the same source, and there is nothing to autoupdate.
+      notifyAddFailure(addOptions, err);
+      return;
+    }
+
+    // WR-02: the add committed and reported `(added)`, so a throw of its
+    // missing-dependency step is not an add failure. The autoupdate step
+    // still runs, and the error then reaches the handler, wrapped so the
+    // handler can tell it from a failed add.
+    stepFailure = { err };
   }
 
   await setMarketplaceAutoupdate({
@@ -127,4 +165,7 @@ export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<voi
     scope: "user",
     cwd: opts.cwd,
   });
+  if (stepFailure !== undefined) {
+    throw new BootstrapStepError(stepFailure.err);
+  }
 }

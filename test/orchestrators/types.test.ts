@@ -16,6 +16,8 @@ import type {
   ReinstallReinstalledOutcome,
   ReinstallSkippedOutcome,
   RevisionMove,
+  ScopeDependencyInstallFn,
+  ScopeDependencyInstallResult,
   UpdatePhaseBridge,
   UpdatePhaseFailure,
 } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
@@ -243,6 +245,37 @@ const PLUGIN_UPDATE_FN = ((plugin, marketplace, scope) => {
 }) satisfies PluginUpdateFn;
 
 void PLUGIN_UPDATE_FN;
+
+// D-PL2-09: the missing-dependency step a marketplace add receives answers one
+// installed row per member, or the refusal's failed row, and the MCP notices.
+const SCOPE_DEPENDENCY_INSTALL_RESULT = {
+  rows: [
+    {
+      status: "installed",
+      name: "lib@other",
+      version: "1.0.0",
+      dependencies: [],
+      reasons: ["dependency installed"],
+      severity: "info",
+      needsReload: true,
+    },
+    {
+      status: "failed",
+      name: "zip@other",
+      reasons: ["version conflict"],
+      severity: "error",
+      needsReload: false,
+    },
+  ],
+  mcpConfigNotices: [],
+} satisfies ScopeDependencyInstallResult;
+
+const SCOPE_DEPENDENCY_INSTALL_FN = ((request) => {
+  void request.select({ plugin: "lib", marketplace: "other", declarers: ["app@tools"] });
+  return Promise.resolve(SCOPE_DEPENDENCY_INSTALL_RESULT);
+}) satisfies ScopeDependencyInstallFn;
+
+void SCOPE_DEPENDENCY_INSTALL_FN;
 
 // D-26: a catalog move names its scope's cwd, whether a partial candidate is admitted,
 // and whether it re-materializes the recorded revision (D-10 / D-25).
@@ -653,6 +686,19 @@ const PLUGIN_UPDATE_FN_WITH_WRONG_RETURN = (
 
 // @ts-expect-error the update function resolves a PluginUpdateOutcome
 void (PLUGIN_UPDATE_FN_WITH_WRONG_RETURN satisfies PluginUpdateFn);
+
+const SCOPE_DEPENDENCY_INSTALL_FN_WITH_WRONG_PARAMETER = (
+  _scope: "user" | "project",
+): Promise<ScopeDependencyInstallResult> => Promise.resolve(SCOPE_DEPENDENCY_INSTALL_RESULT);
+
+// @ts-expect-error the missing-dependency step takes its request bundle
+void (SCOPE_DEPENDENCY_INSTALL_FN_WITH_WRONG_PARAMETER satisfies ScopeDependencyInstallFn);
+
+const SCOPE_DEPENDENCY_INSTALL_FN_WITH_WRONG_RETURN = (): Promise<string> =>
+  Promise.resolve("installed");
+
+// @ts-expect-error the missing-dependency step resolves its rows and notices
+void (SCOPE_DEPENDENCY_INSTALL_FN_WITH_WRONG_RETURN satisfies ScopeDependencyInstallFn);
 
 void ({
   declaresAgents: false,

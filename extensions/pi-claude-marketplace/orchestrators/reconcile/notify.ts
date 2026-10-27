@@ -30,7 +30,7 @@
 //   pluginsToDisable      -> child row { status: "will disable" }
 //   pluginsToEnable       -> child row { status: "will enable" }
 //                            (recorded-but-disabled detection via the
-//                            empty-resources marker)
+//                            record's explicit `enabled: false`, ENBL-05)
 //   pluginsToDependencyDisable
 //                         -> child row { status: "will disable" }, folded into
 //                            the pluginsToDisable loop (LOAD-01). The planner's
@@ -68,6 +68,7 @@ import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type MarketplaceNotificationMessage,
   type MarketplaceStatus,
+  type PluginFailedMessage,
   type PluginInstalledMessage,
   type PluginNotificationMessage,
   type PluginPartiallyInstalledMessage,
@@ -100,17 +101,18 @@ import type {
   PerEntryOutcome,
   PluginBackfilledOutcome,
   PluginConvergedOutcome,
+  PluginDeclarerUnreadableOutcome,
   PluginEnabledOutcome,
   PluginInstalledOutcome,
 } from "./apply-outcomes.ts";
-import type { ConvergencePlan, PlannedMove } from "./convergence.ts";
+import type { CascadeStep, ConvergencePlan, PlannedMove } from "./convergence.ts";
 import type { PendingMsg, ReconcileAppliedMsg } from "./reconcile.messaging.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { MarketplaceRows } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { PluginUpdateOutcome } from "../types.ts";
+import type { PluginUpdateOutcome, ScopeDependencyInstallRow } from "../types.ts";
 
 /**
  * S8 (PR #51): `status` is narrowed to the closed set the pending /
@@ -309,29 +311,64 @@ function pushMarketplaceActions(
  * The arrow names commits only under the `updated` row's rule (UPR-02). A move
  * whose supported set grew carries `{components now supported}`, the marker a
  * backfilled row carries (WCONV-03).
- *
- * D-12: then one row per blocked move, the row `update` gives the same block:
- * a range hold is `(skipped) {dependents constrain}` with the gate's cause
- * line, and a consent decline is `(partially-upgradable)` with the dropped
- * kinds and the hint naming `update --partial` (D-24). Both are warnings in
- * every cardinality; a blocked move changes nothing, so it asks for no reload.
  */
-function pushConvergence(
+function pushConvergenceMoves(
   byMp: Map<string, MarketplaceBlock<PendingMsg>>,
   convergence: ConvergencePlan,
 ): void {
   for (const move of convergence.moves) {
-    const commits = revisionCommits(move);
-    ensureMarketplaceBlock(byMp, move.scope, move.marketplace).plugins.push({
-      status: "will update",
-      name: move.plugin,
-      from: move.fromVersion,
-      to: move.toVersion,
-      ...(commits !== undefined && { commits }),
-      ...(move.grew && { reasons: ["components now supported"] }),
-    });
+    ensureMarketplaceBlock(byMp, move.scope, move.marketplace).plugins.push(willUpdateRow(move));
   }
+}
 
+/**
+ * D-PL2-16 / WR-07: the rows of the steps `apply` runs after its
+ * missing-dependency installs, in its order. A step with a move is its
+ * `will update` row. A step with an enable then lists `will enable` when it
+ * has no move or is a waiting record's (D-PL2-18); a deferred record's move
+ * row covers its enable (WR-02).
+ */
+function pushStepsAfterInstalls(
+  byMp: Map<string, MarketplaceBlock<PendingMsg>>,
+  steps: readonly CascadeStep[],
+): void {
+  for (const step of steps) {
+    const { scope, marketplace, plugin } = step.move ?? step.enable;
+    const rows = ensureMarketplaceBlock(byMp, scope, marketplace).plugins;
+    if (step.move !== undefined) {
+      rows.push(willUpdateRow(step.move));
+    }
+
+    if (step.enable !== undefined && (step.move === undefined || step.waiting === true)) {
+      rows.push({ status: "will enable", name: plugin });
+    }
+  }
+}
+
+/** D-14: the `will update` row of one catalog move. */
+function willUpdateRow(move: PlannedMove): PendingMsg {
+  const commits = revisionCommits(move);
+  return {
+    status: "will update",
+    name: move.plugin,
+    from: move.fromVersion,
+    to: move.toVersion,
+    ...(commits !== undefined && { commits }),
+    ...(move.grew && { reasons: ["components now supported"] }),
+  };
+}
+
+/**
+ * D-12: one row per blocked move, the row `update` gives the same block: a
+ * range hold is `(skipped) {dependents constrain}` with the gate's cause line,
+ * and a consent decline is `(partially-upgradable)` with the dropped kinds and
+ * the hint naming `update --partial` (D-24). Both are warnings in every
+ * cardinality; a blocked move changes nothing, so it asks for no reload.
+ */
+function pushBlockedMoves(
+  byMp: Map<string, MarketplaceBlock<PendingMsg>>,
+  convergence: ConvergencePlan,
+): void {
   for (const hold of convergence.holds) {
     ensureMarketplaceBlock(byMp, hold.scope, hold.marketplace).plugins.push(holdRow(hold));
   }
@@ -480,7 +517,8 @@ export function convergedMoveOutcomes(
 
 /**
  * APPLY1-01: the net row of a held-down record `apply` moved and then enabled
- * in one cascade: the move's `(updated)` row, as `pending` lists it.
+ * in one cascade: the move's `(updated)` row, as `pending` lists it. It is
+ * also a waiting record's move row, ahead of its enable row (D-PL2-18).
  */
 export function enabledMoveOutcome(move: PlannedMove): PluginConvergedOutcome {
   const row: PluginUpdatedMessage = {
@@ -672,7 +710,7 @@ export async function resolvePendingForceInstalls(
  *   - pluginsToDisable      -> child row { status: "will disable" }
  *   - pluginsToEnable       -> child row { status: "will enable" }
  *                              (recorded-but-disabled detection via the
- *                              empty-resources marker)
+ *                              record's explicit `enabled: false`, ENBL-05)
  *   - pluginsToDependencyDisable
  *                           -> child row { status: "will disable" }, folded
  *                              into the pluginsToDisable loop (LOAD-01). The
@@ -681,28 +719,42 @@ export async function resolvePendingForceInstalls(
  *                              passes the satisfaction verdict, so the bucket
  *                              fills (D-21, superseding PENDING-VERDICT-01 /
  *                              D-06-25).
- *   - pluginsToDependencyInstall
- *                           -> child row { status: "will install" }, folded
- *                              into the pluginsToInstall loop (MISS-01,
- *                              D-09-12). A bucket entry never matches a force-
- *                              install key, so its row is the bare token. It
- *                              fills from the same verdict (D-21).
  *   - `convergence`         -> child row { status: "will update" } per catalog
  *                              move (D-14, superseding D-66-05's "no update
- *                              bucket"), then one `skipped` row per range
- *                              hold and one `partially-upgradable` row per
- *                              consent decline (D-12), after the plan buckets.
+ *                              bucket"), after the plan buckets, then one
+ *                              `skipped` row per range hold and one
+ *                              `partially-upgradable` row per consent decline
+ *                              (D-12), after the dependency installs.
+ *   - pluginsToDependencyInstall
+ *                           -> child row { status: "will install" } after the
+ *                              move rows (MISS-01, D-09-12). It never carries
+ *                              the partial modifier, so its row is the bare
+ *                              token. It fills from the same verdict (D-21).
+ *   - `refusedCopies`       -> after the plan buckets and before the catalog
+ *                              moves, the REC-05 row `apply` reports for a
+ *                              record whose installed copy cannot be used
+ *                              (D-PL2-25).
+ *   - `afterInstalls`       -> after the dependency installs, the rows of
+ *                              each step `apply` runs after them, in its
+ *                              order: { status: "will update" } for a step
+ *                              with a move (WR-07), then { status:
+ *                              "will enable" } for an enable alone
+ *                              (D-PL2-16) or a waiting record's (D-PL2-18).
  *
  * Ordering: blocks are sorted by `compareByNameThenScope` (name primary
- * case-insensitive, project-before-user secondary). Plugin rows within a
- * block preserve insertion order per their owning bucket -- the apply path
- * will re-order at execution time if needed.
+ * case-insensitive, project-before-user secondary). D-PL2-02: plugin rows
+ * within a block follow the order `apply` makes the changes in: marketplace
+ * actions and mismatches, config installs, uninstalls, disables, enables,
+ * refused installed copies, catalog moves, missing-dependency installs, the
+ * enables and moves that wait on them, then the blocked moves.
  */
 export function buildReconcilePendingNotification(
   plans: readonly ReconcilePlan[],
   forceInstallKeys: ReadonlySet<string> = new Set<string>(),
   recordedVersions: ReadonlyMap<string, string> = new Map<string, string>(),
   convergence: ConvergencePlan = NO_CONVERGENCE,
+  afterInstalls: readonly CascadeStep[] = [],
+  refusedCopies: readonly PluginDeclarerUnreadableOutcome[] = [],
 ): {
   readonly marketplaces: readonly MarketplaceRows<PendingMsg>[];
 } {
@@ -718,12 +770,7 @@ export function buildReconcilePendingNotification(
       );
     }
 
-    // MISS-01 / D-09-12: the dependency-install bucket previews the same
-    // action the config-driven install bucket does, so both feed one loop
-    // and one token. A bucket entry never matches a key
-    // `resolvePendingForceInstalls` resolved (its candidates come from
-    // `pluginsToInstall` alone), so its row is always the bare token.
-    for (const o of [...plan.pluginsToInstall, ...plan.pluginsToDependencyInstall]) {
+    for (const o of plan.pluginsToInstall) {
       const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
       // FSTAT-06 / D-66-04: stamp the partial modifier when the planned install
       // candidate resolved `partially-available` (no-network resolveStrict, computed
@@ -771,7 +818,29 @@ export function buildReconcilePendingNotification(
     }
   }
 
-  pushConvergence(byMp, convergence);
+  // D-PL2-25: `apply` reports a record whose installed copy it cannot use
+  // before its catalog moves.
+  for (const o of refusedCopies) {
+    ensureMarketplaceBlock(byMp, o.scope, o.marketplace).plugins.push(declarerUnreadableRow(o));
+  }
+
+  pushConvergenceMoves(byMp, convergence);
+
+  // MISS-01 / D-09-12 / D-PL2-02: `apply` installs a missing dependency after
+  // the catalog moves land, so its row follows the move rows. It keeps the
+  // bare `(will install)` token: `resolvePendingForceInstalls` resolves
+  // `pluginsToInstall` alone.
+  for (const o of plans.flatMap((plan) => plan.pluginsToDependencyInstall)) {
+    ensureMarketplaceBlock(byMp, o.scope, o.marketplace).plugins.push({
+      status: "will install",
+      name: o.plugin,
+    });
+  }
+
+  // D-PL2-16 / WR-07: the steps that wait on a planned install run after it.
+  pushStepsAfterInstalls(byMp, afterInstalls);
+
+  pushBlockedMoves(byMp, convergence);
 
   return {
     marketplaces: Object.freeze(
@@ -1115,15 +1184,7 @@ function applyMarketplaceOutcomeToBlock(
       // trailer below the row. Path tokens were already stripped at the apply
       // boundary via redactAbsolutePaths (T-53-02-02 / T-55-02-01).
       if (outcome.cause !== undefined) {
-        block.plugins.push({
-          status: "failed",
-          name: outcome.basename,
-          reasons: [outcome.reason],
-          cause: outcome.cause,
-          // D-03/D-06: a synthetic invalid-config child -> error, no reload.
-          severity: "error",
-          needsReload: false,
-        });
+        block.plugins.push(invalidBlockRow(outcome));
       }
 
       return block;
@@ -1142,6 +1203,26 @@ function applyMarketplaceOutcomeToBlock(
       });
       return block;
   }
+}
+
+/**
+ * The synthetic `(failed)` child of an invalid file block, named by the file's
+ * basename and carrying the diagnostic cause when there is one. `apply` pushes
+ * it under the block header, and the missing-dependency step reports it for a
+ * scope read that threw (D-PL2-20).
+ */
+function invalidBlockRow(
+  outcome: Extract<PerEntryOutcome, { kind: "invalid-block" }>,
+): PluginFailedMessage {
+  return {
+    status: "failed",
+    name: outcome.basename,
+    reasons: [outcome.reason],
+    ...(outcome.cause !== undefined && { cause: outcome.cause }),
+    // D-03/D-06: a synthetic invalid-config child -> error, no reload.
+    severity: "error",
+    needsReload: false,
+  };
 }
 
 /**
@@ -1185,6 +1266,64 @@ function failedRowReasons(
   }
 
   return reasonAsContent(outcome.reason);
+}
+
+/** The `(failed)` row of a failed reconcile install, uninstall, enable or disable. */
+function failedRowFromOutcome(
+  outcome: Extract<
+    PerEntryOutcome,
+    {
+      kind:
+        | "plugin-install-failed"
+        | "plugin-uninstall-failed"
+        | "plugin-enable-failed"
+        | "plugin-disable-failed";
+    }
+  >,
+): PluginFailedMessage {
+  return {
+    status: "failed",
+    name: outcome.plugin,
+    reasons: failedRowReasons(outcome),
+    // D-05-16 / RESV-06 / MIM-03: a refused uninstall, a dependency-cascade
+    // install failure, and an install that left rollback partials carry a
+    // cause onto this row; the last also carries its phases.
+    ...failedRowCause(outcome),
+    ...failedRowRollback(outcome),
+    // D-03/D-06: a failed reconcile apply row -> error, no reload.
+    severity: "error",
+    needsReload: false,
+  };
+}
+
+/**
+ * D-PL2-09 / D-PL2-11 / D-PL2-20: the rows of the missing-dependency step a
+ * marketplace add runs, built as `apply` builds them. An install or an install
+ * refusal is named by its full `plugin@marketplace` key, because it renders
+ * under the added marketplace's block rather than under its own. A scope read
+ * that threw becomes `apply`'s `state.json` `(failed)` row. The step produces
+ * nothing else, so every other kind maps to no row.
+ */
+export function dependencyInstallRows(
+  outcomes: readonly PerEntryOutcome[],
+): ScopeDependencyInstallRow[] {
+  return outcomes.flatMap((outcome): ScopeDependencyInstallRow[] => {
+    if (outcome.kind === "plugin-installed") {
+      const name = `${outcome.plugin}@${outcome.marketplace}`;
+      return [{ ...installedRowFromOutcome(outcome), name }];
+    }
+
+    if (outcome.kind === "plugin-install-failed") {
+      const name = `${outcome.plugin}@${outcome.marketplace}`;
+      return [{ ...failedRowFromOutcome(outcome), name }];
+    }
+
+    if (outcome.kind === "invalid-block") {
+      return [invalidBlockRow(outcome)];
+    }
+
+    return [];
+  });
 }
 
 /**
@@ -1310,37 +1449,32 @@ function applyPluginOutcomeToBlock(
     case "plugin-uninstall-failed":
     case "plugin-enable-failed":
     case "plugin-disable-failed":
-      block.plugins.push({
-        status: "failed",
-        name: outcome.plugin,
-        reasons: failedRowReasons(outcome),
-        // D-05-16 / RESV-06 / MIM-03: a refused uninstall, a dependency-cascade
-        // install failure, and an install that left rollback partials carry a
-        // cause onto this row; the last also carries its phases.
-        ...failedRowCause(outcome),
-        ...failedRowRollback(outcome),
-        // D-03/D-06: a failed reconcile apply row -> error, no reload.
-        severity: "error",
-        needsReload: false,
-      });
+      block.plugins.push(failedRowFromOutcome(outcome));
       return block;
     case "plugin-declarer-unreadable":
-      block.plugins.push({
-        status: "failed",
-        name: outcome.plugin,
-        reasons: [outcome.reason],
-        cause: outcome.cause,
-        // REC-05: the dependency check failed, not the plugin, which stays
-        // installed and loading -- the carried-out-but-short warning arm.
-        severity: "warning",
-        needsReload: false,
-      });
+      block.plugins.push(declarerUnreadableRow(outcome));
       return block;
     case "plugin-converged":
       // D-08 / D-12: the row was composed where the move's verdict was read.
       block.plugins.push(outcome.row);
       return block;
   }
+}
+
+/**
+ * REC-05: the row of a declarer whose declarations could not be established.
+ * The dependency check failed, not the plugin, which stays installed and
+ * loading -- the carried-out-but-short warning arm.
+ */
+function declarerUnreadableRow(outcome: PluginDeclarerUnreadableOutcome): PluginFailedMessage {
+  return {
+    status: "failed",
+    name: outcome.plugin,
+    reasons: [outcome.reason],
+    cause: outcome.cause,
+    severity: "warning",
+    needsReload: false,
+  };
 }
 
 /** The outcomes whose row is the marketplace block's own header. */

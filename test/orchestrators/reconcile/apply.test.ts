@@ -68,7 +68,10 @@ import {
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { createUninstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
-import { createApplyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import {
+  createApplyReconcile,
+  createScopeDependencyInstall,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { buildScopeSatisfactionVerdict } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts";
 import { planReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
 import { emptyReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
@@ -90,6 +93,7 @@ import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
@@ -103,6 +107,10 @@ import type {
   McpMigrationStep,
   ReconcilePlan,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
+import type {
+  ScopeDependencyInstallFn,
+  ScopeDependencyInstallResult,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
@@ -823,7 +831,7 @@ test("D-05-02: the source and owner-test census contains exactly the two approve
   ]);
 });
 
-test("apply.ts exposes the reconcile factory and no composed value", async () => {
+test("apply.ts exposes the reconcile factories and no composed value", async () => {
   // arrange
   const applyModule =
     await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
@@ -832,7 +840,7 @@ test("apply.ts exposes the reconcile factory and no composed value", async () =>
   const exportNames = Object.keys(applyModule);
 
   // assert
-  assert.deepStrictEqual(exportNames, ["createApplyReconcile"]);
+  assert.deepStrictEqual(exportNames, ["createApplyReconcile", "createScopeDependencyInstall"]);
 });
 
 describe("applyReconcile", () => {
@@ -4805,7 +4813,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("D-06-02: a record disabled before the pass is held down without being stamped or given a row", async (t) => {
+  test("D-06-02 / D-PL2-18: a record disabled before the pass is held down without being stamped, and its move reports why it did not run", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "dependency-already-disabled");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -4846,7 +4854,19 @@ describe("applyReconcile", () => {
     await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
-    assert.deepStrictEqual(notifications, [SECRETS_VAULT_NOT_IN_MANIFEST]);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ secrets-vault (failed) {not in manifest}\n" +
+          "  ⊘ deploy-kit v1.0.0 (skipped) {dependency failed}\n" +
+          "\n" +
+          "Reconcile: 1 failure, 1 warning",
+        severity: "error",
+      },
+    ]);
     const record = await recordFor(project, "mp", "deploy-kit");
     assert.equal(record?.enabled, false);
     assert.equal(Object.hasOwn(record ?? {}, "dependencyDisabled"), false);
@@ -4970,18 +4990,22 @@ describe("applyReconcile", () => {
     await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
+    // D-PL2-01: the dependent's own catalog move (its supported set grew)
+    // runs before the missing-dependency install; the judgement disables it
+    // after the install's (failed) row (D-PL2-11).
     assert.deepStrictEqual(notifications, [
       {
         message:
           "A plugin operation has failed.\n" +
           "\n" +
           "\u25cf anthropic-plugin-directory [project]\n" +
+          "  \u25cf deploy-kit v1.0.0 (installed) {components now supported}\n" +
           "  \u2298 secrets-vault (failed) {version conflict}\n" +
           '    cause: "secrets-vault" from the Anthropic Directory is pinned to its listed commit (version 1.0.0), which does not satisfy ^2.0.0 required by "deploy-kit".\n' +
           "  \u25cd deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "secrets-vault@anthropic-plugin-directory" or uninstall "deploy-kit@anthropic-plugin-directory"\n' +
           "\n" +
-          "Reconcile: 1 failure, 1 warning\n" +
+          "Reconcile: 1 failure, 1 warning, 1 success\n" +
           "\n" +
           "/reload to pick up changes",
         severity: "error",
@@ -5197,20 +5221,24 @@ describe("applyReconcile", () => {
     // assert -- the exact set and the exact order, not "at least one row": the
     // fixpoint's sorted batch order puts bravo (held by the absent charlie)
     // before alfa (held by bravo), and an assertion that merely counted rows
-    // would pass against an implementation that propagated nothing.
+    // would pass against an implementation that propagated nothing. D-PL2-01:
+    // both moves (their supported sets grew) run before charlie's install,
+    // and both disables follow its (failed) row (D-PL2-11).
     assert.deepStrictEqual(notifications, [
       {
         message:
           "A plugin operation has failed.\n" +
           "\n" +
           "● mp [project]\n" +
+          "  ● bravo v1.0.0 (installed) {components now supported}\n" +
+          "  ● alfa v1.0.0 (installed) {components now supported}\n" +
           "  ⊘ charlie (failed) {not in manifest}\n" +
           "  ◍ bravo v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "charlie@mp" or uninstall "bravo@mp"\n' +
           "  ◍ alfa v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Enable "bravo@mp" or uninstall "alfa@mp"\n' +
           "\n" +
-          "Reconcile: 1 failure, 2 warnings\n" +
+          "Reconcile: 1 failure, 2 warnings, 2 successes\n" +
           "\n" +
           "/reload to pick up changes",
         severity: "error",
@@ -5853,9 +5881,10 @@ describe("applyReconcile", () => {
         message:
           "● mp [project]\n" +
           "  ● secrets-vault v1.0.0 (installed) {dependency installed}\n" +
+          "  ● deploy-kit v1.0.0 → v1.0.0 (updated) {components now supported}\n" +
           "  ● deploy-kit v1.0.0 (installed)\n" +
           "\n" +
-          "Reconcile: 2 successes\n" +
+          "Reconcile: 3 successes\n" +
           "\n" +
           "/reload to pick up changes",
       },
@@ -5992,17 +6021,20 @@ describe("applyReconcile", () => {
     });
 
     // assert -- both app and lib reach pluginsToEnable through the D-09-08
-    // record-walk lift; each has a growth move, so `apply` enables them in
-    // cascade order after their moves (APPLY1-01): lib, then app above it.
+    // record-walk lift; each waits on core's install and has a growth move, so
+    // `apply` moves and enables them after that install, dependencies first
+    // (D-PL2-16): lib, then app above it.
     assert.deepStrictEqual(notifications, [
       {
         message:
           "● mp [project]\n" +
           "  ● core v1.0.0 (installed) {dependency installed}\n" +
+          "  ● lib v1.0.0 → v1.0.0 (updated) {components now supported}\n" +
           "  ● lib v1.0.0 (installed)\n" +
+          "  ● app v1.0.0 → v1.0.0 (updated) {components now supported}\n" +
           "  ● app v1.0.0 (installed)\n" +
           "\n" +
-          "Reconcile: 3 successes\n" +
+          "Reconcile: 5 successes\n" +
           "\n" +
           "/reload to pick up changes",
       },
@@ -6073,12 +6105,13 @@ describe("applyReconcile", () => {
           "A plugin operation has failed.\n" +
           "\n" +
           "● mp [project]\n" +
+          "  ● deploy-kit v1.0.0 (installed) {components now supported}\n" +
           "  ⊘ secrets-vault (failed) {dependency failed}\n" +
           '    cause: Dependency "crypto-core@mp" is not declared by its marketplace.\n' +
           "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
           "\n" +
-          "Reconcile: 1 failure, 1 warning\n" +
+          "Reconcile: 1 failure, 1 warning, 1 success\n" +
           "\n" +
           "/reload to pick up changes",
         severity: "error",
@@ -6226,11 +6259,12 @@ describe("applyReconcile", () => {
           "A plugin operation has failed.\n" +
           "\n" +
           "● mp [project]\n" +
+          "  ● deploy-kit v1.0.0 (installed) {components now supported}\n" +
           "  ⊘ secrets-vault (failed) {not in manifest}\n" +
           "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
           "\n" +
-          "Reconcile: 1 failure, 1 warning\n" +
+          "Reconcile: 1 failure, 1 warning, 1 success\n" +
           "\n" +
           "/reload to pick up changes",
         severity: "error",
@@ -6456,7 +6490,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("D-09-07: a read pass that fails after an install keeps the round-1 toggles and reports state.json", async (t) => {
+  test("D-PL2-01: a read that fails after the missing-dependency install keeps its row, reports state.json, and the scope is still judged", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "dependency-reload-reread-fallback");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -6488,17 +6522,28 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    let calls = 0;
+    // The first read of the project scope that records secrets-vault is the
+    // one after the missing-dependency install; it fails once.
+    let failed = false;
+    let readsAfterFailure = 0;
     const applyWithFailingReread = createApplyReconcile({
       async loadState(extensionRoot: string): Promise<ExtensionState> {
-        if (extensionRoot === project.extensionRoot) {
-          calls += 1;
-          if (calls === 2) {
-            throw new Error("second read failed");
-          }
+        const state = await loadState(extensionRoot);
+        if (extensionRoot !== project.extensionRoot) {
+          return state;
         }
 
-        return loadState(extensionRoot);
+        if (failed) {
+          readsAfterFailure += 1;
+          return state;
+        }
+
+        if (state.marketplaces["mp"]?.plugins["secrets-vault"] !== undefined) {
+          failed = true;
+          throw new Error("read after the install failed");
+        }
+
+        return state;
       },
     });
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -6516,8 +6561,11 @@ describe("applyReconcile", () => {
     });
 
     // assert -- the install row still renders, plus a synthesized state.json
-    // row for the failed re-read, and deploy-kit ends stamped down by
-    // round-1's toggle plan (the refresh never applied).
+    // row for the failed re-read; the judgement reads the scope once more and
+    // judges it as the install left it, so deploy-kit, whose dependency is now
+    // recorded, stays up unmarked.
+    assert.equal(failed, true);
+    assert.equal(readsAfterFailure, 1);
     assert.equal(notifications.length, 1);
     const message = notifications[0]?.message ?? "";
     assert.ok(message.includes("secrets-vault v1.0.0 (installed) {dependency installed}"));
@@ -6525,7 +6573,312 @@ describe("applyReconcile", () => {
     const secretsVault = await recordFor(project, "mp", "secrets-vault");
     assert.equal(secretsVault?.provenance, "dependency");
     const deployKit = await recordFor(project, "mp", "deploy-kit");
-    assert.equal(deployKit?.dependencyDisabled, true);
+    assert.equal(deployKit?.enabled, true);
+    assert.equal(Object.hasOwn(deployKit ?? {}, "dependencyDisabled"), false);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-PL2-01 / GHB-03: a dependency installed before a later install throws keeps its dependent enabled", async (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://mirror.example");
+    const { cwd, project } = await createHermeticScopes(t, "dependency-install-then-throw");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["alpha-vault"], skill: "clean" },
+      "audit-kit": { dependencies: ["zeta-vault"], skill: "clean" },
+      "alpha-vault": { skill: "clean" },
+    });
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      plugins: unknown[];
+    };
+    manifest.plugins.push({
+      name: "zeta-vault",
+      version: "1.0.0",
+      source: { source: "github", repo: "acme/zeta-vault", sha: "a".repeat(40) },
+    });
+    await writeFile(manifestPath, JSON.stringify(manifest), "utf8");
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {}, "audit-kit@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              supported: ["skills"],
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+            "audit-kit": pluginRecord({
+              supported: ["skills"],
+              pluginRoot: path.join(marketplaceRoot, "plugins", "audit-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    const pass = applyReconcile({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+    });
+
+    // assert
+    await assert.rejects(pass, InvalidGitHubBaseUrlError);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ● alpha-vault v1.0.0 (installed) {dependency installed}\n" +
+          "  ◍ audit-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Install "zeta-vault@mp" or uninstall "audit-kit@mp"\n' +
+          "\n" +
+          "Reconcile: 1 warning, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "warning",
+      },
+    ]);
+    const records = await Promise.all(
+      ["alpha-vault", "deploy-kit", "audit-kit"].map((plugin) => recordFor(project, "mp", plugin)),
+    );
+    assert.deepStrictEqual(
+      records.map((record) => [record?.enabled, record?.dependencyDisabled]),
+      [
+        [true, undefined],
+        [true, undefined],
+        [false, true],
+      ],
+    );
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-09-07: a read pass that fails after a config install keeps the round-1 toggles and reports state.json", async (t) => {
+    // arrange -- the config installs secrets-vault, which deploy-kit declares.
+    const { cwd, project } = await createHermeticScopes(t, "config-install-reread-fallback");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "clean" },
+    });
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {}, "secrets-vault@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              supported: ["skills"],
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    // The first read of the project scope that records secrets-vault is the
+    // D-09-07 re-read after the config install; it fails once.
+    let failed = false;
+    const applyWithFailingReread = createApplyReconcile({
+      async loadState(extensionRoot: string): Promise<ExtensionState> {
+        const state = await loadState(extensionRoot);
+        const recorded = state.marketplaces["mp"]?.plugins["secrets-vault"] !== undefined;
+        if (extensionRoot === project.extensionRoot && recorded && !failed) {
+          failed = true;
+          throw new Error("read after the install failed");
+        }
+
+        return state;
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyWithFailingReread({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+      completionCache: createCompletionCache(),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    });
+
+    // assert -- the install row still renders, plus a synthesized state.json
+    // row for the failed re-read; round-1's toggles held nothing down, since
+    // they count the planned install as landed (D-PL2-02).
+    assert.equal(failed, true);
+    assert.equal(notifications.length, 1);
+    const message = notifications[0]?.message ?? "";
+    assert.ok(message.includes("secrets-vault v1.0.0 (installed)\n"));
+    assert.ok(message.includes("state.json (failed)"));
+    const deployKit = await recordFor(project, "mp", "deploy-kit");
+    assert.equal(deployKit?.enabled, true);
+    assert.equal(Object.hasOwn(deployKit ?? {}, "dependencyDisabled"), false);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-09-11: a missing dependency an earlier entry's cascade installed answers as present and reports no second row", async (t) => {
+    // arrange -- deploy-kit declares alpha and beta, and alpha declares beta,
+    // so alpha's cascade installs beta before beta's own entry runs.
+    const { cwd, project } = await createHermeticScopes(t, "dependency-installed-by-earlier-entry");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["alpha", "beta"], skill: "clean" },
+      alpha: { dependencies: ["beta"], skill: "clean" },
+      beta: { skill: "clean" },
+    });
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              supported: ["skills"],
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● beta v1.0.0 (installed) {dependency installed}\n" +
+          "  ● alpha v1.0.0 (installed) {dependency installed}\n" +
+          "\n" +
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    assert.equal((await recordFor(project, "mp", "deploy-kit"))?.enabled, true);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-PL2-14: a dependency the user disabled and the config enables comes up after the install it waits on, and its dependent stays up", async (t) => {
+    // arrange -- app declares core; core, disabled by the user and enabled by
+    // the config, declares vault, which mp offers and the scope lacks. The
+    // rows match the pending D-21 row for the same shape: vault, then core.
+    const { cwd, project } = await createHermeticScopes(t, "user-disabled-dependency-waits");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      app: { dependencies: ["core"], skill: "clean" },
+      core: { dependencies: ["vault"], skill: "clean" },
+      vault: { skill: "clean" },
+    });
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "app@mp": { enabled: true }, "core@mp": { enabled: true } },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            app: pluginRecord({
+              supported: ["skills"],
+              pluginRoot: path.join(marketplaceRoot, "plugins", "app"),
+            }),
+            core: pluginRecord({
+              enabled: false,
+              supported: ["skills"],
+              pluginRoot: path.join(marketplaceRoot, "plugins", "core"),
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● vault v1.0.0 (installed) {dependency installed}\n" +
+          "  ● core v1.0.0 (installed)\n" +
+          "\n" +
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    const records = await Promise.all(
+      ["app", "core", "vault"].map((plugin) => recordFor(project, "mp", plugin)),
+    );
+    assert.deepStrictEqual(
+      records.map((record) => [record?.enabled, Object.hasOwn(record ?? {}, "dependencyDisabled")]),
+      [
+        [true, false],
+        [true, false],
+        [true, false],
+      ],
+    );
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
@@ -7931,6 +8284,31 @@ function coShippedSeed(widget: Omit<RecordSeed, "pluginRoot" | "supported"> = {}
   } as const;
 }
 
+/**
+ * Records `widget` at a per-commit copy under the plugin clones whose manifest
+ * links to a file in the project directory, outside its plugin directory.
+ */
+async function pinWidgetToEscapingCopy(project: ScopedLocations, cwd: string): Promise<void> {
+  const copy = path.join(project.pluginClonesDir, "widget-copy");
+  const outside = path.join(cwd, "outside-plugin.json");
+  await writeUnder(outside, JSON.stringify({ name: "widget", version: "1.0.0" }));
+  await mkdir(path.join(copy, ".claude-plugin"), { recursive: true });
+  await symlink(outside, path.join(copy, ".claude-plugin", "plugin.json"));
+  const seeded = await loadState(project.extensionRoot);
+  const widget = seeded.marketplaces.mp?.plugins.widget;
+  assert.ok(widget !== undefined);
+  widget.resolvedSource = copy;
+  widget.resolvedSha = "a".repeat(40);
+  await saveState(project.extensionRoot, seeded);
+}
+
+/** D-PL2-25 / REC-05: the one row an apply reports for `widget`'s refused copy. */
+const REFUSED_WIDGET_COPY_NOTIFICATION = {
+  message:
+    "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ widget (failed) {unreadable manifest}\n    cause: cannot read the dependencies of widget@mp: its own manifest is present but cannot be read\n\nReconcile: 1 warning",
+  severity: "warning",
+};
+
 /** Leaves a file nobody may read in `plugin`'s skill, so its move fails to copy it. */
 async function unreadableSkill(marketplaceRoot: string, plugin: string): Promise<void> {
   if (typeof process.getuid === "function" && process.getuid() === 0) {
@@ -7961,6 +8339,80 @@ async function declareEnabled(
   );
 }
 
+/** Drops `plugins` from the project scope's record, as if never installed. */
+async function withoutRecords(project: ScopedLocations, plugins: readonly string[]): Promise<void> {
+  const state = await loadState(project.extensionRoot);
+  const mp = state.marketplaces.mp;
+  assert.ok(mp !== undefined);
+  mp.plugins = Object.fromEntries(
+    Object.entries(mp.plugins).filter(([plugin]) => !plugins.includes(plugin)),
+  );
+  await saveState(project.extensionRoot, state);
+}
+
+/**
+ * MISSORDER-01: `widget` 1.1.0 needs `newdep`, which needs ycore ^2.0.0, and
+ * ships with `ycore` 2.0.0; `widget` and `ycore` are recorded at 1.0.0 and
+ * `newdep` is offered but neither recorded nor declared.
+ */
+async function seedMissingAfterMoves(
+  t: TestContext,
+  label: string,
+): Promise<{ readonly cwd: string; readonly project: ScopedLocations }> {
+  const { cwd, project } = await seedConvergenceScope(t, label, {
+    trees: { widget: { skill: "clean" }, ycore: { skill: "clean" }, newdep: { skill: "clean" } },
+    supported: { widget: ["skills"], ycore: ["skills"], newdep: ["skills"] },
+    offered: { widget: "1.1.0", ycore: "2.0.0" },
+    dependencies: {
+      widget: [{ name: "newdep", version: "*" }],
+      newdep: [{ name: "ycore", version: "^2.0.0" }],
+    },
+  });
+  await withoutRecords(project, ["newdep"]);
+  await declareEnabled(project, cwd, ["widget", "ycore"]);
+  return { cwd, project };
+}
+
+/**
+ * WR-06: `bapp` 2.0.0 needs alib ^2.0.0 and `alib` 2.0.0 needs `cdep`; both
+ * are recorded at 1.0.0, `alib` held down by the LOAD-02 marker, and `cdep`
+ * is neither recorded nor declared. `offerMissing` puts `cdep` in the
+ * marketplace; `dependentHeld` holds `bapp` down too.
+ */
+async function seedWaitingDependencyMoves(
+  t: TestContext,
+  label: string,
+  options: { readonly offerMissing: boolean; readonly dependentHeld?: boolean },
+): Promise<{ readonly cwd: string; readonly project: ScopedLocations }> {
+  const held = { enabled: false, dependencyDisabled: true } as const;
+  const { cwd, project } = await seedConvergenceScope(t, label, {
+    trees: {
+      bapp: { skill: "clean" },
+      alib: { skill: "clean" },
+      ...(options.offerMissing && { cdep: { skill: "clean" } }),
+    },
+    supported: { bapp: ["skills"], alib: ["skills"], cdep: ["skills"] },
+    offered: { bapp: "2.0.0", alib: "2.0.0" },
+    dependencies: {
+      bapp: [{ name: "alib", version: "^2.0.0" }],
+      alib: [{ name: "cdep", version: "*" }],
+    },
+    records: { alib: held, ...(options.dependentHeld === true && { bapp: held }) },
+  });
+  await withoutRecords(project, ["cdep"]);
+  await declareEnabled(project, cwd, ["bapp", "alib"]);
+  return { cwd, project };
+}
+
+/** The version, enabled flag and LOAD-02 marker of each of `plugins` in the project scope. */
+async function recordStates(
+  project: ScopedLocations,
+  plugins: readonly string[],
+): Promise<(readonly [string | undefined, boolean | undefined, boolean | undefined])[]> {
+  const records = await Promise.all(plugins.map((plugin) => recordFor(project, "mp", plugin)));
+  return records.map((record) => [record?.version, record?.enabled, record?.dependencyDisabled]);
+}
+
 describe("applyReconcile catalog convergence", () => {
   test("APPLY1-01: a plugin and the newer dependency it needs move in one apply, the dependency first", async (t) => {
     // arrange
@@ -7985,6 +8437,323 @@ describe("applyReconcile catalog convergence", () => {
       },
     ]);
     assert.equal((await recordFor(project, "mp", "widget"))?.enabled, true);
+    verifyBoundary();
+  });
+
+  test("D-PL2-01: a missing dependency that needs a version a move lands is installed after the moves, in one apply", async (t) => {
+    // arrange
+    const { cwd, project } = await seedMissingAfterMoves(t, "missing-after-moves");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● widget v1.0.0 → v1.1.0 (updated)\n" +
+          "  ● ycore v1.0.0 → v2.0.0 (updated)\n" +
+          "  ● newdep v1.0.0 (installed) {dependency installed}\n" +
+          "\n" +
+          "Reconcile: 3 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    const records = await Promise.all(
+      ["widget", "ycore", "newdep"].map((plugin) => recordFor(project, "mp", plugin)),
+    );
+    assert.deepStrictEqual(
+      records.map((record) => [record?.version, record?.enabled]),
+      [
+        ["1.1.0", true],
+        ["2.0.0", true],
+        ["1.0.0", true],
+      ],
+    );
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-PL2-01: a read that fails after the moves installs no missing dependency from the plan made before them", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "moves-then-read-fails", {
+      trees: { widget: { skill: "clean" }, ycore: { skill: "clean" }, newdep: { skill: "clean" } },
+      supported: { widget: ["skills"], ycore: ["skills"], newdep: ["skills"] },
+      offered: { ycore: "2.0.0" },
+      dependencies: { widget: [{ name: "newdep", version: "*" }] },
+    });
+    await withoutRecords(project, ["newdep"]);
+    await declareEnabled(project, cwd, ["widget", "ycore"]);
+    // The first read of the project scope after ycore moved fails.
+    let failed = false;
+    const applyWithFailingRead = createApplyReconcile({
+      async loadState(extensionRoot: string): Promise<ExtensionState> {
+        const state = await loadState(extensionRoot);
+        if (
+          !failed &&
+          extensionRoot === project.extensionRoot &&
+          state.marketplaces["mp"]?.plugins["ycore"]?.version === "2.0.0"
+        ) {
+          failed = true;
+          throw new Error("read after the moves failed");
+        }
+
+        return state;
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyWithFailingRead({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+      completionCache: createCompletionCache(),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    });
+
+    // assert
+    assert.equal(failed, true);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ● ycore v1.0.0 → v2.0.0 (updated)\n" +
+          "  ◍ widget v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Install "newdep@mp" or uninstall "widget@mp"\n' +
+          "\n" +
+          "⊘ state.json [project] (failed) {unreadable}\n" +
+          "  ⊘ state.json (failed) {unreadable}\n" +
+          "    cause: read after the moves failed\n" +
+          "\n" +
+          "Reconcile: 2 failures, 1 warning, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await recordFor(project, "mp", "newdep"), undefined);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-26 / D-PL2-18: the move of a plugin that declares a record waiting on a missing dependency runs after that record's move and enable", async (t) => {
+    // arrange
+    const { cwd, project } = await seedWaitingDependencyMoves(t, "waiting-dependent-move", {
+      offerMissing: true,
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● cdep v1.0.0 (installed) {dependency installed}\n" +
+          "  ● alib v1.0.0 → v2.0.0 (updated)\n" +
+          "  ● alib v2.0.0 (installed)\n" +
+          "  ● bapp v1.0.0 → v2.0.0 (updated)\n" +
+          "\n" +
+          "Reconcile: 4 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    assert.deepStrictEqual(await recordStates(project, ["alib", "bapp", "cdep"]), [
+      ["2.0.0", true, undefined],
+      ["2.0.0", true, undefined],
+      ["1.0.0", true, undefined],
+    ]);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-26 / D-PL2-18: a record whose missing dependency fails to install reports its move as skipped, and the move that declares it does not run", async (t) => {
+    // arrange
+    const { cwd, project } = await seedWaitingDependencyMoves(t, "waiting-dependent-held", {
+      offerMissing: false,
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ cdep (failed) {not in manifest}\n" +
+          "  ⊘ alib v1.0.0 (skipped) {dependency failed}\n" +
+          "  ◍ bapp v1.0.0 (disabled) {dependency failed}\n" +
+          '    cause: "alib@mp" did not update; run apply again once it can, or uninstall "bapp@mp"\n' +
+          "\n" +
+          "Reconcile: 1 failure, 2 warnings\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await recordStates(project, ["alib", "bapp", "cdep"]), [
+      ["1.0.0", false, true],
+      ["1.0.0", false, true],
+      [undefined, undefined, undefined],
+    ]);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("WR-08: a move after the install whose other dependency failed to move reports dependency failed and stays enabled", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(t, "after-blocked-move", {
+      trees: {
+        xapp: { skill: "clean" },
+        alib: { skill: "clean" },
+        ycore: { skill: "clean" },
+        cdep: { skill: "clean" },
+      },
+      supported: { xapp: ["skills"], alib: ["skills"], ycore: ["skills"], cdep: ["skills"] },
+      offered: { xapp: "2.0.0", alib: "2.0.0", ycore: "2.0.0" },
+      dependencies: {
+        xapp: [
+          { name: "alib", version: "*" },
+          { name: "ycore", version: "*" },
+        ],
+        alib: [{ name: "cdep", version: "*" }],
+      },
+      records: { alib: { enabled: false, dependencyDisabled: true } },
+    });
+    await withoutRecords(project, ["cdep"]);
+    await declareEnabled(project, cwd, ["xapp", "alib", "ycore"]);
+    await unreadableSkill(marketplaceRoot, "ycore");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ ycore v1.0.0 → v2.0.0 (failed) {permission denied}\n" +
+          "  ● cdep v1.0.0 (installed) {dependency installed}\n" +
+          "  ● alib v1.0.0 → v2.0.0 (updated)\n" +
+          "  ● alib v2.0.0 (installed)\n" +
+          "  ⊘ xapp v1.0.0 (skipped) {dependency failed}\n" +
+          "\n" +
+          "Reconcile: 1 failure, 1 warning, 3 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await recordStates(project, ["alib", "xapp", "ycore", "cdep"]), [
+      ["2.0.0", true, undefined],
+      ["1.0.0", true, undefined],
+      ["1.0.0", true, undefined],
+      ["1.0.0", true, undefined],
+    ]);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-26: a held-down plugin whose move declares a record waiting on a missing dependency moves and comes back after it", async (t) => {
+    // arrange
+    const { cwd, project } = await seedWaitingDependencyMoves(t, "waiting-held-dependent", {
+      offerMissing: true,
+      dependentHeld: true,
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● cdep v1.0.0 (installed) {dependency installed}\n" +
+          "  ● alib v1.0.0 → v2.0.0 (updated)\n" +
+          "  ● alib v2.0.0 (installed)\n" +
+          "  ● bapp v1.0.0 → v2.0.0 (updated)\n" +
+          "\n" +
+          "Reconcile: 4 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    assert.deepStrictEqual(await recordStates(project, ["alib", "bapp", "cdep"]), [
+      ["2.0.0", true, undefined],
+      ["2.0.0", true, undefined],
+      ["1.0.0", true, undefined],
+    ]);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-PL2-18: a held-down plugin whose missing dependency's install is refused reports its move as skipped after the refusal", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "waiting-install-refused", {
+      trees: { alib: { skill: "clean" }, cdep: { skill: "clean" }, ycore: { skill: "clean" } },
+      supported: { alib: ["skills"], cdep: ["skills"], ycore: ["skills"] },
+      offered: { alib: "2.0.0" },
+      dependencies: {
+        alib: [{ name: "cdep", version: "*" }],
+        cdep: [{ name: "ycore", version: "^2.0.0" }],
+      },
+      records: { alib: { enabled: false, dependencyDisabled: true } },
+    });
+    await withoutRecords(project, ["cdep"]);
+    await declareEnabled(project, cwd, ["alib", "ycore"]);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ cdep (failed) {dependency failed}\n" +
+          '    cause: Dependency "ycore@mp" is installed at version 1.0.0, which does not satisfy ^2.0.0.\n' +
+          "  ⊘ alib v1.0.0 (skipped) {dependency failed}\n" +
+          "\n" +
+          "Reconcile: 1 failure, 1 warning",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await recordStates(project, ["alib", "ycore", "cdep"]), [
+      ["1.0.0", false, true],
+      ["1.0.0", true, undefined],
+      [undefined, undefined, undefined],
+    ]);
+    assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
 
@@ -8344,6 +9113,54 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
+  test("D-PL2-25: an apply whose cascade and final judgement meet a refused installed copy report it once and move nothing", async (t) => {
+    // arrange -- `widget` runs a per-commit copy whose manifest links outside
+    // its plugin directory, and both plugins have a catalog move
+    const { cwd, project } = await seedConvergenceScope(t, "refused-copy-moves", {
+      ...coShippedSeed(),
+      dependencies: {},
+    });
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    await pinWidgetToEscapingCopy(project, cwd);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [REFUSED_WIDGET_COPY_NOTIFICATION]);
+    assert.deepStrictEqual(
+      [
+        (await recordFor(project, "mp", "widget"))?.enabled,
+        (await recordFor(project, "mp", "zcore"))?.version,
+      ],
+      [true, "1.0.0"],
+    );
+    verifyBoundary();
+  });
+
+  test("D-PL2-25: an apply whose final judgement alone meets a refused installed copy reports it once", async (t) => {
+    // arrange -- as above, with no catalog move for either plugin
+    const { cwd, project } = await seedConvergenceScope(t, "refused-copy-steady", {
+      ...coShippedSeed(),
+      offered: { widget: "1.0.0", zcore: "1.0.0" },
+      dependencies: {},
+    });
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    await pinWidgetToEscapingCopy(project, cwd);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [REFUSED_WIDGET_COPY_NOTIFICATION]);
+    assert.equal((await recordFor(project, "mp", "widget"))?.enabled, true);
+    verifyBoundary();
+  });
+
   test("APPLY1-01 / Review 4 WR-2: a clone cleanup that fails after a held-down step does not end the apply", async (t) => {
     // arrange -- as the restored-copy case, with a plugin-clones directory
     // nobody may list, so the deferred cleanup fails.
@@ -8416,6 +9233,113 @@ describe("applyReconcile catalog convergence", () => {
     ]);
     const widget = await recordFor(project, "mp", "widget");
     assert.deepStrictEqual([widget?.version, widget?.enabled], ["1.0.0", false]);
+    verifyBoundary();
+  });
+
+  test("D-PL2-18 / WR-02: a held-down record whose supported set grew is re-materialized and enabled after the move it waits on", async (t) => {
+    // arrange -- `widget` keeps its catalog version but its tree gained a command
+    const { cwd, project } = await seedConvergenceScope(t, "cascade-deferred-grown", {
+      ...coShippedSeed({ enabled: false, dependencyDisabled: true }),
+      trees: { widget: { skill: "clean", command: true }, zcore: { skill: "clean" } },
+      offered: { zcore: "2.0.0" },
+    });
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n  ● zcore v1.0.0 → v2.0.0 (updated)\n  ● widget v1.0.0 (installed)\n\nReconcile: 2 successes\n\n/reload to pick up changes",
+      },
+    ]);
+    const widget = await recordFor(project, "mp", "widget");
+    assert.deepStrictEqual([widget?.version, widget?.enabled], ["1.0.0", true]);
+    assert.ok(widget?.compatibility.supported.includes("commands"));
+    verifyBoundary();
+  });
+
+  test("D-PL2-18 / WR-C: a held-down record whose growth-only enable fails keeps its version and commit", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "cascade-deferred-grown-fails",
+      {
+        ...coShippedSeed({ enabled: false, dependencyDisabled: true }),
+        trees: { widget: { skill: "clean", command: true }, zcore: { skill: "clean" } },
+        offered: { zcore: "2.0.0" },
+      },
+    );
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    await unreadableSkill(marketplaceRoot, "widget");
+    const before = await recordFor(project, "mp", "widget");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● mp [project]\n  ● zcore v1.0.0 → v2.0.0 (updated)\n  ⊘ widget v1.0.0 (failed) {unreadable}\n\nReconcile: 1 failure, 1 success\n\n/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    const widget = await recordFor(project, "mp", "widget");
+    assert.deepStrictEqual(
+      [widget?.version, widget?.resolvedSha, widget?.enabled],
+      [before?.version, before?.resolvedSha, false],
+    );
+    verifyBoundary();
+  });
+
+  test("APPLY1-01 / WR-C: a pin restore that cannot take the state lock is reported and later steps still run", async (t) => {
+    // arrange -- `widget`'s enable fails, and the restore after it is refused
+    const seed = coShippedSeed({ enabled: false, dependencyDisabled: true });
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "cascade-restore-lock-held",
+      {
+        ...seed,
+        trees: { ...seed.trees, yonder: { skill: "clean" } },
+        supported: { ...seed.supported, yonder: ["skills"] },
+        offered: { ...seed.offered, yonder: "1.1.0" },
+        records: { ...seed.records, yonder: { enabled: false, dependencyDisabled: true } },
+      },
+    );
+    await declareEnabled(project, cwd, ["widget", "yonder", "zcore"]);
+    await unreadableSkill(marketplaceRoot, "widget");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+    const restoreDeferredPin = (): Promise<void> => {
+      throw new StateLockHeldError("project", ".state-lock");
+    };
+
+    // act
+    await applyReconcile({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+      restoreDeferredPin,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n● mp [project]\n  ● zcore v1.0.0 → v2.0.0 (updated)\n  ⊘ widget v1.0.0 → v1.1.0 (failed) {unreadable}\n  ● yonder v1.0.0 → v1.1.0 (updated)\n\n⊘ state.json [project] (failed) {lock held}\n  ⊘ state.json (failed) {lock held}\n    cause: Another pi-claude-marketplace operation is in progress for project scope (.state-lock). Retry after it completes.\n\nReconcile: 3 failures, 2 successes\n\n/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.equal((await recordFor(project, "mp", "yonder"))?.enabled, true);
     verifyBoundary();
   });
 
@@ -9124,5 +10048,218 @@ describe("applyReconcile catalog convergence", () => {
     assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
     assert.equal(await pathExists(project.stateJsonPath), false);
     verifyBoundary();
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// D-PL2-09: the missing-dependency step over one scope that a marketplace add
+// runs. It drives the same `applyDependencyInstalls` the apply pass drives, so
+// these cases prove the read, the selection, the rows, and the read failure.
+// ───────────────────────────────────────────────────────────────────────────
+
+describe("createScopeDependencyInstall", () => {
+  /** The step bound to `reader` and a fresh lifecycle, as the entry point binds it. */
+  function scopeDependencyInstall(
+    reader: ReconcileStateReader = { loadState },
+  ): ScopeDependencyInstallFn {
+    return createScopeDependencyInstall(reader, {
+      completionCache: createCompletionCache(),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    });
+  }
+
+  /** A project scope recording `deploy-kit@mp`, whose declared dependency is not installed. */
+  async function seedDeployKitScope(
+    t: TestContext,
+    label: string,
+    trees: Readonly<Record<string, PluginTree>>,
+  ): Promise<Pick<HermeticScopes, "cwd" | "project">> {
+    const { cwd, project } = await seedCommentedAdapterScope(t, label, {
+      trees,
+      declared: { "deploy-kit@mp": {} },
+      recorded: { "deploy-kit": { supported: ["skills"] } },
+      owners: [],
+    });
+    return { cwd, project };
+  }
+
+  /** Runs the step over the project scope; it emits nothing of its own. */
+  async function runStep(
+    step: ScopeDependencyInstallFn,
+    cwd: string,
+    select: (install: { readonly plugin: string; readonly marketplace: string }) => boolean,
+  ): Promise<ScopeDependencyInstallResult> {
+    const { ctx, verifyBoundary } = createNotificationBoundary(0);
+    const scopeInstall = await step({
+      ctx,
+      run: runWithNothingLoaded(),
+      scope: "project",
+      cwd,
+      select,
+    });
+    verifyBoundary();
+    return scopeInstall;
+  }
+
+  test("installs a selected missing dependency and reports it by its full key", async (t) => {
+    // arrange
+    const { cwd, project } = await seedDeployKitScope(t, "scope-step-install", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "clean" },
+    });
+    const selected: string[] = [];
+
+    // act
+    const scopeInstall = await runStep(scopeDependencyInstall(), cwd, (install) => {
+      selected.push(`${install.plugin}@${install.marketplace}`);
+      return true;
+    });
+
+    // assert
+    assert.deepStrictEqual(selected, ["secrets-vault@mp"]);
+    assert.deepStrictEqual(scopeInstall, {
+      rows: [
+        {
+          status: "installed",
+          name: "secrets-vault@mp",
+          version: "1.0.0",
+          dependencies: [],
+          reasons: ["dependency installed"],
+          severity: "info",
+          needsReload: true,
+        },
+      ],
+      mcpConfigNotices: [],
+    });
+    const secretsVault = await recordFor(project, "mp", "secrets-vault");
+    assert.equal(secretsVault?.provenance, "dependency");
+    assert.equal(secretsVault?.enabled, true);
+  });
+
+  test("leaves a missing dependency the request does not select uninstalled", async (t) => {
+    // arrange
+    const { cwd, project } = await seedDeployKitScope(t, "scope-step-unselected", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "clean" },
+    });
+
+    // act
+    const scopeInstall = await runStep(scopeDependencyInstall(), cwd, () => false);
+
+    // assert
+    assert.deepStrictEqual(scopeInstall, { rows: [], mcpConfigNotices: [] });
+    assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
+  });
+
+  test("reports nothing for a scope with neither a state file nor a config", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "scope-step-pristine");
+
+    // act
+    const scopeInstall = await runStep(scopeDependencyInstall(), cwd, () => true);
+
+    // assert
+    assert.deepStrictEqual(scopeInstall, { rows: [], mcpConfigNotices: [] });
+    assert.equal(await pathExists(project.stateJsonPath), false);
+  });
+
+  test("reports nothing for a scope whose config is invalid", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "scope-step-invalid-config");
+    await writeUnder(project.baseConfigJsonPath, "{");
+
+    // act
+    const scopeInstall = await runStep(scopeDependencyInstall(), cwd, () => true);
+
+    // assert
+    assert.deepStrictEqual(scopeInstall, { rows: [], mcpConfigNotices: [] });
+  });
+
+  test("D-PL2-11: a refused install reports the failed row apply reports, with its cause", async (t) => {
+    // arrange -- secrets-vault declares crypto-core, which mp does not declare.
+    const { cwd, project } = await seedDeployKitScope(t, "scope-step-refused", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { dependencies: ["crypto-core"], skill: "clean" },
+    });
+
+    // act
+    const scopeInstall = await runStep(scopeDependencyInstall(), cwd, () => true);
+
+    // assert
+    const [row, ...rest] = scopeInstall.rows;
+    assert.deepStrictEqual(rest, []);
+    assert.equal(row?.status, "failed");
+    const { cause, ...fields } = row;
+    assert.deepStrictEqual(fields, {
+      status: "failed",
+      name: "secrets-vault@mp",
+      reasons: ["dependency failed"],
+      severity: "error",
+      needsReload: false,
+    });
+    assert.equal(cause?.message, 'Dependency "crypto-core@mp" is not declared by its marketplace.');
+    assert.deepStrictEqual(scopeInstall.mcpConfigNotices, []);
+    assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
+  });
+
+  for (const { thrown, failure, reason } of [
+    {
+      thrown: "a plain error",
+      failure: new Error("state.json is mid-write"),
+      reason: "unreadable",
+    },
+    {
+      thrown: "a held state lock",
+      failure: new StateLockHeldError("project", ".state-lock"),
+      reason: "lock held",
+    },
+  ] as const) {
+    test(`D-PL2-20: a read that throws ${thrown} reports apply's state.json row as ${reason} and installs nothing`, async (t) => {
+      // arrange
+      const { cwd, project } = await seedDeployKitScope(t, "scope-step-read-fails", {
+        "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+        "secrets-vault": { skill: "clean" },
+      });
+      const step = scopeDependencyInstall({ loadState: () => Promise.reject(failure) });
+
+      // act
+      const scopeInstall = await runStep(step, cwd, () => true);
+
+      // assert
+      const [row, ...rest] = scopeInstall.rows;
+      assert.deepStrictEqual(rest, []);
+      assert.equal(row?.status, "failed");
+      const { cause, ...fields } = row;
+      assert.deepStrictEqual(fields, {
+        status: "failed",
+        name: "state.json",
+        reasons: [reason],
+        severity: "error",
+        needsReload: false,
+      });
+      assert.equal(cause?.message, failure.message);
+      assert.deepStrictEqual(scopeInstall.mcpConfigNotices, []);
+      assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
+    });
+  }
+
+  test("AFILE-04: returns the MCP config notices its installs produced", async (t) => {
+    // arrange
+    const { cwd } = await seedDeployKitScope(t, "scope-step-notices", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { mcpServer: true },
+    });
+
+    // act
+    const scopeInstall = await runStep(scopeDependencyInstall(), cwd, () => true);
+
+    // assert
+    assert.deepStrictEqual(scopeInstall.mcpConfigNotices, [
+      { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+    ]);
+    assert.deepStrictEqual(
+      scopeInstall.rows.map((row) => [row.status, row.name]),
+      [["installed", "secrets-vault@mp"]],
+    );
   });
 });

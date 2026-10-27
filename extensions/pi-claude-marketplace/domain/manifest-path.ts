@@ -13,7 +13,8 @@
 // the same field. Each keeps its own I/O and
 // its own error contract; only the ordering is shared (D-01-06). Readers
 // locating one file independently is how a fallback lands in one of them and
-// not in the others.
+// not in the others. The link containment of each candidate is shared too, in
+// `domain/manifest-containment.ts` (D-PL2-24).
 //
 // D-01-07: a reader falls through to the next candidate on ABSENCE ONLY. A
 // candidate that exists but cannot be used -- unreadable, unparseable, or
