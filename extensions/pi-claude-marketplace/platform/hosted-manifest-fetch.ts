@@ -207,12 +207,16 @@ function downloadFailure(err: unknown, url: string): Error {
 /**
  * Downloads the catalog at `url` and returns its bytes. One GET, followed
  * through at most five redirects, within one 10 s timeout, with a 5 MiB body
- * cap. A URL with a user name or password is refused before any request, and
- * the message masks them. A non-2xx final answer throws
- * `HostedManifestHttpError`; every other failure throws
- * `HostedManifestFetchError`.
+ * cap. A URL the URL parser refuses, or one with a user name or password, is
+ * refused before any request, and the message masks the user name and
+ * password. A non-2xx final answer throws `HostedManifestHttpError`; every
+ * other failure throws `HostedManifestFetchError`.
  */
 export async function fetchHostedManifest(url: string): Promise<Uint8Array> {
+  if (!URL.canParse(url)) {
+    throw new HostedManifestFetchError("unreadable", `Marketplace URL is not a valid URL: ${url}`);
+  }
+
   const start = new URL(url);
   if (start.username !== "" || start.password !== "") {
     const masked = new URL(start.href);

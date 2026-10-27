@@ -403,11 +403,15 @@ function parsePathSourceForm(raw: string): ParsedSource | undefined {
  * fragment, as Claude Code drops it, and keeps the query. Returns undefined
  * for anything else, so the caller falls through to the URL arm.
  *
+ * A catalog URL the WHATWG URL parser refuses, such as one with a space in
+ * its host or a port over 65535, is unknown: the download could not request
+ * it.
+ *
  * D-76-02: a github.com URL is never a catalog; it stays on the github arm.
  * Manifest url objects reach `parseUrlSourceForm` through `gatedUrlField` and
  * never this arm, so a plugin entry's `{ source: "url" }` stays a git source.
  */
-function parseHostedManifestForm(raw: string): HostedManifestSource | undefined {
+function parseHostedManifestForm(raw: string): HostedManifestSource | UnknownSource | undefined {
   if (!raw.startsWith("https://") || gitHubUrlPath(raw) !== undefined) {
     return undefined;
   }
@@ -423,6 +427,10 @@ function parseHostedManifestForm(raw: string): HostedManifestSource | undefined 
   const urlPath = pathEnd === -1 ? pathAndRest : pathAndRest.slice(0, pathEnd);
   if (!urlPath.endsWith(".json")) {
     return undefined;
+  }
+
+  if (!URL.canParse(raw)) {
+    return { kind: "unknown", raw, reason: `${raw} is not a valid https URL` };
   }
 
   return { kind: "hosted", raw, url: splitUrlFragment(raw).path };

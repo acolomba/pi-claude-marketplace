@@ -606,6 +606,15 @@ const UNKNOWN_PARSE_CASES: readonly ParseCase[] = [
         "http://h.example/m.json is not supported; http:// URLs are rejected -- only https:// URLs and local paths are accepted",
     },
   },
+  ...[
+    "https://h.example:99999/m.json",
+    "https://h ex.example/m.json",
+    "https://a%zz.example/m.json",
+  ].map((raw): ParseCase => ({
+    name: `rejects the catalog URL ${raw} that the URL parser refuses`,
+    raw,
+    source: { kind: "unknown", raw, reason: `${raw} is not a valid https URL` },
+  })),
   {
     name: "rejects a stored hosted source whose raw text is a Git URL",
     raw: { kind: "hosted", raw: "https://h.example/repo.git" },
