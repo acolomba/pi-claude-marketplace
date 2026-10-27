@@ -32,6 +32,7 @@ function updated(
     outcome: {
       declaresWorkflows: false,
       partition: "updated",
+      resourcesChanged: true,
       name,
       fromVersion: "1.0.0",
       toVersion: "1.1.0",
@@ -180,6 +181,7 @@ test("D-10-13: an update a dependent's range admitted names the range on its cau
       outcome: {
         declaresWorkflows: false,
         partition: "updated",
+        resourcesChanged: true,
         name: "lib",
         fromVersion: "1.0.0",
         toVersion: "1.1.0",
@@ -662,6 +664,7 @@ test("D-05: stamps warning and composes the agents marker from one unloaded snap
       target: { marketplace: "mp", scope: "project" },
       outcome: {
         partition: "updated",
+        resourcesChanged: true,
         name: "hello",
         fromVersion: "1.0.0",
         toVersion: "1.1.0",
@@ -702,6 +705,7 @@ test("D-05: stamps info and composes no marker from one loaded snapshot", () => 
       target: { marketplace: "mp", scope: "project" },
       outcome: {
         partition: "updated",
+        resourcesChanged: true,
         name: "hello",
         fromVersion: "1.0.0",
         toVersion: "1.1.0",
@@ -784,6 +788,7 @@ test("SC3: an unconstrained plugin renders the same manual cascade rows as befor
       outcome: {
         declaresWorkflows: false,
         partition: "updated",
+        resourcesChanged: true,
         name: "alpha",
         fromVersion: prepared.fromVersion,
         toVersion: prepared.toVersion,

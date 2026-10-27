@@ -46,9 +46,9 @@ Feature: Plugin package dependencies
     Given the marketplace "tools" is added to the project scope
     When the user runs "/claude:plugin install pkp@tools --scope project"
     Then the command reports these results:
-      | kind       | severity | needs reload | header                                                    | lines                                             |
-      | cascade    | info     | true         |                                                           |                                                   |
-      | diagnostic | warning  | false        | Plugin "pkp" installed; 1 declared component has a note. | Plugin dependency install failed (npm): no output |
+      | kind       | severity | needs reload | header                                                             | lines                                             |
+      | cascade    | info     | true         |                                                                    |                                                   |
+      | diagnostic | warning  | false        | Plugin "pkp" [project] installed; 1 declared component has a note. | Plugin dependency install failed (npm): no output |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id        | name | status    | reasons | scope   | version |
       | tools            | project           | pkp@tools | pkp  | installed |         | project | 1.0.0   |
@@ -74,9 +74,9 @@ Feature: Plugin package dependencies
     Given the marketplace "tools" is added to the project scope
     When the user runs "/claude:plugin install pkp@tools --scope project"
     Then the command reports these results:
-      | kind       | severity | needs reload | header                                                   | lines                                                                                                                                              |
-      | cascade    | info     | true         |                                                          |                                                                                                                                                    |
-      | diagnostic | warning  | false        | Plugin "pkp" installed; 1 declared component has a note. | Skipped installing this plugin's dependencies: its package-lock.json has a dependency that is not a registry package and version range: pkd-local. |
+      | kind       | severity | needs reload | header                                                             | lines                                                                                                                                              |
+      | cascade    | info     | true         |                                                                    |                                                                                                                                                    |
+      | diagnostic | warning  | false        | Plugin "pkp" [project] installed; 1 declared component has a note. | Skipped installing this plugin's dependencies: its package-lock.json has a dependency that is not a registry package and version range: pkd-local. |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id        | name | status    | reasons | scope   | version |
       | tools            | project           | pkp@tools | pkp  | installed |         | project | 1.0.0   |
@@ -115,9 +115,9 @@ Feature: Plugin package dependencies
     Given the marketplace "tools" is added to the project scope
     When the user runs "/claude:plugin install pkp@tools --scope project"
     Then the command reports these results:
-      | kind       | severity | needs reload | header                                                   | lines                                                                                                                                                                                                                                                             |
-      | cascade    | info     | true         |                                                          |                                                                                                                                                                                                                                                                   |
-      | diagnostic | warning  | false        | Plugin "pkp" installed; 1 declared component has a note. | Skipped installing this plugin's dependencies: its folder in the marketplace "tools" is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder. |
+      | kind       | severity | needs reload | header                                                             | lines                                                                                                                                                                                                                                                             |
+      | cascade    | info     | true         |                                                                    |                                                                                                                                                                                                                                                                   |
+      | diagnostic | warning  | false        | Plugin "pkp" [project] installed; 1 declared component has a note. | Skipped installing this plugin's dependencies: its folder in the marketplace "tools" is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder. |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id        | name | status    | reasons | scope   | version |
       | tools            | project           | pkp@tools | pkp  | installed |         | project | 1.0.0   |
@@ -133,9 +133,9 @@ Feature: Plugin package dependencies
     Given the marketplace "tools" is added to the project scope
     When the user runs "/claude:plugin install pkp@tools --scope project"
     Then the command reports these results:
-      | kind       | severity | needs reload | header                                                   | lines  |
-      | cascade    | info     | true         |                                                          |        |
-      | diagnostic | warning  | false        | Plugin "pkp" installed; 1 declared component has a note. | <note> |
+      | kind       | severity | needs reload | header                                                             | lines  |
+      | cascade    | info     | true         |                                                                    |        |
+      | diagnostic | warning  | false        | Plugin "pkp" [project] installed; 1 declared component has a note. | <note> |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id        | name | status    | reasons | scope   | version |
       | tools            | project           | pkp@tools | pkp  | installed |         | project | 1.0.0   |
@@ -268,9 +268,9 @@ Feature: Plugin package dependencies
     Given the npm registry answers 404 for the package "pkd-dep"
     When the user runs "/claude:plugin apply --scope project"
     Then the command reports these results:
-      | kind                      | severity | needs reload | header                                                   | lines                                             | tally label | tally failures | tally warnings | tally success count |
-      | reconcile-applied-cascade | info     | true         |                                                          |                                                   | Reconcile   | 0              | 0              | 1                   |
-      | diagnostic                | warning  | false        | 1 post-install warning surfaced from reconcile installs. | Plugin dependency install failed (npm): no output |             |                |                |                     |
+      | kind                      | severity | needs reload | header                                                           | lines                                             | tally label | tally failures | tally warnings | tally success count |
+      | reconcile-applied-cascade | info     | true         |                                                                  |                                                   | Reconcile   | 0              | 0              | 1                   |
+      | diagnostic                | warning  | false        | Plugin "pkp" [project] updated; 1 declared component has a note. | Plugin dependency install failed (npm): no output |             |                |                |                     |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id        | name | status  | reasons | scope   | from  | to    |
       | tools            | project           | pkp@tools | pkp  | updated |         | project | 1.0.0 | 2.0.0 |
@@ -308,9 +308,9 @@ Feature: Plugin package dependencies
     Given the npm registry answers 404 for the package "pkd-dep"
     When the user runs "/claude:plugin marketplace update tools --scope project"
     Then the command reports these results:
-      | kind       | severity | needs reload | header                                                 | lines                                             |
-      | cascade    | info     | true         |                                                        |                                                   |
-      | diagnostic | warning  | false        | Plugin "pkp" updated; 1 declared component has a note. | Plugin dependency install failed (npm): no output |
+      | kind       | severity | needs reload | header                                                           | lines                                             |
+      | cascade    | info     | true         |                                                                  |                                                   |
+      | diagnostic | warning  | false        | Plugin "pkp" [project] updated; 1 declared component has a note. | Plugin dependency install failed (npm): no output |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | marketplace status | id        | name | status  | reasons | scope   | from  | to    |
       | tools            | project           | updated            | pkp@tools | pkp  | updated |         | project | 1.0.0 | 2.0.0 |

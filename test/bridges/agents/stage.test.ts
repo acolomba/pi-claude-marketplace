@@ -98,7 +98,10 @@ describe("prepareStagePluginAgents", () => {
         },
       ],
       warnings: [
-        `agent source "reviewer" at "${incomingPath}" duplicates generated name "pi-claude-marketplace-acme-reviewer" already produced by agent source "reviewer" at "${winnerPath}"; keeping first discovered source.`,
+        {
+          kind: "discovery",
+          message: `agent source "reviewer" at "${incomingPath}" duplicates generated name "pi-claude-marketplace-acme-reviewer" already produced by agent source "reviewer" at "${winnerPath}"; keeping first discovered source.`,
+        },
       ],
       failed: [],
     });
@@ -150,8 +153,12 @@ describe("prepareStagePluginAgents", () => {
 
     // assert
     assert.deepStrictEqual(prepared.result.warnings, [
-      "[bot] tools include MCP tools, which pi-subagents runs only in background launches -- launch this agent with `async: true`; a foreground launch fails, and so does a launch before pi-mcp-adapter has cached the server's tools",
-      "[bot] dropped tools: mcp__plugin_acme_web__get",
+      {
+        kind: "hygiene",
+        message:
+          "[bot] tools include MCP tools, which pi-subagents runs only in background launches -- launch this agent with `async: true`; a foreground launch fails, and so does a launch before pi-mcp-adapter has cached the server's tools",
+      },
+      { kind: "hygiene", message: "[bot] dropped tools: mcp__plugin_acme_web__get" },
     ]);
   });
 
@@ -267,7 +274,10 @@ describe("prepareStagePluginAgents", () => {
         },
       ],
       warnings: [
-        `agent source "shared" at "${duplicateSharedPath}" duplicates generated name "pi-claude-marketplace-acme-shared" already produced by agent source "shared" at "${firstSharedPath}"; keeping first discovered source.`,
+        {
+          kind: "discovery",
+          message: `agent source "shared" at "${duplicateSharedPath}" duplicates generated name "pi-claude-marketplace-acme-shared" already produced by agent source "shared" at "${firstSharedPath}"; keeping first discovered source.`,
+        },
       ],
       failed: [],
     });
@@ -453,7 +463,7 @@ Read \${CLAUDE_PROJECT_DIR} and ${pluginRoot}.
     assert.strictEqual(await abortPreparedAgents(createRemovalOps(), prepared), undefined);
   });
 
-  test("aggregates index, conversion, and discovery warnings in stable order", async (t) => {
+  test("D-PL1-02: tags index and conversion warnings hygiene and duplicates discovery, in stable order", async (t) => {
     // arrange
     const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
       t,
@@ -490,11 +500,20 @@ Duplicate body.
     );
     const generatedName = "pi-claude-marketplace-acme-noisy";
     const expectedWarnings = [
-      `agent index corruption (entry dropped): ${locations.agentsIndexPath}.agents[0]: row failed schema validation (entry dropped) -- <root>: must have required properties marketplace, sourceAgent, generatedName, sourcePath, targetPath, sourceHash, droppedFields, droppedTools, warnings`,
-      '[noisy] unknown model "future-model" -- omitted from generated frontmatter',
-      "[noisy] dropped fields: priority",
-      "[noisy] dropped tools: WebFetch",
-      `agent source "noisy" at "${duplicateSourcePath}" duplicates generated name "${generatedName}" already produced by agent source "noisy" at "${firstSourcePath}"; keeping first discovered source.`,
+      {
+        kind: "hygiene",
+        message: `agent index corruption (entry dropped): ${locations.agentsIndexPath}.agents[0]: row failed schema validation (entry dropped) -- <root>: must have required properties marketplace, sourceAgent, generatedName, sourcePath, targetPath, sourceHash, droppedFields, droppedTools, warnings`,
+      },
+      {
+        kind: "hygiene",
+        message: '[noisy] unknown model "future-model" -- omitted from generated frontmatter',
+      },
+      { kind: "hygiene", message: "[noisy] dropped fields: priority" },
+      { kind: "hygiene", message: "[noisy] dropped tools: WebFetch" },
+      {
+        kind: "discovery",
+        message: `agent source "noisy" at "${duplicateSourcePath}" duplicates generated name "${generatedName}" already produced by agent source "noisy" at "${firstSourcePath}"; keeping first discovered source.`,
+      },
     ];
 
     // act
@@ -549,10 +568,14 @@ Mixed body.
     // resolves it by -- not the basename it is stored under.
     const declaredName = "acme:mixed";
     const expectedWarnings = [
-      "[mixed] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). " +
-        `To grant this agent MCP tools, set subagents.agentOverrides["${declaredName}"].tools ` +
-        "(e.g. read,bash,mcp:<server>) in Pi settings.",
-      "[mixed] dropped fields: priority",
+      {
+        kind: "hygiene",
+        message:
+          "[mixed] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). " +
+          `To grant this agent MCP tools, set subagents.agentOverrides["${declaredName}"].tools ` +
+          "(e.g. read,bash,mcp:<server>) in Pi settings.",
+      },
+      { kind: "hygiene", message: "[mixed] dropped fields: priority" },
     ];
 
     // act
@@ -1570,7 +1593,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     assert.strictEqual(await exists(locations.agentsIndexPath), false);
   });
 
-  test("force replaces a previous target whose bytes a user changed and drops its preserved row", async (t) => {
+  test("D-PL1-15: force replaces a staged row whose bytes a user changed and keeps a hand-named row with its file", async (t) => {
     // arrange
     const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
       t,
@@ -1582,15 +1605,16 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
     );
     const currentTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-current.md");
-    const orphanTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-orphan.md");
+    const handNamedTarget = path.join(locations.agentsDir, "my-reviewer.md");
+    const handNamedBytes = "---\nname: my-reviewer\n---\nWritten by hand.\n";
     await mkdir(locations.agentsDir, { recursive: true });
     await writeFile(currentTarget, "---\nname: current\n---\nEdited by hand.\n");
-    await writeFile(orphanTarget, "---\nname: orphan\n---\nEdited by hand.\n");
-    const editedRow = (sourceAgent: string, targetPath: string) => ({
+    await writeFile(handNamedTarget, handNamedBytes);
+    const editedRow = (sourceAgent: string, generatedName: string, targetPath: string) => ({
       plugin: "acme",
       marketplace: "catalog",
       sourceAgent,
-      generatedName: `pi-claude-marketplace-acme-${sourceAgent}`,
+      generatedName,
       sourcePath: `/previous/${sourceAgent}.md`,
       targetPath,
       sourceHash: `hash-${sourceAgent}`,
@@ -1598,12 +1622,16 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       droppedTools: [],
       warnings: [],
     });
+    const handNamedRow = editedRow("reviewer", "my-reviewer", handNamedTarget);
     await mkdir(locations.extensionRoot, { recursive: true });
     await writeFile(
       locations.agentsIndexPath,
       JSON.stringify({
         schemaVersion: 1,
-        agents: [editedRow("current", currentTarget), editedRow("orphan", orphanTarget)],
+        agents: [
+          editedRow("current", "pi-claude-marketplace-acme-current", currentTarget),
+          handNamedRow,
+        ],
       }),
     );
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
@@ -1621,9 +1649,11 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
 
     // assert
     assert.strictEqual(cleanupLeak, undefined);
-    assert.deepStrictEqual(await readdir(locations.agentsDir), [
+    assert.deepStrictEqual((await readdir(locations.agentsDir)).sort(), [
+      "my-reviewer.md",
       "pi-claude-marketplace-acme-current.md",
     ]);
+    assert.strictEqual(await readFile(handNamedTarget, "utf8"), handNamedBytes);
     assert.strictEqual(
       await readFile(currentTarget, "utf8"),
       `---\nname: acme:current\ndescription: Current agent\naliases: pi-claude-marketplace-acme-current\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: current\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nCurrent.\n`,
@@ -1643,8 +1673,70 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
           droppedTools: [],
           warnings: [],
         },
+        handNamedRow,
       ],
     });
+  });
+
+  test("D-PL1-15: force drops a staged-name row that points at another file and leaves that file", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-commit-force-moved-",
+    );
+    await writeFile(
+      path.join(agentsSourceDir, "current.md"),
+      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
+    );
+    const currentTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-current.md");
+    const userTarget = path.join(locations.agentsDir, "my-notes.md");
+    const userBytes = "---\nname: my-notes\n---\nWritten by hand.\n";
+    await mkdir(locations.agentsDir, { recursive: true });
+    await writeFile(userTarget, userBytes);
+    await mkdir(locations.extensionRoot, { recursive: true });
+    await writeFile(
+      locations.agentsIndexPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        agents: [
+          {
+            plugin: "acme",
+            marketplace: "catalog",
+            sourceAgent: "current",
+            // A hand-edited row: the staged name, but another file's path.
+            generatedName: "pi-claude-marketplace-acme-current",
+            sourcePath: "/previous/current.md",
+            targetPath: userTarget,
+            sourceHash: "hash-current",
+            droppedFields: [],
+            droppedTools: [],
+            warnings: [],
+          },
+        ],
+      }),
+    );
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+    });
+
+    // act
+    const cleanupLeak = await commitPreparedAgents(createRemovalOps(), prepared, { force: true });
+
+    // assert
+    assert.strictEqual(cleanupLeak, undefined);
+    assert.strictEqual(await readFile(userTarget, "utf8"), userBytes);
+    assert.strictEqual(await exists(currentTarget), true);
+    const index = JSON.parse(await readFile(locations.agentsIndexPath, "utf8")) as AgentsIndex;
+    assert.deepStrictEqual(
+      index.agents.map(({ generatedName, targetPath }) => ({ generatedName, targetPath })),
+      [{ generatedName: "pi-claude-marketplace-acme-current", targetPath: currentTarget }],
+    );
   });
 
   test("force still refuses a file no index row names at a new target", async (t) => {
@@ -1717,7 +1809,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     assert.strictEqual(await exists(prepared.stagingDir), false);
   });
 
-  test("NFR-10: force refuses an index row whose target is outside the agents directory and removes nothing", async (t) => {
+  test("NFR-10: force refuses an owned index row whose target is outside the agents directory and removes nothing", async (t) => {
     // arrange
     const { scopeRoot, pluginRoot, agentsSourceDir, locations, pluginDataDir } =
       await createStageTree(t, "agents-commit-force-escape-");
@@ -1726,8 +1818,11 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       sourcePath,
       "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
     );
+    // The generated marker makes the row pass the ownership check, so only the
+    // containment check stands between the forced commit and this file.
     const outsideTarget = path.join(scopeRoot, "pi-claude-marketplace-acme-outside.md");
-    const outsideBytes = "---\nname: outside\n---\nNot an agent file.\n";
+    const outsideBytes =
+      "---\nname: outside\nprovenance:\n  generatedBy: pi-claude-marketplace\n---\nMoved away.\n";
     await writeFile(outsideTarget, outsideBytes);
     await mkdir(locations.agentsDir, { recursive: true });
     await mkdir(locations.extensionRoot, { recursive: true });

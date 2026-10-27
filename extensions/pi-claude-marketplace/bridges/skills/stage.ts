@@ -26,6 +26,7 @@ import { stripBom } from "../../shared/bom.ts";
 import { appendLeakToError, errorMessage } from "../../shared/errors.ts";
 import { cleanupStaging } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
+import { discoveryWarning } from "../../shared/staging-warnings.ts";
 import { substituteClaudeVars } from "../../shared/vars.ts";
 
 import { discoverPluginSkills } from "./discover.ts";
@@ -245,7 +246,7 @@ export async function prepareStageSkills(
       result: {
         stagedNames: Object.freeze([]),
         recorded: Object.freeze([]),
-        warnings: Object.freeze([...discoverWarnings]),
+        warnings: Object.freeze(discoverWarnings.map(discoveryWarning)),
         degraded: Object.freeze([]),
       },
     };
@@ -395,7 +396,7 @@ export async function prepareStageSkills(
     result: {
       stagedNames: Object.freeze(stagedNames),
       recorded: Object.freeze(recorded),
-      warnings: Object.freeze([...discoverWarnings]),
+      warnings: Object.freeze(discoverWarnings.map(discoveryWarning)),
       degraded: Object.freeze(degraded),
     },
     _previousNames: Object.freeze(previousNames),

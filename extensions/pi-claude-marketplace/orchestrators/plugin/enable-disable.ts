@@ -111,6 +111,7 @@ import {
   type TargetLayers,
   type writeAdoptingConfigEntries,
 } from "./shared.ts";
+import { surfaceStagingDiagnostics } from "./staging-diagnostics.ts";
 
 import type { RecordDeclarations } from "./dependency-index.ts";
 import type {
@@ -130,6 +131,7 @@ import type { DisabledPluginRecord, ExtensionState } from "../../persistence/sta
 import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { Phase, RollbackPartial, RunPhasesResult } from "../../transaction/phase-ledger.ts";
 import type { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
@@ -192,7 +194,16 @@ export type EnableDegradationSignals = LedgerDegradationSignals;
  * A failed call reports them too, because the file is already rewritten.
  */
 export type EnableDisablePluginOutcome =
-  | ({ readonly status: "enabled"; readonly version?: string } & EnableDisableSubject &
+  | ({
+      readonly status: "enabled";
+      readonly version?: string;
+      /**
+       * D-PL1-12: both halves of the enable root's staging warnings, for an
+       * orchestrated caller to render; `apply` renders both halves (D-PL1-09,
+       * D-PL1-25). Omitted when empty (NREG-01).
+       */
+      readonly stagingWarnings?: readonly StagingWarning[];
+    } & EnableDisableSubject &
       EnableDegradationSignals &
       McpConfigNoticesCarrier)
   | ({ readonly status: "disabled"; readonly version?: string } & EnableDisableSubject &
@@ -222,9 +233,13 @@ export interface McpConfigNoticesCarrier {
  * AFILE-04: the MCP config file notices of every rewrite made inside the
  * lock. Each branch sets it as soon as its rewrite returns, before the config
  * write and the save, so a later throw still reports a file it rewrote.
+ *
+ * D-PL1-12: it also carries the enable root's staging warnings, both halves,
+ * set as soon as the root's ledger returns.
  */
 interface McpConfigNoticeSink {
   mcpConfigNotices: readonly McpConfigNotice[];
+  stagingWarnings?: readonly StagingWarning[];
 }
 
 /**
@@ -480,17 +495,25 @@ async function materializeEnableRoot(
       staleWorkflowCommand: true,
     }),
   };
-  return { outcome, mcpConfigNotices: summary.mcpConfigNotices };
+  return {
+    outcome,
+    mcpConfigNotices: summary.mcpConfigNotices,
+    stagingWarnings: [...summary.discoveryWarnings, ...summary.bridgeWarnings],
+  };
 }
 
 /**
  * The root's fresh enable and its ledger's MCP config file notices (AFILE-04).
  * A ledger that throws restores the file's bytes, so only a completed
  * materialization has notices to report.
+ *
+ * D-PL1-12: `stagingWarnings` holds both halves of the root's own staging
+ * warnings, discovery first.
  */
 interface MaterializedEnableRoot {
   readonly outcome: Extract<SetEnabledOutcome, { kind: "fresh" }>;
   readonly mcpConfigNotices: readonly McpConfigNotice[];
+  readonly stagingWarnings: readonly StagingWarning[];
 }
 
 /**
@@ -526,6 +549,7 @@ async function runEnableBranch(
       capture,
     );
     sink.mcpConfigNotices = materialized.mcpConfigNotices;
+    sink.stagingWarnings = materialized.stagingWarnings;
     return materialized.outcome;
   } catch (err) {
     return {
@@ -858,6 +882,11 @@ interface EnableCascadeRun {
    * rather than restoring its bytes, so removed comments stay removed.
    */
   readonly mcpConfigNotices: McpConfigNotice[];
+  /**
+   * D-PL1-12: the root's own staging warnings, set by `buildEnableRootPhase`
+   * beside `root`. A member's warnings never land here.
+   */
+  rootStagingWarnings?: readonly StagingWarning[];
 }
 
 /**
@@ -1089,6 +1118,7 @@ function buildEnableRootPhase(
           capture,
         );
         run.root = materialized.outcome;
+        run.rootStagingWarnings = materialized.stagingWarnings;
         run.mcpConfigNotices.push(...materialized.mcpConfigNotices);
       } catch (err) {
         run.rollbackPartials.push(...capture.rollbackPartials);
@@ -1301,6 +1331,7 @@ async function runEnableCascadeWithRoot(args: {
       readonly hydratable: readonly EnableCascadeHydratableMember[];
       readonly root: Extract<SetEnabledOutcome, { kind: "fresh" }>;
       readonly mcpConfigNotices: readonly McpConfigNotice[];
+      readonly rootStagingWarnings: readonly StagingWarning[];
     }
   | {
       readonly ok: false;
@@ -1351,6 +1382,7 @@ async function runEnableCascadeWithRoot(args: {
     hydratable: run.hydratable,
     root: run.root,
     mcpConfigNotices: run.mcpConfigNotices,
+    rootStagingWarnings: run.rootStagingWarnings,
   };
 }
 
@@ -1358,12 +1390,13 @@ async function runEnableCascadeWithRoot(args: {
  * `buildEnableRootPhase` is always the LAST phase in
  * `runEnableCascadeWithRoot`'s array, and a clean `runPhases` result means
  * every phase's `do` completed -- so `run.root` is always set on the `ok`
- * arm. Evidence-backed type narrowing only; the invariant is established by
- * the caller.
+ * arm, and with it the root's staging warnings (D-PL1-12). Evidence-backed
+ * type narrowing only; the invariant is established by the caller.
  */
-function assertRootMaterialized(
-  _run: EnableCascadeRun,
-): asserts _run is EnableCascadeRun & { root: Extract<SetEnabledOutcome, { kind: "fresh" }> } {
+function assertRootMaterialized(_run: EnableCascadeRun): asserts _run is EnableCascadeRun & {
+  root: Extract<SetEnabledOutcome, { kind: "fresh" }>;
+  rootStagingWarnings: readonly StagingWarning[];
+} {
   // Evidence-backed type narrowing only; the invariant is established by the caller.
 }
 
@@ -2274,6 +2307,9 @@ async function runFreshEnableCascadeWithRoot(args: {
     };
   }
 
+  // D-PL1-12: only a merged ledger that completed reports the root's
+  // warnings; a failed one unwound the components they name.
+  sink.stagingWarnings = merged.rootStagingWarnings;
   // WR-08: `runEnableCascadeWithRoot` already ran both config writes --
   // the root's own flag flip and every member's stale entry -- as the
   // ledger's own final phase, so only the save and the post-save hook work
@@ -2636,6 +2672,7 @@ async function runSetEnabledOutcome(
       outcome,
       cascadeRows: enableCascadeRows,
     });
+    surfaceEnableStagingWarnings({ ctx, run, plugin, scope, enable, outcome, sink });
     // AFILE-04: the notices follow the rows, on success and on failure.
     notifyMcpConfigNotices(ctx, run, sink.mcpConfigNotices);
   }
@@ -2646,6 +2683,7 @@ async function runSetEnabledOutcome(
     outcome,
     configBasename,
     mcpConfigNotices: sink.mcpConfigNotices,
+    stagingWarnings: sink.stagingWarnings ?? [],
   });
 }
 
@@ -2840,6 +2878,7 @@ function freshOutcomeToTypedResult(
   plugin: string,
   enable: boolean,
   outcome: Extract<SetEnabledOutcome, { kind: "fresh" }>,
+  stagingWarnings: readonly StagingWarning[],
 ): EnableDisablePluginOutcome {
   // WLIF-06: `outcome.staleWorkflowCommand` is deliberately NOT forwarded, on
   // either arm. The exported union is what the load-time reconcile caller
@@ -2865,7 +2904,40 @@ function freshOutcomeToTypedResult(
     ...(outcome.stagedAgents === true && { stagedAgents: true }),
     ...(outcome.stagedMcpServers === true && { stagedMcpServers: true }),
     ...(outcome.stagedWorkflows === true && { stagedWorkflows: true }),
+    ...stagingWarningsMember(stagingWarnings),
   };
+}
+
+/** D-PL1-12 / NREG-01: the `stagingWarnings` member, omitted when empty. */
+function stagingWarningsMember(warnings: readonly StagingWarning[]): {
+  readonly stagingWarnings?: readonly StagingWarning[];
+} {
+  return warnings.length > 0 ? { stagingWarnings: warnings } : {};
+}
+
+/**
+ * D-PL1-12 / D-PL1-07: a standalone enable shows the discovery half of its
+ * root's staging warnings after its rows and before its MCP config notices.
+ * Only a realized enable renders; the header verb union has no `enable failed`,
+ * so an `enable-failed` outcome renders nothing even when the sink holds warnings.
+ */
+function surfaceEnableStagingWarnings(args: {
+  readonly ctx: NotificationContext;
+  readonly run: NotificationRun;
+  readonly plugin: string;
+  readonly scope: Scope;
+  readonly enable: boolean;
+  readonly outcome: SetEnabledOutcome;
+  readonly sink: McpConfigNoticeSink;
+}): void {
+  const { ctx, run, plugin, scope, enable, outcome, sink } = args;
+  if (!enable || outcome.kind !== "fresh") {
+    return;
+  }
+
+  surfaceStagingDiagnostics(ctx, run, [
+    { plugin, scope, verb: "enabled", warnings: sink.stagingWarnings ?? [] },
+  ]);
 }
 
 /**
@@ -2900,6 +2972,8 @@ function outcomeToTypedResult(args: {
   outcome: SetEnabledOutcome;
   /** AFILE-04: carried on the realized and the failed arms, omitted when empty. */
   mcpConfigNotices: readonly McpConfigNotice[];
+  /** D-PL1-12: carried on the `enabled` arm only, omitted when empty. */
+  stagingWarnings: readonly StagingWarning[];
 }): EnableDisablePluginOutcome {
   const { plugin, enable, configBasename, outcome } = args;
   const notices = mcpConfigNoticesMember(args.mcpConfigNotices);
@@ -2952,7 +3026,10 @@ function outcomeToTypedResult(args: {
     }
 
     case "fresh": {
-      return { ...freshOutcomeToTypedResult(plugin, enable, outcome), ...notices };
+      return {
+        ...freshOutcomeToTypedResult(plugin, enable, outcome, args.stagingWarnings),
+        ...notices,
+      };
     }
   }
 }

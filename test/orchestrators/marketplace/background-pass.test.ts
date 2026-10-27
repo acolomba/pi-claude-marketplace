@@ -111,6 +111,7 @@ function updatedOutcome(name: string, toVersion: string): PluginUpdateUpdatedOut
     constraint: undefined,
     stagedAgentNames: [],
     stagedMcpServerNames: [],
+    resourcesChanged: true,
     declaresAgents: false,
     declaresMcp: false,
     declaresWorkflows: false,

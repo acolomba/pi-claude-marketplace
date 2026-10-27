@@ -53,6 +53,7 @@ import { WorkflowTargetOccupiedError } from "../../shared/errors-bridges.ts";
 import { appendLeakToError, appendLeaks, errorMessage } from "../../shared/errors.ts";
 import { cleanupStaging, createRemovalOps, pathExists } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
+import { discoveryWarning } from "../../shared/staging-warnings.ts";
 
 import { discoverPluginWorkflows } from "./discover.ts";
 
@@ -199,7 +200,7 @@ export async function prepareStageWorkflows(
       kind: "noop",
       result: {
         stagedNames: Object.freeze([] as const),
-        warnings: Object.freeze([...discoverWarnings]),
+        warnings: Object.freeze(discoverWarnings.map(discoveryWarning)),
         unownedNames: Object.freeze([] as const),
       },
     };
@@ -254,7 +255,7 @@ export async function prepareStageWorkflows(
     stagingRoot,
     result: {
       stagedNames: Object.freeze(stagedNames),
-      warnings: Object.freeze([...discoverWarnings]),
+      warnings: Object.freeze(discoverWarnings.map(discoveryWarning)),
       unownedNames: Object.freeze([...unownedNames]),
     },
     _previousNames: Object.freeze([...previousNames]),

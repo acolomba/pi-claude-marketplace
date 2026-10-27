@@ -42,8 +42,6 @@ import {
   resolvePluginVersion,
   resolveTagPinnedPluginVersion,
   retiresWorkflowCommand,
-  splitStagingWarnings,
-  surfaceDiscoveryWarnings,
   sweepWorkflowsStaging,
   undeclarableMarketplaceRefusal,
   writeAdoptingConfigEntries,
@@ -62,7 +60,6 @@ import {
   PluginInBaseLayerOnlyError,
   PluginInLocalLayerOnlyError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { createJsonCapture } from "../../edge/json-capture.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
@@ -3596,163 +3593,6 @@ describe("emitMarketplaceNotAddedSignal", () => {
         },
       ]);
     });
-  });
-});
-
-describe("splitStagingWarnings", () => {
-  test("preserves discovery order and separates bridge hygiene warnings", () => {
-    // arrange
-    const warnings = {
-      skills: ["skill-a", "skill-b"],
-      commands: ["command-a"],
-      agents: ["agent-a"],
-      mcp: ["mcp-a", "mcp-b"],
-    };
-
-    // act
-    const split = splitStagingWarnings(warnings);
-
-    // assert
-    assert.deepStrictEqual(split, {
-      discovery: ["skill-a", "skill-b", "command-a"],
-      bridge: ["agent-a", "mcp-a", "mcp-b"],
-    });
-    assert.equal(Object.isFrozen(split.discovery), true);
-    assert.equal(Object.isFrozen(split.bridge), true);
-    assert.deepStrictEqual(warnings, {
-      skills: ["skill-a", "skill-b"],
-      commands: ["command-a"],
-      agents: ["agent-a"],
-      mcp: ["mcp-a", "mcp-b"],
-    });
-  });
-});
-
-describe("surfaceDiscoveryWarnings", () => {
-  for (const mode of ["json", "rpc"]) {
-    test(`preserves redacted discovery lines and the parent sink in ${mode}`, () => {
-      // arrange
-      const capture = createJsonCapture();
-      const ctx = {
-        mode,
-        get ui() {
-          return capture.ui;
-        },
-      };
-      const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
-
-      // act
-      surfaceDiscoveryWarnings(ctx, run, {
-        plugin: "alpha",
-        verb: "installed",
-        warnings: [
-          "Could not read /private/plugin/skills/alpha-skill",
-          "fetch with Bearer abc.def failed",
-          "fetch with Bearer abc.def failed",
-        ],
-      });
-
-      // assert
-      assert.deepStrictEqual(capture.entries, [
-        {
-          customType: "claude-plugin",
-          payload: {
-            schemaVersion: 1,
-            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
-            kind: "diagnostic",
-            severity: "warning",
-            needsReload: false,
-            header: 'Plugin "alpha" installed; 3 declared components have notes.',
-            lines: [
-              "Could not read alpha-skill",
-              "fetch with Bearer *** failed",
-              "fetch with Bearer *** failed",
-            ],
-          },
-        },
-      ]);
-      capture.assertValid();
-    });
-  }
-
-  // eslint-disable-next-line sonarjs/assertions-in-tests -- Explicit strong-mock verify calls assert the complete notification interaction.
-  test("does not notify when no discovery warning exists", () => {
-    // arrange
-    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-
-    // act
-    surfaceDiscoveryWarnings(ctx, runWithNothingLoaded(), {
-      plugin: "alpha",
-      verb: "installed",
-      warnings: [],
-    });
-
-    // assert
-    verify(ctx);
-  });
-
-  // eslint-disable-next-line sonarjs/assertions-in-tests -- Explicit strong-mock verify calls assert the complete notification interaction.
-  test("redacts a singular discovery path and emits exact warning bytes", () => {
-    // arrange
-    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-    const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
-    when(() => ctx.mode)
-      .thenReturn("tui")
-      .once();
-    when(() => ctx.ui)
-      .thenReturn(ui)
-      .once();
-    when(() => {
-      ui.notify(
-        'Plugin "alpha" installed; 1 declared component has a note.\n\nCould not read alpha-skill',
-        "warning",
-      );
-    })
-      .thenReturn(undefined)
-      .once();
-
-    // act
-    surfaceDiscoveryWarnings(ctx, runWithNothingLoaded(), {
-      plugin: "alpha",
-      verb: "installed",
-      warnings: ["Could not read /private/plugin/skills/alpha-skill"],
-    });
-
-    // assert
-    verify(ctx);
-    verify(ui);
-  });
-
-  // eslint-disable-next-line sonarjs/assertions-in-tests -- Explicit strong-mock verify calls assert the complete notification interaction.
-  test("emits plural updated diagnostics in caller warning order", () => {
-    // arrange
-    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-    const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
-    when(() => ctx.mode)
-      .thenReturn("tui")
-      .once();
-    when(() => ctx.ui)
-      .thenReturn(ui)
-      .once();
-    when(() => {
-      ui.notify(
-        'Plugin "alpha" updated; 2 declared components have notes.\n\nfirst warning\nsecond warning',
-        "warning",
-      );
-    })
-      .thenReturn(undefined)
-      .once();
-
-    // act
-    surfaceDiscoveryWarnings(ctx, runWithNothingLoaded(), {
-      plugin: "alpha",
-      verb: "updated",
-      warnings: ["first warning", "second warning"],
-    });
-
-    // assert
-    verify(ctx);
-    verify(ui);
   });
 });
 

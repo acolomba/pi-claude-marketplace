@@ -239,7 +239,7 @@ describe("prepareStageWorkflows", () => {
     assert.strictEqual(prepared.kind, "noop");
     assert.deepStrictEqual(prepared.result, {
       stagedNames: [],
-      warnings: [expectedSkip],
+      warnings: [{ kind: "discovery", message: expectedSkip }],
       unownedNames: [],
     });
     assert.strictEqual(workflowHomeExists, false);
@@ -352,7 +352,7 @@ describe("prepareStageWorkflows", () => {
     // assert
     assert.deepStrictEqual(prepared.result, {
       stagedNames: ["acme:greet"],
-      warnings: [expectedSkip],
+      warnings: [{ kind: "discovery", message: expectedSkip }],
       unownedNames: [],
     });
     assert.deepStrictEqual(stagedEnvelopes, ["acme:greet.json"]);

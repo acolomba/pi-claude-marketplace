@@ -45,6 +45,10 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { type Severity } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import {
+  discoveryWarning,
+  hygieneWarning,
+} from "../../../extensions/pi-claude-marketplace/shared/staging-warnings.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
@@ -412,6 +416,7 @@ for (const mode of ["json", "rpc"]) {
         await pending;
         return {
           partition: "updated",
+          resourcesChanged: true,
           name: plugin,
           fromVersion: "0.0.1",
           toVersion: "0.0.2",
@@ -2348,6 +2353,7 @@ test("autoupdate calls each installed plugin in record order", async () => {
       calls.push({ plugin, marketplace });
       return Promise.resolve({
         partition: "updated",
+        resourcesChanged: true,
         name: plugin,
         fromVersion: "0.0.1",
         toVersion: "0.0.2",
@@ -2469,6 +2475,7 @@ test("autoupdate off never invokes a plugin update", async () => {
       pluginUpdateCalled = true;
       return Promise.resolve({
         partition: "updated",
+        resourcesChanged: true,
         name: "x",
         fromVersion: "0.0.1",
         toVersion: "0.0.2",
@@ -2587,6 +2594,7 @@ test("autoupdate continues in installed order after an ordinary plugin failure",
 
         return Promise.resolve({
           partition: "updated",
+          resourcesChanged: true,
           name: plugin,
           fromVersion: "1.0.0",
           toVersion: "1.1.0",
@@ -2916,6 +2924,7 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
       if (plugin === "a") {
         return Promise.resolve<PluginUpdateOutcome>({
           partition: "updated",
+          resourcesChanged: true,
           name: plugin,
           fromVersion: "0.0.1",
           toVersion: "0.0.2",
@@ -3026,6 +3035,7 @@ test("MU-9 + MSG-RH-1: success emits canonical reload hint trailer for updated p
     const pluginUpdate: PluginUpdateFn = async (plugin) =>
       Promise.resolve({
         partition: "updated",
+        resourcesChanged: true,
         name: plugin,
         fromVersion: "0.0.1",
         toVersion: "0.0.2",
@@ -3140,6 +3150,7 @@ test("UXG-05 (UAT Test-3 gap) regression guard: autoupdate-ON cascade where a pl
     const pluginUpdate: PluginUpdateFn = async (plugin) =>
       Promise.resolve({
         partition: "updated",
+        resourcesChanged: true,
         name: plugin,
         fromVersion: "0.0.1",
         toVersion: "0.0.2",
@@ -3195,6 +3206,7 @@ test("a repeated autoupdate collapses after the first run changes a plugin", asy
         firstRun
           ? {
               partition: "updated",
+              resourcesChanged: true,
               name: plugin,
               fromVersion: "0.0.1",
               toVersion: "0.0.2",
@@ -3280,6 +3292,7 @@ test("AFILE-04: a marketplace update whose autoupdate cascade rewrites a comment
         plugin === "alpha"
           ? {
               partition: "updated",
+              resourcesChanged: true,
               name: plugin,
               fromVersion: "0.0.1",
               toVersion: "0.0.2",
@@ -3340,12 +3353,85 @@ test("AFILE-04: a marketplace update whose autoupdate cascade rewrites a comment
   });
 });
 
+test("D-PL1-07 / D-PL1-09: an autoupdate cascade shows a moved plugin's staging warnings between its rows and its MCP notices", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange -- the moved plugin carries both halves, and both render
+    // (D-PL1-25).
+    await seedGithubMarketplace({
+      cwd,
+      name: "official",
+      ref: "main",
+      autoupdate: true,
+      plugins: { alpha: makePluginRecord() },
+    });
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000011" },
+    });
+    const pluginUpdate: PluginUpdateFn = async (plugin) =>
+      Promise.resolve({
+        partition: "updated",
+        resourcesChanged: true,
+        name: plugin,
+        fromVersion: "0.0.1",
+        toVersion: "0.0.2",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: undefined,
+        declaresWorkflows: false,
+        stagingWarnings: [
+          discoveryWarning('skill source "dup" is duplicated; ignoring duplicate.'),
+          hygieneWarning("agents index was corrupt; rebuilt it"),
+        ],
+        mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp.json" }],
+      });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "official",
+      scope: "project",
+      cwd,
+      gitOps,
+      pluginUpdate,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● official [project] (updated)\n" +
+          "  ● alpha v0.0.1 → v0.0.2 (updated)\n\n" +
+          "/reload to pick up changes",
+      },
+      {
+        message:
+          'Plugin "alpha" [project] updated; 1 declared component has a note; 1 staging warning.\n\n' +
+          'skill source "dup" is duplicated; ignoring duplicate.\n' +
+          "agents index was corrupt; rebuilt it",
+        severity: "warning",
+      },
+      {
+        message:
+          "MCP config comments removed.\n\n" +
+          "The project-scope mcp.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+        severity: "warning",
+      },
+    ]);
+  });
+});
+
 function updatedOutcome(
   plugin: string,
   extra: Partial<Extract<PluginUpdateOutcome, { partition: "updated" }>>,
 ): PluginUpdateOutcome {
   return {
     partition: "updated",
+    resourcesChanged: true,
     name: plugin,
     fromVersion: "0.0.1",
     toVersion: "0.0.2",
@@ -3362,7 +3448,7 @@ function updatedOutcome(
 test("D-PL9-21: a marketplace update shows an autoupdated plugin's package note between its cascade and the MCP notices", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    // alpha's notes also hold an unrelated note, which stays out.
+    // The note rides alpha's staging warnings beside packageNote.
     await seedGithubMarketplace({
       cwd,
       name: "official",
@@ -3377,7 +3463,7 @@ test("D-PL9-21: a marketplace update shows an autoupdated plugin's package note 
     const packageNote = "Plugin dependency install failed (npm): no output";
     const outcomes: Record<string, PluginUpdateOutcome> = {
       alpha: updatedOutcome("alpha", {
-        notes: ["a skill was renamed", packageNote],
+        stagingWarnings: [discoveryWarning(packageNote)],
         packageNote,
         mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp.json" }],
       }),
@@ -3408,7 +3494,7 @@ test("D-PL9-21: a marketplace update shows an autoupdated plugin's package note 
           "/reload to pick up changes",
       },
       {
-        message: `Plugin "alpha" updated; 1 declared component has a note.\n\n${packageNote}`,
+        message: `Plugin "alpha" [project] updated; 1 declared component has a note.\n\n${packageNote}`,
         severity: "warning",
       },
       {
@@ -3624,6 +3710,7 @@ test("a bare update emits each cascade's MCP notices before the next marketplace
 
       return Promise.resolve({
         partition: "updated",
+        resourcesChanged: true,
         name: plugin,
         fromVersion: "0.0.1",
         toVersion: "0.0.2",
@@ -4635,6 +4722,7 @@ test("a newly degraded autoupdate cascade emits its partial row and warning enve
     const pluginUpdate: PluginUpdateFn = async (plugin) =>
       Promise.resolve<PluginUpdateOutcome>({
         partition: "updated",
+        resourcesChanged: true,
         name: plugin,
         fromVersion: "0.0.1",
         toVersion: "0.0.2",
@@ -5683,6 +5771,7 @@ test("WR-12: the autoupdate cascade row is byte-identical to the standalone upda
     const pluginUpdate: PluginUpdateFn = async (plugin) =>
       Promise.resolve({
         partition: "updated",
+        resourcesChanged: true,
         name: plugin,
         fromVersion: "1.0.0",
         toVersion: "1.0.1",
@@ -6654,6 +6743,7 @@ function recordingPluginUpdate(
             toVersion: "0.0.2",
             stagedAgentNames: [],
             stagedMcpServerNames: [],
+            resourcesChanged: true,
             declaresAgents: false,
             declaresMcp: false,
             constraint: undefined,

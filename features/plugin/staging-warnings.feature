@@ -1,0 +1,272 @@
+Feature: Plugin staging warnings
+
+  A staging verb follows its rows with one diagnostic per plugin that names
+  the declared components it skipped. A cascade also lists that plugin's other
+  staging warnings. A local marketplace stands in for a published one.
+
+  Background:
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the project scope
+
+  Scenario: Installing a plugin whose agents share a name reports the skipped agent
+    Given the published plugin "demo" of the marketplace "fixtures" has two agents named "helper"
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | summary                             | header                                                              | lines                                                                                                                                                                                        |
+      | cascade    | warning  | true         | A plugin operation needs attention. |                                                                     |                                                                                                                                                                                              |
+      | diagnostic | warning  | false        |                                     | Plugin "demo" [project] installed; 1 declared component has a note. | agent source "helper" at "second.md" duplicates generated name "pi-claude-marketplace-demo-helper" already produced by agent source "helper" at "first.md"; keeping first discovered source. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons               | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed | requires pi-subagents | project | 1.0.0   |
+
+  Scenario: Updating a plugin whose new version has colliding skills reports the skip under a header that names the scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
+    When the user runs "/claude:plugin update demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                            | lines                                                                                                                                      |
+      | cascade    | info     | true         |                                                                   |                                                                                                                                            |
+      | diagnostic | warning  | false        | Plugin "demo" [project] updated; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons | scope   | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | updated |         | project | 1.0.0 | 1.1.0 |
+
+  Scenario: Reinstalling a plugin whose skills collide reports the skip under a header that names the scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
+    When the user runs "/claude:plugin reinstall demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                                | lines                                                                                                                                      |
+      | cascade    | info     | true         |                                                                       |                                                                                                                                            |
+      | diagnostic | warning  | false        | Plugin "demo" [project] reinstalled; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | reinstalled |         | project | 1.0.0   |
+
+  Scenario: Enabling a plugin whose skills collide reports the skip under a header that names the scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope project"
+    Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
+    When the user runs "/claude:plugin enable demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                            | lines                                                                                                                                      |
+      | cascade    | info     | true         |                                                                   |                                                                                                                                            |
+      | diagnostic | warning  | false        | Plugin "demo" [project] enabled; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+
+  Scenario: An install that fails in its mcp phase reports the skill the skills phase skipped after the failed row
+    Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
+    Given a directory blocks the mcp-adapter.json file of the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | summary                        | header                                                                   | lines                                                                                                                                      |
+      | cascade    | error    | false        | A plugin operation has failed. |                                                                          |                                                                                                                                            |
+      | diagnostic | warning  | false        |                                | Plugin "demo" [project] install failed; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons | scope   | version | cause chain                   | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed |         | project | 1.0.0   | {mcp-adapter.json read error} | false           |       |                  |
+
+  Scenario: An update that fails in its mcp phase reports the skill the skills phase skipped after the failed row
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
+    Given a directory blocks the mcp-adapter.json file of the project scope
+    When the user runs "/claude:plugin update demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | summary                        | header                                                                  | lines                                                                                                                                      |
+      | cascade    | error    | false        | A plugin operation has failed. |                                                                         |                                                                                                                                            |
+      | diagnostic | warning  | false        |                                | Plugin "demo" [project] update failed; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons    | scope   | from  | version | cause chain                   | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | unreadable | project | 1.0.0 | 1.1.0   | {mcp-adapter.json read error} | false           |       |                  |
+
+  Scenario: A reinstall that fails in its mcp phase reports the skill the skills phase skipped after the failed row
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
+    Given a directory blocks the mcp-adapter.json file of the project scope
+    When the user runs "/claude:plugin reinstall demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | summary                        | header                                                                     | lines                                                                                                                                      |
+      | cascade    | error    | false        | A plugin operation has failed. |                                                                            |                                                                                                                                            |
+      | diagnostic | warning  | false        |                                | Plugin "demo" [project] reinstall failed; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons    | scope   | version | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | unreadable | project | 1.0.0   |       |                  |
+
+  Scenario: A marketplace update with autoupdate on reports a moved plugin's skip under its header
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
+    When the user runs "/claude:plugin marketplace update fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                            | lines                                                                                                                                      |
+      | cascade    | info     | true         |                                                                   |                                                                                                                                            |
+      | diagnostic | warning  | false        | Plugin "demo" [project] updated; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name | status  | reasons | scope   | from  | to    |
+      | fixtures         | project           | updated            | demo@fixtures | demo | updated |         | project | 1.0.0 | 1.1.0 |
+
+  Scenario: A marketplace update with autoupdate on reports a moved plugin's skip and its dropped agent field under one header
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
+    Given the published plugin "demo" of the marketplace "fixtures" has an agent "helper" that sets a color
+    When the user runs "/claude:plugin marketplace update fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                                               | lines                                                                                                                                                                      |
+      | cascade    | info     | true         |                                                                                      |                                                                                                                                                                            |
+      | diagnostic | warning  | false        | Plugin "demo" [project] updated; 1 declared component has a note; 1 staging warning. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate., [helper] dropped fields: color |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name | status  | reasons               | scope   | from  | to    |
+      | fixtures         | project           | updated            | demo@fixtures | demo | updated | requires pi-subagents | project | 1.0.0 | 1.1.0 |
+
+  Scenario: A marketplace update with autoupdate on reports a moved plugin that fails in its mcp phase under an update failed header
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
+    Given a directory blocks the mcp-adapter.json file of the project scope
+    When the user runs "/claude:plugin marketplace update fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | summary                        | header                                                                  | lines                                                                                                                                      |
+      | cascade    | error    | false        | A plugin operation has failed. |                                                                         |                                                                                                                                            |
+      | diagnostic | warning  | false        |                                | Plugin "demo" [project] update failed; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name | status | reasons    | scope   | from  | version | leaks | rollback partial | cause chain                   | cause truncated |
+      | fixtures         | project           | updated            | demo@fixtures | demo | failed | unreadable | project | 1.0.0 | 1.1.0   |       |                  | {mcp-adapter.json read error} | false           |
+
+  Scenario: Apply that moves a plugin to its catalog version reports the moved plugin's skip under its header
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
+    When the user runs "/claude:plugin apply --scope project"
+    Then the command reports these results:
+      | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count | header                                                            | lines                                                                                                                                      |
+      | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |                                                                   |                                                                                                                                            |
+      | diagnostic                | warning  | false        |             |                |                |                     | Plugin "demo" [project] updated; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons | scope   | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | updated |         | project | 1.0.0 | 1.1.0 |
+
+  Scenario: Apply that moves a plugin to its catalog version reports the moved plugin's skip and its dropped agent field under one header
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
+    Given the published plugin "demo" of the marketplace "fixtures" has an agent "helper" that sets a color
+    When the user runs "/claude:plugin apply --scope project"
+    Then the command reports these results:
+      | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count | header                                                                               | lines                                                                                                                                                                      |
+      | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |                                                                                      |                                                                                                                                                                            |
+      | diagnostic                | warning  | false        |             |                |                |                     | Plugin "demo" [project] updated; 1 declared component has a note; 1 staging warning. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate., [helper] dropped fields: color |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons                                         | scope   | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | updated | components now supported, requires pi-subagents | project | 1.0.0 | 1.1.0 |
+
+  Scenario: Apply that enables a plugin whose skills collide reports the skip under its header
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope project"
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   | true    |
+    Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
+    When the user runs "/claude:plugin apply --scope project"
+    Then the command reports these results:
+      | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count | header                                                            | lines                                                                                                                                      |
+      | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |                                                                   |                                                                                                                                            |
+      | diagnostic                | warning  | false        |             |                |                |                     | Plugin "demo" [project] enabled; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+
+  Scenario: Updating a plugin whose new version needs a dependency with an MCP server reports that dependency's MCP config notice
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | demo | 1.1.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the published plugin "lib" of the marketplace "fixtures" declares the mcp server "lib-server"
+    Given the mcp-adapter.json file of the project scope holds a comment
+    When the user runs "/claude:plugin update demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind               | severity | needs reload | summary                             | notices                                                                   |
+      | cascade            | warning  | true         | A plugin operation needs attention. |                                                                           |
+      | mcp-config-notices | warning  | false        |                                     | [{"kind":"comments-dropped","scope":"project","file":"mcp-adapter.json"}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name         | status    | reasons                 | scope   | version | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo         | updated   |                         | project |         | 1.0.0 | 1.1.0 |
+      | fixtures         | project           | lib@fixtures  | lib@fixtures | installed | requires pi-mcp-adapter | project | 1.0.0   |       |       |
+
+  Scenario: Updating a plugin whose dependency settle is refused still reports the MCP config notice of the dependency it installed first
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | zbad | 1.0.0   |
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin install zbad@fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | demo | 1.1.0   | zbad@^2.0.0  |
+      | zbad | 2.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the published plugin "lib" of the marketplace "fixtures" declares the mcp server "lib-server"
+    Given the published plugin "zbad" of the marketplace "fixtures" has an unreadable skill file
+    Given the mcp-adapter.json file of the project scope holds a comment
+    When the user runs "/claude:plugin update demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind               | severity | needs reload | summary                             | notices                                                                   |
+      | cascade            | error    | true         | Some plugin operations have failed. |                                                                           |
+      | mcp-config-notices | warning  | false        |                                     | [{"kind":"comments-dropped","scope":"project","file":"mcp-adapter.json"}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name          | status    | reasons                 | scope   | version | cause chain                        | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo          | failed    | dependency failed       | project | 1.0.0   |                                    |                 |       |                  |
+      | fixtures         | project           | lib@fixtures  | lib@fixtures  | installed | requires pi-mcp-adapter | project | 1.0.0   |                                    |                 |       |                  |
+      | fixtures         | project           | zbad@fixtures | zbad@fixtures | failed    |                         | project | 1.0.0   | {unreadable skill file copy error} | false           |       |                  |
+
+  Scenario: A bare update over two marketplaces reports the skips in the order of the rows
+    Given the marketplace "addons" is published as a dir source
+    Given the marketplace "addons" offers these plugins:
+      | name | version |
+      | tool | 1.0.0   |
+    Given the marketplace "addons" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin install tool@addons --scope project"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the marketplace "addons" offers these plugins:
+      | name | version |
+      | tool | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
+    Given the published plugin "tool" of the marketplace "addons" has a second skill whose name collides with its first
+    When the user runs "/claude:plugin update --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | tally label   | tally failures | tally warnings | tally success count | tally success verb | header                                                            | lines                                                                                                                                      |
+      | cascade    | info     | true         | Plugin update | 0              | 0              | 2                   | updated            |                                                                   |                                                                                                                                            |
+      | diagnostic | warning  | false        |               |                |                |                     |                    | Plugin "tool" [project] updated; 1 declared component has a note. | skill source "tool-skill" in "skills" elides to generated name "tool-skill", already produced by skill source "skill"; ignoring duplicate. |
+      | diagnostic | warning  | false        |               |                |                |                     |                    | Plugin "demo" [project] updated; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons | scope   | from  | to    |
+      | addons           | project           | tool@addons   | tool | updated |         | project | 1.0.0 | 1.1.0 |
+      | fixtures         | project           | demo@fixtures | demo | updated |         | project | 1.0.0 | 1.1.0 |

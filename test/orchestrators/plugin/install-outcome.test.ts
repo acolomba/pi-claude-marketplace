@@ -653,7 +653,10 @@ test("surfaces the skills staging cleanup leak and still lands the install", asy
 
   // assert
   assert.deepStrictEqual(installed.summary.bridgeWarnings, [
-    `failed to clean up skills staging directory at ${installed.stagingRoot}: staging cleanup denied`,
+    {
+      kind: "hygiene",
+      message: `failed to clean up skills staging directory at ${installed.stagingRoot}: staging cleanup denied`,
+    },
   ]);
   assert.deepStrictEqual(installed.summary.stagedSkillNames, ["empty-alpha"]);
 });
@@ -668,7 +671,10 @@ test("surfaces the commands staging cleanup leak and still lands the install", a
 
   // assert
   assert.deepStrictEqual(installed.summary.bridgeWarnings, [
-    `failed to clean up commands staging directory at ${installed.stagingRoot}: staging cleanup denied`,
+    {
+      kind: "hygiene",
+      message: `failed to clean up commands staging directory at ${installed.stagingRoot}: staging cleanup denied`,
+    },
   ]);
   assert.deepStrictEqual(installed.summary.stagedCommandNames, ["empty:beta"]);
 });
@@ -715,7 +721,10 @@ test("surfaces the workflows staging cleanup leak and still lands the install", 
   assert.ok(ledgerOutcome.kind === "installed");
   assert.ok(leakedRoot !== undefined);
   assert.deepStrictEqual(ledgerOutcome.summary.bridgeWarnings, [
-    `failed to clean up workflows staging directory at ${leakedRoot}: staging cleanup denied`,
+    {
+      kind: "hygiene",
+      message: `failed to clean up workflows staging directory at ${leakedRoot}: staging cleanup denied`,
+    },
   ]);
   assert.deepStrictEqual(ledgerOutcome.summary.stagedWorkflowNames, ["empty:delta"]);
 });
@@ -1089,7 +1098,10 @@ test("surfaces the agents staging cleanup leak and still lands the install", asy
 
   // assert
   assert.deepStrictEqual(installed.summary.bridgeWarnings, [
-    `failed to clean up agents staging directory at ${installed.stagingRoot}: staging cleanup denied`,
+    {
+      kind: "hygiene",
+      message: `failed to clean up agents staging directory at ${installed.stagingRoot}: staging cleanup denied`,
+    },
   ]);
   assert.deepStrictEqual(installed.summary.stagedAgentNames, ["pi-claude-marketplace-empty-gamma"]);
 });
@@ -2073,9 +2085,134 @@ test("ANAME-02: a server left out by a partial install is not granted to the plu
     "tools: mcp:plugin_empty_db_/query",
   ]);
   assert.deepStrictEqual(ledgerOutcome.summary.bridgeWarnings, [
-    "[bot] tools include MCP tools, which pi-subagents runs only in background launches -- launch this agent with `async: true`; a foreground launch fails, and so does a launch before pi-mcp-adapter has cached the server's tools",
-    "[bot] dropped tools: mcp__plugin_empty_live__stream",
+    {
+      kind: "hygiene",
+      message:
+        "[bot] tools include MCP tools, which pi-subagents runs only in background launches -- launch this agent with `async: true`; a foreground launch fails, and so does a launch before pi-mcp-adapter has cached the server's tools",
+    },
+    { kind: "hygiene", message: "[bot] dropped tools: mcp__plugin_empty_live__stream" },
   ]);
+});
+
+test("D-PL1-03: an agents duplicate joins the discovery warnings and a conversion note the hygiene warnings", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-tagged-warnings-");
+  const seeded = await seedPlugin(environment.cwd);
+  const agentsDir = path.join(seeded.pluginRoot, "agents");
+  await mkdir(agentsDir, { recursive: true });
+  await writeFile(
+    path.join(agentsDir, "first.md"),
+    "---\nname: helper\ndescription: First.\ntools: Read, WebFetch\n---\n\nFirst.\n",
+  );
+  await writeFile(
+    path.join(agentsDir, "second.md"),
+    "---\nname: helper\ndescription: Second.\n---\n\nSecond.\n",
+  );
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.discoveryWarnings, [
+    {
+      kind: "discovery",
+      message: `agent source "helper" at "${path.join(agentsDir, "second.md")}" duplicates generated name "pi-claude-marketplace-empty-helper" already produced by agent source "helper" at "${path.join(agentsDir, "first.md")}"; keeping first discovered source.`,
+    },
+  ]);
+  assert.deepStrictEqual(ledgerOutcome.summary.bridgeWarnings, [
+    { kind: "hygiene", message: "[helper] dropped tools: WebFetch" },
+  ]);
+});
+
+test("D-PL1-13: an mcp phase failure captures the warnings the agents phase collected", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-failure-warnings-");
+  const seeded = await seedPlugin(environment.cwd);
+  const agentsDir = path.join(seeded.pluginRoot, "agents");
+  await mkdir(agentsDir, { recursive: true });
+  await writeFile(
+    path.join(agentsDir, "first.md"),
+    "---\nname: helper\ndescription: First.\ntools: Read, WebFetch\n---\n\nFirst.\n",
+  );
+  await writeFile(
+    path.join(agentsDir, "second.md"),
+    "---\nname: helper\ndescription: Second.\n---\n\nSecond.\n",
+  );
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+      env: {},
+    },
+    capture,
+  );
+
+  // assert
+  await assert.rejects(operation);
+  assert.deepStrictEqual(capture, {
+    rollbackPartials: [],
+    version: "0.0.1",
+    stagingWarnings: [
+      {
+        kind: "discovery",
+        message: `agent source "helper" at "${path.join(agentsDir, "second.md")}" duplicates generated name "pi-claude-marketplace-empty-helper" already produced by agent source "helper" at "${path.join(agentsDir, "first.md")}"; keeping first discovered source.`,
+      },
+      { kind: "hygiene", message: "[helper] dropped tools: WebFetch" },
+    ],
+  });
+});
+
+test("D-PL1-13: an mcp phase failure with no collected warnings captures none", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-failure-no-warnings-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["alpha"] } });
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+      env: {},
+    },
+    capture,
+  );
+
+  // assert
+  await assert.rejects(operation);
+  assert.deepStrictEqual(capture, { rollbackPartials: [], version: "0.0.1" });
 });
 
 test("AFILE-04: staging over a commented mcp-adapter.json reports the comments-dropped notice", async (t) => {
@@ -3078,9 +3215,12 @@ test("D-PL9-03: installs a plugin outside the extension root and notes the packa
 
   // assert
   assert.strictEqual(ledgerOutcome.kind, "installed");
-  assert.deepStrictEqual(ledgerOutcome.summary.discoveryWarnings, [
-    `Skipped installing this plugin's dependencies: its folder in the marketplace "marketplace" is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder.`,
-  ]);
+  assert.deepStrictEqual(
+    ledgerOutcome.summary.discoveryWarnings.map((w) => w.message),
+    [
+      `Skipped installing this plugin's dependencies: its folder in the marketplace "marketplace" is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder.`,
+    ],
+  );
   assert.strictEqual(seeded.state.marketplaces.marketplace?.plugins.empty?.version, "0.0.1");
   assert.deepStrictEqual((await readdir(seeded.pluginRoot)).sort(), [
     ".claude-plugin",

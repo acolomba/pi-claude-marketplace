@@ -79,7 +79,7 @@ void unstageAgentFailure;
 const stageAgentsCommitResult: StageAgentsCommitResult = {
   stagedNames: ["pi-claude-marketplace-acme-reviewer"],
   recorded: [stagedAgentRecord],
-  warnings: ["dropped unsupported tool WebFetch"],
+  warnings: [{ kind: "hygiene", message: "dropped unsupported tool WebFetch" }],
   failed: [unstageAgentFailure],
 } satisfies StageAgentsCommitResult;
 void stageAgentsCommitResult;

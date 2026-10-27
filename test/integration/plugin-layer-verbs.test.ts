@@ -339,6 +339,7 @@ test("LAYER-08: the load-time backfill's reinstall of a dependency writes no lay
   // assert
   assert.deepStrictEqual(outcome, {
     partition: "reinstalled",
+    resourcesChanged: true,
     name: "lib",
     marketplace: "mp",
     scope: "project",

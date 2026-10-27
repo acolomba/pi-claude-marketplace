@@ -29,7 +29,7 @@ import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 // The flow suite supplies the real bridge, filesystem, rollback, and
 // state-ledger fixtures while this mirrored owner pair proves they execute
 // through the extracted swap module.
-import { seedPathMarketplace, withHermeticHome } from "./update-flow.test.ts";
+import { seedCollidingSkills, seedPathMarketplace, withHermeticHome } from "./update-flow.test.ts";
 
 import type { MaterializationPolicy } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import type {
@@ -180,6 +180,7 @@ async function assertAgentsMigrated(params: {
     : ["pi-claude-marketplace-hello-hello-reviewer"];
   assert.deepStrictEqual(outcome, {
     partition: "updated",
+    resourcesChanged: true,
     name: "hello",
     fromVersion: "1.0.0",
     toVersion: "2.0.0",
@@ -674,16 +675,22 @@ test("D-18-15: an overwrite policy commits over a previous agent file a user edi
   // assert
   assert.deepStrictEqual(outcome, {
     partition: "updated",
+    resourcesChanged: true,
     name: "hello",
     fromVersion: "1.0.0",
     toVersion: "2.0.0",
-    notes: ["[bot] source description was missing or empty -- using fallback"],
     stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
     stagedMcpServerNames: [],
     declaresAgents: true,
     declaresMcp: false,
     constraint: undefined,
     declaresWorkflows: false,
+    stagingWarnings: [
+      {
+        kind: "hygiene",
+        message: "[bot] source description was missing or empty -- using fallback",
+      },
+    ],
   });
   assert.strictEqual(
     await readFile(target, "utf8"),
@@ -716,6 +723,235 @@ test("D-18-15: an overwrite policy commits over a previous agent file a user edi
     compatibility: { installable: true, notes: [], supported: ["agents"], unsupported: [] },
     updatedAt: "2026-01-02T00:00:00.001Z",
   });
+});
+
+test("D-PL1-10: a direct swap puts an agents duplicate on the updated outcome's stagingWarnings", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-direct-duplicate-");
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: {
+      hello: {
+        version: "2.0.0",
+        hasSkill: false,
+        agents: [
+          { sourceName: "first", frontmatterName: "helper", description: "First" },
+          { sourceName: "second", frontmatterName: "helper", description: "Second" },
+        ],
+      },
+    },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const agentsDir = path.join(marketplaceRoot, "plugins", "hello", "agents");
+  const args = directSwapArgs(cwd);
+  const preflight = await preflightOf(args);
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "updated",
+    resourcesChanged: true,
+    name: "hello",
+    fromVersion: "1.0.0",
+    toVersion: "2.0.0",
+    stagedAgentNames: ["pi-claude-marketplace-hello-helper"],
+    stagedMcpServerNames: [],
+    declaresAgents: true,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+    stagingWarnings: [
+      {
+        kind: "discovery",
+        message: `agent source "helper" at "${path.join(agentsDir, "second.md")}" duplicates generated name "pi-claude-marketplace-hello-helper" already produced by agent source "helper" at "${path.join(agentsDir, "first.md")}"; keeping first discovered source.`,
+      },
+    ],
+  });
+});
+
+/**
+ * Seed an update to `hello@2.0.0` whose skills collide (a discovery warning)
+ * and whose agent has no description (a hygiene warning).
+ */
+async function seedBothHalvesUpdate(t: TestContext, prefix: string) {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { cwd } = await createHermeticEnvironment(t, prefix);
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "2.0.0", hasSkill: true, hasAgent: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  await seedCollidingSkills(marketplaceRoot);
+  return { cwd, skillsDir: path.join(marketplaceRoot, "plugins", "hello", "skills") };
+}
+
+/** Direct-mode swap arguments for `hello@mp` in the project scope of `cwd`. */
+function directSwapArgs(cwd: string): DirectThreePhaseArgs {
+  return {
+    ...cascadeSwapArgs(cwd),
+    cascade: false,
+    ctx: { mode: "tui", ui: { notify: () => undefined } },
+    run: runWithNothingLoaded(),
+    cardinality: "single",
+    notifyPhaseFailure: () => undefined,
+  };
+}
+
+for (const [mode, swapArgs] of [
+  ["direct", directSwapArgs],
+  ["cascade", cascadeSwapArgs],
+] as const) {
+  test(`D-PL1-10: a ${mode} swap carries both halves on stagingWarnings in bridge order and no notes`, async (t) => {
+    // arrange
+    const { cwd, skillsDir } = await seedBothHalvesUpdate(t, "update-swap-both-halves-");
+    const args = swapArgs(cwd);
+    const preflight = await preflightOf(args);
+
+    // act
+    const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      partition: "updated",
+      resourcesChanged: true,
+      name: "hello",
+      fromVersion: "1.0.0",
+      toVersion: "2.0.0",
+      stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
+      stagedMcpServerNames: [],
+      declaresAgents: true,
+      declaresMcp: false,
+      constraint: undefined,
+      declaresWorkflows: false,
+      stagingWarnings: bothHalvesWarnings(skillsDir),
+    });
+  });
+}
+
+/** D-PL1-14: the collided skill and the description-less agent `seedBothHalvesUpdate` yields. */
+function bothHalvesWarnings(skillsDir: string) {
+  return [
+    {
+      kind: "discovery",
+      message: `skill source "hello-foo" in "${skillsDir}" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.`,
+    },
+    {
+      kind: "hygiene",
+      message: "[bot] source description was missing or empty -- using fallback",
+    },
+  ];
+}
+
+test("D-PL1-14: a prepare that throws in its mcp step reports the warnings of the handles it prepared", async (t) => {
+  // arrange
+  const { cwd, skillsDir } = await seedBothHalvesUpdate(t, "update-swap-prepare-throw-");
+  const reports: unknown[] = [];
+  const args = {
+    ...cascadeSwapArgs(cwd),
+    onStagingWarnings: (warnings: readonly unknown[]) => {
+      reports.push(warnings);
+    },
+  };
+  const preflight = await preflightOf(args);
+  await mkdir(args.locations.mcpAdapterJsonPath, { recursive: true });
+
+  // act
+  const swap = swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  await assert.rejects(swap, { code: "EISDIR" });
+  assert.deepStrictEqual(reports, [bothHalvesWarnings(skillsDir)]);
+});
+
+test("D-PL1-14: an agent-target refusal after a full prepare reports every handle's warnings once", async (t) => {
+  // arrange
+  const { cwd, skillsDir } = await seedBothHalvesUpdate(t, "update-swap-intent-throw-");
+  const reports: unknown[] = [];
+  const args = {
+    ...cascadeSwapArgs(cwd),
+    onStagingWarnings: (warnings: readonly unknown[]) => {
+      reports.push(warnings);
+    },
+  };
+  const preflight = await preflightOf(args);
+  const agentTarget = path.join(args.locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
+  await mkdir(args.locations.agentsDir, { recursive: true });
+  await writeFile(agentTarget, "Foreign agent.\n");
+
+  // act
+  const swap = swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  await assert.rejects(swap, {
+    message: `Cannot replace agent target with non-previous content at ${agentTarget}`,
+  });
+  assert.deepStrictEqual(reports, [bothHalvesWarnings(skillsDir)]);
+});
+
+test("D-PL1-14: a phase-3 failure puts every handle's warnings on its failed outcome", async (t) => {
+  // arrange
+  const { cwd, skillsDir } = await seedBothHalvesUpdate(t, "update-swap-phase3-warnings-");
+  const args = cascadeSwapArgs(cwd);
+  const foreignPath = await seedRefusedWorkflowTarget(
+    args.locations,
+    path.join(cwd, "mp-src", "plugins", "hello"),
+  );
+  const preflight = await preflightOf(args);
+  const refusal = `Cannot replace workflow target with non-previous content at ${foreignPath}`;
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "failed",
+    name: "hello",
+    fromVersion: "1.0.0",
+    toVersion: "2.0.0",
+    notes: [
+      'Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it.',
+      `workflows: ${refusal}`,
+    ],
+    reasons: ["rollback partial"],
+    phaseFailures: [{ phase: "workflows", msg: refusal }],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    stagingWarnings: bothHalvesWarnings(skillsDir),
+  });
+});
+
+test("NREG-01: a clean swap's updated outcome has neither stagingWarnings nor notes", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-clean-warnings-");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "2.0.0", hasSkill: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const args = cascadeSwapArgs(cwd);
+  const preflight = await preflightOf(args);
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  assert.equal(outcome.partition, "updated");
+  assert.deepStrictEqual(
+    { stagingWarnings: "stagingWarnings" in outcome, notes: "notes" in outcome },
+    { stagingWarnings: false, notes: false },
+  );
 });
 
 test("D-18-15 / NFR-3: without an overwrite policy a user-edited previous agent file refuses the swap before it changes anything", async (t) => {
@@ -1249,6 +1485,7 @@ test("AFILE-04: a swap over a commented mcp-adapter.json carries the comments-re
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "updated",
+        resourcesChanged: true,
         name: "hello",
         fromVersion: "1.0.0",
         toVersion: "2.0.0",
@@ -1283,6 +1520,7 @@ test("AFILE-04: a swap over a comment-free mcp-adapter.json carries no notice", 
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "updated",
+        resourcesChanged: true,
         name: "hello",
         fromVersion: "1.0.0",
         toVersion: "2.0.0",
@@ -1424,6 +1662,7 @@ test("AMIG-02: a swap removes the plugin's marked mcp.json entries after the MCP
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "updated",
+        resourcesChanged: true,
         name: "hello",
         fromVersion: "1.0.0",
         toVersion: "2.0.0",
@@ -1560,6 +1799,7 @@ async function prepareDirectUpdate(cwd: string) {
 
 const DIRECT_UPDATED_OUTCOME = {
   partition: "updated",
+  resourcesChanged: true,
   name: "hello",
   fromVersion: "1.0.0",
   toVersion: "2.0.0",
@@ -1617,3 +1857,100 @@ test("LAYER-04: a direct swap with an unreadable local layer updates, renders no
     }
   });
 });
+
+type SeededPluginSpec = Parameters<typeof seedPathMarketplace>[0]["manifestPlugins"][string];
+type RecordedResources = NonNullable<
+  Awaited<ReturnType<typeof loadState>>["marketplaces"][string]
+>["plugins"][string]["resources"];
+
+/**
+ * Seed `hello@1.0.0` with `resources` on its record, and the `2.0.0`
+ * candidate `spec` the update stages.
+ */
+async function seedResourcesUpdate(
+  t: TestContext,
+  resources: RecordedResources,
+  spec: SeededPluginSpec,
+): Promise<string> {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-resources-changed-");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    manifestPlugins: { hello: spec },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const locations = locationsFor("project", cwd);
+  const state = await loadState(locations.extensionRoot);
+  const record = state.marketplaces.mp?.plugins.hello;
+  assert.ok(record);
+  record.resources = resources;
+  await saveState(locations.extensionRoot, state);
+  return cwd;
+}
+
+const NO_RESOURCES = {
+  skills: [],
+  prompts: [],
+  agents: [],
+  mcpServers: [],
+  hooks: [],
+  workflows: [],
+} satisfies RecordedResources;
+
+for (const { situation, resources, spec, expectedOutcome } of [
+  {
+    situation: "the record held a skill and the candidate stages one",
+    resources: { ...NO_RESOURCES, skills: ["hello:tool"] },
+    spec: { version: "2.0.0" },
+    expectedOutcome: { ...DIRECT_UPDATED_OUTCOME, resourcesChanged: true },
+  },
+  {
+    situation: "the record held a prompt and the candidate stages nothing",
+    resources: { ...NO_RESOURCES, prompts: ["hello:deploy"] },
+    spec: { version: "2.0.0", hasSkill: false },
+    expectedOutcome: { ...DIRECT_UPDATED_OUTCOME, resourcesChanged: true },
+  },
+  {
+    situation: "the record held nothing and the candidate stages an MCP server",
+    resources: NO_RESOURCES,
+    spec: { version: "2.0.0", hasSkill: false, hasMcp: true },
+    expectedOutcome: {
+      ...DIRECT_UPDATED_OUTCOME,
+      resourcesChanged: true,
+      stagedMcpServerNames: ["server1"],
+      declaresMcp: true,
+    },
+  },
+  {
+    situation: "the record and the candidate hold only hooks",
+    resources: { ...NO_RESOURCES, hooks: ["hello"] },
+    spec: {
+      version: "2.0.0",
+      hasSkill: false,
+      hooksJson: {
+        PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hi" }] }],
+      },
+    },
+    expectedOutcome: { ...DIRECT_UPDATED_OUTCOME, resourcesChanged: false },
+  },
+] satisfies readonly {
+  situation: string;
+  resources: RecordedResources;
+  spec: SeededPluginSpec;
+  expectedOutcome: Awaited<ReturnType<typeof swapPluginUpdate>>;
+}[]) {
+  test(`D-PL1-18: resourcesChanged is ${expectedOutcome.resourcesChanged} when ${situation}`, async (t) => {
+    // arrange
+    const cwd = await seedResourcesUpdate(t, resources, spec);
+    const args = cascadeSwapArgs(cwd);
+    const preflight = await preflightOf(args);
+
+    // act
+    const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+    // assert
+    assert.deepStrictEqual(outcome, expectedOutcome);
+  });
+}

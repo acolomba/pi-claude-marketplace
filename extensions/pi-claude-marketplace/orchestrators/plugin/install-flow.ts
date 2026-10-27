@@ -99,13 +99,13 @@ import {
   overwriteDisabledMemberEntries,
   pluginLayerVerdict,
   resolveInstallMarketplaceSource,
-  surfaceDiscoveryWarnings,
   undeclarableMarketplaceRefusal,
   sweepWorkflowsStaging,
   writeAdoptingConfigEntries,
   type LedgerDegradationSignals,
   type TargetLayers,
 } from "./shared.ts";
+import { surfaceDiscoveryWarnings, surfaceStagingDiagnostics } from "./staging-diagnostics.ts";
 import { UPDATE_MATERIALIZATION } from "./update-preflight.ts";
 import { assertUpdateNamesFree } from "./update-swap.ts";
 
@@ -1168,10 +1168,10 @@ function unwrapCascade<S extends Exclude<InstallCascadeResult, CascadeFailureArm
  * warning says the installed artifact set does not match what the plugin
  * author shipped, and the install row's resource count gives the user no
  * baseline to notice the shortfall. The caller renders the standalone half
- * through `./shared.ts::surfaceDiscoveryWarnings`, which update and
- * reinstall also call (D-141-05). The skills, commands and workflows bridges
- * feed that array; the agents bridge mixes three kinds of warning onto one
- * result field and rides the hygiene channel instead.
+ * through `./staging-diagnostics.ts::surfaceDiscoveryWarnings`; update,
+ * reinstall and enable render theirs through `surfaceStagingDiagnostics`
+ * (D-141-05). Every bridge tags its warnings at the producer, and the ledger
+ * partitions them by tag (D-PL1-02, D-PL1-03).
  */
 async function collectPostCommitWarnings(
   installCtx: InstallLedgerSummary,
@@ -1191,10 +1191,10 @@ async function collectPostCommitWarnings(
     }
   };
 
-  // D-141-03: never gated. In standalone mode these are the only strings the
-  // returned array carries, which is what the caller's notifyDiagnostic
-  // surface renders.
-  warnings.push(...installCtx.discoveryWarnings);
+  // D-141-03: never gated. The standalone caller does not read the returned
+  // array; it renders the typed `installCtx.discoveryWarnings` itself
+  // (D-PL1-04).
+  warnings.push(...installCtx.discoveryWarnings.map((w) => w.message));
 
   // AS-6 / D-08: eager per-plugin data dir mkdir.
   try {
@@ -1241,7 +1241,7 @@ async function collectPostCommitWarnings(
   // Bridge-side soft warnings (e.g. agents-bridge cleanup-leak return values
   // aggregated during the staged phases).
   for (const w of installCtx.bridgeWarnings) {
-    push(w);
+    push(w.message);
   }
 
   // WLIF-01: sweep workflow staging trees a previous run abandoned. Installing
@@ -1743,6 +1743,12 @@ function handleInstallThrow(args: {
     undefined,
     "single",
   );
+  // D-PL1-13 / D-PL1-24: only a standalone root failure reaches here; a
+  // dependency's failure routes to `handleCascadeThrow`, so the shared
+  // capture's warnings never render under the root's name.
+  surfaceStagingDiagnostics(ctx, run, [
+    { plugin, scope, verb: "install failed", warnings: capture.stagingWarnings ?? [] },
+  ]);
   const wrapped = err instanceof Error ? err : new Error(errorMessage(err));
   return {
     status: "failed",
@@ -2904,8 +2910,9 @@ async function installPluginWithTransaction(
         );
         surfaceDiscoveryWarnings(ctx, run, {
           plugin,
+          scope,
           verb: "installed",
-          warnings: postCommitWarnings,
+          warnings: installCtx.discoveryWarnings,
         });
       }
 
@@ -3486,7 +3493,8 @@ async function lockedRootCascade<S extends Exclude<InstallCascadeResult, Cascade
 
 /**
  * Saves what a root cascade materialized and reports one row per member,
- * still under its lock.
+ * still under its lock. D-PL1-16: the members' MCP config notices ride the
+ * `installed` arm, so an update can show them ahead of its own.
  */
 async function saveRootClosure(
   args: RootCascade,
@@ -3509,6 +3517,7 @@ async function saveRootClosure(
     rows: settled.members.map((member) =>
       composeCascadeMemberRow(member, args.caller.run.softDeps),
     ),
+    ...mcpConfigNoticesMember(settled.mcpConfigNotices),
   };
 }
 
