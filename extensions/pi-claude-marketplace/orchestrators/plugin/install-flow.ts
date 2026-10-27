@@ -1144,9 +1144,8 @@ function unwrapCascade<S extends Exclude<InstallCascadeResult, CascadeFailureArm
  * author shipped, and the install row's resource count gives the user no
  * baseline to notice the shortfall. The caller renders the standalone half
  * through `./shared.ts::surfaceDiscoveryWarnings`, which update and
- * reinstall also call (D-141-05). The skills, commands and workflows bridges
- * feed that array; the agents bridge mixes three kinds of warning onto one
- * result field and rides the hygiene channel instead.
+ * reinstall also call (D-141-05). Every bridge tags its warnings at the
+ * producer, and the ledger partitions them by tag (D-PL1-02, D-PL1-03).
  */
 async function collectPostCommitWarnings(
   installCtx: InstallLedgerSummary,
@@ -1169,7 +1168,7 @@ async function collectPostCommitWarnings(
   // D-141-03: never gated. In standalone mode these are the only strings the
   // returned array carries, which is what the caller's notifyDiagnostic
   // surface renders.
-  warnings.push(...installCtx.discoveryWarnings);
+  warnings.push(...installCtx.discoveryWarnings.map((w) => w.message));
 
   // AS-6 / D-08: eager per-plugin data dir mkdir.
   try {
@@ -1216,7 +1215,7 @@ async function collectPostCommitWarnings(
   // Bridge-side soft warnings (e.g. agents-bridge cleanup-leak return values
   // aggregated during the staged phases).
   for (const w of installCtx.bridgeWarnings) {
-    push(w);
+    push(w.message);
   }
 
   // WLIF-01: sweep workflow staging trees a previous run abandoned. Installing

@@ -60,7 +60,7 @@ void stagedMcpRecord;
 const stageMcpCommitResult: StageMcpCommitResult = {
   stagedNames: ["search"],
   recorded: [stagedMcpRecord],
-  warnings: ["preserved foreign server foreign-search"],
+  warnings: [{ kind: "hygiene", message: "preserved foreign server foreign-search" }],
   notices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
 } satisfies StageMcpCommitResult;
 void stageMcpCommitResult;

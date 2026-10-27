@@ -32,11 +32,10 @@
 //  PluginUpdatePhase3Error with RECOVERY_PLUGIN_REINSTALL_PREFIX hint.
 //  Else: success outcome carries WR-04 stagedAgentNames/stagedMcpServerNames.
 //
-// D-141-03 / D-141-05: the four bridges' staging warnings are READ (they were
-// not, so every one of them was dark on this path) and split by install's
-// rule through `./shared.ts::splitStagingWarnings`. The skills and commands
-// DISCOVERY half always rides the `updated` outcome's `notes`; the agents and
-// mcp HYGIENE half joins it in cascade mode only. The direct path renders the
+// D-141-03 / D-PL1-03: the five bridges' tagged staging warnings are READ and
+// partitioned by tag through `partitionStagingWarnings`, the classifier install
+// uses. The DISCOVERY half always rides the `updated` outcome's `notes`; the
+// HYGIENE half joins it in cascade mode only. The direct path renders the
 // discovery half through `surfaceDiscoveryWarnings` AFTER the cascade, since
 // the runner that produces a warning finishes long before the row it
 // qualifies exists.

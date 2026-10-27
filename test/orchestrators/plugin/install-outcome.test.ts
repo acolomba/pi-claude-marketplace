@@ -645,7 +645,10 @@ test("surfaces the skills staging cleanup leak and still lands the install", asy
 
   // assert
   assert.deepStrictEqual(installed.summary.bridgeWarnings, [
-    `failed to clean up skills staging directory at ${installed.stagingRoot}: staging cleanup denied`,
+    {
+      kind: "hygiene",
+      message: `failed to clean up skills staging directory at ${installed.stagingRoot}: staging cleanup denied`,
+    },
   ]);
   assert.deepStrictEqual(installed.summary.stagedSkillNames, ["empty-alpha"]);
 });
@@ -660,7 +663,10 @@ test("surfaces the commands staging cleanup leak and still lands the install", a
 
   // assert
   assert.deepStrictEqual(installed.summary.bridgeWarnings, [
-    `failed to clean up commands staging directory at ${installed.stagingRoot}: staging cleanup denied`,
+    {
+      kind: "hygiene",
+      message: `failed to clean up commands staging directory at ${installed.stagingRoot}: staging cleanup denied`,
+    },
   ]);
   assert.deepStrictEqual(installed.summary.stagedCommandNames, ["empty:beta"]);
 });
@@ -707,7 +713,10 @@ test("surfaces the workflows staging cleanup leak and still lands the install", 
   assert.ok(ledgerOutcome.kind === "installed");
   assert.ok(leakedRoot !== undefined);
   assert.deepStrictEqual(ledgerOutcome.summary.bridgeWarnings, [
-    `failed to clean up workflows staging directory at ${leakedRoot}: staging cleanup denied`,
+    {
+      kind: "hygiene",
+      message: `failed to clean up workflows staging directory at ${leakedRoot}: staging cleanup denied`,
+    },
   ]);
   assert.deepStrictEqual(ledgerOutcome.summary.stagedWorkflowNames, ["empty:delta"]);
 });
@@ -813,7 +822,10 @@ test("surfaces the agents staging cleanup leak and still lands the install", asy
 
   // assert
   assert.deepStrictEqual(installed.summary.bridgeWarnings, [
-    `failed to clean up agents staging directory at ${installed.stagingRoot}: staging cleanup denied`,
+    {
+      kind: "hygiene",
+      message: `failed to clean up agents staging directory at ${installed.stagingRoot}: staging cleanup denied`,
+    },
   ]);
   assert.deepStrictEqual(installed.summary.stagedAgentNames, ["pi-claude-marketplace-empty-gamma"]);
 });
@@ -1730,8 +1742,53 @@ test("ANAME-02: a server left out by a partial install is not granted to the plu
     "tools: mcp:plugin_empty_db_/query",
   ]);
   assert.deepStrictEqual(ledgerOutcome.summary.bridgeWarnings, [
-    "[bot] tools include MCP tools, which pi-subagents runs only in background launches -- launch this agent with `async: true`; a foreground launch fails, and so does a launch before pi-mcp-adapter has cached the server's tools",
-    "[bot] dropped tools: mcp__plugin_empty_live__stream",
+    {
+      kind: "hygiene",
+      message:
+        "[bot] tools include MCP tools, which pi-subagents runs only in background launches -- launch this agent with `async: true`; a foreground launch fails, and so does a launch before pi-mcp-adapter has cached the server's tools",
+    },
+    { kind: "hygiene", message: "[bot] dropped tools: mcp__plugin_empty_live__stream" },
+  ]);
+});
+
+test("D-PL1-03: an agents duplicate joins the discovery warnings and a conversion note the hygiene warnings", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-tagged-warnings-");
+  const seeded = await seedPlugin(environment.cwd);
+  const agentsDir = path.join(seeded.pluginRoot, "agents");
+  await mkdir(agentsDir, { recursive: true });
+  await writeFile(
+    path.join(agentsDir, "first.md"),
+    "---\nname: helper\ndescription: First.\ntools: Read, WebFetch\n---\n\nFirst.\n",
+  );
+  await writeFile(
+    path.join(agentsDir, "second.md"),
+    "---\nname: helper\ndescription: Second.\n---\n\nSecond.\n",
+  );
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.discoveryWarnings, [
+    {
+      kind: "discovery",
+      message: `agent source "helper" at "${path.join(agentsDir, "second.md")}" duplicates generated name "pi-claude-marketplace-empty-helper" already produced by agent source "helper" at "${path.join(agentsDir, "first.md")}"; keeping first discovered source.`,
+    },
+  ]);
+  assert.deepStrictEqual(ledgerOutcome.summary.bridgeWarnings, [
+    { kind: "hygiene", message: "[helper] dropped tools: WebFetch" },
   ]);
 });
 

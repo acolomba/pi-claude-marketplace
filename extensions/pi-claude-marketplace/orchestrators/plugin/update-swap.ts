@@ -29,10 +29,10 @@
 //  PluginUpdatePhase3Error with RECOVERY_PLUGIN_REINSTALL_PREFIX hint.
 //  Else: success outcome carries WR-04 stagedAgentNames/stagedMcpServerNames.
 //
-// D-141-03 / D-141-05: the four bridges' staging warnings are READ and split by install's
-// rule through `./shared.ts::splitStagingWarnings`. The skills and commands
-// DISCOVERY half always rides the `updated` outcome's `notes`; the agents and
-// mcp HYGIENE half joins it in cascade mode only. The direct path renders the
+// D-141-03 / D-PL1-03: the five bridges' tagged staging warnings are READ and
+// partitioned by tag through `partitionStagingWarnings`, the classifier install
+// uses. The DISCOVERY half always rides the `updated` outcome's `notes`; the
+// HYGIENE half joins it in cascade mode only. The direct path renders the
 // discovery half through `surfaceDiscoveryWarnings` AFTER the cascade, since
 // the runner that produces a warning finishes long before the row it
 // qualifies exists.
@@ -109,6 +109,7 @@ import { createRemovalOps, type RemovalOps } from "../../shared/fs-utils.ts";
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { ownValue } from "../../shared/own-key.ts";
+import { partitionStagingWarnings } from "../../shared/staging-warnings.ts";
 import {
   withStateGuard,
   type LockedStateTransactionDeps,
@@ -119,7 +120,6 @@ import {
   assertNoCrossPluginConflicts,
   removePluginRecord,
   retiresWorkflowCommand,
-  splitStagingWarnings,
 } from "./shared.ts";
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
@@ -333,10 +333,10 @@ type PluginPreflight = PreparedPluginUpdate;
  * order; any throw aborts the handles already prepared and appends their
  * cleanup-leak descriptors.
  *
- * D-141-03 / D-141-05: each returned handle carries a `result.warnings`
- * array. Those are read once the swap succeeds, by `collectUpdateWarnings`
- * below -- not here, because a prepare that later fails has no row to hang a
- * warning off.
+ * D-141-03 / D-PL1-02: each returned handle carries a tagged
+ * `result.warnings` array. Those are read once the swap succeeds, by
+ * `collectUpdateWarnings` below -- not here, because a prepare that later
+ * fails has no row to hang a warning off.
  */
 async function prepareUpdateHandles(
   ops: RemovalOps,
@@ -424,34 +424,24 @@ async function prepareUpdateHandles(
 }
 
 /**
- * D-141-03 / D-141-05: fold the four bridges' staging warnings onto the
- * `updated` outcome, split by install's rule -- the skills and commands
- * DISCOVERY half reaches both modes, the agents and mcp HYGIENE half is
- * orchestrated-only. `args.cascade` is the mode seam; no plumbing flag was
- * added for this.
+ * D-141-03 / D-PL1-03: fold the five bridges' tagged staging warnings onto the
+ * `updated` outcome, partitioned by tag in bridge order (skills, commands,
+ * agents, mcp, workflows). The DISCOVERY half reaches both modes; the HYGIENE
+ * half is orchestrated-only. `args.cascade` is the mode seam.
  *
  * Its own function rather than a few lines inside the finalize window:
  * `prepareUpdateHandles` and that window already sit near the fallow
  * `maxCognitive: 15` ceiling.
  */
 function collectUpdateWarnings(handles: PrepHandles, cascade: boolean): readonly string[] {
-  const { discovery, bridge } = splitStagingWarnings({
-    skills: handles.skills.result.warnings,
-    commands: handles.commands.result.warnings,
-    agents: handles.agents.result.warnings,
-    mcp: handles.mcp.result.warnings,
-  });
-  // WLIF-02: the workflow prepare's warnings join the DISCOVERY half, and they
-  // join it HERE rather than through `splitStagingWarnings`. They describe the
-  // plugin's declared scripts -- a fact a standalone user needs -- not a
-  // hygiene note only the cascade forwards. The shared classifier is left at
-  // four members on purpose: a fifth would drag every other consumer of it
-  // into this change.
-  return Object.freeze([
-    ...discovery,
+  const { discovery, hygiene } = partitionStagingWarnings([
+    ...handles.skills.result.warnings,
+    ...handles.commands.result.warnings,
+    ...handles.agents.result.warnings,
+    ...handles.mcp.result.warnings,
     ...handles.workflows.result.warnings,
-    ...(cascade ? bridge : []),
   ]);
+  return Object.freeze([...discovery, ...(cascade ? hygiene : [])].map((w) => w.message));
 }
 
 async function abortPartialHandles(

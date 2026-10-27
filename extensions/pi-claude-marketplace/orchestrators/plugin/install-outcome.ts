@@ -122,6 +122,7 @@ import { type RemovalOps } from "../../shared/fs-utils.ts";
 import { type DegradeKind } from "../../shared/notify-reasons.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
+import { hygieneWarning, partitionStagingWarnings } from "../../shared/staging-warnings.ts";
 import {
   runPhases,
   type Phase,
@@ -171,6 +172,11 @@ import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type {
+  DiscoveryWarning,
+  HygieneWarning,
+  StagingWarning,
+} from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { InstallPluginOutcome } from "../types.ts";
 
@@ -342,8 +348,8 @@ export interface InstallLedgerSummary {
    * materialization as having placed nothing.
    */
   readonly stagedWorkflowNames: readonly string[];
-  readonly bridgeWarnings: readonly string[];
-  readonly discoveryWarnings: readonly string[];
+  readonly bridgeWarnings: readonly HygieneWarning[];
+  readonly discoveryWarnings: readonly DiscoveryWarning[];
   readonly agentForeignFailures: readonly AgentForeignFailureRow[];
   /**
    * AFILE-04 / AFILE-02: the MCP config file facts the mcp phase reported,
@@ -415,21 +421,19 @@ interface InstallLedgerContext {
   // `onPlaced` callback. Required rather than optional so the state phase's
   // record composition cannot forget the axis.
   stagedWorkflowNames: readonly string[];
-  // Aggregated soft warnings from the bridges (e.g. agents bridge cleanup leaks).
-  bridgeWarnings: string[];
-  // D-07 discovery warnings from the skills, commands and workflows bridges.
-  // Each names ONE declared component and what became of it: either an
-  // artifact the plugin author shipped that this install did not materialize
-  // (a duplicate generated name, an unreadable subdirectory, a source path
-  // that produces no valid name), or -- WGATE-01 -- one it DID materialize
-  // with a caveat, such as a workflow script the host engine will refuse to
-  // load. The second half is why the rendered header claims no disposal.
-  //
-  // The agents bridge is not a feeder: it mixes three kinds of warning onto
-  // one result field and rides `bridgeWarnings` instead. Kept apart from that
-  // array because D-19-01 as amended surfaces these in standalone mode and
-  // the hygiene warnings beside them stay suppressed.
-  discoveryWarnings: string[];
+  // D-PL1-03: the hygiene half of the bridges' tagged warnings (mcp
+  // warnings, agents index corruptions and conversion notes) plus every
+  // commit cleanup leak. D-19-01: standalone mode never renders them.
+  bridgeWarnings: HygieneWarning[];
+  // D-07 discovery warnings, the discovery half of the bridges' tagged
+  // warnings (D-PL1-02). Each names ONE declared component and what became of
+  // it: either an artifact the plugin author shipped that this install did not
+  // materialize (a duplicate generated name, an unreadable subdirectory, a
+  // source path that produces no valid name), or -- WGATE-01 -- one it DID
+  // materialize with a caveat, such as a workflow script the host engine will
+  // refuse to load. The second half is why the rendered header claims no
+  // disposal. D-19-01 as amended surfaces these in standalone mode.
+  discoveryWarnings: DiscoveryWarning[];
   // Bridge-side per-record AG-5 foreign-content rows -- routed to notifyWarning post-success.
   agentForeignFailures: AgentForeignFailureRow[];
   // AFILE-04 / AFILE-02: MCP config file facts from the mcp phase.
@@ -965,6 +969,19 @@ function toInstallLedgerSummary(context: InstallLedgerContext): InstallLedgerSum
 }
 
 /**
+ * D-PL1-03: classifies a bridge result's tagged warnings onto the context's
+ * two channels, keeping bridge order inside each.
+ */
+function collectStagingWarnings(
+  context: InstallLedgerContext,
+  warnings: readonly StagingWarning[],
+): void {
+  const { discovery, hygiene } = partitionStagingWarnings(warnings);
+  context.discoveryWarnings.push(...discovery);
+  context.bridgeWarnings.push(...hygiene);
+}
+
+/**
  * The ledger body proper, under the contract documented on `runInstallLedger`.
  * Hands back the working `InstallLedgerContext` to this module's public-result
  * projection. Module-private: only the declaring module holds the mutable
@@ -1088,13 +1105,11 @@ async function runInstallLedgerBody(
         c.frontmatterDegradations.push({ kind: "skill", ...d });
       }
 
-      // The skills bridge puts its discovery warnings, and nothing else, on
-      // this array (D-141-03).
-      c.discoveryWarnings.push(...prep.result.warnings);
+      collectStagingWarnings(c, prep.result.warnings);
 
       const leak = await commitPreparedSkills(opts.removalOps, prep);
       if (leak !== undefined) {
-        c.bridgeWarnings.push(leak);
+        c.bridgeWarnings.push(hygieneWarning(leak));
       }
     },
     undo: async (c) => {
@@ -1132,12 +1147,11 @@ async function runInstallLedgerBody(
         c.frontmatterDegradations.push({ kind: "command", ...d });
       }
 
-      // As with skills, this array carries discovery warnings only.
-      c.discoveryWarnings.push(...prep.result.warnings);
+      collectStagingWarnings(c, prep.result.warnings);
 
       const leak = await commitPreparedCommands(opts.removalOps, prep);
       if (leak !== undefined) {
-        c.bridgeWarnings.push(leak);
+        c.bridgeWarnings.push(hygieneWarning(leak));
       }
     },
     undo: async (c) => {
@@ -1176,16 +1190,12 @@ async function runInstallLedgerBody(
         cwd: c.cwd,
       });
       c.agentsPrep = prep;
-      // The agents bridge aggregates THREE kinds on one array: agents-index
-      // corruptions, per-agent frontmatter conversion notes, and D-07
-      // duplicate-name skips. Only the last is a discovery truncation, and
-      // the three are not separable here, so the whole array rides the
-      // hygiene channel (D-19-01) rather than the D-141-03 one, keeping
-      // every kind surfaced instead of any getting silently dropped.
-      c.bridgeWarnings.push(...prep.result.warnings);
+      // The agents bridge tags its D-07 duplicate-name skips discovery and
+      // its index corruptions and conversion notes hygiene (D-PL1-02).
+      collectStagingWarnings(c, prep.result.warnings);
       const leak = await commitPreparedAgents(opts.removalOps, prep);
       if (leak !== undefined) {
-        c.bridgeWarnings.push(leak);
+        c.bridgeWarnings.push(hygieneWarning(leak));
       }
 
       c.stagedAgentNames = prep.result.recorded.map((r) => r.generatedName);
@@ -1282,9 +1292,8 @@ async function runInstallLedgerBody(
       const result = prep.result;
       c.stagedMcpServerNames = result.recorded.map((r) => r.generatedName);
       // MCP staging soft warnings (malformed declared env, non-object entry)
-      // ride the same bridgeWarnings channel as the other bridges' leak
-      // strings instead of being dropped.
-      c.bridgeWarnings.push(...result.warnings);
+      // are tagged hygiene, so they join the commit leaks (D-PL1-02).
+      collectStagingWarnings(c, result.warnings);
       c.mcpConfigNotices.push(...result.notices);
       // AMIG-02: the replace removed the plugin's marked entries from the
       // scope's mcp.json after writing mcp-adapter.json; its notices describe
@@ -1340,30 +1349,21 @@ async function runInstallLedgerBody(
       // not the array.
       c.workflowsPrep = prep;
       c.stagedWorkflowNames = [];
-      // D-141-03 / WGATE-01: the bridge's array joins the DISCOVERY half, and it
-      // joins it HERE rather than through `splitStagingWarnings`, which is the
-      // call `update.ts` already makes for the same array and the same reason.
-      // Every string in it describes the plugin's DECLARED scripts -- which ones
-      // were not installed, which were installed but the engine will refuse to
-      // load -- and that is a fact a standalone user needs, not a hygiene note
-      // only the cascade forwards. `bridgeWarnings` is gated on `orchestrated`,
-      // so a standalone install would render none of it. The shared classifier
-      // stays at four members: a fifth would drag every other consumer of it
-      // into this change.
+      // D-141-03 / WGATE-01: the workflows bridge tags every warning
+      // discovery (D-PL1-02). Each one describes the plugin's DECLARED
+      // scripts -- which ones were not installed, which were installed but the
+      // engine will refuse to load -- a fact a standalone user needs.
       //
-      // Pushed at the prepare, matching `agentsPhase` -- the other bridge whose
-      // WARNINGS come off the prepare rather than off the commit's return, and
-      // the shape this one follows. (`mcpPhase` pushes after its commit because
-      // its warnings are a member of the commit's result.)
+      // Collected at the prepare, as `agentsPhase` does: both bridges' warnings
+      // come off the prepare rather than off the commit's return. (`mcpPhase`
+      // collects after its commit because its warnings are a member of the
+      // commit's result.)
       //
       // WR-04: the position buys ordering consistency, NOT survival. A phase
       // throw unwinds `runPhases` and the whole `InstallLedgerContext` is
-      // discarded, so these warnings are lost on the failure path wherever the
-      // push sits. Both arrays are read by `collectPostCommitWarnings`, run
-      // after the ledger returned and the state record committed, and neither
-      // is a member of `InstallLedgerSummary`. That is true of every bridge's
-      // warnings alike, not of this one, so it is not repaired here.
-      c.discoveryWarnings.push(...prep.result.warnings);
+      // discarded, so these warnings are lost on the failure path wherever
+      // they are collected. That is true of every bridge's warnings alike.
+      collectStagingWarnings(c, prep.result.warnings);
       const leak = await commitPreparedWorkflows(prep, {
         // The whole body is one assignment that cannot throw. The commit
         // invokes this callback on the failure paths too, so anything that
@@ -1373,7 +1373,7 @@ async function runInstallLedgerBody(
         },
       });
       if (leak !== undefined) {
-        c.bridgeWarnings.push(leak);
+        c.bridgeWarnings.push(hygieneWarning(leak));
       }
     },
     undo: async (c) => {

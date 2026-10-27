@@ -37,7 +37,6 @@ import {
   resolvePluginVersion,
   resolveTagPinnedPluginVersion,
   retiresWorkflowCommand,
-  splitStagingWarnings,
   surfaceDiscoveryWarnings,
   sweepWorkflowsStaging,
   undeclarableMarketplaceRefusal,
@@ -3446,35 +3445,6 @@ describe("emitMarketplaceNotAddedSignal", () => {
           severity: "error",
         },
       ]);
-    });
-  });
-});
-
-describe("splitStagingWarnings", () => {
-  test("preserves discovery order and separates bridge hygiene warnings", () => {
-    // arrange
-    const warnings = {
-      skills: ["skill-a", "skill-b"],
-      commands: ["command-a"],
-      agents: ["agent-a"],
-      mcp: ["mcp-a", "mcp-b"],
-    };
-
-    // act
-    const split = splitStagingWarnings(warnings);
-
-    // assert
-    assert.deepStrictEqual(split, {
-      discovery: ["skill-a", "skill-b", "command-a"],
-      bridge: ["agent-a", "mcp-a", "mcp-b"],
-    });
-    assert.equal(Object.isFrozen(split.discovery), true);
-    assert.equal(Object.isFrozen(split.bridge), true);
-    assert.deepStrictEqual(warnings, {
-      skills: ["skill-a", "skill-b"],
-      commands: ["command-a"],
-      agents: ["agent-a"],
-      mcp: ["mcp-a", "mcp-b"],
     });
   });
 });

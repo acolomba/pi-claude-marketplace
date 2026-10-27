@@ -16,6 +16,7 @@
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { WorkflowVerdict } from "../../domain/workflow-script.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 
 /**
  * One script discovered under `componentPaths.workflows`, admitted or not.
@@ -128,7 +129,8 @@ export interface StageWorkflowsInput {
 /** Result returned to callers after commit (or noop). */
 export interface StageWorkflowsCommitResult {
   readonly stagedNames: readonly string[];
-  readonly warnings: readonly string[];
+  /** D-PL1-02: every workflows warning is a `discovery` warning. */
+  readonly warnings: readonly StagingWarning[];
   /**
    * CR-01 / WR-06: the subset of `stagedNames` whose target path was ALREADY
    * occupied at prepare time by content this plugin does not own -- occupied,

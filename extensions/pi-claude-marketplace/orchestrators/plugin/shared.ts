@@ -1746,47 +1746,6 @@ export async function emitMarketplaceNotAddedSignal(args: {
 }
 
 /**
- * D-141-03 / D-141-05: split one staging pass's four bridge warning arrays
- * into the DISCOVERY half and the HYGIENE half.
- *
- * Every warning the skills and commands bridges emit describes the SOURCE the
- * plugin author shipped against the artifact set that actually installed --
- * a first-wins skip, an unreadable subdirectory or file, a path that produces
- * no valid name, a skipped subdirectory, or (commands only) one file reached
- * by two declared entries and therefore installed under two names. The last
- * of those reports a surplus rather than a shortfall, so the shared property
- * is not "a skip": it is that the user's own resource count gives no baseline
- * to notice ANY of them. That is why the whole half reaches standalone mode.
- *
- * The agents bridge aggregates index corruptions, per-agent conversion notes
- * and D-07 skips onto ONE array that cannot be split at the call site, so the
- * whole array joins the hygiene channel; mcp rides beside it.
- *
- * Kept here, taking plain string arrays rather than bridge result types, so
- * update and reinstall classify through one function instead of two copies
- * that drift (and so `sonarjs/no-identical-functions` and `fallow dupes` have
- * nothing to find).
- *
- * `install-outcome.ts` does NOT call this. Its ledger phases push each bridge's
- * warnings onto the right array inline, one push per phase, because each
- * phase already holds exactly one bridge's result. It shares the RENDERER
- * below, not this classifier -- so two of the three verbs share the
- * classification and all three share the rendering. A change to the split
- * therefore has to be applied at install's four phase sites by hand.
- */
-export function splitStagingWarnings(warnings: {
-  readonly skills: readonly string[];
-  readonly commands: readonly string[];
-  readonly agents: readonly string[];
-  readonly mcp: readonly string[];
-}): { readonly discovery: readonly string[]; readonly bridge: readonly string[] } {
-  return {
-    discovery: Object.freeze([...warnings.skills, ...warnings.commands]),
-    bridge: Object.freeze([...warnings.agents, ...warnings.mcp]),
-  };
-}
-
-/**
  * D-141-03 / D-141-05: render the discovery half to a standalone user, after
  * the verb's own row.
  *

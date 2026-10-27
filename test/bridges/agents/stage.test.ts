@@ -98,7 +98,10 @@ describe("prepareStagePluginAgents", () => {
         },
       ],
       warnings: [
-        `agent source "reviewer" at "${incomingPath}" duplicates generated name "pi-claude-marketplace-acme-reviewer" already produced by agent source "reviewer" at "${winnerPath}"; keeping first discovered source.`,
+        {
+          kind: "discovery",
+          message: `agent source "reviewer" at "${incomingPath}" duplicates generated name "pi-claude-marketplace-acme-reviewer" already produced by agent source "reviewer" at "${winnerPath}"; keeping first discovered source.`,
+        },
       ],
       failed: [],
     });
@@ -150,8 +153,12 @@ describe("prepareStagePluginAgents", () => {
 
     // assert
     assert.deepStrictEqual(prepared.result.warnings, [
-      "[bot] tools include MCP tools, which pi-subagents runs only in background launches -- launch this agent with `async: true`; a foreground launch fails, and so does a launch before pi-mcp-adapter has cached the server's tools",
-      "[bot] dropped tools: mcp__plugin_acme_web__get",
+      {
+        kind: "hygiene",
+        message:
+          "[bot] tools include MCP tools, which pi-subagents runs only in background launches -- launch this agent with `async: true`; a foreground launch fails, and so does a launch before pi-mcp-adapter has cached the server's tools",
+      },
+      { kind: "hygiene", message: "[bot] dropped tools: mcp__plugin_acme_web__get" },
     ]);
   });
 
@@ -267,7 +274,10 @@ describe("prepareStagePluginAgents", () => {
         },
       ],
       warnings: [
-        `agent source "shared" at "${duplicateSharedPath}" duplicates generated name "pi-claude-marketplace-acme-shared" already produced by agent source "shared" at "${firstSharedPath}"; keeping first discovered source.`,
+        {
+          kind: "discovery",
+          message: `agent source "shared" at "${duplicateSharedPath}" duplicates generated name "pi-claude-marketplace-acme-shared" already produced by agent source "shared" at "${firstSharedPath}"; keeping first discovered source.`,
+        },
       ],
       failed: [],
     });
@@ -453,7 +463,7 @@ Read \${CLAUDE_PROJECT_DIR} and ${pluginRoot}.
     assert.strictEqual(await abortPreparedAgents(createRemovalOps(), prepared), undefined);
   });
 
-  test("aggregates index, conversion, and discovery warnings in stable order", async (t) => {
+  test("D-PL1-02: tags index and conversion warnings hygiene and duplicates discovery, in stable order", async (t) => {
     // arrange
     const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
       t,
@@ -490,11 +500,20 @@ Duplicate body.
     );
     const generatedName = "pi-claude-marketplace-acme-noisy";
     const expectedWarnings = [
-      `agent index corruption (entry dropped): ${locations.agentsIndexPath}.agents[0]: row failed schema validation (entry dropped) -- <root>: must have required properties marketplace, sourceAgent, generatedName, sourcePath, targetPath, sourceHash, droppedFields, droppedTools, warnings`,
-      '[noisy] unknown model "future-model" -- omitted from generated frontmatter',
-      "[noisy] dropped fields: priority",
-      "[noisy] dropped tools: WebFetch",
-      `agent source "noisy" at "${duplicateSourcePath}" duplicates generated name "${generatedName}" already produced by agent source "noisy" at "${firstSourcePath}"; keeping first discovered source.`,
+      {
+        kind: "hygiene",
+        message: `agent index corruption (entry dropped): ${locations.agentsIndexPath}.agents[0]: row failed schema validation (entry dropped) -- <root>: must have required properties marketplace, sourceAgent, generatedName, sourcePath, targetPath, sourceHash, droppedFields, droppedTools, warnings`,
+      },
+      {
+        kind: "hygiene",
+        message: '[noisy] unknown model "future-model" -- omitted from generated frontmatter',
+      },
+      { kind: "hygiene", message: "[noisy] dropped fields: priority" },
+      { kind: "hygiene", message: "[noisy] dropped tools: WebFetch" },
+      {
+        kind: "discovery",
+        message: `agent source "noisy" at "${duplicateSourcePath}" duplicates generated name "${generatedName}" already produced by agent source "noisy" at "${firstSourcePath}"; keeping first discovered source.`,
+      },
     ];
 
     // act
@@ -549,10 +568,14 @@ Mixed body.
     // resolves it by -- not the basename it is stored under.
     const declaredName = "acme:mixed";
     const expectedWarnings = [
-      "[mixed] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). " +
-        `To grant this agent MCP tools, set subagents.agentOverrides["${declaredName}"].tools ` +
-        "(e.g. read,bash,mcp:<server>) in Pi settings.",
-      "[mixed] dropped fields: priority",
+      {
+        kind: "hygiene",
+        message:
+          "[mixed] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). " +
+          `To grant this agent MCP tools, set subagents.agentOverrides["${declaredName}"].tools ` +
+          "(e.g. read,bash,mcp:<server>) in Pi settings.",
+      },
+      { kind: "hygiene", message: "[mixed] dropped fields: priority" },
     ];
 
     // act

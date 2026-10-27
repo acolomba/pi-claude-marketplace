@@ -1415,6 +1415,63 @@ test("PDEF-01: install stages every agent directory and warns on a later duplica
   });
 });
 
+test("PDEF-01 / D-PL1-02: a standalone install reports a later duplicate agent after its row", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-agent-dirs-standalone-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        agentDirectories: ["declared-agents"],
+        agents: [
+          {
+            directory: "declared-agents",
+            sourceName: "shared-first",
+            frontmatterName: "shared",
+            description: "First shared agent",
+            body: "First shared agent.\n",
+          },
+          {
+            sourceName: "shared-later",
+            frontmatterName: "shared",
+            description: "Later shared agent",
+            body: "Later shared agent.\n",
+          },
+        ],
+      });
+      const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.strictEqual(outcome.status, "installed");
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
+        },
+        {
+          message:
+            'Plugin "hello" installed; 1 declared component has a note.\n\nagent source "shared" at "shared-later.md" duplicates generated name "pi-claude-marketplace-hello-shared" already produced by agent source "shared" at "shared-first.md"; keeping first discovered source.',
+          severity: "warning",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ───────────────────────────────────────────────────────────────────────────
 // PI-7 -- version precedence
 // ───────────────────────────────────────────────────────────────────────────

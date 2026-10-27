@@ -549,6 +549,59 @@ test("D-18-15: an overwrite policy commits over a previous agent file a user edi
   });
 });
 
+test("D-PL1-03: a direct swap puts an agents duplicate on the updated outcome's notes", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-direct-duplicate-");
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: {
+      hello: {
+        version: "2.0.0",
+        hasSkill: false,
+        agents: [
+          { sourceName: "first", frontmatterName: "helper", description: "First" },
+          { sourceName: "second", frontmatterName: "helper", description: "Second" },
+        ],
+      },
+    },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const agentsDir = path.join(marketplaceRoot, "plugins", "hello", "agents");
+  const args = {
+    ...cascadeSwapArgs(cwd),
+    cascade: false,
+    ctx: { mode: "tui", ui: { notify: () => undefined } },
+    run: runWithNothingLoaded(),
+    cardinality: "single",
+    notifyPhaseFailure: () => undefined,
+  } as const;
+  const preflight = await preflightOf(args);
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "updated",
+    name: "hello",
+    fromVersion: "1.0.0",
+    toVersion: "2.0.0",
+    notes: [
+      `agent source "helper" at "${path.join(agentsDir, "second.md")}" duplicates generated name "pi-claude-marketplace-hello-helper" already produced by agent source "helper" at "${path.join(agentsDir, "first.md")}"; keeping first discovered source.`,
+    ],
+    stagedAgentNames: ["pi-claude-marketplace-hello-helper"],
+    stagedMcpServerNames: [],
+    declaresAgents: true,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+  });
+});
+
 test("D-18-15 / NFR-3: without an overwrite policy a user-edited previous agent file refuses the swap before it changes anything", async (t) => {
   // arrange
   const { args, preflight, target, editedBytes, indexBytes } = await seedUserEditedAgentUpdate(t);

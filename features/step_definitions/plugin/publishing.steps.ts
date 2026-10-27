@@ -30,6 +30,7 @@ import {
   publishOutputStyle,
   removePublishedOutputStyle,
   rewritePublishedManifest,
+  writePublishedPluginFile,
 } from "../../lib/published-marketplace.ts";
 
 import type { GitPluginRepository, RepositoryPlugin } from "../../lib/git-plugin.ts";
@@ -103,5 +104,32 @@ Given(
   async function (this: ScenarioWorld, plugin: string, name: string) {
     const directory = await removePublishedOutputStyle(this.requirePublished(name), plugin);
     await assert.rejects(stat(directory), { code: "ENOENT" }, `${directory} still exists`);
+  },
+);
+
+// Both agents declare the same name, so the install keeps the first and
+// skips the second (D-07).
+Given(
+  "the published plugin {string} of the marketplace {string} has two agents named {string}",
+  async function (this: ScenarioWorld, plugin: string, name: string, agent: string) {
+    const published = this.requirePublished(name);
+    const agentText = (description: string): string =>
+      `---\nname: ${agent}\ndescription: ${description}\n---\n\n${description}\n`;
+    const first = await writePublishedPluginFile(
+      published,
+      plugin,
+      path.join("agents", "first.md"),
+      agentText("The first agent."),
+    );
+    const second = await writePublishedPluginFile(
+      published,
+      plugin,
+      path.join("agents", "second.md"),
+      agentText("The second agent."),
+    );
+    assert.deepStrictEqual(
+      [await readFile(first, "utf8"), await readFile(second, "utf8")],
+      [agentText("The first agent."), agentText("The second agent.")],
+    );
   },
 );

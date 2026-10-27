@@ -45,7 +45,7 @@ void commandDegradeRecord;
 const stageCommandsCommitResult: StageCommandsCommitResult = {
   stagedNames: ["acme:build:deploy"],
   recorded: [stagedCommandRecord],
-  warnings: ["neutralized malformed frontmatter"],
+  warnings: [{ kind: "discovery", message: "neutralized malformed frontmatter" }],
   degraded: [commandDegradeRecord],
 } satisfies StageCommandsCommitResult;
 void stageCommandsCommitResult;

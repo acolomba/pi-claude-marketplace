@@ -31,6 +31,7 @@ import { AgentOwnershipConflictError } from "../../shared/errors-bridges.ts";
 import { appendLeakToError, appendLeaks, errorMessage } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
+import { discoveryWarning, hygieneWarning } from "../../shared/staging-warnings.ts";
 
 import { convertAgent, GUIDED_DROPPED_FIELDS } from "./convert.ts";
 import { discoverPluginAgents } from "./discover.ts";
@@ -49,6 +50,7 @@ import type {
 } from "./types.ts";
 import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 
 /**
  * 9-step prepare. NOTHING outside `<extensionRoot>/agents-staging/<uuid>/`
@@ -66,7 +68,7 @@ import type { RemovalOps } from "../../shared/fs-utils.ts";
  *   6. Safety-check previous targets (AG-5 foreign-content SOFT-FAIL)
  *   7. Write staged files into <extensionRoot>/agents-staging/<uuid>/
  *   8. Build new index entries
- *   9. Assemble the result (warnings are aggregated, unlabeled, between
+ *   9. Assemble the result (warnings are aggregated and tagged between
  *      steps 4 and 5)
  */
 export async function prepareStagePluginAgents(
@@ -140,13 +142,16 @@ export async function prepareStagePluginAgents(
     );
   }
 
-  // Aggregate warnings (corruptions + per-agent warnings + D-07 dedup
-  // warnings) -- needed for both noop and staged paths so they're built
-  // up here.
-  const aggregatedWarnings: string[] = [
-    ...loaded.corruptions.map((c) => `agent index corruption (entry dropped): ${c}`),
-    ...converted.flatMap((c) => formatAgentWarnings(c)),
-    ...discoverWarnings,
+  // Aggregate warnings for both the noop and staged paths (D-PL1-02): index
+  // corruptions and per-agent conversion notes are hygiene, and the D-07
+  // duplicate-name skips are discovery, because each names a declared agent
+  // this install did not materialize.
+  const aggregatedWarnings: StagingWarning[] = [
+    ...loaded.corruptions.map((c) =>
+      hygieneWarning(`agent index corruption (entry dropped): ${c}`),
+    ),
+    ...converted.flatMap((c) => formatAgentWarnings(c)).map((w) => hygieneWarning(w)),
+    ...discoverWarnings.map((w) => discoveryWarning(w)),
   ];
 
   // Step 5: AS-9 noop short-circuit. Nothing to write AND no previous
