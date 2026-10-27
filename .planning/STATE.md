@@ -5,16 +5,16 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 09
 current_phase_name: Plugin Package Dependencies
 status: executing
-stopped_at: Completed 09-03-PLAN.md
-last_updated: "2026-10-27T04:45:09.003Z"
+stopped_at: Completed 09-04-PLAN.md
+last_updated: "2026-10-27T05:00:41.179Z"
 last_activity: 2026-10-26
 last_activity_desc: Phase 09 execution started
-state_head: 8a7b23484e8df54ecba20b72939371c1ed5ef64b
+state_head: 63c43e3d0e9261b9e611adc005eea7729e95e3be
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 5
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 09 (Plugin Package Dependencies) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-10-26 — Phase 09 execution started
 
@@ -191,8 +191,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-27T04:45:08.869Z
-**Stopped at:** Completed 09-03-PLAN.md
+**Last session:** 2026-10-27T05:00:41.051Z
+**Stopped at:** Completed 09-04-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -407,6 +407,7 @@ archived milestone artifacts.
 | Phase 09 P01 | 39min | 2 tasks | 11 files |
 | Phase 09 P02 | 22min | 3 tasks | 7 files |
 | Phase 09 P03 | 31min | 2 tasks | 6 files |
+| Phase 09 P04 | 12min | 2 tasks | 2 files |
 
 ## Decisions
 
@@ -612,6 +613,7 @@ archived milestone artifacts.
 - [Phase 09]: D-PL9-17 settled by a real hook run: a session start hook of the installed plugin loads the npm package from the plugin root
 - [Phase 09]: The cucumber npm registry stand-in starts per scenario from the first serving step, which writes the sandbox .npmrc before any plugin ships package files
 - [Phase 09]: D-PL9-07: materializeLatestVersion runs the package step on updated outcomes with force = policy.skipSameRevision; a replaced node_modules is parked in the work dir and restored on failure
+- [Phase 09]: The reinstall package scenario empties npm's cache before the reinstall, because a forced npm ci installs from the cache the install filled and makes no request
 
 ### mcp-4 decisions
 
