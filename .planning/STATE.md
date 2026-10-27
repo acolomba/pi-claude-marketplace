@@ -5,16 +5,16 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 1
 current_phase_name: Staging Warning Channels
 status: executing
-stopped_at: "Phase 29 complete; next: milestone audit (`/gsd-audit-milestone`)"
-last_updated: "2026-10-27T03:10:39.901Z"
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-10-27T04:05:22.201Z"
 last_activity: 2026-10-26
-last_activity_desc: Milestone plugin-lifecycle started
-state_head: 1da93031ed57583e6f764fa7ee4b9e9a8d258ead
+last_activity_desc: Phase 1 execution started
+state_head: 58a2111a3a2439d496073dff5cce56610ca9f964
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 8
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -27,14 +27,14 @@ See: `.planning/PROJECT.md` (updated 2026-10-22 at the lifecycle-coverage start)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 30 — Autoapply Setting
+**Current focus:** Phase 1 — Staging Warning Channels
 
 ## Current Position
 
-Phase: 1 (Staging Warning Channels) — READY TO EXECUTE
-Plan: —
+Phase: 1 (Staging Warning Channels) — EXECUTING
+Plan: 2 of 8
 Status: Ready to execute
-Last activity: 2026-10-26 — Milestone plugin-lifecycle started
+Last activity: 2026-10-26 — Phase 1 execution started
 
 
 ### mcp-4 closeout
@@ -191,8 +191,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-25T12:00:00.000Z
-**Stopped at:** Phase 29 complete; next: milestone audit (`/gsd-audit-milestone`)
+**Last session:** 2026-10-27T04:05:22.055Z
+**Stopped at:** Completed 01-01-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -404,6 +404,7 @@ archived milestone artifacts.
 | Phase 29 P12 | 70 min | 3 tasks | 34 files |
 | Phase 29 P13 | 48 min | 3 tasks | 44 files |
 | Phase 29 P14 | 20 min | 2 tasks | 9 files |
+| Phase 01 P01 | 51m | 2 tasks | 36 files |
 
 ## Decisions
 
@@ -603,6 +604,8 @@ archived milestone artifacts.
 - [Phase 29]: The cascade failure classifier reads the errno a BridgeStagingError carries on its cause, so an unreadable plugin source is permission denied (also in the autoupdate cascade)
 - [Phase 29]: apply runs growth-only moves through convergePlugin with rematerialize (skipSameRevision off, overwrite off) and reports them with the plugin-backfilled row; the load-time backfill, its stamp gate and EXTENSION_VERSION are deleted, lastReconciledExtensionVersion stays readable and nothing writes it (D-10, D-13, D-25)
 - [Phase 29]: README.md's dependents sentence says apply reinstalls an uninstalled dependency a dependent still declares and disables the dependents only if that install fails; the APL-D1 and APL-D2 rows record the read-only load and the NFR-2 amendment
+- [Phase 01]: Staging warnings are tagged at each bridge producer and split by partitionStagingWarnings alone; agents D-07 skips are discovery (D-PL1-01..03)
+- [Phase 01]: Staging diagnostic headers read Plugin "<name>" [<scope>] <verb>; the verb is a closed seven-member union (D-PL1-05, D-PL1-06)
 
 ### mcp-4 decisions
 
