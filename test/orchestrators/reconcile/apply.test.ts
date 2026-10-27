@@ -2472,6 +2472,7 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ⊘ hello (failed) {rollback partial}\n" +
           `    cause: ${adapterReadError} -> ${adapterReadError}\n` +
+          "    leaked: hello-tool\n" +
           "    [skills] (rollback failed)\n" +
           "      cause: EACCES: permission denied, unlink 'data.txt'\n" +
           "\n" +
@@ -2533,6 +2534,7 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ⊘ bar (failed) {rollback partial}\n" +
           `    cause: ${adapterReadError} -> ${adapterReadError}\n` +
+          "    leaked: bar-tool\n" +
           "    [skills] (rollback failed)\n" +
           "      cause: EACCES: permission denied, unlink 'data.txt'\n" +
           "  ⊘ hello (failed) {dependency failed}\n" +
@@ -2603,6 +2605,7 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ⊘ bar (failed) {rollback partial}\n" +
           `    cause: ${adapterReadError} -> ${adapterReadError}\n` +
+          "    leaked: bar-tool\n" +
           "    [skills] (rollback failed)\n" +
           "      cause: EACCES: permission denied, unlink 'data.txt'\n" +
           "  ⊘ hello (failed) {dependency failed}\n" +

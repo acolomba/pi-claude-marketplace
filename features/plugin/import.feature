@@ -916,8 +916,8 @@ Feature: Plugin import
       | tally warnings      | 0                              |
       | tally success count | 1                              |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id            | name | status | reasons          | scope | cause chain                                                  | cause truncated | leaks | rollback partial                                                                                            |
-      | fixtures         | user              | added              | demo@fixtures | demo | failed | rollback partial | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           |       | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
+      | marketplace name | marketplace scope | marketplace status | id            | name | status | reasons          | scope | cause chain                                                  | cause truncated | leaks      | rollback partial                                                                                            |
+      | fixtures         | user              | added              | demo@fixtures | demo | failed | rollback partial | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | demo-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
     Then the installation record of the user scope holds these plugins:
       | id | version | enabled |
     Then the user scope stages these skills and prompts:
@@ -955,8 +955,8 @@ Feature: Plugin import
       | tally warnings      | 0                              |
       | tally success count | 1                              |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id            | name | status | reasons          | scope | cause chain                                                  | cause truncated | leaks | rollback partial                                                                                            |
-      | fixtures         | user              | skipped            | already added       | demo@fixtures | demo | failed | rollback partial | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           |       | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id            | name | status | reasons          | scope | cause chain                                                  | cause truncated | leaks      | rollback partial                                                                                            |
+      | fixtures         | user              | skipped            | already added       | demo@fixtures | demo | failed | rollback partial | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | demo-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
     Then the installation record of the user scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | false   |
@@ -990,9 +990,9 @@ Feature: Plugin import
       | tally warnings      | 0                                   |
       | tally success count | 1                                   |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id           | name         | status | reasons           | scope | cause chain                                                  | cause truncated | leaks | rollback partial                                                                                            |
-      | fixtures         | user              | added              | app@fixtures | app          | failed | dependency failed | user  |                                                              |                 |       |                                                                                                             |
-      | fixtures         | user              | added              | lib@fixtures | lib@fixtures | failed | rollback partial  | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           |       | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
+      | marketplace name | marketplace scope | marketplace status | id           | name         | status | reasons           | scope | cause chain                                                  | cause truncated | leaks     | rollback partial                                                                                            |
+      | fixtures         | user              | added              | app@fixtures | app          | failed | dependency failed | user  |                                                              |                 |           |                                                                                                             |
+      | fixtures         | user              | added              | lib@fixtures | lib@fixtures | failed | rollback partial  | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | lib-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
     Then the installation record of the user scope holds these plugins:
       | id | version | enabled |
 
@@ -1026,9 +1026,9 @@ Feature: Plugin import
       | tally warnings      | 0                                   |
       | tally success count | 1                                   |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id            | name         | status | reasons           | scope | cause chain                                                  | cause truncated | leaks | rollback partial                                                                                            |
-      | fixtures         | user              | added              | app@fixtures  | app          | failed | dependency failed | user  |                                                              |                 |       |                                                                                                             |
-      | fixtures         | user              | added              | lib@fixtures  | lib@fixtures | failed | rollback partial  | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           |       | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
-      | fixtures         | user              | added              | tool@fixtures | tool         | failed | dependency failed | user  |                                                              |                 |       |                                                                                                             |
+      | marketplace name | marketplace scope | marketplace status | id            | name         | status | reasons           | scope | cause chain                                                  | cause truncated | leaks     | rollback partial                                                                                            |
+      | fixtures         | user              | added              | app@fixtures  | app          | failed | dependency failed | user  |                                                              |                 |           |                                                                                                             |
+      | fixtures         | user              | added              | lib@fixtures  | lib@fixtures | failed | rollback partial  | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | lib-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
+      | fixtures         | user              | added              | tool@fixtures | tool         | failed | dependency failed | user  |                                                              |                 |           |                                                                                                             |
     Then the installation record of the user scope holds these plugins:
       | id | version | enabled |

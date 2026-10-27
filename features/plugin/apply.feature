@@ -181,8 +181,8 @@ Feature: Plugin apply
       | tally failures      | 1                              |
       | tally warnings      | 0                              |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id            | name | status | reasons          | scope   | cause chain                                                  | cause truncated | leaks | rollback partial                                                                                            |
-      | fixtures         | project           | demo@fixtures | demo | failed | rollback partial | project | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           |       | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
+      | marketplace name | marketplace scope | id            | name | status | reasons          | scope   | cause chain                                                  | cause truncated | leaks      | rollback partial                                                                                            |
+      | fixtures         | project           | demo@fixtures | demo | failed | rollback partial | project | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | demo-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
 
   Scenario: Apply that cannot finish the rollback of a failed dependency reports the dependency's own row
     Given the marketplace "tools" is published as a dir source
@@ -206,9 +206,9 @@ Feature: Plugin apply
       | tally failures | 2                                   |
       | tally warnings | 0                                   |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name | status | reasons           | scope   | cause chain                                                  | cause truncated | leaks | rollback partial                                                                                            |
-      | tools            | project           | app@tools | app  | failed | dependency failed | project |                                                              |                 |       |                                                                                                             |
-      | tools            | project           | lib@tools | lib  | failed | rollback partial  | project | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           |       | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
+      | marketplace name | marketplace scope | id        | name | status | reasons           | scope   | cause chain                                                  | cause truncated | leaks     | rollback partial                                                                                            |
+      | tools            | project           | app@tools | app  | failed | dependency failed | project |                                                              |                 |           |                                                                                                             |
+      | tools            | project           | lib@tools | lib  | failed | rollback partial  | project | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | lib-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
 
   Scenario: Apply that cannot finish the rollback of a dependency two plugins share reports that dependency once
     Given the marketplace "tools" is published as a dir source
@@ -234,10 +234,10 @@ Feature: Plugin apply
       | tally failures | 3                                   |
       | tally warnings | 0                                   |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id           | name   | status | reasons           | scope   | cause chain                                                  | cause truncated | leaks | rollback partial                                                                                            |
-      | tools            | project           | lib@tools    | lib    | failed | rollback partial  | project | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           |       | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
-      | tools            | project           | server@tools | server | failed | dependency failed | project |                                                              |                 |       |                                                                                                             |
-      | tools            | project           | web@tools    | web    | failed | dependency failed | project |                                                              |                 |       |                                                                                                             |
+      | marketplace name | marketplace scope | id           | name   | status | reasons           | scope   | cause chain                                                  | cause truncated | leaks     | rollback partial                                                                                            |
+      | tools            | project           | lib@tools    | lib    | failed | rollback partial  | project | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | lib-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
+      | tools            | project           | server@tools | server | failed | dependency failed | project |                                                              |                 |           |                                                                                                             |
+      | tools            | project           | web@tools    | web    | failed | dependency failed | project |                                                              |                 |           |                                                                                                             |
 
   Scenario: Apply that an invalid GitHub base address stops reports the install it made before stopping
     Given pi runs with the github base address "http://example.invalid"

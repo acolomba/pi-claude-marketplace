@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, test, type TestContext } from "node:test";
 
-import { causeChainTrailer } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  causeChainTrailer,
+  ManualRecoveryError,
+} from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
   redactAbsolutePaths,
   redactCauseChain,
@@ -163,5 +166,39 @@ describe("redactCauseChain", () => {
       "cause: outer at b.json -> inner at d.json",
       "cause: outer at b.json -> [object Object]",
     ]);
+  });
+
+  test("keeps a manual-recovery link with its leaked paths redacted", () => {
+    // arrange
+    const error = new Error("install failed at /srv/state/plugin.json", {
+      cause: new ManualRecoveryError("undo failed at /srv/skills/alpha", [
+        "/srv/skills/alpha",
+        "/srv/skills/beta",
+      ]),
+    });
+
+    // act
+    const rebuilt = redactCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(
+      rebuilt,
+      new Error("install failed at plugin.json", {
+        cause: new ManualRecoveryError("undo failed at alpha", ["alpha", "beta"]),
+      }),
+    );
+  });
+
+  test("keeps a manual-recovery head with no cause, its leaked paths redacted", () => {
+    // arrange
+    const error = new ManualRecoveryError("undo failed at /srv/skills/alpha", [
+      "/srv/skills/alpha",
+    ]);
+
+    // act
+    const rebuilt = redactCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(rebuilt, new ManualRecoveryError("undo failed at alpha", ["alpha"]));
   });
 });
