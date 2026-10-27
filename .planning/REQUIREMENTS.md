@@ -32,9 +32,9 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 
 ### Reconcile and apply (RCN)
 
-- [ ] **RCN-01**: `pending` previews the move that `apply` makes for a plugin whose moved dependency needs a plugin MISS-01 installs (PENDMOVE-01)
-- [ ] **RCN-02**: `apply` installs a missing dependency that needs a version the same `apply` moves to, in one run, and `pending` previews the same order (MISSORDER-01)
-- [ ] **RCN-03**: A scenario proves that a dependent whose dependency a config edit uninstalls is disabled in the same `apply` (RECON-REPLAN-01, close with proof)
+- [x] **RCN-01**: `pending` previews the move that `apply` makes for a plugin whose moved dependency needs a plugin MISS-01 installs (PENDMOVE-01)
+- [x] **RCN-02**: `apply` installs a missing dependency that needs a version the same `apply` moves to, in one run, and `pending` previews the same order (MISSORDER-01)
+- [x] **RCN-03**: A scenario proves that a dependent whose dependency a config edit uninstalls is disabled in the same `apply` (RECON-REPLAN-01, close with proof)
 - [x] **RCN-04**: The dependency walk's failure unit (whole scope vs one record) is decided, recorded with an ID, and the backlog entry closed (STALE-DECLARER-01)
 - [x] **RCN-05**: The enable closure and the update preflight read an installed plugin's declarations from its installed copy, as Claude Code reads the installed `plugin.json` (ENDEPS-01, UPDDEP-01 b3)
 - [ ] **RCN-06**: `marketplace add`, `bootstrap`, and the autoupdate cascade resolve missing dependencies the way Claude Code does after those commands (MISS-MPADD-01)
@@ -140,9 +140,9 @@ None.
 | WRN-05 | Phase 1 | Pending |
 | WRN-06 | Phase 1 | Pending |
 | WRN-07 | Phase 1 | Pending |
-| RCN-01 | Phase 2 | Pending |
-| RCN-02 | Phase 2 | Pending |
-| RCN-03 | Phase 2 | Pending |
+| RCN-01 | Phase 2 | Complete |
+| RCN-02 | Phase 2 | Complete |
+| RCN-03 | Phase 2 | Complete |
 | RCN-04 | Phase 2 | Complete |
 | RCN-05 | Phase 2 | Complete |
 | RCN-06 | Phase 2 | Pending |

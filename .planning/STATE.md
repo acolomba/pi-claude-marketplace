@@ -5,16 +5,16 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 2
 current_phase_name: Apply Ordering and Installed Declarations
 status: executing
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-10-27T04:14:12.700Z"
+stopped_at: Completed 02-03-PLAN.md
+last_updated: "2026-10-27T05:37:59.886Z"
 last_activity: 2026-10-26
 last_activity_desc: Phase 2 execution started
-state_head: fd4cf96fc60bb23981f581597d90fd350c730d8f
+state_head: c939ad7855511495669131c64fdf371d7da76438
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 6
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 2 (Apply Ordering and Installed Declarations) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-10-26 — Phase 2 execution started
 
@@ -191,8 +191,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-27T04:14:12.590Z
-**Stopped at:** Completed 02-02-PLAN.md
+**Last session:** 2026-10-27T05:37:59.389Z
+**Stopped at:** Completed 02-03-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -406,6 +406,7 @@ archived milestone artifacts.
 | Phase 29 P14 | 20 min | 2 tasks | 9 files |
 | Phase 02 P01 | 33min | 2 tasks | 8 files |
 | Phase 02 P02 | 29 min | 2 tasks | 9 files |
+| Phase 02 P03 | 81min | 3 tasks | 8 files |
 
 ## Decisions
 
@@ -611,6 +612,9 @@ archived milestone artifacts.
 - [Phase 02]: D-PL2-06: enable closure and update preflight read a pinned record's declarations from its per-commit clone (catalog fallback when absent, fail closed when unusable)
 - [Phase 02]: D-PL2-05: every declaration walk keeps the whole-scope fail-closed unit, pinned per walk
 - [Phase 02]: D-PL2-07: path-source records keep the catalog read; DECLREC-01 deferred
+- [Phase 02]: D-PL2-01: apply runs MISS-01 after the catalog cascade; its bucket comes from readPlainPlanForScope once a cascade step ran
+- [Phase 02]: D-PL2-16: a waiting record's planned move runs with its enable after MISS-01 (runStep), so a failed install leaves it untouched
+- [Phase 02]: D-PL2-11: disables caused by a MISS-01 refusal print after its (failed) row, dependencies first
 
 ### mcp-4 decisions
 
