@@ -207,6 +207,11 @@ function yieldingPluginUpdate(args: YieldingPluginUpdateArgs): PluginUpdateFn {
 /** Updates the autoupdate marketplaces of each scope; returns early when the runtime stops. */
 async function updateEveryScope(step: PassStep): Promise<void> {
   for (const scope of SCOPES) {
+    // D-PL8-15: a stopped runtime reads no further scope.
+    if (step.isStopped()) {
+      return;
+    }
+
     // eslint-disable-next-line no-await-in-loop -- MSG-GR-3: the project scope runs before the user scope.
     const names = await autoupdateMarketplaces(scope, step.cwd);
     for (const name of names) {

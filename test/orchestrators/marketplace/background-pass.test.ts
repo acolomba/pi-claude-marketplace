@@ -657,6 +657,39 @@ test("a runtime stopped during an update runs no further plugin update", async (
   assert.deepStrictEqual(updatedTargets(calls), ["alpha [project]"]);
 });
 
+test("D-PL8-15: a runtime stopped during the project scope reads nothing of the user scope", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-pass-stopped-scope-");
+  await seedMarketplace(cwd, "project", "alpha", true);
+  const userRoot = locationsFor("user", cwd).extensionRoot;
+  await mkdir(userRoot, { recursive: true });
+  await writeFile(
+    path.join(userRoot, "state.json"),
+    JSON.stringify({ schemaVersion: 99, marketplaces: {} }),
+  );
+  const lines = observeDebugLog(t);
+  let stopped = false;
+  const { calls, deps } = createPassUnderTest({
+    scripts: new Map([
+      [
+        "alpha",
+        (): Promise<void> => {
+          stopped = true;
+          return Promise.resolve();
+        },
+      ],
+    ]),
+  });
+  const pass = createBackgroundPass(deps);
+
+  // act
+  await pass({ ctx: sessionContext(cwd), isStopped: () => stopped });
+
+  // assert
+  assert.deepStrictEqual(updatedTargets(calls), ["alpha [project]"]);
+  assert.deepStrictEqual(lines, []);
+});
+
 test("a runtime stopped while the pass waits for a command starts no update", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-wait-stop-");
