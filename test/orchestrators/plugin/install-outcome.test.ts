@@ -2699,7 +2699,7 @@ test("D-PL9-05: a state phase failure removes the node_modules the packages phas
                 ...phase,
                 do: async () => {
                   installedBeforeState.push(
-                    await readdir(path.join(seeded.pluginRoot, "node_modules")),
+                    (await readdir(path.join(seeded.pluginRoot, "node_modules"))).sort(),
                   );
                   throw new Error("state phase failed");
                 },
@@ -2723,7 +2723,7 @@ test("D-PL9-05: a state phase failure removes the node_modules the packages phas
   );
 
   // assert
-  assert.deepStrictEqual(installedBeforeState, [["pkd-dep"]]);
+  assert.deepStrictEqual(installedBeforeState, [[".pi-claude-marketplace", "pkd-dep"]]);
   assert.deepStrictEqual((await readdir(seeded.pluginRoot)).sort(), [
     ".claude-plugin",
     "package-lock.json",

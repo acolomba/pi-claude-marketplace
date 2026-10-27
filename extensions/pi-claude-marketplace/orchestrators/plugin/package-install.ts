@@ -37,6 +37,12 @@
 // npm's own registry, which npm reports from the work dir before the check,
 // with Claude Code's 30-second limit.
 //
+// D-PL9-22: the step marks what it moves in: the file .pi-claude-marketplace
+// goes into the work dir's node_modules before the rename. Uninstall removes
+// only a marked node_modules inside the extension root, by a move into
+// sources-staging and a delete there, so the plugin root keeps all of it or
+// none. A node_modules that git or the user put there has no marker and stays.
+//
 // D-PL9-10: this is the only module that imports platform/package-manager.ts.
 
 import { randomUUID } from "node:crypto";
@@ -119,6 +125,9 @@ const NOTE_LIMIT = 500;
 // Claude Code's 32 MB cap on package.json and on the lockfile.
 const MAX_INPUT_FILE_BYTES = 33_554_432;
 const SKIPPED_PREFIX = "Skipped installing this plugin's dependencies: ";
+const PACKAGE_STEP_MARKER = ".pi-claude-marketplace";
+const PACKAGE_STEP_MARKER_TEXT =
+  "pi-claude-marketplace installed these packages; uninstalling the plugin removes them.\n";
 
 /** The ports the package step drives, declared by this consumer (D-PL9-12). */
 export interface PackageInstallOps {
@@ -402,6 +411,12 @@ async function moveNodeModules(
   workDir: string,
   inputs: PackageInstallInputs,
 ): Promise<PackageStepOutcome> {
+  // D-PL9-22: a tree that cannot take the marker moves in unmarked, and
+  // uninstall then keeps it; a missing tree reaches the arm below.
+  await writeFile(
+    path.join(workDir, "node_modules", PACKAGE_STEP_MARKER),
+    PACKAGE_STEP_MARKER_TEXT,
+  ).catch(ignoreFailure);
   const liveModules = path.join(inputs.pluginRoot, "node_modules");
   const parkedModules = path.join(workDir, "previous-node_modules");
   if (inputs.replacesNodeModules) {
@@ -620,4 +635,42 @@ export async function installUpdatedPackages(
   return note === undefined
     ? outcome
     : { ...outcome, notes: [...(outcome.notes ?? []), note], packageNote: note };
+}
+
+// A marker that is missing, unreadable, or not a regular file means that the
+// step did not write this node_modules.
+async function isMarked(modules: string): Promise<boolean> {
+  return lstat(path.join(modules, PACKAGE_STEP_MARKER)).then(
+    (stats) => stats.isFile(),
+    () => false,
+  );
+}
+
+/**
+ * D-PL9-22: removes the node_modules that the step wrote into a plugin root
+ * inside the extension root. Uninstall calls it, and the narrow ops type means
+ * it can never start a package manager (NFR-5). A failed move rejects and
+ * leaves node_modules whole; a failed delete leaves the moved copy in
+ * sources-staging, which costs disk only.
+ */
+export async function removeInstalledPackages(
+  ops: Pick<PackageInstallOps, "newWorkDirName">,
+  locations: ScopedLocations,
+  pluginRoot: string,
+): Promise<void> {
+  const modules = path.join(pluginRoot, "node_modules");
+  if (
+    !(await isInsideExtensionRoot(locations.extensionRoot, modules)) ||
+    !(await isMarked(modules))
+  ) {
+    return;
+  }
+
+  const parkDir = await locations.sourcesStagingDir(ops.newWorkDirName());
+  try {
+    await mkdir(parkDir, { recursive: true });
+    await rename(modules, path.join(parkDir, "node_modules"));
+  } finally {
+    await rm(parkDir, { recursive: true, force: true }).catch(ignoreFailure);
+  }
 }

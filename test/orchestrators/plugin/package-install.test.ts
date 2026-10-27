@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   chmod,
+  lstat,
   mkdir,
   readdir,
   readFile,
@@ -19,6 +20,7 @@ import { mock, verify } from "strong-mock";
 import {
   createPackagesPhase,
   installUpdatedPackages,
+  removeInstalledPackages,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -112,6 +114,8 @@ const REWRITTEN_LOCKFILE = [
 const MODULE_TEXT = 'module.exports = "pkd-dep loaded";\n';
 const SUCCESS: PackageManagerRun = { code: 0, stdout: "", stderr: "", timedOut: false };
 const MARKETPLACE = "tools";
+// D-PL9-22: the marker's name is the on-disk contract that uninstall reads.
+const MARKER = ".pi-claude-marketplace";
 
 interface SeededPlugin {
   readonly locations: ScopedLocations;
@@ -275,6 +279,23 @@ describe("createPackagesPhase", () => {
       assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
     });
   }
+
+  test("D-PL9-22: marks the node_modules it moves into the plugin root with a regular file beside the packages", async (t) => {
+    // arrange
+    const seeded = await seedPlugin(t, {
+      "package.json": PACKAGE_JSON,
+      "package-lock.json": LOCKFILE,
+    });
+    const phase = createPackagesPhase(opsWith(installingRunner([])));
+
+    // act
+    await phase.do(seeded.context);
+
+    // assert
+    const modules = path.join(seeded.pluginRoot, "node_modules");
+    assert.deepStrictEqual(await sortedEntries(modules), [MARKER, "pkd-dep"]);
+    assert.ok((await lstat(path.join(modules, MARKER))).isFile());
+  });
 
   test("D-PL9-04 / D-PL9-08: gives the package manager a work dir that holds only the rewritten package.json and lockfile", async (t) => {
     // arrange
@@ -1257,6 +1278,7 @@ describe("installUpdatedPackages", () => {
     assert.deepStrictEqual(hookedOutcome, updatedOutcome());
     assert.deepStrictEqual(requests, [npmRequest(seeded.workDir)]);
     assert.deepStrictEqual(await sortedEntries(path.join(seeded.pluginRoot, "node_modules")), [
+      ".pi-claude-marketplace",
       "pkd-dep",
     ]);
     assert.strictEqual(
@@ -1426,5 +1448,136 @@ describe("installUpdatedPackages", () => {
       await readdir(path.join(seeded.locations.extensionRoot, "sources-staging")),
       [],
     );
+  });
+});
+
+// A contained plugin whose node_modules the real packages phase wrote, so the
+// marker writer and the remover are proven to agree.
+async function seedInstalledPlugin(t: TestContext): Promise<SeededPlugin> {
+  const seeded = await seedPlugin(t, {
+    "package.json": PACKAGE_JSON,
+    "package-lock.json": LOCKFILE,
+  });
+  await createPackagesPhase(opsWith(installingRunner([]))).do(seeded.context);
+  return seeded;
+}
+
+function stagingDir(seeded: SeededPlugin): string {
+  return path.join(seeded.locations.extensionRoot, "sources-staging");
+}
+
+describe("removeInstalledPackages", () => {
+  test("D-PL9-22: removes a marked node_modules from a plugin root inside the extension root", async (t) => {
+    // arrange
+    const seeded = await seedInstalledPlugin(t);
+
+    // act
+    await removeInstalledPackages(opsWith(idleRunner()), seeded.locations, seeded.pluginRoot);
+
+    // assert
+    assert.deepStrictEqual(await sortedEntries(seeded.pluginRoot), [
+      "package-lock.json",
+      "package.json",
+    ]);
+    assert.deepStrictEqual(await readdir(stagingDir(seeded)), []);
+  });
+
+  for (const { kept, files, placement } of [
+    {
+      kept: "a node_modules without the marker",
+      files: { "node_modules/kept/index.js": MODULE_TEXT },
+      placement: "contained",
+    },
+    {
+      kept: "a marked node_modules outside the extension root",
+      files: { [`node_modules/${MARKER}`]: "", "node_modules/kept/index.js": MODULE_TEXT },
+      placement: "outside",
+    },
+    {
+      kept: "a node_modules whose marker is a folder",
+      files: { [`node_modules/${MARKER}/file`]: "", "node_modules/kept/index.js": MODULE_TEXT },
+      placement: "contained",
+    },
+  ] as const) {
+    test(`D-PL9-22 / NFR-10: keeps ${kept}`, async (t) => {
+      // arrange
+      const seeded = await seedPlugin(t, files, placement);
+      const modules = path.join(seeded.pluginRoot, "node_modules");
+      const before = await sortedEntries(modules);
+
+      // act
+      await removeInstalledPackages(opsWith(idleRunner()), seeded.locations, seeded.pluginRoot);
+
+      // assert
+      assert.deepStrictEqual(await sortedEntries(modules), before);
+      assert.strictEqual(
+        await readFile(path.join(modules, "kept", "index.js"), "utf8"),
+        MODULE_TEXT,
+      );
+    });
+  }
+
+  test("D-PL9-22 / NFR-10: keeps a node_modules that is a symlink to a marked folder", async (t) => {
+    // arrange
+    const seeded = await seedPlugin(t, {});
+    const linkTarget = path.join(seeded.locations.extensionRoot, "linked-modules");
+    await mkdir(path.join(linkTarget, "kept"), { recursive: true });
+    await writeFile(path.join(linkTarget, MARKER), "");
+    await writeFile(path.join(linkTarget, "kept", "index.js"), MODULE_TEXT);
+    const link = path.join(seeded.pluginRoot, "node_modules");
+    await symlink(linkTarget, link);
+
+    // act
+    await removeInstalledPackages(opsWith(idleRunner()), seeded.locations, seeded.pluginRoot);
+
+    // assert
+    assert.ok((await lstat(link)).isSymbolicLink());
+    assert.deepStrictEqual(await sortedEntries(linkTarget), [MARKER, "kept"]);
+  });
+
+  test("D-PL9-22: leaves the moved copy in sources-staging when it cannot be deleted", async (t) => {
+    // arrange
+    const seeded = await seedInstalledPlugin(t);
+    const movedPackage = path.join(stagingDir(seeded), "work-1", "node_modules", "pkd-dep");
+    await chmod(path.join(seeded.pluginRoot, "node_modules", "pkd-dep"), 0o555);
+
+    // act
+    try {
+      await removeInstalledPackages(opsWith(idleRunner()), seeded.locations, seeded.pluginRoot);
+    } finally {
+      await chmod(movedPackage, 0o755);
+    }
+
+    // assert
+    assert.deepStrictEqual(await sortedEntries(seeded.pluginRoot), [
+      "package-lock.json",
+      "package.json",
+    ]);
+    assert.strictEqual(await readFile(path.join(movedPackage, "index.js"), "utf8"), MODULE_TEXT);
+  });
+
+  test("D-PL9-22: rejects and keeps node_modules whole when it cannot be moved out", async (t) => {
+    // arrange
+    const seeded = await seedInstalledPlugin(t);
+    await chmod(seeded.pluginRoot, 0o555);
+
+    // act
+    const removal = removeInstalledPackages(
+      opsWith(idleRunner()),
+      seeded.locations,
+      seeded.pluginRoot,
+    );
+    try {
+      await assert.rejects(removal, { code: "EACCES" });
+    } finally {
+      await chmod(seeded.pluginRoot, 0o755);
+    }
+
+    // assert
+    assert.deepStrictEqual(await sortedEntries(path.join(seeded.pluginRoot, "node_modules")), [
+      MARKER,
+      "pkd-dep",
+    ]);
+    assert.deepStrictEqual(await readdir(stagingDir(seeded)), []);
   });
 });

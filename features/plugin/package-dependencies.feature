@@ -323,3 +323,40 @@ Feature: Plugin package dependencies
     Then the plugin "pkp" installed in the project scope has these npm packages:
       | name    | version |
       | pkd-dep | 1.0.0   |
+
+  Scenario: Installing a plugin again after uninstalling it installs the packages its current lockfile lists
+    Given the npm registry serves these packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+      | pkd-dep | 2.0.0   |
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | pkp  | 1.0.0   |
+    Given the published plugin "pkp" of the marketplace "tools" depends on these npm packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install pkp@tools --scope project"
+    Given the user has run "/claude:plugin uninstall pkp@tools --scope project"
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | pkp  | 2.0.0   |
+    Given the published plugin "pkp" of the marketplace "tools" depends on these npm packages:
+      | name    | version |
+      | pkd-dep | 2.0.0   |
+    Given the user has run "/claude:plugin marketplace update tools --scope project"
+    When the user runs "/claude:plugin install pkp@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status    | reasons | scope   | version |
+      | tools            | project           | pkp@tools | pkp  | installed |         | project | 2.0.0   |
+    Then the npm registry receives these requests:
+      | method | path                         | status |
+      | GET    | /pkd-dep/-/pkd-dep-2.0.0.tgz | 200    |
+    Then the plugin "pkp" installed in the project scope has these npm packages:
+      | name    | version |
+      | pkd-dep | 2.0.0   |
