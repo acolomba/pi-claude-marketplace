@@ -50,8 +50,64 @@ const NPM_CI_ARGUMENTS = [
   "--no-fund",
 ];
 const BUN_INSTALL_ARGUMENTS = ["install", "--frozen-lockfile", "--ignore-scripts"];
-const PACKAGE_JSON = JSON.stringify({ name: "plugin", dependencies: { "pkd-dep": "1.0.0" } });
-const LOCKFILE = '{"lockfileVersion":3}';
+const PKD_DEP_LINK = "https://registry.npmjs.org/pkd-dep/-/pkd-dep-1.0.0.tgz";
+const HTTP_LINK = "http://127.0.0.1:4873/pkd-dep/-/pkd-dep-1.0.0.tgz";
+const INTEGRITY = "sha512-AAAA";
+const DEPENDENCIES = { dependencies: { "pkd-dep": "1.0.0" } };
+const PACKAGE_JSON = JSON.stringify({ name: "plugin", ...DEPENDENCIES });
+
+function npmLockfile(
+  root: Readonly<Record<string, unknown>> = DEPENDENCIES,
+  entries: Readonly<Record<string, unknown>> = {
+    "node_modules/pkd-dep": { version: "1.0.0", resolved: PKD_DEP_LINK, integrity: INTEGRITY },
+  },
+): string {
+  return JSON.stringify({
+    name: "plugin",
+    lockfileVersion: 3,
+    packages: { "": { name: "plugin", ...root }, ...entries },
+  });
+}
+
+const LOCKFILE = npmLockfile();
+const BUN_LOCKFILE = JSON.stringify({
+  lockfileVersion: 1,
+  workspaces: { "": { name: "plugin", ...DEPENDENCIES } },
+  packages: { "pkd-dep": ["pkd-dep@1.0.0", "", {}, INTEGRITY] },
+});
+const REWRITTEN_PACKAGE_JSON = [
+  "{",
+  '  "name": "plugin-dependencies",',
+  '  "version": "0.0.0",',
+  '  "dependencies": {',
+  '    "pkd-dep": "1.0.0"',
+  "  }",
+  "}",
+  "",
+].join("\n");
+const REWRITTEN_LOCKFILE = [
+  "{",
+  '  "name": "plugin-dependencies",',
+  '  "version": "0.0.0",',
+  '  "lockfileVersion": 3,',
+  '  "requires": true,',
+  '  "packages": {',
+  '    "": {',
+  '      "name": "plugin-dependencies",',
+  '      "version": "0.0.0",',
+  '      "dependencies": {',
+  '        "pkd-dep": "1.0.0"',
+  "      }",
+  "    },",
+  '    "node_modules/pkd-dep": {',
+  '      "version": "1.0.0",',
+  `      "resolved": "${PKD_DEP_LINK}",`,
+  `      "integrity": "${INTEGRITY}"`,
+  "    }",
+  "  }",
+  "}",
+  "",
+].join("\n");
 const MODULE_TEXT = 'module.exports = "pkd-dep loaded";\n';
 const SUCCESS: PackageManagerRun = { code: 0, stdout: "", stderr: "", timedOut: false };
 const MARKETPLACE = "tools";
@@ -95,8 +151,28 @@ async function seedPlugin(
   };
 }
 
-function opsWith(runPackageManager: PackageManagerRunner): PackageInstallOps {
-  return { runPackageManager, newWorkDirName: () => "work-1" };
+function opsWith(
+  runPackageManager: PackageManagerRunner,
+  runRegistryQuery: PackageManagerRunner = idleRunner(),
+): PackageInstallOps {
+  return { runPackageManager, runRegistryQuery, newWorkDirName: () => "work-1" };
+}
+
+function npmRequest(workDir: string): PackageManagerRequest {
+  return {
+    command: "npm",
+    args: [`--git=${path.join(workDir, "git-is-disabled")}`, ...NPM_CI_ARGUMENTS],
+    cwd: workDir,
+  };
+}
+
+// The files a directory holds, by name, with their text.
+async function filesIn(directory: string): Promise<Record<string, string>> {
+  const names = await sortedEntries(directory);
+  const files = await Promise.all(
+    names.map(async (name) => [name, await readFile(path.join(directory, name), "utf8")] as const),
+  );
+  return Object.fromEntries(files);
 }
 
 async function writeModule(directory: string): Promise<void> {
@@ -140,9 +216,7 @@ describe("createPackagesPhase", () => {
     await phase.do(seeded.context);
 
     // assert
-    assert.deepStrictEqual(requests, [
-      { command: "npm", args: NPM_CI_ARGUMENTS, cwd: seeded.workDir },
-    ]);
+    assert.deepStrictEqual(requests, [npmRequest(seeded.workDir)]);
     assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
     assert.strictEqual(
       await readFile(path.join(seeded.pluginRoot, "node_modules", "pkd-dep", "index.js"), "utf8"),
@@ -154,10 +228,11 @@ describe("createPackagesPhase", () => {
     );
   });
 
-  for (const { lockfiles, copied, expectedRequest } of [
+  for (const { lockfiles, chosen, written, expectedRequest } of [
     {
-      lockfiles: ["bun.lock", "package-lock.json"],
-      copied: "bun.lock",
+      lockfiles: { "bun.lock": BUN_LOCKFILE, "package-lock.json": LOCKFILE },
+      chosen: "bun.lock",
+      written: "bun.lock",
       expectedRequest: (workDir: string): PackageManagerRequest => ({
         command: "bun",
         args: BUN_INSTALL_ARGUMENTS,
@@ -166,30 +241,21 @@ describe("createPackagesPhase", () => {
       }),
     },
     {
-      lockfiles: ["npm-shrinkwrap.json", "package-lock.json"],
-      copied: "npm-shrinkwrap.json",
-      expectedRequest: (workDir: string): PackageManagerRequest => ({
-        command: "npm",
-        args: NPM_CI_ARGUMENTS,
-        cwd: workDir,
-      }),
+      lockfiles: { "npm-shrinkwrap.json": LOCKFILE, "package-lock.json": LOCKFILE },
+      chosen: "npm-shrinkwrap.json",
+      written: "package-lock.json",
+      expectedRequest: npmRequest,
     },
     {
-      lockfiles: ["package-lock.json"],
-      copied: "package-lock.json",
-      expectedRequest: (workDir: string): PackageManagerRequest => ({
-        command: "npm",
-        args: NPM_CI_ARGUMENTS,
-        cwd: workDir,
-      }),
+      lockfiles: { "package-lock.json": LOCKFILE },
+      chosen: "package-lock.json",
+      written: "package-lock.json",
+      expectedRequest: npmRequest,
     },
   ]) {
-    test(`D-PL9-01: runs the ${copied} command when the plugin ships ${lockfiles.join(" and ")}`, async (t) => {
+    test(`D-PL9-01: runs the ${chosen} command on a ${written} when the plugin ships ${Object.keys(lockfiles).join(" and ")}`, async (t) => {
       // arrange
-      const seeded = await seedPlugin(t, {
-        "package.json": PACKAGE_JSON,
-        ...Object.fromEntries(lockfiles.map((lockfile) => [lockfile, LOCKFILE])),
-      });
+      const seeded = await seedPlugin(t, { "package.json": PACKAGE_JSON, ...lockfiles });
       const launches: Array<{ request: PackageManagerRequest; files: string[] }> = [];
       const phase = createPackagesPhase(
         opsWith(async (request) => {
@@ -203,13 +269,13 @@ describe("createPackagesPhase", () => {
 
       // assert
       assert.deepStrictEqual(launches, [
-        { request: expectedRequest(seeded.workDir), files: [copied, "package.json"].sort() },
+        { request: expectedRequest(seeded.workDir), files: [written, "package.json"].sort() },
       ]);
       assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
     });
   }
 
-  test("gives the package manager a work dir that holds only package.json and the lockfile, byte for byte", async (t) => {
+  test("D-PL9-04 / D-PL9-08: gives the package manager a work dir that holds only the rewritten package.json and lockfile", async (t) => {
     // arrange
     const seeded = await seedPlugin(t, {
       "package.json": PACKAGE_JSON,
@@ -220,13 +286,7 @@ describe("createPackagesPhase", () => {
     const workDirs: Array<Record<string, string>> = [];
     const phase = createPackagesPhase(
       opsWith(async (request) => {
-        const names = await sortedEntries(request.cwd);
-        const files = await Promise.all(
-          names.map(
-            async (name) => [name, await readFile(path.join(request.cwd, name), "utf8")] as const,
-          ),
-        );
-        workDirs.push(Object.fromEntries(files));
+        workDirs.push(await filesIn(request.cwd));
         return SUCCESS;
       }),
     );
@@ -236,7 +296,7 @@ describe("createPackagesPhase", () => {
 
     // assert
     assert.deepStrictEqual(workDirs, [
-      { "package-lock.json": LOCKFILE, "package.json": PACKAGE_JSON },
+      { "package-lock.json": REWRITTEN_LOCKFILE, "package.json": REWRITTEN_PACKAGE_JSON },
     ]);
   });
 
@@ -394,17 +454,25 @@ describe("createPackagesPhase", () => {
     verify(runPackageManager);
   });
 
-  for (const { field, listing } of [
-    { field: "dependencies", listing: { "pkd-dep": "1.0.0" } },
-    { field: "optionalDependencies", listing: { "pkd-dep": "1.0.0" } },
-    { field: "peerDependencies", listing: { "pkd-dep": "1.0.0" } },
-    { field: "workspaces", listing: ["packages/*"] },
+  for (const { field, listing, root } of [
+    { field: "dependencies", listing: { "pkd-dep": "1.0.0" }, root: DEPENDENCIES },
+    {
+      field: "optionalDependencies",
+      listing: { "pkd-dep": "1.0.0" },
+      root: { optionalDependencies: { "pkd-dep": "1.0.0" } },
+    },
+    {
+      field: "peerDependencies",
+      listing: { "pkd-dep": "1.0.0" },
+      root: { peerDependencies: { "pkd-dep": "1.0.0" } },
+    },
+    { field: "workspaces", listing: ["packages/*"], root: {} },
   ]) {
     test(`D-PL9-02: runs the package manager when package.json lists ${field}`, async (t) => {
       // arrange
       const seeded = await seedPlugin(t, {
         "package.json": JSON.stringify({ [field]: listing }),
-        "package-lock.json": LOCKFILE,
+        "package-lock.json": npmLockfile(root),
       });
       const requests: PackageManagerRequest[] = [];
       const phase = createPackagesPhase(opsWith(installingRunner(requests)));
@@ -413,9 +481,7 @@ describe("createPackagesPhase", () => {
       await phase.do(seeded.context);
 
       // assert
-      assert.deepStrictEqual(requests, [
-        { command: "npm", args: NPM_CI_ARGUMENTS, cwd: seeded.workDir },
-      ]);
+      assert.deepStrictEqual(requests, [npmRequest(seeded.workDir)]);
     });
   }
 
@@ -723,6 +789,148 @@ describe("createPackagesPhase", () => {
     );
   });
 
+  test("D-PL9-08: refuses a lockfile that lists a package from a local folder and runs nothing", async (t) => {
+    // arrange
+    const lists = { dependencies: { "pkd-dep": "1.0.0", "pkd-local": "file:../pkd-local" } };
+    const seeded = await seedPlugin(t, {
+      "package.json": JSON.stringify({ name: "plugin", ...lists }),
+      "package-lock.json": npmLockfile(lists, {
+        "node_modules/pkd-dep": { version: "1.0.0", resolved: PKD_DEP_LINK, integrity: INTEGRITY },
+        "node_modules/pkd-local": { resolved: "../pkd-local", link: true },
+        "../pkd-local": { name: "pkd-local", version: "1.0.0" },
+      }),
+    });
+    const runPackageManager = idleRunner();
+    const phase = createPackagesPhase(opsWith(runPackageManager));
+
+    // act
+    await phase.do(seeded.context);
+
+    // assert
+    assert.deepStrictEqual(seeded.context.discoveryWarnings, [
+      "Skipped installing this plugin's dependencies: its package-lock.json has a dependency that is not a registry package and version range: pkd-local.",
+    ]);
+    assert.deepStrictEqual(await sortedEntries(seeded.pluginRoot), [
+      "package-lock.json",
+      "package.json",
+    ]);
+    assert.deepStrictEqual(
+      await readdir(path.join(seeded.locations.extensionRoot, "sources-staging")),
+      [],
+    );
+    verify(runPackageManager);
+  });
+
+  test("D-PL9-02: runs nothing and says nothing for a lockfile that lists no package", async (t) => {
+    // arrange
+    const seeded = await seedPlugin(t, {
+      "package.json": PACKAGE_JSON,
+      "package-lock.json": npmLockfile(DEPENDENCIES, {}),
+    });
+    const runPackageManager = idleRunner();
+    const phase = createPackagesPhase(opsWith(runPackageManager));
+
+    // act
+    await phase.do(seeded.context);
+
+    // assert
+    assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
+    assert.deepStrictEqual(await sortedEntries(seeded.pluginRoot), [
+      "package-lock.json",
+      "package.json",
+    ]);
+    verify(runPackageManager);
+  });
+
+  test("D-PL9-08: asks npm for its registry in a bare work dir and installs a lockfile whose http links are on it", async (t) => {
+    // arrange
+    const seeded = await seedPlugin(t, {
+      "package.json": PACKAGE_JSON,
+      "package-lock.json": npmLockfile(DEPENDENCIES, {
+        "node_modules/pkd-dep": { version: "1.0.0", resolved: HTTP_LINK, integrity: INTEGRITY },
+      }),
+    });
+    const queries: Array<{ request: PackageManagerRequest; files: Record<string, string> }> = [];
+    const requests: PackageManagerRequest[] = [];
+    const phase = createPackagesPhase(
+      opsWith(installingRunner(requests), async (request) => {
+        queries.push({ request, files: await filesIn(request.cwd) });
+        return { code: 0, stdout: "http://127.0.0.1:4873/\n", stderr: "", timedOut: false };
+      }),
+    );
+
+    // act
+    await phase.do(seeded.context);
+
+    // assert
+    assert.deepStrictEqual(queries, [
+      {
+        request: {
+          command: "npm",
+          args: [
+            `--git=${path.join(seeded.workDir, "git-is-disabled")}`,
+            "config",
+            "get",
+            "registry",
+            "--workspaces=false",
+          ],
+          cwd: seeded.workDir,
+        },
+        files: { "package.json": "{}" },
+      },
+    ]);
+    assert.deepStrictEqual(requests, [npmRequest(seeded.workDir)]);
+    assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
+    assert.strictEqual(
+      await readFile(path.join(seeded.pluginRoot, "node_modules", "pkd-dep", "index.js"), "utf8"),
+      MODULE_TEXT,
+    );
+  });
+
+  for (const { situation, run } of [
+    {
+      situation: "a registry on another host",
+      run: { code: 0, stdout: "http://127.0.0.1:9/\n", stderr: "", timedOut: false },
+    },
+    {
+      situation: "a registry query that fails",
+      run: { code: 1, stdout: "http://127.0.0.1:4873/\n", stderr: "", timedOut: false },
+    },
+    {
+      situation: "an https registry",
+      run: { code: 0, stdout: "https://registry.npmjs.org/\n", stderr: "", timedOut: false },
+    },
+    {
+      situation: "a registry answer that is not a link",
+      run: { code: 0, stdout: "registry\n", stderr: "", timedOut: false },
+    },
+  ] satisfies Array<{ situation: string; run: PackageManagerRun }>) {
+    test(`D-PL9-08: refuses an http link and installs nothing for ${situation}`, async (t) => {
+      // arrange
+      const seeded = await seedPlugin(t, {
+        "package.json": PACKAGE_JSON,
+        "package-lock.json": npmLockfile(DEPENDENCIES, {
+          "node_modules/pkd-dep": { version: "1.0.0", resolved: HTTP_LINK, integrity: INTEGRITY },
+        }),
+      });
+      const runPackageManager = idleRunner();
+      const phase = createPackagesPhase(opsWith(runPackageManager, answeringRunner(run)));
+
+      // act
+      await phase.do(seeded.context);
+
+      // assert
+      assert.deepStrictEqual(seeded.context.discoveryWarnings, [
+        `Skipped installing this plugin's dependencies: its package-lock.json entry "node_modules/pkd-dep" has a download link that is an unencrypted http link on a host other than your npm registry, so npm could send your saved registry token to it in the clear.`,
+      ]);
+      assert.deepStrictEqual(await sortedEntries(seeded.pluginRoot), [
+        "package-lock.json",
+        "package.json",
+      ]);
+      verify(runPackageManager);
+    });
+  }
+
   test("D-PL9-17: runs the real package manager launcher in a work dir and moves the modules it wrote into the plugin root", async (t) => {
     // arrange
     const seeded = await seedPlugin(t, {
@@ -789,9 +997,7 @@ describe("createPackagesPhase", () => {
     await phase.do(seeded.context);
 
     // assert
-    assert.deepStrictEqual(requests, [
-      { command: "npm", args: NPM_CI_ARGUMENTS, cwd: seeded.workDir },
-    ]);
+    assert.deepStrictEqual(requests, [npmRequest(seeded.workDir)]);
     assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
   });
 
@@ -811,15 +1017,15 @@ describe("createPackagesPhase", () => {
     verify(runPackageManager);
   });
 
-  for (const { lockfile, command } of [
-    { lockfile: "bun.lock", command: "bun" },
-    { lockfile: "package-lock.json", command: "npm" },
+  for (const { lockfile, text, command } of [
+    { lockfile: "bun.lock", text: BUN_LOCKFILE, command: "bun" },
+    { lockfile: "package-lock.json", text: LOCKFILE, command: "npm" },
   ]) {
     test(`D-PL9-01: runs ${command} when a ${lockfile} sits beside a bun.lockb`, async (t) => {
       // arrange
       const seeded = await seedPlugin(t, {
         "package.json": PACKAGE_JSON,
-        [lockfile]: LOCKFILE,
+        [lockfile]: text,
         "bun.lockb": LOCKFILE,
       });
       const commands: string[] = [];
@@ -1047,9 +1253,7 @@ describe("installUpdatedPackages", () => {
 
     // assert
     assert.deepStrictEqual(hookedOutcome, updatedOutcome());
-    assert.deepStrictEqual(requests, [
-      { command: "npm", args: NPM_CI_ARGUMENTS, cwd: seeded.workDir },
-    ]);
+    assert.deepStrictEqual(requests, [npmRequest(seeded.workDir)]);
     assert.deepStrictEqual(await sortedEntries(path.join(seeded.pluginRoot, "node_modules")), [
       "pkd-dep",
     ]);

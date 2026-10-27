@@ -7,7 +7,8 @@
 //
 // D-PL9-02: the install runs only when the plugin root holds package.json, a
 // lockfile from the table, and a package.json that lists something under
-// dependencies, optionalDependencies, peerDependencies, or workspaces.
+// dependencies, optionalDependencies, peerDependencies, or workspaces. A
+// checked lockfile that lists no package runs nothing and says nothing.
 // D-PL9-06: the install ledger leaves alone a plugin root that already holds
 // node_modules. After an update that moves to a new revision, the step runs
 // over it, because the new revision may carry a new lockfile (D-PL9-07).
@@ -19,8 +20,8 @@
 // no absolute path, which every surface would redact to a basename.
 //
 // D-PL9-04: the package manager runs in a fresh work dir under sources-staging
-// that holds only package.json and the lockfile, so the plugin's own .npmrc or
-// bunfig.toml is never read. On success its node_modules moves into the plugin
+// that holds only the rewritten package.json and lockfile, so the plugin's own
+// .npmrc or bunfig.toml is never read. On success its node_modules moves into the plugin
 // root by rename: sources-staging and both clone roots sit under the extension
 // root, on one filesystem. A node_modules it replaces waits inside the work
 // dir, is moved back when the new one cannot move in, and is deleted with the
@@ -30,8 +31,11 @@
 // bridgeWarnings never reaches a standalone user. A failed package install is
 // a note and never a throw, so the plugin stays installed (PKD-02).
 //
-// D-PL9-08: Claude Code's lockfile-content sanitizer is not ported;
-// --ignore-scripts and the bare work dir carry the protection.
+// D-PL9-08: the plugin's package.json and lockfile are checked and rewritten
+// as Claude Code does (domain/package-lockfile.ts), and a refusal is a note.
+// npm runs with git disabled. An http download link passes only when it is on
+// npm's own registry, which npm reports from the work dir before the check,
+// with Claude Code's 30-second limit.
 //
 // D-PL9-10: this is the only module that imports platform/package-manager.ts.
 
@@ -40,6 +44,7 @@ import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/
 import path from "node:path";
 import { stripVTControlCharacters } from "node:util";
 
+import { sanitizeLockfile } from "../../domain/package-lockfile.ts";
 import {
   createPackageManagerRunner,
   NODE_PACKAGE_MANAGER_SPAWN,
@@ -48,6 +53,7 @@ import { errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
 import type { UpdateRunOutcome } from "./update-swap.ts";
+import type { LockfileCheck } from "../../domain/package-lockfile.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { PackageManagerRun, PackageManagerRunner } from "../../platform/package-manager.ts";
 import type { Phase } from "../../transaction/phase-ledger.ts";
@@ -105,6 +111,8 @@ const LISTING_FIELDS = [
 ] as const;
 
 const PACKAGE_INSTALL_TIMEOUT_MS = 60_000;
+// Claude Code's limit on `npm config get registry`.
+const REGISTRY_QUERY_TIMEOUT_MS = 30_000;
 const PACKAGE_INSTALL_KILL_GRACE_MS = 5_000;
 const NOTE_LIMIT = 500;
 // Claude Code's 32 MB cap on package.json and on the lockfile.
@@ -113,18 +121,28 @@ const SKIPPED_PREFIX = "Skipped installing this plugin's dependencies: ";
 
 /** The ports the package step drives, declared by this consumer (D-PL9-12). */
 export interface PackageInstallOps {
+  /** Runs the install itself. */
   readonly runPackageManager: PackageManagerRunner;
+  /** Runs `npm config get registry`, under its own, shorter limit. */
+  readonly runRegistryQuery: PackageManagerRunner;
   readonly newWorkDirName: () => string;
 }
 
 /**
- * The production binding: the real launcher, the 60-second timeout, a
- * 5-second kill grace, the process environment, and a random work dir name.
+ * The production binding: the real launcher, the 60-second install timeout,
+ * the 30-second registry query timeout, a 5-second kill grace, the process
+ * environment, and a random work dir name.
  */
 export const DEFAULT_PACKAGE_INSTALL_OPS: PackageInstallOps = Object.freeze({
   runPackageManager: createPackageManagerRunner({
     spawn: NODE_PACKAGE_MANAGER_SPAWN,
     timeoutMs: PACKAGE_INSTALL_TIMEOUT_MS,
+    killGraceMs: PACKAGE_INSTALL_KILL_GRACE_MS,
+    env: process.env,
+  }),
+  runRegistryQuery: createPackageManagerRunner({
+    spawn: NODE_PACKAGE_MANAGER_SPAWN,
+    timeoutMs: REGISTRY_QUERY_TIMEOUT_MS,
     killGraceMs: PACKAGE_INSTALL_KILL_GRACE_MS,
     env: process.env,
   }),
@@ -162,8 +180,8 @@ interface PackageStepOutcome {
 interface PackageInstallInputs {
   readonly pluginRoot: string;
   readonly row: RunnableLockfile;
-  readonly packageJson: Buffer;
-  readonly lockfile: Buffer;
+  readonly manifest: Readonly<Record<string, unknown>>;
+  readonly lockfileText: string;
   /** The plugin root held node_modules when the checks listed it. */
   readonly replacesNodeModules: boolean;
 }
@@ -330,8 +348,8 @@ async function detectInstall(target: PackageStepTarget): Promise<Detection> {
     inputs: {
       pluginRoot,
       row,
-      packageJson: packageJson.value,
-      lockfile: lockfile.value,
+      manifest: manifest.value,
+      lockfileText: lockfile.value.toString("utf8"),
       replacesNodeModules: hasNodeModules,
     },
   };
@@ -411,18 +429,64 @@ async function moveNodeModules(
   return { createdNodeModules: !inputs.replacesNodeModules };
 }
 
-async function installInWorkDir(
+function gitDisabledArgument(workDir: string): string {
+  return `--git=${path.join(workDir, "git-is-disabled")}`;
+}
+
+function jsonFileText(value: unknown): string {
+  return `${JSON.stringify(value, null, 2)}\n`;
+}
+
+// The origin of npm's registry when it is an http one. Any other answer
+// leaves it undefined, so the check refuses every http link.
+async function httpRegistryOrigin(
+  workDir: string,
+  ops: PackageInstallOps,
+): Promise<string | undefined> {
+  const run = await ops.runRegistryQuery({
+    command: "npm",
+    args: [gitDisabledArgument(workDir), "config", "get", "registry", "--workspaces=false"],
+    cwd: workDir,
+  });
+  const registry = run.stdout.trim();
+  if (run.code !== 0 || !URL.canParse(registry)) {
+    return undefined;
+  }
+
+  const url = new URL(registry);
+  return url.protocol === "http:" ? url.origin : undefined;
+}
+
+// The `{}` package.json makes the work dir npm's project root before npm
+// reports its registry, so no .npmrc of a parent folder is read.
+async function checkLockfile(
+  workDir: string,
+  inputs: PackageInstallInputs,
+  ops: PackageInstallOps,
+): Promise<LockfileCheck> {
+  await mkdir(workDir, { recursive: true });
+  await writeFile(path.join(workDir, "package.json"), "{}", { flag: "wx" });
+  const registryOrigin = inputs.lockfileText.includes('"http://')
+    ? await httpRegistryOrigin(workDir, ops)
+    : undefined;
+  return sanitizeLockfile({
+    manager: inputs.row.command,
+    lockfileName: inputs.row.lockfile,
+    manifest: inputs.manifest,
+    lockfileText: inputs.lockfileText,
+    registryOrigin,
+  });
+}
+
+async function runInWorkDir(
   workDir: string,
   inputs: PackageInstallInputs,
   ops: PackageInstallOps,
 ): Promise<PackageStepOutcome> {
   const { row } = inputs;
-  await mkdir(workDir, { recursive: true });
-  await writeFile(path.join(workDir, "package.json"), inputs.packageJson, { flag: "wx" });
-  await writeFile(path.join(workDir, row.lockfile), inputs.lockfile, { flag: "wx" });
   const run = await ops.runPackageManager({
     command: row.command,
-    args: row.args,
+    args: row.command === "npm" ? [gitDisabledArgument(workDir), ...row.args] : row.args,
     cwd: workDir,
     ...(row.cacheDirVariable !== undefined && {
       env: { [row.cacheDirVariable]: path.join(workDir, "bun-cache") },
@@ -433,6 +497,28 @@ async function installInWorkDir(
   }
 
   return moveNodeModules(workDir, inputs);
+}
+
+async function installInWorkDir(
+  workDir: string,
+  inputs: PackageInstallInputs,
+  ops: PackageInstallOps,
+): Promise<PackageStepOutcome> {
+  const check = await checkLockfile(workDir, inputs, ops);
+  if ("refusal" in check) {
+    return { note: skippedNote(check.refusal), createdNodeModules: false };
+  }
+
+  const { sanitized } = check;
+  if (sanitized.packageCount === 0) {
+    return NOTHING_DONE;
+  }
+
+  await writeFile(path.join(workDir, "package.json"), jsonFileText(sanitized.packageJson));
+  await writeFile(path.join(workDir, sanitized.lockfileName), jsonFileText(sanitized.lockfile), {
+    flag: "wx",
+  });
+  return runInWorkDir(workDir, inputs, ops);
 }
 
 async function runInstallStage(

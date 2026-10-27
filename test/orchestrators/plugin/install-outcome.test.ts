@@ -2666,13 +2666,27 @@ test("D-PL9-05: a state phase failure removes the node_modules the packages phas
     path.join(seeded.pluginRoot, "package.json"),
     JSON.stringify({ name: "empty", dependencies: { "pkd-dep": "1.0.0" } }),
   );
-  await writeFile(path.join(seeded.pluginRoot, "package-lock.json"), '{"lockfileVersion":3}');
+  await writeFile(
+    path.join(seeded.pluginRoot, "package-lock.json"),
+    JSON.stringify({
+      lockfileVersion: 3,
+      packages: {
+        "": { dependencies: { "pkd-dep": "1.0.0" } },
+        "node_modules/pkd-dep": {
+          version: "1.0.0",
+          resolved: "https://registry.npmjs.org/pkd-dep/-/pkd-dep-1.0.0.tgz",
+          integrity: "sha512-AAAA",
+        },
+      },
+    }),
+  );
   const installedBeforeState: string[][] = [];
   const packageInstallOps: PackageInstallOps = {
     runPackageManager: async (request) => {
       await mkdir(path.join(request.cwd, "node_modules", "pkd-dep"), { recursive: true });
       return { code: 0, stdout: "", stderr: "", timedOut: false };
     },
+    runRegistryQuery: () => assert.fail("a lockfile without http links queries no registry"),
     newWorkDirName: () => "work-1",
   };
   const transaction = {

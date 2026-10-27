@@ -480,13 +480,54 @@ test("UPD-DEP-D1: a cascade run authenticates in the command's context when it c
   assert.strictEqual(outcome.partition, "updated");
 });
 
+const PKD_DEP_LINK = "https://registry.npmjs.org/pkd-dep/-/pkd-dep-1.0.0.tgz";
+
 async function writePackageFiles(pluginRoot: string): Promise<void> {
   await writeFile(
     path.join(pluginRoot, "package.json"),
     JSON.stringify({ name: "hello", dependencies: { "pkd-dep": "1.0.0" } }),
   );
-  await writeFile(path.join(pluginRoot, "package-lock.json"), '{"lockfileVersion":3}');
+  await writeFile(
+    path.join(pluginRoot, "package-lock.json"),
+    JSON.stringify({
+      lockfileVersion: 3,
+      packages: {
+        "": { dependencies: { "pkd-dep": "1.0.0" } },
+        "node_modules/pkd-dep": {
+          version: "1.0.0",
+          resolved: PKD_DEP_LINK,
+          integrity: "sha512-AAAA",
+        },
+      },
+    }),
+  );
 }
+
+// The lockfile npm receives for the plugin's lockfile: the root renamed and
+// the fields that decide the install, as two-space JSON.
+const REWRITTEN_LOCKFILE = [
+  "{",
+  '  "name": "plugin-dependencies",',
+  '  "version": "0.0.0",',
+  '  "lockfileVersion": 3,',
+  '  "requires": true,',
+  '  "packages": {',
+  '    "": {',
+  '      "name": "plugin-dependencies",',
+  '      "version": "0.0.0",',
+  '      "dependencies": {',
+  '        "pkd-dep": "1.0.0"',
+  "      }",
+  "    },",
+  '    "node_modules/pkd-dep": {',
+  '      "version": "1.0.0",',
+  `      "resolved": "${PKD_DEP_LINK}",`,
+  '      "integrity": "sha512-AAAA"',
+  "    }",
+  "  }",
+  "}",
+  "",
+].join("\n");
 
 const PACKAGE_NOTE = `Skipped installing this plugin's dependencies: its folder in the marketplace "mp" is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder.`;
 
@@ -566,6 +607,7 @@ function installingPackageOps(): PackageRunLog {
         await writeFile(path.join(request.cwd, "node_modules", "pkd-dep", "index.js"), "new");
         return { code: 0, stdout: "", stderr: "", timedOut: false };
       },
+      runRegistryQuery: () => assert.fail("a lockfile without http links queries no registry"),
       newWorkDirName: () => "work-1",
     },
   };
@@ -630,7 +672,7 @@ for (const { verb, policy, offered, installs } of [
       [outcome.partition, Object.hasOwn(outcome, "notes")],
       ["updated", false],
     );
-    assert.deepStrictEqual(packages.runs, installs === "new" ? ['{"lockfileVersion":3}'] : []);
+    assert.deepStrictEqual(packages.runs, installs === "new" ? [REWRITTEN_LOCKFILE] : []);
     assert.strictEqual(
       await readFile(path.join(pluginRoot, "node_modules", "pkd-dep", "index.js"), "utf8"),
       installs,

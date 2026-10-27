@@ -21,6 +21,7 @@ import { isPlainObject } from "../../lib/field-rows.ts";
 import { pluginPackageFiles, readNpmPackages } from "../../lib/npm-registry.ts";
 import { writePublishedPluginFiles } from "../../lib/published-marketplace.ts";
 
+import type { LocalFolderPackage } from "../../lib/npm-registry.ts";
 import type { PublishedMarketplace } from "../../lib/published-marketplace.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -95,13 +96,39 @@ async function writePluginFiles(
   assert.deepStrictEqual(Object.fromEntries(written), files);
 }
 
+// Writes the package files of the published plugin: the npm packages of
+// `table`, which the registry serves, and the packages of `localFolders`.
+async function writeNpmPackageFiles(
+  world: ScenarioWorld,
+  plugin: string,
+  name: string,
+  table: DataTable,
+  localFolders: readonly LocalFolderPackage[],
+): Promise<void> {
+  const registry = world.requireNpmRegistry();
+  const tarballs = readNpmPackages(table).map((pkg) => registry.served(pkg));
+  const files = pluginPackageFiles(plugin, tarballs, localFolders);
+  await writePluginFiles(world.requirePublished(name), plugin, files);
+}
+
 Given(
   "the published plugin {string} of the marketplace {string} depends on these npm packages:",
   async function (this: ScenarioWorld, plugin: string, name: string, table: DataTable) {
-    const registry = this.requireNpmRegistry();
-    const published = this.requirePublished(name);
-    const tarballs = readNpmPackages(table).map((pkg) => registry.served(pkg));
-    await writePluginFiles(published, plugin, pluginPackageFiles(plugin, tarballs));
+    await writeNpmPackageFiles(this, plugin, name, table, []);
+  },
+);
+
+Given(
+  "the published plugin {string} of the marketplace {string} depends on these npm packages and on the package {string} from the folder {string}:",
+  async function (
+    this: ScenarioWorld,
+    plugin: string,
+    name: string,
+    local: string,
+    folder: string,
+    table: DataTable,
+  ) {
+    await writeNpmPackageFiles(this, plugin, name, table, [{ name: local, folder }]);
   },
 );
 

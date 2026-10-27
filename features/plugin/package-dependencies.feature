@@ -60,6 +60,29 @@ Feature: Plugin package dependencies
       | pkp@tools | 1.0.0   | true    |
     Then the plugin "pkp" installed in the project scope has no npm packages
 
+  Scenario: A plugin whose lockfile lists a package from a local folder is installed with a note and npm fetches nothing
+    Given the npm registry serves these packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | pkp  | 1.0.0   |
+    Given the published plugin "pkp" of the marketplace "tools" depends on these npm packages and on the package "pkd-local" from the folder "../pkd-local":
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install pkp@tools --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                   | lines                                                                                                                                              |
+      | cascade    | info     | true         |                                                          |                                                                                                                                                    |
+      | diagnostic | warning  | false        | Plugin "pkp" installed; 1 declared component has a note. | Skipped installing this plugin's dependencies: its package-lock.json has a dependency that is not a registry package and version range: pkd-local. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id        | name | status    | reasons | scope   | version |
+      | tools            | project           | pkp@tools | pkp  | installed |         | project | 1.0.0   |
+    Then the npm registry receives no request
+    Then the plugin "pkp" installed in the project scope has no npm packages
+
   Scenario: A session start hook of an installed plugin loads the npm package its lockfile lists
     Given the npm registry serves these packages:
       | name    | version |

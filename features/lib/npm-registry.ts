@@ -269,25 +269,42 @@ export function npmConfigText(registry: NpmRegistry): string {
   ].join("\n");
 }
 
+/** A package the plugin takes from a local folder, which npm links rather than fetches. */
+export interface LocalFolderPackage {
+  readonly name: string;
+  /** The folder relative to the plugin, as a `file:` spec names it. */
+  readonly folder: string;
+}
+
 /**
  * Returns the `package.json` and `package-lock.json` texts of the plugin
  * `plugin` by file name. The plugin depends on each of `tarballs` at its
  * exact version, and the lockfile names the URL and integrity of each tarball
- * the registry serves.
+ * the registry serves. It also depends on each of `localFolders` through a
+ * `file:` spec, which the lockfile records the way npm does: a link entry in
+ * node_modules and an entry for the folder itself.
  */
 export function pluginPackageFiles(
   plugin: string,
   tarballs: readonly ServedTarball[],
+  localFolders: readonly LocalFolderPackage[],
 ): Readonly<Record<string, string>> {
-  const dependencies = Object.fromEntries(
-    tarballs.map((tarball) => [tarball.name, tarball.version]),
-  );
-  const lockedPackages = Object.fromEntries(
-    tarballs.map((tarball) => [
+  const dependencyEntries: Array<[string, string]> = [
+    ...tarballs.map((tarball): [string, string] => [tarball.name, tarball.version]),
+    ...localFolders.map((local): [string, string] => [local.name, `file:${local.folder}`]),
+  ];
+  const lockedEntries: Array<[string, Record<string, unknown>]> = [
+    ...tarballs.map((tarball): [string, Record<string, unknown>] => [
       `node_modules/${tarball.name}`,
       { version: tarball.version, resolved: tarball.resolved, integrity: tarball.integrity },
     ]),
-  );
+    ...localFolders.flatMap((local): Array<[string, Record<string, unknown>]> => [
+      [`node_modules/${local.name}`, { resolved: local.folder, link: true }],
+      [local.folder, { name: local.name, version: "1.0.0" }],
+    ]),
+  ];
+  const dependencies = Object.fromEntries(dependencyEntries);
+  const lockedPackages = Object.fromEntries(lockedEntries);
   const manifest = { name: plugin, version: "0.0.0", dependencies };
   const lockfile = {
     name: plugin,
