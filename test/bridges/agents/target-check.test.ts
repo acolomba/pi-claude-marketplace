@@ -73,6 +73,8 @@ test("D-PL4-04: refuses a target that holds a file no index row of the plugin na
     assertAgentTargetsFree(locations, { marketplace: "catalog", plugin: "acme" }, [GENERATED_NAME]),
     assertOccupiedRefusal(target),
   );
+
+  // assert
   await assert.rejects(readFile(locations.agentsIndexPath), { code: "ENOENT" });
   assert.deepStrictEqual(await readdir(locations.agentsDir), [`${GENERATED_NAME}.md`]);
   assert.strictEqual(await readFile(target, "utf8"), USER_BYTES);

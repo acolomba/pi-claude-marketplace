@@ -21,6 +21,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
+  AgentTargetOccupiedError,
   McpConfigFileError,
   McpServerKeyCollisionError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
@@ -2604,11 +2605,8 @@ test("D-PL4-04: previewInstall refuses an agent target a user's file holds and w
   await assert.rejects(
     previewInstall(seeded.state, locations, projectInstallOptions(environment.cwd)),
     (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.strictEqual(
-        error.message,
-        `Cannot replace agent target with non-previous content at ${path.basename(target)}`,
-      );
+      assert.ok(error instanceof AgentTargetOccupiedError);
+      assert.strictEqual(error.targetPath, target);
       return true;
     },
   );

@@ -21,6 +21,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { AgentTargetOccupiedError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { PluginUpdateConcurrencyError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
@@ -345,15 +346,8 @@ test("D-PL4-04: assertUpdateNamesFree refuses a candidate whose new agent target
 
     // act & assert
     await assert.rejects(assertUpdateNamesFree(options, preflight), (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.deepStrictEqual(
-        { name: error.name, message: error.message, cause: error.cause },
-        {
-          name: "AgentTargetOccupiedError",
-          message: `Cannot replace agent target with non-previous content at ${path.basename(newTarget)}`,
-          cause: undefined,
-        },
-      );
+      assert.ok(error instanceof AgentTargetOccupiedError);
+      assert.strictEqual(error.targetPath, newTarget);
       return true;
     });
     assert.strictEqual(await readFile(oldTarget, "utf8"), oldBytes);
