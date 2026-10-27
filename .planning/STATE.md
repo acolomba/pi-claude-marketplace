@@ -4,17 +4,17 @@ milestone: plugin-lifecycle
 milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 2
 current_phase_name: Apply Ordering and Installed Declarations
-status: executing
-stopped_at: Completed 02-05-PLAN.md
-last_updated: "2026-10-27T06:40:19.168Z"
+status: verifying
+stopped_at: Completed 02-06-PLAN.md
+last_updated: "2026-10-27T07:18:06.431Z"
 last_activity: 2026-10-26
 last_activity_desc: Phase 2 execution started
-state_head: b29601f6678e86c3dbc4d506b53fba5f7068aa60
+state_head: 8cf5fcbe6d32ce25545a1662bb3b21f41667fde4
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 2 (Apply Ordering and Installed Declarations) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-26 — Phase 2 execution started
 
 
@@ -191,8 +191,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-27T06:40:19.054Z
-**Stopped at:** Completed 02-05-PLAN.md
+**Last session:** 2026-10-27T07:17:58.411Z
+**Stopped at:** Completed 02-06-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -409,6 +409,7 @@ archived milestone artifacts.
 | Phase 02 P03 | 81min | 3 tasks | 8 files |
 | Phase 02 P04 | 27 min | 2 tasks | 6 files |
 | Phase 02 P05 | 32min | 2 tasks | 21 files |
+| Phase 02 P06 | 30min | 3 tasks | 12 files |
 
 ## Decisions
 
@@ -622,6 +623,8 @@ archived milestone artifacts.
 - [Phase 02]: D-PL2-09: after a standalone marketplace add, the add's scope runs apply's missing-dependency step (injected ScopeDependencyInstallFn) for the dependencies the added marketplace offers; add's scope only
 - [Phase 02]: D-PL2-11 (add call site): a refused add-time install renders apply's (failed) row and cause under the (added) block and raises the notification to error
 - [Phase 02]: D-PL2-15: NFR-5 amendment -- marketplace add (any source kind), bootstrap and autoupdate may clone a git-source missing dependency on a cache miss
+- [Phase 02]: D-PL2-09 (bootstrap): bootstrap runs the missing-dependency step through its add, in the user scope, for the official marketplace's dependencies
+- [Phase 02]: D-PL2-10: marketplace update's autoupdate cascade runs the missing-dependency step after its plugin updates, for missing dependencies a plugin of that marketplace declares; wired in cascadeAutoupdates so Phase 8 inherits it; a dependency the cascade already reported is not tried again
 
 ### mcp-4 decisions
 
