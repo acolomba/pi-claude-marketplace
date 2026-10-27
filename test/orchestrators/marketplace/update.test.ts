@@ -5988,3 +5988,65 @@ test("silently stops when the marketplace vanishes after preflight", async () =>
     assert.deepStrictEqual(git.calls, []);
   });
 });
+
+for (const { layer, runsCascade } of [
+  { layer: undefined, runsCascade: true },
+  { layer: "localConfigJsonPath", runsCascade: false },
+  { layer: "baseConfigJsonPath", runsCascade: false },
+] as const) {
+  test(`D-PL8-07: an official marketplace with ${layer ?? "no invalid config layer"} ${runsCascade ? "runs" : "does not run"} the plugin cascade`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const name = "claude-plugins-official";
+      const marketplaceRoot = path.join(cwd, name);
+      await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+      const installed = makePluginRecord();
+      await seedPathMarketplace({ cwd, name, marketplaceRoot, plugins: { hello: installed } });
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.scopeRoot, { recursive: true });
+      if (layer !== undefined) {
+        await writeFile(locations[layer], "{ invalid", "utf8");
+      }
+
+      await writeFile(
+        path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+        JSON.stringify({
+          ...(JSON.parse(VALID_MANIFEST_JSON) as Record<string, unknown>),
+          description: "Changed since the baseline",
+        }),
+        "utf8",
+      );
+      const cascadeCalls: string[] = [];
+      const pluginUpdate: PluginUpdateFn = (plugin) => {
+        cascadeCalls.push(plugin);
+        return Promise.resolve({
+          partition: "unchanged",
+          name: plugin,
+          fromVersion: installed.version,
+          toVersion: installed.version,
+          declaresAgents: false,
+          declaresMcp: false,
+          constraint: undefined,
+          declaresWorkflows: false,
+        });
+      };
+
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updateMarketplace({
+        completionCache: createCompletionCache(),
+        ctx,
+        run,
+        name,
+        scope: "project",
+        cwd,
+        gitOps: makeForbiddenGitOps().gitOps,
+        pluginUpdate,
+      });
+
+      // assert
+      assert.deepStrictEqual(cascadeCalls, runsCascade ? ["hello"] : []);
+    });
+  });
+}

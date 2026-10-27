@@ -468,7 +468,7 @@ test("bare list emits the exact many-row notification in project-then-user inser
   });
 });
 
-test("invalid local config is ignored while the valid base autoupdate value renders", async () => {
+test("an invalid local config turns off the autoupdate marker the valid base would render", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const locations = locationsFor("project", cwd);
@@ -506,12 +506,35 @@ test("invalid local config is ignored while the valid base autoupdate value rend
     // assert
     assert.deepStrictEqual(boundary.notifications, [
       {
-        message: "● fallback [project] <autoupdate>\n\nMarketplace list: 1 success",
+        message: "● fallback [project]\n\nMarketplace list: 1 success",
       },
     ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
     verify(boundary.ui);
+  });
+});
+
+test("an invalid config layer drops the autoupdate marker from an official marketplace", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await seedMarketplaces(locations, [pathRecord(cwd, "claude-plugins-official", "project")]);
+    await writeFile(locations.localConfigJsonPath, "{ invalid local config", "utf8");
+    const boundary = notificationBoundary("invalid layer official list", true);
+
+    // act
+    await listMarketplaces({
+      ctx: boundary.ctx,
+      cwd,
+      run: runWithNothingLoaded(),
+      scope: "project",
+    });
+
+    // assert
+    assert.deepStrictEqual(boundary.notifications, [
+      { message: "● claude-plugins-official [project]\n\nMarketplace list: 1 success" },
+    ]);
   });
 });
 

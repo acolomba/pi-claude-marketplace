@@ -13,7 +13,7 @@
 // reads. Nothing here touches the network.
 
 import { effectiveMarketplaceAutoupdate } from "../domain/official-marketplaces.ts";
-import { loadMergedScopeConfig } from "../persistence/config-merge.ts";
+import { hasInvalidConfigLayer, loadMergedScopeConfig } from "../persistence/config-merge.ts";
 import { locationsFor } from "../persistence/locations.ts";
 import { loadState } from "../persistence/state-io.ts";
 import { ownValue } from "../shared/own-key.ts";
@@ -84,15 +84,18 @@ async function readScopeMarketplaceRecord(
 
   // No extra I/O: the merged load was already happening for autoupdate, and it
   // answers the `enabled` opinion from the same parse.
-  const { merged } = await loadMergedScopeConfig(locations);
+  const outcome = await loadMergedScopeConfig(locations);
+  const { merged } = outcome;
 
   return {
     scope,
     record,
-    autoupdate: effectiveMarketplaceAutoupdate(
-      opts.marketplace,
-      ownValue(merged.marketplaces, opts.marketplace)?.entry.autoupdate,
-    ),
+    autoupdate:
+      !hasInvalidConfigLayer(outcome) &&
+      effectiveMarketplaceAutoupdate(
+        opts.marketplace,
+        ownValue(merged.marketplaces, opts.marketplace)?.entry.autoupdate,
+      ),
     declaredEnabled: declaredEnabledFor(merged, opts.pluginKey),
   };
 }

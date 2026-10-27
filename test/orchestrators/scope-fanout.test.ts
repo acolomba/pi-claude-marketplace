@@ -167,6 +167,32 @@ for (const { marketplace, autoupdate } of [
   });
 }
 
+for (const layer of ["base", "local"] as const) {
+  test(`an invalid ${layer} config layer turns the autoupdate of an official marketplace off`, async (t) => {
+    // arrange
+    const { cwd, project, root } = await makeTestScopes(t, "scope-fanout-invalid-");
+    const marketplace = "claude-plugins-official";
+    await seedState(project, { [marketplace]: marketplaceRecord("project", marketplace, root) });
+    await seedMalformedFile(
+      layer === "base" ? project.baseConfigJsonPath : project.localConfigJsonPath,
+      "{ invalid",
+    );
+
+    // act
+    const records = await collectMarketplaceRecordsByScope({
+      cwd,
+      scope: "project",
+      marketplace,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      records.map((entry) => entry.autoupdate),
+      [false],
+    );
+  });
+}
+
 test("preserves same-name project-before-user rows and explicit config values", async (t) => {
   // arrange
   const { cwd, project, root, user } = await makeTestScopes(t, "scope-fanout-order-");
@@ -318,7 +344,7 @@ test("skips an absent marketplace before malformed config files are relevant", a
   assert.deepStrictEqual(records, []);
 });
 
-test("uses valid local declarations after a malformed base config", async (t) => {
+test("uses valid local declarations after a malformed base config, with autoupdate off", async (t) => {
   // arrange
   const { cwd, project, root } = await makeTestScopes(t, "scope-fanout-base-failure-");
   await seedState(project, { alpha: marketplaceRecord("project", "alpha", root) });
@@ -358,13 +384,13 @@ test("uses valid local declarations after a malformed base config", async (t) =>
         marketplaceRoot: path.join(root, "project-alpha"),
         plugins: {},
       },
-      autoupdate: true,
+      autoupdate: false,
       declaredEnabled: true,
     },
   ]);
 });
 
-test("uses valid base declarations when the local config is malformed", async (t) => {
+test("uses valid base declarations when the local config is malformed, with autoupdate off", async (t) => {
   // arrange
   const { cwd, project, root } = await makeTestScopes(t, "scope-fanout-local-failure-");
   await seedState(project, { alpha: marketplaceRecord("project", "alpha", root) });
@@ -400,7 +426,7 @@ test("uses valid base declarations when the local config is malformed", async (t
         marketplaceRoot: path.join(root, "project-alpha"),
         plugins: {},
       },
-      autoupdate: true,
+      autoupdate: false,
       declaredEnabled: false,
     },
   ]);

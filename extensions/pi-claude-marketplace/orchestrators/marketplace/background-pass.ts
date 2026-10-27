@@ -31,7 +31,7 @@
 // and this runtime does not retry them.
 
 import { effectiveMarketplaceAutoupdate } from "../../domain/official-marketplaces.ts";
-import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
+import { hasInvalidConfigLayer, loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -42,7 +42,7 @@ import { ownValue } from "../../shared/own-key.ts";
 
 import type { BackgroundGate } from "./background-gate.ts";
 import type { UpdateMarketplaceOptions } from "./update.ts";
-import type { MergedConfig } from "../../persistence/config-merge.ts";
+import type { ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationEntrySink, NotificationRun } from "../../shared/notification-run.ts";
@@ -113,6 +113,8 @@ const ABORTED_NOTE = "the update ran past the background wait cap and was stoppe
 interface PassHalt {
   /** True once the runtime stopped or a step was aborted. */
   readonly isHalted: () => boolean;
+  /** True once the runtime stopped. */
+  readonly isStopped: () => boolean;
   /** Notes a step that ended; an aborted one halts the pass. Returns whether it was aborted. */
   readonly noteStepEnded: (signal: AbortSignal) => boolean;
 }
@@ -121,6 +123,7 @@ function createPassHalt(isStopped: () => boolean): PassHalt {
   let aborted = false;
   return {
     isHalted: () => aborted || isStopped(),
+    isStopped,
     noteStepEnded: (signal) => {
       if (signal.aborted) {
         aborted = true;
@@ -139,11 +142,17 @@ interface PassStep {
   readonly pluginUpdate: PluginUpdateFn;
 }
 
-/** D-PL8-07 (reversed): a marketplace with no config value gets the default for its name. */
-function isAutoupdateOn(merged: MergedConfig, name: string): boolean {
-  return effectiveMarketplaceAutoupdate(
-    name,
-    ownValue(merged.marketplaces, name)?.entry.autoupdate,
+/**
+ * D-PL8-07: a marketplace with no config value gets the default for its name.
+ * An invalid config layer turns autoupdate off for the scope (fail closed).
+ */
+function isAutoupdateOn(outcome: ScopeLoadOutcome, name: string): boolean {
+  return (
+    !hasInvalidConfigLayer(outcome) &&
+    effectiveMarketplaceAutoupdate(
+      name,
+      ownValue(outcome.merged.marketplaces, name)?.entry.autoupdate,
+    )
   );
 }
 
@@ -151,8 +160,8 @@ async function autoupdateMarketplaces(scope: Scope, cwd: string): Promise<readon
   try {
     const locations = locationsFor(scope, cwd);
     const state = await loadState(locations.extensionRoot, { persistMigration: false });
-    const { merged } = await loadMergedScopeConfig(locations);
-    return Object.keys(state.marketplaces).filter((name) => isAutoupdateOn(merged, name));
+    const outcome = await loadMergedScopeConfig(locations);
+    return Object.keys(state.marketplaces).filter((name) => isAutoupdateOn(outcome, name));
   } catch (err: unknown) {
     hookDebugLog(`background update skipped the ${scope} scope: ${errorMessage(err)}`, DEBUG_TAG);
     return [];
@@ -278,14 +287,20 @@ async function runPluginStep(
 function yieldingPluginUpdate(args: YieldingPluginUpdateArgs): PluginUpdateFn {
   const { gate, cwd, halt, updated } = args;
   return async (plugin, marketplace, scope) => {
+    // A stopped runtime keeps its step, so a shutdown waiter wakes only after
+    // the marketplace step ends.
+    if (halt.isStopped()) {
+      return skippedOutcome(plugin, NOT_RUN_NOTE);
+    }
+
     gate.endStep();
     const signal = await gate.beginStep();
     if (halt.isHalted()) {
       return skippedOutcome(plugin, NOT_RUN_NOTE);
     }
 
-    const { merged } = await loadMergedScopeConfig(locationsFor(scope, cwd));
-    if (!isAutoupdateOn(merged, marketplace)) {
+    const config = await loadMergedScopeConfig(locationsFor(scope, cwd));
+    if (!isAutoupdateOn(config, marketplace)) {
       return autoupdateOffOutcome(plugin);
     }
 
@@ -351,13 +366,26 @@ export function createBackgroundPass(deps: BackgroundPassDeps): BackgroundPass {
         updated,
       }),
     };
-    try {
-      await updateEveryScope(step);
-    } finally {
-      // D-PL8-15: a stopped runtime's `pi` is stale, so the run opens after the check.
+    // D-PL8-15: a stopped runtime's `pi` is stale, so the run opens after the check.
+    const notifyUpdated = (): void => {
       if (updated.length > 0 && !isStopped()) {
         notifyBackgroundUpdate(ctx, openNotificationRun(deps.pi, { kind: "load" }), updated);
       }
+    };
+
+    try {
+      await updateEveryScope(step);
+    } catch (err: unknown) {
+      // The pass's own error stays the one that propagates.
+      try {
+        notifyUpdated();
+      } catch (notifyErr: unknown) {
+        hookDebugLog(`background update notice failed: ${errorMessage(notifyErr)}`, DEBUG_TAG);
+      }
+
+      throw err;
     }
+
+    notifyUpdated();
   };
 }

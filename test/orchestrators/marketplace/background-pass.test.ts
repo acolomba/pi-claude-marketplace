@@ -1206,3 +1206,139 @@ test("D-PL8-15: a notice that throws on a stale context rejects the pass", async
     },
   );
 });
+
+test("an invalid config layer turns autoupdate off for the scope, even for an official marketplace", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-pass-invalid-config-");
+  await seedMarketplace(cwd, "project", "claude-plugins-official");
+  await seedMarketplace(cwd, "project", "alpha", true);
+  await seedMarketplace(cwd, "user", "anthropic-agent-skills");
+  await writeFile(locationsFor("project", cwd).localConfigJsonPath, "{ invalid", "utf8");
+  const { calls, deps } = createPassUnderTest({});
+  const pass = createBackgroundPass(deps);
+
+  // act
+  await pass({ ctx: sessionContext(cwd), isStopped: () => false });
+
+  // assert
+  assert.deepStrictEqual(updatedTargets(calls), ["anthropic-agent-skills [user]"]);
+});
+
+test("a config layer that turns invalid during the pass stops the marketplace's remaining plugin updates", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-pass-invalid-recheck-");
+  await seedMarketplace(cwd, "project", "claude-plugins-official");
+  const outcomes: PluginUpdateOutcome[] = [];
+  const { deps } = createPassUnderTest({
+    scripts: new Map([
+      [
+        "claude-plugins-official",
+        async (opts: UpdateMarketplaceOptions): Promise<void> => {
+          await writeFile(locationsFor("project", cwd).baseConfigJsonPath, "{ invalid", "utf8");
+          outcomes.push(
+            await requirePluginUpdate(opts)("one", "claude-plugins-official", "project"),
+          );
+        },
+      ],
+    ]),
+  });
+  const pass = createBackgroundPass(deps);
+
+  // act
+  await pass({ ctx: sessionContext(cwd), isStopped: () => false });
+
+  // assert
+  assert.deepStrictEqual(outcomes, [
+    {
+      partition: "failed",
+      name: "one",
+      notes: ["autoupdate was turned off before this update ran"],
+      reasons: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    },
+  ]);
+});
+
+test("a stopped runtime keeps the marketplace step until updateMarketplace returns", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-pass-shutdown-wait-");
+  await seedMarketplace(cwd, "project", "alpha", true);
+  const gate = createBackgroundGate();
+  const finish = deferred();
+  const reached = deferred();
+  let stopped = false;
+  let waiterResolved = false;
+  let waiter: Promise<void> = Promise.resolve();
+  const { deps } = createPassUnderTest({
+    gate,
+    scripts: new Map([
+      [
+        "alpha",
+        async (opts: UpdateMarketplaceOptions): Promise<void> => {
+          stopped = true;
+          waiter = gate.waitForStep().then(() => {
+            waiterResolved = true;
+          });
+          await requirePluginUpdate(opts)("one", "alpha", "project");
+          reached.resolve();
+          await finish.promise;
+        },
+      ],
+    ]),
+  });
+  const pass = createBackgroundPass(deps);
+
+  // act
+  const passDone = pass({ ctx: sessionContext(cwd), isStopped: () => stopped });
+  await reached.promise;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const resolvedBeforeReturn = waiterResolved;
+  finish.resolve();
+  await passDone;
+  await waiter;
+
+  // assert
+  assert.strictEqual(resolvedBeforeReturn, false);
+  assert.strictEqual(waiterResolved, true);
+});
+
+test("a notice that throws does not replace the error that ended the pass", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-pass-notice-after-error-");
+  await seedMarketplace(cwd, "project", "alpha", true);
+  const lines = observeDebugLog(t);
+  const baseUrlError = new InvalidGitHubBaseUrlError(
+    "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+    "scheme",
+  );
+  const { deps } = createPassUnderTest({
+    scripts: new Map([
+      [
+        "alpha",
+        async (opts: UpdateMarketplaceOptions): Promise<void> => {
+          await updatesPlugins("alpha", "project", ["one"])(opts);
+          throw baseUrlError;
+        },
+      ],
+    ]),
+    outcomes: new Map([["one", updatedOutcome("one", "1.1.0")]]),
+    appendEntry: () => {
+      throw new Error("the session is stale");
+    },
+  });
+  const pass = createBackgroundPass(deps);
+
+  // act & assert
+  await assert.rejects(
+    pass({ ctx: sessionContext(cwd, "rpc"), isStopped: () => false }),
+    (error) => {
+      assert.strictEqual(error, baseUrlError);
+      return true;
+    },
+  );
+  assert.ok(
+    lines.some((line) => line.includes("background update notice failed: the session is stale")),
+  );
+});

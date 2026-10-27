@@ -2992,6 +2992,33 @@ test("PL-7 / CMC-05: marketplace with autoupdate=false (or undefined) does NOT r
   });
 });
 
+test("an invalid config layer drops the <autoupdate> marker from an official marketplace", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "claude-plugins-official",
+      manifest: { name: "claude-plugins-official", plugins: [] },
+    });
+    await writeFile(locationsFor("user", cwd).localConfigJsonPath, "{ invalid", "utf8");
+    const { ctx, run, notifications, ui } = makeCtx();
+
+    // act
+    await listPlugins({ ctx, run, cwd, scope: "user" });
+
+    // assert
+    const out = notifications[0]!.message;
+    assert.match(out, /● claude-plugins-official \[user\]/);
+    assert.equal(out.includes("<autoupdate>"), false);
+
+    verify(ctx);
+    verify(ui);
+  });
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // Probe-error classification + non-`{unsupported source}`
 // surface for unexpected `resolveStrict` throws inside `availableRowComputation`.

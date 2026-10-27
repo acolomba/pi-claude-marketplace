@@ -22,7 +22,7 @@
 //   state.marketplaces); there is no alphabetic sort.
 
 import { effectiveMarketplaceAutoupdate } from "../../domain/official-marketplaces.ts";
-import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
+import { hasInvalidConfigLayer, loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { notifyWithContext, type MarketplaceRows } from "../../shared/notify-context.ts";
@@ -88,10 +88,10 @@ export async function loadMarketplaceListEntries(
     // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config).
     // Pre-compute the merged view ONCE per scope; the inner loop reads
     // `ownValue(merged.marketplaces, name)?.entry.autoupdate` for each record,
-    // and a record without a value gets the default for its name (D-PL8-07,
-    // reversed).
+    // and a record without a value gets the default for its name (D-PL8-07).
     // eslint-disable-next-line no-await-in-loop -- at most two scopes, one config read each
-    const { merged } = await loadMergedScopeConfig(locations);
+    const outcome = await loadMergedScopeConfig(locations);
+    const { merged } = outcome;
     for (const record of Object.values(state.marketplaces)) {
       // NotificationMessage construction recipe.
       // - One MarketplaceNotificationMessage per record, emitted via one
@@ -108,10 +108,12 @@ export async function loadMarketplaceListEntries(
       //   Resolve computes the reload hint (list surface emits none).
       // - Reference: catalog UAT `mixed-scopes` fixture (binding
       //   `<autoupdate>` + `<last-updated <iso>>` tokens).
-      const autoupdate = effectiveMarketplaceAutoupdate(
-        record.name,
-        ownValue(merged.marketplaces, record.name)?.entry.autoupdate,
-      );
+      const autoupdate =
+        !hasInvalidConfigLayer(outcome) &&
+        effectiveMarketplaceAutoupdate(
+          record.name,
+          ownValue(merged.marketplaces, record.name)?.entry.autoupdate,
+        );
       entries.push({
         scope,
         record,
