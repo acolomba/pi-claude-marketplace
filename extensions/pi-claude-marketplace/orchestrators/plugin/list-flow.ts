@@ -351,6 +351,7 @@ async function enumerateMarketplacePlugins(args: {
       pluginScope,
       marketplaceScope,
       marketplaceRoot: mpRecord.marketplaceRoot,
+      marketplaceSource: mpRecord.source,
       marketplaceName: mpName,
       record,
       lookup: manifestLookupFor(scopedManifest, pluginName),

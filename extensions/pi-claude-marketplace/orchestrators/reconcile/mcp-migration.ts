@@ -333,6 +333,7 @@ async function resolveOffline(
     const resolved = await resolveStrict(lookup.entry, {
       marketplaceRoot: marketplace.marketplaceRoot,
       marketplaceName: marketplace.name,
+      marketplaceSource: marketplace.source,
       resolveGitPluginRoot: clone.resolve,
     });
     if (readableOffline(resolved)) {

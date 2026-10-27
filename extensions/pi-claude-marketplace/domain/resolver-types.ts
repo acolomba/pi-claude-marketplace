@@ -202,10 +202,10 @@ export interface ResolveContext {
   /**
    * D-PL5-32: the recorded source of the marketplace that lists the plugin
    * (`MarketplaceRecord.source`). A hosted catalog holds no plugin files, so
-   * the resolver refuses every path entry of such a marketplace. When this is
-   * absent, path entries resolve under `marketplaceRoot`.
+   * the resolver refuses every path entry of such a marketplace. Required, so
+   * no construction site can silently skip the check.
    */
-  readonly marketplaceSource?: unknown;
+  readonly marketplaceSource: unknown;
   readonly readFileText?: (path: string) => Promise<string>;
   readonly statKind?: StatKindReader;
   readonly resolveGitPluginRoot?: (

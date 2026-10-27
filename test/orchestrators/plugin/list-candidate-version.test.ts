@@ -57,7 +57,11 @@ test("reports a git source with no mirror as cold", async (testContext) => {
   // act
   const candidate = await resolveListCandidate(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: MARKETPLACE_NAME },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: MARKETPLACE_NAME,
+      marketplaceSource: undefined,
+    },
     environment.locations,
   );
 
@@ -75,7 +79,11 @@ test("VER-02: a path source takes the version its plugin.json declares over the 
   // act
   const candidate = await resolveListCandidate(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: MARKETPLACE_NAME },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: MARKETPLACE_NAME,
+      marketplaceSource: undefined,
+    },
     environment.locations,
   );
 
@@ -97,7 +105,11 @@ test("VER-02: a path source with no plugin.json takes the entry's version", asyn
   // act
   const candidate = await resolveListCandidate(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: MARKETPLACE_NAME },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: MARKETPLACE_NAME,
+      marketplaceSource: undefined,
+    },
     environment.locations,
   );
 
@@ -119,7 +131,11 @@ test("VER-02: a path source that declares no version anywhere carries none", asy
   // act
   const candidate = await resolveListCandidate(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: MARKETPLACE_NAME },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: MARKETPLACE_NAME,
+      marketplaceSource: undefined,
+    },
     environment.locations,
   );
 
@@ -139,7 +155,11 @@ test("an unavailable path source carries its verdict and no version", async (tes
   // act
   const candidate = await resolveListCandidate(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: MARKETPLACE_NAME },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: MARKETPLACE_NAME,
+      marketplaceSource: undefined,
+    },
     environment.locations,
   );
 
@@ -172,7 +192,11 @@ test("VER-01: a warm git tree takes the version its plugin.json declares over th
   // act
   const candidate = await resolveListCandidate(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: MARKETPLACE_NAME },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: MARKETPLACE_NAME,
+      marketplaceSource: undefined,
+    },
     environment.locations,
   );
 
@@ -201,7 +225,11 @@ test("VER-01: a warm git tree whose plugin.json declares no version takes the en
   // act
   const candidate = await resolveListCandidate(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: MARKETPLACE_NAME },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: MARKETPLACE_NAME,
+      marketplaceSource: undefined,
+    },
     environment.locations,
   );
 
@@ -226,7 +254,11 @@ test("VER-01: a warm git tree that declares no version anywhere takes its 12-hex
   // act
   const candidate = await resolveListCandidate(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: MARKETPLACE_NAME },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: MARKETPLACE_NAME,
+      marketplaceSource: undefined,
+    },
     environment.locations,
   );
 
@@ -256,7 +288,11 @@ test("GIT-01: a pinned git source whose commit copy is cached carries that commi
   // act
   const candidate = await resolveListCandidate(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: MARKETPLACE_NAME },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: MARKETPLACE_NAME,
+      marketplaceSource: undefined,
+    },
     environment.locations,
   );
 
@@ -283,7 +319,11 @@ test("VER-01: a warm git-subdir mirror that lacks the subdirectory carries no ve
   // act
   const candidate = await resolveListCandidate(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: MARKETPLACE_NAME },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: MARKETPLACE_NAME,
+      marketplaceSource: undefined,
+    },
     environment.locations,
   );
 

@@ -128,6 +128,7 @@ function hookOnlyCtx(pluginRoot: string): ResolveContext {
   return {
     marketplaceRoot: "/abs/marketplace",
     marketplaceName: "third-party",
+    marketplaceSource: undefined,
     statKind(p: string): Promise<"file" | "dir" | null> {
       if (p === pluginRoot) {
         return Promise.resolve("dir");

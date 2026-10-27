@@ -186,7 +186,7 @@ test("seeds a same-repository URL plugin mirror with one marketplace clone", asy
     assert.strictEqual(
       await probeManifestEntry(
         entry,
-        { marketplaceRoot, marketplaceName: "third-party" },
+        { marketplaceRoot, marketplaceName: "third-party", marketplaceSource: undefined },
         locations,
       ),
       "available",
@@ -237,7 +237,7 @@ test("seeds a matching path marketplace without network operations", async () =>
     assert.strictEqual(
       await probeManifestEntry(
         entry,
-        { marketplaceRoot, marketplaceName: "third-party" },
+        { marketplaceRoot, marketplaceName: "third-party", marketplaceSource: undefined },
         locations,
       ),
       "available",
@@ -278,7 +278,7 @@ test("leaves a different-repository plugin remote and unseeded", async () => {
     assert.strictEqual(
       await probeManifestEntry(
         entry,
-        { marketplaceRoot, marketplaceName: "third-party" },
+        { marketplaceRoot, marketplaceName: "third-party", marketplaceSource: undefined },
         locations,
       ),
       "remote",

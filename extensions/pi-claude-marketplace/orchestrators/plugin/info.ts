@@ -2210,6 +2210,7 @@ async function buildInstalledGitRow(opts: {
       const resolved = await resolveStrict(entry, {
         marketplaceRoot: mpRecord.marketplaceRoot,
         marketplaceName: mpRecord.name,
+        marketplaceSource: mpRecord.source,
         readFileText: (filePath) => reader.readTextFile(filePath),
         // The tree the probe just materialized; probing again would fetch twice.
         resolveGitPluginRoot: () => Promise.resolve(presence),
@@ -2582,6 +2583,7 @@ async function buildGitNotInstalledRow(opts: {
   const ctx: ResolveContext = {
     marketplaceRoot: mpRecord.marketplaceRoot,
     marketplaceName: mpRecord.name,
+    marketplaceSource: mpRecord.source,
     readFileText: (filePath) => reader.readTextFile(filePath),
     // The tree the probe just materialized; probing again would fetch twice.
     resolveGitPluginRoot: () => Promise.resolve(presence),

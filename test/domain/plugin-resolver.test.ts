@@ -42,7 +42,11 @@ test("strict resolution rejects invalid dependencies in the selected manifest", 
   // act
   const resolved = await resolveStrict(
     { name: "host", source: "./host", dependencies: ["entry"] },
-    { marketplaceRoot: temporaryMarketplace, marketplaceName: "third-party" },
+    {
+      marketplaceRoot: temporaryMarketplace,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    },
   );
 
   // assert
@@ -143,6 +147,7 @@ function resolveContext(
   return {
     marketplaceRoot,
     marketplaceName,
+    marketplaceSource: undefined,
     statKind(p: string): Promise<"file" | "dir" | null> {
       const v = files[p];
 
@@ -899,6 +904,7 @@ test("WR-02: hooks/hooks.json EACCES propagates out of resolveStrict (not wrappe
   const context: ResolveContext = {
     marketplaceRoot: marketplaceRoot,
     marketplaceName: "third-party",
+    marketplaceSource: undefined,
     statKind(p: string): Promise<"file" | "dir" | null> {
       if (p === localRoot) {
         return Promise.resolve("dir");
@@ -1811,6 +1817,7 @@ test("WR-03: unreadable reference file (EACCES) propagates out of resolveStrict 
   const context: ResolveContext = {
     marketplaceRoot: marketplaceRoot,
     marketplaceName: "third-party",
+    marketplaceSource: undefined,
     statKind(p: string): Promise<"file" | "dir" | null> {
       if (p === localRoot) {
         return Promise.resolve("dir");
@@ -1881,7 +1888,11 @@ test("MCPR-04 symlink reference (D-14) -> unavailable + note; never reads outsid
     await writeFile(path.join(externalDir, "secret.mcp.json"), WRAPPED_MCP, "utf8");
     await symlink(path.join(externalDir, "secret.mcp.json"), path.join(pluginRoot, "x.mcp.json"));
 
-    const context: ResolveContext = { marketplaceRoot: mpRoot, marketplaceName: "third-party" };
+    const context: ResolveContext = {
+      marketplaceRoot: mpRoot,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    };
 
     // act
     const resolvedPlugin = await resolveStrict(
@@ -1912,7 +1923,11 @@ test("MCPR-04 reference path traversing a non-directory (ENOTDIR) propagates out
     // PathContainmentError). validateReferencePath re-throws it, and it must
     // propagate for the outer probe classifier to key on `.code`.
     await writeFile(path.join(pluginRoot, "afile"), "x", "utf8");
-    const context: ResolveContext = { marketplaceRoot: mpRoot, marketplaceName: "third-party" };
+    const context: ResolveContext = {
+      marketplaceRoot: mpRoot,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    };
 
     // act & assert
     await assert.rejects(
@@ -4176,6 +4191,7 @@ test("resolveStrict classifies a real file source through the default stat reade
   const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./plugin-file" }), {
     marketplaceRoot: temporaryMarketplace,
     marketplaceName: "third-party",
+    marketplaceSource: undefined,
   });
 
   // assert
@@ -4189,7 +4205,11 @@ test("resolveStrict classifies a real file source through the default stat reade
 
 test("resolveStrict classifies an existing special-file source through the default stat reader", async () => {
   // arrange
-  const context: ResolveContext = { marketplaceRoot: "/", marketplaceName: "third-party" };
+  const context: ResolveContext = {
+    marketplaceRoot: "/",
+    marketplaceName: "third-party",
+    marketplaceSource: undefined,
+  };
 
   // act
   const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./dev/null" }), context);
@@ -4220,6 +4240,7 @@ test("resolveStrict reads a real manifest through the default file reader", asyn
   const resolvedPlugin = await resolveStrict(pluginEntry(), {
     marketplaceRoot: temporaryMarketplace,
     marketplaceName: "third-party",
+    marketplaceSource: undefined,
   });
 
   // assert
@@ -4250,6 +4271,7 @@ test("resolveStrict falls through a non-directory wrapper to the bare manifest",
   const resolved = await resolveStrict(pluginEntry(), {
     marketplaceRoot: temporaryMarketplace,
     marketplaceName: "third-party",
+    marketplaceSource: undefined,
   });
 
   // assert
@@ -4276,6 +4298,7 @@ for (const code of ["EACCES", "ELOOP", undefined]) {
     const context: ResolveContext = {
       marketplaceRoot,
       marketplaceName: "third-party",
+      marketplaceSource: undefined,
       statKind(filePath) {
         if (filePath === wrappedManifest) {
           return Promise.reject(Object.assign(new Error("stat refused"), { code }));
@@ -4313,6 +4336,7 @@ test("resolveStrict propagates a source containment error below a non-directory 
       resolveStrict(pluginEntry({ source: "./afile/child" }), {
         marketplaceRoot: temporaryMarketplace,
         marketplaceName: "third-party",
+        marketplaceSource: undefined,
       }),
     (error: unknown) =>
       error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOTDIR",
@@ -4333,6 +4357,7 @@ test("resolveStrict propagates a component containment error below a non-directo
       resolveStrict(pluginEntry({ skills: ["afile/child"] }), {
         marketplaceRoot: temporaryMarketplace,
         marketplaceName: "third-party",
+        marketplaceSource: undefined,
       }),
     (error: unknown) =>
       error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOTDIR",
@@ -4369,6 +4394,7 @@ test("resolveStrict propagates a non-Error manifest read rejection (not wrapped 
   const context: ResolveContext = {
     marketplaceRoot,
     marketplaceName: "third-party",
+    marketplaceSource: undefined,
     statKind(filePath) {
       if (filePath === localRoot) {
         return Promise.resolve("dir");
@@ -4433,6 +4459,7 @@ test("resolveStrict propagates a non-Error standalone mcp read rejection (not wr
   const context: ResolveContext = {
     marketplaceRoot,
     marketplaceName: "third-party",
+    marketplaceSource: undefined,
     statKind(filePath) {
       if (filePath === localRoot) {
         return Promise.resolve("dir");

@@ -224,6 +224,7 @@ interface FetchTargetEntry {
   readonly entry: ManifestEntry;
   readonly marketplace: string;
   readonly marketplaceRoot: string;
+  readonly marketplaceSource: unknown;
   readonly scope: Scope;
   readonly locations: ScopedLocations;
 }
@@ -294,7 +295,7 @@ async function enumerateFetchTargets(opts: FetchPluginsOptions): Promise<FetchEn
  */
 async function enumerateMarketplaceEntries(
   mpName: string,
-  mp: { manifestPath: string; marketplaceRoot: string },
+  mp: { manifestPath: string; marketplaceRoot: string; source: unknown },
   scope: Scope,
   locations: ScopedLocations,
   wantPlugin: string | undefined,
@@ -307,6 +308,7 @@ async function enumerateMarketplaceEntries(
         entry,
         marketplace: mpName,
         marketplaceRoot: mp.marketplaceRoot,
+        marketplaceSource: mp.source,
         scope,
         locations,
       });
@@ -385,6 +387,7 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
     const marketplaceContext = {
       marketplaceRoot: target.marketplaceRoot,
       marketplaceName: target.marketplace,
+      marketplaceSource: target.marketplaceSource,
     };
     return await freshRow(entry, marketplaceContext, locations, deps.status);
   } catch (err) {
@@ -465,7 +468,10 @@ function skippedUpToDate(entry: ManifestEntry): FetchMsg {
  */
 async function freshRow(
   entry: ManifestEntry,
-  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
+  marketplaceContext: Pick<
+    ResolveContext,
+    "marketplaceRoot" | "marketplaceName" | "marketplaceSource"
+  >,
   locations: ScopedLocations,
   status: FetchStatus,
 ): Promise<FetchMsg> {
@@ -496,7 +502,10 @@ async function freshRow(
  */
 async function reasonedRow(
   entry: ManifestEntry,
-  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
+  marketplaceContext: Pick<
+    ResolveContext,
+    "marketplaceRoot" | "marketplaceName" | "marketplaceSource"
+  >,
   locations: ScopedLocations,
   meta: { version?: string; description?: string },
   status: FetchStatus,

@@ -212,6 +212,8 @@ function makeSyncCloneOnce(
       });
     }
     // path-source: NFR-5 noop. The manifest is re-read per-plugin.
+    // hosted catalog: nothing to sync here; `marketplace update` and autoupdate
+    // refresh it, not `plugin update`.
   };
 }
 
