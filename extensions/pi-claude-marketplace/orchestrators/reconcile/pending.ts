@@ -73,13 +73,19 @@ import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { scanRetainedWorkflowsStaging } from "../plugin/workflows-staging-gc.ts";
 
 import {
+  installedCopyReader,
   movesAfterInstalls,
   planConvergenceCascade,
   settleMoveCascade,
   stepsAfterInstalls,
   withPlannedInstallsLanded,
 } from "./convergence.ts";
-import { buildScopeSatisfactionVerdict, verdictAfterToggles } from "./dependency-verdict.ts";
+import { reportDeclarerFailure } from "./delisted-plugins.ts";
+import {
+  buildScopeSatisfactionVerdict,
+  judgeFinalScope,
+  verdictAfterToggles,
+} from "./dependency-verdict.ts";
 import {
   buildReconcilePendingNotification,
   isReconcilePlanListEmpty,
@@ -95,7 +101,14 @@ import {
   type PendingMsg,
 } from "./reconcile.messaging.ts";
 
-import type { CascadeStep, PlannedDecline, PlannedHold, PlannedMove } from "./convergence.ts";
+import type { PerEntryOutcome, PluginDeclarerUnreadableOutcome } from "./apply-outcomes.ts";
+import type {
+  CascadeStep,
+  ConvergenceCascade,
+  PlannedDecline,
+  PlannedHold,
+  PlannedMove,
+} from "./convergence.ts";
 import type { ScopeSatisfactionVerdict } from "./dependency-verdict.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
@@ -319,6 +332,44 @@ export interface PendingReport {
 }
 
 /**
+ * D-PL2-25 / REC-05: the row of each record whose installed copy cannot be
+ * used, as `apply` reports it: the one that ended the catalog moves, then the
+ * one the judgement after them meets over the scope as it stands. A record
+ * gets one row.
+ */
+async function refusedCopyRows(
+  scope: Scope,
+  state: ExtensionState,
+  locations: ScopedLocations,
+  cascade: ConvergenceCascade,
+): Promise<PluginDeclarerUnreadableOutcome[]> {
+  const failures = [cascade.installedCopyFailure];
+  const readCopy = installedCopyReader(locations);
+  await judgeFinalScope({
+    state,
+    locations,
+    installedDeclarations: async (mp, plugin, record) => {
+      const copy = await readCopy(mp, plugin, record);
+      if (!copy.ok) {
+        failures.push(copy);
+      }
+
+      return copy;
+    },
+  });
+  const rows: PerEntryOutcome[] = [];
+  for (const failure of failures) {
+    if (failure !== null) {
+      reportDeclarerFailure(scope, failure, rows);
+    }
+  }
+
+  return rows.filter(
+    (row): row is PluginDeclarerUnreadableOutcome => row.kind === "plugin-declarer-unreadable",
+  );
+}
+
+/**
  * D-05 / D-06: reads each scope's config and state, plans it the way `apply`
  * would, and folds the plans and the failed blocks into one report. Offline
  * (NFR-5) and write-free. `scopes` is read in the order given (MSG-GR-3).
@@ -340,6 +391,7 @@ export async function composePendingReport(opts: {
   >();
   const recordedVersions: (readonly [string, string])[] = [];
   const afterInstalls: CascadeStep[] = [];
+  const refusedCopies: PluginDeclarerUnreadableOutcome[] = [];
   const convergence: {
     readonly moves: PlannedMove[];
     readonly holds: PlannedHold[];
@@ -454,6 +506,10 @@ export async function composePendingReport(opts: {
       settled.cascade ??
       // eslint-disable-next-line no-await-in-loop -- at most two scopes, one convergence plan each
       (await planConvergenceCascade({ scope, state, locations: loc, plan: settled.plan }));
+    // D-PL2-25: a record whose installed copy cannot be used lists the row
+    // `apply` reports for it.
+    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one final judgement each
+    refusedCopies.push(...(await refusedCopyRows(scope, state, loc, cascade)));
     // WR-02: a held-down record `apply` moves and then enables lists one row.
     const scopePlan = settled.preview;
     plans.push(scopePlan);
@@ -497,7 +553,8 @@ export async function composePendingReport(opts: {
   if (
     invalidBlocks.length === 0 &&
     isReconcilePlanListEmpty(plans) &&
-    moves.length + holds.length + declines.length + afterInstalls.length === 0
+    moves.length + holds.length + declines.length + afterInstalls.length === 0 &&
+    refusedCopies.length === 0
   ) {
     return { marketplaces: [], retained, needsApply: false };
   }
@@ -542,6 +599,7 @@ export async function composePendingReport(opts: {
     new Map(recordedVersions),
     convergence,
     afterInstalls,
+    refusedCopies,
   );
   // D-12 / OUT-07: the pending diff is bulk (it spans both scopes and many
   // marketplaces) -> Plural row cardinality. D-02: thread PENDING_CONTEXT so the

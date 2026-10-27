@@ -97,6 +97,7 @@ import type {
   PerEntryOutcome,
   PluginBackfilledOutcome,
   PluginConvergedOutcome,
+  PluginDeclarerUnreadableOutcome,
   PluginEnabledOutcome,
   PluginInstalledOutcome,
 } from "./apply-outcomes.ts";
@@ -723,6 +724,10 @@ export async function resolvePendingForceInstalls(
  *                              move rows (MISS-01, D-09-12). It never carries
  *                              the partial modifier, so its row is the bare
  *                              token. It fills from the same verdict (D-21).
+ *   - `refusedCopies`       -> after the plan buckets and before the catalog
+ *                              moves, the REC-05 row `apply` reports for a
+ *                              record whose installed copy cannot be used
+ *                              (D-PL2-25).
  *   - `afterInstalls`       -> after the dependency installs, the rows of
  *                              each step `apply` runs after them, in its
  *                              order: { status: "will update" } for a step
@@ -734,8 +739,8 @@ export async function resolvePendingForceInstalls(
  * case-insensitive, project-before-user secondary). D-PL2-02: plugin rows
  * within a block follow the order `apply` makes the changes in: marketplace
  * actions and mismatches, config installs, uninstalls, disables, enables,
- * catalog moves, missing-dependency installs, the enables and moves that wait
- * on them, then the blocked moves.
+ * refused installed copies, catalog moves, missing-dependency installs, the
+ * enables and moves that wait on them, then the blocked moves.
  */
 export function buildReconcilePendingNotification(
   plans: readonly ReconcilePlan[],
@@ -743,6 +748,7 @@ export function buildReconcilePendingNotification(
   recordedVersions: ReadonlyMap<string, string> = new Map<string, string>(),
   convergence: ConvergencePlan = NO_CONVERGENCE,
   afterInstalls: readonly CascadeStep[] = [],
+  refusedCopies: readonly PluginDeclarerUnreadableOutcome[] = [],
 ): {
   readonly marketplaces: readonly MarketplaceRows<PendingMsg>[];
 } {
@@ -804,6 +810,12 @@ export function buildReconcilePendingNotification(
         name: o.plugin,
       });
     }
+  }
+
+  // D-PL2-25: `apply` reports a record whose installed copy it cannot use
+  // before its catalog moves.
+  for (const o of refusedCopies) {
+    ensureMarketplaceBlock(byMp, o.scope, o.marketplace).plugins.push(declarerUnreadableRow(o));
   }
 
   pushConvergenceMoves(byMp, convergence);
@@ -1402,22 +1414,29 @@ function applyPluginOutcomeToBlock(
       block.plugins.push(failedRowFromOutcome(outcome));
       return block;
     case "plugin-declarer-unreadable":
-      block.plugins.push({
-        status: "failed",
-        name: outcome.plugin,
-        reasons: [outcome.reason],
-        cause: outcome.cause,
-        // REC-05: the dependency check failed, not the plugin, which stays
-        // installed and loading -- the carried-out-but-short warning arm.
-        severity: "warning",
-        needsReload: false,
-      });
+      block.plugins.push(declarerUnreadableRow(outcome));
       return block;
     case "plugin-converged":
       // D-08 / D-12: the row was composed where the move's verdict was read.
       block.plugins.push(outcome.row);
       return block;
   }
+}
+
+/**
+ * REC-05: the row of a declarer whose declarations could not be established.
+ * The dependency check failed, not the plugin, which stays installed and
+ * loading -- the carried-out-but-short warning arm.
+ */
+function declarerUnreadableRow(outcome: PluginDeclarerUnreadableOutcome): PluginFailedMessage {
+  return {
+    status: "failed",
+    name: outcome.plugin,
+    reasons: [outcome.reason],
+    cause: outcome.cause,
+    severity: "warning",
+    needsReload: false,
+  };
 }
 
 /** The outcomes whose row is the marketplace block's own header. */

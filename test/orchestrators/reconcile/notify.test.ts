@@ -3215,6 +3215,73 @@ describe("buildReconcilePendingNotification", () => {
     });
   });
 
+  test("D-PL2-25: lists a record whose installed copy cannot be used as its failed row, after the plan's rows and before the catalog moves", () => {
+    // arrange
+    const plans = [
+      reconcilePlan("project", {
+        pluginsToEnable: [{ scope: "project", plugin: "ready", marketplace: "mp" }],
+      }),
+    ];
+    const convergence = {
+      moves: [
+        {
+          scope: "project",
+          marketplace: "mp",
+          plugin: "zcore",
+          fromVersion: "1.0.0",
+          toVersion: "2.0.0",
+          revisionChanged: true,
+          grew: false,
+          partial: false,
+        },
+      ],
+      holds: [],
+      declines: [],
+    } as const;
+    const cause = new Error("widget copy refused");
+
+    // act
+    const pending = buildReconcilePendingNotification(
+      plans,
+      new Set(),
+      new Map(),
+      convergence,
+      [],
+      [
+        {
+          kind: "plugin-declarer-unreadable",
+          scope: "project",
+          marketplace: "mp",
+          plugin: "widget",
+          reason: "unreadable manifest",
+          cause,
+        },
+      ],
+    );
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            { status: "will enable", name: "ready" },
+            {
+              status: "failed",
+              name: "widget",
+              reasons: ["unreadable manifest"],
+              cause,
+              severity: "warning",
+              needsReload: false,
+            },
+            { status: "will update", name: "zcore", from: "1.0.0", to: "2.0.0" },
+          ],
+        },
+      ],
+    });
+  });
+
   test("D-14 / UPR-02: a same-version move names its commits after the plan's rows", () => {
     // arrange
     const fromCommit = "a".repeat(40);

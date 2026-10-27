@@ -18,7 +18,7 @@
 // no-mutation assertions from racing a fire-and-forget write.
 
 import assert from "node:assert/strict";
-import fs, { chmod, mkdir, readdir, readFile, utimes, writeFile } from "node:fs/promises";
+import fs, { chmod, mkdir, readdir, readFile, symlink, utimes, writeFile } from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 import { test } from "node:test";
@@ -1499,6 +1499,92 @@ test("D-12: composePendingReport does not count a range hold as a change apply m
     retained: {},
     needsApply: false,
   });
+});
+
+/**
+ * Records `plugin` of `tools` at a per-commit copy under the plugin clones
+ * whose manifest links to a file in the project directory, outside its plugin
+ * directory, so its installed copy cannot be used.
+ */
+async function pinToEscapingCopy(
+  locations: ScopedLocations,
+  cwd: string,
+  plugin: string,
+): Promise<void> {
+  const copy = path.join(locations.pluginClonesDir, `${plugin}-copy`);
+  const outside = path.join(cwd, "outside-plugin.json");
+  await writeUnder(outside, JSON.stringify({ name: plugin, version: "1.0.0" }));
+  await mkdir(path.join(copy, ".claude-plugin"), { recursive: true });
+  await symlink(outside, path.join(copy, ".claude-plugin", "plugin.json"));
+  const state = JSON.parse(await readFile(locations.stateJsonPath, "utf8")) as {
+    readonly marketplaces: {
+      readonly tools: { readonly plugins: Record<string, Record<string, unknown>> };
+    };
+  };
+  state.marketplaces.tools.plugins[plugin] = {
+    ...state.marketplaces.tools.plugins[plugin],
+    resolvedSource: copy,
+    resolvedSha: "a".repeat(40),
+  };
+  await writeFile(locations.stateJsonPath, JSON.stringify(state, null, 2), "utf8");
+}
+
+/** D-PL2-25 / REC-05: the one row pending lists for `widget`'s refused copy. */
+const REFUSED_WIDGET_COPY_PENDING = {
+  message:
+    "A plugin operation needs attention.\n" +
+    "\n" +
+    "● tools [project]\n" +
+    "  ⊘ widget (failed) {unreadable manifest}\n" +
+    "    cause: cannot read the dependencies of widget@tools: its own manifest is present but cannot be read\n" +
+    "\n" +
+    "Reconcile pending: 1 warning",
+  severity: "warning",
+};
+
+test("D-PL2-25: pending lists an enabled record whose installed copy cannot be used as the row apply reports", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "refused-copy-steady");
+  const offered = { widget: { version: "1.0.0" } };
+  await stageDependencyScope(cwd, project, {
+    offered,
+    recorded: { widget: { version: "1.0.0" } },
+    declared: [{ key: "widget@tools", enabled: true }],
+  });
+  await stageOfferedPlugins(project, offered);
+  await pinToEscapingCopy(project, cwd, "widget");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+
+  // assert
+  assert.deepStrictEqual(notifications, [REFUSED_WIDGET_COPY_PENDING]);
+  verifyBoundary();
+});
+
+test("D-PL2-25: pending lists a refused installed copy that ends the catalog moves once, with no move", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "refused-copy-moves");
+  const offered = { widget: { version: "1.1.0" }, zcore: { version: "2.0.0" } };
+  await stageDependencyScope(cwd, project, {
+    offered,
+    recorded: { widget: { version: "1.0.0" }, zcore: { version: "1.0.0" } },
+    declared: [
+      { key: "widget@tools", enabled: true },
+      { key: "zcore@tools", enabled: true },
+    ],
+  });
+  await stageOfferedPlugins(project, offered);
+  await pinToEscapingCopy(project, cwd, "widget");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+
+  // assert
+  assert.deepStrictEqual(notifications, [REFUSED_WIDGET_COPY_PENDING]);
+  verifyBoundary();
 });
 
 test("D-05-07: a declarer whose manifest cannot be read plans no dependency row", async (t) => {
