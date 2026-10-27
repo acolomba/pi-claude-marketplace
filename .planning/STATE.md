@@ -6,10 +6,10 @@ current_phase: 1
 current_phase_name: Staging Warning Channels
 status: verifying
 stopped_at: Phase 09 complete, ready to verify Phase 1
-last_updated: "2026-10-27T12:05:01.668Z"
+last_updated: "2026-10-27T13:10:46.151Z"
 last_activity: 2026-10-27
 last_activity_desc: Phase 09 complete, transitioned to Phase 1
-state_head: f4161a3468ba8cf1105fe3e5916062ce45b9bc81
+state_head: 62d64d34af32b5235d5df3511dcddfbff09f7d58
 progress:
   total_phases: 11
   completed_phases: 1
@@ -34,7 +34,7 @@ component as a working Pi artifact.
 Phase: 1 — Staging Warning Channels
 Plan: 4
 Status: Phase complete — ready for verification
-Last activity: 2026-10-27 - Completed quick task 261027-95p: lockfile sanitizer, Windows npm, tree kill
+Last activity: 2026-10-27 - Completed quick task 261027-b8d: autoupdate package note, uninstall packages, BOM
 
 
 ### mcp-4 closeout
@@ -189,6 +189,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-glv | GV-01: an update with no tag drops the tag commit from the record; plugin directory plugins pick no release tag and their listed copy answers the range | 2026-10-26 | 33c9ac69 | complete | [261026-glv-match-claude-code-on-untagged-updates-an](./quick/261026-glv-match-claude-code-on-untagged-updates-an/) |
 | 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
 | 261027-95p | Port the lockfile sanitizer, start npm through npm-cli.js on Windows, kill the package manager tree on timeout | 2026-10-27 | f4161a34 | — | [261027-95p-plugin-package-install-sanitizer-windows](./quick/261027-95p-plugin-package-install-sanitizer-windows/) |
+| 261027-b8d | Show the autoupdate package note, remove installed packages on uninstall, strip a byte-order mark in package files | 2026-10-27 | 62d64d34 | — | [261027-b8d-autoupdate-package-note-and-uninstall-no](./quick/261027-b8d-autoupdate-package-note-and-uninstall-no/) |
 
 ## Session Continuity
 

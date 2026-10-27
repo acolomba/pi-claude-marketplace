@@ -13,4 +13,4 @@ Review: `09-REVIEW.md` (commit 8b968b69). Fixes landed in a5ec61b8..adb28310; `n
 | WR-05 package ops not injectable | Fixed: `packageInstallOps` on the ledger seam and the runner | a5ec61b8 |
 | IN-01..IN-08 | Follow-ups, recorded in `09-05-SUMMARY.md` addendum | — |
 
-Residue from the fixes (not findings): `marketplace update` autoupdate rows (`orchestrators/marketplace/update.messaging.ts`) dropped the note, fixed in 93e5cd3c (D-PL9-21: a warning diagnostic after the cascade rows); a grandchild process holding the pipes can outlive the run (no process-group kill).
+Residue from the fixes (not findings): `marketplace update` autoupdate rows (`orchestrators/marketplace/update.messaging.ts`) dropped the note, fixed in 93e5cd3c (D-PL9-21: a warning diagnostic after the cascade rows); a grandchild process holding the pipes could outlive the run, fixed in f4161a34 (D-PL9-19: the timeout stops the whole process tree).
