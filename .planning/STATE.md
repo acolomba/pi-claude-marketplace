@@ -1,19 +1,16 @@
 ---
 gsd_state_version: "1.0"
-milestone: lifecycle-coverage
-status: Awaiting next milestone
-stopped_at: Milestone lifecycle-coverage completed and archived
-last_updated: "2026-10-26T23:30:00.000Z"
+milestone: plugin-lifecycle
+milestone_name: Marketplace and Plugin Lifecycle Backlog
+status: planning
+last_updated: "2026-10-27T01:13:43.054Z"
 last_activity: 2026-10-26
-last_activity_desc: Milestone lifecycle-coverage completed and archived
-state_head: ece42b450d5050bc4e7ba282aad9a140da85520b
 progress:
-  total_phases: 30
-  completed_phases: 30
-  total_plans: 76
-  completed_plans: 76
-  percent: 100
-milestone_name: Plugin Lifecycle Behavioral Tests
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -29,10 +26,11 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: Milestone lifecycle-coverage complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-10-26 - Completed quick task 261026-dpt: match Claude Code on directory pins and tag-commit listings
+Status: Defining requirements
+Last activity: 2026-10-26 — Milestone plugin-lifecycle started
+
 
 ### mcp-4 closeout
 

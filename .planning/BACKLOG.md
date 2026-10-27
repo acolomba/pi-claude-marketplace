@@ -1329,7 +1329,9 @@ Code seams: `persistence/migrate.ts` (delete), `persistence/migrate-config.ts`
 `STATE_SCHEMA.schemaVersion` union simplification), `orchestrators/reconcile/apply.ts`
 (`migrateFirstRunConfig` call site, new loud-failure guard).
 
-## PDEP-01: `claude:plugin info` silently drops version-pinned plugin dependencies
+## ~~PDEP-01: `claude:plugin info` silently drops version-pinned plugin dependencies~~ -- CLOSED
+
+**CLOSED 2026-10-26** at the plugin-lifecycle milestone start: already fixed. `info` parses dependencies with `parseDeclaredDependencies` and renders object entries with range and sha (`orchestrators/plugin/info.ts`), and dependencies are resolved and installed since #198 (8b6ac3bc). Original report follows.
 
 Surfaced 2026-08-13 spiking whether Claude Code plugins support declaring
 dependencies on other plugins and how this repo handles the field. Full
@@ -1444,7 +1446,9 @@ extend), `persistence/state-io.ts` (storage location for non-sensitive
 values), `orchestrators/plugin/install.ts` / `enable-disable.ts`
 (prompt-at-install/enable touchpoints).
 
-## UDISP-01: uninstall deletes plugin data unconditionally, no `--keep-data` escape hatch
+## ~~UDISP-01: uninstall deletes plugin data unconditionally, no `--keep-data` escape hatch~~ -- CLOSED
+
+**CLOSED 2026-10-26** at the plugin-lifecycle milestone start: already fixed. `uninstall --keep-data` shipped with #198 (8b6ac3bc, DATA-01); scenario in `features/plugin/uninstall.feature`. Original report follows.
 
 Surfaced 2026-08-13 from a competitive-analysis gap review
 (`docs/competitive-analysis/pi-plugins.md` recommendation #1: "Uninstall
@@ -2992,7 +2996,9 @@ Code seams: `eslint.config.js` (the Sonar way block, currently scoped to
 rules), `.planning/codebase/CONVENTIONS.md` (the "Sonar way on `extensions/`
 only" bullet, which states the scope this item would change).
 
-## PMAN-01: a bare `<pluginRoot>/plugin.json` is never read
+## ~~PMAN-01: a bare `<pluginRoot>/plugin.json` is never read~~ -- CLOSED
+
+**CLOSED 2026-10-26** at the plugin-lifecycle milestone start: already fixed. `domain/manifest-path.ts` `MANIFEST_CANDIDATES` reads the wrapped then the bare `plugin.json` at every reader, and `domain/component-paths.ts` normalizes paths before the dedup check (#198, 8b6ac3bc). Original report follows.
 
 Surfaced 2026-09-09 while correcting [UDISP-01]. Verified by source read,
 against the installed Claude Code CLI v2.1.236, and against the four
@@ -3523,7 +3529,9 @@ LOAD-03 already settled for the reconcile-driven uninstall, which deliberately
 carries no dependents brace for exactly this reason. Refusing the removal is
 NOT on the table: it would re-introduce the deadlock this phase removed.
 
-## PENDING-VERDICT-01: `pending` previews an enable the next reload will undo
+## ~~PENDING-VERDICT-01: `pending` previews an enable the next reload will undo~~ -- CLOSED
+
+**CLOSED 2026-10-26** at the plugin-lifecycle milestone start: already fixed. `orchestrators/reconcile/pending.ts` computes `buildScopeSatisfactionVerdict` and passes it to `planReconcile` (D-21, #274, eab57d73). Original report follows.
 
 Surfaced by the Phase 6 load-time dependency check (2026-09-18), recorded by
 all three of its implementation plans and by none of their file scopes.
@@ -3583,7 +3591,9 @@ Scope when picked up: re-plan the toggle buckets after any mutating bucket,
 not only the dependency-install step, and measure the added read-pass cost on
 a steady-state reload before shipping it.
 
-## TEST-TMPLEAK-01: clone-cache tests leak their mkdtemp fixtures into /tmp
+## ~~TEST-TMPLEAK-01: clone-cache tests leak their mkdtemp fixtures into /tmp~~ -- CLOSED
+
+**CLOSED 2026-10-26** at the plugin-lifecycle milestone start: already fixed. every `mkdtemp` in `test/orchestrators/plugin/clone-cache.test.ts` has a `t.after` removal (#274, eab57d73). Original report follows.
 
 Surfaced during Phase 9's code review (2026-09-22): the host `/tmp` tmpfs hit
 100% inodes with ~29.8k `clone-cache*`, `clone-cache-marketplace-*` and

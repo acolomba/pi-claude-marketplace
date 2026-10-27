@@ -21,6 +21,33 @@ Use these terms in code, messages, docs, and planning (user decisions 2026-10-17
 - **Declaration:** an entry in a layer. **Installation:** the plugin's artifacts and record in a scope.
 - **Effective configuration:** a scope's two layers merged field by field, local winning on conflicts. The same intent may be declared in both layers.
 
+## Current Milestone: plugin-lifecycle -- Marketplace and Plugin Lifecycle Backlog (branch: features/plugin-lifecycle, started 2026-10-26)
+
+**Goal:** Every open `BACKLOG.md` entry about the marketplace and plugin
+lifecycle is fixed, implemented, or closed with a recorded decision, with
+Claude Code's `/plugin` behavior as the reference.
+
+**Target features:**
+
+- Staging warnings reach the user from `enable`, the update and reinstall
+  cascades, and failed runs; the two warning channels are typed apart.
+- `pending` and `apply` agree in one run; dependency declarations come from
+  the installed copy.
+- Dependency cascade rows, refusals, and status match Claude Code; the
+  resolver installs what it previewed.
+- Marketplace parity: reserved names, hosted `marketplace.json` URLs, the
+  `market` alias, row ids, shorthand parsing, remove reporting.
+- Import registers marketplaces as Claude Code does.
+- One git-host failure classifier; clone reads and cleanup under the lock.
+- Background autoupdate and plugin package-dependency installs, as Claude
+  Code does them.
+- Lifecycle-coverage test, harness, code, and doc leftovers.
+
+**Key context:** Phases 1-9 run in parallel, each in its own session and
+worktree; phases 10 and 11 run after they merge. Each phase decides by
+upstream parity, records decisions with IDs, and reports every uncertain
+choice to the parent session for the user to review.
+
 ## Previous Milestone: lifecycle-coverage -- Plugin Lifecycle Behavioral Tests (branch: claude/plugin-lifecycle-coverage-b1d431, started 2026-10-22, completed 2026-10-25, not yet pushed, no npm release)
 
 **Goal:** The cucumber suite covers every `/claude:plugin` lifecycle command,
