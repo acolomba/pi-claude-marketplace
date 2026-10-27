@@ -141,7 +141,14 @@ Before(async (): Promise<void> => {
       skills: [],
       payloads: [],
       marketplaces: [],
-      gitHost: { repositories: [], arms: [], requests: [], connections: 0, children: 0 },
+      gitHost: {
+        repositories: [],
+        files: [],
+        arms: [],
+        requests: [],
+        connections: 0,
+        children: 0,
+      },
     },
   );
 });
