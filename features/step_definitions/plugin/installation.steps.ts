@@ -20,7 +20,7 @@
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, readlink, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
@@ -141,23 +141,29 @@ async function writeUserFile(
   assert.equal(await readFile(file, "utf8"), text);
 }
 
-// The `| file | text |` rows of every file under `directory`, which must
-// exist, sorted by the file's `/`-separated path inside it.
+// The `| file | text |` rows of every entry under `directory`, which must
+// exist, sorted by the entry's `/`-separated path inside it. A directory's
+// name ends in `/`; a symlink's text is its target prefixed by `-> `.
 async function fileRows(directory: string): Promise<string[][]> {
   assert.ok(existsSync(directory), `${directory} does not exist`);
   const entries = await readdir(directory, { recursive: true, withFileTypes: true });
-  const files = await Promise.all(
-    entries
-      .filter((entry) => entry.isFile())
-      .map(async (entry) => {
-        const file = path.join(entry.parentPath, entry.name);
-        return {
-          name: path.relative(directory, file).split(path.sep).join("/"),
-          text: await readFile(file, "utf8"),
-        };
-      }),
+  const listed = await Promise.all(
+    entries.map(async (entry) => {
+      const entryPath = path.join(entry.parentPath, entry.name);
+      const name = path.relative(directory, entryPath).split(path.sep).join("/");
+      if (entry.isDirectory()) {
+        return { name: `${name}/`, text: "" };
+      }
+
+      if (entry.isSymbolicLink()) {
+        return { name, text: `-> ${await readlink(entryPath)}` };
+      }
+
+      assert.ok(entry.isFile(), `${entryPath} is not a file, directory, or symbolic link`);
+      return { name, text: await readFile(entryPath, "utf8") };
+    }),
   );
-  const rows = files
+  const rows = listed
     .sort((left, right) => left.name.localeCompare(right.name))
     .map((file) => [file.name, file.text]);
   return [["file", "text"], ...rows];
@@ -294,7 +300,8 @@ Then(
     const clones = (await readGitClones(extensionRoot(this, scope))).map((clone) => ({
       clone: clone.clone,
       origin: projectTokens("origin", clone.origin, this.tokens),
-      revision: clone.pin === undefined ? "" : projectTokens("revision", clone.pin, this.tokens),
+      revision:
+        clone.revision === undefined ? "" : projectTokens("revision", clone.revision, this.tokens),
     }));
     const rows = clones
       .sort(

@@ -111,6 +111,11 @@ export function expandTokens(text: string, tokens: RunTokens): string {
     expanded = expanded.replaceAll(token, standsFor);
   }
 
+  const unknown = /\{[a-z][a-z0-9 ._-]*\}/iu.exec(expanded)?.[0];
+  if (unknown !== undefined) {
+    throw new Error(`unknown run token: ${unknown}`);
+  }
+
   return expanded;
 }
 

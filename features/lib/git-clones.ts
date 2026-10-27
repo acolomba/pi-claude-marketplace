@@ -19,8 +19,8 @@ import path from "node:path";
 export interface GitClone {
   readonly clone: "plugin" | "marketplace";
   readonly origin: string;
-  /** The first 12 hex digits of the commit a pinned plugin clone holds. */
-  readonly pin?: string;
+  /** The first 12 hex digits of the commit a plugin clone holds. */
+  readonly revision?: string;
 }
 
 const MIRROR_KEY = /^[0-9a-f]{12}$/u;
@@ -61,10 +61,40 @@ async function originUrl(checkout: string): Promise<string> {
   assert.fail(`${file} has no origin url: ${config}`);
 }
 
+// The first 12 hex digits of the commit checked out at `checkout`, read from
+// git's loose or packed refs without spawning git.
+async function headRevision(checkout: string): Promise<string> {
+  const gitDirectory = path.join(checkout, ".git");
+  const head = (await readFile(path.join(gitDirectory, "HEAD"), "utf8")).trim();
+  if (!head.startsWith("ref: ")) {
+    return head.slice(0, 12);
+  }
+
+  const ref = head.slice("ref: ".length).trim();
+  try {
+    return (await readFile(path.join(gitDirectory, ref), "utf8")).trim().slice(0, 12);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  const packed = await readFile(path.join(gitDirectory, "packed-refs"), "utf8");
+  for (const line of packed.split("\n")) {
+    const [revision, name] = line.split(/\s+/u);
+    if (name === ref && revision !== undefined) {
+      return revision.slice(0, 12);
+    }
+  }
+
+  assert.fail(`${path.join(gitDirectory, "HEAD")} resolves to no commit`);
+}
+
 async function pluginClone(clonesDirectory: string, key: string): Promise<GitClone> {
-  const origin = await originUrl(path.join(clonesDirectory, key));
+  const checkout = path.join(clonesDirectory, key);
+  const origin = await originUrl(checkout);
   if (MIRROR_KEY.test(key)) {
-    return { clone: "plugin", origin };
+    return { clone: "plugin", origin, revision: await headRevision(checkout) };
   }
 
   const pin = PINNED_KEY.exec(key)?.[1];
@@ -72,7 +102,7 @@ async function pluginClone(clonesDirectory: string, key: string): Promise<GitClo
     assert.fail(`${path.join(clonesDirectory, key)} is not named by a plugin clone key`);
   }
 
-  return { clone: "plugin", origin, pin };
+  return { clone: "plugin", origin, revision: pin };
 }
 
 /**
@@ -84,12 +114,18 @@ async function pluginClone(clonesDirectory: string, key: string): Promise<GitClo
 export async function readGitClones(extensionRoot: string): Promise<GitClone[]> {
   const clonesDirectory = path.join(extensionRoot, "plugin-clones");
   const sourcesDirectory = path.join(extensionRoot, "sources");
+  const stagingDirectory = path.join(extensionRoot, "sources-staging");
+  assert.deepStrictEqual(
+    await subdirectories(stagingDirectory),
+    [],
+    `${stagingDirectory} holds unfinished clone staging directories`,
+  );
   const pluginClones = await Promise.all(
     (await subdirectories(clonesDirectory)).map((key) => pluginClone(clonesDirectory, key)),
   );
-  const marketplaceCheckouts = (await subdirectories(sourcesDirectory))
-    .map((name) => path.join(sourcesDirectory, name))
-    .filter((checkout) => existsSync(path.join(checkout, ".git")));
+  const marketplaceCheckouts = (await subdirectories(sourcesDirectory)).map((name) =>
+    path.join(sourcesDirectory, name),
+  );
   const marketplaceClones = await Promise.all(
     marketplaceCheckouts.map(async (checkout): Promise<GitClone> => ({
       clone: "marketplace",
