@@ -7786,6 +7786,43 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
+  test("D-PL1-25: a catalog move shows the moved plugin's skip and its dropped agent field under one updated header", async (t) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedConvergenceScope(t, "converged-both-halves", {
+      trees: { widget: { skill: "clean", agents: ["with-mcp-servers"] } },
+      supported: { widget: ["skills", "agents"] },
+      offered: { widget: "1.1.0" },
+    });
+    await collidingSkill(marketplaceRoot, "widget");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● widget v1.0.0 → v1.1.0 (updated) {requires pi-subagents}\n" +
+          "\n" +
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+      {
+        message:
+          'Plugin "widget" [project] updated; 1 declared component has a note; 1 staging warning.\n' +
+          "\n" +
+          'skill source "widget-tool" in "skills" elides to generated name "widget-tool", already produced by skill source "tool"; ignoring duplicate.\n' +
+          '[bot0] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["widget:bot0"].tools (e.g. read,bash,mcp:<server>) in Pi settings.',
+        severity: "warning",
+      },
+    ]);
+    verifyBoundary();
+  });
+
   test("UPD-DEP-D1: a config install that moves its out-of-range dependency first reports the move as pending lists it", async (t) => {
     // arrange
     const { cwd, project } = await seedConvergenceScope(

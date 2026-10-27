@@ -151,6 +151,22 @@ Feature: Plugin staging warnings
       | marketplace name | marketplace scope | id            | name | status  | reasons | scope   | from  | to    |
       | fixtures         | project           | demo@fixtures | demo | updated |         | project | 1.0.0 | 1.1.0 |
 
+  Scenario: Apply that moves a plugin to its catalog version reports the moved plugin's skip and its dropped agent field under one header
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
+    Given the published plugin "demo" of the marketplace "fixtures" has an agent "helper" that sets a color
+    When the user runs "/claude:plugin apply --scope project"
+    Then the command reports these results:
+      | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count | header                                                                               | lines                                                                                                                                                                      |
+      | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |                                                                                      |                                                                                                                                                                            |
+      | diagnostic                | warning  | false        |             |                |                |                     | Plugin "demo" [project] updated; 1 declared component has a note; 1 staging warning. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate., [helper] dropped fields: color |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons                                         | scope   | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | updated | components now supported, requires pi-subagents | project | 1.0.0 | 1.1.0 |
+
   Scenario: Apply that enables a plugin whose skills collide reports the skip under its header
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has run "/claude:plugin disable demo@fixtures --scope project"

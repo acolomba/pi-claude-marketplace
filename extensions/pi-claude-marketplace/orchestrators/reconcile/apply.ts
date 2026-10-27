@@ -103,7 +103,7 @@ import {
   createUninstallOperation,
 } from "../plugin/operations.ts";
 import { degradationFromEnable } from "../plugin/shared.ts";
-import { surfaceStagingDiagnostics } from "../plugin/staging-diagnostics.ts";
+import { surfaceCascadeStagingDiagnostics } from "../plugin/staging-diagnostics.ts";
 import { UninstallRefusedError } from "../plugin/uninstall.ts";
 
 import {
@@ -1911,9 +1911,10 @@ function reportScopePasses(
   // path that feeds it.
   surfacePostCommitWarnings(opts, outcomes);
 
-  // D-PL1-07 / D-PL1-09: each catalog move's and enable's discovery warnings,
-  // after the install block and before the MCP config notices.
-  surfaceStagingDiagnostics(opts.ctx, opts.run, stagingDiagnosticsOf(outcomes));
+  // D-PL1-07 / D-PL1-09 / D-PL1-25: each catalog move's and enable's staging
+  // warnings, both halves, after the install block and before the MCP config
+  // notices.
+  surfaceCascadeStagingDiagnostics(opts.ctx, opts.run, stagingDiagnosticsOf(outcomes));
 
   // AFILE-04: the MCP config notices every orchestrated operation returned,
   // shown after the cascade rows they explain. The empty-pass return above
