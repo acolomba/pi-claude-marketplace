@@ -6,10 +6,10 @@ current_phase: 1
 current_phase_name: Staging Warning Channels
 status: verifying
 stopped_at: Phase 02 complete, ready to verify Phase 1
-last_updated: "2026-10-27T14:07:11.092Z"
+last_updated: "2026-10-27T14:33:19.416Z"
 last_activity: 2026-10-27
 last_activity_desc: Phase 02 complete, transitioned to Phase 1
-state_head: 61bbe422eb8f20c156b4e66c1bc30fbf84d2afe1
+state_head: 05a15c749fd4c52b38ca5e3fcd6d6b3e6d256417
 progress:
   total_phases: 11
   completed_phases: 1
@@ -191,6 +191,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261027-92s | Follow installed manifest links inside the owning root; refuse escapes as unreadable | 2026-10-27 | 99157528 | — | [261027-92s-manifest-symlink-containment](./quick/261027-92s-manifest-symlink-containment/) |
 | 261027-a3r | Contain install-time manifest links; fail closed on unusable installed copies | 2026-10-27 | 57a07ac5 | — | [261027-a3r-install-time-manifest-link-containment](./quick/261027-a3r-install-time-manifest-link-containment/) |
 | 261027-cyg | Answer a manifest-less installed copy from its entry; read path records in their marketplace clone | 2026-10-27 | 61bbe422 | — | [261027-cyg-entry-only-fallback-and-path-source-owne](./quick/261027-cyg-entry-only-fallback-and-path-source-owne/) |
+| 261027-9oo | Report a waiting plugin's move as its own row; list an unusable installed copy in pending and load | 2026-10-27 | 05a15c74 | — | [261027-9oo-waiting-record-move-as-its-own-step](./quick/261027-9oo-waiting-record-move-as-its-own-step/) |
 
 ## Session Continuity
 
