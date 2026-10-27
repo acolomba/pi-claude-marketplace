@@ -841,7 +841,7 @@ test("retains the source clone when a forward-compatible recorded kind is unavai
       }
 
       sourceKindReads += 1;
-      return sourceKindReads <= 8 ? "unknown" : "future";
+      return sourceKindReads <= 10 ? "unknown" : "future";
     },
   });
   testContext.after(() => {
@@ -866,7 +866,7 @@ test("retains the source clone when a forward-compatible recorded kind is unavai
   // assert
   assert.strictEqual(outcome, undefined);
   assert.deepStrictEqual(notification.calls, [{ message: "● future-source [project] (removed)" }]);
-  assert.strictEqual(sourceKindReads, 12);
+  assert.strictEqual(sourceKindReads, 14);
   assert.strictEqual(await readFile(path.join(cloneDir, "sentinel"), "utf8"), "clone");
   assert.deepStrictEqual(await loadState(locations.extensionRoot), {
     schemaVersion: 3,
