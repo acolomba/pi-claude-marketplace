@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  symlink,
+  truncate,
+  writeFile,
+} from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { describe, test } from "node:test";
@@ -628,5 +638,200 @@ describe("createPackagesPhase", () => {
     const requireFromPlugin = createRequire(path.join(seeded.pluginRoot, "hook.cjs"));
     const loaded: unknown = requireFromPlugin("pkd-dep");
     assert.strictEqual(loaded, "pkd-dep loaded");
+  });
+
+  for (const lockfile of ["yarn.lock", "pnpm-lock.yaml"]) {
+    test(`D-PL9-01: refuses a ${lockfile} with Claude Code's note and runs nothing`, async (t) => {
+      // arrange
+      const seeded = await seedPlugin(t, { "package.json": PACKAGE_JSON, [lockfile]: LOCKFILE });
+      const runPackageManager = idleRunner();
+      const phase = createPackagesPhase(opsWith(runPackageManager));
+
+      // act
+      await phase.do(seeded.context);
+
+      // assert
+      assert.deepStrictEqual(seeded.context.discoveryWarnings, [
+        "Skipped: yarn/pnpm lockfiles are not supported (resolution-time hooks bypass --ignore-scripts). Use bun or npm.",
+      ]);
+      verify(runPackageManager);
+    });
+  }
+
+  test("D-PL9-01: runs npm when a package-lock.json sits beside a yarn.lock", async (t) => {
+    // arrange
+    const seeded = await seedPlugin(t, {
+      "package.json": PACKAGE_JSON,
+      "package-lock.json": LOCKFILE,
+      "yarn.lock": LOCKFILE,
+    });
+    const requests: PackageManagerRequest[] = [];
+    const phase = createPackagesPhase(opsWith(installingRunner(requests)));
+
+    // act
+    await phase.do(seeded.context);
+
+    // assert
+    assert.deepStrictEqual(requests, [
+      { command: "npm", args: NPM_CI_ARGUMENTS, cwd: seeded.workDir },
+    ]);
+    assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
+  });
+
+  test("D-PL9-01: refuses a bun.lockb with Claude Code's note and runs nothing", async (t) => {
+    // arrange
+    const seeded = await seedPlugin(t, { "package.json": PACKAGE_JSON, "bun.lockb": LOCKFILE });
+    const runPackageManager = idleRunner();
+    const phase = createPackagesPhase(opsWith(runPackageManager));
+
+    // act
+    await phase.do(seeded.context);
+
+    // assert
+    assert.deepStrictEqual(seeded.context.discoveryWarnings, [
+      "Skipped installing this plugin's dependencies: its bun.lockb is a binary lockfile that cannot be checked; ship a text bun.lock instead.",
+    ]);
+    verify(runPackageManager);
+  });
+
+  for (const { lockfile, command } of [
+    { lockfile: "bun.lock", command: "bun" },
+    { lockfile: "package-lock.json", command: "npm" },
+  ]) {
+    test(`D-PL9-01: runs ${command} when a ${lockfile} sits beside a bun.lockb`, async (t) => {
+      // arrange
+      const seeded = await seedPlugin(t, {
+        "package.json": PACKAGE_JSON,
+        [lockfile]: LOCKFILE,
+        "bun.lockb": LOCKFILE,
+      });
+      const commands: string[] = [];
+      const phase = createPackagesPhase(
+        opsWith((request) => {
+          commands.push(request.command);
+          return Promise.resolve(SUCCESS);
+        }),
+      );
+
+      // act
+      await phase.do(seeded.context);
+
+      // assert
+      assert.deepStrictEqual(commands, [command]);
+      assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
+    });
+  }
+
+  test("D-PL9-16: refuses a package.json that is not valid JSON and runs nothing", async (t) => {
+    // arrange
+    const seeded = await seedPlugin(t, {
+      "package.json": '{"dependencies":',
+      "package-lock.json": LOCKFILE,
+    });
+    const runPackageManager = idleRunner();
+    const phase = createPackagesPhase(opsWith(runPackageManager));
+
+    // act
+    await phase.do(seeded.context);
+
+    // assert
+    assert.deepStrictEqual(seeded.context.discoveryWarnings, [
+      "Skipped installing this plugin's dependencies: its package.json is not valid JSON.",
+    ]);
+    verify(runPackageManager);
+  });
+
+  for (const packageJson of ["[]", '"text"', "null"]) {
+    test(`refuses a package.json of ${packageJson}, which is not a JSON object, and runs nothing`, async (t) => {
+      // arrange
+      const seeded = await seedPlugin(t, {
+        "package.json": packageJson,
+        "package-lock.json": LOCKFILE,
+      });
+      const runPackageManager = idleRunner();
+      const phase = createPackagesPhase(opsWith(runPackageManager));
+
+      // act
+      await phase.do(seeded.context);
+
+      // assert
+      assert.deepStrictEqual(seeded.context.discoveryWarnings, [
+        "Skipped installing this plugin's dependencies: its package.json is not a JSON object.",
+      ]);
+      verify(runPackageManager);
+    });
+  }
+
+  for (const { file, shape, place } of [
+    {
+      file: "package.json",
+      shape: "a symlink to a file outside the plugin root",
+      place: async (seeded: SeededPlugin): Promise<void> => {
+        const outsideFile = path.join(seeded.locations.scopeRoot, "outside-package.json");
+        await writeFile(outsideFile, PACKAGE_JSON);
+        await symlink(outsideFile, path.join(seeded.pluginRoot, "package.json"));
+        await writeFile(path.join(seeded.pluginRoot, "package-lock.json"), LOCKFILE);
+      },
+    },
+    {
+      file: "package-lock.json",
+      shape: "a directory",
+      place: async (seeded: SeededPlugin): Promise<void> => {
+        await writeFile(path.join(seeded.pluginRoot, "package.json"), PACKAGE_JSON);
+        await mkdir(path.join(seeded.pluginRoot, "package-lock.json"));
+      },
+    },
+  ]) {
+    test(`T-09-06: refuses a ${file} that is ${shape} and runs nothing`, async (t) => {
+      // arrange
+      const seeded = await seedPlugin(t, {});
+      await place(seeded);
+      const runPackageManager = idleRunner();
+      const phase = createPackagesPhase(opsWith(runPackageManager));
+
+      // act
+      await phase.do(seeded.context);
+
+      // assert
+      assert.deepStrictEqual(seeded.context.discoveryWarnings, [
+        `Skipped installing this plugin's dependencies: its ${file} is not a regular file.`,
+      ]);
+      verify(runPackageManager);
+    });
+  }
+
+  test("T-09-06: refuses a package.json larger than 32 MB and runs nothing", async (t) => {
+    // arrange
+    const seeded = await seedPlugin(t, { "package.json": "", "package-lock.json": LOCKFILE });
+    await truncate(path.join(seeded.pluginRoot, "package.json"), 33_554_433);
+    const runPackageManager = idleRunner();
+    const phase = createPackagesPhase(opsWith(runPackageManager));
+
+    // act
+    await phase.do(seeded.context);
+
+    // assert
+    assert.deepStrictEqual(seeded.context.discoveryWarnings, [
+      "Skipped installing this plugin's dependencies: its package.json is not a regular file of at most 32 MB.",
+    ]);
+    verify(runPackageManager);
+  });
+
+  test("D-PL9-06: skips a plugin root with node_modules and a yarn.lock without a note", async (t) => {
+    // arrange
+    const seeded = await seedPlugin(t, {
+      "package.json": PACKAGE_JSON,
+      "yarn.lock": LOCKFILE,
+      "node_modules/kept/index.js": MODULE_TEXT,
+    });
+    const runPackageManager = idleRunner();
+    const phase = createPackagesPhase(opsWith(runPackageManager));
+
+    // act
+    await phase.do(seeded.context);
+
+    // assert
+    assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
+    verify(runPackageManager);
   });
 });

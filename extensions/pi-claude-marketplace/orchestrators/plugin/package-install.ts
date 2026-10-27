@@ -30,7 +30,7 @@
 // D-PL9-10: this is the only module that imports platform/package-manager.ts.
 
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -61,7 +61,13 @@ interface RunnableLockfile {
   readonly cacheDirVariable?: string;
 }
 
-// D-PL9-01: Claude Code's table, in its priority order.
+interface RefusedLockfile {
+  readonly lockfile: string;
+  readonly refusal: string;
+}
+
+// D-PL9-01: Claude Code's table, in its priority order. The first lockfile
+// present wins, so a bun.lock or package-lock.json beside a bun.lockb runs.
 const LOCKFILE_TABLE = [
   {
     lockfile: "bun.lock",
@@ -71,7 +77,17 @@ const LOCKFILE_TABLE = [
   },
   { lockfile: "npm-shrinkwrap.json", command: "npm", args: NPM_CI_ARGUMENTS },
   { lockfile: "package-lock.json", command: "npm", args: NPM_CI_ARGUMENTS },
-] as const satisfies readonly RunnableLockfile[];
+  {
+    lockfile: "bun.lockb",
+    refusal:
+      "its bun.lockb is a binary lockfile that cannot be checked; ship a text bun.lock instead",
+  },
+] as const satisfies readonly (RunnableLockfile | RefusedLockfile)[];
+
+// Claude Code refuses these when no table lockfile is present.
+const UNSUPPORTED_LOCKFILES = ["yarn.lock", "pnpm-lock.yaml"] as const;
+const UNSUPPORTED_LOCKFILE_NOTE =
+  "Skipped: yarn/pnpm lockfiles are not supported (resolution-time hooks bypass --ignore-scripts). Use bun or npm.";
 
 const LISTING_FIELDS = [
   "dependencies",
@@ -83,6 +99,8 @@ const LISTING_FIELDS = [
 const PACKAGE_INSTALL_TIMEOUT_MS = 60_000;
 const PACKAGE_INSTALL_KILL_GRACE_MS = 5_000;
 const NOTE_LIMIT = 500;
+// Claude Code's 32 MB cap on package.json and on the lockfile.
+const MAX_INPUT_FILE_BYTES = 33_554_432;
 const SKIPPED_PREFIX = "Skipped installing this plugin's dependencies: ";
 
 /** The ports the package step drives, declared by this consumer (D-PL9-12). */
@@ -124,7 +142,17 @@ interface PackageInstallInputs {
   readonly lockfile: Buffer;
 }
 
+// What the checks before the run decided: run nothing quietly, run nothing
+// and say why, or run the package manager on these inputs.
+type Detection =
+  | { readonly kind: "skip" }
+  | { readonly kind: "note"; readonly note: string }
+  | { readonly kind: "run"; readonly inputs: PackageInstallInputs };
+
+type Checked<T> = { readonly value: T } | { readonly refusal: string };
+
 const NOTHING_DONE: PackageStepOutcome = { createdNodeModules: false };
+const SKIP: Detection = { kind: "skip" };
 
 function isPlainObject(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -138,8 +166,57 @@ function listsSomething(value: unknown): boolean {
   return isPlainObject(value) && Object.keys(value).length > 0;
 }
 
-function listsPackages(manifest: unknown): boolean {
-  return isPlainObject(manifest) && LISTING_FIELDS.some((field) => listsSomething(manifest[field]));
+function listsPackages(manifest: Readonly<Record<string, unknown>>): boolean {
+  return LISTING_FIELDS.some((field) => listsSomething(manifest[field]));
+}
+
+function skippedNote(reason: string): string {
+  return `${SKIPPED_PREFIX}${reason}.`.slice(0, NOTE_LIMIT);
+}
+
+// lstat then read leaves a narrow window in which the file could be swapped;
+// Claude Code closes it with open-and-fstat. The inputs here come from a clone
+// this extension made or from the user's own folder.
+async function readBoundedFile(pluginRoot: string, name: string): Promise<Checked<Buffer>> {
+  const filePath = path.join(pluginRoot, name);
+  const stats = await lstat(filePath);
+  if (!stats.isFile()) {
+    return { refusal: `its ${name} is not a regular file` };
+  }
+
+  if (stats.size > MAX_INPUT_FILE_BYTES) {
+    return { refusal: `its ${name} is not a regular file of at most 32 MB` };
+  }
+
+  return { value: await readFile(filePath) };
+}
+
+// D-PL9-16: a package.json that does not parse is a note, never a throw.
+function parseManifest(bytes: Buffer): Checked<Readonly<Record<string, unknown>>> {
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(bytes.toString("utf8"));
+  } catch {
+    // JSON.parse throws only a SyntaxError, which this check reports as such.
+    return { refusal: "its package.json is not valid JSON" };
+  }
+
+  return isPlainObject(manifest)
+    ? { value: manifest }
+    : { refusal: "its package.json is not a JSON object" };
+}
+
+// The first table row present, or why nothing runs: a refused row's reason,
+// Claude Code's yarn/pnpm note, or a quiet skip.
+function chooseLockfile(entries: ReadonlySet<string>): RunnableLockfile | Detection {
+  const row = LOCKFILE_TABLE.find((candidate) => entries.has(candidate.lockfile));
+  if (row === undefined) {
+    return UNSUPPORTED_LOCKFILES.some((lockfile) => entries.has(lockfile))
+      ? { kind: "note", note: UNSUPPORTED_LOCKFILE_NOTE }
+      : SKIP;
+  }
+
+  return "refusal" in row ? { kind: "note", note: skippedNote(row.refusal) } : row;
 }
 
 async function readEntryNames(pluginRoot: string): Promise<ReadonlySet<string> | undefined> {
@@ -164,31 +241,43 @@ async function isInsideExtensionRoot(extensionRoot: string, pluginRoot: string):
   );
 }
 
-async function detectInstall(
-  pluginRoot: string,
-  locations: ScopedLocations,
-): Promise<PackageInstallInputs | undefined> {
+async function detectInstall(pluginRoot: string, locations: ScopedLocations): Promise<Detection> {
   const entries = await readEntryNames(pluginRoot);
   if (entries === undefined || !entries.has("package.json") || entries.has("node_modules")) {
-    return undefined;
+    return SKIP;
   }
 
-  const row = LOCKFILE_TABLE.find((candidate) => entries.has(candidate.lockfile));
-  if (row === undefined) {
-    return undefined;
+  const row = chooseLockfile(entries);
+  if ("kind" in row) {
+    return row;
   }
 
-  const packageJson = await readFile(path.join(pluginRoot, "package.json"));
-  if (!listsPackages(JSON.parse(packageJson.toString("utf8")))) {
-    return undefined;
+  const packageJson = await readBoundedFile(pluginRoot, "package.json");
+  if ("refusal" in packageJson) {
+    return { kind: "note", note: skippedNote(packageJson.refusal) };
   }
 
-  if (!(await isInsideExtensionRoot(locations.extensionRoot, pluginRoot))) {
-    return undefined;
+  const manifest = parseManifest(packageJson.value);
+  if ("refusal" in manifest) {
+    return { kind: "note", note: skippedNote(manifest.refusal) };
   }
 
-  const lockfile = await readFile(path.join(pluginRoot, row.lockfile));
-  return { pluginRoot, row, packageJson, lockfile };
+  if (
+    !listsPackages(manifest.value) ||
+    !(await isInsideExtensionRoot(locations.extensionRoot, pluginRoot))
+  ) {
+    return SKIP;
+  }
+
+  const lockfile = await readBoundedFile(pluginRoot, row.lockfile);
+  if ("refusal" in lockfile) {
+    return { kind: "note", note: skippedNote(lockfile.refusal) };
+  }
+
+  return {
+    kind: "run",
+    inputs: { pluginRoot, row, packageJson: packageJson.value, lockfile: lockfile.value },
+  };
 }
 
 function failedNote(command: string, detail: string): string {
@@ -271,17 +360,20 @@ async function installPluginPackages(
   locations: ScopedLocations,
   ops: PackageInstallOps,
 ): Promise<PackageStepOutcome> {
-  let inputs: PackageInstallInputs | undefined;
+  let detection: Detection;
   try {
-    inputs = await detectInstall(pluginRoot, locations);
+    detection = await detectInstall(pluginRoot, locations);
   } catch (error: unknown) {
-    return {
-      note: `${SKIPPED_PREFIX}${errorMessage(error)}.`.slice(0, NOTE_LIMIT),
-      createdNodeModules: false,
-    };
+    return { note: skippedNote(errorMessage(error)), createdNodeModules: false };
   }
 
-  return inputs === undefined ? NOTHING_DONE : runInstallStage(inputs, locations, ops);
+  if (detection.kind === "skip") {
+    return NOTHING_DONE;
+  }
+
+  return detection.kind === "note"
+    ? { note: detection.note, createdNodeModules: false }
+    : runInstallStage(detection.inputs, locations, ops);
 }
 
 /**
