@@ -81,12 +81,12 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 
 - [ ] **GLK-01**: Every remote git access classifies a host's HTTP answer through one entry point with an explicit per-operation 404/410 rule, so plugin install, update, fetch, and info report it as marketplace add and update do (GITERR-01)
 - [ ] **GLK-02**: The autoupdate cascade classifies an unclassified error as the direct update path does, not as `{not in manifest}` (CASCREASON-01)
-- [ ] **GLK-03**: Clone cleanup runs under the state lock at every call site (CLONEGC-01)
+- [x] **GLK-03**: Clone cleanup runs under the state lock at every call site (CLONEGC-01)
 - [ ] **GLK-04**: A marketplace-tag-pinned update copies the marketplace git data under a lock (TAGCOPY-01)
 - [ ] **GLK-05**: `fetch` and `info --fetch` read their result row inside the lock (FETCHROW-01)
-- [ ] **GLK-06**: Two update intent marks in the same millisecond are told apart (INTENTMS-01)
+- [x] **GLK-06**: Two update intent marks in the same millisecond are told apart (INTENTMS-01)
 - [ ] **GLK-07**: `fetch`, tab completion, and `browse` show the version `list` and `info` show (ENTRYVER-01)
-- [ ] **GLK-08**: A tag-ref reinstall with a warm mirror resolves the tag offline (LCORCH-01 b5)
+- [x] **GLK-08**: A tag-ref reinstall with a warm mirror resolves the tag offline (LCORCH-01 b5)
 
 ### Background autoupdate (AUP)
 
@@ -174,12 +174,12 @@ None.
 | MIM-04 | Phase 6 | Pending |
 | GLK-01 | Phase 7 | Pending |
 | GLK-02 | Phase 7 | Pending |
-| GLK-03 | Phase 7 | Pending |
+| GLK-03 | Phase 7 | Complete |
 | GLK-04 | Phase 7 | Pending |
 | GLK-05 | Phase 7 | Pending |
-| GLK-06 | Phase 7 | Pending |
+| GLK-06 | Phase 7 | Complete |
 | GLK-07 | Phase 7 | Pending |
-| GLK-08 | Phase 7 | Pending |
+| GLK-08 | Phase 7 | Complete |
 | AUP-01 | Phase 8 | Pending |
 | AUP-02 | Phase 8 | Pending |
 | AUP-03 | Phase 8 | Pending |
