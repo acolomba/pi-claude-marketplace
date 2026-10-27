@@ -1176,7 +1176,7 @@ describe("dependencyDisabledOutcome", () => {
   test("T-06-05: prints the range the verdict already bounded verbatim", () => {
     // arrange -- the verdict bounds the declared ranges once, so a second
     // bound here would cut the text and replace its true overflow count.
-    const bounded = `>=${"1".repeat(198)}... (+12 chars)`;
+    const bounded = `>=${"1".repeat(198)}… (+12 chars)`;
     const held = {
       scope: "user",
       marketplace: "official",

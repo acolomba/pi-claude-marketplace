@@ -96,6 +96,7 @@ function contradiction(declarers: readonly string[], key = "fff@mp"): GraphWalkF
       key,
       range: "^1.0.0, ^2.0.0",
       detail: "no version satisfies all 2 declared ranges",
+      unmaterialized: [],
     },
     declarers,
   };
@@ -119,6 +120,8 @@ function ports(world: {
   readonly preview?: (member: ResolvedCascadeMember) => Promise<string | undefined>;
   /** The judge's cause when a request cannot move. */
   readonly refusalCause?: string;
+  /** Whether that refusal would stop `update` too. */
+  readonly updateBlocked?: true;
   /** GV-01: each version lands at a release tag, its commit appended. */
   readonly tagged?: boolean;
 }): DependencyPlanPorts<PlannedCandidate> & { readonly calls: Calls } {
@@ -137,7 +140,11 @@ function ports(world: {
       const version = world.versions?.(judged);
       return Promise.resolve<PlanJudgement<PlannedCandidate>>(
         version === undefined || judged.excludedVersions?.includes(version) === true
-          ? { ok: false, cause: world.refusalCause ?? "version 1.5.0 falls outside the range" }
+          ? {
+              ok: false,
+              cause: world.refusalCause ?? "version 1.5.0 falls outside the range",
+              ...(world.updateBlocked && { updateBlocked: world.updateBlocked }),
+            }
           : { ok: true, prepared: landedAt(version, world.tagged === true) },
       );
     },
@@ -157,7 +164,13 @@ function landedAt(version: string, tagged: boolean): PlannedCandidate {
     : { toVersion: version };
 }
 
-function refusal(key: string, range: string, moveRefusal: string) {
+function refusal(
+  key: string,
+  range: string,
+  moveRefusal: string,
+  declaredBy: readonly string[],
+  updateBlocked?: true,
+) {
   return {
     ok: false,
     subject: {
@@ -169,6 +182,8 @@ function refusal(key: string, range: string, moveRefusal: string) {
         range,
         recordedVersion: "1.0.0",
         moveRefusal,
+        declaredBy,
+        ...(updateBlocked && { updateBlocked }),
       },
     },
   } as const;
@@ -551,7 +566,7 @@ describe("planDependencyGraph", () => {
     // assert
     assert.deepStrictEqual(
       plan,
-      refusal("lib@mp", "^2.0.0", "version 1.5.0 falls outside the range"),
+      refusal("lib@mp", "^2.0.0", "version 1.5.0 falls outside the range", ["aaa@mp", "app@mp"]),
     );
     assert.deepStrictEqual(bound.calls.judged, [request("lib", requesters)]);
   });
@@ -562,6 +577,7 @@ describe("planDependencyGraph", () => {
       walks: { "": graph([wall("lib", "1.0.0", APP_ASKS_2)], ["lib@mp"]) },
       refusalCause:
         "Cannot replace agent target with non-previous content at /scope/.pi/agents/pi-claude-marketplace-lib-helper.md",
+      updateBlocked: true,
     });
 
     // act
@@ -574,13 +590,20 @@ describe("planDependencyGraph", () => {
         "lib@mp",
         "^2.0.0",
         "Cannot replace agent target with non-previous content at pi-claude-marketplace-lib-helper.md",
+        ["app@mp"],
+        true,
       ),
     );
   });
 
   test("UPD-DEP-D1: refuses a closure the walk cannot resolve", async () => {
     // arrange
-    const failure = { ok: false, reason: "cycle", chain: ["app@mp", "aaa@mp", "app@mp"] } as const;
+    const failure = {
+      ok: false,
+      reason: "cycle",
+      chain: ["app@mp", "aaa@mp", "app@mp"],
+      unmaterialized: [],
+    } as const;
     const bound = ports({ walks: { "": { kind: "closure-failed", failure, declarers: [] } } });
 
     // act
@@ -901,6 +924,7 @@ describe("planDependencyGraph", () => {
         "lib@mp",
         "^2.0.0",
         "its version does not settle: each version chosen for it changes what the other dependencies need",
+        ["app@mp"],
       ),
     );
     assert.deepStrictEqual(bound.calls.walks, ["", "lib@mp=2.0.0"]);

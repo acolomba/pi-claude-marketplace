@@ -5122,6 +5122,7 @@ for (const allowGamma of [false, true]) {
                 "Some plugin operations have failed.\n\n" +
                 "● alpha [project]\n" +
                 "  ⊘ hello (failed) {dependency failed}\n" +
+                "  ⊘ some-other-plugin@beta (failed) {dependency failed}\n" +
                 "  ⊘ some-other-plugin@gamma (failed) {cross-marketplace}\n" +
                 '    cause: Dependency "some-other-plugin@gamma", declared by "some-other-plugin@beta", is from marketplace "gamma", which root marketplace "alpha" does not allow. Install "some-other-plugin@gamma" manually first, or add "gamma" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "alpha".',
             },
@@ -5263,7 +5264,7 @@ test("RESV-03 regression: an unreadable version constraint still fails the insta
       // ledger phase, so state.json and the scope root are byte-identical.
       assertRetryFailure(
         outcome,
-        'Dependency "some-other-plugin@mp" declares an unparseable version constraint not-a-version-range (input 1 of 1 is not a valid version range).',
+        'Dependency "some-other-plugin@mp" declares an unparseable version constraint \u201cnot-a-version-range\u201d (input 1 of 1 is not a valid version range).',
       );
       assert.deepStrictEqual(notifications, []);
       assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
@@ -18580,7 +18581,7 @@ test("UPD-DEP-D1: installing refuses a plugin whose installed dependency no rele
           "● mp [project]",
           "  ⊘ app (failed) {dependency failed}",
           "  ⊘ lib@mp v1.2.0 (failed) {already installed, version conflict}",
-          '    cause: Dependency "lib@mp" is installed at version 1.2.0, which does not satisfy ^2.0.0, and cannot move: version 1.2.0 falls outside what the combined range admits (^2.0.0) -- required by "app@mp"',
+          '    cause: Dependency "lib@mp" is installed at version 1.2.0, which does not satisfy ^2.0.0, and cannot move: version 1.2.0 falls outside what the combined range admits (^2.0.0) -- required by "app@mp". To look for a version in range, run /claude:plugin update lib@mp.',
         ].join("\n"),
         severity: "error",
       },

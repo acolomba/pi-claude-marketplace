@@ -5,12 +5,31 @@ import {
   composeMcpConfigNoticesText,
   composeMcpMigrationText,
   mcpConfigNoticeLine,
+  printable,
 } from "../../extensions/pi-claude-marketplace/shared/notification-mcp.ts";
 
 import type { McpMigrationRow } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 const MCP_MIGRATION_COST_LINE =
   "The new names reset what pi-mcp-adapter keeps for each server name: sign in again to servers that use OAuth, and approve project servers again. Until you reload, pi-mcp-adapter can still show the old names.";
+
+describe("printable", () => {
+  test("AMIG-03 / D-PL3-14 a format character and a line feed render as their escapes", () => {
+    // act
+    const rendered = printable("a\u202eb\nc");
+
+    // assert
+    assert.strictEqual(rendered, String.raw`a\u202eb\u000ac`);
+  });
+
+  test("AMIG-03 text with no control or format character is unchanged", () => {
+    // act
+    const rendered = printable("helper@official");
+
+    // assert
+    assert.strictEqual(rendered, "helper@official");
+  });
+});
 
 describe("mcpConfigNoticeLine", () => {
   test("AFILE-04: a notice renders its one line without a summary", () => {

@@ -761,6 +761,13 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
                 severity: "error",
                 needsReload: false,
               },
+              {
+                status: "failed",
+                name: "linter@tools",
+                reasons: ["dependency failed"],
+                severity: "error",
+                needsReload: false,
+              },
             ],
           },
         ],
@@ -786,7 +793,7 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
                 version: "1.0.0",
                 reasons: ["already installed", "version conflict"],
                 cause: new Error(
-                  'Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: version 1.5.0 falls outside what the combined range admits (^2.0.0) -- required by "helper@official"',
+                  'Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: version 1.5.0 falls outside what the combined range admits (^2.0.0) -- required by "helper@official". To look for a version in range, run /claude:plugin update formatter@tools.',
                 ),
                 severity: "error",
                 needsReload: false,
@@ -1082,6 +1089,13 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
                 severity: "error",
                 needsReload: false,
               },
+              {
+                status: "failed",
+                name: "linter@tools",
+                reasons: ["dependency failed"],
+                severity: "error",
+                needsReload: false,
+              },
             ],
           },
         ],
@@ -1107,6 +1121,32 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
                 reasons: ["invalid manifest"],
                 cause: new Error(
                   'Plugin "helper@official" declares an unusable dependency (dependencies.0: Invalid input).',
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // CAS-02: a listed plugin whose own id breaks the plugin id rule.
+    "dependency-invalid-root-id": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "_helper",
+                reasons: ["invalid manifest"],
+                cause: new Error(
+                  'Plugin "_helper@official" cannot be installed, because its id is invalid: Each part of a plugin id (plugin@marketplace) may use only the letters a-z and A-Z, digits, ".", "_" and "-", and must start with a letter or digit. Here the plugin\'s name does not; the marketplace\'s maintainer can rename it.',
                 ),
                 severity: "error",
                 needsReload: false,

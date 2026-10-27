@@ -149,6 +149,8 @@ interface SeedOptions {
   readonly gitSource?: unknown;
   /** The marketplace's own name; defaults to `marketplace`. */
   readonly marketplaceName?: string;
+  /** The plugin's name in its entry and its `plugin.json`; defaults to `empty`. */
+  readonly pluginName?: string;
   /** The marketplace record's stored source; defaults to `./marketplace`. */
   readonly marketplaceSource?: ExtensionState["marketplaces"][string]["source"];
 }
@@ -158,6 +160,7 @@ async function seedPlugin(
   options: SeedOptions = {},
 ): Promise<{ readonly pluginRoot: string; readonly state: ExtensionState }> {
   const marketplaceName = options.marketplaceName ?? "marketplace";
+  const pluginName = options.pluginName ?? "empty";
   const marketplaceRoot = path.join(cwd, "marketplace");
   const pluginRoot =
     options.gitSource === undefined
@@ -168,13 +171,13 @@ async function seedPlugin(
   await mkdir(path.dirname(manifestPath), { recursive: true });
   await writeFile(
     path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-    JSON.stringify({ name: "empty", version: "0.0.1", ...options.pluginJson }),
+    JSON.stringify({ name: pluginName, version: "0.0.1", ...options.pluginJson }),
   );
   await writeFile(
     manifestPath,
     JSON.stringify({
       name: marketplaceName,
-      plugins: [{ name: "empty", source: options.gitSource ?? "./plugins/empty" }],
+      plugins: [{ name: pluginName, source: options.gitSource ?? "./plugins/empty" }],
     }),
   );
   await writeComponents(pluginRoot, options.components ?? {});
@@ -2497,6 +2500,18 @@ for (const { label, pluginJson, requiredBy, message } of [
     message:
       '"empty" from the Anthropic Directory is pinned to its listed commit (no version), which does not satisfy ^1.0.0.',
   },
+  {
+    label: "a 120-character version and requirer",
+    pluginJson: { version: `0.0.1-${"z".repeat(114)}` },
+    requiredBy: [`${"r".repeat(120)}@marketplace`],
+    message: `"empty" from the Anthropic Directory is pinned to its listed commit (version 0.0.1-${"z".repeat(114)}), which does not satisfy ^1.0.0 required by "${"r".repeat(120)}".`,
+  },
+  {
+    label: "a version and a requirer past 120 characters",
+    pluginJson: { version: `0.0.1-${"z".repeat(124)}` },
+    requiredBy: [`${"r".repeat(130)}@marketplace`],
+    message: `"empty" from the Anthropic Directory is pinned to its listed commit (version 0.0.1-${"z".repeat(114)}…), which does not satisfy ^1.0.0 required by "${"r".repeat(120)}…".`,
+  },
 ]) {
   test(`GV-01: a plugin directory copy with ${label} refuses the install as Claude Code does`, async (t) => {
     // arrange
@@ -2518,6 +2533,31 @@ for (const { label, pluginJson, requiredBy, message } of [
     );
   });
 }
+
+test("GV-01 / D-PL3-09: a plugin directory refusal cuts a plugin name past 120 characters at 120", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-directory-long-name-");
+  const pluginName = "p".repeat(130);
+  const seeded = await seedPlugin(environment.cwd, { pluginName });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act & assert
+  await assert.rejects(
+    previewInstall(seeded.state, locations, {
+      ...projectInstallOptions(environment.cwd),
+      plugin: pluginName,
+      directoryPin: { range: ">=1.0.0 <2.0.0-0", declared: "^1.0.0", requiredBy: [] },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof DirectoryPinUnsatisfiedError);
+      assert.strictEqual(
+        error.message,
+        `"${"p".repeat(120)}…" from the Anthropic Directory is pinned to its listed commit (version 0.0.1), which does not satisfy ^1.0.0.`,
+      );
+      return true;
+    },
+  );
+});
 
 test("UPD-DEP-D1: previewInstall throws what the gate throws for a plugin pi supports only in part", async (t) => {
   // arrange
