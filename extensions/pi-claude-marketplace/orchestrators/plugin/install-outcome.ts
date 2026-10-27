@@ -146,7 +146,11 @@ import { WorkflowsUnstageFailureError } from "../marketplace/shared.ts";
 import { materializeMarketplaceTagClone } from "./clone-cache.ts";
 import { discoverGeneratedNames } from "./discover-names.ts";
 import { probeInstallClone, type InstallCloneCacheSeam } from "./install-clone-probe.ts";
-import { createPackagesPhase, DEFAULT_PACKAGE_INSTALL_OPS } from "./package-install.ts";
+import {
+  createPackagesPhase,
+  DEFAULT_PACKAGE_INSTALL_OPS,
+  type PackageInstallOps,
+} from "./package-install.ts";
 import {
   assertNoCrossPluginConflicts,
   readDeclaredPluginVersion,
@@ -283,6 +287,8 @@ export interface InstallLedgerOptions {
 /** Transaction operation required by the guard-free ledger. */
 export interface InstallLedgerTransaction {
   readonly runPhases: typeof runPhases;
+  /** D-PL9-12: the package step's ports; absent, the real package manager runs. */
+  readonly packageInstallOps?: PackageInstallOps;
 }
 
 /** Failure details captured before a formatted ledger error is rethrown. */
@@ -1524,7 +1530,9 @@ async function runInstallLedgerBody(
 
   // D-PL9-05: after the six bridge phases, so a bridge failure never spends the
   // network; before state, so a state failure reaches its undo.
-  const packagesPhase = createPackagesPhase(DEFAULT_PACKAGE_INSTALL_OPS);
+  const packagesPhase = createPackagesPhase(
+    transaction.packageInstallOps ?? DEFAULT_PACKAGE_INSTALL_OPS,
+  );
 
   // D-01 literal-array; order is part of the contract -- never refactor
   // to a dynamic builder. D-63-01: hooks slot lands between agents and mcp.

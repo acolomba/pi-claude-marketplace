@@ -48,6 +48,7 @@ import type {
   InstallLedgerOptions,
   InstallLedgerSummary,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
+import type { PackageInstallOps } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -2649,6 +2650,66 @@ test("D-PL9-03: installs a plugin outside the extension root and notes the packa
     `Skipped installing this plugin's dependencies: its folder ${seeded.pluginRoot} is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder.`,
   ]);
   assert.strictEqual(seeded.state.marketplaces.marketplace?.plugins.empty?.version, "0.0.1");
+  assert.deepStrictEqual((await readdir(seeded.pluginRoot)).sort(), [
+    ".claude-plugin",
+    "package-lock.json",
+    "package.json",
+  ]);
+});
+
+test("D-PL9-05: a state phase failure removes the node_modules the packages phase created in a contained plugin", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-packages-undo-");
+  const locations = locationsFor("project", environment.cwd);
+  const seeded = await seedPlugin(path.join(locations.extensionRoot, "sources", "fixture"));
+  await writeFile(
+    path.join(seeded.pluginRoot, "package.json"),
+    JSON.stringify({ name: "empty", dependencies: { "pkd-dep": "1.0.0" } }),
+  );
+  await writeFile(path.join(seeded.pluginRoot, "package-lock.json"), '{"lockfileVersion":3}');
+  const installedBeforeState: string[][] = [];
+  const packageInstallOps: PackageInstallOps = {
+    runPackageManager: async (request) => {
+      await mkdir(path.join(request.cwd, "node_modules", "pkd-dep"), { recursive: true });
+      return { code: 0, stdout: "", stderr: "", timedOut: false };
+    },
+    newWorkDirName: () => "work-1",
+  };
+  const transaction = {
+    packageInstallOps,
+    runPhases: <C>(phases: readonly Phase<C>[], ctx: C) =>
+      runPhases(
+        phases.map((phase): Phase<C> =>
+          phase.name === "state"
+            ? {
+                ...phase,
+                do: async () => {
+                  installedBeforeState.push(
+                    await readdir(path.join(seeded.pluginRoot, "node_modules")),
+                  );
+                  throw new Error("state phase failed");
+                },
+              }
+            : phase,
+        ),
+        ctx,
+      ),
+  };
+
+  // act
+  await assert.rejects(
+    runInstallLedger(
+      seeded.state,
+      locations,
+      projectInstallOptions(environment.cwd),
+      undefined,
+      transaction,
+    ),
+    /state phase failed/,
+  );
+
+  // assert
+  assert.deepStrictEqual(installedBeforeState, [["pkd-dep"]]);
   assert.deepStrictEqual((await readdir(seeded.pluginRoot)).sort(), [
     ".claude-plugin",
     "package-lock.json",
