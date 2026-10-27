@@ -294,16 +294,27 @@ function formatAgentWarnings(converted: ConvertedAgent): string[] {
  * it keeps. By default only the rows whose files this plugin still owns are
  * replaced; the AG-5 rows (this plugin's own agent files whose bytes a user
  * changed) stay on disk and in the index. `force` is reinstall's repair
- * overwrite: it replaces the AG-5 rows too. A file no index row names is
- * never in either set.
+ * overwrite: it also replaces the AG-5 rows whose `generatedName` this
+ * staging produces (D-PL1-15). Any other AG-5 row, such as one the user
+ * named by hand, keeps its file and its row, as an unforced commit keeps it.
+ * A kept row whose target equals a new entry's target makes the commit
+ * refuse before it removes anything. A file no index row names is never in
+ * either set.
  */
 function partitionPreviousEntries(
   prepared: PreparedAgentsStaged,
   options: { readonly force?: boolean } | undefined,
 ): { readonly replaced: readonly AgentsIndexEntry[]; readonly kept: readonly AgentsIndexEntry[] } {
-  return options?.force === true
-    ? { replaced: [...prepared.previousEntries, ...prepared.foreignPreservedEntries], kept: [] }
-    : { replaced: prepared.previousEntries, kept: prepared.foreignPreservedEntries };
+  if (options?.force !== true) {
+    return { replaced: prepared.previousEntries, kept: prepared.foreignPreservedEntries };
+  }
+
+  const stagedNames = new Set(prepared.newEntries.map((entry) => entry.generatedName));
+  const isStaged = (entry: AgentsIndexEntry): boolean => stagedNames.has(entry.generatedName);
+  return {
+    replaced: [...prepared.previousEntries, ...prepared.foreignPreservedEntries.filter(isStaged)],
+    kept: prepared.foreignPreservedEntries.filter((entry) => !isStaged(entry)),
+  };
 }
 
 /**

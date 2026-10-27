@@ -1593,7 +1593,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     assert.strictEqual(await exists(locations.agentsIndexPath), false);
   });
 
-  test("force replaces a previous target whose bytes a user changed and drops its preserved row", async (t) => {
+  test("D-PL1-15: force replaces a staged row whose bytes a user changed and keeps a hand-named row with its file", async (t) => {
     // arrange
     const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
       t,
@@ -1605,15 +1605,16 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
     );
     const currentTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-current.md");
-    const orphanTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-orphan.md");
+    const handNamedTarget = path.join(locations.agentsDir, "my-reviewer.md");
+    const handNamedBytes = "---\nname: my-reviewer\n---\nWritten by hand.\n";
     await mkdir(locations.agentsDir, { recursive: true });
     await writeFile(currentTarget, "---\nname: current\n---\nEdited by hand.\n");
-    await writeFile(orphanTarget, "---\nname: orphan\n---\nEdited by hand.\n");
-    const editedRow = (sourceAgent: string, targetPath: string) => ({
+    await writeFile(handNamedTarget, handNamedBytes);
+    const editedRow = (sourceAgent: string, generatedName: string, targetPath: string) => ({
       plugin: "acme",
       marketplace: "catalog",
       sourceAgent,
-      generatedName: `pi-claude-marketplace-acme-${sourceAgent}`,
+      generatedName,
       sourcePath: `/previous/${sourceAgent}.md`,
       targetPath,
       sourceHash: `hash-${sourceAgent}`,
@@ -1621,12 +1622,16 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       droppedTools: [],
       warnings: [],
     });
+    const handNamedRow = editedRow("reviewer", "my-reviewer", handNamedTarget);
     await mkdir(locations.extensionRoot, { recursive: true });
     await writeFile(
       locations.agentsIndexPath,
       JSON.stringify({
         schemaVersion: 1,
-        agents: [editedRow("current", currentTarget), editedRow("orphan", orphanTarget)],
+        agents: [
+          editedRow("current", "pi-claude-marketplace-acme-current", currentTarget),
+          handNamedRow,
+        ],
       }),
     );
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
@@ -1644,9 +1649,11 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
 
     // assert
     assert.strictEqual(cleanupLeak, undefined);
-    assert.deepStrictEqual(await readdir(locations.agentsDir), [
+    assert.deepStrictEqual((await readdir(locations.agentsDir)).sort(), [
+      "my-reviewer.md",
       "pi-claude-marketplace-acme-current.md",
     ]);
+    assert.strictEqual(await readFile(handNamedTarget, "utf8"), handNamedBytes);
     assert.strictEqual(
       await readFile(currentTarget, "utf8"),
       `---\nname: acme:current\ndescription: Current agent\naliases: pi-claude-marketplace-acme-current\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: current\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nCurrent.\n`,
@@ -1666,6 +1673,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
           droppedTools: [],
           warnings: [],
         },
+        handNamedRow,
       ],
     });
   });
@@ -1740,7 +1748,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     assert.strictEqual(await exists(prepared.stagingDir), false);
   });
 
-  test("NFR-10: force refuses an index row whose target is outside the agents directory and removes nothing", async (t) => {
+  test("NFR-10: force refuses a staged-name index row whose target is outside the agents directory and removes nothing", async (t) => {
     // arrange
     const { scopeRoot, pluginRoot, agentsSourceDir, locations, pluginDataDir } =
       await createStageTree(t, "agents-commit-force-escape-");
@@ -1761,7 +1769,9 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
           plugin: "acme",
           marketplace: "catalog",
           sourceAgent: "outside",
-          generatedName: "pi-claude-marketplace-acme-outside",
+          // D-PL1-15: force replaces only rows with a staged name, so only such a
+          // row reaches the containment check.
+          generatedName: "pi-claude-marketplace-acme-current",
           sourcePath: "/previous/outside.md",
           targetPath: outsideTarget,
           sourceHash: "hash-outside",
