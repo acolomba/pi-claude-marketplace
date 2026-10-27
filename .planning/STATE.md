@@ -5,16 +5,16 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 3
 current_phase_name: Dependency Cascade Rows and Status
 status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-10-27T03:58:40.374Z"
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-10-27T05:11:05.413Z"
 last_activity: 2026-10-26
 last_activity_desc: Phase 3 execution started
-state_head: ab5d90fe70f02c452a1983156e1bfc4f5ae42427
+state_head: 855ee41347319a7f5a8226cb33c27e7eddbb380f
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 6
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 3 (Dependency Cascade Rows and Status) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-10-26 — Phase 3 execution started
 
@@ -191,8 +191,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-27T03:58:40.033Z
-**Stopped at:** Completed 03-02-PLAN.md
+**Last session:** 2026-10-27T05:11:05.300Z
+**Stopped at:** Completed 03-03-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -406,6 +406,7 @@ archived milestone artifacts.
 | Phase 29 P14 | 20 min | 2 tasks | 9 files |
 | Phase 03 P01 | 17min | 2 tasks | 7 files |
 | Phase 03 P02 | 24min | 2 tasks | 15 files |
+| Phase 03 P03 | 70min | 3 tasks | 11 files |
 
 ## Decisions
 
@@ -608,6 +609,9 @@ archived milestone artifacts.
 - [Phase 03]: D-PL3-12/16: versions quoted in hold and move refusals are cut at render to 64 UTF-16 code units via truncateForRefusal
 - [Phase 03]: D-PL3-04/D-PL3-14: install looks an id-invalid root up first; unlisted keeps {not in manifest}, listed is refused {invalid manifest} with Claude Code's invalid-id cause
 - [Phase 03]: D-PL3-17 known limit: apply, load, and import show the invalid-id cause under {dependency failed}
+- [Phase 03]: D-PL3-01/02: every closure member a failed install would have newly materialized and did not gets a cause-less (failed) {dependency failed} row
+- [Phase 03]: D-PL3-15: a key a moved row reports gets no second row; root ledger, plan-step, and mid-walk lookup failures keep one row
+- [Phase 03]: T-03-48: a dependency's ledger error in a cascade row has absolute paths cut to basenames, as the move row already does
 
 ### mcp-4 decisions
 
