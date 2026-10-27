@@ -171,6 +171,51 @@ Confidence: **high** for the table, commands, and timeout (literal constants);
   scenario uses a `package.json` and `package-lock.json` that disagree, which
   makes `npm ci` exit non-zero without any network.
 
+### Decisions settled after research (09-RESEARCH.md)
+
+- **D-PL9-14 (warning channel, amends D-PL9-09):** No new closed-set
+  reason token. A new `Reason` member reaches `notification-types.ts`,
+  `notification-wire.ts`, the generated JSON schema, `docs/json-output.md`,
+  and five row composers, which collide with Phases 1 and 3. The install
+  ledger pushes the note into `discoveryWarnings` (rendered as a warning
+  diagnostic after the row, path-redacted, and forwarded to orchestrated
+  callers as `postCommitWarnings`); the update hook appends it to the
+  `updated` outcome's `notes`. `shared/notify-reasons.ts` is not touched.
+  The row reason is filed as backlog PKGDEP-04 for Phase 11 or later.
+- **D-PL9-11 corrected:** only three files import `child_process`
+  (`platform/git-credential.ts`, `bridges/hooks/dispatch-exec.ts`,
+  `bridges/hooks/async-rewake/registry.ts`). The new
+  `child-process-chokepoint` rule exempts those three plus
+  `platform/package-manager.ts`. The existing gate
+  `test/architecture/no-shell-out.test.ts` + `SHELL_OUT_EXEMPT_TARGETS`
+  in its `gate-targets.ts` gains the new module in the same commit; both
+  gates stay (the rule pack misses dynamic `import()`).
+- **D-PL9-10 mechanism:** the "only the orchestrator module imports the
+  platform module" rule is one `import-x/no-restricted-paths` zone added to
+  BLOCK C of `eslint.config.js` (a separate block would replace the rule's
+  options). BLOCK F / `NETWORK_SEAMS` is unchanged (it is git-specific).
+- **D-PL9-15 (spawn env):** the spawn passes the argv verbatim and adds
+  `npm_config_update_notifier=false` to the child env; it never uses
+  `spawnSync` (the state lock refresh needs the event loop). The command is
+  a parameter (`sonarjs/no-os-command-from-path`).
+- **D-PL9-16 (unreadable package.json):** an unparseable `package.json`
+  is a warning note ("its package.json is not valid JSON"), never a throw.
+- **D-PL9-13 corrected:** the failure scenario arms the registry stand-in
+  to answer 404 (npm 11 fetches the packument on a package.json/lockfile
+  mismatch, so that shape is not network-free). The sandbox `~/.npmrc`
+  sets `registry=<stand-in>`, `update-notifier=false`, `fetch-retries=0`,
+  so no scenario can reach the public registry. The success scenario uses a
+  git-source marketplace (a directory marketplace hits the D-PL9-03 skip,
+  which gets its own scenario).
+- **D-PL9-17 (proof the plugin finds its modules):** the planner first
+  checks whether a plugin hook or MCP server runs in the cucumber RPC
+  session; if one does, the success scenario proves the module loads
+  through it; otherwise the scenario checks the installed package file in
+  the plugin's `node_modules` and a unit test proves `require` resolution.
+- **Governance text:** PROJECT.md / AGENTS.md NFR-5 wording and BACKLOG
+  entries are not edited here; the phase SUMMARY carries them for the
+  parent (`## Decision rows`, `## Backlog dispositions`).
+
 ### Claude's Discretion
 
 - Module names (`orchestrators/plugin/package-install.ts` suggested), the
@@ -232,6 +277,12 @@ Confidence: **high** for the table, commands, and timeout (literal constants);
 4. **Sanitizer deferred (D-PL9-08).** A plugin lockfile with `git:` or
    `file:` dependencies installs with us and is refused upstream.
    Alternative: port the sanitizer now.
+6. **No row reason token (D-PL9-14).** The failure shows as a warning
+   diagnostic note, not a `{packages not installed}` reason on the row,
+   to stay out of Phase 1/3 files. Alternative: widen this phase to the
+   reason vocabulary and the install/update row composers.
+7. **Files outside the ROADMAP `Files` line:** `test/architecture/no-shell-out.test.ts`
+   and its `gate-targets.ts` (the existing spawn gate fails without them).
 5. **Skip when `node_modules` exists (D-PL9-06).** A stale `node_modules`
    after `marketplace update` changes a path-in-clone plugin's lockfile is
    only refreshed by the plugin's `update`. Alternative: always reinstall.
