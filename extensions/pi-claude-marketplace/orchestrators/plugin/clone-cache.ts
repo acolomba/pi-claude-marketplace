@@ -32,6 +32,7 @@ import {
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { loadState } from "../../persistence/state-io.ts";
+import { resolveTagOid } from "../../platform/git.ts";
 import { appendLeakToError, PinnedCommitMissingError } from "../../shared/errors.ts";
 import {
   cleanupStaging,
@@ -426,8 +427,10 @@ export async function materializeUnpinnedSource(
  *      and Claude Code both clone a source once. Reads (list/info) never call
  *      this seam, so NFR-5 is untouched. With `refresh: false` a present
  *      mirror answers the commit its last fetch recorded for the declared ref,
- *      with no network (reinstall, D-18-04); a missing mirror, or a ref the
- *      mirror never fetched, is the NFR-5 cache miss and still reaches it.
+ *      with no network (reinstall, D-18-04): the ref's tracking ref, or else
+ *      the local tag of that name (D-PL7-10, GLK-08). A missing mirror, or a
+ *      ref the mirror holds neither way, is the NFR-5 cache miss and still
+ *      reaches it.
  *   4. Read the pin: resolvedSha = resolveRef({ dir: mirrorRoot, ref: "HEAD" }).
  *
  * `auth` threads into the clone and the refresh fetch the way
@@ -448,6 +451,7 @@ export async function materializeOrRefreshPluginMirror(args: {
   networkUrl: string;
   ref?: string;
   gitOps?: GitOps;
+  resolveTagOid?: typeof resolveTagOid;
   auth: GitAuthBundle;
   refresh?: boolean;
 }): Promise<{ pluginRoot: string; resolvedSha: string }> {
@@ -497,7 +501,12 @@ export async function materializeOrRefreshPluginMirror(args: {
   if (promotion !== "renamed") {
     const fetchedSha =
       args.refresh === false
-        ? await resolveFetchedRefOffline(gitOps, mirrorRoot, args.ref)
+        ? await resolveFetchedRefOffline(
+            gitOps,
+            args.resolveTagOid ?? resolveTagOid,
+            mirrorRoot,
+            args.ref,
+          )
         : undefined;
     if (fetchedSha !== undefined) {
       return { pluginRoot: mirrorRoot, resolvedSha: fetchedSha };
@@ -519,17 +528,41 @@ export async function materializeOrRefreshPluginMirror(args: {
  * branch (`refs/remotes/origin/HEAD`) when no ref is declared, otherwise
  * `refs/remotes/origin/<ref>`.
  *
- * Returns undefined when the mirror holds no such ref, for example a tag or a
- * branch no fetch brought in yet. The caller then refreshes.
+ * A declared ref with no tracking ref falls back to the local tag of that
+ * name (D-PL7-10, GLK-08): a clone for a tag writes `refs/tags/<ref>` and no
+ * tracking ref, because the fetch refspec maps branches only.
+ * `resolveTagOid` peels an annotated tag to its commit.
+ *
+ * Returns undefined when the mirror holds no such ref, for example a branch
+ * no fetch brought in yet, or a tag that names no commit. The caller then
+ * refreshes.
  */
 async function resolveFetchedRefOffline(
   gitOps: GitOps,
+  resolveTag: typeof resolveTagOid,
   mirrorRoot: string,
   ref: string | undefined,
 ): Promise<string | undefined> {
   const trackingRef = ref === undefined ? "refs/remotes/origin/HEAD" : `refs/remotes/origin/${ref}`;
   try {
     return await gitOps.resolveRef({ dir: mirrorRoot, ref: trackingRef });
+  } catch (err) {
+    if (!isGitNotFoundError(err)) {
+      throw err;
+    }
+  }
+
+  return ref === undefined ? undefined : resolveLocalTagOffline(resolveTag, mirrorRoot, ref);
+}
+
+/** The commit the mirror's local tag `ref` names, or undefined when it has none. */
+async function resolveLocalTagOffline(
+  resolveTag: typeof resolveTagOid,
+  mirrorRoot: string,
+  ref: string,
+): Promise<string | undefined> {
+  try {
+    return await resolveTag({ dir: mirrorRoot, name: ref, cache: {} });
   } catch (err) {
     if (isGitNotFoundError(err)) {
       return undefined;
