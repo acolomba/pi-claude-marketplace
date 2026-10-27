@@ -1,6 +1,7 @@
 /**
  * @fileoverview Steps about a plugin's npm packages: the package files a
- * published plugin ships, and the packages an installed plugin holds.
+ * published plugin ships, the packages an installed plugin holds, and npm's
+ * cache of fetched packages.
  *
  * A plugin ships a `package.json` and a `package-lock.json` built from the
  * tarballs the scenario's npm registry serves, so the lockfile names their
@@ -11,7 +12,7 @@
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
@@ -122,6 +123,14 @@ Given(
     });
   },
 );
+
+// npm keeps the tarballs it fetched in the cache under HOME and installs them
+// again from there without a request.
+Given("the npm cache is empty", async function (this: ScenarioWorld) {
+  const cache = path.join(this.tokens.home, ".npm");
+  await rm(cache, { recursive: true, force: true });
+  assert.strictEqual(existsSync(cache), false, `${cache} exists`);
+});
 
 Given(
   "the published plugin {string} of the marketplace {string} has a session start hook that writes what the npm package {string} exports to the project file {string}",
