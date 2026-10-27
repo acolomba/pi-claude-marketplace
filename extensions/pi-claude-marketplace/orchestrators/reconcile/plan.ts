@@ -248,6 +248,20 @@ function buildMarketplaceClaims(
 }
 
 /**
+ * D-PL6-02 / D-PL6-10: the recorded marketplace each declared marketplace
+ * claims, by its own name or by a one-to-one source match, read from the
+ * planner's own claim rule so import and reconcile cannot disagree. A
+ * declaration in a conflicted claim, or with no recorded match, maps to
+ * nothing.
+ */
+export function marketplaceSourceClaims(
+  declared: MergedConfig["marketplaces"],
+  recorded: ExtensionState["marketplaces"],
+): ReadonlyMap<string, string> {
+  return buildMarketplaceClaims(declared, recorded).recordedByDeclared;
+}
+
+/**
  * D-04-05: whether any record under a marketplace arrived as another plugin's
  * dependency. The exemption that keeps such a record out of the uninstall
  * bucket must reach the marketplace-removal path too: a dependency resolved

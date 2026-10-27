@@ -11,7 +11,7 @@ import {
 import { degradationFromEnable } from "../../orchestrators/plugin/shared.ts";
 import { buildScopeSatisfactionVerdict } from "../../orchestrators/reconcile/dependency-verdict.ts";
 import { enabledRowFromOutcome } from "../../orchestrators/reconcile/notify.ts";
-import { planReconcile } from "../../orchestrators/reconcile/plan.ts";
+import { marketplaceSourceClaims, planReconcile } from "../../orchestrators/reconcile/plan.ts";
 import { loadConfig, type PluginConfigEntry } from "../../persistence/config-io.ts";
 import {
   writeBatchedConfigEntries,
@@ -1350,7 +1350,16 @@ function desiredConfigFor(scopePlan: ScopedImportPlan): MergedConfig {
 }
 
 type ImportReadPass =
-  | { readonly kind: "planned"; readonly state: ExtensionState; readonly plan: ReconcilePlan }
+  | {
+      readonly kind: "planned";
+      readonly state: ExtensionState;
+      readonly plan: ReconcilePlan;
+      /**
+       * D-PL6-02: each settings marketplace the scope records under exactly
+       * one other name, mapped to that recorded name.
+       */
+      readonly claims: ReadonlyMap<string, string>;
+    }
   | { readonly kind: "lock-held"; readonly error: StateLockHeldError };
 
 /**
@@ -1376,10 +1385,14 @@ async function readPassForImport(
         // LOAD-01 / D-06-04: computed inside the lock, as reconcile's read
         // pass computes it, so it reads the same snapshot the planner sees.
         const verdict = await buildScopeSatisfactionVerdict({ state: tx.state, locations });
+        const desired = desiredConfigFor(scopePlan);
+        // D-PL6-10: the planner's own claim rule, read from the same snapshot.
+        const claims = marketplaceSourceClaims(desired.marketplaces, tx.state.marketplaces);
         return {
           kind: "planned",
           state: tx.state,
-          plan: planReconcile(desiredConfigFor(scopePlan), tx.state, scope, verdict),
+          plan: planReconcile(desired, tx.state, scope, verdict),
+          claims: new Map([...claims].filter(([declared, recorded]) => declared !== recorded)),
         };
       },
       { loadState: async () => loadState(scope, opts.cwd) },
@@ -1418,12 +1431,44 @@ function plannedMismatchFor(plan: ReconcilePlan, marketplace: string): SettledMi
 }
 
 /**
- * IMP-05 / IMP-06: settle the settings' marketplaces against the plan. A
- * marketplace the scope does not record under the settings' name is added, as
- * before this path existed: that covers the planner's add bucket and its
- * source claims, which import does not follow (D-07). A recorded one is either
- * a planner source mismatch, which blocks it, or already recorded with the
- * settings' source, which is reported as a skip. Answers the names whose
+ * D-PL6-02: the scope plan with each claimed settings marketplace renamed to
+ * the name the scope records it under. The marketplace keeps the settings
+ * source, and each plugin ref under it names the recorded marketplace in both
+ * `marketplace` and `raw`, so every outcome and config key names one plugin.
+ * Only one-to-one claims are in `claims`; a recorded name is never a settings
+ * name, because the planner's claim candidates exclude declared names, so two
+ * entries cannot collide.
+ */
+function aliasedScopePlan(
+  scopePlan: ScopedImportPlan,
+  claims: ReadonlyMap<string, string>,
+): ScopedImportPlan {
+  return {
+    ...scopePlan,
+    marketplacesToEnsure: scopePlan.marketplacesToEnsure.map((marketplace) => ({
+      ...marketplace,
+      marketplace: claims.get(marketplace.marketplace) ?? marketplace.marketplace,
+    })),
+    pluginsToInstall: scopePlan.pluginsToInstall.map((plugin) => {
+      const recorded = claims.get(plugin.ref.marketplace);
+      return recorded === undefined
+        ? plugin
+        : {
+            ...plugin,
+            ref: { ...plugin.ref, marketplace: recorded, raw: `${plugin.ref.plugin}@${recorded}` },
+          };
+    }),
+  };
+}
+
+/**
+ * IMP-05 / IMP-06: settle the settings' marketplaces against the plan, in
+ * this order. A planner source mismatch, a conflicted source claim included,
+ * blocks the marketplace before anything is added (D-PL6-09). A name the
+ * scope records, the recorded name of a claimed settings marketplace included,
+ * is reported as a skip. Any other marketplace is added. D-PL6-02 supersedes
+ * lifecycle-coverage D-07, which added a claimed settings marketplace under
+ * its settings name and failed it as a duplicate. Answers the names whose
  * plugins may run.
  */
 async function ensurePlannedMarketplaces(
@@ -1435,11 +1480,11 @@ async function ensurePlannedMarketplaces(
   const blockedMarketplaces = new Set<string>();
   for (const marketplace of scopePlan.marketplacesToEnsure) {
     const mismatch = plannedMismatchFor(read.plan, marketplace.marketplace);
-    if (ownValue(read.state.marketplaces, marketplace.marketplace) === undefined) {
+    if (mismatch !== undefined) {
+      recordPlannedMismatch(result, blockedMarketplaces, scopePlan, marketplace, mismatch);
+    } else if (ownValue(read.state.marketplaces, marketplace.marketplace) === undefined) {
       // eslint-disable-next-line no-await-in-loop -- each add locks the scope (retries: 0)
       await addOnePlannedMarketplace(opts, result, blockedMarketplaces, scopePlan, marketplace);
-    } else if (mismatch !== undefined) {
-      recordPlannedMismatch(result, blockedMarketplaces, scopePlan, marketplace, mismatch);
     } else {
       result.skippedExistingMarketplaces.push({
         kind: "marketplace-skip",
@@ -1550,9 +1595,10 @@ async function executeScopedPlan(
     return;
   }
 
-  const usable = await ensurePlannedMarketplaces(opts, result, scopePlan, read);
-  pushSkippedPluginWarnings(result, scopePlan);
-  await applyPlannedPlugins(opts, result, scopePlan, read, usable);
+  const aliased = aliasedScopePlan(scopePlan, read.claims);
+  const usable = await ensurePlannedMarketplaces(opts, result, aliased, read);
+  pushSkippedPluginWarnings(result, aliased);
+  await applyPlannedPlugins(opts, result, aliased, read, usable);
 
   // WB-03: after all per-entry orchestrated-mode addMarketplace
   // + installPlugin calls complete for THIS scope, run a per-scope batched
@@ -1570,7 +1616,7 @@ async function executeScopedPlan(
   // marketplace for REMOVAL and its plugins for UNINSTALL. The repair makes
   // a re-run converge CONSTRUCTIVELY (re-declare what import installed)
   // instead of destructively.
-  await writeBatchedConfigForScope(opts, result, scopePlan);
+  await writeBatchedConfigForScope(opts, result, aliased);
 }
 
 /**

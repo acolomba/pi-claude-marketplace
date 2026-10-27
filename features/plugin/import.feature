@@ -666,3 +666,46 @@ Feature: Plugin import
     Then the "claude-plugins.json" file of the user scope declares these plugins:
       | id            |
       | demo@fixtures |
+
+  Scenario: Importing settings that name a known marketplace under another name installs the plugin under the recorded marketplace
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@other": true },
+        "extraKnownMarketplaces": {
+          "other": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade |
+      | severity            | info    |
+      | needs reload        | true    |
+      | tally label         | Import  |
+      | tally failures      | 0       |
+      | tally warnings      | 0       |
+      | tally success count | 2       |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id            | name | version | status    | reasons | scope |
+      | fixtures         | user              | skipped            | already added       | demo@fixtures | demo | 1.0.0   | installed |         | user  |
+    Then the installation record of the user scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+    Then the "claude-plugins.json" file of the user scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    When the user runs "/claude:plugin pending --scope user"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
