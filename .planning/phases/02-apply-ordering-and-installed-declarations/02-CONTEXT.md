@@ -296,6 +296,38 @@ Minified names: `bae` = resolveMissingDependencies, `lsn` = installResolvedPlugi
   marketplace into its cache, so its boundary there is the plugin directory;
   this extension reads such a plugin in place, with the wider in-place
   boundary.
+- **D-PL2-18 — A waiting record's catalog move is its own step and its own
+  row.** (user decision 2.12, 2026-10-27) It supersedes the one-row part of
+  D-PL2-16, and for such a move it also supersedes WR-B's no-row rule.
+  - The move of a record whose enable waits on the missing-dependency install
+    is planned whether or not the enable comes. Internally the move and the
+    enable stay one cascade step, marked `waiting`, because the steps are
+    ordered by key and two steps with one key would collapse into one; each
+    command turns the step into two rows. `apply` runs the move and the enable
+    back to back, so WR-C still restores the pin when the enable fails.
+  - On success, `pending` and `apply` list the same rows in the same order
+    (D-PL2-02): the install, the move, then the enable (`apply` renders the
+    enable as `(installed)`).
+  - On failure or refusal, `pending` (which cannot foresee it) listed those
+    three rows. `apply` reports the install's `(failed)` row (D-PL2-11), then
+    the move as `(skipped) {dependency failed}`, and nothing for the enable.
+    The record's version, enabled flag and marker do not change. A move that
+    declares the record is skipped, or disabled by the judgement (WR-08). A
+    dependent that the judgement disables takes the cascade's `{dependency
+    failed}` remedy ("<record> did not update; run apply again once it can, or
+    uninstall <dependent>"), not the LOAD-01 "Enable ..." remedy, because the
+    blocked step joins the failed steps.
+  - A growth-only move follows the same rule: its `(updated)` row with equal
+    versions and `{components now supported}` comes before its enable row.
+  - Deferred records in the cascade keep WR-02's one row.
+  - Out of scope (WR-B): a held-down record whose waited-on catalog move
+    fails still reports nothing for itself.
+  - Proof: unit cases in `convergence.test.ts`, `notify.test.ts`,
+    `pending.test.ts` and `apply.test.ts`; the `apply.feature` scenarios
+    "Apply moves a held-down plugin and then enables it once the missing
+    dependency it waits on is installed, as pending lists both" and "Apply
+    reports the move of a held-down plugin as skipped when the install of the
+    missing dependency it waits on is refused".
 - **D-PL2-22 — An installed copy with no manifest answers from its marketplace
   entry alone.** (user decision 2026-10-27) When the installed-first read
   (`readInstalledRecordDeclarations`) reads a record that has `resolvedSha`,
@@ -388,6 +420,19 @@ Minified names: `bae` = resolveMissingDependencies, `lsn` = installResolvedPlugi
   pass stay catalog-first (D-PL2-06), so `pending` and the load list no move
   for that scope and print no row naming the record yet; quick 261027-9oo adds
   that row.
+  **Amended 2026-10-27 (orchestrator decision for quick 261027-9oo):**
+  `pending`, and the load, which prints `pending`'s block, now list the same
+  REC-05 row `apply` reports, so `pending` lists what `apply` reports for this
+  case. `composePendingReport` takes the cascade's `installedCopyFailure`, then
+  runs `judgeFinalScope` over the scope as it stands with the installed-copy
+  reader `apply` uses, and lists each failing record once, after the plan's
+  rows and before the catalog moves. The row is a failure, not a change, so
+  it adds no apply trailer. The load verdict and the read pass stay
+  catalog-first (D-PL2-06). Proof: unit cases in `pending.test.ts`,
+  `notify.test.ts` and `load.test.ts`. No scenario: an enabled record whose
+  installed copy is refused needs a hand-edited `state.json`, because install
+  refuses such a copy (D-PL2-24), and the cucumber harness has no step that
+  writes installation records.
 - **Add-time MISS-01 lifts no marker-held dependent** (D-PL2-09 as written).
 - **Files outside the ROADMAP line also touched:** `orchestrators/reconcile/{types,notify}.ts`
   (or wherever pending's projection orders rows) so `pending` prints rows in
