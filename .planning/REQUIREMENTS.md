@@ -98,7 +98,7 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 
 - [x] **PKD-01**: Installing or updating a plugin whose root ships `package.json` and a supported lockfile runs the same frozen, script-free, time-bounded install Claude Code runs, in the staged copy (PKGDEP-01)
 - [x] **PKD-02**: A failed, timed-out, or skipped package install degrades the plugin with a warning and never blocks it (PKGDEP-01)
-- [ ] **PKD-03**: NFR-5 and the process-spawn rules are amended with a recorded ID for the package install (PKGDEP-01)
+- [x] **PKD-03**: NFR-5 and the process-spawn rules are amended with a recorded ID for the package install (PKGDEP-01)
 
 ### Tests and harness (TST)
 
@@ -185,7 +185,7 @@ None.
 | AUP-03 | Phase 8 | Pending |
 | PKD-01 | Phase 9 | Complete |
 | PKD-02 | Phase 9 | Complete |
-| PKD-03 | Phase 9 | Pending |
+| PKD-03 | Phase 9 | Complete |
 | TST-01 | Phase 10 | Pending |
 | TST-02 | Phase 10 | Pending |
 | TST-03 | Phase 10 | Pending |
