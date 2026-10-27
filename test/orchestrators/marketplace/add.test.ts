@@ -40,6 +40,7 @@ import {
   CleanupLeakError,
   FetchedUrlCause,
   InvalidGitHubBaseUrlError,
+  InvalidMarketplaceManifestError,
   MarketplaceDuplicateNameError,
   StaleSourceCloneError,
   StateLockHeldError,
@@ -3784,6 +3785,512 @@ test("cleans a URL clone after state-save failure and a second invocation conver
       "valid-marketplace",
     ]);
     assert.strictEqual(await pathExists(finalClone), true);
+  });
+});
+
+type ReplacedRecord = ExtensionState["marketplaces"][string];
+type ReplacedPlugin = ReplacedRecord["plugins"][string];
+
+function replacedPlugin(name: string): ReplacedPlugin {
+  return {
+    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    enabled: true,
+    provenance: "explicit",
+    installedAt: "2026-01-01T00:00:00.000Z",
+    resolvedSource: `/marketplaces/plugins/${name}`,
+    resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [], workflows: [] },
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    version: "1.0.0",
+  };
+}
+
+function replacedPlugins(): ReplacedRecord["plugins"] {
+  return { alpha: replacedPlugin("alpha"), beta: replacedPlugin("beta") };
+}
+
+/** Writes a path marketplace at `directory` whose manifest declares `name` and no plugins. */
+async function writePathMarketplaceAt(directory: string, name: string): Promise<string> {
+  await mkdir(path.join(directory, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(directory, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({ name, plugins: [] }),
+  );
+  return directory;
+}
+
+/** D-PL6-19: a scope that records `tools` from the path marketplace at `root`. */
+async function seedPathRecord(
+  locations: ScopedLocations,
+  cwd: string,
+  root: string,
+): Promise<ExtensionState> {
+  const state: ExtensionState = {
+    schemaVersion: 3,
+    marketplaces: {
+      tools: {
+        name: "tools",
+        scope: "project",
+        source: { kind: "path", raw: root, logical: root },
+        addedFromCwd: cwd,
+        manifestPath: path.join(root, ".claude-plugin", "marketplace.json"),
+        marketplaceRoot: root,
+        plugins: replacedPlugins(),
+      },
+    },
+  };
+  await saveState(locations.extensionRoot, state);
+  return state;
+}
+
+/**
+ * D-PL6-19: a scope that records `valid-marketplace` from the github source
+ * `owner/repo`, with its clone at `sources/valid-marketplace/` holding a
+ * sentinel file.
+ */
+async function seedGithubRecord(
+  locations: ScopedLocations,
+  cwd: string,
+): Promise<{ readonly state: ExtensionState; readonly cloneDir: string }> {
+  const cloneDir = await locations.sourceCloneDir("valid-marketplace");
+  await mkdir(cloneDir, { recursive: true });
+  await writeFile(path.join(cloneDir, ".old-clone-sentinel"), "old");
+  const state: ExtensionState = {
+    schemaVersion: 3,
+    marketplaces: {
+      "valid-marketplace": {
+        name: "valid-marketplace",
+        scope: "project",
+        source: { kind: "github", raw: "owner/repo", owner: "owner", repo: "repo" },
+        addedFromCwd: cwd,
+        manifestPath: path.join(cloneDir, ".claude-plugin", "marketplace.json"),
+        marketplaceRoot: cloneDir,
+        plugins: replacedPlugins(),
+      },
+    },
+  };
+  await saveState(locations.extensionRoot, state);
+  return { state, cloneDir };
+}
+
+async function stagingEntries(locations: ScopedLocations): Promise<string[]> {
+  return readdir(path.dirname(await locations.sourcesStagingDir("probe")));
+}
+
+test("D-PL6-19: an add that replaces a recorded path marketplace records the new directory and keeps its plugins", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-replace-path-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const oldRoot = await writePathMarketplaceAt(path.join(cwd, "old-tools"), "tools");
+    const newRoot = await writePathMarketplaceAt(path.join(cwd, "new-tools"), "tools");
+    await seedPathRecord(locations, cwd, oldRoot);
+    const { ctx, run, notifications } = makeCtx(0);
+    const { gitOps } = createGitOps();
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: newRoot,
+      gitOps,
+      notifications: { mode: "orchestrated" },
+      replaceRecorded: "tools",
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, { status: "added", name: "tools" });
+    const { lastUpdatedAt, ...record } =
+      (await loadState(locations.extensionRoot)).marketplaces["tools"] ?? {};
+    assert.deepStrictEqual(record, {
+      name: "tools",
+      scope: "project",
+      source: { kind: "path", raw: newRoot, logical: newRoot },
+      addedFromCwd: cwd,
+      manifestPath: path.join(newRoot, ".claude-plugin", "marketplace.json"),
+      marketplaceRoot: newRoot,
+      lastSuccessfulManifest: JSON.stringify({ name: "tools", plugins: [] }),
+      plugins: replacedPlugins(),
+    });
+    assert.match(lastUpdatedAt ?? "", /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    assert.strictEqual(
+      await readFile(path.join(oldRoot, ".claude-plugin", "marketplace.json"), "utf8"),
+      JSON.stringify({ name: "tools", plugins: [] }),
+    );
+    assert.strictEqual(await pathExists(locations.baseConfigJsonPath), false);
+    assert.deepStrictEqual(notifications, []);
+  });
+});
+
+test("D-PL6-19: an add that replaces a recorded github marketplace swaps its clone and keeps its plugins", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-replace-github-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { cloneDir } = await seedGithubRecord(locations, cwd);
+    const { ctx, run, notifications } = makeCtx(0);
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+      replaceRecorded: "valid-marketplace",
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, { status: "added", name: "valid-marketplace" });
+    const { lastUpdatedAt, ...record } =
+      (await loadState(locations.extensionRoot)).marketplaces["valid-marketplace"] ?? {};
+    assert.deepStrictEqual(record, {
+      name: "valid-marketplace",
+      scope: "project",
+      source: {
+        kind: "github",
+        raw: "anthropics/claude-plugins-official",
+        owner: "anthropics",
+        repo: "claude-plugins-official",
+      },
+      addedFromCwd: cwd,
+      manifestPath: path.join(cloneDir, ".claude-plugin", "marketplace.json"),
+      marketplaceRoot: cloneDir,
+      lastSuccessfulManifest: VALID_MANIFEST_JSON,
+      plugins: replacedPlugins(),
+    });
+    assert.match(lastUpdatedAt ?? "", /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    assert.strictEqual(await pathExists(path.join(cloneDir, ".old-clone-sentinel")), false);
+    assert.strictEqual(
+      await readFile(path.join(cloneDir, OWNERSHIP_MARKER), "utf8"),
+      OWNERSHIP_MARKER_BYTES,
+    );
+    assert.deepStrictEqual(await stagingEntries(locations), []);
+    assert.deepStrictEqual(notifications, []);
+  });
+});
+
+test("D-PL6-19: an add whose new manifest names another marketplace fails as an invalid manifest and keeps the record and clone", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-replace-renamed-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { state, cloneDir } = await seedGithubRecord(locations, cwd);
+    const { ctx, run, notifications } = makeCtx(0);
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      onClone: async (directory) => {
+        await writeFile(
+          path.join(directory, ".claude-plugin", "marketplace.json"),
+          JSON.stringify({ name: "other", plugins: [] }),
+        );
+      },
+    });
+    const message =
+      'marketplace.json names the marketplace "other", not "valid-marketplace", which it replaces';
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+      replaceRecorded: "valid-marketplace",
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      reason: "invalid manifest",
+      error: new InvalidMarketplaceManifestError(message),
+      cause: message,
+    });
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), state);
+    assert.strictEqual(await readFile(path.join(cloneDir, ".old-clone-sentinel"), "utf8"), "old");
+    assert.strictEqual(await pathExists(await locations.sourceCloneDir("other")), false);
+    assert.deepStrictEqual(await stagingEntries(locations), []);
+    assert.deepStrictEqual(notifications, []);
+  });
+});
+
+test("D-PL6-19: an add whose new directory names another marketplace fails as an invalid manifest and keeps the record", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-replace-path-renamed-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const oldRoot = await writePathMarketplaceAt(path.join(cwd, "old-tools"), "tools");
+    const newRoot = await writePathMarketplaceAt(path.join(cwd, "new-tools"), "other");
+    const state = await seedPathRecord(locations, cwd, oldRoot);
+    const { ctx, run, notifications } = makeCtx(0);
+    const { gitOps } = createGitOps();
+    const message =
+      'marketplace.json names the marketplace "other", not "tools", which it replaces';
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: newRoot,
+      gitOps,
+      notifications: { mode: "orchestrated" },
+      replaceRecorded: "tools",
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      reason: "invalid manifest",
+      error: new InvalidMarketplaceManifestError(message),
+      cause: message,
+    });
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), state);
+    assert.deepStrictEqual(notifications, []);
+  });
+});
+
+test("D-PL6-19: a replaced clone that cannot be removed after the save leaves the replace added", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-replace-cleanup-leak-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    await seedGithubRecord(locations, cwd);
+    const stagingRoot = path.dirname(await locations.sourcesStagingDir("probe"));
+    const { ctx, run, notifications } = makeCtx(0);
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+    t.mock.method(fs.promises, "rm", async (target: fs.PathLike, rmOptions?: fs.RmOptions) => {
+      if (path.dirname(String(target)) === stagingRoot) {
+        throw Object.assign(new Error(`EACCES: permission denied, rm '${String(target)}'`), {
+          code: "EACCES",
+        });
+      }
+
+      await rm(target, rmOptions);
+    });
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+      replaceRecorded: "valid-marketplace",
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, { status: "added", name: "valid-marketplace" });
+    const [setAside, ...others] = await stagingEntries(locations);
+    assert.deepStrictEqual(others, []);
+    assert.deepStrictEqual(await readdir(path.join(stagingRoot, setAside ?? "")), [
+      ".old-clone-sentinel",
+    ]);
+    assert.deepStrictEqual(notifications, []);
+  });
+});
+
+test("D-PL6-19: an add whose clone fails puts the replaced clone back and keeps the record", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-replace-clone-fails-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { state, cloneDir } = await seedGithubRecord(locations, cwd);
+    const { ctx, run, notifications } = makeCtx(0);
+    const cloneFailure = httpError(404);
+    const { gitOps } = createGitOps({ cloneThrows: cloneFailure });
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+      replaceRecorded: "valid-marketplace",
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      reason: "source missing",
+      error: cloneFailure,
+      cause: "HTTP Error: 404",
+    });
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), state);
+    assert.strictEqual(await readFile(path.join(cloneDir, ".old-clone-sentinel"), "utf8"), "old");
+    assert.deepStrictEqual(await stagingEntries(locations), []);
+    assert.deepStrictEqual(notifications, []);
+  });
+});
+
+/**
+ * D-PL6-19: makes the state save after the swap fail. The clone hook moves
+ * `state.json` aside and leaves a directory in its place; `restore` puts the
+ * saved file back so the case can read it.
+ */
+function failSaveAfterClone(locations: ScopedLocations): {
+  readonly onClone: () => Promise<void>;
+  readonly restore: () => Promise<void>;
+} {
+  const saved = `${locations.stateJsonPath}.saved`;
+  return {
+    onClone: async () => {
+      await fs.promises.rename(locations.stateJsonPath, saved);
+      await mkdir(locations.stateJsonPath);
+    },
+    restore: async () => {
+      await rm(locations.stateJsonPath, { recursive: true, force: true });
+      await fs.promises.rename(saved, locations.stateJsonPath);
+    },
+  };
+}
+
+test("D-PL6-19: a save that fails after the swap removes the new clone and puts the replaced clone back", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-replace-save-fails-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { state, cloneDir } = await seedGithubRecord(locations, cwd);
+    const { ctx, run, notifications } = makeCtx(0);
+    const saveFault = failSaveAfterClone(locations);
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      onClone: saveFault.onClone,
+    });
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+      replaceRecorded: "valid-marketplace",
+    });
+    await saveFault.restore();
+
+    // assert
+    assert.ok(outcome.status === "failed");
+    assert.deepStrictEqual(
+      {
+        reason: outcome.reason,
+        code: (outcome.error as NodeJS.ErrnoException).code,
+        cause: outcome.cause,
+      },
+      { reason: "unparseable", code: "EISDIR", cause: outcome.error.message },
+    );
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), state);
+    assert.deepStrictEqual((await readdir(cloneDir)).sort(), [".old-clone-sentinel"]);
+    assert.deepStrictEqual(await stagingEntries(locations), []);
+    assert.deepStrictEqual(notifications, []);
+  });
+});
+
+test("D-PL6-19: a restore that cannot finish appends its leak to the failure", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-replace-restore-leak-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { cloneDir } = await seedGithubRecord(locations, cwd);
+    const { ctx, run, notifications } = makeCtx(0);
+    const saveFault = failSaveAfterClone(locations);
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      onClone: saveFault.onClone,
+    });
+    t.mock.method(fs.promises, "rm", async (target: fs.PathLike, rmOptions?: fs.RmOptions) => {
+      if (String(target) === cloneDir) {
+        throw Object.assign(new Error(`EACCES: permission denied, rm '${cloneDir}'`), {
+          code: "EACCES",
+        });
+      }
+
+      await rm(target, rmOptions);
+    });
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+      replaceRecorded: "valid-marketplace",
+    });
+    await saveFault.restore();
+
+    // assert
+    const [setAside] = await stagingEntries(locations);
+    assert.ok(setAside !== undefined, "the replaced clone stays set aside");
+    const setAsideDir = path.join(
+      path.dirname(await locations.sourcesStagingDir("probe")),
+      setAside,
+    );
+    const restoreFailure = await fs.promises.rename(setAsideDir, cloneDir).then(
+      () => "the restore target was free",
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    );
+    assert.ok(outcome.status === "failed");
+    assert.ok(outcome.error instanceof CleanupLeakError);
+    assert.deepStrictEqual(
+      outcome.cause,
+      `${outcome.error.cause.message} (additionally: ` +
+        `failed to clean up marketplace final clone ${cloneDir} at ${cloneDir}: ` +
+        `EACCES: permission denied, rm '${cloneDir}'; ` +
+        `failed to restore marketplace clone ${setAsideDir} to ${cloneDir}: ${restoreFailure})`,
+    );
+    assert.deepStrictEqual(notifications, []);
+  });
+});
+
+test("D-PL6-19: an add that replaces a marketplace the scope no longer records adds it with no plugins", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-replace-gone-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const newRoot = await writePathMarketplaceAt(path.join(cwd, "new-tools"), "tools");
+    const { ctx, run, notifications } = makeCtx(0);
+    const { gitOps } = createGitOps();
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: newRoot,
+      gitOps,
+      notifications: { mode: "orchestrated" },
+      replaceRecorded: "tools",
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, { status: "added", name: "tools" });
+    const { lastUpdatedAt, ...record } =
+      (await loadState(locations.extensionRoot)).marketplaces["tools"] ?? {};
+    assert.deepStrictEqual(record, {
+      name: "tools",
+      scope: "project",
+      source: { kind: "path", raw: newRoot, logical: newRoot },
+      addedFromCwd: cwd,
+      manifestPath: path.join(newRoot, ".claude-plugin", "marketplace.json"),
+      marketplaceRoot: newRoot,
+      lastSuccessfulManifest: JSON.stringify({ name: "tools", plugins: [] }),
+      plugins: {},
+    });
+    assert.match(lastUpdatedAt ?? "", /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    assert.deepStrictEqual(notifications, []);
   });
 });
 
