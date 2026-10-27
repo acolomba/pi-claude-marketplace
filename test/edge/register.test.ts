@@ -2175,7 +2175,7 @@ describe("registerClaudePluginCommand", () => {
     // assert
     assert.deepStrictEqual(notifications, [
       { message: "● claude-plugins-official [user] (added)" },
-      { message: "● claude-plugins-official [user] <autoupdate>" },
+      { message: "● claude-plugins-official [user] <autoupdate> {already autoupdate}" },
     ]);
     assert.deepStrictEqual(await loadState(userLocations.extensionRoot), {
       schemaVersion: 3,
@@ -2202,11 +2202,9 @@ describe("registerClaudePluginCommand", () => {
       schemaVersion: 1,
       marketplaces: {
         "claude-plugins-official": {
-          autoupdate: true,
           source: "anthropics/claude-plugins-official",
         },
       },
-      plugins: {},
     });
     assert.deepStrictEqual(userTree, [
       "claude-plugins.json",
