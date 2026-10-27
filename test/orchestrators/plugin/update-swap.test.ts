@@ -512,6 +512,30 @@ test("GLK-06: an intent mark replaces an unparseable updatedAt with the current 
   assert.strictEqual(marked?.updatedAt, "2026-01-03T00:00:00.000Z");
 });
 
+test("GLK-06: an intent mark replaces an updatedAt at the largest date with the current time", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-04T00:00:00.000Z") });
+  const args = await seedSameRevisionUpdate(
+    t,
+    "update-swap-max-stamp-",
+    "+275760-09-13T00:00:00.000Z",
+  );
+  const preflight = await preparePluginUpdate({ ...args, policy: SAME_REVISION_POLICY });
+  assert.ok(!("partition" in preflight));
+
+  // act
+  const outcome = await swapPluginUpdate(
+    { ...args, stateTransaction: { saveState: refuseFinalizeSave() } },
+    preflight,
+    SAME_REVISION_POLICY,
+  );
+
+  // assert
+  assert.strictEqual(outcome.partition, "failed");
+  const marked = (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  assert.strictEqual(marked?.updatedAt, "2026-01-04T00:00:00.000Z");
+});
+
 test("GLK-06: a finalize stamps the record one millisecond after the intent mark of the same instant", async (t) => {
   // arrange
   t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });

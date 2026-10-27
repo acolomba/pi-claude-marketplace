@@ -610,12 +610,13 @@ const PHASE3_FAILURE_PHASES = [
 type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
 
 // D-PL7-08: the stamp is strictly later than the one it replaces, even within
-// one millisecond, so a rival run that read the replaced stamp fails ST-9. An
-// unparseable stamp is replaced by the current time.
+// one millisecond, so a rival run that read the replaced stamp fails ST-9. A
+// stamp that does not parse, or that is the largest time a Date holds, is
+// replaced by the current time, which still differs from it.
 function nextUpdateStamp(previous: string): string {
-  const prior = Date.parse(previous);
   const now = Date.now();
-  return new Date(Number.isNaN(prior) ? now : Math.max(now, prior + 1)).toISOString();
+  const later = new Date(Math.max(now, Date.parse(previous) + 1));
+  return (Number.isNaN(later.getTime()) ? new Date(now) : later).toISOString();
 }
 
 /**
