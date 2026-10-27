@@ -23,6 +23,7 @@ import {
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   createPackageManagerRunner,
+  NODE_PACKAGE_MANAGER_HOST,
   NODE_PACKAGE_MANAGER_SPAWN,
 } from "../../../extensions/pi-claude-marketplace/platform/package-manager.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -942,6 +943,7 @@ describe("createPackagesPhase", () => {
       timeoutMs: 10_000,
       killGraceMs: 1_000,
       env: {},
+      host: NODE_PACKAGE_MANAGER_HOST,
     });
     const script = [
       'const fs = require("node:fs");',

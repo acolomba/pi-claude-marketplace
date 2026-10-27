@@ -47,6 +47,7 @@ import { stripVTControlCharacters } from "node:util";
 import { sanitizeLockfile } from "../../domain/package-lockfile.ts";
 import {
   createPackageManagerRunner,
+  NODE_PACKAGE_MANAGER_HOST,
   NODE_PACKAGE_MANAGER_SPAWN,
 } from "../../platform/package-manager.ts";
 import { errorMessage, isErrnoException } from "../../shared/errors.ts";
@@ -131,7 +132,7 @@ export interface PackageInstallOps {
 /**
  * The production binding: the real launcher, the 60-second install timeout,
  * the 30-second registry query timeout, a 5-second kill grace, the process
- * environment, and a random work dir name.
+ * environment, this process's host, and a random work dir name.
  */
 export const DEFAULT_PACKAGE_INSTALL_OPS: PackageInstallOps = Object.freeze({
   runPackageManager: createPackageManagerRunner({
@@ -139,12 +140,14 @@ export const DEFAULT_PACKAGE_INSTALL_OPS: PackageInstallOps = Object.freeze({
     timeoutMs: PACKAGE_INSTALL_TIMEOUT_MS,
     killGraceMs: PACKAGE_INSTALL_KILL_GRACE_MS,
     env: process.env,
+    host: NODE_PACKAGE_MANAGER_HOST,
   }),
   runRegistryQuery: createPackageManagerRunner({
     spawn: NODE_PACKAGE_MANAGER_SPAWN,
     timeoutMs: REGISTRY_QUERY_TIMEOUT_MS,
     killGraceMs: PACKAGE_INSTALL_KILL_GRACE_MS,
     env: process.env,
+    host: NODE_PACKAGE_MANAGER_HOST,
   }),
   newWorkDirName: randomUUID,
 });

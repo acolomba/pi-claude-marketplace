@@ -1,14 +1,21 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
 
 import {
+  NODE_PACKAGE_MANAGER_HOST,
   NODE_PACKAGE_MANAGER_SPAWN,
   createPackageManagerRunner,
 } from "../../extensions/pi-claude-marketplace/platform/package-manager.ts";
 
+import { createHermeticEnvironment } from "./hermetic-environment.ts";
+
 import type {
+  PackageManagerHost,
   PackageManagerProcess,
+  PackageManagerRun,
   PackageManagerSpawn,
   PackageManagerSpawnOptions,
 } from "../../extensions/pi-claude-marketplace/platform/package-manager.ts";
@@ -80,12 +87,21 @@ function createPackageManagerProcess(pid?: number): PackageManagerProcessControl
   };
 }
 
+// A Linux host: it never looks a command up, so its file probe fails a case
+// that reaches it.
+const LINUX_HOST: PackageManagerHost = {
+  platform: "linux",
+  execPath: "/usr/bin/node",
+  isFile: () => assert.fail("a Linux launch probes no file"),
+};
+
 function runnerFor(control: PackageManagerProcessControl) {
   return createPackageManagerRunner({
     spawn: () => control.process,
     timeoutMs: TIMEOUT_MS,
     killGraceMs: KILL_GRACE_MS,
     env: {},
+    host: LINUX_HOST,
   });
 }
 
@@ -116,6 +132,7 @@ test("starts no process until a request runs", () => {
     timeoutMs: TIMEOUT_MS,
     killGraceMs: KILL_GRACE_MS,
     env: {},
+    host: LINUX_HOST,
   });
 
   // assert
@@ -134,6 +151,7 @@ test("spawns the command with its arguments verbatim, no shell, the request dire
     timeoutMs: TIMEOUT_MS,
     killGraceMs: KILL_GRACE_MS,
     env: { HOME: "/home/user" },
+    host: LINUX_HOST,
   });
 
   // act
@@ -209,6 +227,7 @@ test("resolves with the launch error when the launcher throws", async () => {
     timeoutMs: TIMEOUT_MS,
     killGraceMs: KILL_GRACE_MS,
     env: {},
+    host: LINUX_HOST,
   });
 
   // act
@@ -343,6 +362,7 @@ test("runs a real child process and captures its exit code and output", async ()
     timeoutMs: 10_000,
     killGraceMs: 1_000,
     env: {},
+    host: NODE_PACKAGE_MANAGER_HOST,
   });
   const script = 'process.stdout.write("out"); process.stderr.write("err"); process.exitCode = 3;';
 
@@ -355,4 +375,223 @@ test("runs a real child process and captures its exit code and output", async ()
 
   // assert
   assert.deepStrictEqual(run, { code: 3, stdout: "out", stderr: "err", timedOut: false });
+});
+
+test("probes a real file as a file and a directory or a missing path as none", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "package-manager-host-");
+  const file = path.join(environment.root, "npm.cmd");
+  const directory = path.join(environment.root, "npm.exe");
+  await writeFile(file, "");
+  await mkdir(directory);
+
+  // act
+  const probes = await Promise.all(
+    [file, directory, path.join(environment.root, "missing.exe")].map((candidate) =>
+      NODE_PACKAGE_MANAGER_HOST.isFile(candidate),
+    ),
+  );
+
+  // assert
+  assert.deepStrictEqual(probes, [true, false, false]);
+});
+
+test("runs on the platform and the Node binary of this process", () => {
+  // arrange
+  const expectedHost = { platform: process.platform, execPath: process.execPath };
+
+  // act
+  const { platform, execPath } = NODE_PACKAGE_MANAGER_HOST;
+
+  // assert
+  assert.deepStrictEqual({ platform, execPath }, expectedHost);
+});
+
+const WINDOWS_NODE = "C:\\Program Files\\nodejs\\node.exe";
+
+interface WindowsLaunch {
+  readonly probes: string[];
+  readonly launches: Array<readonly [string, readonly string[], boolean]>;
+  readonly run: PackageManagerRun;
+}
+
+// Runs one request on a win32 host whose file probe finds exactly `files`. A
+// process that starts closes with 0 as soon as the run watches it.
+async function runOnWindows(
+  command: string,
+  env: NodeJS.ProcessEnv,
+  files: readonly string[],
+): Promise<WindowsLaunch> {
+  const probes: string[] = [];
+  const launches: Array<readonly [string, readonly string[], boolean]> = [];
+  const runPackageManager = createPackageManagerRunner({
+    spawn: (launched, args, options) => {
+      launches.push([launched, args, options.shell]);
+      const control = createPackageManagerProcess(42);
+      queueMicrotask(() => {
+        control.close(0);
+      });
+      return control.process;
+    },
+    timeoutMs: TIMEOUT_MS,
+    killGraceMs: KILL_GRACE_MS,
+    env,
+    host: {
+      platform: "win32",
+      execPath: WINDOWS_NODE,
+      isFile: (file) => {
+        probes.push(file);
+        return Promise.resolve(files.includes(file));
+      },
+    },
+  });
+  const run = await runPackageManager({ command, args: ["ci"], cwd: "C:\\work" });
+  return { probes, launches, run };
+}
+
+const CLOSED: PackageManagerRun = { code: 0, stdout: "", stderr: "", timedOut: false };
+
+function notStarted(message: string): PackageManagerRun {
+  return { code: null, stdout: "", stderr: "", timedOut: false, error: new Error(message) };
+}
+
+test("D-PL9-18: starts npm.cmd's npm-cli.js with this Node binary and no shell on Windows", async () => {
+  // arrange
+  const cli = "C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js";
+
+  // act
+  const launch = await runOnWindows("npm", { PATH: "C:\\Program Files\\nodejs" }, [
+    "C:\\Program Files\\nodejs\\npm.cmd",
+    cli,
+  ]);
+
+  // assert
+  assert.deepStrictEqual(launch, {
+    probes: ["C:\\Program Files\\nodejs\\npm.exe", "C:\\Program Files\\nodejs\\npm.cmd", cli],
+    launches: [[WINDOWS_NODE, [cli, "ci"], false]],
+    run: CLOSED,
+  });
+});
+
+test("D-PL9-18: reads Path in any case, strips its quotes, and never probes an empty, current, or relative entry", async () => {
+  // act
+  const launch = await runOnWindows(
+    "npm",
+    { Path: '"C:\\Quoted Dir";;.;relative\\bin;C:\\tools' },
+    ["C:\\tools\\npm.exe"],
+  );
+
+  // assert
+  assert.deepStrictEqual(launch, {
+    probes: ["C:\\Quoted Dir\\npm.exe", "C:\\Quoted Dir\\npm.cmd", "C:\\tools\\npm.exe"],
+    launches: [["C:\\tools\\npm.exe", ["ci"], false]],
+    run: CLOSED,
+  });
+});
+
+test("D-PL9-18: takes the first PATH directory that holds the command", async () => {
+  // arrange
+  const cli = "C:\\first\\node_modules\\npm\\bin\\npm-cli.js";
+
+  // act
+  const launch = await runOnWindows("npm", { PATH: "C:\\first;C:\\second" }, [
+    "C:\\first\\npm.cmd",
+    cli,
+    "C:\\second\\npm.exe",
+  ]);
+
+  // assert
+  assert.deepStrictEqual(launch, {
+    probes: ["C:\\first\\npm.exe", "C:\\first\\npm.cmd", cli],
+    launches: [[WINDOWS_NODE, [cli, "ci"], false]],
+    run: CLOSED,
+  });
+});
+
+test("D-PL9-18: starts bun.exe directly, ahead of a bun.cmd in the same directory", async () => {
+  // act
+  const launch = await runOnWindows("bun", { PATH: "C:\\bun" }, [
+    "C:\\bun\\bun.exe",
+    "C:\\bun\\bun.cmd",
+  ]);
+
+  // assert
+  assert.deepStrictEqual(launch, {
+    probes: ["C:\\bun\\bun.exe"],
+    launches: [["C:\\bun\\bun.exe", ["ci"], false]],
+    run: CLOSED,
+  });
+});
+
+for (const { situation, command, env, files, probes, message } of [
+  {
+    situation: "a bun.cmd",
+    command: "bun",
+    env: { PATH: "C:\\bun" },
+    files: ["C:\\bun\\bun.cmd"],
+    probes: ["C:\\bun\\bun.exe", "C:\\bun\\bun.cmd"],
+    message:
+      "bun on PATH is a batch file (C:\\bun\\bun.cmd), which this install does not run without a shell",
+  },
+  {
+    situation: "an npm.cmd with no npm-cli.js beside it",
+    command: "npm",
+    env: { PATH: "C:\\scoop\\shims" },
+    files: ["C:\\scoop\\shims\\npm.cmd"],
+    probes: [
+      "C:\\scoop\\shims\\npm.exe",
+      "C:\\scoop\\shims\\npm.cmd",
+      "C:\\scoop\\shims\\node_modules\\npm\\bin\\npm-cli.js",
+    ],
+    message: "npm-cli.js was not found beside C:\\scoop\\shims\\npm.cmd",
+  },
+  {
+    situation: "no match on PATH",
+    command: "npm",
+    env: { PATH: "C:\\tools" },
+    files: [],
+    probes: ["C:\\tools\\npm.exe", "C:\\tools\\npm.cmd"],
+    message: "npm was not found on PATH",
+  },
+  {
+    situation: "no PATH at all",
+    command: "npm",
+    env: {},
+    files: [],
+    probes: [],
+    message: "npm was not found on PATH",
+  },
+]) {
+  test(`D-PL9-18: resolves the run with an error and starts nothing for ${situation} on Windows`, async () => {
+    // act
+    const launch = await runOnWindows(command, env, files);
+
+    // assert
+    assert.deepStrictEqual(launch, { probes, launches: [], run: notStarted(message) });
+  });
+}
+
+test("D-PL9-18: spawns the bare command on Linux without looking it up", async () => {
+  // arrange
+  const launches: string[] = [];
+  const control = createPackageManagerProcess();
+  const runPackageManager = createPackageManagerRunner({
+    spawn: (command) => {
+      launches.push(command);
+      return control.process;
+    },
+    timeoutMs: TIMEOUT_MS,
+    killGraceMs: KILL_GRACE_MS,
+    env: { PATH: "/usr/bin" },
+    host: LINUX_HOST,
+  });
+
+  // act
+  const pending = runPackageManager(request);
+  control.close(0);
+  const run = await pending;
+
+  // assert
+  assert.deepStrictEqual(launches, ["npm"]);
+  assert.deepStrictEqual(run, CLOSED);
 });
