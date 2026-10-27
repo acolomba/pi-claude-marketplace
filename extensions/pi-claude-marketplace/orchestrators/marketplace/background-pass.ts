@@ -9,7 +9,9 @@
 // access stored credentials only, with no Device Flow.
 //
 // D-PL8-04: each marketplace refresh and each plugin update is one gate step,
-// so a `/claude:plugin` command waits for at most one of them.
+// so a `/claude:plugin` command waits for at most one of them. A command can
+// run between two plugin updates, so each plugin update first reads the merged
+// config again and skips the plugin once autoupdate is off (D-PL8-01).
 //
 // AUP-03 / D-PL8-10 / D-PL8-15: after the last marketplace, a pass that
 // updated at least one plugin raises one `background-update` notice through the
@@ -34,6 +36,7 @@ import { ownValue } from "../../shared/own-key.ts";
 
 import type { BackgroundGate } from "./background-gate.ts";
 import type { UpdateMarketplaceOptions } from "./update.ts";
+import type { MergedConfig } from "../../persistence/config-merge.ts";
 import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationEntrySink, NotificationRun } from "../../shared/notification-run.ts";
@@ -85,6 +88,8 @@ const SILENT_SINK: NotificationEntrySink = {
 
 const NOT_RUN_NOTE = "the session ended before this update ran";
 
+const AUTOUPDATE_OFF_NOTE = "autoupdate was turned off before this update ran";
+
 interface PassStep {
   readonly deps: BackgroundPassDeps;
   readonly run: NotificationRun;
@@ -94,14 +99,16 @@ interface PassStep {
 }
 
 /** D-PL8-07: a marketplace with no config value stays off. */
+function isAutoupdateOn(merged: MergedConfig, name: string): boolean {
+  return ownValue(merged.marketplaces, name)?.entry.autoupdate === true;
+}
+
 async function autoupdateMarketplaces(scope: Scope, cwd: string): Promise<readonly string[]> {
   try {
     const locations = locationsFor(scope, cwd);
     const state = await loadState(locations.extensionRoot, { persistMigration: false });
     const { merged } = await loadMergedScopeConfig(locations);
-    return Object.keys(state.marketplaces).filter(
-      (name) => ownValue(merged.marketplaces, name)?.entry.autoupdate === true,
-    );
+    return Object.keys(state.marketplaces).filter((name) => isAutoupdateOn(merged, name));
   } catch (err: unknown) {
     hookDebugLog(`background update skipped the ${scope} scope: ${errorMessage(err)}`, DEBUG_TAG);
     return [];
@@ -137,32 +144,49 @@ async function updateOneMarketplace(step: PassStep, name: string, scope: Scope):
   return true;
 }
 
+interface YieldingPluginUpdateArgs {
+  readonly gate: BackgroundGate;
+  readonly cwd: string;
+  readonly isStopped: () => boolean;
+  readonly updatePlugin: PluginUpdateFn;
+  readonly updated: BackgroundUpdatePlugin[];
+}
+
+/**
+ * A failed outcome with no reason, for a plugin update the pass did not run,
+ * because a throw would get a reason from the cascade's classifier.
+ */
+function notRunOutcome(plugin: string, note: string): PluginUpdateFailedOutcome {
+  return {
+    partition: "failed",
+    name: plugin,
+    notes: [note],
+    reasons: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  };
+}
+
 /**
  * D-PL8-04 / D-PL8-15: ends the step in flight, waits for the commands that
- * arrived, and runs the plugin update as a new step. After a shutdown it
- * returns a failed outcome with no reason instead, because a throw would get a
- * reason from the cascade's classifier. Each `updated` outcome adds a row to
- * `updated`, in update order (D-PL8-10).
+ * arrived, and runs the plugin update as a new step. It does not run the
+ * update after a shutdown, or when a command that ran meanwhile turned the
+ * marketplace's autoupdate off (D-PL8-01). Each `updated` outcome adds a row
+ * to `updated`, in update order (D-PL8-10).
  */
-function yieldingPluginUpdate(
-  gate: BackgroundGate,
-  isStopped: () => boolean,
-  updatePlugin: PluginUpdateFn,
-  updated: BackgroundUpdatePlugin[],
-): PluginUpdateFn {
+function yieldingPluginUpdate(args: YieldingPluginUpdateArgs): PluginUpdateFn {
+  const { gate, cwd, isStopped, updatePlugin, updated } = args;
   return async (plugin, marketplace, scope) => {
     gate.endStep();
     await gate.beginStep();
     if (isStopped()) {
-      return {
-        partition: "failed",
-        name: plugin,
-        notes: [NOT_RUN_NOTE],
-        reasons: [],
-        declaresAgents: false,
-        declaresMcp: false,
-        declaresWorkflows: false,
-      } satisfies PluginUpdateFailedOutcome;
+      return notRunOutcome(plugin, NOT_RUN_NOTE);
+    }
+
+    const { merged } = await loadMergedScopeConfig(locationsFor(scope, cwd));
+    if (!isAutoupdateOn(merged, marketplace)) {
+      return notRunOutcome(plugin, AUTOUPDATE_OFF_NOTE);
     }
 
     const outcome = await updatePlugin(plugin, marketplace, scope);
@@ -211,7 +235,13 @@ export function createBackgroundPass(deps: BackgroundPassDeps): BackgroundPass {
       run,
       cwd,
       isStopped,
-      pluginUpdate: yieldingPluginUpdate(deps.gate, isStopped, updatePlugin, updated),
+      pluginUpdate: yieldingPluginUpdate({
+        gate: deps.gate,
+        cwd,
+        isStopped,
+        updatePlugin,
+        updated,
+      }),
     };
     try {
       await updateEveryScope(step);

@@ -430,6 +430,66 @@ test("a command that arrives during a plugin update waits for it", async (t) => 
   assert.deepStrictEqual(log, ["update first", "command", "update second"]);
 });
 
+test("D-PL8-01: a command that turns autoupdate off during the pass stops the marketplace's remaining plugin updates", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-pass-autoupdate-off-");
+  await seedMarketplace(cwd, "project", "alpha", true);
+  const log: string[] = [];
+  const gate = createBackgroundGate();
+  const commands: Promise<void>[] = [];
+  const outcomes: PluginUpdateOutcome[] = [];
+  const { capture, deps } = createPassUnderTest({
+    log,
+    gate,
+    pluginHooks: new Map([
+      [
+        "first",
+        (): void => {
+          commands.push(
+            gate.runForeground(async () => {
+              await seedAutoupdateConfig(locationsFor("project", cwd), "alpha", false);
+              log.push("noautoupdate alpha");
+            }),
+          );
+        },
+      ],
+    ]),
+    outcomes: new Map([["second", updatedOutcome("second", "2.0.0")]]),
+    scripts: new Map([
+      [
+        "alpha",
+        async (opts: UpdateMarketplaceOptions): Promise<void> => {
+          const pluginUpdate = requirePluginUpdate(opts);
+          outcomes.push(await pluginUpdate("first", "alpha", "project"));
+          outcomes.push(await pluginUpdate("second", "alpha", "project"));
+        },
+      ],
+    ]),
+  });
+  const pass = createBackgroundPass(deps);
+  const expectedOutcomes: PluginUpdateOutcome[] = [
+    unchangedOutcome("first"),
+    {
+      partition: "failed",
+      name: "second",
+      notes: ["autoupdate was turned off before this update ran"],
+      reasons: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    },
+  ];
+
+  // act
+  await pass({ ctx: sessionContext(cwd, "rpc"), isStopped: () => false });
+  await Promise.all(commands);
+
+  // assert
+  assert.deepStrictEqual(outcomes, expectedOutcomes);
+  assert.deepStrictEqual(log, ["update first", "noautoupdate alpha"]);
+  assert.deepStrictEqual(capture.entries, []);
+});
+
 test("skips a scope whose install state cannot be read", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-unreadable-");
