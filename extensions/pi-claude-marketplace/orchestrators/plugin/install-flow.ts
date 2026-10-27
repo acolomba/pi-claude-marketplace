@@ -1775,8 +1775,9 @@ function handleCaughtInstallFailure(args: {
  * names the failing dependency as its subject and carries the requesting
  * plugin's own row beside it, instead of reporting the requested plugin alone
  * for something it did not do. The outcome contract is unchanged -- the typed
- * Error stays the dispatch surface and `cause` stays the formatted text -- so an
- * orchestrated caller sees exactly what it saw before.
+ * Error stays the dispatch surface and `cause` stays the formatted text -- and
+ * an orchestrated caller also gets the failed dependency's rollback partials,
+ * as the single-plugin outcome carries its own (REC-06, D-PL6-04).
  */
 function handleCascadeThrow(args: {
   readonly ctx: NotificationContext;
@@ -1797,7 +1798,13 @@ function handleCascadeThrow(args: {
   const error = cascadeFailureCause(subject, rootKey);
   const cause = formatOrchestratedCause(error);
   if (orchestrated) {
-    return { status: "failed", error, cause, ...movedMember(args.moved) };
+    return {
+      status: "failed",
+      error,
+      cause,
+      ...memberPartials(subject),
+      ...movedMember(args.moved),
+    };
   }
 
   notifyWithContext(
@@ -1818,6 +1825,19 @@ function handleCascadeThrow(args: {
     "single",
   );
   return { status: "failed", error, cause, ...movedMember(args.moved) };
+}
+
+/**
+ * MIM-03 / D-PL6-04: the rollback partials a failed dependency left, present
+ * only when its undo could not finish. The causes are raw; each consumer
+ * redacts them before a row (D-PL6-12).
+ */
+function memberPartials(
+  subject: CascadeFailureSubject,
+): Pick<Extract<InstallPluginOutcome, { readonly status: "failed" }>, "rollbackPartials"> {
+  return subject.kind === "member" && subject.rollbackPartials.length > 0
+    ? { rollbackPartials: subject.rollbackPartials }
+    : {};
 }
 
 /** UPD-DEP-D1: the rows of the dependencies an install moved into range. */
