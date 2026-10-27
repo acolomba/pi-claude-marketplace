@@ -396,7 +396,7 @@ async function recordMove(
   const entry = declared.entry;
   const candidate = await resolveListCandidate(
     entry,
-    { marketplaceRoot: mp.marketplaceRoot, marketplaceName: mp.name },
+    { marketplaceRoot: mp.marketplaceRoot, marketplaceName: mp.name, marketplaceSource: mp.source },
     input.locations,
   );
   const source = gitSourceOf(entry.source);

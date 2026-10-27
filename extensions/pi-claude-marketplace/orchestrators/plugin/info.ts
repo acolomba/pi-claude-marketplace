@@ -2348,6 +2348,7 @@ async function buildInstalledRow(opts: {
     const resolved = await resolveStrict(entry, {
       marketplaceRoot: mpRecord.marketplaceRoot,
       marketplaceName: mpRecord.name,
+      marketplaceSource: mpRecord.source,
       readFileText: (filePath) => reader.readTextFile(filePath),
     });
     if (resolved.state === "installable") {
@@ -2749,6 +2750,7 @@ async function buildNotInstalledRow(opts: {
     resolved = await resolveStrict(entry, {
       marketplaceRoot: mpRecord.marketplaceRoot,
       marketplaceName: mpRecord.name,
+      marketplaceSource: mpRecord.source,
       readFileText: (filePath) => reader.readTextFile(filePath),
     });
   } catch (err) {

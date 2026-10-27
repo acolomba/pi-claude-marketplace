@@ -46,7 +46,10 @@ function isGitPluginSource(
 /** Resolves one manifest entry offline and derives its candidate version. */
 export async function resolveListCandidate(
   manifestEntry: ManifestPluginEntry,
-  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
+  marketplaceContext: Pick<
+    ResolveContext,
+    "marketplaceRoot" | "marketplaceName" | "marketplaceSource"
+  >,
   locations: ScopedLocations,
 ): Promise<ListCandidate> {
   const parsedSource = parsePluginSource(manifestEntry.source);

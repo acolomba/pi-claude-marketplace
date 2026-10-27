@@ -809,6 +809,65 @@ test("VER-02: a partially available path plugin shows the version its plugin.jso
   });
 });
 
+test("D-PL5-32: a hosted marketplace's relative entry reads unavailable with an unsupported source", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const catalogUrl = "https://h.example/acme/mp/marketplace.json";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "root", source: "./", version: "1.0.0" }] },
+      source: { kind: "hosted", raw: catalogUrl, url: catalogUrl },
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "root", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ⊘ root v1.0.0 (unavailable) {unsupported source}",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("D-PL5-32: an installed plugin whose hosted entry now names a relative path reads installed with an unsupported source", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const catalogUrl = "https://h.example/acme/mp/marketplace.json";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "root", source: "./", version: "1.0.0" }] },
+      source: { kind: "hosted", raw: catalogUrl, url: catalogUrl },
+      installed: { root: { version: "1.0.0" } },
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "root", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● root v1.0.0 (installed) {unsupported source}",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
 test("SRC-01 / VER-02: a path plugin whose directory is missing reads source missing at the entry version", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
