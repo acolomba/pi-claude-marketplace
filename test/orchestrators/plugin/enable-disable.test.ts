@@ -1975,7 +1975,7 @@ test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const { statePath, baseConfigPath } = await seedRealDisabledMarketplace(home, {
-      marketplaceName: "claude-plugins-official",
+      marketplaceName: "acme-plugins",
       pluginName: "foo-plugin",
       version: "1.2.3",
     });
@@ -1985,7 +1985,7 @@ test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace
       ctx,
       run: runWithNothingLoaded(),
       cwd,
-      marketplace: "claude-plugins-official",
+      marketplace: "acme-plugins",
       plugin: "foo-plugin",
       enable: true,
       scope: "user",
@@ -2002,7 +2002,7 @@ test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace
     assert.equal(
       notifications[0]!.message,
       [
-        "● claude-plugins-official [user]",
+        "● acme-plugins [user]",
         "  ● foo-plugin v1.2.3 (installed)",
         "",
         "/reload to pick up changes",
@@ -2027,7 +2027,7 @@ test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace
         }
       >;
     };
-    const rec = state.marketplaces["claude-plugins-official"]!.plugins["foo-plugin"]!;
+    const rec = state.marketplaces["acme-plugins"]!.plugins["foo-plugin"]!;
     assert.ok(
       rec.resources.skills.length > 0,
       "resources.skills must be non-empty after a fresh enable (state/disk drift otherwise)",
@@ -2043,7 +2043,7 @@ test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace
     const cfg = await readConfig(baseConfigPath);
     const plugins = (cfg as { plugins?: Record<string, { enabled?: boolean }> }).plugins ?? {};
     assert.equal(
-      plugins["foo-plugin@claude-plugins-official"]?.enabled,
+      plugins["foo-plugin@acme-plugins"]?.enabled,
       true,
       "config entry should carry enabled:true",
     );
@@ -2167,7 +2167,7 @@ test("WLIF-03: disable removes the workflow envelope while the record keeps nami
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const { statePath } = await seedRealDisabledMarketplace(home, {
-      marketplaceName: "claude-plugins-official",
+      marketplaceName: "acme-plugins",
       pluginName: "foo-plugin",
       version: "1.2.3",
       withWorkflow: true,
@@ -2175,7 +2175,7 @@ test("WLIF-03: disable removes the workflow envelope while the record keeps nami
     const args = {
       run: runWithNothingLoaded(),
       cwd,
-      marketplace: "claude-plugins-official",
+      marketplace: "acme-plugins",
       plugin: "foo-plugin",
       scope: "user" as const,
     };
@@ -2191,8 +2191,7 @@ test("WLIF-03: disable removes the workflow envelope while the record keeps nami
       >;
     };
     assert.deepStrictEqual(
-      recordAfterEnable.marketplaces["claude-plugins-official"]?.plugins["foo-plugin"]?.resources
-        .workflows,
+      recordAfterEnable.marketplaces["acme-plugins"]?.plugins["foo-plugin"]?.resources.workflows,
       ["foo-plugin:greet"],
       "precondition: the enable must actually record an envelope",
     );
@@ -2211,7 +2210,7 @@ test("WLIF-03: disable removes the workflow envelope while the record keeps nami
         { plugins: Record<string, { enabled: boolean; resources: { workflows: string[] } }> }
       >;
     };
-    const record = after.marketplaces["claude-plugins-official"]?.plugins["foo-plugin"];
+    const record = after.marketplaces["acme-plugins"]?.plugins["foo-plugin"];
     assert.equal(record?.enabled, false);
     assert.deepStrictEqual(record?.resources.workflows, ["foo-plugin:greet"]);
   });
@@ -2275,7 +2274,7 @@ async function recordedWorkflowNames(statePath: string): Promise<readonly string
       { plugins: Record<string, { resources: { workflows: string[] } }> }
     >;
   };
-  return parsed.marketplaces["claude-plugins-official"]?.plugins["foo-plugin"]?.resources.workflows;
+  return parsed.marketplaces["acme-plugins"]?.plugins["foo-plugin"]?.resources.workflows;
 }
 
 /**
@@ -2294,7 +2293,7 @@ async function seedWorkflowRoundTrip(
   savedDir: string;
 }> {
   const { statePath, mpRoot } = await seedRealDisabledMarketplace(home, {
-    marketplaceName: "claude-plugins-official",
+    marketplaceName: "acme-plugins",
     pluginName: "foo-plugin",
     version: "1.2.3",
   });
@@ -2306,7 +2305,7 @@ async function seedWorkflowRoundTrip(
     args: {
       run: runWithNothingLoaded(),
       cwd,
-      marketplace: "claude-plugins-official",
+      marketplace: "acme-plugins",
       plugin: "foo-plugin",
       scope: "user" as const,
     },
@@ -2445,7 +2444,7 @@ test("WLIF-06: a disable that took an envelope off disk names the reload remedy"
     assert.deepStrictEqual(soleRow(notifications), {
       message:
         "A plugin operation needs attention.\n\n" +
-        "● claude-plugins-official [user]\n" +
+        "● acme-plugins [user]\n" +
         "  ◍ foo-plugin v1.2.3 (disabled) {stale workflow command}\n\n" +
         "/reload to pick up changes",
       severity: "warning",
@@ -2469,7 +2468,7 @@ test("WLIF-06: a disable that retired nothing renders the row it always rendered
     // shape, so the severity assertion is the one that would catch it.
     assert.deepStrictEqual(soleRow(notifications), {
       message:
-        "● claude-plugins-official [user]\n" +
+        "● acme-plugins [user]\n" +
         "  ◍ foo-plugin v1.2.3 (disabled)\n\n" +
         "/reload to pick up changes",
     });
@@ -2498,7 +2497,7 @@ test("WLIF-06: an enable whose source dropped a workflow names the retired comma
     assert.deepStrictEqual(soleRow(notifications), {
       message:
         "A plugin operation needs attention.\n\n" +
-        "● claude-plugins-official [user]\n" +
+        "● acme-plugins [user]\n" +
         "  ● foo-plugin v1.2.3 (installed) " +
         "{stale workflow command, requires pi-dynamic-workflows}\n\n" +
         "/reload to pick up changes",
@@ -2553,7 +2552,7 @@ test("WLIF-06: a name in both the recorded and the staged set retires nothing", 
     assert.deepStrictEqual(soleRow(notifications), {
       message:
         "A plugin operation needs attention.\n\n" +
-        "● claude-plugins-official [user]\n" +
+        "● acme-plugins [user]\n" +
         "  ● foo-plugin v1.2.3 (installed) {requires pi-dynamic-workflows}\n\n" +
         "/reload to pick up changes",
       severity: "warning",
@@ -2754,14 +2753,14 @@ test("ENBL-19: an enable/disable/enable round trip succeeds -- the retained inve
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const { statePath } = await seedRealDisabledMarketplace(home, {
-      marketplaceName: "claude-plugins-official",
+      marketplaceName: "acme-plugins",
       pluginName: "foo-plugin",
       version: "1.2.3",
     });
     const args = {
       run: runWithNothingLoaded(),
       cwd,
-      marketplace: "claude-plugins-official",
+      marketplace: "acme-plugins",
       plugin: "foo-plugin",
       scope: "user" as const,
     };
@@ -2781,7 +2780,7 @@ test("ENBL-19: an enable/disable/enable round trip succeeds -- the retained inve
           { plugins: Record<string, { enabled: boolean; resources: { skills: string[] } }> }
         >;
       };
-      const rec = state.marketplaces["claude-plugins-official"]!.plugins["foo-plugin"]!;
+      const rec = state.marketplaces["acme-plugins"]!.plugins["foo-plugin"]!;
       assert.equal(rec.enabled, false, "the round trip's middle step must leave a DISABLED record");
       return rec.resources.skills;
     };
@@ -2800,7 +2799,7 @@ test("ENBL-19: an enable/disable/enable round trip succeeds -- the retained inve
     assert.equal(
       notifications[0]!.message,
       [
-        "● claude-plugins-official [user]",
+        "● acme-plugins [user]",
         "  ● foo-plugin v1.2.3 (installed)",
         "",
         "/reload to pick up changes",
@@ -2948,7 +2947,7 @@ test("WR-06 / SEV-01: enable of a plugin that stages an agent renders {requires 
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     await seedRealDisabledMarketplace(home, {
-      marketplaceName: "claude-plugins-official",
+      marketplaceName: "acme-plugins",
       pluginName: "foo-plugin",
       version: "1.2.3",
       withAgent: true,
@@ -2959,7 +2958,7 @@ test("WR-06 / SEV-01: enable of a plugin that stages an agent renders {requires 
       ctx,
       run: runWithNothingLoaded(),
       cwd,
-      marketplace: "claude-plugins-official",
+      marketplace: "acme-plugins",
       plugin: "foo-plugin",
       enable: true,
       scope: "user",
@@ -2977,7 +2976,7 @@ test("WR-06 / SEV-01: enable of a plugin that stages an agent renders {requires 
       [
         "A plugin operation needs attention.",
         "",
-        "● claude-plugins-official [user]",
+        "● acme-plugins [user]",
         "  ● foo-plugin v1.2.3 (installed) {requires pi-subagents}",
         "",
         "/reload to pick up changes",
@@ -2990,7 +2989,7 @@ test("WR-06 / SEV-01: the same re-enable with pi-subagents loaded renders no mar
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     await seedRealDisabledMarketplace(home, {
-      marketplaceName: "claude-plugins-official",
+      marketplaceName: "acme-plugins",
       pluginName: "foo-plugin",
       version: "1.2.3",
       withAgent: true,
@@ -3005,7 +3004,7 @@ test("WR-06 / SEV-01: the same re-enable with pi-subagents loaded renders no mar
         workflowEngineLoaded: false,
       }),
       cwd,
-      marketplace: "claude-plugins-official",
+      marketplace: "acme-plugins",
       plugin: "foo-plugin",
       enable: true,
       scope: "user",
@@ -3020,7 +3019,7 @@ test("WR-06 / SEV-01: the same re-enable with pi-subagents loaded renders no mar
     assert.equal(
       notifications[0]!.message,
       [
-        "● claude-plugins-official [user]",
+        "● acme-plugins [user]",
         "  ● foo-plugin v1.2.3 (installed)",
         "",
         "/reload to pick up changes",
@@ -3037,7 +3036,7 @@ test("WR-06 / WARN-01: a re-enable that staged an agent AND degraded a skill com
     // is what keeps either rule from silently replacing the other.
     // arrange
     await seedRealDisabledMarketplace(home, {
-      marketplaceName: "claude-plugins-official",
+      marketplaceName: "acme-plugins",
       pluginName: "foo-plugin",
       version: "1.2.3",
       withAgent: true,
@@ -3049,7 +3048,7 @@ test("WR-06 / WARN-01: a re-enable that staged an agent AND degraded a skill com
       ctx,
       run: runWithNothingLoaded(),
       cwd,
-      marketplace: "claude-plugins-official",
+      marketplace: "acme-plugins",
       plugin: "foo-plugin",
       enable: true,
       scope: "user",
@@ -3065,7 +3064,7 @@ test("WR-06 / WARN-01: a re-enable that staged an agent AND degraded a skill com
       [
         "A plugin operation needs attention.",
         "",
-        "● claude-plugins-official [user]",
+        "● acme-plugins [user]",
         "  ● foo-plugin v1.2.3 (installed) {malformed skill, requires pi-subagents}",
         "",
         "/reload to pick up changes",
@@ -3080,7 +3079,7 @@ test("WR-06 / NREG-01: a re-enable that staged neither agents nor MCP servers re
     // companion, so an unloaded probe must produce no marker and no raise.
     // arrange
     await seedRealDisabledMarketplace(home, {
-      marketplaceName: "claude-plugins-official",
+      marketplaceName: "acme-plugins",
       pluginName: "foo-plugin",
       version: "1.2.3",
     });
@@ -3090,7 +3089,7 @@ test("WR-06 / NREG-01: a re-enable that staged neither agents nor MCP servers re
       ctx,
       run: runWithNothingLoaded(),
       cwd,
-      marketplace: "claude-plugins-official",
+      marketplace: "acme-plugins",
       plugin: "foo-plugin",
       enable: true,
       scope: "user",
@@ -3103,7 +3102,7 @@ test("WR-06 / NREG-01: a re-enable that staged neither agents nor MCP servers re
     assert.equal(
       notifications[0]!.message,
       [
-        "● claude-plugins-official [user]",
+        "● acme-plugins [user]",
         "  ● foo-plugin v1.2.3 (installed)",
         "",
         "/reload to pick up changes",
@@ -3386,7 +3385,7 @@ test("WR-02: a failed plugin row from another surface renders byte-identically -
   notify(ctx, runWithNothingLoaded(), {
     marketplaces: [
       {
-        name: "claude-plugins-official",
+        name: "acme-plugins",
         scope: "user",
         plugins: [
           {
@@ -3409,7 +3408,7 @@ test("WR-02: a failed plugin row from another surface renders byte-identically -
     [
       "A plugin operation has failed.",
       "",
-      "● claude-plugins-official [user]",
+      "● acme-plugins [user]",
       "  ⊘ foo-plugin (failed)",
       "    cause: EACCES: permission denied, mkdir '/home/user/.pi/agent/skills'",
     ].join("\n"),
@@ -4645,7 +4644,7 @@ test("orchestrated mode enable-success returns { status: 'enabled', name, versio
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     await seedRealDisabledMarketplace(home, {
-      marketplaceName: "claude-plugins-official",
+      marketplaceName: "acme-plugins",
       pluginName: "foo-plugin",
       version: "1.2.3",
     });
@@ -4655,7 +4654,7 @@ test("orchestrated mode enable-success returns { status: 'enabled', name, versio
       ctx,
       run: runWithNothingLoaded(),
       cwd,
-      marketplace: "claude-plugins-official",
+      marketplace: "acme-plugins",
       plugin: "foo-plugin",
       enable: true,
       scope: "user",

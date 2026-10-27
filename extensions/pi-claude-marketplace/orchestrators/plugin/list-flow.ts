@@ -57,6 +57,7 @@
 
 import { lookupDeclaredPlugin, type ManifestLookup } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
+import { assertRecordedMarketplaceName } from "../../domain/name.ts";
 import { loadMergedScopeConfig, type MergedConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
@@ -87,6 +88,7 @@ import {
 } from "./list-orphan-fold.ts";
 import { LIST_CONTEXT, type ListMsg } from "./list.messaging.ts";
 
+import type { ParsedSource } from "../../domain/source.ts";
 import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -456,6 +458,8 @@ async function loadMarketplaceManifestSoftly(
 ): Promise<ScopedManifest> {
   try {
     const manifest = await loadManifestSoftly(mpRecord.manifestPath);
+    // D-PL5-28: a marketplace Claude Code refuses reads as a failed one.
+    assertRecordedMarketplaceName(mpRecord.name, mpRecord.source as ParsedSource, manifest.name);
     return { ok: true, manifest };
   } catch (err) {
     // BOUND-03 / D-95-05: the failure stays off every rendered row (the

@@ -22,7 +22,7 @@ orchestrators/reconcile/
 ├── reconcile.messaging.ts   # PENDING_CONTEXT + RECONCILE_APPLIED_CONTEXT row render maps
 ├── read-pass.ts             # the shared locked, write-free read pass + runScopeIsolated
 ├── mcp-migration.ts         # the AMIG-01 move of MCP entries out of the legacy mcp.json
-├── delisted-plugins.ts      # the unreadable-declarer and {not in manifest} warnings
+├── delisted-plugins.ts      # the unreadable-declarer, refused-marketplace, and {not in manifest} warnings
 ├── pending.ts               # /claude:plugin pending orchestrator (read-only) + composePendingReport
 ├── load.ts                  # the read-only load: MIG-01, the MCP move, the pending block, warnings, routing
 └── apply.ts                 # /claude:plugin apply orchestrator (plan, then convergence)
@@ -100,7 +100,7 @@ The planner and the apply path coordinate via one structural sentinel, plus two 
 
 ## Load path
 
-`load.ts::createLoadReconcile` builds the load's reconcile step (session start and `/reload`). It changes no installation state (APL-03 / D-02). Per scope, project first, it runs `read-pass.ts::openScopePass` (the read pass with MIG-01 and the legacy state migration, then the AMIG-01 MCP move), and then `closeScopePass` (the unreadable-declarer and `{not in manifest}` warnings, and the hook routing rebuild). After both scopes, it builds `pending`'s report with `pending.ts::composePendingReport` over every scope whose read pass did not throw. On a mismatch it prints that block, which ends with the apply trailer and never with the `/reload` hint (D-05, D-06). On a match it prints nothing (RECON-05).
+`load.ts::createLoadReconcile` builds the load's reconcile step (session start and `/reload`). It changes no installation state (APL-03 / D-02). Per scope, project first, it runs `read-pass.ts::openScopePass` (the read pass with MIG-01 and the legacy state migration, then the AMIG-01 MCP move), and then `closeScopePass` (the unreadable-declarer warning, the `{invalid manifest}` warning for each enabled plugin of a marketplace Claude Code refuses (D-PL5-28), the `{not in manifest}` warnings, and the hook routing rebuild). After both scopes, it builds `pending`'s report with `pending.ts::composePendingReport` over every scope whose read pass did not throw. On a mismatch it prints that block, which ends with the apply trailer and never with the `/reload` hint (D-05, D-06). On a match it prints nothing (RECON-05).
 
 ## Pending path
 

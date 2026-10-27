@@ -95,6 +95,7 @@ import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
 import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
+import type { ParsedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type * as ApplyOrchestrator from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import type { ReconcileStateReader } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/read-pass.ts";
@@ -536,11 +537,13 @@ function marketplaceRecord(options: {
   readonly manifestPath: string;
   readonly marketplaceRoot: string;
   readonly plugins?: Readonly<Record<string, PluginRecord>>;
+  /** The stored source; defaults to the path source `rawSource`. */
+  readonly source?: ParsedSource;
 }): MarketplaceRecord {
   return {
     name: options.marketplace,
     scope: options.scope,
-    source: pathSource(options.rawSource),
+    source: options.source ?? pathSource(options.rawSource),
     addedFromCwd: options.cwd,
     manifestPath: options.manifestPath,
     marketplaceRoot: options.marketplaceRoot,
@@ -4645,7 +4648,7 @@ describe("applyReconcile", () => {
     await writeUnder(
       project.baseConfigJsonPath,
       configBytes({
-        marketplaces: { [directory]: { source: marketplaceRoot } },
+        marketplaces: { [directory]: { source: `anthropics/${directory}` } },
         plugins: { [`deploy-kit@${directory}`]: {} },
       }),
     );
@@ -4657,6 +4660,12 @@ describe("applyReconcile", () => {
           scope: "project",
           marketplace: directory,
           rawSource: marketplaceRoot,
+          source: {
+            kind: "github",
+            raw: `anthropics/${directory}`,
+            owner: "anthropics",
+            repo: directory,
+          },
           manifestPath,
           marketplaceRoot,
           plugins: {

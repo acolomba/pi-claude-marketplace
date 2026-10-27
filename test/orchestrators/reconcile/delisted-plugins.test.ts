@@ -7,6 +7,7 @@ import { describe, test } from "node:test";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   reportDelistedPlugins,
+  reportRefusedMarketplaces,
   reportUnreadableDeclarer,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/delisted-plugins.ts";
 
@@ -86,6 +87,123 @@ function delistedRow(marketplace: string, plugin: string): PerEntryOutcome {
     cause: new Error(`Plugin "${plugin}" not found in marketplace "${marketplace}"`),
   };
 }
+
+const LOOKALIKE_REFUSAL =
+  'Claude Code refuses the marketplace name "tools": it looks like one of Anthropic\'s own';
+
+function refusedRow(marketplace: string, plugin: string, refusal: string): PerEntryOutcome {
+  return {
+    kind: "plugin-declarer-unreadable",
+    scope: "project",
+    marketplace,
+    plugin,
+    reason: "invalid manifest",
+    cause: new Error(refusal),
+  };
+}
+
+describe("reportRefusedMarketplaces", () => {
+  test("D-PL5-28: every enabled plugin of a refused marketplace gets an invalid-manifest warning", async () => {
+    // arrange
+    const tools = marketplaceRecord("tools", ["app", "lib"]);
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await reportRefusedMarketplaces(
+      "project",
+      stateOf(tools),
+      outcomes,
+      manifestLoader({
+        [tools.manifestPath]: manifestListing("claude-plugins-v2", ["app", "lib"]),
+      }),
+    );
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      refusedRow("tools", "app", LOOKALIKE_REFUSAL),
+      refusedRow("tools", "lib", LOOKALIKE_REFUSAL),
+    ]);
+  });
+
+  test("D-PL5-28: a disabled plugin of a refused marketplace gets no warning", async () => {
+    // arrange
+    const tools = marketplaceRecord("tools", ["app", "paused"], ["paused"]);
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await reportRefusedMarketplaces(
+      "project",
+      stateOf(tools),
+      outcomes,
+      manifestLoader({ [tools.manifestPath]: manifestListing("claude-plugins-v2", ["app"]) }),
+    );
+
+    // assert
+    assert.deepStrictEqual(outcomes, [refusedRow("tools", "app", LOOKALIKE_REFUSAL)]);
+  });
+
+  test("D-PL5-28: a plugin this pass already reported gets no refused-marketplace row", async () => {
+    // arrange
+    const tools = marketplaceRecord("tools", ["app", "lib"]);
+    const failed: PerEntryOutcome = {
+      kind: "plugin-declarer-unreadable",
+      scope: "project",
+      marketplace: "tools",
+      plugin: "app",
+      reason: "unreadable manifest",
+      cause: new Error("cannot read the dependencies of app@tools"),
+    };
+    const outcomes: PerEntryOutcome[] = [failed];
+
+    // act
+    await reportRefusedMarketplaces(
+      "project",
+      stateOf(tools),
+      outcomes,
+      manifestLoader({
+        [tools.manifestPath]: manifestListing("claude-plugins-v2", ["app", "lib"]),
+      }),
+    );
+
+    // assert
+    assert.deepStrictEqual(outcomes, [failed, refusedRow("tools", "lib", LOOKALIKE_REFUSAL)]);
+  });
+
+  test("D-PL5-28: a marketplace Claude Code accepts reports nothing", async () => {
+    // arrange
+    const tools = marketplaceRecord("tools", ["app"]);
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await reportRefusedMarketplaces(
+      "project",
+      stateOf(tools),
+      outcomes,
+      manifestLoader({ [tools.manifestPath]: manifestListing("tools", ["app"]) }),
+    );
+
+    // assert
+    assert.deepStrictEqual(outcomes, []);
+  });
+
+  test("D-PL5-28: a record under a reserved name is refused even when its manifest fails to load", async () => {
+    // arrange
+    const official = marketplaceRecord("claude-plugins-official", ["app"]);
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await reportRefusedMarketplaces("project", stateOf(official), outcomes, manifestLoader({}));
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      refusedRow(
+        "claude-plugins-official",
+        "app",
+        "Marketplace \"claude-plugins-official\" is registered from an untrusted source: The name 'claude-plugins-official' is reserved for official Anthropic marketplaces and can only be used with GitHub sources from the 'anthropics' organization. To fix it, remove the marketplace and re-add it from the official source.",
+      ),
+    ]);
+  });
+});
 
 describe("reportDelistedPlugins", () => {
   test("REC-05 / DLS-01: every enabled record its loaded manifest does not list gets a not-in-manifest warning", async () => {

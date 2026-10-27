@@ -13,13 +13,22 @@
 // nothing here; that fault is the walk's own row. The manifest read is the
 // memoized offline load (NFR-5), and nothing is persisted, so the row returns
 // every session until the plugin is uninstalled or listed again.
+//
+// MKT-01 / D-PL5-28: Claude Code refuses to load a marketplace recorded under a
+// name it refuses, and raises one load error for each enabled plugin of it.
+// The refused-marketplace row is Pi's counterpart. The plugin keeps working,
+// because a load changes no installation state (APL-D1) and Pi has no way to
+// unload what its companion extensions already read; only enabled plugins are
+// reported, as upstream skips the disabled ones.
 
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { recordedMarketplaceNameRefusal } from "../../domain/name.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ScopeReadResult } from "./types.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
+import type { ParsedSource } from "../../domain/source.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -144,6 +153,64 @@ async function loadOrUndefined(
   }
 }
 
+/** Every marketplace `state` records, with its loaded manifest or `undefined`. */
+async function loadedMarketplaces(
+  state: ExtensionState | undefined,
+  loadManifest: typeof loadMarketplaceManifest,
+): Promise<
+  {
+    marketplace: ExtensionState["marketplaces"][string];
+    manifest: MarketplaceManifest | undefined;
+  }[]
+> {
+  const marketplaces = Object.values(state?.marketplaces ?? {});
+  const manifests = await Promise.all(
+    marketplaces.map((marketplace) => loadOrUndefined(loadManifest, marketplace.manifestPath)),
+  );
+  return marketplaces.map((marketplace, index) => ({ marketplace, manifest: manifests[index] }));
+}
+
+/**
+ * D-PL5-28: pushes one `{invalid manifest}` warning, carrying Claude Code's
+ * refusal as its cause, for every enabled record in `state` (the read-pass
+ * snapshot) whose marketplace Claude Code refuses, unless this pass already
+ * reported, uninstalled, or disabled that plugin. A manifest that cannot be
+ * read still has its record's own name checked.
+ */
+export async function reportRefusedMarketplaces(
+  scope: Scope,
+  state: ExtensionState | undefined,
+  outcomes: PerEntryOutcome[],
+  loadManifest: typeof loadMarketplaceManifest = loadMarketplaceManifest,
+): Promise<void> {
+  for (const { marketplace, manifest } of await loadedMarketplaces(state, loadManifest)) {
+    const refusal = recordedMarketplaceNameRefusal(
+      marketplace.name,
+      marketplace.source as ParsedSource,
+      manifest?.name,
+    );
+    if (refusal === undefined) {
+      continue;
+    }
+
+    for (const [plugin, record] of Object.entries(marketplace.plugins)) {
+      if (
+        record.enabled &&
+        !hasRowOfKinds(DELISTED_SUPPRESSING_KINDS, outcomes, scope, marketplace.name, plugin)
+      ) {
+        outcomes.push({
+          kind: "plugin-declarer-unreadable",
+          scope,
+          marketplace: marketplace.name,
+          plugin,
+          reason: "invalid manifest",
+          cause: new Error(refusal),
+        });
+      }
+    }
+  }
+}
+
 /**
  * Pushes one `{not in manifest}` warning for every enabled record in `state`
  * (the read-pass snapshot) whose loaded manifest does not list it, unless this
@@ -157,14 +224,9 @@ export async function reportDelistedPlugins(
   outcomes: PerEntryOutcome[],
   loadManifest: typeof loadMarketplaceManifest = loadMarketplaceManifest,
 ): Promise<void> {
-  const marketplaces = Object.values(state?.marketplaces ?? {});
-  const manifests = await Promise.all(
-    marketplaces.map((marketplace) => loadOrUndefined(loadManifest, marketplace.manifestPath)),
-  );
-  marketplaces.forEach((marketplace, index) => {
-    const manifest = manifests[index];
+  for (const { marketplace, manifest } of await loadedMarketplaces(state, loadManifest)) {
     if (manifest === undefined) {
-      return;
+      continue;
     }
 
     for (const [plugin, record] of Object.entries(marketplace.plugins)) {
@@ -183,5 +245,5 @@ export async function reportDelistedPlugins(
         });
       }
     }
-  });
+  }
 }

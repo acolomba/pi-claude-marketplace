@@ -53,6 +53,7 @@ import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts"
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
+import type { ParsedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type { ListPluginsOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts";
 import type {
   ExtensionContext,
@@ -224,6 +225,8 @@ interface SeedMarketplaceOpts {
   mpName: string;
   /** When provided, written to <mpRoot>/.claude-plugin/marketplace.json. */
   manifest?: unknown;
+  /** The record's stored source; defaults to a path source. */
+  source?: ParsedSource;
   /** When provided BUT manifest is undefined, manifestPath in state points here (typically a nonexistent file for PL-6 tests). */
   manifestPathOverride?: string;
   /**
@@ -362,7 +365,7 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
   const record: Record<string, unknown> = {
     name: mpName,
     scope,
-    source: pathSource(`./${mpName}-src`),
+    source: opts.source ?? pathSource(`./${mpName}-src`),
     addedFromCwd: cwd,
     manifestPath,
     marketplaceRoot: mpRoot,
@@ -1248,6 +1251,17 @@ test("T-80-08 / D-78-04: an INSTALLED git plugin with a missing clone stays `(in
 // unchanged.
 // ──────────────────────────────────────────────────────────────────────────
 
+/**
+ * D-PL5-28: the anthropics organization's github source, the only source a
+ * marketplace recorded as `claude-plugins-official` loads from.
+ */
+const ANTHROPICS_OFFICIAL_SOURCE = {
+  kind: "github",
+  raw: "anthropics/claude-plugins-official",
+  owner: "anthropics",
+  repo: "claude-plugins-official",
+} satisfies ParsedSource;
+
 test("list flags binaries on candidate and upgrade rows of an official marketplace", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
@@ -1258,6 +1272,7 @@ test("list flags binaries on candidate and upgrade rows of an official marketpla
       scopeRoot: userRoot,
       cwd,
       mpName: "claude-plugins-official",
+      source: ANTHROPICS_OFFICIAL_SOURCE,
       manifest: {
         name: "claude-plugins-official",
         plugins: [
@@ -2889,6 +2904,32 @@ test("FSTAT-01 / D-64-02: the partially-installed row's reasons are the narrowUn
 // ──────────────────────────────────────────────────────────────────────────
 // PL-6: manifest soft-fail (catalog CMC-22 form: failed-marketplace header)
 // ──────────────────────────────────────────────────────────────────────────
+
+test("D-PL5-28: a marketplace whose manifest now declares a look-alike name renders as a bare failed header", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp1",
+      manifest: { name: "claude-plugins-v2", plugins: [] },
+      installed: { stranded: { version: "9.9.9" } },
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await listPlugins({ ctx, run, cwd, scope: "user" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: "A marketplace operation has failed.\n\n⊘ mp1 [user] (failed)",
+        severity: "error",
+      },
+    ]);
+  });
+});
 
 test("PL-6 / CMC-22: manifest load failure renders the marketplace as a bare V2 failed header (no `{unparseable}` brace; no cause trailer)", async () => {
   // Catalog `unparseable-mp` at docs/output-catalog.md:215-226: emits a

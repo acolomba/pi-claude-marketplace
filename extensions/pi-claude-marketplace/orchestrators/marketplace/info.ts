@@ -12,6 +12,7 @@
 import path from "node:path";
 
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { assertRecordedMarketplaceName } from "../../domain/name.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
@@ -113,6 +114,8 @@ async function buildBlock(
   };
 
   const parsed = await loadMarketplaceManifest(manifestPath);
+  // D-PL5-28: a marketplace Claude Code refuses fails as an invalid manifest.
+  assertRecordedMarketplaceName(record.name, src, parsed.name);
   const rawDescription = (parsed as Record<string, unknown>).description;
   const description = typeof rawDescription === "string" ? rawDescription : undefined;
 

@@ -1092,54 +1092,64 @@ test("a manifest failure names the marketplace alone as its JSON row id", async 
   });
 });
 
-test("schema-invalid manifest JSON renders the catalog invalid-manifest envelope", async () => {
-  await withHermeticHome(async ({ cwd, home }) => {
-    // arrange
-    const locations = locationsFor("user", cwd);
-    const manifestPath = path.join(locations.extensionRoot, "bad-mp.json");
-    await mkdir(path.dirname(manifestPath), { recursive: true });
-    await writeFile(
-      manifestPath,
-      JSON.stringify({ name: "bad-mp", plugins: "not-an-array" }),
-      "utf8",
-    );
-    await saveMarketplace(
-      locations,
-      marketplaceRecord({
-        addedFromCwd: cwd,
-        manifestPath,
-        marketplaceRoot: "/home/user/marketplaces/bad-mp",
-        name: "bad-mp",
+for (const { title, name, manifest } of [
+  {
+    title: "schema-invalid manifest JSON renders the catalog invalid-manifest envelope",
+    name: "bad-mp",
+    manifest: { name: "bad-mp", plugins: "not-an-array" },
+  },
+  {
+    title:
+      "D-PL5-28: a marketplace recorded under a reserved name from a path source renders the invalid-manifest envelope",
+    name: "claude-plugins-official",
+    manifest: { name: "claude-plugins-official", plugins: [] },
+  },
+]) {
+  test(title, async () => {
+    await withHermeticHome(async ({ cwd, home }) => {
+      // arrange
+      const locations = locationsFor("user", cwd);
+      const manifestPath = path.join(locations.extensionRoot, `${name}.json`);
+      await mkdir(path.dirname(manifestPath), { recursive: true });
+      await writeFile(manifestPath, JSON.stringify(manifest), "utf8");
+      await saveMarketplace(
+        locations,
+        marketplaceRecord({
+          addedFromCwd: cwd,
+          manifestPath,
+          marketplaceRoot: `/home/user/marketplaces/${name}`,
+          name,
+          scope: "user",
+          source: pathSource(`/home/user/marketplaces/${name}`),
+        }),
+      );
+      const before = await snapshotEnvironment(home, cwd);
+      const boundary = notificationBoundary({
+        message: [
+          "A plugin operation has failed.",
+          "",
+          `● ${name} [user] <no autoupdate>`,
+          `  ⊘ ${name} (failed) {invalid manifest}`,
+          "    components: not resolved",
+        ].join("\n"),
+        severity: "error",
+      });
+
+      // act
+      await getMarketplaceInfo({
+        ctx: boundary.ctx,
+        run: boundary.run,
+        name,
         scope: "user",
-        source: pathSource("/home/user/marketplaces/bad-mp"),
-      }),
-    );
-    const before = await snapshotEnvironment(home, cwd);
-    const boundary = notificationBoundary({
-      message: [
-        "A plugin operation has failed.",
-        "",
-        "● bad-mp [user] <no autoupdate>",
-        "  ⊘ bad-mp (failed) {invalid manifest}",
-        "    components: not resolved",
-      ].join("\n"),
-      severity: "error",
-    });
+        cwd,
+      });
 
-    // act
-    await getMarketplaceInfo({
-      ctx: boundary.ctx,
-      run: boundary.run,
-      name: "bad-mp",
-      scope: "user",
-      cwd,
+      // assert
+      assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
+      boundary.verifyAll();
     });
-
-    // assert
-    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
-    boundary.verifyAll();
   });
-});
+}
 
 test("implicit scope emits a healthy project block before a failed user block", async () => {
   await withHermeticHome(async ({ cwd, home }) => {

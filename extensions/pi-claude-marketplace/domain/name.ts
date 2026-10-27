@@ -412,7 +412,7 @@ export function assertRecordedMarketplaceName(
  * The look-alike sentence echoes the record's name only when it is printable
  * ASCII, so no unprintable name reaches a terminal.
  */
-function recordedMarketplaceNameRefusal(
+export function recordedMarketplaceNameRefusal(
   recordName: string,
   source: ParsedSource,
   declaredName?: string,

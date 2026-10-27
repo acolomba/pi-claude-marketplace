@@ -15,6 +15,7 @@ import {
   generatedWorkflowName,
   isReservedRecordKey,
   mcpServerDisplayName,
+  recordedMarketplaceNameRefusal,
   reservedMarketplaceNameRefusal,
 } from "../../extensions/pi-claude-marketplace/domain/name.ts";
 import {
@@ -822,6 +823,81 @@ describe("assertRecordedMarketplaceName", () => {
       assertRecordedMarketplaceName("claude-directory", pathMarketplaceSource, "claude-directory");
     });
   });
+});
+
+describe("recordedMarketplaceNameRefusal", () => {
+  for (const { title, recordName, source, declaredName, refusal: expectedRefusal } of [
+    {
+      title: "refuses a reserved record name from a path source as an untrusted source",
+      recordName: "claude-plugins-official",
+      source: pathMarketplaceSource,
+      declaredName: undefined,
+      refusal: `Marketplace "claude-plugins-official" is registered from an untrusted source: ${ORGANIZATION_REFUSAL("claude-plugins-official")} To fix it, remove the marketplace and re-add it from the official source.`,
+    },
+    {
+      title: "refuses a reserved record name from another github owner as an untrusted source",
+      recordName: "claude-plugins-official",
+      source: {
+        kind: "github",
+        raw: "acme/claude-plugins-official",
+        owner: "acme",
+        repo: "claude-plugins-official",
+      },
+      declaredName: "claude-plugins-official",
+      refusal: `Marketplace "claude-plugins-official" is registered from an untrusted source: ${GITHUB_REFUSAL("claude-plugins-official")} To fix it, remove the marketplace and re-add it from the official source.`,
+    },
+    {
+      title: "refuses a record named as another spelling of a reserved name",
+      recordName: "claude.code.plugins",
+      source: pathMarketplaceSource,
+      declaredName: "claude.code.plugins",
+      refusal:
+        '"claude.code.plugins" is another spelling of "claude-code-plugins", a reserved marketplace name.',
+    },
+    {
+      title: "accepts the anthropic-plugin-directory record of the anthropics organization",
+      recordName: "anthropic-plugin-directory",
+      source: anthropicsSource("anthropic-plugin-directory"),
+      declaredName: "anthropic-plugin-directory",
+      refusal: undefined,
+    },
+    {
+      title: "refuses a catalog that declares a strong look-alike for the record tools",
+      recordName: "tools",
+      source: pathMarketplaceSource,
+      declaredName: "claude-plugins-v2",
+      refusal: `Claude Code refuses the marketplace name "tools": it looks like one of Anthropic's own`,
+    },
+    {
+      title: "refuses a catalog that declares one of Claude Code's own names",
+      recordName: "tools",
+      source: pathMarketplaceSource,
+      declaredName: "npm",
+      refusal:
+        'Marketplace name "npm" is reserved for plugins installed from an npm registry (`<package>@npm`); remove this marketplace and add it again under another name',
+    },
+    {
+      title: "accepts a record whose name Claude Code refuses only in a catalog it has not read",
+      recordName: "claude-directory",
+      source: pathMarketplaceSource,
+      declaredName: undefined,
+      refusal: undefined,
+    },
+  ] satisfies {
+    title: string;
+    recordName: string;
+    source: ParsedSource;
+    declaredName: string | undefined;
+    refusal: string | undefined;
+  }[]) {
+    test(`D-PL5-28: ${title}`, () => {
+      // act
+      const refusal = recordedMarketplaceNameRefusal(recordName, source, declaredName);
+
+      // assert
+      assert.strictEqual(refusal, expectedRefusal);
+    });
+  }
 });
 
 describe("generatedSkillName", () => {
