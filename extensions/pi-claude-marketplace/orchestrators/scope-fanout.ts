@@ -12,6 +12,7 @@
 // NFR-5: `loadState` and `loadMergedScopeConfig` are both read-only local
 // reads. Nothing here touches the network.
 
+import { effectiveMarketplaceAutoupdate } from "../domain/official-marketplaces.ts";
 import { loadMergedScopeConfig } from "../persistence/config-merge.ts";
 import { locationsFor } from "../persistence/locations.ts";
 import { loadState } from "../persistence/state-io.ts";
@@ -88,7 +89,10 @@ async function readScopeMarketplaceRecord(
   return {
     scope,
     record,
-    autoupdate: ownValue(merged.marketplaces, opts.marketplace)?.entry.autoupdate ?? false,
+    autoupdate: effectiveMarketplaceAutoupdate(
+      opts.marketplace,
+      ownValue(merged.marketplaces, opts.marketplace)?.entry.autoupdate,
+    ),
     declaredEnabled: declaredEnabledFor(merged, opts.pluginKey),
   };
 }

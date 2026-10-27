@@ -297,6 +297,25 @@ test("updates each recorded marketplace whose merged autoupdate is true, project
   );
 });
 
+test("D-PL8-07: updates an official marketplace without a config value and skips a default-off one", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-pass-official-");
+  await seedMarketplace(cwd, "project", "claude-plugins-official");
+  await seedMarketplace(cwd, "project", "knowledge-work-plugins");
+  await seedMarketplace(cwd, "user", "anthropic-agent-skills");
+  const { calls, deps } = createPassUnderTest({});
+  const pass = createBackgroundPass(deps);
+
+  // act
+  await pass({ ctx: sessionContext(cwd), isStopped: () => false });
+
+  // assert
+  assert.deepStrictEqual(updatedTargets(calls), [
+    "claude-plugins-official [project]",
+    "anthropic-agent-skills [user]",
+  ]);
+});
+
 test("runs every update through one silent load run", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-run-");

@@ -220,9 +220,13 @@ Claude Code takes the first value that is set, in this order:
 2. The `autoUpdate` value of the marketplace entry in `known_marketplaces.json`.
 3. The default. The default is on for the official marketplace names of Claude Code, except `knowledge-work-plugins` and `first-party-plugins`. It is also on for the `claudeai` and `pluginDirectory` sources. It is off for all other marketplaces.
 
-This extension takes the `autoupdate` value of the marketplace entry in the local configuration file of the scope (`claude-plugins.local.json`). If that file does not set it, the extension takes the value from the base configuration file (`claude-plugins.json`). If neither file sets it, autoupdate is off. `/claude:plugin bootstrap` writes `autoupdate: true` for `claude-plugins-official`, so the official marketplace has autoupdate on, as in Claude Code. `/claude:plugin marketplace autoupdate` and `/claude:plugin marketplace noautoupdate` set the value.
+This extension takes the first value that is set, in this order:
 
-Pi has no claude.ai source and no plugin-directory source. An official marketplace name that a configuration file declares without an `autoupdate` value has autoupdate off here, but on in Claude Code.
+1. The `autoupdate` value of the marketplace entry in the local configuration file of the scope (`claude-plugins.local.json`).
+2. The `autoupdate` value of the marketplace entry in the base configuration file of the scope (`claude-plugins.json`).
+3. The default of Claude Code for the marketplace name. The extension changes the name to lower case first, as Claude Code does. The default is on for the official marketplace names of Claude Code, except `knowledge-work-plugins` and `first-party-plugins`. It is off for all other marketplaces.
+
+Pi has no claude.ai source and no plugin-directory source, so the default for those two sources does not apply here. `/claude:plugin bootstrap` writes no `autoupdate` value for `claude-plugins-official`, because the default already turns autoupdate on. `/claude:plugin marketplace autoupdate` and `/claude:plugin marketplace noautoupdate` set the value.
 
 ### Claude Code settings that the extension does not read
 

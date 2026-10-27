@@ -669,6 +669,36 @@ describe("loadMarketplaceListEntries", () => {
     });
   });
 
+  for (const { name, autoupdate } of [
+    { name: "claude-plugins-official", autoupdate: true },
+    { name: "knowledge-work-plugins", autoupdate: false },
+  ]) {
+    test(`D-PL8-07: defaults the autoupdate of ${name} without a config value to ${autoupdate}`, async () => {
+      await withHermeticHome(async ({ cwd }) => {
+        // arrange
+        await seedMarketplaces(locationsFor("project", cwd), [
+          pathRecord(cwd, name, "project", "2026-05-25T00:00:00Z"),
+        ]);
+
+        // act
+        const blocks = (await loadMarketplaceListEntries({ cwd, scope: "project" })).map(
+          (entry) => entry.block,
+        );
+
+        // assert
+        assert.deepStrictEqual(blocks, [
+          {
+            name,
+            scope: "project",
+            severity: "info",
+            details: { autoupdate, lastUpdatedAt: "2026-05-25T00:00:00Z" },
+            plugins: [],
+          },
+        ]);
+      });
+    });
+  }
+
   test("omits details when autoupdate is off and no last-update time is recorded", async () => {
     await withHermeticHome(async ({ cwd }) => {
       // arrange

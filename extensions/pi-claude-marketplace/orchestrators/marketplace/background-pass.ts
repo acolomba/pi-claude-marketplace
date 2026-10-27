@@ -25,6 +25,7 @@
 // cascade turns a plugin lock miss into a failed outcome. Both stay silent,
 // and this runtime does not retry them.
 
+import { effectiveMarketplaceAutoupdate } from "../../domain/official-marketplaces.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
@@ -98,9 +99,12 @@ interface PassStep {
   readonly pluginUpdate: PluginUpdateFn;
 }
 
-/** D-PL8-07: a marketplace with no config value stays off. */
+/** D-PL8-07 (reversed): a marketplace with no config value gets the default for its name. */
 function isAutoupdateOn(merged: MergedConfig, name: string): boolean {
-  return ownValue(merged.marketplaces, name)?.entry.autoupdate === true;
+  return effectiveMarketplaceAutoupdate(
+    name,
+    ownValue(merged.marketplaces, name)?.entry.autoupdate,
+  );
 }
 
 async function autoupdateMarketplaces(scope: Scope, cwd: string): Promise<readonly string[]> {

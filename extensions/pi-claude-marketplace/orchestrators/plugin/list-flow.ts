@@ -57,6 +57,7 @@
 
 import { lookupDeclaredPlugin, type ManifestLookup } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
+import { effectiveMarketplaceAutoupdate } from "../../domain/official-marketplaces.ts";
 import { loadMergedScopeConfig, type MergedConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
@@ -689,7 +690,10 @@ export async function loadPluginListPayload(
       mpName,
       mpScope: "project",
       mpRecord,
-      autoupdate: ownValue(projectMerged.marketplaces, mpName)?.entry.autoupdate ?? false,
+      autoupdate: effectiveMarketplaceAutoupdate(
+        mpName,
+        ownValue(projectMerged.marketplaces, mpName)?.entry.autoupdate,
+      ),
       scopeConfig: projectMerged,
       extraPlugins: [],
     });
@@ -716,7 +720,10 @@ export async function loadPluginListPayload(
       mpName,
       mpScope: "user",
       mpRecord,
-      autoupdate: ownValue(userMerged.marketplaces, mpName)?.entry.autoupdate ?? false,
+      autoupdate: effectiveMarketplaceAutoupdate(
+        mpName,
+        ownValue(userMerged.marketplaces, mpName)?.entry.autoupdate,
+      ),
       scopeConfig: userMerged,
       extraPlugins: folded,
       excludeFromAvailable: foldedNames,

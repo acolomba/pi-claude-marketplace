@@ -2415,6 +2415,57 @@ test("autoupdate off never invokes a plugin update", async () => {
   });
 });
 
+for (const { name, expectedCalls } of [
+  { name: "claude-plugins-official", expectedCalls: ["hello"] },
+  { name: "knowledge-work-plugins", expectedCalls: [] },
+  { name: "tools", expectedCalls: [] },
+]) {
+  test(`D-PL8-07: a marketplace named ${name} without a config value cascades to ${JSON.stringify(expectedCalls)}`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      await seedGithubMarketplace({
+        cwd,
+        name,
+        ref: "main",
+        plugins: { hello: makePluginRecord() },
+      });
+      const { ctx, run } = makeCtx();
+      const { gitOps } = createGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000005" },
+      });
+      const calls: string[] = [];
+      const pluginUpdate: PluginUpdateFn = async (plugin) => {
+        calls.push(plugin);
+        return Promise.resolve({
+          partition: "unchanged",
+          name: plugin,
+          fromVersion: "0.0.1",
+          toVersion: "0.0.1",
+          declaresAgents: false,
+          declaresMcp: false,
+          constraint: undefined,
+          declaresWorkflows: false,
+        });
+      };
+
+      // act
+      await updateMarketplace({
+        completionCache: createCompletionCache(),
+        ctx,
+        run,
+        name,
+        scope: "project",
+        cwd,
+        gitOps,
+        pluginUpdate,
+      });
+
+      // assert
+      assert.deepStrictEqual(calls, expectedCalls);
+    });
+  });
+}
+
 test("autoupdate continues in installed order after an ordinary plugin failure", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange

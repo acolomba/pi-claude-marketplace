@@ -127,6 +127,46 @@ test("reads only an explicit project scope and applies missing-config defaults",
   ]);
 });
 
+for (const { marketplace, autoupdate } of [
+  { marketplace: "claude-plugins-official", autoupdate: true },
+  { marketplace: "first-party-plugins", autoupdate: false },
+]) {
+  test(`D-PL8-07: defaults the autoupdate of ${marketplace} without a config value to ${autoupdate}`, async (t) => {
+    // arrange
+    const { cwd, project, root } = await makeTestScopes(t, "scope-fanout-official-");
+    await seedState(project, { [marketplace]: marketplaceRecord("project", marketplace, root) });
+
+    // act
+    const records = await collectMarketplaceRecordsByScope({
+      cwd,
+      scope: "project",
+      marketplace,
+    });
+
+    // assert
+    assert.deepStrictEqual(records, [
+      {
+        scope: "project",
+        record: {
+          name: marketplace,
+          scope: "project",
+          source: {
+            kind: "path",
+            raw: `./project-${marketplace}`,
+            logical: `./project-${marketplace}`,
+          },
+          addedFromCwd: path.join(root, "project-added-from"),
+          manifestPath: path.join(root, `project-${marketplace}.json`),
+          marketplaceRoot: path.join(root, `project-${marketplace}`),
+          plugins: {},
+        },
+        autoupdate,
+        declaredEnabled: undefined,
+      },
+    ]);
+  });
+}
+
 test("preserves same-name project-before-user rows and explicit config values", async (t) => {
   // arrange
   const { cwd, project, root, user } = await makeTestScopes(t, "scope-fanout-order-");

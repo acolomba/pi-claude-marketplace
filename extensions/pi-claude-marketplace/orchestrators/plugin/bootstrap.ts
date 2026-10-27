@@ -79,13 +79,16 @@ export interface BootstrapOptions {
 
 /**
  * Add the canonical Anthropic marketplace to user scope and enable
- * autoupdate for it. Idempotent end-to-end:
- *   - first run on clean state: emits two notifications (add + enable).
- *   - re-run on fully bootstrapped state: emits the add's
- *     `(skipped) {already added}` row, then the autoupdate step's
- *     `(skipped) {already autoupdate}` row (MPA-01).
- *   - re-run on half-bootstrapped state (marketplace present, autoupdate
- *     off): emits the same skipped add row, then `(autoupdate enabled)`.
+ * autoupdate for it. Its official name already turns autoupdate on by default
+ * (D-PL8-07, reversed), so the autoupdate step writes no value and reports
+ * `(skipped) {already autoupdate}` unless `claude-plugins.json` sets the value
+ * off (D-PL8-19). Idempotent end-to-end:
+ *   - first run on clean state: emits the add's `(added)` row, then the
+ *     autoupdate step's `(skipped) {already autoupdate}` row.
+ *   - re-run: emits the add's `(skipped) {already added}` row, then the same
+ *     autoupdate row (MPA-01).
+ *   - re-run when `claude-plugins.json` sets autoupdate off: emits the same
+ *     skipped add row, then `(autoupdate enabled)`.
  *
  * An idempotent re-run is recognized before any clone: `addMarketplace`
  * matches the typed source against the user scope's records inside its own

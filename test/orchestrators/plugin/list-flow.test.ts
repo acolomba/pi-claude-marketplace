@@ -4541,6 +4541,57 @@ test("loadPluginListPayload filters project marketplaces and projects autoupdate
   });
 });
 
+test("D-PL8-07: loadPluginListPayload defaults autoupdate by marketplace name in both scopes", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const projectRoot = path.join(cwd, ".pi");
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "project",
+      scopeRoot: projectRoot,
+      cwd,
+      mpName: "claude-plugins-official",
+      manifest: { name: "claude-plugins-official", plugins: [] },
+    });
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "anthropic-agent-skills",
+      manifest: { name: "anthropic-agent-skills", plugins: [] },
+    });
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "knowledge-work-plugins",
+      manifest: { name: "knowledge-work-plugins", plugins: [] },
+    });
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+
+    // act
+    const marketplaces = await loadPluginListPayload({ ctx, cwd });
+
+    // assert
+    assert.deepStrictEqual(marketplaces, [
+      {
+        name: "anthropic-agent-skills",
+        scope: "user",
+        details: { autoupdate: true },
+        plugins: [],
+      },
+      {
+        name: "claude-plugins-official",
+        scope: "project",
+        details: { autoupdate: true },
+        plugins: [],
+      },
+      { name: "knowledge-work-plugins", scope: "user", plugins: [] },
+    ]);
+    verify(ctx);
+  });
+});
+
 test("loadPluginListPayload preserves input order for case-tied marketplaces in one scope", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
