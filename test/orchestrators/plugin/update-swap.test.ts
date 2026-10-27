@@ -176,6 +176,7 @@ async function assertAgentsMigrated(params: {
     : ["pi-claude-marketplace-hello-hello-reviewer"];
   assert.deepStrictEqual(outcome, {
     partition: "updated",
+    resourcesChanged: true,
     name: "hello",
     fromVersion: "1.0.0",
     toVersion: "2.0.0",
@@ -505,6 +506,7 @@ test("D-18-15: an overwrite policy commits over a previous agent file a user edi
   // assert
   assert.deepStrictEqual(outcome, {
     partition: "updated",
+    resourcesChanged: true,
     name: "hello",
     fromVersion: "1.0.0",
     toVersion: "2.0.0",
@@ -585,6 +587,7 @@ test("D-PL1-10: a direct swap puts an agents duplicate on the updated outcome's 
   // assert
   assert.deepStrictEqual(outcome, {
     partition: "updated",
+    resourcesChanged: true,
     name: "hello",
     fromVersion: "1.0.0",
     toVersion: "2.0.0",
@@ -650,6 +653,7 @@ for (const [mode, swapArgs] of [
     // assert
     assert.deepStrictEqual(outcome, {
       partition: "updated",
+      resourcesChanged: true,
       name: "hello",
       fromVersion: "1.0.0",
       toVersion: "2.0.0",
@@ -1228,6 +1232,7 @@ test("AFILE-04: a swap over a commented mcp-adapter.json carries the comments-re
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "updated",
+        resourcesChanged: true,
         name: "hello",
         fromVersion: "1.0.0",
         toVersion: "2.0.0",
@@ -1262,6 +1267,7 @@ test("AFILE-04: a swap over a comment-free mcp-adapter.json carries no notice", 
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "updated",
+        resourcesChanged: true,
         name: "hello",
         fromVersion: "1.0.0",
         toVersion: "2.0.0",
@@ -1403,6 +1409,7 @@ test("AMIG-02: a swap removes the plugin's marked mcp.json entries after the MCP
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "updated",
+        resourcesChanged: true,
         name: "hello",
         fromVersion: "1.0.0",
         toVersion: "2.0.0",
@@ -1539,6 +1546,7 @@ async function prepareDirectUpdate(cwd: string) {
 
 const DIRECT_UPDATED_OUTCOME = {
   partition: "updated",
+  resourcesChanged: true,
   name: "hello",
   fromVersion: "1.0.0",
   toVersion: "2.0.0",
@@ -1596,3 +1604,100 @@ test("LAYER-04: a direct swap with an unreadable local layer updates, renders no
     }
   });
 });
+
+type SeededPluginSpec = Parameters<typeof seedPathMarketplace>[0]["manifestPlugins"][string];
+type RecordedResources = NonNullable<
+  Awaited<ReturnType<typeof loadState>>["marketplaces"][string]
+>["plugins"][string]["resources"];
+
+/**
+ * Seed `hello@1.0.0` with `resources` on its record, and the `2.0.0`
+ * candidate `spec` the update stages.
+ */
+async function seedResourcesUpdate(
+  t: TestContext,
+  resources: RecordedResources,
+  spec: SeededPluginSpec,
+): Promise<string> {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-resources-changed-");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    manifestPlugins: { hello: spec },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const locations = locationsFor("project", cwd);
+  const state = await loadState(locations.extensionRoot);
+  const record = state.marketplaces.mp?.plugins.hello;
+  assert.ok(record);
+  record.resources = resources;
+  await saveState(locations.extensionRoot, state);
+  return cwd;
+}
+
+const NO_RESOURCES = {
+  skills: [],
+  prompts: [],
+  agents: [],
+  mcpServers: [],
+  hooks: [],
+  workflows: [],
+} satisfies RecordedResources;
+
+for (const { situation, resources, spec, expectedOutcome } of [
+  {
+    situation: "the record held a skill and the candidate stages one",
+    resources: { ...NO_RESOURCES, skills: ["hello:tool"] },
+    spec: { version: "2.0.0" },
+    expectedOutcome: { ...DIRECT_UPDATED_OUTCOME, resourcesChanged: true },
+  },
+  {
+    situation: "the record held a prompt and the candidate stages nothing",
+    resources: { ...NO_RESOURCES, prompts: ["hello:deploy"] },
+    spec: { version: "2.0.0", hasSkill: false },
+    expectedOutcome: { ...DIRECT_UPDATED_OUTCOME, resourcesChanged: true },
+  },
+  {
+    situation: "the record held nothing and the candidate stages an MCP server",
+    resources: NO_RESOURCES,
+    spec: { version: "2.0.0", hasSkill: false, hasMcp: true },
+    expectedOutcome: {
+      ...DIRECT_UPDATED_OUTCOME,
+      resourcesChanged: true,
+      stagedMcpServerNames: ["server1"],
+      declaresMcp: true,
+    },
+  },
+  {
+    situation: "the record and the candidate hold only hooks",
+    resources: { ...NO_RESOURCES, hooks: ["hello"] },
+    spec: {
+      version: "2.0.0",
+      hasSkill: false,
+      hooksJson: {
+        PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hi" }] }],
+      },
+    },
+    expectedOutcome: { ...DIRECT_UPDATED_OUTCOME, resourcesChanged: false },
+  },
+] satisfies readonly {
+  situation: string;
+  resources: RecordedResources;
+  spec: SeededPluginSpec;
+  expectedOutcome: Awaited<ReturnType<typeof swapPluginUpdate>>;
+}[]) {
+  test(`D-PL1-18: resourcesChanged is ${expectedOutcome.resourcesChanged} when ${situation}`, async (t) => {
+    // arrange
+    const cwd = await seedResourcesUpdate(t, resources, spec);
+    const args = cascadeSwapArgs(cwd);
+    const preflight = await preflightOf(args);
+
+    // act
+    const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+    // assert
+    assert.deepStrictEqual(outcome, expectedOutcome);
+  });
+}

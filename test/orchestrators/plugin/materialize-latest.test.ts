@@ -168,6 +168,7 @@ test("swaps the offered version in and records it in cascade mode", async (t) =>
   // assert
   assert.deepStrictEqual(outcome, {
     partition: "updated",
+    resourcesChanged: true,
     name: "hello",
     fromVersion: "1.0.0",
     toVersion: "1.1.0",
@@ -202,6 +203,7 @@ test("REI-01: a policy that does not skip the recorded revision restores its del
   // assert
   assert.deepStrictEqual(outcome, {
     partition: "updated",
+    resourcesChanged: true,
     name: "hello",
     fromVersion: "1.0.0",
     toVersion: "1.0.0",
@@ -329,6 +331,7 @@ test("UPD-DEP-D1: settles the new version's dependencies before the swap and rep
   // assert
   assert.deepStrictEqual(outcome, {
     partition: "updated",
+    resourcesChanged: true,
     name: "hello",
     fromVersion: "1.0.0",
     toVersion: "1.1.0",

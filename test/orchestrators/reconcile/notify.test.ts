@@ -2014,6 +2014,7 @@ describe("convergedMoveOutcomes", () => {
     const outcomes = convergedMoveOutcomes(DEMO_MOVE, {
       ...UPDATE_BASE,
       partition: "updated",
+      resourcesChanged: true,
       fromVersion: "1.0.0",
       toVersion: "1.1.0",
       stagedAgentNames: [],
@@ -2055,6 +2056,7 @@ describe("convergedMoveOutcomes", () => {
       {
         ...UPDATE_BASE,
         partition: "updated",
+        resourcesChanged: true,
         fromVersion: "1.0.0",
         toVersion: "1.1.0",
         stagedAgentNames: [],
@@ -2094,6 +2096,7 @@ describe("convergedMoveOutcomes", () => {
       {
         ...UPDATE_BASE,
         partition: "updated",
+        resourcesChanged: true,
         fromVersion: "1.0.0",
         toVersion: "1.1.0",
         stagedAgentNames: [],
@@ -2132,6 +2135,7 @@ describe("convergedMoveOutcomes", () => {
       {
         ...UPDATE_BASE,
         partition: "updated",
+        resourcesChanged: true,
         fromVersion: "1.0.0",
         toVersion: "1.1.0",
         stagedAgentNames: [],

@@ -417,6 +417,7 @@ describe("reinstallOutcomeFromRun", () => {
     // arrange
     const run: UpdateRunOutcome = {
       partition: "updated",
+      resourcesChanged: true,
       name: "hello",
       fromVersion: "1.0.0",
       toVersion: "1.1.0",
@@ -452,6 +453,7 @@ describe("reinstallOutcomeFromRun", () => {
     // arrange
     const run: UpdateRunOutcome = {
       partition: "updated",
+      resourcesChanged: true,
       name: "hello",
       fromVersion: "1.0.0",
       toVersion: "1.0.0",
@@ -490,6 +492,7 @@ describe("reinstallOutcomeFromRun", () => {
     // arrange
     const run: UpdateRunOutcome = {
       partition: "updated",
+      resourcesChanged: true,
       name: "hello",
       fromVersion: "1.0.0",
       toVersion: "1.1.0",
@@ -533,6 +536,7 @@ describe("reinstallOutcomeFromRun", () => {
     // arrange
     const run: UpdateRunOutcome = {
       partition: "updated",
+      resourcesChanged: true,
       name: "hello",
       fromVersion: "1.0.0",
       toVersion: "1.0.0",

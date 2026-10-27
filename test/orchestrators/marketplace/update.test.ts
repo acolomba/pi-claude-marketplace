@@ -403,6 +403,7 @@ for (const mode of ["json", "rpc"]) {
         await pending;
         return {
           partition: "updated",
+          resourcesChanged: true,
           name: plugin,
           fromVersion: "0.0.1",
           toVersion: "0.0.2",
@@ -2264,6 +2265,7 @@ test("autoupdate calls each installed plugin in record order", async () => {
       calls.push({ plugin, marketplace });
       return Promise.resolve({
         partition: "updated",
+        resourcesChanged: true,
         name: plugin,
         fromVersion: "0.0.1",
         toVersion: "0.0.2",
@@ -2385,6 +2387,7 @@ test("autoupdate off never invokes a plugin update", async () => {
       pluginUpdateCalled = true;
       return Promise.resolve({
         partition: "updated",
+        resourcesChanged: true,
         name: "x",
         fromVersion: "0.0.1",
         toVersion: "0.0.2",
@@ -2452,6 +2455,7 @@ test("autoupdate continues in installed order after an ordinary plugin failure",
 
         return Promise.resolve({
           partition: "updated",
+          resourcesChanged: true,
           name: plugin,
           fromVersion: "1.0.0",
           toVersion: "1.1.0",
@@ -2776,6 +2780,7 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
       if (plugin === "a") {
         return Promise.resolve<PluginUpdateOutcome>({
           partition: "updated",
+          resourcesChanged: true,
           name: plugin,
           fromVersion: "0.0.1",
           toVersion: "0.0.2",
@@ -2886,6 +2891,7 @@ test("MU-9 + MSG-RH-1: success emits canonical reload hint trailer for updated p
     const pluginUpdate: PluginUpdateFn = async (plugin) =>
       Promise.resolve({
         partition: "updated",
+        resourcesChanged: true,
         name: plugin,
         fromVersion: "0.0.1",
         toVersion: "0.0.2",
@@ -3000,6 +3006,7 @@ test("UXG-05 (UAT Test-3 gap) regression guard: autoupdate-ON cascade where a pl
     const pluginUpdate: PluginUpdateFn = async (plugin) =>
       Promise.resolve({
         partition: "updated",
+        resourcesChanged: true,
         name: plugin,
         fromVersion: "0.0.1",
         toVersion: "0.0.2",
@@ -3055,6 +3062,7 @@ test("a repeated autoupdate collapses after the first run changes a plugin", asy
         firstRun
           ? {
               partition: "updated",
+              resourcesChanged: true,
               name: plugin,
               fromVersion: "0.0.1",
               toVersion: "0.0.2",
@@ -3140,6 +3148,7 @@ test("AFILE-04: a marketplace update whose autoupdate cascade rewrites a comment
         plugin === "alpha"
           ? {
               partition: "updated",
+              resourcesChanged: true,
               name: plugin,
               fromVersion: "0.0.1",
               toVersion: "0.0.2",
@@ -3403,6 +3412,7 @@ test("a bare update emits each cascade's MCP notices before the next marketplace
 
       return Promise.resolve({
         partition: "updated",
+        resourcesChanged: true,
         name: plugin,
         fromVersion: "0.0.1",
         toVersion: "0.0.2",
@@ -4414,6 +4424,7 @@ test("a newly degraded autoupdate cascade emits its partial row and warning enve
     const pluginUpdate: PluginUpdateFn = async (plugin) =>
       Promise.resolve<PluginUpdateOutcome>({
         partition: "updated",
+        resourcesChanged: true,
         name: plugin,
         fromVersion: "0.0.1",
         toVersion: "0.0.2",
@@ -5640,6 +5651,7 @@ test("WR-12: the autoupdate cascade row is byte-identical to the standalone upda
     const pluginUpdate: PluginUpdateFn = async (plugin) =>
       Promise.resolve({
         partition: "updated",
+        resourcesChanged: true,
         name: plugin,
         fromVersion: "1.0.0",
         toVersion: "1.0.1",

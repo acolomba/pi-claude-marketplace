@@ -12824,6 +12824,7 @@ test("AFILE-04: the cascade update entry returns the notice without notifying", 
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "updated",
+        resourcesChanged: true,
         name: "hello",
         fromVersion: "1.0.0",
         toVersion: "1.0.1",
@@ -13174,6 +13175,7 @@ test("D-26: convergePlugin moves a path-source plugin to the catalog version in 
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "updated",
+        resourcesChanged: true,
         name: "hello",
         fromVersion: "1.0.0",
         toVersion: "1.1.0",
@@ -13313,6 +13315,7 @@ test("D-10 / D-25: convergePlugin with rematerialize re-materializes the recorde
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "updated",
+        resourcesChanged: true,
         name: "hello",
         fromVersion: "1.0.0",
         toVersion: "1.0.0",

@@ -144,6 +144,7 @@ const PLUGIN_UPDATE_UPDATED_CLEAN = {
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: false,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toVersion: "1.1.0",
@@ -166,6 +167,7 @@ const PLUGIN_UPDATE_UPDATED_FULL = {
     newlyDegraded: true,
   },
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: ["alpha-agent"],
   stagedMcpServerNames: ["alpha-mcp"],
   stagingWarnings: [
@@ -437,6 +439,7 @@ void ({
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toCommit: "b".repeat(40),
@@ -475,6 +478,7 @@ void ({
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   // @ts-expect-error the updated partition requires both transition versions
@@ -527,6 +531,7 @@ void ({
     kinds: ["hooks"],
   },
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toVersion: "2.0.0",
@@ -540,6 +545,7 @@ void ({
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toVersion: "2.0.0",
@@ -555,6 +561,7 @@ void ({
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toVersion: "2.0.0",
@@ -603,12 +610,28 @@ void ({
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toVersion: "2.0.0",
   // @ts-expect-error outcome types do not carry rendered-row dependencies
   dependencies: ["agents"],
 } satisfies PluginUpdateOutcome);
+
+// D-PL1-18: every updated outcome states whether it touched a loadable resource.
+void ({
+  constraint: undefined,
+  declaresAgents: false,
+  declaresMcp: false,
+  declaresWorkflows: false,
+  fromVersion: "1.0.0",
+  name: "alpha",
+  partition: "updated",
+  stagedAgentNames: [],
+  stagedMcpServerNames: [],
+  toVersion: "2.0.0",
+  // @ts-expect-error the updated partition requires resourcesChanged
+} satisfies PluginUpdateUpdatedOutcome);
 
 // D-10-17a: the disclosure member is REQUIRED-BUT-NULLABLE, never `constraint?:`
 // -- omitting the key entirely is a compile error, unlike an ordinary optional
@@ -619,6 +642,7 @@ void ({
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toVersion: "2.0.0",
@@ -637,6 +661,7 @@ void ({
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toVersion: "2.0.0",

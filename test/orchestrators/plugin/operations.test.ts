@@ -953,6 +953,7 @@ test("D-26: convergePlugin moves the plugin to the catalog version in place and 
   // assert
   assert.deepStrictEqual(outcome, {
     partition: "updated",
+    resourcesChanged: false,
     name: "p1",
     fromVersion: "0.0.1",
     toVersion: "0.0.2",

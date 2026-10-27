@@ -216,6 +216,7 @@ test("projects a clean updated outcome with dependency order and optional reason
   // arrange
   const outcome = {
     partition: "updated",
+    resourcesChanged: true,
     name: "epsilon",
     fromVersion: "1.0.0",
     toVersion: "1.1.0",
@@ -250,6 +251,7 @@ test("UPR-02: an autoupdated plugin at the same version names the moved commits"
   const toCommit = "b".repeat(40);
   const outcome = {
     partition: "updated",
+    resourcesChanged: true,
     name: "ghp",
     fromVersion: "1.0.0",
     toVersion: "1.0.0",
@@ -284,6 +286,7 @@ test("NREG-01: an autoupdated plugin whose version moved names no commits", () =
   // arrange
   const outcome = {
     partition: "updated",
+    resourcesChanged: true,
     name: "ghp",
     fromVersion: "1.0.0",
     toVersion: "1.1.0",
@@ -317,6 +320,7 @@ test("projects orphan rewake before canonical malformed reasons on an updated ro
   // arrange
   const outcome = {
     partition: "updated",
+    resourcesChanged: true,
     name: "eta",
     fromVersion: "2.0.0",
     toVersion: "2.1.0",
@@ -351,6 +355,7 @@ test("keeps an empty newly-degraded signal on the clean updated row", () => {
   // arrange
   const outcome = {
     partition: "updated",
+    resourcesChanged: true,
     name: "theta",
     fromVersion: "3.0.0",
     toVersion: "3.1.0",
@@ -384,6 +389,7 @@ test("projects a newly degraded partial update with warning severity", () => {
   // arrange
   const outcome = {
     partition: "updated",
+    resourcesChanged: true,
     name: "iota",
     fromVersion: "4.0.0",
     toVersion: "4.1.0",
@@ -417,6 +423,7 @@ test("projects an already degraded partial update with info severity", () => {
   // arrange
   const outcome = {
     partition: "updated",
+    resourcesChanged: true,
     name: "kappa",
     fromVersion: "5.0.0",
     toVersion: "5.1.0",
@@ -450,6 +457,7 @@ test("preserves orphan, malformed, and dropped reason order on a partial update"
   // arrange
   const outcome = {
     partition: "updated",
+    resourcesChanged: true,
     name: "lambda",
     fromVersion: "6.0.0",
     toVersion: "6.1.0",
@@ -559,6 +567,7 @@ test("D-10-13: an updated outcome with a constraint discloses its range on the a
   const outcome = {
     declaresWorkflows: false,
     partition: "updated",
+    resourcesChanged: true,
     name: "lib",
     fromVersion: "1.0.0",
     toVersion: "1.1.0",
@@ -693,6 +702,7 @@ test("SC3: an unconstrained plugin renders the same autoupdate cascade rows as b
   const outcome = {
     declaresWorkflows: false,
     partition: "updated",
+    resourcesChanged: true,
     name: "alpha",
     fromVersion: prepared.fromVersion,
     toVersion: prepared.toVersion,

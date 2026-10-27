@@ -1549,6 +1549,13 @@ export async function swapPluginUpdate(
     // justified consumer of `PreparedPluginUpdate.constraint`.
     constraint: preflight.constraint,
     declaresWorkflows: handles.workflows.result.stagedNames.length > 0,
+    resourcesChanged: stagedResourcesChanged(preflight.record.resources, [
+      handles.skills.result.stagedNames,
+      handles.commands.result.stagedNames,
+      stagedAgentNames,
+      stagedMcpServerNames,
+      handles.workflows.result.stagedNames,
+    ]),
     // Spread only when non-empty: a clean update's outcome keeps the key ABSENT
     // rather than present-and-empty, so its shape is unchanged (NREG-01).
     ...(degradedKinds.length > 0 && { degradedKinds }),
@@ -1620,6 +1627,32 @@ function collectDegradedKinds(handles: PrepHandles): readonly DegradeKind[] {
       ...(handles.commands.result.degraded.length > 0 ? ["command" as const] : []),
     ]),
   );
+}
+
+/**
+ * D-PL1-18: whether the update touched a resource a reload must pick up -- a
+ * skill, prompt, agent, MCP server or workflow, in the record's inventory
+ * before the swap or among the names it staged. Hooks are re-routed in
+ * process, so the record's hooks inventory is not read.
+ */
+function stagedResourcesChanged(
+  before: {
+    readonly skills: readonly string[];
+    readonly prompts: readonly string[];
+    readonly agents: readonly string[];
+    readonly mcpServers: readonly string[];
+    readonly workflows: readonly string[];
+  },
+  staged: readonly (readonly string[])[],
+): boolean {
+  return [
+    before.skills,
+    before.prompts,
+    before.agents,
+    before.mcpServers,
+    before.workflows,
+    ...staged,
+  ].some((names) => names.length > 0);
 }
 
 async function dropPluginCompletionCache(args: ThreePhaseArgs): Promise<void> {

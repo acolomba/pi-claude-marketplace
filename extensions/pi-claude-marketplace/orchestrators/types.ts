@@ -379,6 +379,13 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
   readonly stagedAgentNames: readonly string[];
   readonly stagedMcpServerNames: readonly string[];
   /**
+   * D-PL1-18: true when the record's inventory before the swap or the staged
+   * inventory after it holds any skill, prompt, agent, MCP server or workflow,
+   * because a reload must pick those up. Hooks are re-routed in process and do
+   * not count.
+   */
+  readonly resourcesChanged: boolean;
+  /**
    * WLIF-06: the update's new version withdrew or renamed at least one workflow
    * the record named, so the command that envelope registered is still live for
    * the session -- the host exposes no unregister call. A FOURTH independent
