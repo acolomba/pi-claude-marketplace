@@ -5,16 +5,16 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 1
 current_phase_name: Staging Warning Channels
 status: verifying
-stopped_at: Phase 09 complete, ready to verify Phase 1
-last_updated: "2026-10-27T13:10:46.151Z"
+stopped_at: Phase 4 complete, ready to verify Phase 1
+last_updated: "2026-10-27T11:04:03.605Z"
 last_activity: 2026-10-27
-last_activity_desc: Phase 09 complete, transitioned to Phase 1
-state_head: 62d64d34af32b5235d5df3511dcddfbff09f7d58
+last_activity_desc: Phase 4 complete, transitioned to Phase 1
+state_head: edac58eb2fb9fccd7212f72307195efa784d73c4
 progress:
   total_phases: 11
   completed_phases: 1
-  total_plans: 5
-  completed_plans: 5
+  total_plans: 6
+  completed_plans: 6
   percent: 9
 ---
 
@@ -27,14 +27,14 @@ See: `.planning/PROJECT.md` (updated 2026-10-22 at the lifecycle-coverage start)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 09 — Plugin Package Dependencies
+**Current focus:** Phase 30 — Autoapply Setting
 
 ## Current Position
 
 Phase: 1 — Staging Warning Channels
 Plan: 4
 Status: Phase complete — ready for verification
-Last activity: 2026-10-27 - Completed quick task 261027-b8d: autoupdate package note, uninstall packages, BOM
+Last activity: 2026-10-27 — Completed quick task 261027-9lp: agent-target refusal redaction and update reason
 
 
 ### mcp-4 closeout
@@ -188,13 +188,12 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-gvt | GV-01: record plugins at a range-selected release tag as Claude Code does, the tag semver kept as resolvedVersion | 2026-10-26 | 2638b001 | complete | [261026-gvt-record-plugins-at-release-tags-as-claude-code](./quick/261026-gvt-record-plugins-at-release-tags-as-claude-code/) |
 | 261026-glv | GV-01: an update with no tag drops the tag commit from the record; plugin directory plugins pick no release tag and their listed copy answers the range | 2026-10-26 | 33c9ac69 | complete | [261026-glv-match-claude-code-on-untagged-updates-an](./quick/261026-glv-match-claude-code-on-untagged-updates-an/) |
 | 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
-| 261027-95p | Port the lockfile sanitizer, start npm through npm-cli.js on Windows, kill the package manager tree on timeout | 2026-10-27 | f4161a34 | — | [261027-95p-plugin-package-install-sanitizer-windows](./quick/261027-95p-plugin-package-install-sanitizer-windows/) |
-| 261027-b8d | Show the autoupdate package note, remove installed packages on uninstall, strip a byte-order mark in package files | 2026-10-27 | 62d64d34 | — | [261027-b8d-autoupdate-package-note-and-uninstall-no](./quick/261027-b8d-autoupdate-package-note-and-uninstall-no/) |
+| 261027-9lp | D-PL4-08/09: agent-target preview refusals name only the file; a plain update's refusal drops the false "unreadable manifest" reason | 2026-10-27 | edac58eb | complete | [261027-9lp-agent-target-refusal-redaction-and-updat](./quick/261027-9lp-agent-target-refusal-redaction-and-updat/) |
 
 ## Session Continuity
 
-**Last session:** 2026-10-27T05:08:44.317Z
-**Stopped at:** Phase 09 complete, ready to verify Phase 1
+**Last session:** 2026-10-25T12:00:00.000Z
+**Stopped at:** Phase 4 complete, ready to verify Phase 1
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -406,11 +405,6 @@ archived milestone artifacts.
 | Phase 29 P12 | 70 min | 3 tasks | 34 files |
 | Phase 29 P13 | 48 min | 3 tasks | 44 files |
 | Phase 29 P14 | 20 min | 2 tasks | 9 files |
-| Phase 09 P01 | 39min | 2 tasks | 11 files |
-| Phase 09 P02 | 22min | 3 tasks | 7 files |
-| Phase 09 P03 | 31min | 2 tasks | 6 files |
-| Phase 09 P04 | 12min | 2 tasks | 2 files |
-| Phase 09 P05 | 5min | 2 tasks | 1 files |
 
 ## Decisions
 
@@ -610,15 +604,6 @@ archived milestone artifacts.
 - [Phase 29]: The cascade failure classifier reads the errno a BridgeStagingError carries on its cause, so an unreadable plugin source is permission denied (also in the autoupdate cascade)
 - [Phase 29]: apply runs growth-only moves through convergePlugin with rematerialize (skipSameRevision off, overwrite off) and reports them with the plugin-backfilled row; the load-time backfill, its stamp gate and EXTENSION_VERSION are deleted, lastReconciledExtensionVersion stays readable and nothing writes it (D-10, D-13, D-25)
 - [Phase 29]: README.md's dependents sentence says apply reinstalls an uninstalled dependency a dependent still declares and disables the dependents only if that install fails; the APL-D1 and APL-D2 rows record the read-only load and the NFR-2 amendment
-- [Phase 09]: The packages phase reads only locations, resolved.pluginRoot and discoveryWarnings; InstallLedgerContext is unchanged
-- [Phase 09]: A plugin root that does not exist is a quiet skip; one that cannot be listed is a skip note
-- [Phase 09]: A failed work-dir removal is ignored; the install's own note stands
-- [Phase 09]: D-PL9-17 settled by a real hook run: a session start hook of the installed plugin loads the npm package from the plugin root
-- [Phase 09]: The cucumber npm registry stand-in starts per scenario from the first serving step, which writes the sandbox .npmrc before any plugin ships package files
-- [Phase 09]: D-PL9-07: materializeLatestVersion runs the package step on updated outcomes with force = policy.skipSameRevision; a replaced node_modules is parked in the work dir and restored on failure
-- [Phase 09]: The reinstall package scenario empties npm's cache before the reinstall, because a forced npm ci installs from the cache the install filled and makes no request
-- [Phase 09]: Phase 9 gate green on first run (npm run check exit 0 at fb0feda0); no fix commits
-- [Phase 09]: Proposed NFR-5 amendment (D-PL9-10) also rewrites the path-source clause: a path-source plugin in a cloned marketplace may run its package install
 
 ### mcp-4 decisions
 

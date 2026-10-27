@@ -58,7 +58,10 @@ import {
   toDisabledRecord,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import { McpServerCollisionError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
+import {
+  AgentTargetOccupiedError,
+  McpServerCollisionError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
   CrossPluginConflictError,
   DependencyCascadeError,
@@ -4936,7 +4939,7 @@ test("WR-03: installPlugin's marketplaceTagProbe seam reaches a path-source depe
         plugin: "hello",
         marketplaceTagProbe: (options) => {
           seen.push(options);
-          return Promise.resolve({ kind: "no-matching-tag", range: options.range });
+          return Promise.resolve({ kind: "no-matching-tag" });
         },
       });
 
@@ -6356,6 +6359,77 @@ test("MISS-01 / WR-07: a failed missing-dependency install removes the clone its
       assert.deepStrictEqual(await readFile(projectLocations.stateJsonPath), stateBefore);
       assert.deepStrictEqual(settled, []);
     } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * Fails the per-plugin ledger at `commands` and makes the `skills` undo throw
+ * `undoError` after it runs. The outer cascade's phases are named by member
+ * key, so they pass through untouched.
+ */
+function failAfterSkillsWithUndoFault(
+  transactionControl: InstallTransactionControl,
+  undoError: Error,
+): () => void {
+  const originalRunPhases = transactionControl.runPhases;
+  transactionControl.runPhases = <C>(phases: readonly Phase<C>[], ctx: C) =>
+    originalRunPhases(
+      phases.map((phase): Phase<C> => {
+        if (phase.name === "skills") {
+          return {
+            ...phase,
+            undo: async (phaseCtx: C) => {
+              await phase.undo?.(phaseCtx);
+              throw undoError;
+            },
+          };
+        }
+
+        if (phase.name === "commands") {
+          return { ...phase, do: () => Promise.reject(new Error("commands phase failed")) };
+        }
+
+        return phase;
+      }),
+      ctx,
+    );
+  return () => {
+    transactionControl.runPhases = originalRunPhases;
+  };
+}
+
+test("REC-06: a missing-dependency install whose own ledger cannot finish an undo reports the rollback partial", async () => {
+  await withHermeticHome(async ({ installMissingDependency, transactionControl }) => {
+    const { cwd } = await seedCatalogScope({ widget: { version: "1.0.0" } });
+    const undoError = new Error("skills undo failed");
+    const restore = failAfterSkillsWithUndoFault(transactionControl, undoError);
+    try {
+      // arrange
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "widget",
+        ranges: [],
+        requiredBy: "app@mp",
+      });
+
+      // assert
+      assert.ok(outcome.status === "failed");
+      assert.deepStrictEqual(outcome.rollbackPartials, [
+        { phase: "skills", msg: undoError.message, cause: undoError },
+      ]);
+      const state = await loadState(locationsFor("project", cwd).extensionRoot);
+      assert.equal(state.marketplaces["mp"]?.plugins["widget"], undefined);
+    } finally {
+      restore();
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -16124,7 +16198,7 @@ test("D-09-05: a satisfiable root range reaches the marketplace tag probe throug
         plugin: "secrets-vault",
         ranges: ["^1.0.0"],
         requiredBy: "deploy-kit@mp",
-        marketplaceTagProbe: () => Promise.resolve({ kind: "no-matching-tag", range: "^1.0.0" }),
+        marketplaceTagProbe: () => Promise.resolve({ kind: "no-matching-tag" }),
       });
 
       // assert
@@ -18327,6 +18401,155 @@ test("UPD-DEP-D1: installing a plugin moves an installed dependency outside its 
   });
 });
 
+/** The commit the mock git host's HEAD names. */
+const HOST_HEAD = "3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f";
+
+/**
+ * Offers `name` in marketplace `mp` as an unpinned url source, and answers the
+ * repository directory the mock clone copies. Runs after the last
+ * `publishCatalog`, which rewrites the catalog.
+ */
+async function offerGitPlugin(
+  marketplaceRoot: string,
+  name: string,
+  dependencies?: readonly string[],
+): Promise<string> {
+  const repository = path.join(path.dirname(marketplaceRoot), `${name}-repository`);
+  await mkdir(path.join(repository, "skills", "probe"), { recursive: true });
+  await writeFile(path.join(repository, "skills", "probe", "SKILL.md"), "---\nname: probe\n---\n");
+  const declared = dependencies === undefined ? {} : { dependencies };
+  await mkdir(path.join(repository, ".claude-plugin"));
+  await writeFile(
+    path.join(repository, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name, version: "1.0.0", ...declared }),
+  );
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  const catalog = JSON.parse(await readFile(manifestPath, "utf8")) as { plugins: object[] };
+  catalog.plugins.push({
+    name,
+    source: { source: "url", url: "https://example.com/org/repo" },
+    ...declared,
+  });
+  await writeFile(manifestPath, JSON.stringify(catalog));
+  return repository;
+}
+
+/**
+ * Installs `app@mp` into the project scope from a git host whose HEAD is
+ * `HOST_HEAD`, counting each mirror resolve (one network read each) and the
+ * pin of each pinned clone.
+ */
+async function installAppCountingResolves(
+  owner: InstallTestOwner,
+  cwd: string,
+  repository: string,
+): Promise<{ readonly status: string; readonly mirrors: number; readonly pins: string[] }> {
+  const inner = seamWith(
+    createGitOps({
+      fixtureSourceDir: repository,
+      head: HOST_HEAD,
+      localRefs: { "refs/heads/main": HOST_HEAD },
+      remoteRefs: { "refs/remotes/origin/main": HOST_HEAD },
+    }).gitOps,
+  );
+  let mirrors = 0;
+  const pins: string[] = [];
+  const { ctx, run } = makeCtx();
+  const outcome = await owner.installPlugin({
+    ctx,
+    run,
+    scope: "project",
+    cwd,
+    marketplace: "mp",
+    plugin: "app",
+    cloneCacheSeam: {
+      ...inner,
+      materializeOrRefreshPluginMirror: (args) => {
+        mirrors += 1;
+        return inner.materializeOrRefreshPluginMirror(args);
+      },
+      materializePluginClone: (args) => {
+        pins.push(args.pin);
+        return inner.materializePluginClone(args);
+      },
+    },
+  });
+  return { status: outcome.status, mirrors, pins };
+}
+
+/** The commit `plugin@mp`'s record names. */
+async function recordedSha(cwd: string, plugin: string): Promise<string | undefined> {
+  const state = await loadState(locationsFor("project", cwd).extensionRoot);
+  return state.marketplaces.mp?.plugins[plugin]?.resolvedSha;
+}
+
+const FRESH_GIT_DEPENDENCY_CASES: readonly {
+  readonly title: string;
+  readonly catalog: Readonly<Record<string, CatalogPlugin>>;
+}[] = [
+  {
+    title:
+      "an install that moves a dependency installs a fresh git dependency at the commit its preview resolved, resolving it once",
+    catalog: {
+      app: { version: "1.0.0", dependencies: ["lib@^2.0.0", "util"] },
+      lib: { version: "2.0.0" },
+    },
+  },
+  {
+    title:
+      "a fresh git dependency a moved dependency's new version needs installs at its previewed commit before the move",
+    catalog: {
+      app: { version: "1.0.0", dependencies: ["lib@^2.0.0"] },
+      lib: { version: "2.0.0", dependencies: ["util"] },
+    },
+  },
+];
+
+for (const { title, catalog } of FRESH_GIT_DEPENDENCY_CASES) {
+  test(`D-PL4-01: ${title}`, async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({ lib: { version: "1.2.0" } });
+      await installed(owner, cwd, "lib");
+      await publishCatalog(marketplaceRoot, catalog);
+      const repository = await offerGitPlugin(marketplaceRoot, "util");
+
+      // act
+      const install = await installAppCountingResolves(owner, cwd, repository);
+
+      // assert
+      assert.deepStrictEqual(install, { status: "installed", mirrors: 1, pins: [HOST_HEAD] });
+      assert.deepStrictEqual(await recordedVersions(cwd), {
+        app: ["1.0.0", true],
+        lib: ["2.0.0", true],
+        util: ["1.0.0", true],
+      });
+      assert.strictEqual(await recordedSha(cwd, "util"), HOST_HEAD);
+    });
+  });
+}
+
+test("D-PL4-01: a git plugin installed after a dependency move installs the commit its own preview resolved, resolving it once", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope({ lib: { version: "1.2.0" } });
+    await installed(owner, cwd, "lib");
+    await publishCatalog(marketplaceRoot, { lib: { version: "2.0.0" } });
+    const repository = await offerGitPlugin(marketplaceRoot, "app", ["lib@^2.0.0"]);
+
+    // act
+    const install = await installAppCountingResolves(owner, cwd, repository);
+
+    // assert
+    assert.deepStrictEqual(install, { status: "installed", mirrors: 1, pins: [HOST_HEAD] });
+    assert.deepStrictEqual(await recordedVersions(cwd), {
+      app: ["1.0.0", true],
+      lib: ["2.0.0", true],
+    });
+    assert.strictEqual(await recordedSha(cwd, "app"), HOST_HEAD);
+  });
+});
+
 test("UPD-DEP-D1: installing refuses a plugin whose installed dependency no release moves inside its range", async () => {
   await withHermeticHome(async (owner) => {
     // arrange
@@ -18726,6 +18949,44 @@ describe("createUpdateDependencyResolver", () => {
         other: ["1.0.0", true],
         widget: ["1.0.0", true],
       });
+    });
+  });
+
+  test("D-PL4-04: refuses a version whose agent target a user's file holds before it installs any dependency", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({ widget: { version: "1.0.0" } });
+      await installed(owner, cwd, "widget");
+      await publishCatalog(marketplaceRoot, {
+        widget: { version: "1.1.0", dependencies: ["zcore"] },
+        zcore: { version: "1.0.0" },
+      });
+      await mkdir(path.join(marketplaceRoot, "plugins", "widget", "agents"));
+      await writeFile(
+        path.join(marketplaceRoot, "plugins", "widget", "agents", "helper.md"),
+        "---\nname: helper\ndescription: Helper\ntools: Read, Grep\n---\n\nBody.\n",
+      );
+      const agentsDir = locationsFor("project", cwd).agentsDir;
+      const userFile = path.join(agentsDir, "pi-claude-marketplace-widget-helper.md");
+      await mkdir(agentsDir, { recursive: true });
+      await writeFile(userFile, "The user's own agent.\n");
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+      );
+
+      // act & assert
+      await assert.rejects(
+        settle(updateArgs(owner, cwd, "widget"), await preparedUpdate(cwd, "widget"), {
+          ctx,
+          run,
+        }),
+        new AgentTargetOccupiedError(userFile),
+      );
+      assert.deepStrictEqual(await recordedVersions(cwd), { widget: ["1.0.0", true] });
+      assert.strictEqual(await readFile(userFile, "utf8"), "The user's own agent.\n");
     });
   });
 
