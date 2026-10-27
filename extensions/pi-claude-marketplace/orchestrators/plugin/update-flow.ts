@@ -87,6 +87,7 @@ import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import { notifyUpdateNoOpWithContext, notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
+import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildGitHubAuth } from "../auth-host.ts";
 import { DEFAULT_GIT_OPS, refreshGitHubClone, refreshUrlClone } from "../marketplace/shared.ts";
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
@@ -168,13 +169,20 @@ const MARKETPLACE_REFRESH_RULE: Parameters<typeof classifyGitFailure>[1] = {
  * `MarketplaceUpdateError` whose message is the status on the URL the fetch
  * sent, as `marketplace update` frames it, so that frame leads the cause
  * line. Every other failure is rethrown unchanged.
+ *
+ * GLK-04: the refresh writes the marketplace `.git`, so it runs under the
+ * scope lock that `marketplace update` and the update preflight's tag copy
+ * take on that `.git`. The direct update syncs each marketplace before it
+ * runs any target, so no lock is held yet and this one does not nest. A held
+ * lock throws StateLockHeldError, which reads `lock held`.
  */
 async function refreshFramed(
+  locations: ScopedLocations,
   source: GitHubSource | UrlSource,
   refresh: () => Promise<void>,
 ): Promise<void> {
   try {
-    await refresh();
+    await withExistingScopeLock(locations, () => refresh());
   } catch (err) {
     const frame = classifyGitFailure(err, MARKETPLACE_REFRESH_RULE, networkCloneUrl(source))?.frame;
     if (frame === undefined) {
@@ -233,12 +241,12 @@ function makeSyncCloneOnce(
         ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
         ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
       });
-      await refreshFramed(source, () =>
+      await refreshFramed(locations, source, () =>
         refreshGitHubClone(cloneDir, source.ref, gitOps, undefined, auth),
       );
     } else if (source.kind === "url") {
       const cloneDir = await locations.sourceCloneDir(mpName);
-      await refreshFramed(source, () =>
+      await refreshFramed(locations, source, () =>
         refreshUrlClone({
           cloneDir,
           source,

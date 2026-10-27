@@ -1690,6 +1690,51 @@ test("syncClone-fail: an HTTP 401 on the marketplace sync renders {authenticatio
   });
 });
 
+test("GLK-04: a held scope lock refuses the marketplace sync as lock held before any git write", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-lock-held-");
+    try {
+      // arrange
+      await seedGithubMarketplaceForSync(cwd);
+      const locations = locationsFor("project", cwd);
+      const { gitOps, state } = createGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      const { ctx, run, notifications } = makeCtx();
+      const release = await lockfile.lock(locations.extensionRoot, {
+        lockfilePath: locations.stateLockFile,
+        realpath: false,
+      });
+      try {
+        // act
+        await updatePlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target: { kind: "marketplace", marketplace: "official" },
+          gitOps,
+          credentialOps: makeCredentialOps(),
+        });
+      } finally {
+        await release();
+      }
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: `A plugin operation has failed.\n\n● official [project]\n  ⊘ official (failed) {lock held}\n    cause: Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes. -> Lock file is already being held\n\nPlugin update: 1 failure`,
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(state.fetchCalls, []);
+      assert.deepStrictEqual(state.forceUpdateRefCalls, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 for (const { title, seed, marketplace, status, statusMessage, message } of [
   {
     title:
@@ -3970,6 +4015,51 @@ test("syncClone-fail: a non-Error injected rejection is normalized at the direct
       assert.equal(notifications[0]?.severity, "error");
       assert.match(notifications[0]?.message ?? "", /\{unreadable manifest\}/);
       assert.match(notifications[0]?.message ?? "", /transport string rejection/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a non-Error rejection from a target's run is normalized at the direct boundary", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-run-non-error-");
+    try {
+      // arrange
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const rejectNonError = Promise.reject.bind(Promise);
+      const operations = createPluginUpdateOperations(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+        undefined,
+        process.env,
+        () => rejectNonError("dependency string rejection"),
+      );
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await operations.updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        refusedUpdateNotification(
+          "hello v1.0.0 → v1.1.0",
+          "unreadable manifest",
+          "dependency string rejection",
+        ),
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
