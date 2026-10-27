@@ -709,3 +709,76 @@ Feature: Plugin import
       | kind         | reconcile-pending-empty |
       | severity     | info                    |
       | needs reload | false                   |
+
+  Scenario: Importing a plugin whose install rollback cannot finish names the rollback phase
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has a read-only skill directory
+    Given a directory blocks the mcp-adapter.json file of the user scope
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade                        |
+      | severity            | error                          |
+      | needs reload        | false                          |
+      | summary             | A plugin operation has failed. |
+      | tally label         | Import                         |
+      | tally failures      | 1                              |
+      | tally warnings      | 0                              |
+      | tally success count | 1                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name | status | reasons          | scope | cause chain                                                  | cause truncated | leaks | rollback partial                                                                                         |
+      | fixtures         | user              | added              | demo@fixtures | demo | failed | rollback partial | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           |       | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
+    Then the installation record of the user scope holds these plugins:
+      | id | version | enabled |
+    Then the user scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | demo-skill |
+
+  Scenario: Importing a disabled plugin whose enable rollback cannot finish names the rollback phase
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope user"
+    Given the published plugin "demo" of the marketplace "fixtures" has a read-only skill directory
+    Given a directory blocks the mcp-adapter.json file of the user scope
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade                        |
+      | severity            | error                          |
+      | needs reload        | false                          |
+      | summary             | A plugin operation has failed. |
+      | tally label         | Import                         |
+      | tally failures      | 1                              |
+      | tally warnings      | 0                              |
+      | tally success count | 1                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id            | name | status | reasons          | scope | cause chain                                                  | cause truncated | leaks | rollback partial                                                                                         |
+      | fixtures         | user              | skipped            | already added       | demo@fixtures | demo | failed | rollback partial | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           |       | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
+    Then the installation record of the user scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | false   |

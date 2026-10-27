@@ -1741,6 +1741,7 @@ test("REC-06: names a rollback the failed install could not finish as rollback p
     {
       ...failedUnexpectedly("broken", "mp", "user", failure.message),
       runtimeReason: "rollback partial",
+      rollbackPartial: [{ phase: "skills" }],
     },
   ]);
   assert.deepStrictEqual(notifications, [
@@ -1749,7 +1750,68 @@ test("REC-06: names a rollback the failed install could not finish as rollback p
         "A plugin operation has failed.\n\n" +
         "● mp [user] (added)\n" +
         "  ⊘ broken (failed) {rollback partial}\n" +
-        `    cause: ${failure.message}\n\n` +
+        `    cause: ${failure.message}\n` +
+        "    [skills] (rollback failed)\n\n" +
+        "Import: 1 failure, 1 success",
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+});
+
+test("D-PL6-12: shows a rollback phase cause with each absolute path cut to its last segment", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "install-rollback-partial-redacted");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const failure = new Error("failed to stage skill a-fmt: EACCES");
+  const undoFailure = new Error("could not remove skill a-fmt", {
+    cause: new Error(
+      "EACCES: permission denied, unlink '/home/user/.pi/agent/pi-claude-marketplace/resources/skills/a-fmt/data.txt'",
+    ),
+  });
+  const redactedUndoCause = "EACCES: permission denied, unlink 'data.txt'";
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: () =>
+        Promise.resolve({
+          ...failedInstallOutcome(failure, failure.message),
+          rollbackPartials: [{ phase: "skills", msg: undoFailure.message, cause: undoFailure }],
+        }),
+      loadSettings: () => Promise.resolve(settingsForMp("broken")),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult.unexpectedPluginFailures, [
+    {
+      ...failedUnexpectedly("broken", "mp", "user", failure.message),
+      runtimeReason: "rollback partial",
+      rollbackPartial: [
+        {
+          phase: "skills",
+          cause: new Error(undoFailure.message, { cause: new Error(redactedUndoCause) }),
+        },
+      ],
+    },
+  ]);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation has failed.\n\n" +
+        "● mp [user] (added)\n" +
+        "  ⊘ broken (failed) {rollback partial}\n" +
+        `    cause: ${failure.message}\n` +
+        "    [skills] (rollback failed)\n" +
+        `      cause: ${undoFailure.message} -> ${redactedUndoCause}\n\n` +
         "Import: 1 failure, 1 success",
       severity: "error",
     },
@@ -4993,6 +5055,69 @@ test("IMP-05: an enable that fails or finds the plugin enabled is reported, not 
       "Import: 1 failure, 1 warning, 2 successes",
     severity: "error",
   });
+  verifyBoundary();
+});
+
+test("D-PL6-03: an enable whose rollback could not finish lists the rollback phases", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "enable-rollback-partial");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const failure = new Error("failed to stage the MCP servers of demo");
+  const undoFailure = new Error("could not remove skill demo-skill");
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      loadSettings: () => Promise.resolve(settingsForMp("demo")),
+      loadState: () => Promise.resolve(stateWithDisabled("demo")),
+      setPluginEnabled: () =>
+        Promise.resolve({
+          status: "failed",
+          reason: "rollback partial",
+          error: failure,
+          cause: failure.message,
+          rollbackPartials: [
+            { phase: "skills", msg: undoFailure.message, cause: undoFailure },
+            { phase: "commands", msg: "could not remove prompt demo-run" },
+          ],
+        }),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    skippedExistingMarketplaces: [skipped("mp", "project")],
+    unexpectedPluginFailures: [
+      {
+        ...failedUnexpectedly("demo", "mp", "project", failure.message),
+        runtimeReason: "rollback partial",
+        rollbackPartial: [
+          { phase: "skills", cause: new Error(undoFailure.message) },
+          { phase: "commands" },
+        ],
+      },
+    ],
+  });
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation has failed.\n\n" +
+        "● mp [project] (skipped) {already added}\n" +
+        "  ⊘ demo (failed) {rollback partial}\n" +
+        `    cause: ${failure.message}\n` +
+        "    [skills] (rollback failed)\n" +
+        `      cause: ${undoFailure.message}\n` +
+        "    [commands] (rollback failed)\n\n" +
+        "Import: 1 failure, 1 success",
+      severity: "error",
+    },
+  ]);
   verifyBoundary();
 });
 

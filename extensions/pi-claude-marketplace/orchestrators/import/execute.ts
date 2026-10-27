@@ -90,6 +90,7 @@ import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
 
 export interface MarketplaceAddedOutcome {
   readonly kind: "marketplace-added";
@@ -238,6 +239,12 @@ export interface UnexpectedPluginFailureOutcome {
    * no onward cause (`exactOptionalPropertyTypes`).
    */
   readonly causeChain?: Error;
+  /**
+   * MIM-03 / D-PL6-03: the undo steps the failed install or enable could not
+   * finish, as install's failed row lists them. Each cause is already
+   * redacted (D-PL6-12). Omitted when every undo finished.
+   */
+  readonly rollbackPartial?: PluginFailedMessage["rollbackPartial"];
 }
 
 /**
@@ -596,6 +603,25 @@ function unexpectedFailureReasons(
 }
 
 /**
+ * The row of a plugin that failed for a reason no other bucket classifies.
+ * MIM-03 / D-PL6-03: a rollback that could not finish lists its phases, as
+ * install's row does.
+ */
+function unexpectedFailureRow(o: UnexpectedPluginFailureOutcome): PluginFailedMessage {
+  return {
+    status: "failed",
+    name: o.plugin,
+    reasons: unexpectedFailureReasons(o),
+    // IMP-09: install's authentication row is bare, so this one is too.
+    ...(o.runtimeReason !== "authentication required" && { cause: failureCause(o) }),
+    ...(o.rollbackPartial !== undefined && { rollbackPartial: o.rollbackPartial }),
+    // D-03/D-06: an unexpected import failure -> error, no reload.
+    severity: "error",
+    needsReload: false,
+  };
+}
+
+/**
  * The row of an installed plugin. IMP-10: an enable takes the row reconcile
  * renders for the same re-enable, so a partial record reads
  * `(partially-installed)`.
@@ -725,17 +751,7 @@ function buildImportNotificationMarketplaces(
   }
 
   for (const o of result.unexpectedPluginFailures) {
-    const row: PluginFailedMessage = {
-      status: "failed",
-      name: o.plugin,
-      reasons: unexpectedFailureReasons(o),
-      // IMP-09: install's authentication row is bare, so this one is too.
-      ...(o.runtimeReason !== "authentication required" && { cause: failureCause(o) }),
-      // D-03/D-06: an unexpected import failure -> error, no reload.
-      severity: "error",
-      needsReload: false,
-    };
-    pushMarketplaceRow(rowsByMp, o.scope, o.marketplace, row);
+    pushMarketplaceRow(rowsByMp, o.scope, o.marketplace, unexpectedFailureRow(o));
   }
 
   // UPD-DEP-D1 / WR-N5: the dependencies each install changed, after the
@@ -1083,7 +1099,7 @@ async function installOnePlannedPlugin(
       // on `instanceof PluginShapeError` plus `.kind` to recover the specific
       // failure class; everything else falls through to the unexpected bucket.
       dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause, {
-        rolledBackPartial: (outcome.rollbackPartials?.length ?? 0) > 0,
+        rollbackPartials: outcome.rollbackPartials ?? [],
       });
       return "install-failed";
     case "installed":
@@ -1206,7 +1222,7 @@ async function enableOnePlannedPlugin(
       // AFILE-04: a failed enable can still have rewritten the MCP config.
       result.mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
       dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause, {
-        rolledBackPartial: outcome.reason === "rollback partial",
+        rollbackPartials: outcome.rollbackPartials ?? [],
       });
       return "install-failed";
     case "skipped":
@@ -1915,17 +1931,18 @@ function isEmptyPatch(batch: ImportConfigPatch): boolean {
  * `buildImportNotificationMarketplaces` rebuild ONE `Error` with a real
  * `.cause` link for the notification grammar to walk, instead of the walker
  * re-rendering an already-flattened trailer embedded in the head text.
+ * MIM-03 / D-PL6-12: the rollback partials are redacted the same way.
  */
 function pushUnexpectedFailure(
   result: MutableImportResult,
   plugin: PlannedPluginImport,
   reason: UnexpectedPluginFailureOutcome["reason"],
   error: Error,
-  rolledBackPartial = false,
+  rollbackPartials: readonly RollbackPartial[] = [],
 ): void {
   const causeChain = redactCauseChain(error.cause);
   const runtimeReason =
-    reason === "unexpected-failure" ? runtimeFailureReason(error, rolledBackPartial) : undefined;
+    reason === "unexpected-failure" ? runtimeFailureReason(error, rollbackPartials) : undefined;
   result.unexpectedPluginFailures.push({
     kind: "plugin-failure",
     scope: plugin.scope,
@@ -1936,6 +1953,23 @@ function pushUnexpectedFailure(
     ...(runtimeReason !== undefined && { runtimeReason }),
     cause: redactAbsolutePaths(errorMessage(error)),
     ...(causeChain !== undefined && { causeChain }),
+    ...(rollbackPartials.length > 0 && {
+      rollbackPartial: redactedRollbackPartials(rollbackPartials),
+    }),
+  });
+}
+
+/**
+ * MIM-03 / D-PL6-12 / T-55-02-02: the rollback phases as a failed row shows
+ * them, each cause rebuilt through `redactCauseChain` so no absolute path
+ * reaches the row.
+ */
+function redactedRollbackPartials(
+  partials: readonly RollbackPartial[],
+): NonNullable<PluginFailedMessage["rollbackPartial"]> {
+  return partials.map((partial) => {
+    const cause = redactCauseChain(partial.cause);
+    return { phase: partial.phase, ...(cause !== undefined && { cause }) };
   });
 }
 
@@ -1945,8 +1979,11 @@ function pushUnexpectedFailure(
  * row names it first), the reason of the marketplace add the install ran
  * (LAYER-07), or the git host's answer.
  */
-function runtimeFailureReason(error: Error, rolledBackPartial: boolean): ContentReason | undefined {
-  if (rolledBackPartial) {
+function runtimeFailureReason(
+  error: Error,
+  rollbackPartials: readonly RollbackPartial[],
+): ContentReason | undefined {
+  if (rollbackPartials.length > 0) {
     return "rollback partial";
   }
 
@@ -1976,7 +2013,7 @@ function dispatchFailedOutcome(
   plugin: PlannedPluginImport,
   error: Error,
   cause: string,
-  options: { readonly rolledBackPartial: boolean },
+  options: { readonly rollbackPartials: readonly RollbackPartial[] },
 ): void {
   if (error instanceof DependencyCascadeError) {
     pushUnexpectedFailure(result, plugin, "dependency-failed", error);
@@ -2030,7 +2067,7 @@ function dispatchFailedOutcome(
     }
   }
 
-  pushUnexpectedFailure(result, plugin, "unexpected-failure", error, options.rolledBackPartial);
+  pushUnexpectedFailure(result, plugin, "unexpected-failure", error, options.rollbackPartials);
 }
 
 /**
