@@ -105,12 +105,12 @@ parent session applies them at merge.
 4. Git-source `list` rows, `required by` lists, and truncation match Claude Code or carry a recorded ID (CAS-04, CAS-05).
 5. The offline git-move refusal names a next step, and no hold cause carries an unbounded `version` string (CAS-06, CAS-07).
 
-**Plans:** 6 plans
+**Plans:** 2/6 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 03-01-PLAN.md — Tracer: `truncateForRefusal` cuts a hold cause's and a move refusal's version to 64 code units, proven by an `update.feature` hold scenario (CAS-07)
-- [ ] 03-02-PLAN.md — Tracer: an install looks an invalid root id up first and refuses a listed one with Claude Code's invalid-id cause; integration pin, two `install.feature` scenarios, new catalog state (CAS-02)
+- [x] 03-01-PLAN.md — Tracer: `truncateForRefusal` cuts a hold cause's and a move refusal's version to 64 code units, proven by an `update.feature` hold scenario (CAS-07)
+- [x] 03-02-PLAN.md — Tracer: an install looks an invalid root id up first and refuses a listed one with Claude Code's invalid-id cause; integration pin, two `install.feature` scenarios, new catalog state (CAS-02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 03-03-PLAN.md — Tracer: every dependency a failed install would have installed gets a `{dependency failed}` row on the walk, constraint, and member routes, moved keys once; catalog examples kept true (CAS-01)
