@@ -176,6 +176,12 @@ phase), the workflow-target refusal (see Deferred).
     directory (NFR-3 and UPD-DEP-D1's "known post-move failure" settle the
     behavior).
 
+- **D-PL4-07:** a move refusal's cause is shown with absolute paths reduced to
+  their last segment (`redactAbsolutePaths`), applied where the plan builds
+  the refusal (`dependency-plan.ts::unmovable`). Today a move that fails in
+  the swap shows the redacted basename (`failedMoveRow`, T-55-02-02); the
+  same failure found by the plan must read the same.
+
 ### RSV-05: probe and outcome types
 - **D-PL4-05 (b2):** remove the unread `range` from the `no-matching-tag` arm
   of `SelectedReleaseTag` (`domain/release-tag.ts`) and
@@ -305,6 +311,10 @@ phase), the workflow-target refusal (see Deferred).
    before any move lands. Alternative: limit the check to updates (moves and
    the update root), as RSV-04's text says. Why: the phase goal is "refuses
    before any move lands", and the install steps land after the moves.
+8. **D-PL4-07 redacts the move refusal's paths.** Chosen: the basename only,
+   as the swap's failed move row shows today. Alternative: the full path, as
+   lock-held rows show. Why: the same failure should read the same wherever
+   it is found.
 7. **RSV-05 b2 removes the field.** Chosen: remove the unread `range`.
    Alternative: read it. Why: every caller already renders the declared
    ranges. Removing it touches Phase 3's `install-cascade.ts` (one parameter
