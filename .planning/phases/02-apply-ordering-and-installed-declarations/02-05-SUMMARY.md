@@ -273,6 +273,8 @@ None -- no security-relevant surface outside the plan's `<threat_model>` was int
 
 1. **The `select` filter.** The step installs only dependencies in the added marketplace (`install.marketplace === recordedName`). Other missing dependencies that the scope could already install are left to `apply`. The alternative is to install every missing dependency in the scope, which would make an add do unrelated work.
 2. **Read failure.** A read of the scope that throws after the add committed answers no rows and a debug-log line. The add reports `(added)` alone, and the next `apply` installs the dependency (NFR-3; Claude Code also only logs here, E3).
+
+   Resolved 2026-10-27 by user decision (D-PL2-20): the step reports apply's state.json (failed) row with its cause instead of the debug line, and still installs nothing.
 3. **Post-commit hygiene warnings are not surfaced.** `dependencyInstallRows` maps rows only. The `postCommitWarnings` that `apply` sends through its second `notifyDiagnostic` are dropped at the add call site. Phase 1's tagged warning channel (WRN-03) is the place for them.
 4. **A throw out of the step.** The `(added)` row goes out first, then the throw reaches the command (APPLYTHROW-01 order). The alternative is to swallow it into a debug line, which would hide a GHB-03 configuration error.
 5. **No judgement after the step.** After a refusal, the dependent stays enabled with an unsatisfied dependency until the next load or `apply` (see RED evidence). `apply` disables it in the same run. This follows D-PL2-09 as amended ("installs only").

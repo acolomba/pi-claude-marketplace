@@ -255,8 +255,12 @@ None -- no security-relevant surface outside the plan's `<threat_model>` was int
 
 1. **Foreground autoupdate.** The step is wired into the autoupdate cascade of the foreground `marketplace update` command. Claude Code runs it in its background autoupdate, which this extension does not have yet (Phase 8). The alternative is to wait for Phase 8 and leave the foreground command without the step. It is wired now because Phase 8 reuses the cascade.
 2. **One row per dependency.** The step skips a dependency that a plugin update of the same cascade already reported (Deviation 1). Claude Code's `bae` would try it again, but it only logs (E3), so a user sees nothing twice there. The alternative is to keep both rows, which shows the same refused dependency twice in one block.
+
+   Resolved 2026-10-27 by user decision (D-PL2-19): kept; one row per dependency per command.
 3. **The declarer filter.** `select` keys on the declarer's marketplace (`<plugin>@<marketplace>` ends in `@<name>`), not on the dependency's marketplace. So a dependency in another marketplace that a plugin of the autoupdated marketplace needs is installed too, as upstream E1 does. The add-time step (02-05) filters on the dependency's marketplace instead, because there the new marketplace is what satisfies the dependency.
 4. **A throw out of the step.** A throw (only GHB-03, an invalid GitHub base) propagates from the cascade, and the update rows of that marketplace are not reported. The cascade's plugin loop already does this for a GHB-03 throw from a plugin update. `marketplace add` instead reports `(added)` first (02-05); the update could do the same with a `finally`, at the cost of more code in `refreshOneMarketplace`.
+
+   Resolved 2026-10-27 by user decision (D-PL2-21): the marketplace's update rows and notices go out first, from a finally, then the throw reaches the command.
 5. **Tally count.** In a bare `marketplace update`, the plural tally counts the step's rows like any plugin row (`Marketplace update: 4 successes` for two up-to-date updates and one install). This is the existing tally rule, unchanged.
 6. **Scope of the autoupdate step.** Only the refreshed marketplace's scope, as in 02-05 (SC-1, D-29). Upstream scans every scope.
 

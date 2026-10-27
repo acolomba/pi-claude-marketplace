@@ -219,6 +219,8 @@ Minified names: `bae` = resolveMissingDependencies, `lsn` = installResolvedPlugi
   every change it attempts) and the project's row grammar; the dependent's
   `disabled {dependency unsatisfied}` row matches upstream's visible state. ID
   D-PL2-11 closes PARITYGV-01 b4.
+  Confirmed 2026-10-27 by user decision as a deliberate divergence from Claude
+  Code: rows over logs: Pi has no user-read log.
 
 ### Delisted installed-copy containment (RCN-08: LCORCH-01 b6)
 
@@ -328,6 +330,44 @@ Minified names: `bae` = resolveMissingDependencies, `lsn` = installResolvedPlugi
     dependency it waits on is installed, as pending lists both" and "Apply
     reports the move of a held-down plugin as skipped when the install of the
     missing dependency it waits on is refused".
+- **D-PL2-19 — One row per dependency per autoupdate command.** (user decision
+  2026-10-27) The autoupdate step skips a dependency that a plugin update of
+  the same command already reported a row for (02-06 Deviation 1; WR-04
+  extends this to a bare `marketplace update`). Claude Code's `bae` would try
+  that dependency again, but it only logs (E3). A retry here would print the
+  same refused dependency twice in one block. Deliberate divergence from Claude
+  Code: rows over logs: Pi has no user-read log.
+- **D-PL2-20 — A failed scope read in the missing-dependency step reports
+  apply's row.** (user decision 2026-10-27)
+  - When the step's read throws after the command committed, the step reports
+    `apply`'s `state.json` `(failed)` row for the same throw. The row uses
+    `apply`'s classified reason (`{unreadable}`, `{lock held}`, …) and its
+    path-redacted cause, built through `runScopeIsolated` and rendered as
+    `apply`'s synthetic file row. The row replaces the debug-log line.
+  - The step installs nothing, and the next `apply` installs the dependency
+    (NFR-3).
+  - It applies at every call site of the shared step: `marketplace add`,
+    `bootstrap`, and the autoupdate cascade, where it renders under the
+    marketplace's block and turns the result into an `error`.
+  - An invalid layer config is not a throw and still answers no row.
+  - Claude Code only logs here (E3). Deliberate divergence from Claude Code:
+    rows over logs: Pi has no user-read log.
+- **D-PL2-21 — An autoupdate step throw reports the updates first.** (user
+  decision 2026-10-27)
+  - A throw out of the autoupdate cascade's missing-dependency step
+    (D-PL2-10), in practice GHB-03, no longer drops the marketplace's report.
+    `cascadeAutoupdates` reports the plugin update rows, their dependency rows
+    and their MCP config notices from a `finally`, and then the same error
+    reaches the command.
+  - This is the order of `marketplace add`'s `(added)` row and of `apply`'s
+    APPLYTHROW-01.
+  - A GHB-03 throw out of a plugin update itself still fails the command with
+    no row.
+  - The updates committed, so a user who sees only the error cannot know that
+    `/reload` is due.
+  - GHB-03's variable is Pi's own, so Claude Code has no counterpart.
+    Deliberate divergence from Claude Code:
+    rows over logs: Pi has no user-read log.
 - **D-PL2-22 — An installed copy with no manifest answers from its marketplace
   entry alone.** (user decision 2026-10-27) When the installed-first read
   (`readInstalledRecordDeclarations`) reads a record that has `resolvedSha`,
@@ -552,3 +592,4 @@ an inside-root symlink is followed; see D-PL2-17); D-PL2-14 (alternative: keep a
 7. **D-PL2-11** — keep `apply`'s failed row for a MISS-01 refusal, where
    upstream only logs. Alternative: drop the row, keep only the dependent's
    disabled row. Why: APL-D1 explicit-command reporting.
+   Resolved 2026-10-27 by user decision: kept (D-PL2-11).
