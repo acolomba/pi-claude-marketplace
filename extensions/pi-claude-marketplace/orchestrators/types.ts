@@ -21,6 +21,7 @@ import type {
   PluginUpdatedMessage,
 } from "../shared/notification-types.ts";
 import type { DegradeKind } from "../shared/notify-reasons.ts";
+import type { DiscoveryWarning, StagingWarning } from "../shared/staging-warnings.ts";
 import type { Scope } from "../shared/types.ts";
 import type { RollbackPartial } from "../transaction/phase-ledger.ts";
 import type { LedgerDegradationSignals } from "./plugin/shared.ts";
@@ -89,6 +90,12 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly stagedAgentNames: readonly string[];
   readonly stagedMcpServerNames: readonly string[];
   /**
+   * D-PL1-18: mirrors the shared runner's `resourcesChanged`. The reinstall
+   * row keeps `needsReload: true` (the byte-pinned D-03/D-06 row), so no
+   * renderer reads it.
+   */
+  readonly resourcesChanged: boolean;
+  /**
    * CMC-13: per-row soft-dep predicate inputs. `true` iff
    * the plugin's resolved manifest declared the kind AND it was actually
    * staged at reinstall time (the orchestrator already tracks
@@ -128,13 +135,13 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly degradedKinds?: readonly DegradeKind[];
   readonly notes?: readonly string[];
   /**
-   * D-141-03 / D-141-05: the DISCOVERY half of this reinstall's staging
-   * warnings, unprefixed, carried separately from `notes`.
+   * D-141-03 / D-PL1-11: the DISCOVERY half of this reinstall's staging
+   * warnings, typed, carried separately from `notes`.
    *
-   * `notes` folds the discovery half and the maintenance warnings behind a
+   * `notes` folds the discovery messages and the maintenance warnings behind a
    * `warning: ` prefix for orchestrated consumers, so a reader cannot tell
-   * them apart again. The agents and MCP hygiene half is not carried: the
-   * shared swap drops it in direct mode, as it does for `update`.
+   * them apart again. The hygiene half is not carried: reinstall takes only
+   * the discovery half of the shared runner's `stagingWarnings`.
    * `reinstallPlugins` needs exactly the discovery half to render after its
    * cascade, and the boundary forces the carrier: the warnings originate
    * inside the shared runner while the rows are not rendered until
@@ -153,7 +160,7 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    * Omitted when empty, so a clean reinstall's outcome shape is unchanged
    * (NREG-01).
    */
-  readonly discoveryWarnings?: readonly string[];
+  readonly discoveryWarnings?: readonly DiscoveryWarning[];
   /**
    * AFILE-04 / AFILE-02: the MCP config file notices from this reinstall's
    * MCP commit. The outcome carries them because the rows render after the
@@ -241,6 +248,12 @@ export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
    * Omitted when there are none (NREG-01).
    */
   readonly mcpConfigNotices?: readonly McpConfigNotice[];
+  /**
+   * D-PL1-11 / D-PL1-14: the DISCOVERY half of the staging warnings the
+   * failed reinstall prepared before it failed, rendered after the cascade
+   * with `reinstall failed`. Omitted when empty (NREG-01).
+   */
+  readonly discoveryWarnings?: readonly DiscoveryWarning[];
 }
 
 export type ReinstallPluginOutcome =
@@ -380,6 +393,13 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
   readonly stagedAgentNames: readonly string[];
   readonly stagedMcpServerNames: readonly string[];
   /**
+   * D-PL1-18: true when the record's inventory before the swap or the staged
+   * inventory after it holds any skill, prompt, agent, MCP server or workflow,
+   * because a reload must pick those up. Hooks are re-routed in process and do
+   * not count.
+   */
+  readonly resourcesChanged: boolean;
+  /**
    * WLIF-06: the update's new version withdrew or renamed at least one workflow
    * the record named, so the command that envelope registered is still live for
    * the session -- the host exposes no unregister call. A FOURTH independent
@@ -446,35 +466,28 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
     readonly newlyDegraded: boolean;
   };
   /**
-   * D-141-03 / D-141-05: the bridge staging warnings this update produced,
-   * already split -- the discovery half always, plus the hygiene half in
-   * cascade mode only. Mirrors the optional `notes?` that
-   * `ReinstallReinstalledOutcome` carries.
+   * D-PL1-10: the bridge staging warnings this update's prepare produced, both
+   * halves, tagged, in bridge order (skills, commands, agents, mcp,
+   * workflows). The direct update and reinstall render the discovery half
+   * after their rows (D-PL1-07, D-141-03); the cascades render both halves
+   * (D-PL1-25).
    *
-   * This partition needs the carrier because the update path puts a boundary
+   * The outcome is the carrier because the update path puts a boundary
    * between a warning and the row it qualifies: the warnings originate inside
    * the three-phase runner, while the direct path renders no row until
    * `renderUpdateCascadeAndNotify` at the very end of `updatePlugins`. A
    * diagnostic fired from inside the runner would print the detail BEFORE
-   * that row, so the outcome is the only thing that crosses the boundary.
+   * that row.
    *
    * Omitted when empty, so a clean update's outcome shape is unchanged
    * (NREG-01).
-   *
-   * NOT dead. `update.ts::surfaceUpdateDiscoveryWarnings` reads this field on
-   * this partition to render the standalone diagnostic, and the cascade
-   * consumers carry it onward. What no consumer does is NARROW it to a
-   * closed-set `Reason` the way the `skipped` and `failed` arms do -- the two
-   * `notes` narrowers (`narrowSkipReasons`, `narrowFailReasons`) are each
-   * typed on their own partition's arm, so a cascade ROW renderer never
-   * reads this one.
    */
-  readonly notes?: readonly string[];
+  readonly stagingWarnings?: readonly StagingWarning[];
   /**
-   * PKD-02 / D-PL9-14: the package step's note, which `notes` also holds.
-   * The direct update and reinstall render `notes`; `apply`'s catalog moves
-   * and dependency moves render none of `notes`, so they read this field
-   * alone. Omitted when the step had nothing to say (NREG-01).
+   * PKD-02 / D-PL9-14: the package step's note, which `stagingWarnings` also
+   * holds as a discovery warning. Every verb renders it from there (D-PL1-07,
+   * D-PL1-25); dependency moves render no staging warnings, so they read this
+   * field alone. Omitted when the step had nothing to say (NREG-01).
    */
   readonly packageNote?: string;
   /**
@@ -587,6 +600,13 @@ export interface PluginUpdateFailedOutcome extends PluginUpdateBase {
    * there are none (NREG-01).
    */
   readonly mcpConfigNotices?: readonly McpConfigNotice[];
+  /**
+   * D-PL1-10 / D-PL1-14: the tagged staging warnings of the handles the
+   * failed update prepared, both halves, in bridge order. The direct update
+   * renders the discovery half after the failure row, and the cascades render
+   * both halves (D-PL1-25). Omitted when empty (NREG-01).
+   */
+  readonly stagingWarnings?: readonly StagingWarning[];
 }
 
 /**

@@ -21,6 +21,7 @@
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 
 /** A single command discovered under `componentPaths.commands`. */
 export interface DiscoveredCommand {
@@ -84,7 +85,8 @@ export interface StageCommandsCommitResult {
   readonly stagedNames: readonly string[];
   /** W-05: callers read `recorded` to populate state.json. */
   readonly recorded: readonly StagedCommandRecord[];
-  readonly warnings: readonly string[];
+  /** D-PL1-02: every commands warning is a `discovery` warning. */
+  readonly warnings: readonly StagingWarning[];
   /**
    * The orchestrator maps these to the `{malformed command}` reason token and
    * the per-component detail line. Empty on the all-valid path (NREG-01).

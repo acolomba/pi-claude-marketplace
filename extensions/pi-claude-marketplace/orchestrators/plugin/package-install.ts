@@ -59,11 +59,13 @@ import {
 import { stripBom } from "../../shared/bom.ts";
 import { errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
+import { discoveryWarning } from "../../shared/staging-warnings.ts";
 
 import type { UpdateRunOutcome } from "./update-swap.ts";
 import type { LockfileCheck } from "../../domain/package-lockfile.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { PackageManagerRun, PackageManagerRunner } from "../../platform/package-manager.ts";
+import type { DiscoveryWarning } from "../../shared/staging-warnings.ts";
 import type { Phase } from "../../transaction/phase-ledger.ts";
 
 const NPM_CI_ARGUMENTS = [
@@ -167,7 +169,7 @@ export interface PackagesPhaseContext {
   readonly locations: ScopedLocations;
   readonly marketplace: string;
   readonly resolved: { readonly pluginRoot: string };
-  readonly discoveryWarnings: string[];
+  readonly discoveryWarnings: DiscoveryWarning[];
 }
 
 /** The plugin one package step runs for. */
@@ -605,7 +607,7 @@ export function createPackagesPhase(ops: PackageInstallOps): Phase<PackagesPhase
       );
       createdNodeModules = outcome.createdNodeModules;
       if (outcome.note !== undefined) {
-        c.discoveryWarnings.push(outcome.note);
+        c.discoveryWarnings.push(discoveryWarning(outcome.note));
       }
     },
     undo: async (c) => {
@@ -636,7 +638,11 @@ export async function installUpdatedPackages(
   const { note } = await installPluginPackages(target, ops);
   return note === undefined
     ? outcome
-    : { ...outcome, notes: [...(outcome.notes ?? []), note], packageNote: note };
+    : {
+        ...outcome,
+        stagingWarnings: [...(outcome.stagingWarnings ?? []), discoveryWarning(note)],
+        packageNote: note,
+      };
 }
 
 // A marker that is missing, unreadable, or not a regular file means that the

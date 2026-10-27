@@ -1388,7 +1388,9 @@ test("PDEF-01: update stages every agent directory and warns on a later duplicat
     const outcome = await updateSinglePlugin("hello", "mp", "project");
 
     assert.strictEqual(outcome.partition, "updated");
-    assert.deepStrictEqual(outcome.notes, [expectedWarning]);
+    assert.deepStrictEqual(outcome.stagingWarnings, [
+      { kind: "discovery", message: expectedWarning },
+    ]);
     const state = await loadState(locations.extensionRoot);
     assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources.agents, [
       "pi-claude-marketplace-hello-shared",
@@ -11332,7 +11334,10 @@ test("a disabled update accepts a concurrent writer that already stored the next
  * (D-141-04), so discovery keeps the localeCompare-first source and reports
  * the loser.
  */
-async function seedCollidingSkills(marketplaceRoot: string, pluginName = "hello"): Promise<void> {
+export async function seedCollidingSkills(
+  marketplaceRoot: string,
+  pluginName = "hello",
+): Promise<void> {
   const skillsDir = path.join(marketplaceRoot, "plugins", pluginName, "skills");
   for (const dir of [`${pluginName}-foo`, "foo"]) {
     await mkdir(path.join(skillsDir, dir), { recursive: true });
@@ -11415,7 +11420,7 @@ for (const mode of ["json", "rpc"]) {
               kind: "diagnostic",
               severity: "warning",
               needsReload: false,
-              header: 'Plugin "hello" updated; 1 declared component has a note.',
+              header: 'Plugin "hello" [project] updated; 1 declared component has a note.',
               lines: [
                 'skill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
               ],
@@ -11460,7 +11465,7 @@ test("D-141-03: a standalone updatePlugins run surfaces the skills discovery war
         },
         {
           message:
-            'Plugin "hello" updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
       ]);
@@ -11471,7 +11476,7 @@ test("D-141-03: a standalone updatePlugins run surfaces the skills discovery war
   });
 });
 
-test("D-141-03: an updateSinglePlugin cascade emits no notification and carries both halves on notes", async () => {
+test("D-PL1-10: an updateSinglePlugin cascade emits no notification and carries both halves on stagingWarnings", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-discwarn-casc-");
     try {
@@ -11496,15 +11501,17 @@ test("D-141-03: an updateSinglePlugin cascade emits no notification and carries 
       }
 
       assert.equal(outcome.partition, "updated");
-      const notes = outcome.partition === "updated" ? (outcome.notes ?? []) : [];
-      assert.ok(
-        notes.some((n) => n.includes('"hello-foo"')),
-        `expected the discovery warning on notes; got: ${JSON.stringify(notes)}`,
-      );
-      assert.ok(
-        notes.some((n) => n.includes("source description was missing or empty")),
-        `expected the agents warning on notes; got: ${JSON.stringify(notes)}`,
-      );
+      const warnings = outcome.partition === "updated" ? (outcome.stagingWarnings ?? []) : [];
+      assert.deepStrictEqual(warnings, [
+        {
+          kind: "discovery",
+          message: `skill source "hello-foo" in "${path.join(seeded.marketplaceRoot, "plugins", "hello", "skills")}" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.`,
+        },
+        {
+          kind: "hygiene",
+          message: "[bot] source description was missing or empty -- using fallback",
+        },
+      ]);
 
       // The agents half must NOT reach a standalone run's notifications.
       const cwd2 = await createCaseDir("update-discwarn-std-");
@@ -11534,7 +11541,7 @@ test("D-141-03: an updateSinglePlugin cascade emits no notification and carries 
           },
           {
             message:
-              'Plugin "hello" updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+              'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
             severity: "warning",
           },
         ]);
@@ -11580,17 +11587,351 @@ test("D-141-03: a bulk update surfaces one diagnostic per updated plugin", async
         },
         {
           message:
-            'Plugin "hello" updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
         {
           message:
-            'Plugin "world" updated; 1 declared component has a note.\n\nskill source "world-foo" in "skills" elides to generated name "world-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "world" [project] updated; 1 declared component has a note.\n\nskill source "world-foo" in "skills" elides to generated name "world-foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
       ]);
       verifyBoundary();
     } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-PL1-07: a bare update renders the diagnostics in the row order of the marketplace blocks", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-discwarn-order-");
+    try {
+      // arrange
+      // The bare form visits the project scope first, but the rows sort the
+      // user-scope "alpha" block ahead of the project-scope "zeta" block.
+      const zeta = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "zeta-src"),
+        marketplaceName: "zeta",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      await seedCollidingSkills(zeta.marketplaceRoot, "hello");
+      const alpha = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "alpha-src"),
+        marketplaceName: "alpha",
+        manifestPlugins: { world: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { world: "1.0.0" },
+        scope: "user",
+      });
+      await seedCollidingSkills(alpha.marketplaceRoot, "world");
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(3);
+
+      // act
+      await updatePlugins({ ctx, run: runWithNothingLoaded(), cwd, target: { kind: "all" } });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● alpha [user]\n  ● world v1.0.0 → v1.0.1 (updated)\n\n● zeta [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n\nPlugin update: 2 updated\n\n/reload to pick up changes",
+        },
+        {
+          message:
+            'Plugin "world" [user] updated; 1 declared component has a note.\n\nskill source "world-foo" in "skills" elides to generated name "world-foo", already produced by skill source "foo"; ignoring duplicate.',
+          severity: "warning",
+        },
+        {
+          message:
+            'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+          severity: "warning",
+        },
+      ]);
+      verifyBoundary();
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * D-PL1-14: make `pluginName`'s mcp prepare throw by giving its one MCP
+ * server a key another plugin owns in the project scope's mcp-adapter.json.
+ * Returns the refusal the prepare throws.
+ */
+async function seedForeignMcpServerKey(
+  cwd: string,
+  marketplaceRoot: string,
+  pluginName: string,
+): Promise<string> {
+  await writeFile(
+    path.join(marketplaceRoot, "plugins", pluginName, ".mcp.json"),
+    JSON.stringify({ mcpServers: { "rollback-server": { command: "node" } } }),
+  );
+  const adapterPath = locationsFor("project", cwd).mcpAdapterJsonPath;
+  await mkdir(path.dirname(adapterPath), { recursive: true });
+  await writeFile(
+    adapterPath,
+    JSON.stringify({
+      mcpServers: {
+        [`plugin_${pluginName}_rollback-server_`]: {
+          command: "node",
+          _piClaudeMarketplace: { plugin: "other-plugin", marketplace: "mp" },
+        },
+      },
+    }),
+  );
+  return `Refusing to stage MCP server "plugin_${pluginName}_rollback-server_": ${adapterPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`;
+}
+
+test("D-PL1-14 / D-PL1-22: a direct update whose later target throws in prepare renders only that target's update failed diagnostic", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-failed-prepare-warnings-");
+    try {
+      // arrange
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          aaa: { version: "1.0.1", hasSkill: true },
+          zzz: { version: "1.0.1", hasSkill: true, hasMcp: true },
+        },
+        installedVersions: { aaa: "1.0.0", zzz: "1.0.0" },
+      });
+      await seedCollidingSkills(seeded.marketplaceRoot, "aaa");
+      await seedCollidingSkills(seeded.marketplaceRoot, "zzz");
+      const refusal = await seedForeignMcpServerKey(cwd, seeded.marketplaceRoot, "zzz");
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "A plugin operation has failed.",
+            "",
+            "● mp [project]",
+            "  ⊘ zzz v1.0.0 → v1.0.1 (failed) {unreadable manifest}",
+            `    cause: ${refusal}`,
+            "",
+            "Plugin update: 1 failure",
+          ].join("\n"),
+          severity: "error",
+        },
+        {
+          message:
+            "● mp [project]\n  ● aaa v1.0.0 → v1.0.1 (updated)\n\nPlugin update: 1 updated\n\n/reload to pick up changes",
+        },
+        {
+          message:
+            'Plugin "zzz" [project] update failed; 1 declared component has a note.\n\nskill source "zzz-foo" in "skills" elides to generated name "zzz-foo", already produced by skill source "foo"; ignoring duplicate.',
+          severity: "warning",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-PL1-14: a direct update whose phase-3 commit fails renders its update failed diagnostic after the cascade", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-failed-phase3-warnings-");
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          aaa: { version: "1.0.1", hasSkill: true },
+          zzz: { version: "1.0.1", hasSkill: true },
+        },
+        installedVersions: { aaa: "1.0.0", zzz: "1.0.0" },
+      });
+      await seedCollidingSkills(seeded.marketplaceRoot, "zzz");
+      await mkdir(locations.skillsTargetDir, { recursive: true });
+      await writeFile(path.join(locations.skillsTargetDir, "zzz-tool"), "obstacle");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      // assert
+      const rename = `ENOTDIR: not a directory, rename '${locations.skillsStagingDir}/<uuid>/zzz-tool' -> '${locations.skillsTargetDir}/zzz-tool'`;
+      assert.deepStrictEqual(
+        notifications.map((notification) => ({
+          ...notification,
+          message: notification.message.replaceAll(
+            /[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}/g,
+            "<uuid>",
+          ),
+        })),
+        [
+          {
+            message: [
+              "A plugin operation has failed.",
+              "",
+              "● mp [project]",
+              "  ⊘ zzz v1.0.0 → v1.0.1 (failed) {rollback partial}",
+              `    cause: Plugin "zzz" failed during physical replace. Run /claude:plugin reinstall zzz@mp to repair it. -> ${rename}`,
+              "    [skills] (rollback failed)",
+              `      cause: ${rename}`,
+              "",
+              "Plugin update: 1 failure",
+            ].join("\n"),
+            severity: "error",
+          },
+          {
+            message:
+              "● mp [project]\n  ● aaa v1.0.0 → v1.0.1 (updated)\n\nPlugin update: 1 updated\n\n/reload to pick up changes",
+          },
+          {
+            message:
+              'Plugin "zzz" [project] update failed; 1 declared component has a note.\n\nskill source "zzz-foo" in "skills" elides to generated name "zzz-foo", already produced by skill source "foo"; ignoring duplicate.',
+            severity: "warning",
+          },
+        ],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-PL1-14: a failed outcome a direct update keeps renders its update failed diagnostic after the cascade", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-failed-settled-warnings-");
+    try {
+      // arrange
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      await seedCollidingSkills(seeded.marketplaceRoot);
+      const { ctx, run, notifications } = makeCtx();
+      const operations = createPluginUpdateOperations(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+        { saveState: () => Promise.reject(new Error("disk full")) },
+        {},
+        () =>
+          Promise.resolve({
+            kind: "settled",
+            rows: [
+              {
+                status: "installed",
+                name: "zcore@mp",
+                dependencies: [],
+                version: "1.0.0",
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          }),
+      );
+
+      // act
+      await operations.updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "A plugin operation has failed.",
+            "",
+            "● mp [project]",
+            "  ⊘ hello v1.0.0 (failed)",
+            "    cause: disk full",
+            "  ● zcore@mp v1.0.0 (installed)",
+            "",
+            "/reload to pick up changes",
+          ].join("\n"),
+          severity: "error",
+        },
+        {
+          message:
+            'Plugin "hello" [project] update failed; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+          severity: "warning",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-PL1-14: a cascade target whose prepare throws returns a failed outcome carrying its warnings", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-failed-cascade-warnings-");
+    const previousCwd = process.cwd();
+    try {
+      // arrange
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true, hasMcp: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      await seedCollidingSkills(seeded.marketplaceRoot);
+      const refusal = await seedForeignMcpServerKey(cwd, seeded.marketplaceRoot, "hello");
+      process.chdir(cwd);
+
+      // act
+      const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+      // assert
+      assert.ok(outcome.partition === "failed");
+      assert.ok(outcome.cause instanceof Error);
+      assert.strictEqual(outcome.cause.message, refusal);
+      const { cause: _cause, ...withoutCause } = outcome;
+      assert.deepStrictEqual(withoutCause, {
+        partition: "failed",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.0.1",
+        notes: [`${refusal}\n\ncause: ${refusal}`],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        reasons: ["unreadable manifest"],
+        stagingWarnings: [
+          {
+            kind: "discovery",
+            message: `skill source "hello-foo" in "${path.join(seeded.marketplaceRoot, "plugins", "hello", "skills")}" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.`,
+          },
+        ],
+      });
+    } finally {
+      process.chdir(previousCwd);
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -11852,7 +12193,7 @@ test("WLIF-02: a workflow version B cannot admit reaches the standalone diagnost
       assert.equal(diagnostics.length, 1, JSON.stringify(notifications));
       assert.match(
         diagnostics[0]?.message ?? "",
-        /Plugin "hello" updated; 1 declared component has a note\./,
+        /Plugin "hello" \[project\] updated; 1 declared component has a note\./,
       );
       assert.match(diagnostics[0]?.message ?? "", /workflow script "broken\.js"/);
       assert.match(diagnostics[0]?.message ?? "", /was not installed/);
@@ -11862,7 +12203,7 @@ test("WLIF-02: a workflow version B cannot admit reaches the standalone diagnost
   });
 });
 
-test("WLIF-02: the same workflow warning rides the cascade outcome's notes", async () => {
+test("WLIF-02: the same workflow warning rides the cascade outcome's stagingWarnings", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-workflows-warn-cascade-");
     const previousCwd = process.cwd();
@@ -11885,14 +12226,13 @@ test("WLIF-02: the same workflow warning rides the cascade outcome's notes", asy
 
       // assert
       assert.equal(outcome.partition, "updated");
-      assert.equal(
-        (outcome.notes ?? []).some(
-          (note) =>
-            note.includes('workflow script "broken.js"') && note.includes("was not installed"),
-        ),
-        true,
-        JSON.stringify(outcome.notes),
-      );
+      const warnings = outcome.partition === "updated" ? (outcome.stagingWarnings ?? []) : [];
+      assert.deepStrictEqual(warnings, [
+        {
+          kind: "discovery",
+          message: `workflow script "broken.js" in "${path.join(marketplaceRoot, "plugins", "hello", "workflows")}" was not installed: broken.js declares no \`meta\`, so there is nothing to install`,
+        },
+      ]);
     } finally {
       process.chdir(previousCwd);
       await rm(cwd, { recursive: true, force: true });
@@ -13123,6 +13463,75 @@ test("AFILE-04: an update that fails after its MCP commit still reports the remo
   });
 });
 
+test("D-PL1-23 / WRN-06: a direct update whose settle refused shows the notices of the dependencies it installed after the cascade", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-refused-settle-notices-");
+    try {
+      // arrange
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const { ctx, run, notifications } = makeCtx();
+      const operations = createPluginUpdateOperations(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+        undefined,
+        {},
+        () =>
+          Promise.resolve({
+            kind: "refused",
+            rows: [
+              {
+                status: "installed",
+                name: "zcore@mp",
+                dependencies: [],
+                version: "1.0.0",
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+            cause: new Error("zzz refused"),
+            mcpConfigNotices: [
+              { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+            ],
+          }),
+      );
+
+      // act
+      await operations.updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "A plugin operation has failed.",
+            "",
+            "● mp [project]",
+            "  ⊘ hello v1.0.0 (failed) {dependency failed}",
+            "  ● zcore@mp v1.0.0 (installed)",
+            "",
+            "/reload to pick up changes",
+          ].join("\n"),
+          severity: "error",
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("AFILE-04: the cascade update entry returns the notice without notifying", async () => {
   await withHermeticHome(async () => {
     // arrange
@@ -13138,6 +13547,7 @@ test("AFILE-04: the cascade update entry returns the notice without notifying", 
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "updated",
+        resourcesChanged: true,
         name: "hello",
         fromVersion: "1.0.0",
         toVersion: "1.0.1",
@@ -13488,6 +13898,7 @@ test("D-26: convergePlugin moves a path-source plugin to the catalog version in 
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "updated",
+        resourcesChanged: true,
         name: "hello",
         fromVersion: "1.0.0",
         toVersion: "1.1.0",
@@ -13627,6 +14038,7 @@ test("D-10 / D-25: convergePlugin with rematerialize re-materializes the recorde
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "updated",
+        resourcesChanged: true,
         name: "hello",
         fromVersion: "1.0.0",
         toVersion: "1.0.0",

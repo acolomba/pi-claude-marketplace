@@ -36,6 +36,7 @@ const REINSTALL_REINSTALLED_CLEAN = {
   marketplace: "official",
   name: "alpha",
   partition: "reinstalled",
+  resourcesChanged: false,
   scope: "project",
   stagedAgentNames: [],
   stagedMcpServerNames: [],
@@ -47,13 +48,17 @@ const REINSTALL_REINSTALLED_FULL = {
   declaresMcp: true,
   declaresWorkflows: false,
   degradedKinds: ["skill", "command"],
-  discoveryWarnings: ["skill alpha could not be read", "command beta could not be read"],
+  discoveryWarnings: [
+    { kind: "discovery", message: "skill alpha could not be read" },
+    { kind: "discovery", message: "command beta could not be read" },
+  ],
   fromCommit: "1111111111111111111111111111111111111111",
   fromVersion: "1.0.0",
   marketplace: "official",
   name: "alpha",
   notes: ["warning: skill alpha could not be read", "warning: command beta could not be read"],
   partition: "reinstalled",
+  resourcesChanged: true,
   scope: "user",
   stagedAgentNames: ["alpha-agent"],
   stagedMcpServerNames: ["alpha-mcp"],
@@ -143,6 +148,7 @@ const PLUGIN_UPDATE_UPDATED_CLEAN = {
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: false,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toVersion: "1.1.0",
@@ -159,15 +165,19 @@ const PLUGIN_UPDATE_UPDATED_FULL = {
   degradedKinds: ["skill", "command"],
   fromVersion: "1.0.0",
   name: "alpha",
-  notes: ["warning: skill alpha could not be read"],
   orphanRewake: true,
   partialDegrade: {
     kinds: ["hooks", "lsp"],
     newlyDegraded: true,
   },
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: ["alpha-agent"],
   stagedMcpServerNames: ["alpha-mcp"],
+  stagingWarnings: [
+    { kind: "discovery", message: "skill alpha could not be read" },
+    { kind: "hygiene", message: "agents index entry was corrupt" },
+  ],
   toVersion: "2.0.0",
 } satisfies PluginUpdateUpdatedOutcome;
 
@@ -388,11 +398,28 @@ void ({
   marketplace: "official",
   name: "alpha",
   partition: "reinstalled",
+  resourcesChanged: true,
   scope: "project",
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   version: "1.0.0",
   // @ts-expect-error the reinstalled partition requires explicit companion predicates
+} satisfies ReinstallReinstalledOutcome);
+
+// D-PL1-18: a reinstalled outcome carries the runner's resourcesChanged.
+void ({
+  declaresAgents: false,
+  declaresMcp: false,
+  declaresWorkflows: false,
+  fromVersion: "1.0.0",
+  marketplace: "official",
+  name: "alpha",
+  partition: "reinstalled",
+  scope: "project",
+  stagedAgentNames: [],
+  stagedMcpServerNames: [],
+  version: "1.0.0",
+  // @ts-expect-error the reinstalled partition requires resourcesChanged
 } satisfies ReinstallReinstalledOutcome);
 
 void ({
@@ -433,6 +460,7 @@ void ({
   name: "alpha",
   notes: undefined,
   partition: "reinstalled",
+  resourcesChanged: true,
   scope: "project",
   stagedAgentNames: [],
   stagedMcpServerNames: [],
@@ -449,6 +477,7 @@ void ({
   marketplace: "official",
   name: "alpha",
   partition: "reinstalled",
+  resourcesChanged: true,
   scope: "project",
   stagedAgentNames: [],
   stagedMcpServerNames: [],
@@ -464,6 +493,7 @@ void ({
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toCommit: "b".repeat(40),
@@ -502,6 +532,7 @@ void ({
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   // @ts-expect-error the updated partition requires both transition versions
@@ -554,6 +585,7 @@ void ({
     kinds: ["hooks"],
   },
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toVersion: "2.0.0",
@@ -567,6 +599,7 @@ void ({
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toVersion: "2.0.0",
@@ -582,6 +615,7 @@ void ({
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toVersion: "2.0.0",
@@ -630,12 +664,28 @@ void ({
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toVersion: "2.0.0",
   // @ts-expect-error outcome types do not carry rendered-row dependencies
   dependencies: ["agents"],
 } satisfies PluginUpdateOutcome);
+
+// D-PL1-18: every updated outcome states whether it touched a loadable resource.
+void ({
+  constraint: undefined,
+  declaresAgents: false,
+  declaresMcp: false,
+  declaresWorkflows: false,
+  fromVersion: "1.0.0",
+  name: "alpha",
+  partition: "updated",
+  stagedAgentNames: [],
+  stagedMcpServerNames: [],
+  toVersion: "2.0.0",
+  // @ts-expect-error the updated partition requires resourcesChanged
+} satisfies PluginUpdateUpdatedOutcome);
 
 // D-10-17a: the disclosure member is REQUIRED-BUT-NULLABLE, never `constraint?:`
 // -- omitting the key entirely is a compile error, unlike an ordinary optional
@@ -646,6 +696,7 @@ void ({
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toVersion: "2.0.0",
@@ -664,6 +715,7 @@ void ({
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toVersion: "2.0.0",

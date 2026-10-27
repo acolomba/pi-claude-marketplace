@@ -51,11 +51,10 @@ import {
   PluginInBaseLayerOnlyError,
   PluginInLocalLayerOnlyError,
 } from "../../shared/errors.ts";
-import { notify, notifyDiagnostic } from "../../shared/notification-dispatch.ts";
+import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
-import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { crossScopeFlag, marketplaceInOtherScope } from "../marketplace/shared.ts";
 
 import { readRecordDeclarations } from "./dependency-index.ts";
@@ -1796,88 +1795,6 @@ export async function emitMarketplaceNotAddedSignal(args: {
       scope: err.requestedScope,
     })),
   });
-}
-
-/**
- * D-141-03 / D-141-05: split one staging pass's four bridge warning arrays
- * into the DISCOVERY half and the HYGIENE half.
- *
- * Every warning the skills and commands bridges emit describes the SOURCE the
- * plugin author shipped against the artifact set that actually installed --
- * a first-wins skip, an unreadable subdirectory or file, a path that produces
- * no valid name, a skipped subdirectory, or (commands only) one file reached
- * by two declared entries and therefore installed under two names. The last
- * of those reports a surplus rather than a shortfall, so the shared property
- * is not "a skip": it is that the user's own resource count gives no baseline
- * to notice ANY of them. That is why the whole half reaches standalone mode.
- *
- * The agents bridge aggregates index corruptions, per-agent conversion notes
- * and D-07 skips onto ONE array that cannot be split at the call site, so the
- * whole array joins the hygiene channel; mcp rides beside it.
- *
- * Kept here, taking plain string arrays rather than bridge result types, so
- * update and reinstall classify through one function instead of two copies
- * that drift (and so `sonarjs/no-identical-functions` and `fallow dupes` have
- * nothing to find).
- *
- * `install-outcome.ts` does NOT call this. Its ledger phases push each bridge's
- * warnings onto the right array inline, one push per phase, because each
- * phase already holds exactly one bridge's result. It shares the RENDERER
- * below, not this classifier -- so two of the three verbs share the
- * classification and all three share the rendering. A change to the split
- * therefore has to be applied at install's four phase sites by hand.
- */
-export function splitStagingWarnings(warnings: {
-  readonly skills: readonly string[];
-  readonly commands: readonly string[];
-  readonly agents: readonly string[];
-  readonly mcp: readonly string[];
-}): { readonly discovery: readonly string[]; readonly bridge: readonly string[] } {
-  return {
-    discovery: Object.freeze([...warnings.skills, ...warnings.commands]),
-    bridge: Object.freeze([...warnings.agents, ...warnings.mcp]),
-  };
-}
-
-/**
- * D-141-03 / D-141-05: render the discovery half to a standalone user, after
- * the verb's own row.
- *
- * The seam is `notifyDiagnostic`, the same sanctioned second-notify channel
- * the reconcile pass uses; the verb's row itself stays exactly one
- * `MarketplaceNotificationMessage` (IL-2).
- *
- * NFR-9: a discovery warning embeds the absolute component directory it
- * walked, so it goes through `redactAbsolutePaths` before it reaches the
- * user, exactly as the reconcile composer does.
- *
- * WGATE-01: the header counts the lines and states nothing about what became
- * of the components they name. It cannot: two of the families routed into this
- * array report a component that WAS materialized -- a workflow script the host
- * engine will refuse to load, and one that installs under a name it does not
- * declare -- so a header claiming a disposal would contradict the lines
- * directly beneath it. "Note" is the word the read-only `info` surface already
- * prints for the same facts, so the two surfaces name them the same way.
- */
-export function surfaceDiscoveryWarnings(
-  ctx: NotificationContext,
-  run: NotificationRun,
-  args: {
-    readonly plugin: string;
-    readonly verb: "installed" | "updated" | "reinstalled";
-    readonly warnings: readonly string[];
-  },
-): void {
-  if (args.warnings.length === 0) {
-    return;
-  }
-
-  const lines = args.warnings.map((w) => redactAbsolutePaths(w));
-  const header =
-    lines.length === 1
-      ? `Plugin "${args.plugin}" ${args.verb}; 1 declared component has a note.`
-      : `Plugin "${args.plugin}" ${args.verb}; ${lines.length.toString()} declared components have notes.`;
-  notifyDiagnostic(ctx, run, header, lines);
 }
 
 /**

@@ -812,7 +812,11 @@ describe("prepareStageMcpServers", () => {
         },
       ],
       warnings: [
-        'mcp server "plugin_acme_scalar_": entry is not an object; staged as an empty entry',
+        {
+          kind: "hygiene",
+          message:
+            'mcp server "plugin_acme_scalar_": entry is not an object; staged as an empty entry',
+        },
       ],
       notices: [],
     });

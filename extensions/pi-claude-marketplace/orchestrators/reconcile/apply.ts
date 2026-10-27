@@ -123,16 +123,18 @@ import {
   createUninstallOperation,
 } from "../plugin/operations.ts";
 import { degradationFromEnable } from "../plugin/shared.ts";
+import { surfaceCascadeStagingDiagnostics } from "../plugin/staging-diagnostics.ts";
 import { UninstallRefusedError } from "../plugin/uninstall.ts";
 
 import {
   carriedMcpConfigNotices,
-  carriedPackageNote,
+  carriedStagingWarnings,
   cascadeDisabledOutcome,
   classifyOrchestratorThrow,
   installFailureReasonFields,
   dependencyDisabledOutcome,
   sourceMismatchOutcomes,
+  stagingDiagnosticsOf,
 } from "./apply-outcomes.ts";
 import {
   cascadeDependencies,
@@ -1056,6 +1058,8 @@ async function applyPluginToggles(
           ...(Object.keys(degradation).length > 0 && { degradation }),
         }),
         ...carriedMcpConfigNotices(result),
+        // D-PL1-09: a disable stages nothing, so only the enable arm carries them.
+        ...(result.status === "enabled" ? carriedStagingWarnings(result) : {}),
       });
     } else if (result.status === "failed") {
       outcomes.push({
@@ -2239,7 +2243,7 @@ function grownMoveOutcomes(move: PlannedMove, result: PluginUpdateOutcome): PerE
       unsupported,
       ...installedRowDegradation(result),
       ...carriedMcpConfigNotices(result),
-      ...carriedPackageNote(result),
+      ...carriedStagingWarnings(result),
     },
   ];
 }
@@ -2389,6 +2393,11 @@ function reportScopePasses(
   // path that feeds it.
   surfacePostCommitWarnings(opts, outcomes);
 
+  // D-PL1-07 / D-PL1-09 / D-PL1-25: each catalog move's and enable's staging
+  // warnings, both halves, after the install block and before the MCP config
+  // notices.
+  surfaceCascadeStagingDiagnostics(opts.ctx, opts.run, stagingDiagnosticsOf(outcomes));
+
   // AFILE-04: the MCP config notices every orchestrated operation returned,
   // shown after the cascade rows they explain. The empty-pass return above
   // sends none, since a pass with no outcome carries no notice.
@@ -2450,33 +2459,25 @@ export function createScopeDependencyInstall(
   };
 }
 
-/**
- * The post-commit warnings one outcome carries. Both install-driven arms carry
- * the field: `installPlugin` collects its post-commit warnings after the state
- * commit and gates none of them on the DFEN-04 disabled verdict, so an install
- * that landed disabled has the same hygiene facts to report as one that landed
- * enabled. PKD-02: a realized catalog or growth move carries its package note.
- */
-function postCommitWarningsOf(o: PerEntryOutcome): readonly string[] {
-  if (
-    o.kind === "plugin-installed" ||
-    o.kind === "plugin-disabled" ||
-    o.kind === "plugin-converged" ||
-    o.kind === "plugin-backfilled"
-  ) {
-    return o.postCommitWarnings ?? [];
-  }
-
-  return [];
-}
-
 function surfacePostCommitWarnings(
   opts: ApplyReconcileOptions,
   outcomes: readonly PerEntryOutcome[],
 ): void {
   const lines: string[] = [];
   for (const o of outcomes) {
-    for (const w of postCommitWarningsOf(o)) {
+    // Both install-driven arms carry the field: `installPlugin` collects its
+    // post-commit warnings after the state commit and gates none of them on the
+    // DFEN-04 disabled verdict, so an install that landed disabled has the same
+    // hygiene facts to report as one that landed enabled.
+    if (o.kind !== "plugin-installed" && o.kind !== "plugin-disabled") {
+      continue;
+    }
+
+    if (o.postCommitWarnings === undefined) {
+      continue;
+    }
+
+    for (const w of o.postCommitWarnings) {
       // T-86-03 / NFR-9: collapse any absolute source path embedded in a
       // frontmatter parse-error detail (or any other post-commit warning) to
       // its basename before it reaches the operator-facing notifyDiagnostic

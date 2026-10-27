@@ -92,7 +92,7 @@ import {
 
 import {
   carriedMcpConfigNotices,
-  carriedPackageNote,
+  carriedStagingWarnings,
   sourceMismatchOutcomeSubject,
 } from "./apply-outcomes.ts";
 import { plannedSourceMismatchSubject } from "./types.ts";
@@ -483,7 +483,7 @@ export function convergedMoveOutcomes(
             ),
           ),
           ...carriedMcpConfigNotices(outcome),
-          ...carriedPackageNote(outcome),
+          ...carriedStagingWarnings(outcome),
         },
       ];
     case "skipped": {
@@ -510,6 +510,7 @@ export function convergedMoveOutcomes(
             needsReload: false,
           }),
           ...carriedMcpConfigNotices(outcome),
+          ...carriedStagingWarnings(outcome),
         },
       ];
   }

@@ -1418,6 +1418,233 @@ test("PDEF-01: install stages every agent directory and warns on a later duplica
   });
 });
 
+test("PDEF-01 / D-PL1-02: a standalone install reports a later duplicate agent after its row", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-agent-dirs-standalone-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        agentDirectories: ["declared-agents"],
+        agents: [
+          {
+            directory: "declared-agents",
+            sourceName: "shared-first",
+            frontmatterName: "shared",
+            description: "First shared agent",
+            body: "First shared agent.\n",
+          },
+          {
+            sourceName: "shared-later",
+            frontmatterName: "shared",
+            description: "Later shared agent",
+            body: "Later shared agent.\n",
+          },
+        ],
+      });
+      const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.strictEqual(outcome.status, "installed");
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
+        },
+        {
+          message:
+            'Plugin "hello" [project] installed; 1 declared component has a note.\n\nagent source "shared" at "shared-later.md" duplicates generated name "pi-claude-marketplace-hello-shared" already produced by agent source "shared" at "shared-first.md"; keeping first discovered source.',
+          severity: "warning",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * Block the project scope's mcp-adapter.json with a directory and return the
+ * runtime's own EISDIR wording for it, which later Node majors extend with the
+ * path.
+ */
+async function blockMcpAdapterJson(cwd: string): Promise<string> {
+  const adapterPath = locationsFor("project", cwd).mcpAdapterJsonPath;
+  await mkdir(adapterPath, { recursive: true });
+  return readFile(adapterPath, "utf8").then(
+    () => assert.fail("the blocked mcp-adapter.json must not read"),
+    (error: unknown) => {
+      const errno = error as NodeJS.ErrnoException;
+      assert.deepStrictEqual(
+        { code: errno.code, syscall: errno.syscall },
+        { code: "EISDIR", syscall: "read" },
+      );
+      return errno.message;
+    },
+  );
+}
+
+/** D-PL1-13: a plugin whose agents collide and whose mcp phase then fails. */
+async function seedCollidingAgentsBehindBlockedMcp(cwd: string): Promise<string> {
+  await seedPathMarketplaceWithPlugin({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    pluginName: "hello",
+    agentDirectories: ["declared-agents"],
+    agents: [
+      {
+        directory: "declared-agents",
+        sourceName: "shared-first",
+        frontmatterName: "shared",
+        description: "First shared agent",
+        body: "First shared agent.\n",
+      },
+      {
+        sourceName: "shared-later",
+        frontmatterName: "shared",
+        description: "Later shared agent",
+        body: "Later shared agent.\n",
+      },
+    ],
+  });
+  return blockMcpAdapterJson(cwd);
+}
+
+test("D-PL1-13: a standalone install that fails in its mcp phase reports the agent skip after its failed row", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-failed-warnings-"));
+    try {
+      // arrange
+      const readFailure = await seedCollidingAgentsBehindBlockedMcp(cwd);
+      const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.strictEqual(outcome.status, "failed");
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "A plugin operation has failed.",
+            "",
+            "● mp [project]",
+            "  ⊘ hello v0.0.1 (failed)",
+            `    cause: ${readFailure}`,
+          ].join("\n"),
+          severity: "error",
+        },
+        {
+          message:
+            'Plugin "hello" [project] install failed; 1 declared component has a note.\n\nagent source "shared" at "shared-later.md" duplicates generated name "pi-claude-marketplace-hello-shared" already produced by agent source "shared" at "shared-first.md"; keeping first discovered source.',
+          severity: "warning",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-PL1-13: an orchestrated install that fails in its mcp phase sends nothing and carries no warnings", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-failed-warnings-orch-"));
+    try {
+      // arrange
+      await seedCollidingAgentsBehindBlockedMcp(cwd);
+      const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(outcome.status, "failed");
+      assert.strictEqual("stagingWarnings" in outcome, false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-PL1-24: a dependency whose skills collide and whose mcp phase fails renders no diagnostic under the root", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-failed-warnings-dep-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const collidingSkillDir = path.join(
+        cwd,
+        "mp-src",
+        "plugins",
+        "some-other-plugin",
+        "skills",
+        "some-other-plugin-tool",
+      );
+      await mkdir(collidingSkillDir, { recursive: true });
+      await writeFile(path.join(collidingSkillDir, "SKILL.md"), "---\nname: tool\n---\n\nBody.\n");
+      const readFailure = await blockMcpAdapterJson(cwd);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "Some plugin operations have failed.",
+            "",
+            "● mp [project]",
+            "  ⊘ hello (failed) {dependency failed}",
+            "  ⊘ some-other-plugin@mp (failed)",
+            `    cause: ${readFailure.replace(locationsFor("project", cwd).mcpAdapterJsonPath, "mcp-adapter.json")}`,
+          ].join("\n"),
+          severity: "error",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ───────────────────────────────────────────────────────────────────────────
 // PI-7 -- version precedence
 // ───────────────────────────────────────────────────────────────────────────
@@ -12404,7 +12631,7 @@ test("D-141-03: a standalone install surfaces a command discovery warning as a s
         },
         {
           message:
-            'Plugin "hello" installed; 1 declared component has a note.\n\ncommand source "tools/lint" in "commands" elides to generated name "hello:tools:lint", already produced by command source "hello-tools/lint"; ignoring duplicate.',
+            'Plugin "hello" [project] installed; 1 declared component has a note.\n\ncommand source "tools/lint" in "commands" elides to generated name "hello:tools:lint", already produced by command source "hello-tools/lint"; ignoring duplicate.',
           severity: "warning",
         },
       ]);
@@ -12491,7 +12718,7 @@ for (const mode of ["json", "rpc"]) {
               kind: "diagnostic",
               severity: "warning",
               needsReload: false,
-              header: 'Plugin "hello" installed; 1 declared component has a note.',
+              header: 'Plugin "hello" [project] installed; 1 declared component has a note.',
               lines: [
                 'command source "tools/lint" in "commands" elides to generated name "hello:tools:lint", already produced by command source "hello-tools/lint"; ignoring duplicate.',
               ],
@@ -18110,7 +18337,7 @@ test("WGATE-03: a script whose meta carries shapes the gate predicates never exp
   assert.ok(diagnostic !== undefined);
   assert.strictEqual(
     diagnostic,
-    'Plugin "hello" installed; 1 declared component has a note.\n\nworkflow script "greet.js" in "workflows" was installed but the engine will refuse to load it: the engine refuses at its check 8 -- every value inside `meta` must be a plain literal, so no spread, computed key, key written as anything but an identifier, string or number, method, accessor, reserved key name (`__proto__`, `constructor`, `prototype`), array hole, substituted template or computed expression',
+    'Plugin "hello" [project] installed; 1 declared component has a note.\n\nworkflow script "greet.js" in "workflows" was installed but the engine will refuse to load it: the engine refuses at its check 8 -- every value inside `meta` must be a plain literal, so no spread, computed key, key written as anything but an identifier, string or number, method, accessor, reserved key name (`__proto__`, `constructor`, `prototype`), array hole, substituted template or computed expression',
   );
 });
 
@@ -18335,7 +18562,7 @@ test("WGATE-01 / D-115-05: a standalone install renders every workflow discovery
       // refuse to load. It is shared by install, update and reinstall.
       assert.equal(
         diagnostic.message,
-        `Plugin "hello" installed; 6 declared components have notes.\n\n${EXPECTED_DISCOVERY_FAMILY_LINES.join("\n")}`,
+        `Plugin "hello" [project] installed; 6 declared components have notes.\n\n${EXPECTED_DISCOVERY_FAMILY_LINES.join("\n")}`,
       );
       // NFR-9: the temporary marketplace root never reaches the user.
       assert.ok(!diagnostic.message.includes(cwd), diagnostic.message);
@@ -19021,6 +19248,59 @@ describe("createUpdateDependencyResolver", () => {
       assert.deepStrictEqual(await recordedVersions(cwd), {
         widget: ["1.0.0", true],
         zcore: ["1.0.0", true],
+      });
+    });
+  });
+
+  test("D-PL1-16: reports the MCP config notices of the dependency it installs", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({
+        widget: { version: "1.0.0" },
+        zcore: { version: "1.0.0" },
+      });
+      await installed(owner, cwd, "widget");
+      await publishCatalog(marketplaceRoot, {
+        widget: { version: "1.1.0", dependencies: ["zcore"] },
+        zcore: { version: "1.0.0" },
+      });
+      await writeFile(
+        path.join(marketplaceRoot, "plugins", "zcore", ".mcp.json"),
+        JSON.stringify({ mcpServers: { "zcore-server": { command: "node" } } }),
+      );
+      const locations = locationsFor("project", cwd);
+      await writeFile(locations.mcpAdapterJsonPath, '// mine\n{"mcpServers":{}}\n');
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+        {},
+      );
+
+      // act
+      const settlement = await settle(
+        updateArgs(owner, cwd, "widget"),
+        await preparedUpdate(cwd, "widget"),
+        { ctx, run },
+      );
+
+      // assert
+      assert.deepStrictEqual(settlement, {
+        kind: "settled",
+        rows: [
+          {
+            status: "installed",
+            name: "zcore@mp",
+            dependencies: ["mcp"],
+            version: "1.0.0",
+            severity: "warning",
+            needsReload: true,
+          },
+        ],
+        mcpConfigNotices: [
+          { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+        ],
       });
     });
   });

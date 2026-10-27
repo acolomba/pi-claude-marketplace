@@ -19,6 +19,10 @@ import {
   type PendingInstallCandidate,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts";
 import { DependencyCascadeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  discoveryWarning,
+  hygieneWarning,
+} from "../../../extensions/pi-claude-marketplace/shared/staging-warnings.ts";
 
 import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
 import type { PlannedMove } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/convergence.ts";
@@ -2097,6 +2101,7 @@ describe("convergedMoveOutcomes", () => {
     const outcomes = convergedMoveOutcomes(DEMO_MOVE, {
       ...UPDATE_BASE,
       partition: "updated",
+      resourcesChanged: true,
       fromVersion: "1.0.0",
       toVersion: "1.1.0",
       stagedAgentNames: [],
@@ -2131,18 +2136,19 @@ describe("convergedMoveOutcomes", () => {
     ]);
   });
 
-  test("PKD-02: an updated move carries its package note as a post-install warning", () => {
+  test("PKD-02: an updated move carries its package note as a staging warning", () => {
     // act
     const outcomes = convergedMoveOutcomes(DEMO_MOVE, {
       ...UPDATE_BASE,
       partition: "updated",
+      resourcesChanged: true,
       fromVersion: "1.0.0",
       toVersion: "1.1.0",
       stagedAgentNames: [],
       stagedMcpServerNames: [],
       declaresWorkflows: false,
       constraint: undefined,
-      notes: ["a skipped skill", "Plugin dependency install failed (npm): E404"],
+      stagingWarnings: [discoveryWarning("Plugin dependency install failed (npm): E404")],
       packageNote: "Plugin dependency install failed (npm): E404",
     });
 
@@ -2163,7 +2169,7 @@ describe("convergedMoveOutcomes", () => {
           severity: "info",
           needsReload: true,
         },
-        postCommitWarnings: ["Plugin dependency install failed (npm): E404"],
+        stagingWarnings: [discoveryWarning("Plugin dependency install failed (npm): E404")],
       },
     ]);
   });
@@ -2175,6 +2181,7 @@ describe("convergedMoveOutcomes", () => {
       {
         ...UPDATE_BASE,
         partition: "updated",
+        resourcesChanged: true,
         fromVersion: "1.0.0",
         toVersion: "1.1.0",
         stagedAgentNames: [],
@@ -2214,6 +2221,7 @@ describe("convergedMoveOutcomes", () => {
       {
         ...UPDATE_BASE,
         partition: "updated",
+        resourcesChanged: true,
         fromVersion: "1.0.0",
         toVersion: "1.1.0",
         stagedAgentNames: [],
@@ -2252,6 +2260,7 @@ describe("convergedMoveOutcomes", () => {
       {
         ...UPDATE_BASE,
         partition: "updated",
+        resourcesChanged: true,
         fromVersion: "1.0.0",
         toVersion: "1.1.0",
         stagedAgentNames: [],
@@ -2415,6 +2424,45 @@ describe("convergedMoveOutcomes", () => {
         mcpConfigNotices: [notice],
       },
     ]);
+  });
+
+  test("D-PL1-23: an updated and a failed move carry the runner's tagged staging warnings", () => {
+    // arrange
+    const stagingWarnings = [discoveryWarning("skill skipped"), hygieneWarning("index rebuilt")];
+
+    // act
+    const moved = convergedMoveOutcomes(DEMO_MOVE, {
+      ...UPDATE_BASE,
+      partition: "updated",
+      resourcesChanged: true,
+      fromVersion: "1.0.0",
+      toVersion: "1.1.0",
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      declaresWorkflows: false,
+      constraint: undefined,
+      stagingWarnings,
+    });
+    const failed = convergedMoveOutcomes(DEMO_MOVE, {
+      ...UPDATE_BASE,
+      partition: "failed",
+      notes: [],
+      reasons: ["permission denied"],
+      declaresWorkflows: false,
+      stagingWarnings,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      [...moved, ...failed].map((outcome) => ({
+        status: outcome.row.status,
+        stagingWarnings: outcome.stagingWarnings,
+      })),
+      [
+        { status: "updated", stagingWarnings },
+        { status: "failed", stagingWarnings },
+      ],
+    );
   });
 
   test("a failed move with no classified reason renders an empty brace", () => {

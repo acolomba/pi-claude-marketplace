@@ -139,7 +139,6 @@ import {
   NO_STORED_CREDENTIAL_CAUSE,
   buildGitHubAuth,
 } from "../auth-host.ts";
-import { surfaceDiscoveryWarnings } from "../plugin/shared.ts";
 // WR-12 / WR-03: the `(updated)` row composer, imported from the LEAF module
 // that holds it rather than from the plugin-update ledger. The ledger stays
 // behind the injected `pluginUpdate` seam -- and now stays out of this module's
@@ -159,6 +158,7 @@ import {
 import {
   UPDATE_CONTEXT,
   outcomeToCascadePluginMessage,
+  surfaceCascadeStagingWarnings,
   type UpdateRowMsg,
 } from "./update.messaging.ts";
 
@@ -803,27 +803,6 @@ function refreshFailureReasons(err: unknown): readonly ContentReason[] {
   return reason === undefined ? [] : [reason];
 }
 
-/**
- * PKD-02 / D-PL9-21: shows each updated plugin's package note after the
- * cascade rows, as the direct plugin update shows it. The cascade's other
- * notes follow WRN-02's shared placement rule, not this call.
- */
-function surfaceCascadePackageNotes(
-  ctx: NotificationContext,
-  run: NotificationRun,
-  outcomes: readonly PluginUpdateOutcome[],
-): void {
-  for (const outcome of outcomes) {
-    if (outcome.partition === "updated" && outcome.packageNote !== undefined) {
-      surfaceDiscoveryWarnings(ctx, run, {
-        plugin: outcome.name,
-        verb: "updated",
-        warnings: [outcome.packageNote],
-      });
-    }
-  }
-}
-
 async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   const { ctx, cardinality, name, scope, locations, run } = args;
 
@@ -1006,7 +985,7 @@ function notifyRefreshed(
     },
   ];
   notifyWithContext(ctx, run, UPDATE_CONTEXT, cascadeRows, undefined, cardinality);
-  surfaceCascadePackageNotes(ctx, run, outcomes);
+  surfaceCascadeStagingWarnings(ctx, run, outcomes, scope);
   // AFILE-04: the notices of the cascade's updates, shown after the rows they
   // explain. A failed update can carry them too: its MCP commit succeeded
   // before a later bridge or the finalize failed. The no-op paths above have

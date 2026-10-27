@@ -44,6 +44,7 @@ import {
 } from "../../shared/errors.ts";
 import { cleanupStaging } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
+import { discoveryWarning } from "../../shared/staging-warnings.ts";
 import { substituteClaudeVars } from "../../shared/vars.ts";
 
 import { discoverPluginCommands } from "./discover.ts";
@@ -171,7 +172,7 @@ export async function prepareStageCommands(
       result: {
         stagedNames: Object.freeze<string[]>([]),
         recorded: Object.freeze<StagedCommandRecord[]>([]),
-        warnings: Object.freeze([...discoverWarnings]),
+        warnings: Object.freeze(discoverWarnings.map(discoveryWarning)),
         // CMD-01: the noop branch stages no commands, so no source is parsed and
         // nothing can degrade -- always empty here.
         degraded: Object.freeze<CommandDegradeRecord[]>([]),
@@ -280,7 +281,7 @@ export async function prepareStageCommands(
     result: {
       stagedNames: Object.freeze(stagedNames),
       recorded: Object.freeze(recorded),
-      warnings: Object.freeze([...discoverWarnings]),
+      warnings: Object.freeze(discoverWarnings.map(discoveryWarning)),
       // CMD-01: one record per command whose SOURCE frontmatter was unparseable
       // and neutralized (D-86-07). The install orchestrator maps these to the
       // `{malformed command}` reason token + per-component detail.

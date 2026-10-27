@@ -242,7 +242,7 @@ describe("prepareStageSkills", () => {
           targetPath: path.join(locations.skillsTargetDir, "acme-tool"),
         },
       ],
-      warnings: [expectedWarning],
+      warnings: [{ kind: "discovery", message: expectedWarning }],
       degraded: [],
     });
     assert.strictEqual(

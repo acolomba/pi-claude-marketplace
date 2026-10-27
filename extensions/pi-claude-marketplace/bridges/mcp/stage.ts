@@ -52,6 +52,7 @@ import {
   McpServerKeyCollisionError,
 } from "../../shared/errors-bridges.ts";
 import { errorMessage, errorWithManualRecovery } from "../../shared/errors.ts";
+import { hygieneWarning } from "../../shared/staging-warnings.ts";
 
 import {
   ADAPTER_SERVER_KEYS,
@@ -95,6 +96,7 @@ import type {
   McpToolRulesUnenforcedNotice,
   McpVariablesMissingNotice,
 } from "../../shared/notification-types.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /** A file a replace is about to write, and what it held before. */
@@ -377,7 +379,7 @@ function noopStaging(notices: readonly McpConfigNotice[]): PreparedMcpStaging {
   const result: StageMcpCommitResult = {
     stagedNames: Object.freeze<string[]>([]),
     recorded: Object.freeze<StagedMcpRecord[]>([]),
-    warnings: Object.freeze<string[]>([]),
+    warnings: Object.freeze<StagingWarning[]>([]),
     notices: Object.freeze([...notices]),
   };
   return { kind: "noop", result };
@@ -590,7 +592,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   const result: StageMcpCommitResult = {
     stagedNames: Object.freeze([...declaredNames]),
     recorded,
-    warnings: Object.freeze(stampWarnings),
+    warnings: Object.freeze(stampWarnings.map((message) => hygieneWarning(message))),
     notices,
   };
 

@@ -22,13 +22,13 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 
 ### Staging warnings (WRN)
 
-- [ ] **WRN-01**: `enable` shows the discovery warnings its re-materialization produces, as `install` does for the same plugin (ENWARN-01)
-- [ ] **WRN-02**: A cascade update or reinstall (`marketplace update`, autoupdate, `apply` catalog moves) renders the warnings each plugin's materialization produced, with one placement rule shared by the three cascades, and the diagnostic header names the scope (UPCASC-01)
-- [ ] **WRN-03**: Each bridge tags a staging warning at the producer as discovery or hygiene, and the orchestrators partition on that tag, so swapping the two channels is a compile error (WCHAN-01)
-- [ ] **WRN-04**: A failed install, update, or reinstall reports the prepare warnings the phases that ran before the failure collected (WARN-01)
-- [ ] **WRN-05**: A forced agents commit keeps an `agents-index.json` row that the plugin's own staging did not produce (AGIDX-01)
-- [ ] **WRN-06**: `update` shows the MCP notices of the dependencies it installs (LCORCH-01 b3)
-- [ ] **WRN-07**: The reinstall outcome carries `resourcesChanged` again, and a reinstall drops the completion cache once (LCORCH-01 b4)
+- [x] **WRN-01**: `enable` shows the discovery warnings its re-materialization produces, as `install` does for the same plugin (ENWARN-01)
+- [x] **WRN-02**: A cascade update or reinstall (`marketplace update`, autoupdate, `apply` catalog moves) renders the warnings each plugin's materialization produced, with one placement rule shared by the three cascades, and the diagnostic header names the scope (UPCASC-01)
+- [x] **WRN-03**: Each bridge tags a staging warning at the producer as discovery or hygiene, and the orchestrators partition on that tag, so swapping the two channels is a compile error (WCHAN-01)
+- [x] **WRN-04**: A failed install, update, or reinstall reports the prepare warnings the phases that ran before the failure collected (WARN-01)
+- [x] **WRN-05**: A forced agents commit keeps an `agents-index.json` row that the plugin's own staging did not produce (AGIDX-01)
+- [x] **WRN-06**: `update` shows the MCP notices of the dependencies it installs (LCORCH-01 b3)
+- [x] **WRN-07**: The reinstall outcome carries `resourcesChanged` again, and a reinstall drops the completion cache once (LCORCH-01 b4)
 
 ### Reconcile and apply (RCN)
 
@@ -136,13 +136,13 @@ None.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| WRN-01 | Phase 1 | Pending |
-| WRN-02 | Phase 1 | Pending |
-| WRN-03 | Phase 1 | Pending |
-| WRN-04 | Phase 1 | Pending |
-| WRN-05 | Phase 1 | Pending |
-| WRN-06 | Phase 1 | Pending |
-| WRN-07 | Phase 1 | Pending |
+| WRN-01 | Phase 1 | Complete |
+| WRN-02 | Phase 1 | Complete |
+| WRN-03 | Phase 1 | Complete |
+| WRN-04 | Phase 1 | Complete |
+| WRN-05 | Phase 1 | Complete |
+| WRN-06 | Phase 1 | Complete |
+| WRN-07 | Phase 1 | Complete |
 | RCN-01 | Phase 2 | Complete |
 | RCN-02 | Phase 2 | Complete |
 | RCN-03 | Phase 2 | Complete |

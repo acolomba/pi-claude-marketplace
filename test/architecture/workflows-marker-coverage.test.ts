@@ -342,6 +342,7 @@ const SITE_CASES = [
                   {
                     constraint: undefined,
                     partition: "updated",
+                    resourcesChanged: true,
                     name: "hello",
                     fromVersion: "1.0.0",
                     toVersion: "2.0.0",

@@ -37,6 +37,7 @@ import {
   removePublishedOutputStyle,
   restoreDirectoryWrites,
   rewritePublishedManifest,
+  writePublishedPluginFile,
 } from "../../lib/published-marketplace.ts";
 import { READ_ONLY_SKILL_REMOVAL_ERROR_TOKEN } from "../../lib/run-tokens.ts";
 
@@ -217,6 +218,66 @@ Given(
   async function (this: ScenarioWorld, plugin: string, name: string) {
     const directory = await removePublishedOutputStyle(this.requirePublished(name), plugin);
     await assert.rejects(stat(directory), { code: "ENOENT" }, `${directory} still exists`);
+  },
+);
+
+// Both agents declare the same name, so the install keeps the first and
+// skips the second (D-07).
+Given(
+  "the published plugin {string} of the marketplace {string} has two agents named {string}",
+  async function (this: ScenarioWorld, plugin: string, name: string, agent: string) {
+    const published = this.requirePublished(name);
+    const agentText = (description: string): string =>
+      `---\nname: ${agent}\ndescription: ${description}\n---\n\n${description}\n`;
+    const first = await writePublishedPluginFile(
+      published,
+      plugin,
+      path.join("agents", "first.md"),
+      agentText("The first agent."),
+    );
+    const second = await writePublishedPluginFile(
+      published,
+      plugin,
+      path.join("agents", "second.md"),
+      agentText("The second agent."),
+    );
+    assert.deepStrictEqual(
+      [await readFile(first, "utf8"), await readFile(second, "utf8")],
+      [agentText("The first agent."), agentText("The second agent.")],
+    );
+  },
+);
+
+// A Pi agent has no color, so staging drops the field and says so in a
+// hygiene warning (D-PL1-02): a staging warning that skips nothing.
+Given(
+  "the published plugin {string} of the marketplace {string} has an agent {string} that sets a color",
+  async function (this: ScenarioWorld, plugin: string, name: string, agent: string) {
+    const text = `---\nname: ${agent}\ndescription: The ${agent} agent.\ncolor: blue\n---\n\nThe ${agent} agent.\n`;
+    const file = await writePublishedPluginFile(
+      this.requirePublished(name),
+      plugin,
+      path.join("agents", `${agent}.md`),
+      text,
+    );
+    assert.strictEqual(await readFile(file, "utf8"), text);
+  },
+);
+
+// The generated name of `skills/skill` is `<plugin>-skill`, the name of the
+// plugin's own skill, and `<plugin>-skill/` sorts first, so the install keeps
+// that one and skips the new one.
+Given(
+  "the published plugin {string} of the marketplace {string} has a second skill whose name collides with its first",
+  async function (this: ScenarioWorld, plugin: string, name: string) {
+    const text = "---\nname: skill\ndescription: A colliding skill.\n---\n\nColliding.\n";
+    const file = await writePublishedPluginFile(
+      this.requirePublished(name),
+      plugin,
+      path.join("skills", "skill", "SKILL.md"),
+      text,
+    );
+    assert.strictEqual(await readFile(file, "utf8"), text);
   },
 );
 

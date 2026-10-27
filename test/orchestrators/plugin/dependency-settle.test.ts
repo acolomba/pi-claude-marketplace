@@ -27,6 +27,7 @@ import type {
   MovedDependency,
   UpdateDependencyRow,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
+import type { McpConfigNotice } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 function lib(requesters: DependencyMoveRequest["requesters"]): DependencyMoveRequest {
   return { key: "lib@mp", name: "lib", marketplace: "mp", recordedVersion: "1.0.0", requesters };
@@ -123,6 +124,42 @@ const STEPS: readonly DependencyPlanStep[] = [
   { kind: "materialize", members: [HELPER] },
   { kind: "move", move: LIB_MOVE },
 ];
+
+const ADAPTER_NOTICE: McpConfigNotice = {
+  kind: "comments-dropped",
+  scope: "project",
+  file: "mcp-adapter.json",
+};
+const LEGACY_NOTICE: McpConfigNotice = {
+  kind: "comments-dropped",
+  scope: "project",
+  file: "mcp.json",
+};
+const ZCORE: PlannedCascadeMember = {
+  kind: "install",
+  member: { ...HELPER.member, key: "zcore@mp", name: "zcore" },
+};
+const PLAIN: PlannedCascadeMember = {
+  kind: "install",
+  member: { ...HELPER.member, key: "plain@mp", name: "plain" },
+};
+
+/** A closure slice that installs its members, raising the notice `notices` names per member. */
+function installingWithNotices(
+  notices: Readonly<Record<string, McpConfigNotice>>,
+): (members: readonly PlannedCascadeMember[]) => Promise<SettleCascadeRun> {
+  return (members) => {
+    const raised = members.flatMap((entry) => {
+      const notice = notices[entry.member.key];
+      return notice === undefined ? [] : [notice];
+    });
+    return Promise.resolve({
+      kind: "installed",
+      rows: members.map((entry) => installedRow(entry.member.key)),
+      ...(raised.length > 0 && { mcpConfigNotices: raised }),
+    });
+  };
+}
 
 describe("runDependencySteps", () => {
   test("UPD-DEP-D1: runs every step in order and lists each change that landed", async () => {
@@ -309,6 +346,84 @@ describe("runDependencySteps", () => {
     await assert.rejects(runDependencySteps([{ kind: "move", move: LIB_MOVE }], ports), invalid);
   });
 
+  test("D-PL1-16: the notices of every closure slice that landed ride the result in step order, and a slice or move with none adds none", async () => {
+    // arrange
+    const ports = stepPorts({
+      materialize: installingWithNotices({
+        "helper@mp": ADAPTER_NOTICE,
+        "zcore@mp": LEGACY_NOTICE,
+      }),
+    });
+
+    // act
+    const ran = await runDependencySteps(
+      [
+        { kind: "materialize", members: [HELPER] },
+        { kind: "move", move: LIB_MOVE },
+        { kind: "materialize", members: [PLAIN] },
+        { kind: "materialize", members: [ZCORE] },
+      ],
+      ports,
+    );
+
+    // assert
+    assert.deepStrictEqual(ran, {
+      ok: true,
+      landed: [
+        moved(installedRow("helper@mp")),
+        moved(updatedRow("lib@mp")),
+        moved(installedRow("plain@mp")),
+        moved(installedRow("zcore@mp")),
+      ],
+      mcpConfigNotices: [ADAPTER_NOTICE, LEGACY_NOTICE],
+    });
+  });
+
+  test("D-PL1-16: a move that throws after a slice landed keeps that slice's notices on the failure", async () => {
+    // arrange
+    const ports = stepPorts({
+      materialize: installingWithNotices({ "helper@mp": ADAPTER_NOTICE }),
+      move: () => Promise.reject(new Error("clone failed")),
+    });
+
+    // act
+    const ran = await runDependencySteps(STEPS, ports);
+
+    // assert
+    assert.deepStrictEqual(
+      [ran.ok, ran.landed.map((entry) => entry.row.status), ran.mcpConfigNotices],
+      [false, ["installed", "failed"], [ADAPTER_NOTICE]],
+    );
+  });
+
+  test("D-PL1-16: a slice that throws after an earlier slice landed keeps the earlier slice's notices", async () => {
+    // arrange
+    const thrown = new Error("state lock held");
+    const ports = stepPorts({
+      materialize: (members) =>
+        members[0]?.member.key === "helper@mp"
+          ? installingWithNotices({ "helper@mp": ADAPTER_NOTICE })(members)
+          : Promise.reject(thrown),
+    });
+
+    // act
+    const ran = await runDependencySteps(
+      [
+        { kind: "materialize", members: [HELPER] },
+        { kind: "materialize", members: [ZCORE] },
+      ],
+      ports,
+    );
+
+    // assert
+    assert.deepStrictEqual(ran, {
+      ok: false,
+      landed: [moved(installedRow("helper@mp"))],
+      cause: thrown,
+      mcpConfigNotices: [ADAPTER_NOTICE],
+    });
+  });
+
   test("GHB-03: an invalid GitHub base override after a change landed is the move's failure", async () => {
     // arrange
     const invalid = new InvalidGitHubBaseUrlError(
@@ -381,6 +496,79 @@ describe("settleDependencies", () => {
     // assert
     assert.deepStrictEqual(settled, { kind: "settled", rows: [installedRow("zcore@mp")] });
     assert.deepStrictEqual(ports.calls, ["first run"]);
+  });
+
+  test("D-PL1-16: a first run that installs a dependency with notices settles with its notices", async () => {
+    // arrange
+    const ports = settlePorts({
+      firstRun: () =>
+        Promise.resolve({
+          kind: "installed",
+          rows: [installedRow("zcore@mp")],
+          mcpConfigNotices: [ADAPTER_NOTICE],
+        }),
+    });
+
+    // act
+    const settled = await settleDependencies(ports);
+
+    // assert
+    assert.deepStrictEqual(settled, {
+      kind: "settled",
+      rows: [installedRow("zcore@mp")],
+      mcpConfigNotices: [ADAPTER_NOTICE],
+    });
+  });
+
+  test("D-PL1-16: a planned settle carries the notices of its final closure", async () => {
+    // arrange
+    const ports = settlePorts({
+      firstRun: () => Promise.resolve({ kind: "planned" }),
+      plan: () => Promise.resolve(PLAN),
+      steps: stepPorts({ materialize: installingWithNotices({ "helper@mp": ADAPTER_NOTICE }) }),
+    });
+
+    // act
+    const settled = await settleDependencies(ports);
+
+    // assert
+    assert.deepStrictEqual(settled, {
+      kind: "settled",
+      rows: [updatedRow("lib@mp"), installedRow("helper@mp")],
+      mcpConfigNotices: [ADAPTER_NOTICE],
+    });
+  });
+
+  test("D-PL1-16: a settle that refuses after a slice landed carries that slice's notices", async () => {
+    // arrange
+    const kept = failedRow("lib@mp", new Error("did not land"));
+    const ports = settlePorts({
+      firstRun: () => Promise.resolve({ kind: "planned" }),
+      plan: () =>
+        Promise.resolve({
+          ok: true,
+          steps: [
+            { kind: "materialize", members: [HELPER] },
+            { kind: "move", move: LIB_MOVE },
+          ],
+          final: { members: [], alreadyInstalled: [] },
+        }),
+      steps: stepPorts({
+        materialize: installingWithNotices({ "helper@mp": ADAPTER_NOTICE }),
+        move: () => Promise.resolve({ landed: false, rows: [kept] }),
+      }),
+    });
+
+    // act
+    const settled = await settleDependencies(ports);
+
+    // assert
+    assert.deepStrictEqual(settled, {
+      kind: "refused",
+      rows: [installedRow("helper@mp"), kept],
+      cause: LIB_DID_NOT_MOVE,
+      mcpConfigNotices: [ADAPTER_NOTICE],
+    });
   });
 
   test("UPD-DEP-D1: a first run the cascade refuses refuses the settle with the failing row", async () => {

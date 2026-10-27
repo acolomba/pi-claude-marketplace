@@ -7640,6 +7640,53 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
+  test("D-PL1-07 / D-PL1-09: an enable whose skills collide shows the skip after the install block and before the MCP notice", async (t) => {
+    // arrange -- `duo` installs with one post-install warning; `hello` is
+    // enabled, collides on a skill, and rewrites the commented adapter file.
+    const { cwd } = await seedCommentedAdapterScope(t, "enable-staging-warning", {
+      trees: { duo: { agents: ["with-mcp-servers"] }, hello: { skill: "clean", mcpServer: true } },
+      declared: { "duo@mp": {}, "hello@mp": {} },
+      recorded: { hello: { enabled: false } },
+      owners: [],
+    });
+    await collidingSkill(path.join(cwd, "mp-src"), "hello");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(4);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● duo v1.0.0 (installed) {requires pi-subagents}\n" +
+          "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
+          "\n" +
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+      {
+        message:
+          "1 post-install warning surfaced from reconcile installs.\n" +
+          "\n" +
+          '[bot0] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["duo:bot0"].tools (e.g. read,bash,mcp:<server>) in Pi settings.',
+        severity: "warning",
+      },
+      {
+        message:
+          'Plugin "hello" [project] enabled; 1 declared component has a note.\n' +
+          "\n" +
+          'skill source "tool" in "skills" elides to generated name "hello-tool", already produced by skill source "hello-tool"; ignoring duplicate.',
+        severity: "warning",
+      },
+      COMMENTS_REMOVED_NOTICE,
+    ]);
+    verifyBoundary();
+  });
+
   test("AFILE-04: a reload disable that unstages from a commented mcp-adapter.json shows the notice after the cascade", async (t) => {
     // arrange
     const { cwd, project } = await seedCommentedAdapterScope(t, "afile-disable", {
@@ -8324,6 +8371,17 @@ async function unreadableSkill(marketplaceRoot: string, plugin: string): Promise
   );
 }
 
+/**
+ * D-PL1-07: gives `plugin` a second skill whose generated name collides with
+ * the `tool` skill's, so its staging skips one declared component.
+ */
+async function collidingSkill(marketplaceRoot: string, plugin: string): Promise<void> {
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", plugin, "skills", `${plugin}-tool`, "SKILL.md"),
+    `---\nname: ${plugin}-tool\n---\n\nbody\n`,
+  );
+}
+
 /** Declares each plugin of `mp` enabled in the project's base config. */
 async function declareEnabled(
   project: ScopedLocations,
@@ -8437,6 +8495,79 @@ describe("applyReconcile catalog convergence", () => {
       },
     ]);
     assert.equal((await recordFor(project, "mp", "widget"))?.enabled, true);
+    verifyBoundary();
+  });
+
+  test("D-PL1-07 / D-PL1-20: a catalog move whose skills collide shows the skip after the cascade under its updated header", async (t) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedConvergenceScope(t, "converged-staging-warning", {
+      trees: { widget: { skill: "clean" } },
+      supported: { widget: ["skills"] },
+      offered: { widget: "1.1.0" },
+    });
+    await collidingSkill(marketplaceRoot, "widget");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● widget v1.0.0 → v1.1.0 (updated)\n" +
+          "\n" +
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+      {
+        message:
+          'Plugin "widget" [project] updated; 1 declared component has a note.\n' +
+          "\n" +
+          'skill source "widget-tool" in "skills" elides to generated name "widget-tool", already produced by skill source "tool"; ignoring duplicate.',
+        severity: "warning",
+      },
+    ]);
+    verifyBoundary();
+  });
+
+  test("D-PL1-25: a catalog move shows the moved plugin's skip and its dropped agent field under one updated header", async (t) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedConvergenceScope(t, "converged-both-halves", {
+      trees: { widget: { skill: "clean", agents: ["with-mcp-servers"] } },
+      supported: { widget: ["skills", "agents"] },
+      offered: { widget: "1.1.0" },
+    });
+    await collidingSkill(marketplaceRoot, "widget");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● widget v1.0.0 → v1.1.0 (updated) {requires pi-subagents}\n" +
+          "\n" +
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+      {
+        message:
+          'Plugin "widget" [project] updated; 1 declared component has a note; 1 staging warning.\n' +
+          "\n" +
+          'skill source "widget-tool" in "skills" elides to generated name "widget-tool", already produced by skill source "tool"; ignoring duplicate.\n' +
+          '[bot0] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["widget:bot0"].tools (e.g. read,bash,mcp:<server>) in Pi settings.',
+        severity: "warning",
+      },
+    ]);
     verifyBoundary();
   });
 
@@ -9735,7 +9866,7 @@ describe("applyReconcile catalog convergence", () => {
       row: "  ● demo v1.0.0 → v1.1.0 (updated) {components now supported}\n",
     },
   ]) {
-    test(`PKD-02: a ${move} move whose package step leaves a note reports it as a post-install warning`, async (t) => {
+    test(`PKD-02: a ${move} move whose package step leaves a note reports it as a staging warning`, async (t) => {
       // arrange
       const { cwd, marketplaceRoot } = await seedConvergenceScope(t, `converge-${move}-packages`, {
         trees: { demo: { skill: "clean", command: true } },
@@ -9767,7 +9898,7 @@ describe("applyReconcile catalog convergence", () => {
         },
         {
           message:
-            "1 post-install warning surfaced from reconcile installs.\n" +
+            'Plugin "demo" [project] updated; 1 declared component has a note.\n' +
             "\n" +
             'Skipped installing this plugin\'s dependencies: its folder in the marketplace "mp" is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder.',
           severity: "warning",

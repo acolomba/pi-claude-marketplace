@@ -84,6 +84,7 @@ test("reinstalledRowFromOutcome omits empty version, matching scope, reasons, an
   // arrange
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
+    resourcesChanged: true,
     name: "alpha",
     marketplace: "official",
     scope: "project",
@@ -114,6 +115,7 @@ test("reinstalledRowFromOutcome orders agent dependency and degraded reasons wit
   // arrange
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
+    resourcesChanged: true,
     name: "alpha",
     marketplace: "official",
     scope: "project",
@@ -147,6 +149,7 @@ test("reinstalledRowFromOutcome projects an MCP-only dependency", () => {
   // arrange
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
+    resourcesChanged: true,
     name: "mcp-only",
     marketplace: "official",
     scope: "user",
@@ -177,6 +180,7 @@ test("reinstalledRowFromOutcome preserves agents before MCP when both dependenci
   // arrange
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
+    resourcesChanged: true,
     name: "both",
     marketplace: "official",
     scope: "user",
@@ -207,6 +211,7 @@ test("WDEP-02: reinstalledRowFromOutcome places the workflows dependency LAST", 
   // arrange
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
+    resourcesChanged: true,
     name: "all-three",
     marketplace: "official",
     scope: "user",
@@ -238,6 +243,7 @@ test("WDEP-02: a reinstall declaring no workflow carries no host-engine dependen
   // arrange
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
+    resourcesChanged: true,
     name: "none",
     marketplace: "official",
     scope: "user",
@@ -261,6 +267,7 @@ test("UPR-03: a reinstall that moved its version composes the arrow from the rep
   // arrange
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
+    resourcesChanged: true,
     name: "alpha",
     marketplace: "official",
     scope: "project",
@@ -292,6 +299,7 @@ test("REI-01: a reinstall at the recorded revision composes the single version",
   // arrange
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
+    resourcesChanged: true,
     name: "alpha",
     marketplace: "official",
     scope: "project",
@@ -324,6 +332,7 @@ test("UPR-02: a reinstall onto a new commit at the same version names both commi
   // arrange
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
+    resourcesChanged: true,
     name: "alpha",
     marketplace: "official",
     scope: "project",
@@ -370,6 +379,7 @@ test("UPR-03: renderReinstallPartitionAndNotify draws the arrow for a reinstall 
   const outcomes: readonly ReinstallPluginOutcome[] = [
     {
       partition: "reinstalled",
+      resourcesChanged: true,
       name: "alpha",
       marketplace: "official",
       scope: "project",
@@ -412,6 +422,7 @@ test("renderReinstallPartitionAndNotify projects a clean reinstalled row with a 
   const outcomes: readonly ReinstallPluginOutcome[] = [
     {
       partition: "reinstalled",
+      resourcesChanged: true,
       name: "alpha",
       marketplace: "official",
       scope: "project",
@@ -980,6 +991,7 @@ test("renderReinstallPartitionAndNotify sorts case-insensitive names and scopes 
     },
     {
       partition: "reinstalled",
+      resourcesChanged: true,
       name: "p-first",
       marketplace: "acme",
       scope: "project",
@@ -1050,6 +1062,7 @@ test("WLIF-06: a retired workflow command takes the tail token and raises the ro
   // arrange
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
+    resourcesChanged: true,
     name: "alpha",
     marketplace: "official",
     scope: "project",
@@ -1084,6 +1097,7 @@ test("WLIF-06: the token raises a row that has no other reason of its own", () =
   // arrange -- nothing degraded, so the raise can only come from this axis.
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
+    resourcesChanged: true,
     name: "alpha",
     marketplace: "official",
     scope: "project",
@@ -1117,6 +1131,7 @@ test("WLIF-06: a reinstall that retired nothing renders the row it always render
   // rather than present-and-empty, which is what preserves the legacy bytes.
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
+    resourcesChanged: true,
     name: "alpha",
     marketplace: "official",
     scope: "project",
@@ -1148,6 +1163,7 @@ test("D-18-06: a reinstall names its malformed kinds before the kinds it left ou
   // arrange
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
+    resourcesChanged: true,
     name: "alpha",
     marketplace: "official",
     scope: "project",
@@ -1181,6 +1197,7 @@ test("D-18-06: an already partial record's reinstall names the left-out kind at 
   // arrange
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
+    resourcesChanged: true,
     name: "alpha",
     marketplace: "official",
     scope: "project",
@@ -1213,6 +1230,7 @@ test("D-18-06: a reinstall that newly left a kind out raises a row that has no o
   // arrange
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
+    resourcesChanged: true,
     name: "alpha",
     marketplace: "official",
     scope: "project",
@@ -1245,6 +1263,7 @@ test("D-10-15 / D-18-07: a reinstall that landed the marketplace's current copy 
   // arrange
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
+    resourcesChanged: true,
     name: "alpha",
     marketplace: "official",
     scope: "project",
@@ -1283,6 +1302,7 @@ test("D-10-13: a reinstall a dependent's range admitted names the range on its c
   const disclosure = 'constrained to the combined range (^1.0.0) -- required by "app@tools"';
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
+    resourcesChanged: true,
     name: "lib",
     marketplace: "tools",
     scope: "project",

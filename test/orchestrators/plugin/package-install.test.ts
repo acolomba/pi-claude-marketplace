@@ -28,6 +28,7 @@ import {
   NODE_PACKAGE_MANAGER_HOST,
   NODE_PACKAGE_MANAGER_SPAWN,
 } from "../../../extensions/pi-claude-marketplace/platform/package-manager.ts";
+import { discoveryWarning } from "../../../extensions/pi-claude-marketplace/shared/staging-warnings.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type {
@@ -223,7 +224,10 @@ describe("createPackagesPhase", () => {
 
     // assert
     assert.deepStrictEqual(requests, [npmRequest(seeded.workDir)]);
-    assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
+    assert.deepStrictEqual(
+      seeded.context.discoveryWarnings.map((w) => w.message),
+      [],
+    );
     assert.strictEqual(
       await readFile(path.join(seeded.pluginRoot, "node_modules", "pkd-dep", "index.js"), "utf8"),
       MODULE_TEXT,
@@ -277,7 +281,10 @@ describe("createPackagesPhase", () => {
       assert.deepStrictEqual(launches, [
         { request: expectedRequest(seeded.workDir), files: [written, "package.json"].sort() },
       ]);
-      assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
+      assert.deepStrictEqual(
+        seeded.context.discoveryWarnings.map((w) => w.message),
+        [],
+      );
     });
   }
 
@@ -358,7 +365,10 @@ describe("createPackagesPhase", () => {
       await phase.do(seeded.context);
 
       // assert
-      assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
+      assert.deepStrictEqual(
+        seeded.context.discoveryWarnings.map((w) => w.message),
+        [],
+      );
       assert.deepStrictEqual(await sortedEntries(seeded.pluginRoot), entriesBefore);
       verify(runPackageManager);
     });
@@ -386,9 +396,12 @@ describe("createPackagesPhase", () => {
       await phase.do(seeded.context);
 
       // assert
-      assert.deepStrictEqual(seeded.context.discoveryWarnings, [
-        `Skipped installing this plugin's dependencies: its folder in the marketplace "tools" is outside the folders this extension manages, so it was not changed. To install them, run "${command}" in that folder.`,
-      ]);
+      assert.deepStrictEqual(
+        seeded.context.discoveryWarnings.map((w) => w.message),
+        [
+          `Skipped installing this plugin's dependencies: its folder in the marketplace "tools" is outside the folders this extension manages, so it was not changed. To install them, run "${command}" in that folder.`,
+        ],
+      );
       assert.deepStrictEqual(
         await sortedEntries(seeded.pluginRoot),
         [lockfile, "package.json"].sort(),
@@ -415,7 +428,10 @@ describe("createPackagesPhase", () => {
     await phase.do(seeded.context);
 
     // assert
-    assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
+    assert.deepStrictEqual(
+      seeded.context.discoveryWarnings.map((w) => w.message),
+      [],
+    );
     assert.deepStrictEqual(await sortedEntries(path.join(seeded.pluginRoot, "node_modules")), [
       "kept",
     ]);
@@ -451,9 +467,12 @@ describe("createPackagesPhase", () => {
     await phase.do(context);
 
     // assert
-    assert.deepStrictEqual(context.discoveryWarnings, [
-      `Skipped installing this plugin's dependencies: its folder in the marketplace "tools" is outside the folders this extension manages, so it was not changed. To install them, run "npm ${NPM_CI_ARGUMENTS.join(" ")}" in that folder.`,
-    ]);
+    assert.deepStrictEqual(
+      context.discoveryWarnings.map((w) => w.message),
+      [
+        `Skipped installing this plugin's dependencies: its folder in the marketplace "tools" is outside the folders this extension manages, so it was not changed. To install them, run "npm ${NPM_CI_ARGUMENTS.join(" ")}" in that folder.`,
+      ],
+    );
     assert.deepStrictEqual(await sortedEntries(linkTarget), [path.basename(seeded.pluginRoot)]);
     assert.deepStrictEqual(await sortedEntries(seeded.pluginRoot), [
       "package-lock.json",
@@ -473,7 +492,10 @@ describe("createPackagesPhase", () => {
     await phase.do(seeded.context);
 
     // assert
-    assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
+    assert.deepStrictEqual(
+      seeded.context.discoveryWarnings.map((w) => w.message),
+      [],
+    );
     verify(runPackageManager);
   });
 
@@ -525,9 +547,10 @@ describe("createPackagesPhase", () => {
     await phase.do(seeded.context);
 
     // assert
-    assert.deepStrictEqual(seeded.context.discoveryWarnings, [
-      "Plugin dependency install failed (npm): E404",
-    ]);
+    assert.deepStrictEqual(
+      seeded.context.discoveryWarnings.map((w) => w.message),
+      ["Plugin dependency install failed (npm): E404"],
+    );
     assert.deepStrictEqual(await sortedEntries(seeded.pluginRoot), [
       "package-lock.json",
       "package.json",
@@ -605,7 +628,10 @@ describe("createPackagesPhase", () => {
       await phase.do(seeded.context);
 
       // assert
-      assert.deepStrictEqual(seeded.context.discoveryWarnings, [note]);
+      assert.deepStrictEqual(
+        seeded.context.discoveryWarnings.map((w) => w.message),
+        [note],
+      );
     });
   }
 
@@ -624,9 +650,10 @@ describe("createPackagesPhase", () => {
     await phase.do(seeded.context);
 
     // assert
-    assert.deepStrictEqual(seeded.context.discoveryWarnings, [
-      prefix + "e".repeat(500 - prefix.length),
-    ]);
+    assert.deepStrictEqual(
+      seeded.context.discoveryWarnings.map((w) => w.message),
+      [prefix + "e".repeat(500 - prefix.length)],
+    );
   });
 
   test("leaves the plugin root as it was when the package manager wrote no node_modules", async (t) => {
@@ -641,7 +668,10 @@ describe("createPackagesPhase", () => {
     await phase.do(seeded.context);
 
     // assert
-    assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
+    assert.deepStrictEqual(
+      seeded.context.discoveryWarnings.map((w) => w.message),
+      [],
+    );
     assert.deepStrictEqual(await sortedEntries(seeded.pluginRoot), [
       "package-lock.json",
       "package.json",
@@ -675,9 +705,10 @@ describe("createPackagesPhase", () => {
     await phase.do(seeded.context);
 
     // assert
-    assert.deepStrictEqual(seeded.context.discoveryWarnings, [
-      `Plugin dependency install failed (npm): ${moveError.message}`,
-    ]);
+    assert.deepStrictEqual(
+      seeded.context.discoveryWarnings.map((w) => w.message),
+      [`Plugin dependency install failed (npm): ${moveError.message}`],
+    );
     assert.deepStrictEqual(await sortedEntries(seeded.pluginRoot), [
       "package-lock.json",
       "package.json",
@@ -708,9 +739,10 @@ describe("createPackagesPhase", () => {
     }
 
     // assert
-    assert.deepStrictEqual(seeded.context.discoveryWarnings, [
-      `Skipped installing this plugin's dependencies: ${readError.message}.`,
-    ]);
+    assert.deepStrictEqual(
+      seeded.context.discoveryWarnings.map((w) => w.message),
+      [`Skipped installing this plugin's dependencies: ${readError.message}.`],
+    );
     verify(runPackageManager);
   });
 
@@ -737,9 +769,10 @@ describe("createPackagesPhase", () => {
     }
 
     // assert
-    assert.deepStrictEqual(seeded.context.discoveryWarnings, [
-      `Skipped installing this plugin's dependencies: ${listError.message}.`,
-    ]);
+    assert.deepStrictEqual(
+      seeded.context.discoveryWarnings.map((w) => w.message),
+      [`Skipped installing this plugin's dependencies: ${listError.message}.`],
+    );
     verify(runPackageManager);
   });
 
@@ -767,9 +800,10 @@ describe("createPackagesPhase", () => {
     }
 
     // assert
-    assert.deepStrictEqual(seeded.context.discoveryWarnings, [
-      "Plugin dependency install failed (npm): E404",
-    ]);
+    assert.deepStrictEqual(
+      seeded.context.discoveryWarnings.map((w) => w.message),
+      ["Plugin dependency install failed (npm): E404"],
+    );
     assert.deepStrictEqual(await sortedEntries(seeded.workDir), ["locked"]);
   });
 
@@ -830,9 +864,12 @@ describe("createPackagesPhase", () => {
     await phase.do(seeded.context);
 
     // assert
-    assert.deepStrictEqual(seeded.context.discoveryWarnings, [
-      "Skipped installing this plugin's dependencies: its package-lock.json has a dependency that is not a registry package and version range: pkd-local.",
-    ]);
+    assert.deepStrictEqual(
+      seeded.context.discoveryWarnings.map((w) => w.message),
+      [
+        "Skipped installing this plugin's dependencies: its package-lock.json has a dependency that is not a registry package and version range: pkd-local.",
+      ],
+    );
     assert.deepStrictEqual(await sortedEntries(seeded.pluginRoot), [
       "package-lock.json",
       "package.json",
@@ -857,7 +894,10 @@ describe("createPackagesPhase", () => {
     await phase.do(seeded.context);
 
     // assert
-    assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
+    assert.deepStrictEqual(
+      seeded.context.discoveryWarnings.map((w) => w.message),
+      [],
+    );
     assert.deepStrictEqual(await sortedEntries(seeded.pluginRoot), [
       "package-lock.json",
       "package.json",
@@ -903,7 +943,10 @@ describe("createPackagesPhase", () => {
       },
     ]);
     assert.deepStrictEqual(requests, [npmRequest(seeded.workDir)]);
-    assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
+    assert.deepStrictEqual(
+      seeded.context.discoveryWarnings.map((w) => w.message),
+      [],
+    );
     assert.strictEqual(
       await readFile(path.join(seeded.pluginRoot, "node_modules", "pkd-dep", "index.js"), "utf8"),
       MODULE_TEXT,
@@ -943,9 +986,12 @@ describe("createPackagesPhase", () => {
       await phase.do(seeded.context);
 
       // assert
-      assert.deepStrictEqual(seeded.context.discoveryWarnings, [
-        `Skipped installing this plugin's dependencies: its package-lock.json entry "node_modules/pkd-dep" has a download link that is an unencrypted http link on a host other than your npm registry, so npm could send your saved registry token to it in the clear.`,
-      ]);
+      assert.deepStrictEqual(
+        seeded.context.discoveryWarnings.map((w) => w.message),
+        [
+          `Skipped installing this plugin's dependencies: its package-lock.json entry "node_modules/pkd-dep" has a download link that is an unencrypted http link on a host other than your npm registry, so npm could send your saved registry token to it in the clear.`,
+        ],
+      );
       assert.deepStrictEqual(await sortedEntries(seeded.pluginRoot), [
         "package-lock.json",
         "package.json",
@@ -983,7 +1029,10 @@ describe("createPackagesPhase", () => {
     await phase.do(seeded.context);
 
     // assert
-    assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
+    assert.deepStrictEqual(
+      seeded.context.discoveryWarnings.map((w) => w.message),
+      [],
+    );
     const requireFromPlugin = createRequire(path.join(seeded.pluginRoot, "hook.cjs"));
     const loaded: unknown = requireFromPlugin("pkd-dep");
     assert.strictEqual(loaded, "pkd-dep loaded");
@@ -1000,9 +1049,12 @@ describe("createPackagesPhase", () => {
       await phase.do(seeded.context);
 
       // assert
-      assert.deepStrictEqual(seeded.context.discoveryWarnings, [
-        "Skipped: yarn/pnpm lockfiles are not supported (resolution-time hooks bypass --ignore-scripts). Use bun or npm.",
-      ]);
+      assert.deepStrictEqual(
+        seeded.context.discoveryWarnings.map((w) => w.message),
+        [
+          "Skipped: yarn/pnpm lockfiles are not supported (resolution-time hooks bypass --ignore-scripts). Use bun or npm.",
+        ],
+      );
       verify(runPackageManager);
     });
   }
@@ -1022,7 +1074,10 @@ describe("createPackagesPhase", () => {
 
     // assert
     assert.deepStrictEqual(requests, [npmRequest(seeded.workDir)]);
-    assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
+    assert.deepStrictEqual(
+      seeded.context.discoveryWarnings.map((w) => w.message),
+      [],
+    );
   });
 
   test("D-PL9-01: refuses a bun.lockb with Claude Code's note and runs nothing", async (t) => {
@@ -1035,9 +1090,12 @@ describe("createPackagesPhase", () => {
     await phase.do(seeded.context);
 
     // assert
-    assert.deepStrictEqual(seeded.context.discoveryWarnings, [
-      "Skipped installing this plugin's dependencies: its bun.lockb is a binary lockfile that cannot be checked; ship a text bun.lock instead.",
-    ]);
+    assert.deepStrictEqual(
+      seeded.context.discoveryWarnings.map((w) => w.message),
+      [
+        "Skipped installing this plugin's dependencies: its bun.lockb is a binary lockfile that cannot be checked; ship a text bun.lock instead.",
+      ],
+    );
     verify(runPackageManager);
   });
 
@@ -1065,7 +1123,10 @@ describe("createPackagesPhase", () => {
 
       // assert
       assert.deepStrictEqual(commands, [command]);
-      assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
+      assert.deepStrictEqual(
+        seeded.context.discoveryWarnings.map((w) => w.message),
+        [],
+      );
     });
   }
 
@@ -1082,9 +1143,10 @@ describe("createPackagesPhase", () => {
     await phase.do(seeded.context);
 
     // assert
-    assert.deepStrictEqual(seeded.context.discoveryWarnings, [
-      "Skipped installing this plugin's dependencies: its package.json is not valid JSON.",
-    ]);
+    assert.deepStrictEqual(
+      seeded.context.discoveryWarnings.map((w) => w.message),
+      ["Skipped installing this plugin's dependencies: its package.json is not valid JSON."],
+    );
     verify(runPackageManager);
   });
 
@@ -1123,7 +1185,10 @@ describe("createPackagesPhase", () => {
 
       // assert
       assert.deepStrictEqual(seen, workDirs);
-      assert.deepStrictEqual(seeded.context.discoveryWarnings, notes);
+      assert.deepStrictEqual(
+        seeded.context.discoveryWarnings.map((w) => w.message),
+        notes,
+      );
     });
   }
 
@@ -1141,9 +1206,10 @@ describe("createPackagesPhase", () => {
       await phase.do(seeded.context);
 
       // assert
-      assert.deepStrictEqual(seeded.context.discoveryWarnings, [
-        "Skipped installing this plugin's dependencies: its package.json is not a JSON object.",
-      ]);
+      assert.deepStrictEqual(
+        seeded.context.discoveryWarnings.map((w) => w.message),
+        ["Skipped installing this plugin's dependencies: its package.json is not a JSON object."],
+      );
       verify(runPackageManager);
     });
   }
@@ -1179,9 +1245,10 @@ describe("createPackagesPhase", () => {
       await phase.do(seeded.context);
 
       // assert
-      assert.deepStrictEqual(seeded.context.discoveryWarnings, [
-        `Skipped installing this plugin's dependencies: its ${file} is not a regular file.`,
-      ]);
+      assert.deepStrictEqual(
+        seeded.context.discoveryWarnings.map((w) => w.message),
+        [`Skipped installing this plugin's dependencies: its ${file} is not a regular file.`],
+      );
       verify(runPackageManager);
     });
   }
@@ -1197,9 +1264,12 @@ describe("createPackagesPhase", () => {
     await phase.do(seeded.context);
 
     // assert
-    assert.deepStrictEqual(seeded.context.discoveryWarnings, [
-      "Skipped installing this plugin's dependencies: its package.json is not a regular file of at most 32 MB.",
-    ]);
+    assert.deepStrictEqual(
+      seeded.context.discoveryWarnings.map((w) => w.message),
+      [
+        "Skipped installing this plugin's dependencies: its package.json is not a regular file of at most 32 MB.",
+      ],
+    );
     verify(runPackageManager);
   });
 
@@ -1217,7 +1287,10 @@ describe("createPackagesPhase", () => {
     await phase.do(seeded.context);
 
     // assert
-    assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
+    assert.deepStrictEqual(
+      seeded.context.discoveryWarnings.map((w) => w.message),
+      [],
+    );
     verify(runPackageManager);
   });
 });
@@ -1227,6 +1300,7 @@ const FAILED_RUN: PackageManagerRun = { code: 1, stdout: "", stderr: "boom", tim
 function updatedOutcome(): PluginUpdateUpdatedOutcome {
   return {
     partition: "updated",
+    resourcesChanged: true,
     name: "plugin",
     fromVersion: "1.0.0",
     toVersion: "1.1.0",
@@ -1352,7 +1426,7 @@ describe("installUpdatedPackages", () => {
     verify(runPackageManager);
   });
 
-  test("PKD-02: appends the note to the notes the outcome already carries", async (t) => {
+  test("PKD-02: appends the note to the staging warnings the outcome already carries", async (t) => {
     // arrange
     const seeded = await seedPlugin(t, {
       "package.json": PACKAGE_JSON,
@@ -1362,19 +1436,22 @@ describe("installUpdatedPackages", () => {
     // act
     const hookedOutcome = await installUpdatedPackages(
       opsWith(answeringRunner(FAILED_RUN)),
-      { ...updatedOutcome(), notes: ["first"] },
+      { ...updatedOutcome(), stagingWarnings: [discoveryWarning("first")] },
       { ...seeded.target, force: true },
     );
 
     // assert
     assert.deepStrictEqual(hookedOutcome, {
       ...updatedOutcome(),
-      notes: ["first", "Plugin dependency install failed (npm): boom"],
+      stagingWarnings: [
+        discoveryWarning("first"),
+        discoveryWarning("Plugin dependency install failed (npm): boom"),
+      ],
       packageNote: "Plugin dependency install failed (npm): boom",
     });
   });
 
-  test("PKD-02: adds a notes list for an outcome that carried none", async (t) => {
+  test("PKD-02: adds a staging warning list for an outcome that carried none", async (t) => {
     // arrange
     const seeded = await seedPlugin(t, {
       "package.json": PACKAGE_JSON,
@@ -1391,7 +1468,7 @@ describe("installUpdatedPackages", () => {
     // assert
     assert.deepStrictEqual(hookedOutcome, {
       ...updatedOutcome(),
-      notes: ["Plugin dependency install failed (npm): boom"],
+      stagingWarnings: [discoveryWarning("Plugin dependency install failed (npm): boom")],
       packageNote: "Plugin dependency install failed (npm): boom",
     });
   });
@@ -1451,7 +1528,9 @@ describe("installUpdatedPackages", () => {
     // assert
     assert.deepStrictEqual(hookedOutcome, {
       ...updatedOutcome(),
-      notes: [`Plugin dependency install failed (npm): ${moveError.message}`],
+      stagingWarnings: [
+        discoveryWarning(`Plugin dependency install failed (npm): ${moveError.message}`),
+      ],
       packageNote: `Plugin dependency install failed (npm): ${moveError.message}`,
     });
     assert.strictEqual(
