@@ -92,7 +92,7 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 
 - [x] **AUP-01**: With autoupdate on for a marketplace, a session refreshes that marketplace and updates its installed plugins in the background after a delay, as Claude Code does, without blocking or racing a foreground command (AUTOUP-01)
 - [x] **AUP-02**: The default autoupdate setting per marketplace and the operator opt-outs match Claude Code, mapped to Pi where Pi lacks the concept, with each mapping recorded (AUTOUP-01)
-- [ ] **AUP-03**: When a background update changed anything, the user gets one passive notice that names what changed and the `/reload` step (AUTOUP-01)
+- [x] **AUP-03**: When a background update changed anything, the user gets one passive notice that names what changed and the `/reload` step (AUTOUP-01)
 
 ### Plugin package dependencies (PKD)
 
@@ -182,7 +182,7 @@ None.
 | GLK-08 | Phase 7 | Pending |
 | AUP-01 | Phase 8 | Complete |
 | AUP-02 | Phase 8 | Complete |
-| AUP-03 | Phase 8 | Pending |
+| AUP-03 | Phase 8 | Complete |
 | PKD-01 | Phase 9 | Pending |
 | PKD-02 | Phase 9 | Pending |
 | PKD-03 | Phase 9 | Pending |

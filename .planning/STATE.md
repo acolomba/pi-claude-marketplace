@@ -5,16 +5,16 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 8
 current_phase_name: Background Autoupdate
 status: executing
-stopped_at: Completed 08-01-PLAN.md
-last_updated: "2026-10-27T04:00:56.695Z"
+stopped_at: Completed 08-03-PLAN.md
+last_updated: "2026-10-27T04:33:52.681Z"
 last_activity: 2026-10-26
 last_activity_desc: Phase 8 execution started
-state_head: d7922c7d127dc2b5f0fd2b01b004f8d5c22a41a7
+state_head: 3525499dca0f2cc0342c0cbe1ce04d6116ff79e7
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 8 (Background Autoupdate) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-10-26 — Phase 8 execution started
 
@@ -191,8 +191,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-27T04:00:56.487Z
-**Stopped at:** Completed 08-01-PLAN.md
+**Last session:** 2026-10-27T04:33:52.386Z
+**Stopped at:** Completed 08-03-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -406,6 +406,7 @@ archived milestone artifacts.
 | Phase 29 P14 | 20 min | 2 tasks | 9 files |
 | Phase 08 P02 | 14 min | 2 tasks | 3 files |
 | Phase 08 P01 | 34min | 2 tasks | 10 files |
+| Phase 08 P03 | 25min | 2 tasks | 21 files |
 
 ## Decisions
 
@@ -608,6 +609,8 @@ archived milestone artifacts.
 - [Phase 08]: The env-vars section is titled 'Variables that control the background update', not 'Variables the extension reads', because the extension reads other variables the section does not list
 - [Phase 08]: 08-01: every /claude:plugin command runs through one in-process gate per runtime (runForeground on registerClaudePluginCommand); the mode check stays outside it (D-PL8-04)
 - [Phase 08]: 08-01: the background pass reports through a print-mode context into hookDebugLog [autoupdate] and a load-origin run with a dropping sink; a plugin update skipped after shutdown returns a failed outcome with an empty reason list (D-PL8-06, D-PL8-15)
+- [Phase 08]: background-update no-credential-leak row plants the userinfo URL in name and toVersion, because the gate requires the *** marker in the text and the text shows only the name
+- [Phase 08]: background-update resolve arm redacts name, marketplace, fromVersion and toVersion (PMOD-04); scope passes through
 
 ### mcp-4 decisions
 
