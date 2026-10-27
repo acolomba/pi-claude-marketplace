@@ -12,7 +12,7 @@
  */
 
 import assert from "node:assert/strict";
-import { readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { type DataTable, Given } from "@cucumber/cucumber";
@@ -28,7 +28,10 @@ import {
 import { runGit } from "../../lib/hermetic-git.ts";
 import {
   publishOutputStyle,
+  publishReadOnlySkillDirectory,
+  readOnlySkillRemovalError,
   removePublishedOutputStyle,
+  restoreDirectoryWrites,
   rewritePublishedManifest,
 } from "../../lib/published-marketplace.ts";
 
@@ -103,5 +106,24 @@ Given(
   async function (this: ScenarioWorld, plugin: string, name: string) {
     const directory = await removePublishedOutputStyle(this.requirePublished(name), plugin);
     await assert.rejects(stat(directory), { code: "ENOENT" }, `${directory} still exists`);
+  },
+);
+
+Given(
+  "the published plugin {string} of the marketplace {string} has a read-only skill directory",
+  async function (this: ScenarioWorld, plugin: string, name: string) {
+    const published = this.requirePublished(name);
+    const scratch = await mkdtemp(path.join(this.tokens.home, "skill-removal-"));
+    this.onRelease(() => rm(scratch, { recursive: true, force: true }));
+    // Releases run most recent first, so the restore runs before every removal
+    // registered so far, including one of a read-only copy Pi leaves behind.
+    const { home, agentDir, projectDir } = this.tokens;
+    this.onRelease(() => restoreDirectoryWrites([home, agentDir, projectDir]));
+    const directory = await publishReadOnlySkillDirectory(published, plugin);
+    assert.strictEqual((await stat(directory)).mode & 0o777, 0o555);
+    assert.deepStrictEqual(await readdir(directory), ["data.txt"]);
+    const error = await readOnlySkillRemovalError(published, plugin, scratch);
+    assert.deepStrictEqual([error.code, error.syscall], ["EACCES", "unlink"]);
+    this.recordErrorMessage("{read-only skill directory removal error}", error.message);
   },
 );
