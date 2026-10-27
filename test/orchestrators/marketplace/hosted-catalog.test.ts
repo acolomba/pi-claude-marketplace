@@ -24,6 +24,7 @@ import { fetchHostedManifest } from "../../../extensions/pi-claude-marketplace/p
 import {
   CleanupLeakError,
   InvalidMarketplaceManifestError,
+  ReservedMarketplaceNameError,
   StaleSourceCloneError,
   UnreadableSourceCloneError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -33,10 +34,12 @@ import {
   type RemovalOps,
 } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
+import type { HostedManifestSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type { HostedManifestFetch } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/hosted-catalog.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 const CATALOG_URL = "https://catalog.example/acme/marketplace.json";
+const HOSTED_SOURCE: HostedManifestSource = { kind: "hosted", raw: CATALOG_URL, url: CATALOG_URL };
 const CATALOG = '{"name":"tools","owner":{"name":"acme"},"plugins":[]}';
 const MARKER_FILE = ".pi-claude-marketplace-hosted.json";
 
@@ -327,7 +330,7 @@ describe("refreshHostedCatalog", () => {
 
     // act
     await refreshHostedCatalog({
-      url: CATALOG_URL,
+      source: HOSTED_SOURCE,
       manifestPath,
       locations,
       fetchCatalog: serving(changed, urls),
@@ -353,7 +356,7 @@ describe("refreshHostedCatalog", () => {
     // act & assert
     await assert.rejects(
       refreshHostedCatalog({
-        url: CATALOG_URL,
+        source: HOSTED_SOURCE,
         manifestPath,
         locations,
         fetchCatalog: () => Promise.reject(failure),
@@ -376,7 +379,7 @@ describe("refreshHostedCatalog", () => {
       // act & assert
       await assert.rejects(
         refreshHostedCatalog({
-          url: CATALOG_URL,
+          source: HOSTED_SOURCE,
           manifestPath,
           locations,
           fetchCatalog: serving(bytes),
@@ -389,6 +392,35 @@ describe("refreshHostedCatalog", () => {
     });
   }
 
+  test("D-PL5-27: refuses a download that declares a reserved name and keeps the stored catalog", async (t) => {
+    // arrange
+    const { locations, manifestPath } = await storedCatalog(t);
+    const renamed = '{"name":"claude-plugins-official","owner":{"name":"acme"},"plugins":[]}';
+
+    // act & assert
+    await assert.rejects(
+      refreshHostedCatalog({
+        source: HOSTED_SOURCE,
+        manifestPath,
+        locations,
+        fetchCatalog: serving(renamed),
+        removalOps: createRemovalOps(),
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof ReservedMarketplaceNameError);
+        assert.strictEqual(
+          error.message,
+          "The name 'claude-plugins-official' is reserved for official Anthropic marketplaces and can only be used with GitHub sources from the 'anthropics' organization.",
+        );
+        return true;
+      },
+    );
+    assert.deepStrictEqual(
+      { catalog: await readFile(manifestPath, "utf8"), staging: await stagingEntries(locations) },
+      { catalog: CATALOG, staging: [] },
+    );
+  });
+
   test("appends the leak of a staging cleanup that fails to the refresh error", async (t) => {
     // arrange
     const { locations, manifestPath } = await storedCatalog(t);
@@ -399,7 +431,7 @@ describe("refreshHostedCatalog", () => {
     // act & assert
     await assert.rejects(
       refreshHostedCatalog({
-        url: CATALOG_URL,
+        source: HOSTED_SOURCE,
         manifestPath,
         locations,
         fetchCatalog: serving("{"),
@@ -424,7 +456,7 @@ describe("refreshHostedCatalog", () => {
     // act & assert
     await assert.rejects(
       refreshHostedCatalog({
-        url: CATALOG_URL,
+        source: HOSTED_SOURCE,
         manifestPath: outside,
         locations,
         fetchCatalog: serving(CATALOG, urls),

@@ -486,7 +486,7 @@ async function refreshRecord(
       // D-PL5-09: download the catalog again; it replaces the stored one only
       // once it validates. Nothing is cloned, so no retry hint applies.
       await refreshHostedCatalog({
-        url: source.url,
+        source,
         manifestPath: recordedManifestPath(record),
         locations,
         fetchCatalog: args.hostedManifestFetch,

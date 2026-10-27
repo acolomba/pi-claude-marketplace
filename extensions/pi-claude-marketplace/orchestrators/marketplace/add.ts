@@ -73,6 +73,7 @@ import {
   HostedManifestFetchError,
   InvalidMarketplaceManifestError,
   MarketplaceDuplicateNameError,
+  ReservedMarketplaceNameError,
   StaleSourceCloneError,
   StateLockHeldError,
   UnreadableSourceCloneError,
@@ -422,19 +423,6 @@ async function readManifestDocument(
     }
 
     throw err;
-  }
-}
-
-/**
- * MKT-01 / D-PL5-02: a manifest declared a name Claude Code reserves for the
- * anthropics GitHub organization, from another source. The message is Claude
- * Code's refusal sentence. As an `InvalidMarketplaceManifestError` it reads
- * `invalid manifest` wherever an add failure is classified.
- */
-class ReservedMarketplaceNameError extends InvalidMarketplaceManifestError {
-  constructor(refusal: string) {
-    super(refusal);
-    this.name = "ReservedMarketplaceNameError";
   }
 }
 

@@ -45,6 +45,7 @@ import {
   PluginShapeError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
+  ReservedMarketplaceNameError,
   rethrowInvalidGitHubBaseUrl,
   serializeCauseChain,
   StaleSourceCloneError,
@@ -1501,6 +1502,24 @@ describe("InvalidMarketplaceManifestError", () => {
     assert.deepStrictEqual(
       { name: error.name, message: error.message, cause: error.cause },
       { name: "InvalidMarketplaceManifestError", message: "invalid manifest", cause },
+    );
+  });
+});
+
+describe("ReservedMarketplaceNameError", () => {
+  test("carries Claude Code's refusal sentence as an invalid manifest", () => {
+    // arrange
+    const refusal =
+      "The name 'claude-plugins-official' is reserved for official Anthropic marketplaces.";
+
+    // act
+    const error = new ReservedMarketplaceNameError(refusal);
+
+    // assert
+    assert.ok(error instanceof InvalidMarketplaceManifestError);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, cause: error.cause },
+      { name: "ReservedMarketplaceNameError", message: refusal, cause: undefined },
     );
   });
 });

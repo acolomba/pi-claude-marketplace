@@ -730,6 +730,19 @@ export class InvalidMarketplaceManifestError extends Error {
 }
 
 /**
+ * MKT-01 / D-PL5-02 / D-PL5-27: a manifest declared a name Claude Code reserves
+ * for the anthropics GitHub organization, from another source. The message is
+ * Claude Code's refusal sentence. As an `InvalidMarketplaceManifestError` it
+ * reads `invalid manifest` wherever an add or a refresh failure is classified.
+ */
+export class ReservedMarketplaceNameError extends InvalidMarketplaceManifestError {
+  constructor(refusal: string) {
+    super(refusal);
+    this.name = "ReservedMarketplaceNameError";
+  }
+}
+
+/**
  * CFG-03 / LAYER-04: a layer config that a named plugin command must read could
  * not be read: an EACCES, a truncated mid-save file, or a schema violation. It
  * is an invalid manifest, so every narrowing that maps one to

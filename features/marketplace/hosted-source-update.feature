@@ -1,8 +1,9 @@
 Feature: Marketplace hosted source update
 
   `marketplace update` downloads a hosted marketplace's catalog again, and keeps
-  the stored copy when the download fails. The run's loopback https git host
-  serves the catalog file and records every request.
+  the stored copy when the download fails or the catalog declares a reserved
+  name. The run's loopback https git host serves the catalog file and records
+  every request.
 
   Scenario: Updating a hosted marketplace downloads its catalog again and records the change
     Given the marketplace "tools" is published as a hosted source
@@ -38,3 +39,50 @@ Feature: Marketplace hosted source update
     Then the git host receives these requests:
       | method | path                         | status |
       | GET    | /acme/tools/marketplace.json | 404    |
+
+  Scenario: Updating a hosted marketplace whose catalog now declares a reserved name fails with Claude Code's refusal
+    Given the marketplace "tools" is published as a hosted source
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" update source contains this manifest:
+      """
+      {"name":"claude-plugins-official","owner":{"name":"features"},"plugins":[]}
+      """
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons          | scope   | leaks | rollback partial | cause chain                                                                                                                                                                                            | cause truncated |
+      | tools            | project           | failed             | tools | tools | failed | invalid manifest | project |       |                  | Failed to update marketplace "tools"., The name 'claude-plugins-official' is reserved for official Anthropic marketplaces and can only be used with GitHub sources from the 'anthropics' organization. | false           |
+    Then the git host receives these requests:
+      | method | path                         | status |
+      | GET    | /acme/tools/marketplace.json | 200    |
+
+  Scenario: A hosted marketplace whose refresh was refused for a reserved name keeps its stored catalog
+    Given the marketplace "tools" is published as a hosted source
+    Given the marketplace "tools" has the description "Accepted tools"
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" update source contains this manifest:
+      """
+      {"name":"claude-plugins-official","owner":{"name":"features"},"plugins":[],"description":"Renamed tools"}
+      """
+    Given the user has run "/claude:plugin marketplace update tools --scope project", which failed
+    When the user runs "/claude:plugin marketplace info tools --scope project"
+    Then the marketplace info result has these fields:
+      | kind                    | marketplace-info                               |
+      | name                    | tools                                          |
+      | scope                   | project                                        |
+      | details autoupdate      | false                                          |
+      | details last updated at | {scenario time}                                |
+      | source kind             | url                                            |
+      | source abs path         |                                                |
+      | source url              | https://{git host}/acme/tools/marketplace.json |
+      | source owner            |                                                |
+      | source repo             |                                                |
+      | source ref              |                                                |
+      | description             | Accepted tools                                 |
+      | severity                | info                                           |
+      | needs reload            | false                                          |
+    Then the git host receives no request

@@ -11,9 +11,11 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { loadMarketplaceManifestDocument } from "../../domain/manifest.ts";
+import { reservedMarketplaceNameRefusal } from "../../domain/name.ts";
 import { fetchHostedManifest } from "../../platform/hosted-manifest-fetch.ts";
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import {
+  ReservedMarketplaceNameError,
   StaleSourceCloneError,
   UnreadableSourceCloneError,
   appendLeakToError,
@@ -21,6 +23,7 @@ import {
 import { cleanupStaging, pathExists, type RemovalOps } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
+import type { HostedManifestSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 
 /** D-PL5-07: downloads the catalog at a URL and returns its bytes. */
@@ -65,30 +68,36 @@ export async function downloadHostedCatalog(args: {
 }
 
 /**
- * D-PL5-09: downloads the catalog at `url` again and puts it in place of the
- * stored one at `manifestPath`. The bytes go to a fresh directory under
- * `sources-staging/`, on the filesystem of `sources/` (D-09), and are read
- * through the one manifest reader (NFR-8) before a rename replaces the stored
- * file. A failed download, an invalid catalog, or a failed rename leaves the
- * stored file as it was, and a staging cleanup that leaks is appended to the
- * thrown error (MA-9).
+ * D-PL5-09: downloads the catalog at the source's URL again and puts it in
+ * place of the stored one at `manifestPath`. The bytes go to a fresh directory
+ * under `sources-staging/`, on the filesystem of `sources/` (D-09), and are
+ * read through the one manifest reader (NFR-8) before a rename replaces the
+ * stored file. A catalog that now declares a reserved name is refused before
+ * the rename (D-PL5-27). A failed download, an invalid or refused catalog, or a
+ * failed rename leaves the stored file as it was, and a staging cleanup that
+ * leaks is appended to the thrown error (MA-9).
  */
 export async function refreshHostedCatalog(args: {
-  readonly url: string;
+  readonly source: HostedManifestSource;
   readonly manifestPath: string;
   readonly locations: ScopedLocations;
   readonly fetchCatalog: HostedManifestFetch;
   readonly removalOps: RemovalOps;
 }): Promise<void> {
-  const { url, manifestPath, locations, removalOps } = args;
+  const { source, manifestPath, locations, removalOps } = args;
   await assertPathInside(locations.sourcesDir, manifestPath, "hosted marketplace catalog");
-  const bytes = await args.fetchCatalog(url);
+  const bytes = await args.fetchCatalog(source.url);
   const stagingDir = await locations.sourcesStagingDir(randomUUID());
   const stagedPath = path.join(stagingDir, CATALOG_FILE);
   try {
     await mkdir(stagingDir, { recursive: true });
     await writeFile(stagedPath, bytes);
-    await loadMarketplaceManifestDocument(stagedPath);
+    const document = await loadMarketplaceManifestDocument(stagedPath);
+    const refusal = reservedMarketplaceNameRefusal(document.manifest.name, source);
+    if (refusal !== undefined) {
+      throw new ReservedMarketplaceNameError(refusal);
+    }
+
     await rename(stagedPath, manifestPath);
   } catch (err) {
     throw appendLeakToError(
