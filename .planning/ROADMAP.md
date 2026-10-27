@@ -52,7 +52,7 @@ parent session applies them at merge.
 - [ ] **Phase 6: Import Marketplace Planning** - import plans marketplaces the way Claude Code registers them
 - [ ] **Phase 7: Git Errors and Lock Discipline** - one git-host classifier, and every clone read or cleanup under the lock
 - [ ] **Phase 8: Background Autoupdate** - autoupdate updates in the background, as Claude Code does
-- [ ] **Phase 9: Plugin Package Dependencies** - a plugin's own npm or bun dependencies install with it
+- [x] **Phase 9: Plugin Package Dependencies** - a plugin's own npm or bun dependencies install with it (completed 2026-10-27)
 - [ ] **Phase 10: Lifecycle Test and Harness Gaps** - the open scenario, unit, and harness gaps are closed
 - [ ] **Phase 11: Cleanup, Split, and Docs** - dead code, the install-flow split, docs, and backlog closures
 
@@ -194,7 +194,7 @@ parent session applies them at merge.
 2. A failing, timed-out, or lockfile-less package install leaves the plugin installed with a warning (PKD-02).
 3. The NFR-5 amendment and the spawn rule carry a decision ID, and `npm run check` is green (PKD-03).
 
-**Plans:** 5/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 **Wave 1**
