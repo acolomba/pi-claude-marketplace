@@ -58,7 +58,10 @@ import {
   toDisabledRecord,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import { McpServerCollisionError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
+import {
+  AgentTargetOccupiedError,
+  McpServerCollisionError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
   CrossPluginConflictError,
   DependencyCascadeError,
@@ -18979,7 +18982,7 @@ describe("createUpdateDependencyResolver", () => {
           ctx,
           run,
         }),
-        new Error(`Cannot replace agent target with non-previous content at ${userFile}`),
+        new AgentTargetOccupiedError(userFile),
       );
       assert.deepStrictEqual(await recordedVersions(cwd), { widget: ["1.0.0", true] });
       assert.strictEqual(await readFile(userFile, "utf8"), "The user's own agent.\n");
