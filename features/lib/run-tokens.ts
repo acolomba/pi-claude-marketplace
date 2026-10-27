@@ -20,8 +20,11 @@
  * gives a file call that a step set up to fail, which differs between Node
  * majors; the step reads it back by making the same call. An error token also
  * stands for its message with each quoted path cut to its last segment, which
- * is how import and apply show a redacted cause. A message can hold a sandbox
- * path, so a result is projected through the error tokens before any other.
+ * is how import and apply show a redacted cause, and for its message with each
+ * quoted path replaced by any path that ends in that segment, which is how
+ * install shows a cause a step could not reproduce at the same path. A message
+ * can hold a sandbox path, so a result is projected through the error tokens
+ * before any other.
  */
 
 import path from "node:path";
@@ -72,6 +75,17 @@ export function cutQuotedPaths(message: string): string {
   );
 }
 
+// Matches `message` with each quoted path cut to its last segment, or with
+// that path replaced by any path that ends in the segment.
+function anyQuotedPathPattern(message: string): RegExp {
+  const escape = (text: string): string => text.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const pattern = cutQuotedPaths(message)
+    .split(/'([^']+)'/u)
+    .map((part, index) => (index % 2 === 0 ? escape(part) : `'(?:[^']*/)?${escape(part)}'`))
+    .join("");
+  return new RegExp(pattern, "gu");
+}
+
 /**
  * Replaces every `{home}`, `{project dir}`, and `{agent dir}` in `text` with
  * the sandbox directory it stands for, every `{git host}` with the git host's
@@ -95,7 +109,8 @@ export function expandTokens(text: string, tokens: RunTokens): string {
  * Projects the result value `value` of the field `key` back to tokens. A
  * `lastUpdatedAt` inside the scenario's window becomes `{scenario time}`;
  * otherwise every occurrence of a recorded error message, then of that
- * message with its quoted paths cut, becomes its error token, then every
+ * message with its quoted paths cut or ending at any path, becomes its error
+ * token, then every
  * occurrence of a sandbox directory becomes its token, every
  * occurrence of the git host's address becomes `{git host}`, every
  * occurrence of a revision's commit becomes its commit token, and every
@@ -108,7 +123,9 @@ export function projectTokens(key: string, value: string, tokens: RunTokens): st
 
   let projected = value;
   for (const [token, standsFor] of tokens.errors) {
-    projected = projected.replaceAll(standsFor, token).replaceAll(cutQuotedPaths(standsFor), token);
+    projected = projected
+      .replaceAll(standsFor, token)
+      .replaceAll(anyQuotedPathPattern(standsFor), token);
   }
 
   projected = projected
