@@ -29,6 +29,7 @@ test("buildClaudeImportPlan builds a complete mixed user plan with ordered diagn
     scopes: [
       {
         scope: "user",
+        settingsMarketplaces: ["claude-plugins-official", "missing"],
         marketplacesToEnsure: [
           {
             scope: "user",
@@ -139,6 +140,7 @@ test("buildClaudeImportPlan keeps every plugin while ensuring a shared marketpla
     scopes: [
       {
         scope: "project",
+        settingsMarketplaces: ["private"],
         marketplacesToEnsure: [
           {
             scope: "project",
@@ -199,6 +201,7 @@ test("buildClaudeImportPlan preserves user and project scope input order", () =>
     scopes: [
       {
         scope: "user",
+        settingsMarketplaces: ["claude-plugins-official"],
         marketplacesToEnsure: [
           {
             scope: "user",
@@ -221,6 +224,7 @@ test("buildClaudeImportPlan preserves user and project scope input order", () =>
       },
       {
         scope: "project",
+        settingsMarketplaces: ["claude-plugins-official"],
         marketplacesToEnsure: [
           {
             scope: "project",
@@ -289,6 +293,7 @@ test("buildClaudeImportPlan diagnoses malformed nested marketplace payloads", ()
     scopes: [
       {
         scope: "user",
+        settingsMarketplaces: ["bad-url", "bad-github", "bad-directory", "file", "unknown"],
         marketplacesToEnsure: [],
         diagnostics: [
           {
@@ -442,6 +447,15 @@ test("buildClaudeImportPlan diagnoses nonobject and unsupported flat entries", (
     scopes: [
       {
         scope: "project",
+        settingsMarketplaces: [
+          "array",
+          "null",
+          "string",
+          "flat-url",
+          "bad-github",
+          "bad-source",
+          "missing",
+        ],
         marketplacesToEnsure: [],
         diagnostics: [
           {
@@ -628,6 +642,7 @@ test("buildClaudeImportPlan maps flat directory and GitHub entries in ref order"
     scopes: [
       {
         scope: "project",
+        settingsMarketplaces: ["private", "team"],
         marketplacesToEnsure: [
           {
             scope: "project",
@@ -691,6 +706,7 @@ test("buildClaudeImportPlan maps every nested source shape and optional ref", ()
     scopes: [
       {
         scope: "user",
+        settingsMarketplaces: ["url", "url-ref", "github", "github-ref", "directory"],
         marketplacesToEnsure: [
           {
             scope: "user",
@@ -763,6 +779,7 @@ test("buildClaudeImportPlan maps the official source and skips its duplicate", (
     scopes: [
       {
         scope: "user",
+        settingsMarketplaces: ["claude-plugins-official"],
         marketplacesToEnsure: [
           {
             scope: "user",
@@ -820,6 +837,7 @@ test("MIM-02 / D-PL6-01: plans the referenced marketplaces first, then every oth
     scopes: [
       {
         scope: "user",
+        settingsMarketplaces: ["gamma", "beta", "alpha"],
         marketplacesToEnsure: [
           { scope: "user", marketplace: "gamma", source: "/opt/gamma" },
           { scope: "user", marketplace: "beta", source: "../beta" },
@@ -865,6 +883,7 @@ test("MIM-02 / D-PL6-01: diagnoses an extra entry no enabled plugin names when i
     scopes: [
       {
         scope: "project",
+        settingsMarketplaces: ["remote"],
         marketplacesToEnsure: [],
         pluginsToInstall: [],
         skippedPlugins: [],
@@ -895,6 +914,7 @@ test("D-PL6-08: plans no official marketplace that only an extra entry names", (
     scopes: [
       {
         scope: "user",
+        settingsMarketplaces: ["claude-plugins-official", "team"],
         marketplacesToEnsure: [{ scope: "user", marketplace: "team", source: "acme/team" }],
         pluginsToInstall: [],
         skippedPlugins: [],
@@ -927,6 +947,7 @@ test("D-PL6-08: plans the official source for an official marketplace an enabled
     scopes: [
       {
         scope: "user",
+        settingsMarketplaces: ["claude-plugins-official"],
         marketplacesToEnsure: [
           {
             scope: "user",

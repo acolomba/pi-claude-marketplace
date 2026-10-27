@@ -88,6 +88,11 @@ export interface ScopedClaudeImportPlanInput {
 
 export interface ScopedClaudeImportPlan {
   readonly scope: Scope;
+  /**
+   * D-PL6-02: every marketplace name the settings declare, in
+   * `extraKnownMarketplaces` or through an enabled plugin, planned or not.
+   */
+  readonly settingsMarketplaces: readonly string[];
   readonly marketplacesToEnsure: readonly PlannedMarketplaceSource[];
   readonly pluginsToInstall: readonly PlannedPluginImport[];
   readonly skippedPlugins: readonly SkippedPluginImport[];

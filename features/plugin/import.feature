@@ -749,6 +749,35 @@ Feature: Plugin import
       | severity     | info                    |
       | needs reload | false                   |
 
+  Scenario: Importing settings that also declare the recorded name of a known marketplace does not follow its source to that record
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@other": true },
+        "extraKnownMarketplaces": {
+          "other": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          },
+          "fixtures": {
+            "source": { "source": "file", "url": "https://example.test/marketplace.json" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the command reports these results:
+      | kind       | severity | needs reload | summary                      | tally label | tally failures | tally warnings | header                        | lines                                                                                                                                                                 |
+      | cascade    | error    | false        | Some operations have failed. | Import      | 2              | 0              |                               |                                                                                                                                                                       |
+      | diagnostic | warning  | false        |                              |             |                |                | 1 import diagnostic surfaced. | Skipping Claude marketplace "fixtures" because it has no supported url, github, or directory source (nested file/remote-marketplace.json sources are not importable). |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons | scope | cause chain                                          | cause truncated | leaks | rollback partial |
+      | other            | user              | failed             | other@other | other | failed |         | user  | Marketplace "fixtures" already exists in user scope. | false           |       |                  |
+    Then the user scope has no installed plugins
+
   Scenario: Importing a plugin whose install rollback cannot finish names the rollback phase
     Given the marketplace "fixtures" offers these plugins:
       | name | version |

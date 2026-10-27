@@ -5395,6 +5395,90 @@ test("CR-01: declares an installed plugin under the settings name a config alrea
   verify(installPlugin);
 });
 
+for (const { diagnostics, entry, recordedName, title } of [
+  {
+    diagnostics: [
+      {
+        code: "unmappable-marketplace-source",
+        marketplace: "recorded-mp",
+        message:
+          'Skipping Claude marketplace "recorded-mp" because it has no supported url, github, ' +
+          "or directory source (nested file/remote-marketplace.json sources are not importable).",
+        scope: "project",
+        severity: "warning",
+      },
+    ],
+    entry: { source: { source: "file", url: "https://example.test/marketplace.json" } },
+    recordedName: "recorded-mp",
+    title: "with no supported source",
+  },
+  {
+    diagnostics: [],
+    entry: { github: { repo: "someone/else" } },
+    recordedName: "claude-plugins-official",
+    title: "as the official marketplace no plugin names",
+  },
+] satisfies readonly {
+  readonly diagnostics: ClaudeImportExecutionResult["diagnostics"];
+  readonly entry: Record<string, unknown>;
+  readonly recordedName: string;
+  readonly title: string;
+}[]) {
+  test(`D-PL6-02: adds a settings marketplace instead of claiming a record the settings also declare ${title}`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScopes(t, "source-claim-declared-by-settings");
+    const { ctx, verifyBoundary } = createNotificationBoundary(diagnostics.length + 1);
+    const calls: string[] = [];
+
+    // act
+    const importResult = await importClaudeSettings({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      deps: collaborators({
+        addMarketplace: (options) => {
+          calls.push(`add ${options.rawSource}`);
+          return Promise.resolve(addedOutcome("mp"));
+        },
+        installPlugin: (options) => {
+          calls.push(`install ${options.plugin}@${options.marketplace}`);
+          return Promise.resolve(installedOutcome());
+        },
+        loadSettings: () =>
+          Promise.resolve(
+            claudeSettings({
+              enabledPlugins: { "plugin@mp": true },
+              extraKnownMarketplaces: { mp: { directory: "./mp" }, [recordedName]: entry },
+            }),
+          ),
+        loadState: () =>
+          Promise.resolve(
+            recordedState([
+              recordedMarketplace({
+                name: recordedName,
+                scope: "project",
+                source: pathSource("./mp"),
+              }),
+            ]),
+          ),
+      }),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      selectedScopes: ["project"],
+    });
+
+    // assert
+    assert.deepStrictEqual(calls, ["add ./mp", "install plugin@mp"]);
+    assert.deepStrictEqual(importResult, {
+      ...emptyImportResult(),
+      addedMarketplaces: [added("mp", "project")],
+      changedResources: true,
+      diagnostics,
+      installedPlugins: [installed("plugin", "mp", "project")],
+    });
+    verifyBoundary();
+  });
+}
+
 test("D-PL6-09: a settings marketplace whose source two records hold blocks its plugins before any add", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "source-ambiguous");

@@ -1493,12 +1493,19 @@ async function readPassForImport(
         const desired = desiredConfigFor(scopePlan);
         // D-PL6-10: the planner's own claim rule, read from the same snapshot.
         const claims = marketplaceSourceClaims(desired.marketplaces, tx.state.marketplaces);
+        // D-PL6-02: a recorded name the settings declare themselves, planned
+        // or not, is never another settings name's alias.
+        const settingsNames = new Set(scopePlan.settingsMarketplaces);
         const config = await loadMergedScopeConfig(locations);
         return {
           kind: "planned",
           state: tx.state,
           plan: planReconcile(desired, tx.state, scope, verdict),
-          claims: new Map([...claims].filter(([declared, recorded]) => declared !== recorded)),
+          claims: new Map(
+            [...claims].filter(
+              ([declared, recorded]) => declared !== recorded && !settingsNames.has(recorded),
+            ),
+          ),
           configNames: configNamesByRecorded(config.merged.marketplaces, tx.state.marketplaces),
         };
       },
@@ -1542,9 +1549,9 @@ function plannedMismatchFor(plan: ReconcilePlan, marketplace: string): SettledMi
  * the name the scope records it under. The marketplace keeps the settings
  * source, and each plugin ref under it names the recorded marketplace in both
  * `marketplace` and `raw`, so every outcome and config key names one plugin.
- * Only one-to-one claims are in `claims`; a recorded name is never a settings
- * name, because the planner's claim candidates exclude declared names, so two
- * entries cannot collide.
+ * Only one-to-one claims are in `claims`, and the read pass drops every claim
+ * of a name the settings declare, planned or not, so a recorded name is never
+ * a settings name and two entries cannot collide.
  */
 function aliasedScopePlan(
   scopePlan: ScopedImportPlan,

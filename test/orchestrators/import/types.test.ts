@@ -200,6 +200,7 @@ void scopedClaudeImportPlanInput;
 
 const scopedClaudeImportPlan: ScopedClaudeImportPlan = {
   scope: "project",
+  settingsMarketplaces: ["official", "retired"],
   marketplacesToEnsure: [
     {
       scope: "project",
@@ -244,6 +245,7 @@ const claudeImportPlan: ClaudeImportPlan = {
   scopes: [
     {
       scope: "user",
+      settingsMarketplaces: ["official"],
       marketplacesToEnsure: [
         {
           scope: "user",
@@ -333,10 +335,19 @@ void ({ marketplacesToEnsure: [], diagnostics: [] } satisfies MarketplaceSourceP
 void ({ scope: "user" } satisfies ScopedClaudeImportPlanInput);
 void ({
   scope: "project",
+  settingsMarketplaces: [],
   marketplacesToEnsure: [],
   pluginsToInstall: [],
   diagnostics: [],
   // @ts-expect-error scoped plans always expose skipped imports
+} satisfies ScopedClaudeImportPlan);
+void ({
+  scope: "project",
+  marketplacesToEnsure: [],
+  pluginsToInstall: [],
+  skippedPlugins: [],
+  diagnostics: [],
+  // @ts-expect-error scoped plans always expose the settings marketplace names
 } satisfies ScopedClaudeImportPlan);
 // @ts-expect-error complete import plans always expose aggregate diagnostics
 void ({ scopes: [] } satisfies ClaudeImportPlan);
@@ -351,6 +362,8 @@ void (true satisfies IsMutableArray<EnabledPluginRefsResult["diagnostics"]>);
 void (true satisfies IsMutableArray<MarketplaceSourcePlanResult["marketplacesToEnsure"]>);
 // @ts-expect-error unmappable marketplace names are a readonly array
 void (true satisfies IsMutableArray<MarketplaceSourcePlanResult["unmappableMarketplaces"]>);
+// @ts-expect-error scoped plan settings marketplaces are a readonly array
+void (true satisfies IsMutableArray<ScopedClaudeImportPlan["settingsMarketplaces"]>);
 // @ts-expect-error scoped plan marketplaces are a readonly array
 void (true satisfies IsMutableArray<ScopedClaudeImportPlan["marketplacesToEnsure"]>);
 // @ts-expect-error scoped plan plugins are a readonly array
