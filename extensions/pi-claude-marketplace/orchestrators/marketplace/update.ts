@@ -158,6 +158,7 @@ import {
 import {
   UPDATE_CONTEXT,
   outcomeToCascadePluginMessage,
+  surfaceCascadeStagingWarnings,
   type UpdateRowMsg,
 } from "./update.messaging.ts";
 
@@ -908,6 +909,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     },
   ];
   notifyWithContext(ctx, run, UPDATE_CONTEXT, cascadeRows, undefined, cardinality);
+  surfaceCascadeStagingWarnings(ctx, run, outcomes, scope);
   // AFILE-04: the notices of the cascade's updates, shown after the rows they
   // explain. A failed update can carry them too: its MCP commit succeeded
   // before a later bridge or the finalize failed. The no-op paths above have

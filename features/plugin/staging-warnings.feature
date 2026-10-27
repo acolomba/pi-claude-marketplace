@@ -102,3 +102,19 @@ Feature: Plugin staging warnings
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status | reasons    | scope   | version | leaks | rollback partial |
       | fixtures         | project           | demo@fixtures | demo | failed | unreadable | project | 1.0.0   |       |                  |
+
+  Scenario: A marketplace update with autoupdate on reports a moved plugin's skip under its header
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
+    When the user runs "/claude:plugin marketplace update fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                            | lines                                                                                                                                      |
+      | cascade    | info     | true         |                                                                   |                                                                                                                                            |
+      | diagnostic | warning  | false        | Plugin "demo" [project] updated; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name | status  | reasons | scope   | from  | to    |
+      | fixtures         | project           | updated            | demo@fixtures | demo | updated |         | project | 1.0.0 | 1.1.0 |

@@ -41,6 +41,10 @@ import {
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { type Severity } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import {
+  discoveryWarning,
+  hygieneWarning,
+} from "../../../extensions/pi-claude-marketplace/shared/staging-warnings.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
@@ -3202,6 +3206,77 @@ test("AFILE-04: a marketplace update whose autoupdate cascade rewrites a comment
         message:
           "MCP config comments removed.\n\n" +
           "The project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.\n" +
+          "The project-scope mcp.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+        severity: "warning",
+      },
+    ]);
+  });
+});
+
+test("D-PL1-07 / D-PL1-09: an autoupdate cascade shows a moved plugin's staging warnings between its rows and its MCP notices", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange -- the moved plugin carries both halves; only the discovery half
+    // renders (D-PL1-08).
+    await seedGithubMarketplace({
+      cwd,
+      name: "official",
+      ref: "main",
+      autoupdate: true,
+      plugins: { alpha: makePluginRecord() },
+    });
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000011" },
+    });
+    const pluginUpdate: PluginUpdateFn = async (plugin) =>
+      Promise.resolve({
+        partition: "updated",
+        resourcesChanged: true,
+        name: plugin,
+        fromVersion: "0.0.1",
+        toVersion: "0.0.2",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: undefined,
+        declaresWorkflows: false,
+        stagingWarnings: [
+          discoveryWarning('skill source "dup" is duplicated; ignoring duplicate.'),
+          hygieneWarning("agents index was corrupt; rebuilt it"),
+        ],
+        mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp.json" }],
+      });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "official",
+      scope: "project",
+      cwd,
+      gitOps,
+      pluginUpdate,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● official [project] (updated)\n" +
+          "  ● alpha v0.0.1 → v0.0.2 (updated)\n\n" +
+          "/reload to pick up changes",
+      },
+      {
+        message:
+          'Plugin "alpha" [project] updated; 1 declared component has a note.\n\n' +
+          'skill source "dup" is duplicated; ignoring duplicate.',
+        severity: "warning",
+      },
+      {
+        message:
+          "MCP config comments removed.\n\n" +
           "The project-scope mcp.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
         severity: "warning",
       },

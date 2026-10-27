@@ -5,15 +5,23 @@ import test from "node:test";
 import {
   UPDATE_CONTEXT,
   outcomeToCascadePluginMessage,
+  surfaceCascadeStagingWarnings,
   type UpdateRowMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts";
 import { preparePluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
+import {
+  discoveryWarning,
+  hygieneWarning,
+} from "../../../extensions/pi-claude-marketplace/shared/staging-warnings.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 import { seedUnconstrainedTarget } from "../plugin/seed-unconstrained-target.ts";
 
 import type { MaterializationPolicy } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import type { PluginUpdateOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
+import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
+import type { Severity } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 /** `update`'s knobs on the shared runner (D-18-04). */
 const UPDATE_POLICY = {
@@ -1254,4 +1262,131 @@ test("UPDATE_CONTEXT declares complete row policies", () => {
     failed: { markers: false, contentReasons: true },
     installed: { markers: true, contentReasons: true },
   });
+});
+
+/** A recording context for the staging-diagnostic helper. */
+function recordingCtx(): {
+  ctx: NotificationContext;
+  notifications: { message: string; severity?: Severity }[];
+} {
+  const notifications: { message: string; severity?: Severity }[] = [];
+  const ctx: NotificationContext = {
+    mode: "tui",
+    ui: {
+      notify(message: string, severity?: Severity): void {
+        notifications.push(severity === undefined ? { message } : { message, severity });
+      },
+    },
+  };
+  return { ctx, notifications };
+}
+
+test("D-PL1-07 / D-PL1-08: a cascade shows the discovery warnings of its updated and failed plugins in outcome order", () => {
+  // arrange
+  const { ctx, notifications } = recordingCtx();
+  const outcomes: PluginUpdateOutcome[] = [
+    {
+      partition: "failed",
+      name: "alpha",
+      notes: ["plugin update phase 3 failed"],
+      reasons: ["permission denied"],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+      stagingWarnings: [discoveryWarning('skill source "a" is duplicated; ignoring duplicate.')],
+    },
+    {
+      partition: "unchanged",
+      name: "beta",
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
+      declaresAgents: false,
+      declaresMcp: false,
+      constraint: undefined,
+      declaresWorkflows: false,
+    },
+    {
+      partition: "skipped",
+      name: "gamma",
+      notes: [],
+      reasons: ["not installed"],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    },
+    {
+      partition: "updated",
+      resourcesChanged: true,
+      name: "delta",
+      fromVersion: "1.0.0",
+      toVersion: "1.1.0",
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      constraint: undefined,
+      declaresWorkflows: false,
+      stagingWarnings: [
+        discoveryWarning('command source "c" is duplicated; ignoring duplicate.'),
+        hygieneWarning("agents index was corrupt; rebuilt it"),
+        discoveryWarning('skill source "d" is duplicated; ignoring duplicate.'),
+      ],
+    },
+  ];
+
+  // act
+  surfaceCascadeStagingWarnings(ctx, runWithNothingLoaded(), outcomes, "project");
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        'Plugin "alpha" [project] update failed; 1 declared component has a note.\n\n' +
+        'skill source "a" is duplicated; ignoring duplicate.',
+      severity: "warning",
+    },
+    {
+      message:
+        'Plugin "delta" [project] updated; 2 declared components have notes.\n\n' +
+        'command source "c" is duplicated; ignoring duplicate.\n' +
+        'skill source "d" is duplicated; ignoring duplicate.',
+      severity: "warning",
+    },
+  ]);
+});
+
+test("D-PL1-08: a cascade whose moved plugins carry no discovery warning shows nothing", () => {
+  // arrange
+  const { ctx, notifications } = recordingCtx();
+  const outcomes: PluginUpdateOutcome[] = [
+    {
+      partition: "updated",
+      resourcesChanged: true,
+      name: "alpha",
+      fromVersion: "1.0.0",
+      toVersion: "1.1.0",
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      constraint: undefined,
+      declaresWorkflows: false,
+      stagingWarnings: [hygieneWarning("agents index was corrupt; rebuilt it")],
+    },
+    {
+      partition: "failed",
+      name: "beta",
+      notes: ["plugin update phase 3 failed"],
+      reasons: ["permission denied"],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    },
+  ];
+
+  // act
+  surfaceCascadeStagingWarnings(ctx, runWithNothingLoaded(), outcomes, "user");
+
+  // assert
+  assert.deepStrictEqual(notifications, []);
 });

@@ -7,14 +7,18 @@ import {
   type PluginUpdatedMessage,
 } from "../../shared/notification-types.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
+import { surfaceStagingDiagnostics } from "../plugin/shared.ts";
 import {
   constraintCauseFor,
   revisionVersionSlot,
   updatedRowFromOutcome,
 } from "../plugin/update-row.ts";
 
+import type { NotificationContext } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { StagingDiagnostic } from "../plugin/shared.ts";
 import type {
   PluginUpdateFailedOutcome,
   PluginUpdateOutcome,
@@ -187,6 +191,44 @@ export function outcomeToCascadePluginMessage(
         needsReload: false,
       };
   }
+}
+
+/**
+ * D-PL1-07: show each moved plugin's staging warnings after the cascade rows
+ * and before the MCP config notices, one diagnostic per plugin in row order.
+ * An `updated` outcome renders under `updated`, a `failed` one under
+ * `update failed`; every other partition staged nothing.
+ *
+ * D-PL1-08: the discovery half only; the hygiene half stays on the outcome.
+ * D-PL1-09: the autoupdate cascade is this same path, so this one call covers
+ * both. `scope` is the cascade's marketplace scope, which every row shares.
+ */
+export function surfaceCascadeStagingWarnings(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  outcomes: readonly PluginUpdateOutcome[],
+  scope: Scope,
+): void {
+  surfaceStagingDiagnostics(
+    ctx,
+    run,
+    outcomes.flatMap((outcome) => cascadeStagingDiagnostic(outcome, scope)),
+  );
+}
+
+function cascadeStagingDiagnostic(outcome: PluginUpdateOutcome, scope: Scope): StagingDiagnostic[] {
+  if (outcome.partition !== "updated" && outcome.partition !== "failed") {
+    return [];
+  }
+
+  return [
+    {
+      plugin: outcome.name,
+      scope,
+      verb: outcome.partition === "updated" ? "updated" : "update failed",
+      warnings: outcome.stagingWarnings ?? [],
+    },
+  ];
 }
 
 type NoteReason = readonly [readonly string[], ContentReason];
