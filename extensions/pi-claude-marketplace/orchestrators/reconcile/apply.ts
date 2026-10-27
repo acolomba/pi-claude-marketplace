@@ -481,11 +481,37 @@ function redactedRollbackPartials(
 }
 
 /**
+ * MIM-03 / D-PL6-05: the row of a dependency whose undo could not finish,
+ * under the dependency's own marketplace and by its bare name, as apply's
+ * other dependency rows read. The key splits at its last `@`, as a plugin key
+ * does (T-06-12).
+ */
+function dependencyRollbackOutcome(
+  scope: Scope,
+  error: DependencyCascadeError,
+  rollbackPartials: NonNullable<FailedPluginInstall["rollbackPartials"]>,
+): PerEntryOutcome {
+  const at = error.key.lastIndexOf("@");
+  return {
+    kind: "plugin-install-failed",
+    scope,
+    marketplace: error.key.slice(at + 1),
+    plugin: error.key.slice(0, at),
+    reason: "rollback partial",
+    cause: redactedDependencyCascadeError(error),
+    rollbackPartials,
+  };
+}
+
+/**
  * The rows of one failed install in `applyPluginInstalls`.
  *
  * MIM-03 / D-PL6-05: an install whose undo could not finish reads `(failed)
  * {rollback partial}` with the per-phase rows, as `install` does, and its
  * cause is the install error rebuilt with every link redacted (D-PL6-12).
+ * When the undo that could not finish was a dependency's, the dependency gets
+ * that row of its own, and the requested plugin's row reads `{dependency
+ * failed}` with no cause, as `install`'s does.
  *
  * RESV-06: otherwise only a dependency-cascade failure carries a cause onto
  * the row. Redact defensively (T-55-02-02 / T-53-02-02) -- the
@@ -496,7 +522,7 @@ function redactedRollbackPartials(
  * `redactCauseChain`) with every link redacted, instead of dropping it.
  *
  * AFILE-04: dependencies that committed before the failure rewrote the MCP
- * config, so their notices ride the failed row.
+ * config, so their notices ride the requested plugin's failed row.
  */
 function installFailedOutcomes(
   op: ReconcilePlan["pluginsToInstall"][number],
@@ -509,26 +535,34 @@ function installFailedOutcomes(
     marketplace: op.marketplace,
     plugin: op.plugin,
   } as const;
-  if (rollbackPartials.length > 0 && !(error instanceof DependencyCascadeError)) {
-    const cause = redactCauseChain(error);
+  if (rollbackPartials.length === 0) {
     return [
       {
         ...subject,
-        reason: "rollback partial",
-        ...(cause !== undefined && { cause }),
-        rollbackPartials: redactedRollbackPartials(rollbackPartials),
+        ...installFailureReasonFields(error),
+        ...(error instanceof DependencyCascadeError && {
+          cause: redactedDependencyCascadeError(error),
+        }),
         ...carriedMcpConfigNotices(result),
       },
     ];
   }
 
+  const phases = redactedRollbackPartials(rollbackPartials);
+  if (error instanceof DependencyCascadeError) {
+    return [
+      { ...subject, reason: "dependency failed", ...carriedMcpConfigNotices(result) },
+      dependencyRollbackOutcome(op.scope, error, phases),
+    ];
+  }
+
+  const cause = redactCauseChain(error);
   return [
     {
       ...subject,
-      ...installFailureReasonFields(error),
-      ...(error instanceof DependencyCascadeError && {
-        cause: redactedDependencyCascadeError(error),
-      }),
+      reason: "rollback partial",
+      ...(cause !== undefined && { cause }),
+      rollbackPartials: phases,
       ...carriedMcpConfigNotices(result),
     },
   ];

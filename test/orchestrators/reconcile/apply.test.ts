@@ -2484,6 +2484,69 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
+  test("MIM-03 / D-PL6-12: a dependency whose skills undo cannot finish gets its own redacted row", async (t) => {
+    // arrange
+    const { cwd, denyWrites, project, restoreWrites } = await createHermeticScopes(
+      t,
+      "install-dependency-rollback-partial",
+    );
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", dependencies: ["bar"] },
+      bar: { skill: "clean" },
+    });
+    const readOnly = path.join(marketplaceRoot, "plugins", "bar", "skills", "tool", "read-only");
+    await writeUnder(path.join(readOnly, "data.txt"), "data\n");
+    await denyWrites(readOnly);
+    restoreWrites(path.join(project.extensionRoot, "resources", "skills", "bar-tool", "read-only"));
+    await mkdir(project.mcpAdapterJsonPath, { recursive: true });
+    const adapterReadError = await redactedReadErrorMessage(project.mcpAdapterJsonPath);
+    const declaration = configBytes({
+      marketplaces: { mp: { source: marketplaceRoot } },
+      plugins: { "hello@mp": {} },
+    });
+    await writeUnder(project.baseConfigJsonPath, declaration);
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+        }),
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some plugin operations have failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ hello (failed) {dependency failed}\n" +
+          "  ⊘ bar (failed) {rollback partial}\n" +
+          `    cause: ${adapterReadError} -> ${adapterReadError}\n` +
+          "    [skills] (rollback failed)\n" +
+          "      cause: EACCES: permission denied, unlink 'data.txt'\n" +
+          "\n" +
+          "Reconcile: 2 failures",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await recordFor(project, "mp", "hello"), undefined);
+    assert.equal(await recordFor(project, "mp", "bar"), undefined);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
   test("D-27: installs through a declared alias under the canonical recorded name and converges on the second pass", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "canonical-alias");
