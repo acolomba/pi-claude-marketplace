@@ -12,6 +12,7 @@ import {
   emptyReconcilePlan,
   plannedSourceMismatchSubject,
   type ApplyReconcileOptions,
+  type DeferredPinRestore,
   type DependencyDisableStamp,
   type McpMigrationInput,
   type McpMigrationStep,
@@ -51,6 +52,7 @@ const uninstallPlugin = mock<UninstallPluginOperation>({
   name: "uninstall operation type evidence",
 });
 const dependencyDisableStamp: DependencyDisableStamp = () => Promise.resolve();
+const deferredPinRestore: DeferredPinRestore = () => Promise.resolve();
 const migrateMcpEntries: McpMigrationStep = () => Promise.resolve();
 
 const plannedMarketplaceAdd = {
@@ -175,6 +177,14 @@ void ({
   completionCache,
   hooksRouting,
   stampDependencyDisabled: dependencyDisableStamp,
+} satisfies ApplyReconcileOptions);
+void ({
+  ctx: extensionContext,
+  run: runWithNothingLoaded(),
+  cwd: "/work/project",
+  completionCache,
+  hooksRouting,
+  restoreDeferredPin: deferredPinRestore,
 } satisfies ApplyReconcileOptions);
 void ({
   ctx: extensionContext,
