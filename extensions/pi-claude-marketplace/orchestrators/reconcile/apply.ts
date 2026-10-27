@@ -76,6 +76,7 @@
 // stable pi-subagents / pi-mcp-adapter status.
 
 import { locationsFor } from "../../persistence/locations.ts";
+import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { declaredDependencies } from "../../shared/concerns/soft-dep.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
@@ -538,6 +539,11 @@ function isSameFailedInstall(
  * IN-02: two installs can fail on the same dependency, so the dependency's row
  * is left out when `outcomes` already holds a failed-install row for it.
  *
+ * D-PL6-15: the requested plugin's row and the dependency's row are ordered by
+ * name, as `install` and import order them. The order shows only when the
+ * dependency comes from the requested plugin's marketplace, because rows of
+ * other marketplaces go to their own blocks.
+ *
  * AFILE-04: dependencies that committed before the failure rewrote the MCP
  * config, so their notices ride the requested plugin's failed row.
  */
@@ -569,10 +575,21 @@ function installFailedOutcomes(
   const phases = redactedRollbackPartials(rollbackPartials);
   if (error instanceof DependencyCascadeError) {
     const dependency = dependencyRollbackOutcome(op.scope, error, phases);
-    return [
-      { ...subject, reason: "dependency failed", ...carriedMcpConfigNotices(result) },
-      ...(outcomes.some((outcome) => isSameFailedInstall(outcome, dependency)) ? [] : [dependency]),
-    ];
+    const requested: PluginInstallFailedOutcome = {
+      ...subject,
+      reason: "dependency failed",
+      ...carriedMcpConfigNotices(result),
+    };
+    if (outcomes.some((outcome) => isSameFailedInstall(outcome, dependency))) {
+      return [requested];
+    }
+
+    return [requested, dependency].sort((a, b) =>
+      compareByNameThenScope(
+        { name: a.plugin, scope: a.scope },
+        { name: b.plugin, scope: b.scope },
+      ),
+    );
   }
 
   const cause = redactCauseChain(error);

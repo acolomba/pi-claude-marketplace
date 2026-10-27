@@ -2531,11 +2531,11 @@ describe("applyReconcile", () => {
           "Some plugin operations have failed.\n" +
           "\n" +
           "● mp [project]\n" +
-          "  ⊘ hello (failed) {dependency failed}\n" +
           "  ⊘ bar (failed) {rollback partial}\n" +
           `    cause: ${adapterReadError} -> ${adapterReadError}\n` +
           "    [skills] (rollback failed)\n" +
           "      cause: EACCES: permission denied, unlink 'data.txt'\n" +
+          "  ⊘ hello (failed) {dependency failed}\n" +
           "\n" +
           "Reconcile: 2 failures",
         severity: "error",
@@ -2601,11 +2601,11 @@ describe("applyReconcile", () => {
           "Some plugin operations have failed.\n" +
           "\n" +
           "● mp [project]\n" +
-          "  ⊘ hello (failed) {dependency failed}\n" +
           "  ⊘ bar (failed) {rollback partial}\n" +
           `    cause: ${adapterReadError} -> ${adapterReadError}\n` +
           "    [skills] (rollback failed)\n" +
           "      cause: EACCES: permission denied, unlink 'data.txt'\n" +
+          "  ⊘ hello (failed) {dependency failed}\n" +
           "  ⊘ world (failed) {dependency failed}\n" +
           "\n" +
           "Reconcile: 3 failures",

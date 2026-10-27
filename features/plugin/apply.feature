@@ -213,16 +213,16 @@ Feature: Plugin apply
   Scenario: Apply that cannot finish the rollback of a dependency two plugins share reports that dependency once
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
-      | name | version | dependencies |
-      | app  | 1.0.0   | lib          |
-      | kit  | 1.0.0   | lib          |
-      | lib  | 1.0.0   |              |
+      | name   | version | dependencies |
+      | server | 1.0.0   | lib          |
+      | web    | 1.0.0   | lib          |
+      | lib    | 1.0.0   |              |
     Given the published plugin "lib" of the marketplace "tools" has a read-only skill directory
     Given the marketplace "tools" is added to the project scope
     Given a config in scope project and layer base, with these plugins:
       | marketplace | plugin | enabled |
-      | tools       | app    |         |
-      | tools       | kit    |         |
+      | tools       | server |         |
+      | tools       | web    |         |
     Given a directory blocks the mcp-adapter.json file of the project scope
     When the user runs "/claude:plugin apply --scope project"
     Then the result has these fields:
@@ -234,10 +234,10 @@ Feature: Plugin apply
       | tally failures | 3                                   |
       | tally warnings | 0                                   |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name | status | reasons           | scope   | cause chain                                                  | cause truncated | leaks | rollback partial                                                                                            |
-      | tools            | project           | app@tools | app  | failed | dependency failed | project |                                                              |                 |       |                                                                                                             |
-      | tools            | project           | lib@tools | lib  | failed | rollback partial  | project | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           |       | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
-      | tools            | project           | kit@tools | kit  | failed | dependency failed | project |                                                              |                 |       |                                                                                                             |
+      | marketplace name | marketplace scope | id           | name   | status | reasons           | scope   | cause chain                                                  | cause truncated | leaks | rollback partial                                                                                            |
+      | tools            | project           | lib@tools    | lib    | failed | rollback partial  | project | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           |       | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
+      | tools            | project           | server@tools | server | failed | dependency failed | project |                                                              |                 |       |                                                                                                             |
+      | tools            | project           | web@tools    | web    | failed | dependency failed | project |                                                              |                 |       |                                                                                                             |
 
   Scenario: Apply that an invalid GitHub base address stops reports the install it made before stopping
     Given pi runs with the github base address "http://example.invalid"
