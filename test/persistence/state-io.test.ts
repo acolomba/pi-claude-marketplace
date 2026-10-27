@@ -943,6 +943,19 @@ for (const { name, source, expectedSource } of [
     },
   },
   {
+    name: "a stored hosted source",
+    source: {
+      kind: "hosted",
+      raw: "https://h.example/c/marketplace.json#main",
+      url: "https://h.example/c/marketplace.json#main",
+    },
+    expectedSource: {
+      kind: "hosted",
+      raw: "https://h.example/c/marketplace.json#main",
+      url: "https://h.example/c/marketplace.json",
+    },
+  },
+  {
     name: "a forward-compatible unknown source",
     source: { kind: "unknown", raw: "future:catalog", reason: "future source" },
     expectedSource: { kind: "unknown", raw: "future:catalog", reason: "future source" },
@@ -1011,6 +1024,12 @@ for (const { name, source, expectedMessage } of [
     name: "a URL record whose raw value is a GitHub shorthand",
     source: { kind: "url", raw: "acme/catalog" },
     expectedMessage: 'state.json marketplace "catalog" has an invalid url source: acme/catalog',
+  },
+  {
+    name: "a hosted record whose raw value is a Git URL",
+    source: { kind: "hosted", raw: "https://h.example/repo.git" },
+    expectedMessage:
+      'state.json marketplace "catalog" has an invalid hosted source: https://h.example/repo.git',
   },
   {
     name: "a path record without a raw string",
@@ -1512,6 +1531,36 @@ for (const { name, plugin, expectedError } of [
     assert.strictEqual(await readFile(stateJsonPath, "utf8"), "retain existing state");
   });
 }
+
+test("D-PL5-05: round-trips a hosted marketplace source through save and load", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-hosted-roundtrip-");
+  const state: ExtensionState = {
+    schemaVersion: 3,
+    marketplaces: {
+      catalog: {
+        name: "catalog",
+        scope: "user",
+        source: {
+          kind: "hosted",
+          raw: "https://h.example/c/marketplace.json#main",
+          url: "https://h.example/c/marketplace.json",
+        },
+        addedFromCwd: "/work",
+        manifestPath: "/catalog/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/catalog",
+        plugins: {},
+      },
+    },
+  };
+
+  // act
+  await saveState(extensionRoot, state);
+  const loaded = await loadState(extensionRoot);
+
+  // assert
+  assert.deepStrictEqual(loaded, state);
+});
 
 test("round-trips the recorded workflow envelope names through save and load", async (t) => {
   // arrange

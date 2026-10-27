@@ -36,7 +36,7 @@ import { errorMessage } from "../shared/errors.ts";
 
 import { migrateLegacyMarketplaceRecords, persistMigratedState } from "./migrate.ts";
 
-import type { GitHubSource, UrlSource } from "../domain/source.ts";
+import type { GitHubSource, HostedManifestSource, UrlSource } from "../domain/source.ts";
 
 /**
  * D-100-01 / D-100-02 / ENBL-11: one persisted hook entry -- the event name
@@ -354,6 +354,20 @@ function revalidateStoredUrlSource(mpName: string, raw: string): UrlSource | Git
   throw new Error(`state.json marketplace "${mpName}" has an invalid url source: ${raw}`);
 }
 
+/**
+ * D-PL5-05 / ST-6: revalidate a stored hosted source through the SAME parser
+ * funnel, so its fragment-free url is recomputed. Any other parse is a
+ * corrupt record.
+ */
+function revalidateStoredHostedSource(mpName: string, raw: string): HostedManifestSource {
+  const parsedSrc = parsePluginSource(raw);
+  if (parsedSrc.kind === "hosted") {
+    return parsedSrc;
+  }
+
+  throw new Error(`state.json marketplace "${mpName}" has an invalid hosted source: ${raw}`);
+}
+
 function normalizeStoredSource(mpName: string, mp: Record<string, unknown>): void {
   const src = mp.source;
 
@@ -380,6 +394,8 @@ function normalizeStoredSource(mpName: string, mp: Record<string, unknown>): voi
     mp.source = githubSource(obj.raw);
   } else if (obj.kind === "url" && typeof obj.raw === "string") {
     mp.source = revalidateStoredUrlSource(mpName, obj.raw);
+  } else if (obj.kind === "hosted" && typeof obj.raw === "string") {
+    mp.source = revalidateStoredHostedSource(mpName, obj.raw);
   } else if (obj.kind !== "unknown") {
     throw new Error(
       `state.json marketplace "${mpName}" has malformed source object (missing kind/raw)`,
