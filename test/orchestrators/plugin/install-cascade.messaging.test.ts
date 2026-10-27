@@ -838,6 +838,30 @@ describe("composeCascadeFailureMessage", () => {
     });
   });
 
+  test("CAS-07 an unsatisfied installed copy's cause cuts its recorded version at 64 characters", () => {
+    // arrange
+    const recordedVersion = `1.0.0-${"z".repeat(74)}`;
+    const subject: CascadeFailureSubject = {
+      kind: "constraint",
+      failure: {
+        kind: "range-conflict",
+        why: "installed-unsatisfied",
+        key: "formatter@tools",
+        range: "^2.0.0",
+        recordedVersion,
+      },
+    };
+
+    // act
+    const cause = cascadeFailureCause(subject, ROOT_KEY);
+
+    // assert
+    assert.strictEqual(
+      cause.message,
+      `Dependency "formatter@tools" is installed at version 1.0.0-${"z".repeat(58)}…, which does not satisfy ^2.0.0.`,
+    );
+  });
+
   test("UPD-DEP-D1 / CAS-06 an installed copy the requested plugin declares that cannot move names why and the update to run", () => {
     // arrange
     const subject: CascadeFailureSubject = {

@@ -1,3 +1,4 @@
+import { MAX_REFUSAL_VERSION_CHARS, truncateForRefusal } from "../../domain/dependency-range.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import {
   DependencyCascadeError,
@@ -400,12 +401,15 @@ function closureFailureFacts(
  * dependency itself, the cause ends with Claude Code's next step, as Claude
  * Code adds it only under that condition (CAS-06, D-PL3-11). The hint names
  * only the dependency key, which the walk checked against the token allowlist.
+ * The recorded version is cut at 64 code units, as Claude Code cuts every
+ * version a refusal quotes (CAS-07, D-PL3-12).
  */
 function installedUnsatisfiedCause(
   failure: Extract<CascadeConstraintFailure, { readonly why: "installed-unsatisfied" }>,
   rootKey: string,
 ): string {
-  const head = `Dependency "${failure.key}" is installed at version ${failure.recordedVersion}, which does not satisfy ${failure.range}`;
+  const recorded = truncateForRefusal(failure.recordedVersion, MAX_REFUSAL_VERSION_CHARS);
+  const head = `Dependency "${failure.key}" is installed at version ${recorded}, which does not satisfy ${failure.range}`;
   if (failure.moveRefusal === undefined) {
     return `${head}.`;
   }
