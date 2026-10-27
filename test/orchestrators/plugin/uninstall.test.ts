@@ -7814,3 +7814,198 @@ test("AFILE-04: an orchestrated partial uninstall returns the notice on its fail
     }
   });
 });
+
+// D-PL9-22: the marker's name is the on-disk contract the package step writes.
+const PACKAGE_STEP_MARKER = ".pi-claude-marketplace";
+
+/**
+ * Points each named record of the marketplace at one plugin root inside the
+ * extension root, whose node_modules the package step marked.
+ */
+async function placeStepPackages(
+  locations: ReturnType<typeof locationsFor>,
+  marketplace: string,
+  plugins: readonly string[],
+  folder: string,
+): Promise<string> {
+  const pluginRoot = path.join(locations.extensionRoot, "sources", marketplace, "plugins", folder);
+  await mkdir(path.join(pluginRoot, "node_modules", "pkd-dep"), { recursive: true });
+  await writeFile(path.join(pluginRoot, "plugin.json"), "{}");
+  await writeFile(path.join(pluginRoot, "node_modules", PACKAGE_STEP_MARKER), "");
+  await writeFile(path.join(pluginRoot, "node_modules", "pkd-dep", "index.js"), "");
+  const state = await loadState(locations.extensionRoot);
+  for (const plugin of plugins) {
+    const record = state.marketplaces[marketplace]?.plugins[plugin];
+    assert.ok(record !== undefined);
+    record.resolvedSource = pluginRoot;
+  }
+
+  await saveState(locations.extensionRoot, state);
+  return pluginRoot;
+}
+
+async function sortedEntries(directory: string): Promise<string[]> {
+  return (await readdir(directory)).sort();
+}
+
+const UNINSTALLED_X_ROW =
+  "● mp [project]\n  ○ x v0.0.1 (uninstalled)\n\n/reload to pick up changes";
+
+for (const { mode, outcome, notifications } of [
+  { mode: "standalone", outcome: undefined, notifications: [{ message: UNINSTALLED_X_ROW }] },
+  {
+    mode: "orchestrated",
+    outcome: { status: "uninstalled", name: "x", version: "0.0.1" },
+    notifications: [],
+  },
+] as const) {
+  test(`D-PL9-22: uninstall in ${mode} mode removes the node_modules the package step wrote and reports what a plain uninstall reports`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-packages-"));
+      try {
+        // arrange
+        const locations = locationsFor("project", cwd);
+        await seedDeclaringMarketplace(locations, "mp", { x: {} }, cwd);
+        const pluginRoot = await placeStepPackages(locations, "mp", ["x"], "x");
+        const captured = makeCtx();
+
+        // act
+        const result = await uninstallWithFreshOwner({
+          ctx: captured.ctx,
+          run: captured.run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "x",
+          notifications: { mode },
+        });
+
+        // assert
+        assert.deepStrictEqual(result, outcome);
+        assert.deepStrictEqual(captured.notifications, notifications);
+        assert.deepStrictEqual(await sortedEntries(pluginRoot), ["plugin.json"]);
+        assert.deepStrictEqual(
+          await sortedEntries(path.join(locations.extensionRoot, "sources-staging")),
+          [],
+        );
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+test("D-PL9-22: uninstall keeps the step's node_modules while another installed plugin runs from the same folder", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-packages-shared-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(locations, "mp", { x: {}, y: {} }, cwd);
+      const pluginRoot = await placeStepPackages(locations, "mp", ["x", "y"], "shared");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await uninstallWithFreshOwner({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [{ message: UNINSTALLED_X_ROW }]);
+      assert.deepStrictEqual(await sortedEntries(path.join(pluginRoot, "node_modules")), [
+        PACKAGE_STEP_MARKER,
+        "pkd-dep",
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-PL9-22 / D-19-01: a node_modules that cannot be moved out stays whole and the uninstall still succeeds", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-packages-locked-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(locations, "mp", { x: {} }, cwd);
+      const pluginRoot = await placeStepPackages(locations, "mp", ["x"], "x");
+      const { ctx, run, notifications } = makeCtx();
+      await chmod(pluginRoot, 0o555);
+
+      // act
+      try {
+        await uninstallWithFreshOwner({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "x",
+        });
+      } finally {
+        await chmod(pluginRoot, 0o755);
+      }
+
+      // assert
+      assert.deepStrictEqual(notifications, [{ message: UNINSTALLED_X_ROW }]);
+      assert.deepStrictEqual(await recordedInventory(locations), {});
+      assert.deepStrictEqual(await sortedEntries(path.join(pluginRoot, "node_modules")), [
+        PACKAGE_STEP_MARKER,
+        "pkd-dep",
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-PL9-22 / D-05-09: uninstall --prune removes the step's node_modules of a dependency it sweeps", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-packages-prune-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(
+        locations,
+        "mp",
+        { x: { dependencies: ["d"] }, d: { provenance: "dependency" } },
+        cwd,
+      );
+      const pluginRoot = await placeStepPackages(locations, "mp", ["d"], "d");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await uninstallWithFreshOwner({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        prune: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ○ x v0.0.1 (uninstalled)\n" +
+            "  ○ d v0.0.1 (uninstalled) {dependency pruned}\n" +
+            "\n" +
+            "/reload to pick up changes",
+        },
+      ]);
+      assert.deepStrictEqual(await recordedInventory(locations), {});
+      assert.deepStrictEqual(await sortedEntries(pluginRoot), ["plugin.json"]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

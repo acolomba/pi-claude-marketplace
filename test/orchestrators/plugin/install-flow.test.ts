@@ -13434,6 +13434,7 @@ test("install cleans up each bridge staging root inside its own phase and a repe
         "before:hooks skills=empty commands=empty agents=empty",
         "before:mcp skills=empty commands=empty agents=empty",
         "before:workflows skills=empty commands=empty agents=empty",
+        "before:packages skills=empty commands=empty agents=empty",
         "before:state skills=empty commands=empty agents=empty",
         "before:complete@mp skills=empty commands=empty agents=empty",
       ]);

@@ -3236,6 +3236,87 @@ test("AFILE-04: a marketplace update whose autoupdate cascade rewrites a comment
   });
 });
 
+function updatedOutcome(
+  plugin: string,
+  extra: Partial<Extract<PluginUpdateOutcome, { partition: "updated" }>>,
+): PluginUpdateOutcome {
+  return {
+    partition: "updated",
+    name: plugin,
+    fromVersion: "0.0.1",
+    toVersion: "0.0.2",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+    ...extra,
+  };
+}
+
+test("D-PL9-21: a marketplace update shows an autoupdated plugin's package note between its cascade and the MCP notices", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    // alpha's notes also hold an unrelated note, which stays out.
+    await seedGithubMarketplace({
+      cwd,
+      name: "official",
+      ref: "main",
+      autoupdate: true,
+      plugins: { alpha: makePluginRecord(), beta: makePluginRecord() },
+    });
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000010" },
+    });
+    const packageNote = "Plugin dependency install failed (npm): no output";
+    const outcomes: Record<string, PluginUpdateOutcome> = {
+      alpha: updatedOutcome("alpha", {
+        notes: ["a skill was renamed", packageNote],
+        packageNote,
+        mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp.json" }],
+      }),
+      beta: updatedOutcome("beta", {}),
+    };
+    const pluginUpdate: PluginUpdateFn = async (plugin) =>
+      Promise.resolve(outcomes[plugin] ?? unchangedOutcome(plugin));
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "official",
+      scope: "project",
+      cwd,
+      gitOps,
+      pluginUpdate,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● official [project] (updated)\n" +
+          "  ● alpha v0.0.1 → v0.0.2 (updated)\n" +
+          "  ● beta v0.0.1 → v0.0.2 (updated)\n\n" +
+          "/reload to pick up changes",
+      },
+      {
+        message: `Plugin "alpha" updated; 1 declared component has a note.\n\n${packageNote}`,
+        severity: "warning",
+      },
+      {
+        message:
+          "MCP config comments removed.\n\n" +
+          "The project-scope mcp.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+        severity: "warning",
+      },
+    ]);
+  });
+});
+
 test("AFILE-04: a no-op marketplace update over a commented mcp-adapter.json sends no notice", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange

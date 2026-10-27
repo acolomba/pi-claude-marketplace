@@ -507,6 +507,32 @@ export async function writePublishedPluginFile(
 }
 
 /**
+ * Writes every text of `files`, by its path inside the published plugin
+ * `plugin`, and creates the directories above it. Unlike
+ * `writePublishedPluginFile`, it replaces a file that exists, so a later
+ * revision may replace the files. It refuses a path outside the publication,
+ * and a git publication commits and pushes all the files as one change.
+ */
+export async function writePublishedPluginFiles(
+  published: PublishedMarketplace,
+  plugin: string,
+  files: Readonly<Record<string, string>>,
+): Promise<void> {
+  const targets = Object.entries(files).map(
+    ([file, text]) =>
+      [ownedTarget(published, path.join(published.root, "plugins", plugin, file)), text] as const,
+  );
+  await changePublication(published, async () => {
+    await Promise.all(
+      targets.map(async ([target, text]) => {
+        await mkdir(path.dirname(target), { recursive: true });
+        await writeFile(target, text);
+      }),
+    );
+  });
+}
+
+/**
  * Gives the published plugin `plugin` an output style and returns the path
  * of its file. A plugin's `output-styles` directory holds its output styles,
  * a component Pi does not support, so the plugin becomes partially

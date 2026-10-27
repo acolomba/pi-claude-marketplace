@@ -22,6 +22,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { serializeCauseChain } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -123,6 +124,9 @@ async function seedDependency(
     },
   };
 }
+
+const PACKAGE_NOTE =
+  'Skipped installing this plugin\'s dependencies: its folder in the marketplace "mp" is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder.';
 
 function request(overrides: Partial<DependencyMoveRequest> = {}): DependencyMoveRequest {
   return {
@@ -362,6 +366,44 @@ describe("runDependencyMove", () => {
       updatedAt: "2026-01-02T00:00:00.001Z",
     });
   });
+
+  for (const { situation, requesters, cause } of [
+    {
+      situation: "after its range disclosure",
+      requesters: [{ key: "widget@mp", ranges: ["^2.0.0"] }],
+      cause: (): Error =>
+        new Error('constrained to the combined range (^2.0.0) -- required by "widget@mp"', {
+          cause: new Error(PACKAGE_NOTE),
+        }),
+    },
+    { situation: "alone", requesters: [], cause: (): Error => new Error(PACKAGE_NOTE) },
+  ]) {
+    test(`PKD-02: a moved dependency warns with its package note on the cause line ${situation}`, async (t) => {
+      // arrange
+      t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+      const { context, pluginRoot } = await seedDependency(t, {
+        recorded: "1.0.0",
+        offered: "2.0.0",
+      });
+      await writeFile(
+        path.join(pluginRoot, "package.json"),
+        JSON.stringify({ name: "zcore", dependencies: { "pkd-dep": "1.0.0" } }),
+      );
+      await writeFile(path.join(pluginRoot, "package-lock.json"), '{"lockfileVersion":3}');
+
+      // act
+      const run = await runDependencyMove(move("2.0.0", { requesters }), context);
+
+      // assert
+      const [row] = run.rows;
+      assert.deepStrictEqual(
+        [run.landed, run.rows.length, row?.status, row?.severity],
+        [true, 1, "updated", "warning"],
+      );
+      assert.ok(row?.status === "updated");
+      assert.deepStrictEqual(serializeCauseChain(row.cause), serializeCauseChain(cause()));
+    });
+  }
 
   test("fails a move whose candidate is not the version the plan chose and keeps the record", async (t) => {
     // arrange

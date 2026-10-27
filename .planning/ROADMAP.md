@@ -52,7 +52,7 @@ parent session applies them at merge.
 - [ ] **Phase 6: Import Marketplace Planning** - import plans marketplaces the way Claude Code registers them
 - [x] **Phase 7: Git Errors and Lock Discipline** - one git-host classifier, and every clone read or cleanup under the lock (completed 2026-10-27)
 - [ ] **Phase 8: Background Autoupdate** - autoupdate updates in the background, as Claude Code does
-- [ ] **Phase 9: Plugin Package Dependencies** - a plugin's own npm or bun dependencies install with it
+- [x] **Phase 9: Plugin Package Dependencies** - a plugin's own npm or bun dependencies install with it (completed 2026-10-27)
 - [ ] **Phase 10: Lifecycle Test and Harness Gaps** - the open scenario, unit, and harness gaps are closed
 - [ ] **Phase 11: Cleanup, Split, and Docs** - dead code, the install-flow split, docs, and backlog closures
 
@@ -226,6 +226,24 @@ Plans:
 1. Installing a plugin with `package.json` and `package-lock.json` runs `npm ci --ignore-scripts` (or the bun equivalent) in the staged copy, and its hook or MCP server finds its modules (PKD-01).
 2. A failing or timed-out package install, or one with a lockfile Claude Code refuses (`bun.lockb`, `yarn.lock`, `pnpm-lock.yaml`), leaves the plugin installed with a warning; a `package.json` with no lockfile stays silent, as Claude Code does (PKD-02, D-PL9-02).
 3. The NFR-5 amendment and the spawn rule carry a decision ID, and `npm run check` is green (PKD-03).
+
+**Plans:** 5/5 plans complete
+
+Plans:
+**Wave 1**
+- [x] 09-01-PLAN.md — tracer: the package step through the install ledger, the spawn module and its gates, then Claude Code's lockfile refusals
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 09-02-PLAN.md — D-PL9-17 spike, loopback npm registry stand-in, and the install success, failure, and hook-proof scenarios
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 09-03-PLAN.md — the local-folder note (D-PL9-03) and the update hook in the shared runner (D-PL9-07)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 09-04-PLAN.md — scenarios for the local-folder note, the lockfile refusals, the update, and the offline reinstall
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [x] 09-05-PLAN.md — full `npm run check` on the combined tree and the parent's merge handoff
 
 ### Phase 10: Lifecycle Test and Harness Gaps
 
