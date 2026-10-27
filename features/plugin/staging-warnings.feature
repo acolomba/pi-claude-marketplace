@@ -48,3 +48,16 @@ Feature: Plugin staging warnings
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | reinstalled |         | project | 1.0.0   |
+
+  Scenario: Enabling a plugin whose skills collide reports the skip install reports, under a header that names the scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope project"
+    Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
+    When the user runs "/claude:plugin enable demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                            | lines                                                                                                                                      |
+      | cascade    | info     | true         |                                                                   |                                                                                                                                            |
+      | diagnostic | warning  | false        | Plugin "demo" [project] enabled; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
