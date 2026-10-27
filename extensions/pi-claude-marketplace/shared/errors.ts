@@ -611,6 +611,40 @@ export class TooManyRedirectsError extends Error {
 }
 
 /**
+ * D-PL5-07 / D-PL5-10: the host answered a hosted catalog download with a
+ * status that is not 2xx. `code` and `data.statusCode` have the shape of an
+ * isomorphic-git `HttpError`, so the git host ladder classifies a hosted
+ * status as it classifies a clone's: 401/403, 404/410, or any other status.
+ */
+export class HostedManifestHttpError extends Error {
+  // fallow-ignore-next-line unused-class-member -- shared/git-failure-classifiers.ts reads it by duck type.
+  readonly code = "HttpError";
+  readonly data: { readonly statusCode: number };
+  constructor(url: string, statusCode: number) {
+    super(
+      `HTTP ${statusCode} error while downloading marketplace from ${url}. The marketplace file may not exist at this URL.`,
+    );
+    this.name = "HostedManifestHttpError";
+    this.data = { statusCode };
+  }
+}
+
+/**
+ * D-PL5-07 / D-PL5-10: a hosted catalog download that got no usable answer.
+ * `network` is a connection that failed or timed out. `unreadable` is an
+ * answer the download refuses: a body over the size cap, a redirect it does
+ * not follow, or a URL that carries a user name or password.
+ */
+export class HostedManifestFetchError extends Error {
+  readonly failure: "network" | "unreadable";
+  constructor(failure: "network" | "unreadable", message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "HostedManifestFetchError";
+    this.failure = failure;
+  }
+}
+
+/**
  * GHB-01: the cause `platform/git.ts` attaches to a failed network call whose
  * URL the GitHub base override rewrote. `url` is the URL actually fetched.
  */

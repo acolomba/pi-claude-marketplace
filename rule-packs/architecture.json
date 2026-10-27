@@ -146,15 +146,18 @@
         "undici"
       ],
       "files": ["extensions/pi-claude-marketplace/**"],
-      "message": "IL-4 / NFR-5: the extension opens no network connection of its own. Git traffic goes through platform/git.ts and Device Flow through domain/github-auth.ts."
+      "message": "IL-4 / NFR-5: the extension opens no network connection of its own. Git traffic goes through platform/git.ts, Device Flow through domain/github-auth.ts, and a hosted marketplace catalog is downloaded through platform/hosted-manifest-fetch.ts."
     },
     {
       "id": "fetch-chokepoint",
       "kind": "banned-call",
       "callees": ["fetch", "globalThis.fetch"],
       "files": ["extensions/pi-claude-marketplace/**"],
-      "exclude": ["extensions/pi-claude-marketplace/domain/github-auth.ts"],
-      "message": "IL-4 / NFR-5: only domain/github-auth.ts calls fetch, for the Device Flow endpoints."
+      "exclude": [
+        "extensions/pi-claude-marketplace/domain/github-auth.ts",
+        "extensions/pi-claude-marketplace/platform/hosted-manifest-fetch.ts"
+      ],
+      "message": "IL-4 / NFR-5 / D-PL5-07: only domain/github-auth.ts, for the Device Flow endpoints, and platform/hosted-manifest-fetch.ts, for a hosted marketplace catalog, call fetch."
     }
   ]
 }

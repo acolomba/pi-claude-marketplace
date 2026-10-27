@@ -23,6 +23,8 @@ import {
   findManualRecoveryError,
   formatCauseChain,
   hasFetchedUrlCause,
+  HostedManifestFetchError,
+  HostedManifestHttpError,
   InvalidGitHubBaseUrlError,
   InstallMarketplaceAddError,
   InvalidMarketplaceManifestError,
@@ -1312,6 +1314,78 @@ describe("TooManyRedirectsError", () => {
     assert.deepStrictEqual(
       { name: error.name, message: error.message, cause: error.cause },
       expectedError,
+    );
+  });
+});
+
+describe("HostedManifestHttpError", () => {
+  test("carries the status in the shape the git host ladder reads", () => {
+    // arrange
+    const url = "https://catalog.example/acme/marketplace.json";
+
+    // act
+    const error = new HostedManifestHttpError(url, 404);
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        data: error.data,
+        cause: error.cause,
+      },
+      {
+        name: "HostedManifestHttpError",
+        message:
+          "HTTP 404 error while downloading marketplace from https://catalog.example/acme/marketplace.json. The marketplace file may not exist at this URL.",
+        code: "HttpError",
+        data: { statusCode: 404 },
+        cause: undefined,
+      },
+    );
+  });
+});
+
+describe("HostedManifestFetchError", () => {
+  test("carries the failure kind and the underlying cause", () => {
+    // arrange
+    const cause = new TypeError("fetch failed");
+
+    // act
+    const error = new HostedManifestFetchError(
+      "network",
+      "Could not connect to https://catalog.example/acme/marketplace.json",
+      { cause },
+    );
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, failure: error.failure, cause: error.cause },
+      {
+        name: "HostedManifestFetchError",
+        message: "Could not connect to https://catalog.example/acme/marketplace.json",
+        failure: "network",
+        cause,
+      },
+    );
+  });
+
+  test("leaves the cause unset for a refused answer", () => {
+    // act
+    const error = new HostedManifestFetchError("unreadable", "too large");
+
+    // assert
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, failure: error.failure, cause: error.cause },
+      {
+        name: "HostedManifestFetchError",
+        message: "too large",
+        failure: "unreadable",
+        cause: undefined,
+      },
     );
   });
 });

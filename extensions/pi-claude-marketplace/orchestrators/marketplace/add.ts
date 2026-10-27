@@ -5,7 +5,7 @@
 //
 // Flow (D-04 outer guard wraps the ENTIRE flow including network IO):
 //
-//   parsePluginSource(rawSource) -> path | github | url | unknown
+//   parsePluginSource(rawSource) -> path | github | url | hosted | unknown
 //   if unknown: throw new Error(parsed.reason)  // MA-10
 //
 //   withStateGuard(locations, async (state) => {
@@ -22,6 +22,11 @@
 //             removed; every other outcome throws
 //       fs.rename(stagingDir, finalDir)                     // atomic, same-FS by D-09
 //       setOwn(state.marketplaces, derivedName, { ... })
+//
+//     if (hosted):  // D-PL5-06: stored like a clone, through the same tail
+//       download <staging>/.claude-plugin/marketplace.json  // network -- D-PL5-07
+//       write <staging>/.pi-claude-marketplace-hosted.json  // ownership marker
+//       then the github / url steps from the manifest read on
 //
 //     if (path):
 //       resolve manifest path on disk per MA-3
@@ -111,6 +116,12 @@ import { seedSameRepoPluginMirrors } from "../plugin/clone-cache.ts";
 
 import { ADD_CONTEXT } from "./add.messaging.ts";
 import {
+  DEFAULT_HOSTED_MANIFEST_FETCH,
+  downloadHostedCatalog,
+  recognizeHostedLeftover,
+  type HostedManifestFetch,
+} from "./hosted-catalog.ts";
+import {
   DEFAULT_GIT_OPS,
   fsErrnoReason,
   marketplaceFailureRows,
@@ -120,7 +131,13 @@ import {
 } from "./shared.ts";
 
 import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
-import type { GitHubSource, ParsedSource, PathSource, UrlSource } from "../../domain/source.ts";
+import type {
+  GitHubSource,
+  HostedManifestSource,
+  ParsedSource,
+  PathSource,
+  UrlSource,
+} from "../../domain/source.ts";
 import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -216,6 +233,11 @@ export interface AddMarketplaceOptions {
    * can drive Device Flow end-to-end without network.
    */
   readonly deviceFlowHttp?: DeviceFlowHttp;
+  /**
+   * D-PL5-07 injection seam that downloads a hosted catalog. Defaults to
+   * DEFAULT_HOSTED_MANIFEST_FETCH, which wraps platform/hosted-manifest-fetch.ts.
+   */
+  readonly hostedManifestFetch?: HostedManifestFetch;
   /**
    * Composition seam for `bootstrapClaudePlugin` (ATTR-07). When `true`, the
    * enumerated precondition errors are re-thrown (typed) instead of being
@@ -671,7 +693,9 @@ class ConfigInvalidError extends InvalidMarketplaceManifestError {
  * add` cannot record, before any lock or disk access. The refusal is an
  * `UnsupportedSourceError`, classified as `unsupported source` (D-48-C A3).
  */
-export function parseAddableSource(rawSource: string): GitHubSource | UrlSource | PathSource {
+export function parseAddableSource(
+  rawSource: string,
+): GitHubSource | UrlSource | PathSource | HostedManifestSource {
   const source = parsePluginSource(rawSource);
 
   // S5a: the parser produced an unknown kind with a reason, surfaced verbatim
@@ -682,9 +706,10 @@ export function parseAddableSource(rawSource: string): GitHubSource | UrlSource 
     );
   }
 
-  // S5b: valid-but-unsupported kinds. MURL-01 / D-76-05: `url` is admitted;
-  // only `git-subdir` and `npm` (marketplace-level) stay rejected.
-  if (source.kind !== "github" && source.kind !== "path" && source.kind !== "url") {
+  // S5b: valid-but-unsupported kinds. MURL-01 / D-76-05: `url` is admitted,
+  // and MKT-02 / D-PL5-04 admits `hosted`; only `git-subdir` and `npm`
+  // (marketplace-level) stay rejected.
+  if (source.kind === "git-subdir" || source.kind === "npm") {
     throw new UnsupportedSourceError(
       `Cannot add marketplace from "${rawSource}": unsupported source kind ${source.kind}`,
     );
@@ -695,15 +720,16 @@ export function parseAddableSource(rawSource: string): GitHubSource | UrlSource 
 
 /**
  * LAYER-07 / D-MF-04: the lock-free add body. It records the marketplace `source` names in
- * `state` and, for a github or url source, clones it into `sources/<name>/`
- * with the MA-6 / MA-12 / MA-13 leftover handling and the MA-9 staging
- * cleanup. It returns the recorded name and, for a github or url source, the
- * final clone directory.
+ * `state` and, for a github, url, or hosted source, stages it into
+ * `sources/<name>/` with the MA-6 / MA-12 / MA-13 leftover handling and the
+ * MA-9 staging cleanup: a git source is cloned, and a hosted source has its
+ * catalog downloaded (D-PL5-06). It returns the recorded name and, for every
+ * kind but a path source, the final directory.
  *
  * LAYER-07 / D-MF-04: a project-scope install that needs a marketplace only
  * the user scope records runs this body inside its own lock, so the project
- * gets the record and the clone an explicit `marketplace add --scope project`
- * gives it.
+ * gets the record and the clone or download an explicit `marketplace add
+ * --scope project` gives it (D-PL5-20).
  *
  * Locking contract: the caller holds the scope's state lock and owns the
  * config write-back and the save. `proper-lockfile` (`retries: 0`) is not
@@ -715,7 +741,7 @@ export function parseAddableSource(rawSource: string): GitHubSource | UrlSource 
 export async function addMarketplaceToState(args: {
   readonly state: ExtensionState;
   readonly locations: ScopedLocations;
-  readonly source: GitHubSource | UrlSource | PathSource;
+  readonly source: ReturnType<typeof parseAddableSource>;
   readonly cwd: string;
   readonly ctx: NotificationContext;
   readonly run: NotificationRun;
@@ -723,6 +749,8 @@ export async function addMarketplaceToState(args: {
   readonly credentialOps?: CredentialOps | undefined;
   readonly deviceFlowHttp?: DeviceFlowHttp | undefined;
   readonly gitOps?: GitOps | undefined;
+  /** D-PL5-07: downloads a hosted catalog. Defaults to DEFAULT_HOSTED_MANIFEST_FETCH. */
+  readonly hostedManifestFetch?: HostedManifestFetch | undefined;
   /**
    * FTCH-06 / D-79-02: the command's once-per-host Device Flow memo. An
    * install passes its own, so its add and its plugin clones share one memo.
@@ -730,40 +758,105 @@ export async function addMarketplaceToState(args: {
   readonly authMemo?: Map<string, AuthAttemptResult> | undefined;
   /**
    * D-PL5-17: the record whose checkout a repair re-materializes. The clone
-   * must declare its name, and the record keeps its source and plugins. A
-   * path source is never repaired, so its body ignores this.
+   * or download must declare its name, and the record keeps its source and
+   * plugins. A path source is never repaired, so its body ignores this.
    */
   readonly previous?: ExtensionState["marketplaces"][string] | undefined;
 }): Promise<{ readonly name: string; readonly cloneDir?: string }> {
-  const { state, locations, source, cwd, removalOps, deviceFlowHttp, authMemo } = args;
+  const { state, locations, source, cwd, removalOps } = args;
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
-  const credentialOps = args.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
+  const fetchCatalog = args.hostedManifestFetch ?? DEFAULT_HOSTED_MANIFEST_FETCH;
   if (source.kind === "path") {
     return { name: await addPathInGuard({ state, locations, source, cwd }) };
   }
 
-  // MURL-01 / D-76-06: source.url is the stored canonical identity; the wire
-  // url derives from the source via `networkCloneUrl` (D-2-01, D-2-03). Every
-  // host carries an auth bundle; the provider lookup decides its Device Flow
-  // half (PROV-03).
+  const name = await addStagedInGuard({
+    state,
+    locations,
+    source,
+    cwd,
+    removalOps,
+    previous: args.previous,
+    steps:
+      source.kind === "hosted"
+        ? hostedStagingSteps(source, fetchCatalog, removalOps)
+        : gitStagingSteps(source, gitOps, args),
+  });
+  return { name, cloneDir: await locations.sourceCloneDir(name) };
+}
+
+/** The inputs of `addMarketplaceToState`. */
+type AddToStateArgs = Parameters<typeof addMarketplaceToState>[0];
+
+/**
+ * How one staged source kind fills its staging tree and recognizes a leftover
+ * of its own at the destination. The rest of the add is the shared tail in
+ * `addStagedInGuard`.
+ */
+interface StagingSteps {
+  /** Fills the staging tree and writes the kind's ownership marker into it. */
+  readonly stage: (stagingDir: string) => Promise<void>;
+  /**
+   * MA-12 / MA-13: removes the leftover at `finalDir` when it is this
+   * extension's own for the same source, and throws for any other tree.
+   * Returns the removal leak, or `undefined`.
+   */
+  readonly recognize: (finalDir: string, derivedName: string) => Promise<string | undefined>;
+}
+
+/**
+ * The steps of a github or url add: clone into staging (NFR-5: only these
+ * kinds reach `gitOps.clone`), then write the Q-01 ownership marker before
+ * anything can rename the clone into place.
+ *
+ * MURL-01 / D-76-06: source.url is the stored canonical identity; the wire
+ * url derives from the source via `networkCloneUrl` (D-2-01, D-2-03). Every
+ * host carries an auth bundle; the provider lookup decides its Device Flow
+ * half (PROV-03).
+ */
+function gitStagingSteps(
+  source: GitHubSource | UrlSource,
+  gitOps: GitOps,
+  args: AddToStateArgs,
+): StagingSteps {
+  const { deviceFlowHttp, authMemo, removalOps } = args;
   const auth = cloneAuthFor(source, {
-    credentialOps,
+    credentialOps: args.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
     ctx: args.ctx,
     run: args.run,
     ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
     ...(authMemo !== undefined && { authMemo }),
   });
-  const name = await addGitClonedInGuard({
-    state,
-    locations,
-    source,
-    gitOps,
-    removalOps,
-    auth,
-    cwd,
-    previous: args.previous,
-  });
-  return { name, cloneDir: await locations.sourceCloneDir(name) };
+  return {
+    async stage(stagingDir) {
+      await gitOps.clone({
+        dir: stagingDir,
+        url: networkCloneUrl(source),
+        ...(source.ref !== undefined && { ref: source.ref, singleBranch: true }),
+        auth,
+      });
+      await writeOwnershipMarker(stagingDir);
+    },
+    recognize: (finalDir, derivedName) =>
+      recognizeLeftover({ finalDir, derivedName, source, gitOps, removalOps }),
+  };
+}
+
+/**
+ * D-PL5-06 / D-PL5-07: the steps of a hosted add: download the catalog into
+ * staging with one GET of `source.url`, then mark the tree with that URL. A
+ * leftover is ours when its hosted marker records the same URL.
+ */
+function hostedStagingSteps(
+  source: HostedManifestSource,
+  fetchCatalog: HostedManifestFetch,
+  removalOps: RemovalOps,
+): StagingSteps {
+  return {
+    stage: (stagingDir) => downloadHostedCatalog({ url: source.url, stagingDir, fetchCatalog }),
+    recognize: (finalDir, derivedName) =>
+      recognizeHostedLeftover({ finalDir, derivedName, url: source.url, removalOps }),
+  };
 }
 
 /**
@@ -826,6 +919,7 @@ async function runAddInGuard<U>(args: {
       credentialOps: opts.credentialOps,
       deviceFlowHttp: opts.deviceFlowHttp,
       gitOps: opts.gitOps,
+      hostedManifestFetch: opts.hostedManifestFetch,
       previous: action?.record,
     });
 
@@ -1019,9 +1113,10 @@ function failedAddRow(
 }
 
 /**
- * ADD-10: the `{status} on {url}` frame of a clone the git host answered with
- * an HTTP status, for a `network error` row. An unsupported source never
- * parsed, and a path source never clones, so neither has a frame.
+ * ADD-10: the `{status} on {url}` frame of a clone or a hosted download the
+ * host answered with an HTTP status, for a `network error` row. An
+ * unsupported source never parsed, and a path source requests nothing, so
+ * neither has a frame.
  */
 function hostErrorFrame(
   err: unknown,
@@ -1032,12 +1127,27 @@ function hostErrorFrame(
     return undefined;
   }
 
-  const source = parseAddableSource(rawSource);
+  const remoteUrl = remoteUrlOf(parseAddableSource(rawSource));
   const frame =
-    source.kind === "path"
-      ? undefined
-      : hostHttpFailureFrame(unwrapAddError(err), networkCloneUrl(source));
+    remoteUrl === undefined ? undefined : hostHttpFailureFrame(unwrapAddError(err), remoteUrl);
   return reason === "network error" ? frame : undefined;
+}
+
+/**
+ * The URL an add of `source` requests: the clone URL of a github or url
+ * source, or the catalog URL of a hosted source (D-PL5-10). A path source
+ * requests nothing.
+ */
+function remoteUrlOf(source: ReturnType<typeof parseAddableSource>): string | undefined {
+  switch (source.kind) {
+    case "path":
+      return undefined;
+    case "hosted":
+      return source.url;
+    case "github":
+    case "url":
+      return networkCloneUrl(source);
+  }
 }
 
 /**
@@ -1381,54 +1491,36 @@ async function recognizeLeftover(args: {
 }
 
 /**
- * Shared clone-into-guard body for git-cloned marketplace sources (github and
- * url). Owns everything from staging-dir creation through the clone, the Q-01
- * ownership-marker write, manifest read, MA-8 duplicate check, MA-6/MA-12/MA-13
- * leftover recognition, atomic rename, state mutation, and the MA-9
- * append-leak-not-mask cleanup catch. The only per-kind
- * differences are the parsed `source` (from which the clone url is derived)
- * and the `auth` bundle, so that subtle MA-9 discipline lives in
- * exactly one place.
+ * The shared add body for every staged marketplace source (github, url, and
+ * hosted). Owns everything from staging-dir creation through the kind's
+ * `stage` step, manifest read, MA-8 duplicate check, MA-6/MA-12/MA-13
+ * leftover recognition through the kind's `recognize` step, atomic rename,
+ * state mutation, and the MA-9 append-leak-not-mask cleanup catch. The kinds
+ * differ only in their steps, so that subtle MA-9 discipline lives in exactly
+ * one place.
  *
  * MURL-01 / GAUTH-03: every git-cloned source carries a host-keyed `auth`
  * bundle, so the clone consults the user's git credential helper when the
  * server challenges. A public clone never challenges, so nothing is consulted.
  */
-async function addGitClonedInGuard(args: {
+async function addStagedInGuard(args: {
   state: ExtensionState;
   removalOps: RemovalOps;
   locations: ScopedLocations;
-  source: GitHubSource | UrlSource;
-  gitOps: GitOps;
-  auth: GitAuthBundle;
+  source: GitHubSource | UrlSource | HostedManifestSource;
   cwd: string;
   previous: MarketplaceRecord | undefined;
+  steps: StagingSteps;
 }): Promise<string> {
-  const { state, locations, source, gitOps, auth, cwd, removalOps, previous } = args;
+  const { state, locations, source, cwd, removalOps, previous, steps } = args;
   const stagingDir = await locations.sourcesStagingDir(randomUUID());
-
-  // 1. Clone into staging (NFR-5: only git-cloned kinds reach gitOps.clone).
-  try {
-    await gitOps.clone({
-      dir: stagingDir,
-      url: networkCloneUrl(source),
-      ...(source.ref !== undefined && { ref: source.ref, singleBranch: true }),
-      auth,
-    });
-  } catch (err) {
-    // Clone itself failed -- there is no staging dir to clean up beyond a
-    // potentially partial mkdir. cleanupStaging is ENOENT-tolerant.
-    const leak = await cleanupStaging(removalOps, stagingDir, "marketplace clone staging");
-    throw appendLeakToError(err, leak);
-  }
 
   let stagedAtFinal = false;
   let finalDir: string | undefined;
   let leftoverLeak: string | undefined;
   try {
-    // 2. Q-01: mark the clone as this extension's own before anything can
-    //    rename it into place.
-    await writeOwnershipMarker(stagingDir);
+    // 1-2. Fill staging and mark it as this extension's own (Q-01, D-PL5-06).
+    await steps.stage(stagingDir);
 
     // 3-4. Read + validate manifest; MA-8: duplicate name in this scope.
     const manifestPath = path.join(stagingDir, ".claude-plugin", "marketplace.json");
@@ -1441,21 +1533,15 @@ async function addGitClonedInGuard(args: {
     );
 
     // 5. MA-6/MA-12/MA-13: recognize-remove-rename on the final destination.
-    // A leftover is the extension's own when it carries the ownership marker
-    // and its `origin` names the same source, with the host case folded and
-    // the path exact (Q-01, Q-03, D-3-01). Such a tree is removed so a partial
-    // tree cannot leak into installed state (D-3-02); every other outcome
-    // throws (MA-13). `sourceCloneDir` has already refused a symlinked
-    // destination (PS-1), so recognition and removal act on one directory.
+    // A leftover is the extension's own when it carries the kind's ownership
+    // marker for the same source (Q-01, Q-03, D-3-01, D-PL5-06). Such a tree
+    // is removed so a partial tree cannot leak into installed state (D-3-02);
+    // every other outcome throws (MA-13). `sourceCloneDir` has already refused
+    // a symlinked destination (PS-1), so recognition and removal act on one
+    // directory.
     finalDir = await locations.sourceCloneDir(derivedName);
     if (await pathExists(finalDir)) {
-      leftoverLeak = await recognizeLeftover({
-        finalDir,
-        derivedName,
-        source,
-        gitOps,
-        removalOps,
-      });
+      leftoverLeak = await steps.recognize(finalDir, derivedName);
       if (leftoverLeak !== undefined) {
         // A partially-removed tree must not be renamed over (MA-14).
         throw new UnremovableLeftoverCloneError(finalDir, derivedName, leftoverLeak);

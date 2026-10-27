@@ -69,6 +69,7 @@ import type {
   AddMarketplaceOptions,
   AddMarketplaceOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
+import type { HostedManifestFetch } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/hosted-catalog.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -5549,5 +5550,204 @@ test("MPA-02: a path manifest nobody may read renders (failed) {permission denie
       },
     ]);
     assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces, {});
+  });
+});
+
+const HOSTED_URL = "https://catalog.example/acme/marketplace.json";
+
+/** The hosted ownership marker of a download of `url` (D-PL5-06). */
+const HOSTED_MARKER = ".pi-claude-marketplace-hosted.json";
+
+function hostedMarkerBytes(url: string): string {
+  return `{\n  "generatedBy": "pi-claude-marketplace",\n  "url": "${url}"\n}\n`;
+}
+
+/**
+ * A hosted catalog host that answers every download with `answer`: the bytes
+ * of a catalog, or the error the download throws. It records each URL asked.
+ */
+function createHostedManifestFetch(answer: string | Error = VALID_MANIFEST_JSON): {
+  readonly hostedManifestFetch: HostedManifestFetch;
+  readonly urls: readonly string[];
+} {
+  const urls: string[] = [];
+  return {
+    hostedManifestFetch: (url) => {
+      urls.push(url);
+      return answer instanceof Error
+        ? Promise.reject(answer)
+        : Promise.resolve(Buffer.from(answer));
+    },
+    urls,
+  };
+}
+
+/** Seeds `sources/valid-marketplace/` with a sentinel file and, when given, a hosted marker. */
+async function arrangeHostedLeftover(
+  locations: ScopedLocations,
+  marker: string | undefined,
+): Promise<string> {
+  const finalDir = await locations.sourceCloneDir("valid-marketplace");
+  await mkdir(finalDir, { recursive: true });
+  await writeFile(path.join(finalDir, ".leftover-sentinel"), "x");
+  if (marker !== undefined) {
+    await writeFile(path.join(finalDir, HOSTED_MARKER), marker);
+  }
+
+  return finalDir;
+}
+
+test("MKT-02: a hosted add downloads the catalog once and records it like a clone", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const rawSource = `${HOSTED_URL}#latest`;
+    const { ctx, run, notifications } = makeCtx();
+    const { hostedManifestFetch, urls } = createHostedManifestFetch();
+    const finalDir = await locations.sourceCloneDir("valid-marketplace");
+    const manifestPath = path.join(finalDir, ".claude-plugin", "marketplace.json");
+
+    // act
+    await addMarketplace({ ctx, run, scope: "project", cwd, rawSource, hostedManifestFetch });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+    assert.deepStrictEqual(urls, [HOSTED_URL]);
+    const recorded = (await loadState(locations.extensionRoot)).marketplaces["valid-marketplace"];
+    assert.ok(recorded);
+    const { lastUpdatedAt: _, ...kept } = recorded;
+    assert.deepStrictEqual(kept, {
+      name: "valid-marketplace",
+      scope: "project",
+      source: { kind: "hosted", raw: rawSource, url: HOSTED_URL },
+      addedFromCwd: cwd,
+      plugins: {},
+      manifestPath,
+      marketplaceRoot: finalDir,
+      lastSuccessfulManifest: VALID_MANIFEST_JSON,
+    });
+    assert.deepStrictEqual(
+      {
+        catalog: await readFile(manifestPath, "utf8"),
+        marker: await readFile(path.join(finalDir, HOSTED_MARKER), "utf8"),
+        config: await readFile(locations.baseConfigJsonPath, "utf8"),
+        staging: await readdir(path.join(locations.extensionRoot, "sources-staging")),
+      },
+      {
+        catalog: VALID_MANIFEST_JSON,
+        marker: hostedMarkerBytes(HOSTED_URL),
+        config: declaredMarketplaceBytes("valid-marketplace", rawSource),
+        staging: [],
+      },
+    );
+  });
+});
+
+test("MA-12 / D-PL5-06: a hosted leftover marked with the same URL is replaced", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const finalDir = await arrangeHostedLeftover(locations, hostedMarkerBytes(HOSTED_URL));
+    const { hostedManifestFetch } = createHostedManifestFetch();
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: HOSTED_URL,
+      hostedManifestFetch,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+    assert.deepStrictEqual(
+      {
+        sentinel: await pathExists(path.join(finalDir, ".leftover-sentinel")),
+        recordedRoot: (await loadState(locations.extensionRoot)).marketplaces["valid-marketplace"]
+          ?.marketplaceRoot,
+      },
+      { sentinel: false, recordedRoot: finalDir },
+    );
+  });
+});
+
+for (const { title, marker } of [
+  { title: "no hosted marker", marker: undefined },
+  {
+    title: "a hosted marker for another URL",
+    marker: hostedMarkerBytes("https://other.example/m.json"),
+  },
+]) {
+  test(`MA-13 / D-PL5-06: a hosted leftover with ${title} refuses as stale clone and stays`, async () => {
+    await withTmpScope(async ({ cwd, locations }) => {
+      // arrange
+      const { ctx, run, notifications } = makeCtx();
+      const finalDir = await arrangeHostedLeftover(locations, marker);
+      const { hostedManifestFetch } = createHostedManifestFetch();
+
+      // act
+      await addMarketplace({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        rawSource: HOSTED_URL,
+        hostedManifestFetch,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}",
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(
+        {
+          sentinel: await pathExists(path.join(finalDir, ".leftover-sentinel")),
+          staging: await readdir(path.join(locations.extensionRoot, "sources-staging")),
+          state: await loadState(locations.extensionRoot),
+          config: await pathExists(locations.baseConfigJsonPath),
+        },
+        {
+          sentinel: true,
+          staging: [],
+          state: { schemaVersion: 3, marketplaces: {} },
+          config: false,
+        },
+      );
+    });
+  });
+}
+
+test("D-PL5-20: addMarketplaceToState returns the download directory of a hosted source", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { ctx, run } = makeCtx(0);
+    const { hostedManifestFetch } = createHostedManifestFetch();
+    const snapshot: ExtensionState = { schemaVersion: 3, marketplaces: {} };
+
+    // act
+    const added = await addMarketplaceToState({
+      state: snapshot,
+      locations,
+      source: parseAddableSource(HOSTED_URL),
+      cwd,
+      ctx,
+      run,
+      removalOps: createRemovalOps(),
+      hostedManifestFetch,
+    });
+
+    // assert
+    const cloneDir = await locations.sourceCloneDir("valid-marketplace");
+    assert.deepStrictEqual(added, { name: "valid-marketplace", cloneDir });
+    assert.strictEqual(snapshot.marketplaces["valid-marketplace"]?.marketplaceRoot, cloneDir);
+    assert.strictEqual(
+      await readFile(path.join(cloneDir, ".claude-plugin", "marketplace.json"), "utf8"),
+      VALID_MANIFEST_JSON,
+    );
   });
 });

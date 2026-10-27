@@ -1,0 +1,114 @@
+// orchestrators/marketplace/hosted-catalog.ts
+//
+// D-PL5-06 / D-PL5-07: the files of a hosted marketplace, one catalog
+// downloaded from an https URL. It is stored like a clone, so every reader of
+// `sources/<name>/.claude-plugin/marketplace.json` works on it unchanged. A
+// hosted tree has no `.git/`, so its ownership marker sits at the tree root
+// and records the URL the catalog came from.
+
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+
+import { fetchHostedManifest } from "../../platform/hosted-manifest-fetch.ts";
+import { atomicWriteJson } from "../../shared/atomic-json.ts";
+import { StaleSourceCloneError, UnreadableSourceCloneError } from "../../shared/errors.ts";
+import { cleanupStaging, pathExists, type RemovalOps } from "../../shared/fs-utils.ts";
+import { assertPathInside } from "../../shared/path-safety.ts";
+
+/** D-PL5-07: downloads the catalog at a URL and returns its bytes. */
+export type HostedManifestFetch = (url: string) => Promise<Uint8Array>;
+
+/** D-PL5-07: the production download, `platform/hosted-manifest-fetch.ts`. */
+export const DEFAULT_HOSTED_MANIFEST_FETCH: HostedManifestFetch = fetchHostedManifest;
+
+// D-PL5-06: the hosted ownership marker. Its name and its place at the tree
+// root are a user contract: renaming either makes every leftover written
+// before the rename refuse as `{stale clone}`.
+const HOSTED_MARKER_FILE = ".pi-claude-marketplace-hosted.json";
+const GENERATED_BY = "pi-claude-marketplace";
+const CATALOG_DIR = ".claude-plugin";
+const CATALOG_FILE = "marketplace.json";
+
+function hostedMarkerPath(dir: string): string {
+  return path.join(dir, HOSTED_MARKER_FILE);
+}
+
+/**
+ * D-PL5-06: downloads the catalog at `url` into `stagingDir`, as
+ * `.claude-plugin/marketplace.json`, then writes the hosted ownership marker
+ * beside it. Nothing is written before the bytes arrive. A plain write is
+ * enough: the caller renames the whole staging tree into place (NFR-1).
+ */
+export async function downloadHostedCatalog(args: {
+  readonly url: string;
+  readonly stagingDir: string;
+  readonly fetchCatalog: HostedManifestFetch;
+}): Promise<void> {
+  const { url, stagingDir } = args;
+  const bytes = await args.fetchCatalog(url);
+  const catalogDir = path.join(stagingDir, CATALOG_DIR);
+  const catalogPath = path.join(catalogDir, CATALOG_FILE);
+  await assertPathInside(stagingDir, catalogPath, "hosted marketplace catalog");
+  await mkdir(catalogDir, { recursive: true });
+  await writeFile(catalogPath, bytes);
+  const markerPath = hostedMarkerPath(stagingDir);
+  await assertPathInside(stagingDir, markerPath, "hosted marketplace ownership marker");
+  await atomicWriteJson(markerPath, { generatedBy: GENERATED_BY, url });
+}
+
+/** Whether `text` is the hosted ownership marker of a download of `url`. */
+function marksDownloadOf(text: string, url: string): boolean {
+  try {
+    const marker: unknown = JSON.parse(text);
+    return (
+      typeof marker === "object" &&
+      marker !== null &&
+      Reflect.get(marker, "generatedBy") === GENERATED_BY &&
+      Reflect.get(marker, "url") === url
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * MA-12 / MA-13 for a hosted marketplace: removes `finalDir` when its hosted
+ * ownership marker records a download of `url`, so the caller's rename can
+ * proceed. Any other tree throws `StaleSourceCloneError`, and a marker that
+ * cannot be read throws `UnreadableSourceCloneError`. Recognition is the only
+ * authority for removal (D-3-02).
+ *
+ * @returns the leak message from removing the leftover, or `undefined` when
+ *   the removal left nothing behind or the destination no longer exists
+ *   (IN-06).
+ */
+export async function recognizeHostedLeftover(args: {
+  readonly finalDir: string;
+  readonly derivedName: string;
+  readonly url: string;
+  readonly removalOps: RemovalOps;
+}): Promise<string | undefined> {
+  const { finalDir, derivedName, url, removalOps } = args;
+  let text: string;
+  try {
+    text = await readFile(hostedMarkerPath(finalDir), "utf8");
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" && !(await pathExists(finalDir))) {
+      return undefined;
+    }
+
+    if (code === "ENOENT" || code === "ENOTDIR") {
+      throw new StaleSourceCloneError(finalDir, derivedName);
+    }
+
+    const failure = code === "EACCES" || code === "EPERM" ? "permission-denied" : "unreadable";
+    throw new UnreadableSourceCloneError(finalDir, derivedName, failure);
+  }
+
+  if (!marksDownloadOf(text, url)) {
+    throw new StaleSourceCloneError(finalDir, derivedName);
+  }
+
+  return cleanupStaging(removalOps, finalDir, "marketplace leftover download");
+}
