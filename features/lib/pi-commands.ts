@@ -73,11 +73,18 @@ const ENTRIES_VALIDATOR = Compile(
 );
 
 // The sandbox Pi waits no delay before the background update, so the wait
-// covers the marketplace refresh and the plugin update. It stays below the
-// 30-second step timeout, so a missing result fails with its own message.
+// covers the marketplace refresh, the plugin updates, and the quiet window
+// below. It stays below the 30-second step timeout, so a missing result fails
+// with its own message.
 const BACKGROUND_RESULT_TIMEOUT_MS = 20_000;
 
 const BACKGROUND_RESULT_POLL_MS = 100;
+
+// The first payload after the message does not mean that the background
+// update has finished, so the driver reads on until the payload count has
+// stayed the same for this long. A later payload, such as a second notice,
+// then reaches the step instead of being dropped (DRV-01).
+const BACKGROUND_RESULT_QUIET_MS = 1_000;
 
 // What a request reports beyond its own result: neither an extension error
 // nor a dialog is ever expected.
@@ -190,8 +197,9 @@ export async function readSession(pi: PiProcess): Promise<SessionReport> {
  * schema (DRV-01). The sandbox Pi has no model, so it refuses the prompt, but
  * only after its input handlers ran, and one of them arms the background
  * update. The background update appends its payloads after Pi has answered,
- * so this reads the session's entries until a payload follows the message,
- * and fails when none does within `BACKGROUND_RESULT_TIMEOUT_MS`.
+ * so this reads the session's entries until at least one payload follows the
+ * message and no new one has arrived for `BACKGROUND_RESULT_QUIET_MS`. It
+ * fails when that does not happen within `BACKGROUND_RESULT_TIMEOUT_MS`.
  */
 export async function sendMessage(
   pi: PiProcess,
@@ -203,15 +211,20 @@ export async function sendMessage(
   const { command, success } = exchange.response;
   assert.deepStrictEqual({ command, success }, { command: "prompt", success: false }, message);
   const deadline = Date.now() + BACKGROUND_RESULT_TIMEOUT_MS;
+  let payloads: readonly NotificationPayload[] = [];
+  let quietSince = Date.now();
   for (;;) {
-    const payloads = claudePluginPayloads((await readCustomEntries(pi)).slice(before));
-    if (payloads.length > 0) {
+    const read = claudePluginPayloads((await readCustomEntries(pi)).slice(before));
+    if (read.length !== payloads.length) {
+      payloads = read;
+      quietSince = Date.now();
+    } else if (payloads.length > 0 && Date.now() - quietSince >= BACKGROUND_RESULT_QUIET_MS) {
       return payloads;
     }
 
     if (Date.now() >= deadline) {
       assert.fail(
-        `no claude-plugin result followed the message ${JSON.stringify(message)} within ${BACKGROUND_RESULT_TIMEOUT_MS} ms`,
+        `the claude-plugin results that followed the message ${JSON.stringify(message)} did not settle within ${BACKGROUND_RESULT_TIMEOUT_MS} ms: ${JSON.stringify(payloads)}`,
       );
     }
 
