@@ -2652,7 +2652,7 @@ Single-shot setup of `anthropics/claude-plugins-official` in user scope. The mar
 ● claude-plugins-official [user] (added)
 ```
 
-The bootstrap path is a marketplace add; the marketplace status `added` carries the `(added)` header arm. No reload-hint: a marketplace record is not a Pi-visible resource (SNM-33 / D-22-01). Bootstrap also enables autoupdate on the marketplace persistence record, but the v2 state-change header arm (`added`) does not carry the `<autoupdate>` marker -- the marker only appears on the list-surface header form (`mp.status === undefined`, `mp.details.autoupdate === true`). Subsequent `marketplace list` renders the marketplace with the marker.
+The bootstrap path is a marketplace add; the marketplace status `added` carries the `(added)` header arm. No reload-hint: a marketplace record is not a Pi-visible resource (SNM-33 / D-22-01). The official name `claude-plugins-official` has autoupdate on by default (D-PL8-07), so bootstrap's autoupdate step writes no value and reports `{already autoupdate}` unless `claude-plugins.json` sets the value off (D-PL8-19). The v2 state-change header arm (`added`) does not carry the `<autoupdate>` marker -- the marker only appears on the list-surface header form (`mp.status === undefined`, `mp.details.autoupdate === true`). Subsequent `marketplace list` renders the marketplace with the marker.
 
 ### Re-run when already bootstrapped
 
@@ -2726,7 +2726,7 @@ D-48-A / ATTR-07: the `failed` marketplace header MAY now carry a closed-set rea
 ● local-mp [user] (added)
 ```
 
-Path-source marketplaces default to autoupdate OFF; the `added` arm does not carry the marker. No reload-hint: `marketplace add` changes a marketplace record, not a Pi-visible resource (SNM-33 / D-22-01).
+A path-source marketplace with no `autoupdate` value takes the default for its name: on for an official Claude Code marketplace name other than `knowledge-work-plugins` and `first-party-plugins`, off for any other name (D-PL8-07). The `added` arm does not carry the marker. No reload-hint: `marketplace add` changes a marketplace record, not a Pi-visible resource (SNM-33 / D-22-01).
 
 ### Success -- GitHub source
 
@@ -2736,7 +2736,7 @@ Path-source marketplaces default to autoupdate OFF; the `added` arm does not car
 ● claude-plugins-official [user] (added)
 ```
 
-`marketplace add` never enables autoupdate for any source kind (github or path); the persisted record stores no `autoupdate` field on add. Autoupdate is opt-in -- enabled later via an explicit `marketplace autoupdate`, or by `bootstrap`. The `added` state-change arm carries `(added)`; subsequent `marketplace list` surfaces show the `<autoupdate>` / `<no autoupdate>` marker on the SUB-BRANCH B list-surface header only once the flag has been set. No reload-hint: a marketplace record is not a Pi-visible resource (SNM-33 / D-22-01).
+`marketplace add` writes no `autoupdate` value for any source kind (github or path). Without a value, a marketplace takes the default for its name: on for an official Claude Code marketplace name other than `knowledge-work-plugins` and `first-party-plugins`, off for any other name (D-PL8-07). Otherwise autoupdate is opt-in -- enabled later via an explicit `marketplace autoupdate`. The `added` state-change arm carries `(added)`; subsequent `marketplace list` surfaces show the `<autoupdate>` marker on the SUB-BRANCH B list-surface header only once autoupdate is on, by a set value or by the default. No reload-hint: a marketplace record is not a Pi-visible resource (SNM-33 / D-22-01).
 
 ### Skipped -- already added
 
@@ -5029,7 +5029,7 @@ Changed and already-correct rows both count as successful plural outcomes.
 
 ### Config files
 
-A named flip changes only its target layer: the base config (`claude-plugins.json`), or the local config (`claude-plugins.local.json`) with `--local` (LAYER-02). When only the other layer declares the marketplace, the flip is refused before anything changes, with the `{marketplace in local layer only}` or `{marketplace in base layer only}` rows documented under [`## /claude:plugin marketplace remove <name>`](#claudeplugin-marketplace-remove-name). A flip row reports the outcome in the target layer. A local entry without an `autoupdate` value has the value it inherits: the base entry's value, or off when the base config does not declare the marketplace or sets no value (MAU-4). So `{already autoupdate}` means the target layer already has the value, its own or inherited, and a flip writes a local value only when it changes the value that applies. When a local entry without a value needs the inherited value and the base config cannot be read, the flip fails with `{invalid manifest}` and writes nothing in that scope. `marketplace list` and `marketplace info` show the value that the two layers merge to, where a local entry's `autoupdate` wins over the base one (D-07). A flip without a name sets the value in the base config of each marketplace that config declares. It writes a local entry only when the value that applies to the entry still differs, so a local entry without a value takes the new base value when the base config declares the marketplace. With `--local`, it changes only the local config.
+A named flip changes only its target layer: the base config (`claude-plugins.json`), or the local config (`claude-plugins.local.json`) with `--local` (LAYER-02). When only the other layer declares the marketplace, the flip is refused before anything changes, with the `{marketplace in local layer only}` or `{marketplace in base layer only}` rows documented under [`## /claude:plugin marketplace remove <name>`](#claudeplugin-marketplace-remove-name). A flip row reports the outcome in the target layer. A base entry without an `autoupdate` value has the default for the marketplace name: on for an official Claude Code marketplace name other than `knowledge-work-plugins` and `first-party-plugins`, off for any other name (MAU-4; D-PL8-07). A local entry without an `autoupdate` value has the value it inherits: the base entry's value, or the default for the name when the base config does not declare the marketplace or sets no value. So `{already autoupdate}` means the target layer already has the value, its own or inherited, and a flip writes a local value only when it changes the value that applies. When a local entry without a value needs the inherited value and the base config cannot be read, the flip fails with `{invalid manifest}` and writes nothing in that scope. `marketplace list` and `marketplace info` show the value that the two layers merge to, where a local entry's `autoupdate` wins over the base one (D-07). A flip without a name sets the value in the base config of each marketplace that config declares. It writes a local entry only when the value that applies to the entry still differs, so a local entry without a value takes the new base value when the base config declares the marketplace. With `--local`, it changes only the local config.
 
 A flip that fails after it has written something reports both in one emission: the rows of the marketplaces it flipped in an earlier scope, or in an earlier file of the same scope, then the failed header with its failed child. A marketplace whose files were only partly written gets no row of its own; the failed row covers it. The failed child carries `{lock held}` for a held state lock, `{invalid manifest}` for an invalid config file, `{permission denied}` when the file system refuses a write, and `{unreadable}` for any other failure, such as a config file the writer refuses to replace.
 
@@ -5348,6 +5348,28 @@ Left in mcp.json:
 ```
 
 Emitted by `notifyMcpMigration` when the step wrote a plugin's servers to `mcp-adapter.json` but could not remove the old entries from `mcp.json`, for example because the file could not be written. The step writes `mcp-adapter.json` first, then `state.json`, then `mcp.json`, so a fault between the writes loses no server: `mcp-adapter.json` and `mcp.json` both hold it for one session. The next `/reload` finds the old entries again, leaves `mcp-adapter.json` unchanged, removes the old entries and reports the move once. A user-scope move also removes the plugin's old-name disable stubs from the project `mcp-adapter.json` before it removes the old entries. When that write fails, for example because a project-scope operation holds the lock, the old entries and the stubs stay, and the row names the `project-scope mcp-adapter.json` in place of `mcp.json`. The row lists the plugin's old names in file order and a detail with no absolute path and no final period of its own. It sorts with the other rows left in `mcp.json`. Severity: `warning`. The byte form is locked by `test/architecture/mcp-migration-notice.test.ts`.
+
+### Background update notice (AUP-03 / D-PL8-10)
+
+<!-- catalog-state: background-update-one -->
+
+```text
+Plugin updated: demo · Run /reload to apply
+```
+
+<!-- catalog-state: background-update-two -->
+
+```text
+Plugins updated: alpha and beta · Run /reload to apply
+```
+
+<!-- catalog-state: background-update-many -->
+
+```text
+Plugins updated: 3 plugins · Run /reload to apply
+```
+
+Emitted once by `notifyBackgroundUpdate` after a background update that moved at least one plugin. A background update runs after the first message of a tui session, once for each extension runtime. The notice names plugins, without their marketplace. A plugin is named once even when it was updated in both scopes or from two marketplaces (D-PL8-21), and names keep the order of the update. Two names are joined with "and". Three or more names are counted instead. Severity: `info`. The notice always asks for `/reload`, because Claude Code reloads a plugin in the running session only for a plugin source kind this extension does not have (D-PL8-11). A background update that moved nothing, failed, or was skipped prints nothing, and its detail goes to the debug log (`PI_CLAUDE_MARKETPLACE_DEBUG=1`). A json or rpc session never runs the background update, so it never receives its `background-update` entry; the payload kind stays in the schema (D-PL8-20, see [`docs/json-output.md`](json-output.md)). The byte form is locked by `test/architecture/background-update-notice.test.ts`, not by the catalog-uat walk, whose parser skips this section.
 
 ______________________________________________________________________
 

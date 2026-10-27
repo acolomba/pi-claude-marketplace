@@ -229,6 +229,12 @@ export const DEFAULT_GIT_OPS: GitOps = {
 };
 
 /**
+ * D-PL8-24: the git abort scope, re-exported here so `index.ts` hands it to the
+ * background pass without naming `platform/git.ts`.
+ */
+export { runWithGitAbortSignal } from "../../platform/git.ts";
+
+/**
  * Recognize isomorphic-git's `NotFoundError` without importing the library
  * into the orchestrator tier (D-13). The class sets both `name` and `code`
  * to the string `"NotFoundError"` (see `node_modules/isomorphic-git`

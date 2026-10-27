@@ -60,7 +60,12 @@
 
 import { lookupDeclaredPlugin, type ManifestLookup } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
-import { loadMergedScopeConfig, type MergedConfig } from "../../persistence/config-merge.ts";
+import { effectiveMarketplaceAutoupdate } from "../../domain/official-marketplaces.ts";
+import {
+  hasInvalidConfigLayer,
+  loadMergedScopeConfig,
+  type MergedConfig,
+} from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -660,14 +665,16 @@ export async function loadPluginListPayload(
   // D-13-19: read both scopes' state.
   const userLocations = locationsFor("user", opts.cwd);
   const projectLocations = locationsFor("project", opts.cwd);
-  const [userState, projectState, userMerged, projectMerged] = await Promise.all([
+  const [userState, projectState, userOutcome, projectOutcome] = await Promise.all([
     loadState(userLocations.extensionRoot),
     loadState(projectLocations.extensionRoot),
     // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config).
     // Pre-compute the merged view per scope ONCE before the fold loops below.
-    loadMergedScopeConfig(userLocations).then((r) => r.merged),
-    loadMergedScopeConfig(projectLocations).then((r) => r.merged),
+    loadMergedScopeConfig(userLocations),
+    loadMergedScopeConfig(projectLocations),
   ]);
+  const userMerged = userOutcome.merged;
+  const projectMerged = projectOutcome.merged;
 
   const blocks: BuiltMarketplace[] = [];
 
@@ -692,7 +699,12 @@ export async function loadPluginListPayload(
       mpName,
       mpScope: "project",
       mpRecord,
-      autoupdate: ownValue(projectMerged.marketplaces, mpName)?.entry.autoupdate ?? false,
+      autoupdate:
+        !hasInvalidConfigLayer(projectOutcome) &&
+        effectiveMarketplaceAutoupdate(
+          mpName,
+          ownValue(projectMerged.marketplaces, mpName)?.entry.autoupdate,
+        ),
       scopeConfig: projectMerged,
       extraPlugins: [],
     });
@@ -719,7 +731,12 @@ export async function loadPluginListPayload(
       mpName,
       mpScope: "user",
       mpRecord,
-      autoupdate: ownValue(userMerged.marketplaces, mpName)?.entry.autoupdate ?? false,
+      autoupdate:
+        !hasInvalidConfigLayer(userOutcome) &&
+        effectiveMarketplaceAutoupdate(
+          mpName,
+          ownValue(userMerged.marketplaces, mpName)?.entry.autoupdate,
+        ),
       scopeConfig: userMerged,
       extraPlugins: folded,
       excludeFromAvailable: foldedNames,

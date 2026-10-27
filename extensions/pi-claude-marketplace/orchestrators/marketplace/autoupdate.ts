@@ -51,8 +51,8 @@
 //   unnamed (D-MF-03): each recorded marketplace, in each declaring layer whose
 //    value, own or inherited, differs from the request; with --local,
 //    claude-plugins.local.json only. A local entry without a value inherits
-//    the base entry's value, or off when the base config does not declare the
-//    marketplace (LAYER-09)
+//    the base entry's value, or the default for its name when the base config
+//    does not declare the marketplace or sets no value (LAYER-09; D-PL8-07)
 //   each changed layer gets one batched config write; WR-05: a flip reads and
 //   writes only config, never state.json (SPLIT-01)
 //  accumulate the changed and unchanged names across scopes
@@ -69,6 +69,7 @@
 
 import path from "node:path";
 
+import { effectiveMarketplaceAutoupdate } from "../../domain/official-marketplaces.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
@@ -297,9 +298,10 @@ async function loadFlipLayer(filePath: string, local: boolean): Promise<FlipLaye
 }
 
 /**
- * The base entry's current value, off when the base config is absent or does
- * not set it. An invalid base config fails closed, and only when a local entry
- * without a value asks (CFG-03).
+ * The base entry's current value, or the default for the name when the base
+ * config is absent or does not set it (D-PL8-07). An invalid base
+ * config fails closed, and only when a local entry without a value asks
+ * (CFG-03).
  */
 function inheritFrom(base: ConfigLoadResult): InheritedValue {
   return (name) => {
@@ -307,24 +309,31 @@ function inheritFrom(base: ConfigLoadResult): InheritedValue {
       throw invalidConfigError(path.basename(base.filePath));
     }
 
-    return (
-      base.status === "valid" && (ownValue(base.config.marketplaces, name)?.autoupdate ?? false)
+    return effectiveMarketplaceAutoupdate(
+      name,
+      base.status === "valid" ? ownValue(base.config.marketplaces, name)?.autoupdate : undefined,
     );
   };
 }
 
-/** After a flip of the base layer, a base config that declares the marketplace holds `enable`. */
+/**
+ * After a flip of the base layer, a base config that declares the marketplace
+ * holds `enable`; one that does not gives the default for the name (D-PL8-07).
+ */
 function inheritAfterFlip(base: FlipLayer, enable: boolean): InheritedValue {
-  return (name) => enable && ownValue(base.config.marketplaces, name) !== undefined;
+  return (name) =>
+    ownValue(base.config.marketplaces, name) === undefined
+      ? effectiveMarketplaceAutoupdate(name, undefined)
+      : enable;
 }
 
 /**
  * Whether a layer's `autoupdate` value already matches the request. A base
- * entry without a value reads as off (MAU-4). A local entry without a value has
- * the value it inherits: the base entry's value, or off when the base config
- * does not declare the marketplace or the base entry has no value (D-MF-03 /
- * LAYER-09). So a flip writes a local value only when it changes the value that
- * applies.
+ * entry without a value reads as the default for its name (MAU-4; D-PL8-07).
+ * A local entry without a value has the value it inherits: the base
+ * entry's value, or the default for the name when the base config does not
+ * declare the marketplace or the base entry has no value (D-MF-03 / LAYER-09).
+ * So a flip writes a local value only when it changes the value that applies.
  */
 function layerAlreadySet(
   layer: FlipLayer,
@@ -333,11 +342,9 @@ function layerAlreadySet(
   inherited: InheritedValue,
 ): boolean {
   const own = ownValue(layer.config.marketplaces, name)?.autoupdate;
-  if (own !== undefined) {
-    return own === enable;
-  }
-
-  return (layer.local && inherited(name)) === enable;
+  const applies =
+    layer.local && own === undefined ? inherited(name) : effectiveMarketplaceAutoupdate(name, own);
+  return applies === enable;
 }
 
 /**
