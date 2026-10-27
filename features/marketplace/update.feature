@@ -860,7 +860,7 @@ Feature: Marketplace update
       | alpha | 1.10.0  |
       | zeta  | 1.10.0  |
     Given the marketplace "tools" has the description "A catalog ordered opposite its installs"
-    Given the published plugin "zeta" of the marketplace "tools" has an unreadable skill file
+    Given the published plugin "zeta" of the marketplace "tools" has an unreadable command file
     When the user runs "/claude:plugin marketplace update tools --scope <scope>"
     Then the result has these fields:
       | kind         | cascade                        |
@@ -868,9 +868,9 @@ Feature: Marketplace update
       | needs reload | true                           |
       | summary      | A plugin operation has failed. |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status  | reasons           | scope   | from  | to     | version | leaks | rollback partial |
-      | tools            | <scope>           | updated            | zeta@tools  | zeta  | failed  | permission denied | <scope> | 1.0.0 |        | 1.10.0  |       |                  |
-      | tools            | <scope>           | updated            | alpha@tools | alpha | updated |                   | <scope> | 1.0.0 | 1.10.0 |         |       |                  |
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status  | reasons           | scope   | from  | to     | version | leaks | rollback partial | cause chain                                                                                       | cause truncated |
+      | tools            | <scope>           | updated            | zeta@tools  | zeta  | failed  | permission denied | <scope> | 1.0.0 |        | 1.10.0  |       |                  | command "zeta:notes" of plugin "zeta" could not be staged, {unreadable command file read error} | false           |
+      | tools            | <scope>           | updated            | alpha@tools | alpha | updated |                   | <scope> | 1.0.0 | 1.10.0 |         |       |                  |                                                                                                   |                 |
     When the user runs "/claude:plugin list --scope <scope>"
     Then the result has these fields:
       | kind                | cascade     |
@@ -890,9 +890,9 @@ Feature: Marketplace update
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id         | name | status      | reasons | scope   | from  | to     |
-      | tools            | <scope>           | zeta@tools | zeta | will update |         | <scope> | 1.0.0 | 1.10.0 |
-      | tools            | <scope>           | zeta@tools | zeta | will update |         | <scope> | 1.0.0 | 1.10.0 |
+      | marketplace name | marketplace scope | id         | name | status      | reasons                  | scope   | from  | to     |
+      | tools            | <scope>           | zeta@tools | zeta | will update | components now supported | <scope> | 1.0.0 | 1.10.0 |
+      | tools            | <scope>           | zeta@tools | zeta | will update | components now supported | <scope> | 1.0.0 | 1.10.0 |
     Then the session offers these skills:
       | command            | description              |
       | /skill:alpha-skill | A skill of alpha 1.10.0. |

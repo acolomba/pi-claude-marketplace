@@ -50,6 +50,10 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
+  BridgeStagingError,
+  McpServerCollisionError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
+import {
   CleanupContextError,
   DependencyDeclarationsUnreadableError,
   InvalidGitHubBaseUrlError,
@@ -4118,7 +4122,7 @@ test("manifest-load-fail: manifest with invalid entry name type -> notifyError o
 
 // ─── prepareUpdateHandles catch + abortHandles ───────────────────────────────
 
-test("prepare-handles-fail: MCP collision aborts partial handles, outcome=failed", async () => {
+test("prepare-handles-fail / GLK-02 / D-PL7-12: MCP collision aborts partial handles and fails as unreadable manifest with its cause", async () => {
   // prepareStageMcpServers throws McpServerCollisionError (from
   // assertNoMcpCollisions) with three handles already populated -- skills,
   // commands and agents -- and none for mcp or the workflows prepare that
@@ -4186,7 +4190,14 @@ test("prepare-handles-fail: MCP collision aborts partial handles, outcome=failed
       // assert
       assert.equal(outcome.partition, "failed", `expected failed, got ${outcome.partition}`);
       assert.equal(outcome.name, "hello");
-      assert.deepEqual(outcome.reasons, ["not in manifest"]);
+      assert.deepEqual(outcome.reasons, ["unreadable manifest"]);
+      assert.ok(outcome.partition === "failed");
+      // D-PL7-12: the fallback reason carries the collision as its cause.
+      assert.ok(outcome.cause instanceof McpServerCollisionError);
+      assert.deepStrictEqual(
+        [outcome.cause.serverName, outcome.cause.owningPath],
+        ["plugin_hello_rollback-server_", locations.mcpAdapterJsonPath],
+      );
       assert.ok((outcome.notes ?? []).length > 0, "failed outcome must carry error notes");
       for (const stagingRoot of [
         locations.skillsStagingDir,
@@ -13482,7 +13493,9 @@ test("D-26 / PUP-9: a throw inside convergePlugin becomes a failed outcome namin
       });
 
       // assert
-      assert.deepStrictEqual(outcome, {
+      assert.ok(outcome.partition === "failed");
+      const { cause, ...failure } = outcome;
+      assert.deepStrictEqual(failure, {
         partition: "failed",
         name: "hello",
         fromVersion: "1.0.0",
@@ -13493,8 +13506,150 @@ test("D-26 / PUP-9: a throw inside convergePlugin becomes a failed outcome namin
         declaresWorkflows: false,
         reasons: ["permission denied"],
       });
+      // D-PL7-12: an errno reason carries its error as the row's cause.
+      assert.strictEqual(cause, denied);
       const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
       assert.strictEqual(record?.version, "1.0.0");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GLK-02 / D-PL7-12: a convergePlugin swap that fails with EISDIR reads unreadable and carries its cause", async () => {
+  await withHermeticHome(async () => {
+    // arrange -- the swap's intent mark is the first save, after the candidate.
+    const cwd = await createCaseDir("update-converge-eisdir-");
+    try {
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const blocked = Object.assign(new Error("EISDIR: illegal operation on a directory, read"), {
+        code: "EISDIR",
+      });
+      const operations = convergeOperations({
+        loadState,
+        saveState: () => Promise.reject(blocked),
+      });
+
+      // act
+      const outcome = await operations.convergePlugin({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        cwd,
+        partial: false,
+        rematerialize: false,
+      });
+
+      // assert
+      assert.ok(outcome.partition === "failed");
+      const { cause, ...failure } = outcome;
+      assert.deepStrictEqual(failure, {
+        partition: "failed",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        notes: [`${blocked.message}\n\ncause: ${blocked.message}`],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        reasons: ["unreadable"],
+      });
+      assert.strictEqual(cause, blocked);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GLK-02: a convergePlugin swap that fails with a missing marketplace reads not found, as the direct path does", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await createCaseDir("update-converge-mp-missing-");
+    try {
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const missing = new MarketplaceNotFoundError("mp", ["project"]);
+      const operations = convergeOperations({
+        loadState,
+        saveState: () => Promise.reject(missing),
+      });
+
+      // act
+      const outcome = await operations.convergePlugin({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        cwd,
+        partial: false,
+        rematerialize: false,
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "failed",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        notes: [`${missing.message}\n\ncause: ${missing.message}`],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        reasons: ["not found"],
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GLK-02 / D-13: a direct update whose staging error wraps EACCES reads permission denied", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await createCaseDir("update-direct-staging-denied-");
+    try {
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const denied = Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+      const staging = new BridgeStagingError("could not stage hello.md", { cause: denied });
+      const operations = convergeOperations({
+        loadState,
+        saveState: () => Promise.reject(staging),
+      });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await operations.updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v1.0.0 → v1.1.0 (failed) {permission denied}\n    cause: could not stage hello.md -> EACCES: permission denied",
+          severity: "error",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

@@ -79,7 +79,7 @@ import {
   rethrowInvalidGitHubBaseUrl,
   StateLockHeldError,
 } from "../../shared/errors.ts";
-import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { classifyGitFailure } from "../../shared/git-failure-classifiers.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
@@ -733,8 +733,10 @@ async function runCascadeTarget(
  * the whole batch. `notes` is consumed outside the notify path so the MSG-CC-1
  * trailer is composed inline here.
  *
- * Pre-narrow to a closed-set `Reason` so the cascade consumer reads the typed
- * producer value directly instead of reparsing its display note.
+ * GLK-02 / D-PL7-04: the reason comes from the ladder the direct path uses
+ * (`classifyUpdateFailure`), so the cascade row names the reason the direct
+ * row names. D-PL7-12: a reason from the git, errno, or fallback arm carries
+ * the error as the row's cause, as the direct row does.
  */
 function cascadeFailureOutcome(
   plugin: string,
@@ -742,6 +744,7 @@ function cascadeFailureOutcome(
   err: unknown,
 ): PluginUpdateOutcome {
   const cleanupFailures = cleanupFailuresFromError(err);
+  const failure = classifyUpdateFailure(err);
   const base: PluginUpdateOutcome = {
     partition: "failed",
     name: plugin,
@@ -749,6 +752,7 @@ function cascadeFailureOutcome(
     // before one.
     ...report.move,
     notes: [composeErrorWithCauseChain(err)],
+    ...(!failure.typed && err instanceof Error && { cause: err }),
     ...(cleanupFailures.length > 0 && {
       cause: err as Error,
       cleanupFailures,
@@ -765,59 +769,118 @@ function cascadeFailureOutcome(
     declaresMcp: false,
     declaresWorkflows: false,
   };
-  return { ...base, reasons: reasonsFromTypedError(err) };
+  return { ...base, reasons: [failure.reason] };
 }
 
 /**
- * Map an exported-workflow error to a closed-set `Reason[]` for cascade-failure
- * outcomes. Typed facts (a held state lock, FLR-02, the concurrency errors,
- * and an unreadable dependency walk, D-18-17) and errno codes win; the
- * permissive fallback is `not in manifest`.
+ * GLK-02 / D-PL7-04: the one failure ladder of `update`, shared by the direct
+ * path and the cascade paths (autoupdate and apply's converge). A cleanup
+ * leak is narrowed to its primary error. A typed error names its own reason
+ * (`typedUpdateFailReason`); any other error goes through
+ * `untypedUpdateFailReason`. `typed` tells the cascade that the reason came
+ * from a typed error, whose row carries a cause only where
+ * `cascadeFailureOutcome` names one.
  */
-function reasonsFromTypedError(err: unknown): readonly ContentReason[] {
+function classifyUpdateFailure(err: unknown): {
+  readonly reason: ContentReason;
+  readonly typed: boolean;
+} {
   const primary = err instanceof CleanupContextError ? err.primary : err;
+  const typedReason = typedUpdateFailReason(primary);
+  return typedReason === undefined
+    ? { reason: untypedUpdateFailReason(primary), typed: false }
+    : { reason: typedReason, typed: true };
+}
+
+/**
+ * D-PL7-02: a plugin clone access reads a repository the record names, so a
+ * host 404 or 410 means the source is gone.
+ */
+const PLUGIN_CLONE_RULE: Parameters<typeof classifyGitFailure>[1] = {
+  notFound: "source missing",
+};
+
+/**
+ * The reason of a failure no typed error names: the git host's answer under
+ * the plugin-clone rule first, then the errno (D-13: a bridge's staging
+ * error reads its filesystem cause), then `unreadable manifest`.
+ */
+function untypedUpdateFailReason(primary: unknown): ContentReason {
+  return (
+    classifyGitFailure(primary, PLUGIN_CLONE_RULE)?.reason ?? errnoFailReason(failureErrno(primary))
+  );
+}
+
+/**
+ * D-13: the errno behind a failure. A bridge that could not stage a file
+ * names the file in its own message and carries the filesystem error as its
+ * cause, so a source the runner cannot read reads `permission denied`.
+ */
+function failureErrno(error: unknown): string | undefined {
+  const carrier = error instanceof BridgeStagingError ? error.cause : error;
+  return (carrier as NodeJS.ErrnoException | undefined)?.code;
+}
+
+function errnoFailReason(code: string | undefined): ContentReason {
+  switch (code) {
+    case "EACCES":
+    case "EPERM":
+      return "permission denied";
+    case "ENOENT":
+    case "ENOTDIR":
+      return "source missing";
+    // A local file the update could not read or write, such as a directory in
+    // place of mcp-adapter.json: naming the marketplace manifest would blame
+    // the wrong file (the marketplace/shared.ts errno precedent).
+    case "EISDIR":
+    case "EIO":
+    case "EBADF":
+      return "unreadable";
+    case undefined:
+    default:
+      return "unreadable manifest";
+  }
+}
+
+/**
+ * The reason a typed failure names, or `undefined` for an error no typed
+ * identity matches. FLR-01: a held state lock is `"lock held"`, as the other
+ * plugin commands report it.
+ */
+function typedUpdateFailReason(primary: unknown): ContentReason | undefined {
   if (primary instanceof StateLockHeldError) {
-    return ["lock held"] as const;
+    return "lock held";
+  }
+
+  if (primary instanceof MarketplaceNotFoundError) {
+    return "not found";
+  }
+
+  if (primary instanceof PluginUpdatePhase3Error) {
+    return "rollback partial";
   }
 
   if (primary instanceof PluginUpdateConcurrencyError) {
-    return [
-      primary.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled",
-    ] as const;
+    return primary.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled";
+  }
+
+  if (primary instanceof InvalidMarketplaceManifestError) {
+    return "invalid manifest";
+  }
+
+  if (primary instanceof PluginInLocalLayerOnlyError) {
+    return "plugin in local layer only";
+  }
+
+  if (primary instanceof PluginInBaseLayerOnlyError) {
+    return "plugin in base layer only";
   }
 
   if (primary instanceof DependencyDeclarationsUnreadableError) {
-    return ["unreadable"] as const;
+    return "unreadable";
   }
 
-  // errno-bearing FS errors map to the matching
-  // closed Reason instead of falling through to the consumer's
-  // legacy notes-substring parse (which would land on the permissive
-  // `not in manifest` default for both narrowSkipReasons and
-  // narrowFailReasons).
-  if (primary instanceof Error) {
-    const code = cascadeErrno(primary);
-    if (code === "EACCES" || code === "EPERM") {
-      return ["permission denied"] as const;
-    }
-
-    if (code === "ENOENT" || code === "ENOTDIR") {
-      return ["source missing"] as const;
-    }
-  }
-
-  return ["not in manifest"] as const;
-}
-
-/**
- * D-13: the errno behind a cascade failure. A bridge that could not stage a
- * file names the file in its own message and carries the filesystem error as
- * its cause, so a source the runner cannot read reads `permission denied`
- * rather than the permissive fallback.
- */
-function cascadeErrno(error: Error): string | undefined {
-  const carrier = error instanceof BridgeStagingError ? error.cause : error;
-  return (carrier as NodeJS.ErrnoException | undefined)?.code;
+  return undefined;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -841,8 +904,7 @@ interface NotifyDirectFailureArgs {
    * PluginFailedMessage. Used by the phase-3 aggregate path where the
    * `"rollback partial"` reason is the catalog form (510-522). Omitted
    * for direct-path enumerate / syncClone / phase-2 failures, which
-   * route through `narrowDirectFailReason` for a best-fit Reason from
-   * the typed error.
+   * take their Reason from the shared `classifyUpdateFailure` ladder.
    */
   readonly reasonOverride?: ContentReason;
   /**
@@ -863,7 +925,9 @@ interface NotifyDirectFailureArgs {
 function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
   const { ctx, run, marketplace, scope, pluginName, err } = args;
   const cause = err instanceof Error ? err : new Error(String(err));
-  const reasons: readonly ContentReason[] = [args.reasonOverride ?? narrowDirectFailReason(cause)];
+  const reasons: readonly ContentReason[] = [
+    args.reasonOverride ?? classifyUpdateFailure(cause).reason,
+  ];
   // WR-05: row-level `scope` is OMITTED -- it always matched the
   // marketplace block's `scope` at every callsite below, and
   // `renderScopeBracket` (shared/notification-grammar.ts) suppresses the
@@ -912,94 +976,6 @@ function rollbackPartialCauseSlot(p: UpdatePhase3Failure): { readonly cause: Err
 }
 
 /**
- * Narrow a direct-path failure's typed error to a closed-set `Reason` for
- * the synthetic `PluginFailedMessage`. Order: the typed identities of
- * `typedDirectFailReason` first (a held state lock among them), errno /
- * stable transport fields second, honest generic fallback last.
- * The fallback `"unreadable manifest"` mirrors the marketplace/update.ts
- * narrowFailReason precedent for unknown error shapes.
- */
-function narrowDirectFailReason(err: Error): ContentReason {
-  // Phase-3 aggregate failures are surfaced via reasonOverride; here we
-  // handle the enumerate / syncClone / phase-2 paths only.
-  const primary = err instanceof CleanupContextError ? err.primary : err;
-
-  const typedReason = typedDirectFailReason(primary);
-  if (typedReason !== undefined) {
-    return typedReason;
-  }
-
-  const transportReason = classifyGitTransportFailure(primary);
-  if (transportReason !== undefined) {
-    return transportReason;
-  }
-
-  return narrowErrnoFailReason((primary as NodeJS.ErrnoException).code);
-}
-
-function narrowErrnoFailReason(code: string | undefined): ContentReason {
-  switch (code) {
-    case "EACCES":
-    case "EPERM":
-      return "permission denied";
-    case "ENOENT":
-    case "ENOTDIR":
-      return "source missing";
-    // A local file the update could not read or write, such as a directory in
-    // place of mcp-adapter.json: naming the marketplace manifest would blame
-    // the wrong file (the marketplace/shared.ts errno precedent).
-    case "EISDIR":
-    case "EIO":
-    case "EBADF":
-      return "unreadable";
-    case undefined:
-    default:
-      return "unreadable manifest";
-  }
-}
-
-/**
- * The reason a typed direct-path failure names, or `undefined` for an error
- * no typed identity matches. FLR-01: a held state lock is `"lock held"`, as
- * the other plugin commands report it.
- */
-function typedDirectFailReason(primary: Error): ContentReason | undefined {
-  if (primary instanceof StateLockHeldError) {
-    return "lock held";
-  }
-
-  if (primary instanceof MarketplaceNotFoundError) {
-    return "not found";
-  }
-
-  if (primary instanceof PluginUpdatePhase3Error) {
-    return "rollback partial";
-  }
-
-  if (primary instanceof PluginUpdateConcurrencyError) {
-    return primary.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled";
-  }
-
-  if (primary instanceof InvalidMarketplaceManifestError) {
-    return "invalid manifest";
-  }
-
-  if (primary instanceof PluginInLocalLayerOnlyError) {
-    return "plugin in local layer only";
-  }
-
-  if (primary instanceof PluginInBaseLayerOnlyError) {
-    return "plugin in base layer only";
-  }
-
-  if (primary instanceof DependencyDeclarationsUnreadableError) {
-    return "unreadable";
-  }
-
-  return undefined;
-}
-
-/**
  * WR-05: synthetic placeholder for the bare-form enumerate-failure path.
  * Held as a module-level constant so a future change has a single edit
  * point. Mirrors the `"(reinstall)"` precedent in
@@ -1032,7 +1008,7 @@ function notifyBareFormEnumerateFailure(args: {
   readonly cardinality: "single" | "plural";
 }): void {
   const { ctx, run, scope, err } = args;
-  const reasons: readonly ContentReason[] = [narrowDirectFailReason(err)];
+  const reasons: readonly ContentReason[] = [classifyUpdateFailure(err).reason];
   // WR-05: row-level `scope` is OMITTED -- the marketplace block carries
   // the same scope, and `renderScopeBracket` suppresses the per-row
   // bracket in that case. Matches the omit convention used by
