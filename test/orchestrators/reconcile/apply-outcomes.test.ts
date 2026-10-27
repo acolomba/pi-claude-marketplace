@@ -1317,7 +1317,7 @@ describe("carriedStagingWarnings", () => {
 });
 
 describe("stagingDiagnosticsOf", () => {
-  test("D-PL1-20: projects each catalog move and enable under its header verb, in outcome order", () => {
+  test("D-PL1-20: projects each catalog move and enable under its header verb, in row order", () => {
     // arrange
     const moved = [discoveryWarning("moved skip")];
     const failed = [discoveryWarning("failed skip")];
@@ -1383,10 +1383,35 @@ describe("stagingDiagnosticsOf", () => {
 
     // assert
     assert.deepStrictEqual(diagnostics, [
-      { plugin: "alpha", scope: "user", verb: "enabled", warnings: [] },
       { plugin: "beta", scope: "project", verb: "updated", warnings: moved },
       { plugin: "gamma", scope: "project", verb: "update failed", warnings: failed },
+      { plugin: "alpha", scope: "user", verb: "enabled", warnings: [] },
       { plugin: "delta", scope: "user", verb: "updated", warnings: grown },
     ]);
+  });
+
+  test("D-PL1-07: orders the diagnostics by marketplace block, as the rows are", () => {
+    // arrange
+    const outcomes: PerEntryOutcome[] = [
+      { kind: "plugin-enabled", scope: "user", marketplace: "zeta", plugin: "formatter" },
+      {
+        kind: "plugin-backfilled",
+        scope: "user",
+        marketplace: "alpha",
+        plugin: "linter",
+        dependencies: [],
+        installable: true,
+        unsupported: [],
+      },
+    ];
+
+    // act
+    const diagnostics = stagingDiagnosticsOf(outcomes);
+
+    // assert
+    assert.deepStrictEqual(
+      diagnostics.map(({ plugin }) => plugin),
+      ["linter", "formatter"],
+    );
   });
 });

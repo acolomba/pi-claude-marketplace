@@ -28,6 +28,7 @@
 import path from "node:path";
 
 import { isRenderablePluginKey } from "../../domain/dependencies.ts";
+import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import {
   DependencyCascadeError,
   DirectoryPinUnsatisfiedError,
@@ -889,40 +890,52 @@ export function carriedStagingWarnings(carrier: {
 
 /**
  * D-PL1-20: the staging diagnostic of every catalog move and enable `apply`
- * made, in outcome order. A converged move renders under `updated`, or
- * `update failed` when its row failed; a backfill under `updated`; an enable
- * under `enabled`. Every other outcome staged nothing of its own here.
+ * made. A converged move renders under `updated`, or `update failed` when its
+ * row failed; a backfill under `updated`; an enable under `enabled`. Every
+ * other outcome staged nothing of its own here.
+ *
+ * D-PL1-07: the diagnostics follow the rows. `buildReconcileAppliedCascade`
+ * orders its marketplace blocks by `compareByNameThenScope` and keeps outcome
+ * order inside a block, so a stable sort on the same key gives the row order.
  */
 export function stagingDiagnosticsOf(outcomes: readonly PerEntryOutcome[]): StagingDiagnostic[] {
-  return outcomes.flatMap(stagingDiagnosticOf);
+  return outcomes
+    .filter(isStagingOutcome)
+    .sort((left, right) =>
+      compareByNameThenScope(
+        { name: left.marketplace, scope: left.scope },
+        { name: right.marketplace, scope: right.scope },
+      ),
+    )
+    .map(stagingDiagnosticOf);
 }
 
-function stagingDiagnosticOf(outcome: PerEntryOutcome): StagingDiagnostic[] {
-  if (outcome.kind === "plugin-converged") {
-    return [
-      stagingDiagnostic(outcome, outcome.row.status === "failed" ? "update failed" : "updated"),
-    ];
-  }
+type StagingOutcome = PluginConvergedOutcome | PluginBackfilledOutcome | PluginEnabledOutcome;
 
-  if (outcome.kind === "plugin-backfilled") {
-    return [stagingDiagnostic(outcome, "updated")];
-  }
-
-  if (outcome.kind === "plugin-enabled") {
-    return [stagingDiagnostic(outcome, "enabled")];
-  }
-
-  return [];
+function isStagingOutcome(outcome: PerEntryOutcome): outcome is StagingOutcome {
+  return (
+    outcome.kind === "plugin-converged" ||
+    outcome.kind === "plugin-backfilled" ||
+    outcome.kind === "plugin-enabled"
+  );
 }
 
-function stagingDiagnostic(
-  outcome: PluginConvergedOutcome | PluginBackfilledOutcome | PluginEnabledOutcome,
-  verb: StagingDiagnostic["verb"],
-): StagingDiagnostic {
+function stagingDiagnosticOf(outcome: StagingOutcome): StagingDiagnostic {
   return {
     plugin: outcome.plugin,
     scope: outcome.scope,
-    verb,
+    verb: stagingVerbOf(outcome),
     warnings: outcome.stagingWarnings ?? [],
   };
+}
+
+function stagingVerbOf(outcome: StagingOutcome): StagingDiagnostic["verb"] {
+  switch (outcome.kind) {
+    case "plugin-converged":
+      return outcome.row.status === "failed" ? "update failed" : "updated";
+    case "plugin-backfilled":
+      return "updated";
+    case "plugin-enabled":
+      return "enabled";
+  }
 }

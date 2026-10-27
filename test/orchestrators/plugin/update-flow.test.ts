@@ -11279,6 +11279,58 @@ test("D-141-03: a bulk update surfaces one diagnostic per updated plugin", async
   });
 });
 
+test("D-PL1-07: a bare update renders the diagnostics in the row order of the marketplace blocks", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-discwarn-order-");
+    try {
+      // arrange: the bare form visits the project scope first, the rows sort
+      // the user-scope "alpha" block ahead of the project-scope "zeta" block.
+      const zeta = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "zeta-src"),
+        marketplaceName: "zeta",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      await seedCollidingSkills(zeta.marketplaceRoot, "hello");
+      const alpha = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "alpha-src"),
+        marketplaceName: "alpha",
+        manifestPlugins: { world: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { world: "1.0.0" },
+        scope: "user",
+      });
+      await seedCollidingSkills(alpha.marketplaceRoot, "world");
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(3);
+
+      // act
+      await updatePlugins({ ctx, run: runWithNothingLoaded(), cwd, target: { kind: "all" } });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● alpha [user]\n  ● world v1.0.0 → v1.0.1 (updated)\n\n● zeta [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n\nPlugin update: 2 updated\n\n/reload to pick up changes",
+        },
+        {
+          message:
+            'Plugin "world" [user] updated; 1 declared component has a note.\n\nskill source "world-foo" in "skills" elides to generated name "world-foo", already produced by skill source "foo"; ignoring duplicate.',
+          severity: "warning",
+        },
+        {
+          message:
+            'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+          severity: "warning",
+        },
+      ]);
+      verifyBoundary();
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 /**
  * D-PL1-14: make `pluginName`'s mcp prepare throw by giving its one MCP
  * server a key another plugin owns in the project scope's mcp-adapter.json.

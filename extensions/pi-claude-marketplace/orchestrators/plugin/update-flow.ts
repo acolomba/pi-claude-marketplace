@@ -62,6 +62,7 @@
 
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
+import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { BridgeStagingError } from "../../shared/errors-bridges.ts";
 import {
   CleanupContextError,
@@ -482,6 +483,10 @@ async function updatePluginsWith(
  *
  * D-PL1-14: a `failed` outcome the batch kept renders with `update failed`.
  *
+ * D-PL1-07: the diagnostics follow the rows. `composeUpdateCascade` orders its
+ * marketplace blocks by `compareByNameThenScope` and keeps outcome order inside
+ * a block, so a stable sort on the same key gives the row order.
+ *
  * Deliberately NOT called from `abortUpdateBatch`: the targets that succeeded
  * before an abort render no diagnostic, and only the failed target's renders
  * there (D-PL1-22).
@@ -491,7 +496,13 @@ function surfaceUpdateDiscoveryWarnings(
   run: NotificationRun,
   outcomes: readonly UpdateCascadeOutcome[],
 ): void {
-  surfaceStagingDiagnostics(ctx, run, outcomes.flatMap(updateStagingDiagnostic));
+  const inRowOrder = [...outcomes].sort((left, right) =>
+    compareByNameThenScope(
+      { name: left.target.marketplace, scope: left.target.scope },
+      { name: right.target.marketplace, scope: right.target.scope },
+    ),
+  );
+  surfaceStagingDiagnostics(ctx, run, inRowOrder.flatMap(updateStagingDiagnostic));
 }
 
 /**
