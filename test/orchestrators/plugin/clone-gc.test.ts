@@ -9,7 +9,7 @@ import lockfile from "proper-lockfile";
 import {
   collectPluginClonesLocked,
   garbageCollectPluginClones,
-  listUnreferencedPluginClones,
+  listUnreferencedPluginClonesLocked,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -524,7 +524,31 @@ describe("collectPluginClonesLocked", () => {
   });
 });
 
-describe("listUnreferencedPluginClones", () => {
+describe("listUnreferencedPluginClonesLocked", () => {
+  test("GLK-03 / D-PL7-13: refuses while another holder has the scope lock", async (t) => {
+    // arrange
+    const locations = await freshLocations(t);
+    await seedState(locations, {});
+    await seedCloneDirectories(locations, ["fetched-mirror"]);
+    const release = await holdStateLock(locations);
+    let caught: unknown;
+
+    // act
+    try {
+      await listUnreferencedPluginClonesLocked(locations);
+    } catch (error) {
+      caught = error;
+    } finally {
+      await release();
+    }
+
+    // assert
+    assert.ok(caught instanceof StateLockHeldError);
+    assert.strictEqual(caught.scope, "project");
+    assert.strictEqual(caught.lockPath, locations.stateLockFile);
+    assert.deepStrictEqual(await cloneEntries(locations), ["fetched-mirror"]);
+  });
+
   test("UPD-DEP-D1: lists the clone keys on disk that no record references", async (t) => {
     // arrange
     const locations = await freshLocations(t);
@@ -539,7 +563,7 @@ describe("listUnreferencedPluginClones", () => {
     await seedCloneDirectories(locations, ["live-clone", "fetched-mirror", "stale"]);
 
     // act
-    const keys = await listUnreferencedPluginClones(locations);
+    const keys = await listUnreferencedPluginClonesLocked(locations);
 
     // assert
     assert.deepStrictEqual([...keys].sort(), ["fetched-mirror", "stale"]);
@@ -550,7 +574,7 @@ describe("listUnreferencedPluginClones", () => {
     const locations = await freshLocations(t);
 
     // act
-    const keys = await listUnreferencedPluginClones(locations);
+    const keys = await listUnreferencedPluginClonesLocked(locations);
 
     // assert
     assert.deepStrictEqual(keys, new Set());

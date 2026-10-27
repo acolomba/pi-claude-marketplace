@@ -88,10 +88,10 @@ async function readCloneKeys(locations: ScopedLocations): Promise<string[]> {
  * and collects every other unreferenced clone: those the plan created, and
  * the revisions its moves replaced.
  */
-export async function listUnreferencedPluginClones(
+async function listUnreferencedPluginClones(
   locations: ScopedLocations,
 ): Promise<ReadonlySet<string>> {
-  const state = await loadState(locations.extensionRoot);
+  const state = await loadState(locations.extensionRoot, { persistMigration: false });
   const liveKeys = deriveLiveCloneKeys(state, locations.pluginClonesDir);
   return new Set((await readCloneKeys(locations)).filter((key) => !liveKeys.has(key)));
 }
@@ -162,4 +162,17 @@ export function collectPluginClonesLocked(
   keep?: ReadonlySet<string>,
 ): Promise<string[]> {
   return withExistingScopeLock(locations, () => garbageCollectPluginClones(locations, keep));
+}
+
+/**
+ * D-PL7-13: the unreferenced-clone listing under a fresh lock of `locations`'
+ * scope, with the same caller rules as `collectPluginClonesLocked`. Unlocked,
+ * a clone that a locked `fetch` adds between this listing and the sweep would
+ * be missing from the listing, so the sweep would delete it. While another
+ * holder has the lock it rejects with StateLockHeldError.
+ */
+export function listUnreferencedPluginClonesLocked(
+  locations: ScopedLocations,
+): Promise<ReadonlySet<string>> {
+  return withExistingScopeLock(locations, () => listUnreferencedPluginClones(locations));
 }

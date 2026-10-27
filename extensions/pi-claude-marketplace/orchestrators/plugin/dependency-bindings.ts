@@ -10,7 +10,7 @@
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 
-import { garbageCollectPluginClones, listUnreferencedPluginClones } from "./clone-gc.ts";
+import { collectPluginClonesLocked, listUnreferencedPluginClonesLocked } from "./clone-gc.ts";
 import { cascadeFailureCause, composeCascadeFailureMessage } from "./install-cascade.messaging.ts";
 
 import type { DependencyMoveContext, DependencyMoveMemos } from "./dependency-move.ts";
@@ -154,14 +154,16 @@ export function updateCaller(
  * plan, and returns the sweep that removes every other unreferenced clone
  * once the operation ends: those the plan created, and the revisions its
  * moves replaced. A clone that was unreferenced before, such as a mirror
- * `fetch` warmed, stays. IN-N5: when the clones cannot be listed, the sweep
- * removes nothing. The sweep never throws (D-19-01): a failure is traced, and
- * a later lifecycle operation retries it.
+ * `fetch` warmed, stays. D-PL7-05 / D-PL7-13: the listing and the sweep each
+ * take a fresh scope lock, so the caller must hold none. IN-N5: when the
+ * clones cannot be listed, a held lock included, the sweep removes nothing.
+ * The sweep never throws (D-19-01): a failure, a held lock included, is
+ * traced, and a later lifecycle operation retries it.
  */
 export async function planCloneSweep(locations: ScopedLocations): Promise<() => Promise<void>> {
   let before: ReadonlySet<string>;
   try {
-    before = await listUnreferencedPluginClones(locations);
+    before = await listUnreferencedPluginClonesLocked(locations);
   } catch (err) {
     hookDebugLog(`dependency plan: clone listing failed: ${errorMessage(err)}`, "install");
     return () => Promise.resolve();
@@ -169,7 +171,7 @@ export async function planCloneSweep(locations: ScopedLocations): Promise<() => 
 
   return async () => {
     try {
-      await garbageCollectPluginClones(locations, before);
+      await collectPluginClonesLocked(locations, before);
     } catch (err) {
       hookDebugLog(`dependency plan: clone cleanup failed: ${errorMessage(err)}`, "install");
     }
