@@ -393,9 +393,9 @@ export async function readCandidateDeclaration(options: {
  * Whether `target` lies lexically below `root`: the relative path is neither
  * empty nor a climb out. Clone GC keys live clones by the same test.
  */
-function liesUnder(root: string, target: string): boolean {
+export function liesUnder(root: string, target: string): boolean {
   const relative = path.relative(root, target);
-  return relative !== "" && !relative.startsWith("..");
+  return relative !== "" && relative !== ".." && !relative.startsWith(".." + path.sep);
 }
 
 /**

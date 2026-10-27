@@ -30,10 +30,10 @@ import { atCatalogVersion, isRecordedButDisabled } from "../../persistence/state
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { ownValue } from "../../shared/own-key.ts";
-import { assertPathInside } from "../../shared/path-safety.ts";
 import { admitResolvedVersion, foldDeclaredConstraint } from "../plugin/constraint-fold.ts";
 import {
   installedCopyReadOptions,
+  liesUnder,
   readInstalledCopyDeclaration,
 } from "../plugin/dependency-declaration-read.ts";
 import {
@@ -506,7 +506,7 @@ async function recordMoveIsolated(
     found = await recordMove(input, mp, plugin, record);
   } catch (err) {
     hookDebugLog(
-      `planConvergence: skipped ${plugin}@${mp.name}: ${errorMessage(err)}`,
+      `recordMoveIsolated: skipped ${plugin}@${mp.name}: ${errorMessage(err)}`,
       "reconcile",
     );
     return undefined;
@@ -1210,17 +1210,14 @@ async function releaseOnLandedMoves(
   return { plan: input.plan, released };
 }
 
-/** Whether `pluginRoot` is a per-commit copy under the scope's plugin clones. */
-export async function isPinnedCopy(
-  locations: ScopedLocations,
-  pluginRoot: string,
-): Promise<boolean> {
-  try {
-    await assertPathInside(locations.pluginClonesDir, pluginRoot, "installed plugin copy");
-    return true;
-  } catch {
-    return false;
-  }
+/**
+ * Whether `pluginRoot` is a per-commit copy under the scope's plugin clones.
+ * It is the location test `installedCopyReadOptions` applies, so a fault in
+ * the copy's path is never read here as "not a copy"; the read of the copy
+ * answers it (D-PL2-25).
+ */
+export function isPinnedCopy(locations: ScopedLocations, pluginRoot: string): boolean {
+  return liesUnder(locations.pluginClonesDir, pluginRoot);
 }
 
 /**
@@ -1233,7 +1230,7 @@ export async function isPinnedCopy(
  */
 export function installedCopyReader(locations: ScopedLocations): InstalledDeclarationsReader {
   return async (mp, plugin, record) =>
-    (await isPinnedCopy(locations, record.resolvedSource))
+    isPinnedCopy(locations, record.resolvedSource)
       ? installedCopyDeclarations({ locations }, mp, plugin, record)
       : NO_COPY_DECLARATIONS;
 }

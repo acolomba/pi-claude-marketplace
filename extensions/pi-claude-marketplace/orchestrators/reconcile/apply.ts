@@ -1874,8 +1874,7 @@ async function judgeScopeAfterCascade(
   for (const mp of Object.values(state.marketplaces)) {
     for (const [plugin, record] of Object.entries(mp.plugins)) {
       const key = `${plugin}@${mp.name}`;
-      // eslint-disable-next-line no-await-in-loop -- one copy check per failed dependent
-      if (failed.own.has(key) && !(await isPinnedCopy(locations, record.resolvedSource))) {
+      if (failed.own.has(key) && !isPinnedCopy(locations, record.resolvedSource)) {
         seeded.push(...movedFor(key, cascade, before.unsatisfied, failed));
       }
     }

@@ -624,7 +624,7 @@ test("T-29-22: a candidate whose version cannot be read is skipped and traced", 
   // assert
   assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
   assert.equal(
-    logged.some((line) => line.includes("planConvergence: skipped demo@tools")),
+    logged.some((line) => line.includes("recordMoveIsolated: skipped demo@tools")),
     true,
   );
 });
@@ -1615,6 +1615,30 @@ test("D-PL2-12 / D-PL2-25: the installed-copy reader fails closed on a copy unde
     "widget",
     pluginRecord(copy),
   );
+
+  // assert
+  assert.deepStrictEqual(describeFailure(read), WIDGET_UNREADABLE_MANIFEST);
+});
+
+test("D-PL2-25: the installed-copy reader fails closed on a pinned copy whose path cannot be inspected", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "copy-reader-fault");
+  const locked = path.join(fixture.locations.pluginClonesDir, "widget-copy");
+  await mkdir(path.join(locked, "inner"), { recursive: true });
+  const mp = await stageMarketplace(fixture, "tools", []);
+  await chmod(locked, 0o000);
+
+  // act
+  let read;
+  try {
+    read = await installedCopyReader(fixture.locations)(
+      { ...mp, plugins: {} },
+      "widget",
+      pluginRecord(path.join(locked, "inner"), { resolvedSha: "a".repeat(40) }),
+    );
+  } finally {
+    await chmod(locked, 0o755);
+  }
 
   // assert
   assert.deepStrictEqual(describeFailure(read), WIDGET_UNREADABLE_MANIFEST);
