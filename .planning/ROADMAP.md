@@ -50,7 +50,7 @@ parent session applies them at merge.
 - [ ] **Phase 4: Dependency Resolver Residue** - the resolver installs what it previewed and refuses before it moves
 - [ ] **Phase 5: Marketplace Command Parity** - reserved names, hosted manifests, `market` alias, row ids, shorthand, remove reporting
 - [ ] **Phase 6: Import Marketplace Planning** - import plans marketplaces the way Claude Code registers them
-- [ ] **Phase 7: Git Errors and Lock Discipline** - one git-host classifier, and every clone read or cleanup under the lock
+- [x] **Phase 7: Git Errors and Lock Discipline** - one git-host classifier, and every clone read or cleanup under the lock (completed 2026-10-27)
 - [ ] **Phase 8: Background Autoupdate** - autoupdate updates in the background, as Claude Code does
 - [ ] **Phase 9: Plugin Package Dependencies** - a plugin's own npm or bun dependencies install with it
 - [ ] **Phase 10: Lifecycle Test and Harness Gaps** - the open scenario, unit, and harness gaps are closed
@@ -165,7 +165,7 @@ parent session applies them at merge.
 3. Two intent marks in one millisecond are distinguished (GLK-06).
 4. A `fetch` scenario for a plugin whose `plugin.json` and entry disagree shows the `list` version; a warm tag reinstall makes no network call (GLK-07, GLK-08).
 
-**Plans:** 10/10 plans executed in 3 waves
+**Plans:** 10/10 plans complete in 3 waves
 
 Plans:
 - [x] 07-01-PLAN.md — wave 1: `classifyGitFailure` entry point behind the kept wrappers; marketplace update and the stored-credential check moved onto it (GLK-01)
