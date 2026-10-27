@@ -6,10 +6,10 @@ current_phase: 1
 current_phase_name: Staging Warning Channels
 status: verifying
 stopped_at: Phase 8 complete, ready to verify Phase 1
-last_updated: "2026-10-27T05:54:46.835Z"
+last_updated: "2026-10-27T12:44:37.155Z"
 last_activity: 2026-10-27
 last_activity_desc: Phase 8 complete, transitioned to Phase 1
-state_head: f22e5384fa040e3bc654ae248df8556e961e14d0
+state_head: 238b15840193e39ddb35c9bbcc601fba1c5c58ba
 progress:
   total_phases: 11
   completed_phases: 1
@@ -34,7 +34,7 @@ component as a working Pi artifact.
 Phase: 1 — Staging Warning Channels
 Plan: 4
 Status: Phase complete — ready for verification
-Last activity: 2026-10-27 — Phase 8 complete, transitioned to Phase 1
+Last activity: 2026-10-27 - Completed quick task 261027-9nh: Phase 8 background autoupdate follow-ups
 
 
 ### mcp-4 closeout
@@ -188,6 +188,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-gvt | GV-01: record plugins at a range-selected release tag as Claude Code does, the tag semver kept as resolvedVersion | 2026-10-26 | 2638b001 | complete | [261026-gvt-record-plugins-at-release-tags-as-claude-code](./quick/261026-gvt-record-plugins-at-release-tags-as-claude-code/) |
 | 261026-glv | GV-01: an update with no tag drops the tag commit from the record; plugin directory plugins pick no release tag and their listed copy answers the range | 2026-10-26 | 33c9ac69 | complete | [261026-glv-match-claude-code-on-untagged-updates-an](./quick/261026-glv-match-claude-code-on-untagged-updates-an/) |
 | 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
+| 261027-9nh | Phase 8 background autoupdate follow-ups: wait cap + abort, official-name default, tui only, notice dedupe, skipped outcome | 2026-10-27 | 238b1584 | — | [261027-9nh-phase-8-background-autoupdate-follow-ups](./quick/261027-9nh-phase-8-background-autoupdate-follow-ups/) |
 
 ## Session Continuity
 
