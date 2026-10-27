@@ -196,7 +196,7 @@ Made while planning and executing:
 18. 08-01 test readings: scheduler case 8 as the cross product of six opt-outs with three force spellings (18 rows); the NFR-2 case split per handler; the index arming case deletes all four Claude Code variables; pass case 10 observes the wait through a wrapper around `beginStep`.
 19. 08-02: the docs H2 is "Variables that control the background update", not "Variables the extension reads", because the extension reads other variables that section does not list.
 20. 08-03 test readings: the pass's notice case uses two marketplaces in two scopes rather than one plugin in both scopes; the stopped-runtime case stops after the last marketplace.
-21. 08-04: the message step returns at the first read that holds any payload after the message, with every payload of that read. A slow second payload arriving after that read is not seen; the notice is the pass's only emission and comes last.
+21. 08-04, after review WR-01: the message step polls until the payload count holds for a 1 s quiet window (`BACKGROUND_RESULT_QUIET_MS`), and asserts the prompt's own answer carries no payload (WR-02). Alternative: a longer window, at the cost of scenario time.
 - Known limit (review IN-04): the shutdown wait for a background step in flight has no timeout, so a stalled fetch also holds `/reload`, new, resume, and fork. Alternative: a wait cap, after which the next runtime may meet `{lock held}` at load.
 
 ## Artifacts this phase produces
