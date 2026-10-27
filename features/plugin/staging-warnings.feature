@@ -235,9 +235,9 @@ Feature: Plugin staging warnings
     Given the mcp-adapter.json file of the project scope holds a comment
     When the user runs "/claude:plugin update demo@fixtures --scope project"
     Then the command reports these results:
-      | kind               | severity | needs reload | summary | notices |
-      | cascade            | error    | true         | Some plugin operations have failed. |         |
-      | mcp-config-notices | warning  | false        |         | [{"kind":"comments-dropped","scope":"project","file":"mcp-adapter.json"}] |
+      | kind               | severity | needs reload | summary                             | notices                                                                   |
+      | cascade            | error    | true         | Some plugin operations have failed. |                                                                           |
+      | mcp-config-notices | warning  | false        |                                     | [{"kind":"comments-dropped","scope":"project","file":"mcp-adapter.json"}] |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name          | status    | reasons                 | scope   | version | cause chain                        | cause truncated | leaks | rollback partial |
       | fixtures         | project           | demo@fixtures | demo          | failed    | dependency failed       | project | 1.0.0   |                                    |                 |       |                  |

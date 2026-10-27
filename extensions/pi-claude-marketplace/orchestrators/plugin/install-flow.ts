@@ -1143,9 +1143,10 @@ function unwrapCascade<S extends Exclude<InstallCascadeResult, CascadeFailureArm
  * warning says the installed artifact set does not match what the plugin
  * author shipped, and the install row's resource count gives the user no
  * baseline to notice the shortfall. The caller renders the standalone half
- * through `./staging-diagnostics.ts::surfaceDiscoveryWarnings`; update, reinstall and
- * enable render theirs through `surfaceStagingDiagnostics` (D-141-05). Every bridge tags its warnings at the
- * producer, and the ledger partitions them by tag (D-PL1-02, D-PL1-03).
+ * through `./staging-diagnostics.ts::surfaceDiscoveryWarnings`; update,
+ * reinstall and enable render theirs through `surfaceStagingDiagnostics`
+ * (D-141-05). Every bridge tags its warnings at the producer, and the ledger
+ * partitions them by tag (D-PL1-02, D-PL1-03).
  */
 async function collectPostCommitWarnings(
   installCtx: InstallLedgerSummary,
