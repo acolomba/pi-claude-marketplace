@@ -23,6 +23,49 @@ Feature: Marketplace hosted source update
       | method | path                         | status |
       | GET    | /acme/tools/marketplace.json | 200    |
 
+  Scenario: Updating a hosted marketplace whose catalog has not changed reports it up to date
+    Given the marketplace "tools" is published as a hosted source
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons |
+      | tools            | project           | skipped            | up-to-date          |
+    Then the git host receives these requests:
+      | method | path                         | status |
+      | GET    | /acme/tools/marketplace.json | 200    |
+
+  Scenario: Updating a hosted marketplace whose connection drops fails as network unreachable and keeps its installed plugins
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "tools" is published as a hosted source
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | url         | ghp        | false  |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@tools --scope project"
+    Given the git host drops the connection for the marketplace "tools"
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons             | scope   | leaks | rollback partial | cause chain | cause truncated |
+      | tools            | project           | failed             | tools | tools | failed | network unreachable | project |       |                  | Failed to update marketplace "tools"., Could not connect to https://{git host}/acme/tools/marketplace.json, fetch failed, other side closed | false           |
+    Then the git host receives these requests:
+      | method | path                         | status  |
+      | GET    | /acme/tools/marketplace.json | dropped |
+    When the user runs "/claude:plugin list --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status    | reasons | scope   | version |
+      | tools            | project           | ghp@tools | ghp  | installed |         | project | 1.0.0   |
+
   Scenario: Updating a hosted marketplace the git host answers with 404 fails as network error
     Given the marketplace "tools" is published as a hosted source
     Given the marketplace "tools" is added to the project scope

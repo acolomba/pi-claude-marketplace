@@ -1,8 +1,8 @@
 /**
  * @fileoverview Steps about the https git host that serves the repositories
  * of git marketplaces and git plugins, and the catalog files of hosted
- * marketplaces: arming one repository or catalog to fail or to require a
- * credential, letting it serve again, the GitHub base address pi runs with,
+ * marketplaces: arming one repository or catalog to fail, to redirect, or to
+ * require a credential, serving a catalog of a size, letting it serve again, the GitHub base address pi runs with,
  * the credential a user stores for the host, and the requests the host
  * receives. A step names a repository through the `git repository` parameter
  * type, by the marketplace or the plugin it serves; a hosted marketplace names
@@ -17,6 +17,7 @@ import path from "node:path";
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
 import { armedStatus } from "../lib/https-git-host/server.ts";
+import { expandTokens } from "../lib/run-tokens.ts";
 
 import type { GitHostArm } from "../lib/https-git-host/server.ts";
 import type { GitRepositoryReference } from "../support/git-repository.ts";
@@ -95,6 +96,37 @@ Given(
     reference: GitRepositoryReference,
   ): Promise<void> {
     await armRepository(this, reference, { kind: "credential", user, password });
+  },
+);
+
+Given(
+  "the git host redirects the {git repository} to {string}",
+  async function (
+    this: ScenarioWorld,
+    reference: GitRepositoryReference,
+    location: string,
+  ): Promise<void> {
+    await armRepository(this, reference, {
+      kind: "redirect",
+      location: expandTokens(location, this.tokens),
+    });
+  },
+);
+
+Given(
+  "the git host serves {int} bytes as the catalog of the marketplace {string}",
+  function (this: ScenarioWorld, size: number, name: string): void {
+    const published = this.requirePublished(name);
+    if (published.kind !== "hosted") {
+      assert.fail(`the marketplace ${name} is not published as a hosted source`);
+    }
+
+    this.gitHost.serveFile(
+      published.directory,
+      published.file,
+      Buffer.alloc(size),
+      published.owner,
+    );
   },
 );
 

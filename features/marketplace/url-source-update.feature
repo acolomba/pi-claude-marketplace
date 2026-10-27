@@ -43,3 +43,20 @@ Feature: Marketplace url source update
       | marketplace name | marketplace scope | marketplace status | marketplace reasons | id    | name  | status | reasons             | scope   | leaks | rollback partial | cause chain                                           | cause truncated |
       | tools            | project           | failed             |                     | tools | tools | failed | network unreachable | project |       |                  | Failed to update marketplace "tools"., socket hang up | false           |
       | extras           | project           | skipped            | up-to-date          |       |       |        |                     |         |       |                  |                                                       |                 |
+
+  Scenario: Updating a url marketplace an earlier version recorded with a clone url ending in .json still fetches from its git host
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" is added to the project scope
+    Given an earlier version recorded the clone url of the marketplace "tools" in the project scope as "https://{git host}/acme/tools.json"
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons |
+      | tools            | project           | skipped            | up-to-date          |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |

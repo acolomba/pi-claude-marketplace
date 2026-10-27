@@ -318,6 +318,68 @@ Feature: Marketplace add
       | source kind | source                            | second source                          |
       | url         | https://{git host}/acme/tools.git | https://{git host}/acme/tools-copy.git |
 
+  Scenario: Adding again a hosted marketplace from the source it was added from changes nothing
+    Given the marketplace "tools" is published as a hosted source
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools/marketplace.json --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status  | reasons       |
+      | tools | project | skipped | already added |
+    Then the git host receives no request
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                                         |
+      | tools | https://{git host}/acme/tools/marketplace.json |
+
+  Scenario: Adding again a hosted marketplace whose stored catalog is gone restores it and keeps its installed plugins
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "tools" is published as a hosted source
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | url         | ghp        | false  |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@tools --scope project"
+    Given the project scope has lost the checkout of the marketplace "tools"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools/marketplace.json --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | ghp@tools | 1.0.0   | true    |
+    Then the git host receives these requests:
+      | method | path                         | status |
+      | GET    | /acme/tools/marketplace.json | 200    |
+
+  Scenario: Adding a hosted marketplace whose name the scope already holds fails as a duplicate name
+    Given the marketplace "tools" is published as a hosted source
+    Given the marketplace "tools" is added to the project scope
+    Given a second marketplace declaring the name "tools" is ready to add from "tools-copy"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools-copy/marketplace.json --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name  | scope   | status | reasons        |
+      | tools | project | failed | duplicate name |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                                         |
+      | tools | https://{git host}/acme/tools/marketplace.json |
+    Then the git host receives these requests:
+      | method | path                              | status |
+      | GET    | /acme/tools-copy/marketplace.json | 200    |
+
   Scenario: Adding again with --local a marketplace that the local layer declares changes nothing
     Given the marketplace "tools" is published as a dir source
     Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"

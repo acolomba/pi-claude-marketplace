@@ -116,6 +116,114 @@ Feature: Marketplace hosted source
     Then the project scope holds no marketplace checkout
     Then the "claude-plugins.json" file of the project scope does not exist
 
+  Scenario: Adding a hosted marketplace whose URL carries a password is refused before any request
+    Given the marketplace "tools" is published as a hosted source
+    When the user runs "/claude:plugin marketplace add https://user:secret@{git host}/acme/tools/marketplace.json --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | error   |
+      | needs reload | false   |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id | name | status | reasons | scope | leaks | rollback partial | cause chain | cause truncated |
+      | https://***@{git host}/acme/tools/marketplace.json | project | failed | https://***@{git host}/acme/tools/marketplace.json | https://***@{git host}/acme/tools/marketplace.json | failed | unreadable | project |       |                  | Marketplace URL must not contain a user name or password: https://***@{git host}/acme/tools/marketplace.json | false |
+    Then the git host receives no request
+    Then the project scope holds no marketplace checkout
+    Then the "claude-plugins.json" file of the project scope does not exist
+
+  Scenario: Adding a hosted marketplace follows a redirect that stays on the same host
+    Given the marketplace "tools" is published as a hosted source
+    Given the git host redirects the marketplace "tools" to "/acme/tools/marketplace.json"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools/moved.json --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                                    |
+      | tools | https://{git host}/acme/tools/moved.json |
+    Then the git host receives these requests:
+      | method | path                         | status |
+      | GET    | /acme/tools/moved.json       | 302    |
+      | GET    | /acme/tools/marketplace.json | 200    |
+
+  Scenario Outline: Adding a hosted marketplace refuses a redirect to a disallowed cross-origin URL
+    Given the marketplace "tools" is published as a hosted source
+    Given the git host redirects the marketplace "tools" to "<location>"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools/moved.json --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | error   |
+      | needs reload | false   |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id | name | status | reasons | scope | leaks | rollback partial | cause chain | cause truncated |
+      | https://{git host}/acme/tools/moved.json | project | failed | https://{git host}/acme/tools/moved.json | https://{git host}/acme/tools/moved.json | failed | unreadable | project |       |                  | Marketplace catalog redirected to a disallowed URL and was refused -- a server-chosen cross-origin redirect must use https:// and must not point at a loopback, link-local, or cloud-metadata host (only a hop that stays on the origin you started from is exempt): <location> | false |
+    Then the git host receives these requests:
+      | method | path                   | status |
+      | GET    | /acme/tools/moved.json | 302    |
+    Then the project scope holds no marketplace checkout
+    Then the "claude-plugins.json" file of the project scope does not exist
+
+    Examples:
+      | location                                         |
+      | http://{git host}/acme/tools/marketplace.json    |
+      | https://localhost/acme/tools/marketplace.json    |
+      | https://169.254.169.254/acme/tools/marketplace.json |
+
+  Scenario: Adding a hosted marketplace whose catalog is over the size cap fails as unreadable
+    Given the marketplace "tools" is published as a hosted source
+    Given the git host serves 5242881 bytes as the catalog of the marketplace "tools"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools/marketplace.json --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | error   |
+      | needs reload | false   |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id | name | status | reasons | scope | leaks | rollback partial | cause chain | cause truncated |
+      | https://{git host}/acme/tools/marketplace.json | project | failed | https://{git host}/acme/tools/marketplace.json | https://{git host}/acme/tools/marketplace.json | failed | unreadable | project |       |                  | Marketplace catalog at https://{git host}/acme/tools/marketplace.json is larger than 5242880 bytes | false |
+    Then the git host receives these requests:
+      | method | path                         | status |
+      | GET    | /acme/tools/marketplace.json | 200    |
+    Then the project scope holds no marketplace checkout
+    Then the "claude-plugins.json" file of the project scope does not exist
+
+  Scenario: Adding a hosted marketplace from a URL with a fragment requests and shows the URL without it
+    Given the marketplace "tools" is published as a hosted source
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools/marketplace.json#stable --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                                                 |
+      | tools | https://{git host}/acme/tools/marketplace.json#stable |
+    Then the git host receives these requests:
+      | method | path                         | status |
+      | GET    | /acme/tools/marketplace.json | 200    |
+    When the user runs "/claude:plugin marketplace info tools --scope project"
+    Then the marketplace info result has these fields:
+      | kind                    | marketplace-info                               |
+      | name                    | tools                                          |
+      | scope                   | project                                        |
+      | details autoupdate      | false                                          |
+      | details last updated at | {scenario time}                                |
+      | source kind             | url                                            |
+      | source abs path         |                                                |
+      | source url              | https://{git host}/acme/tools/marketplace.json |
+      | source owner            |                                                |
+      | source repo             |                                                |
+      | source ref              |                                                |
+      | severity                | info                                           |
+      | needs reload            | false                                          |
+
   Scenario: Installing a plugin from a hosted marketplace clones only the plugin
     Given the git repository "ghp" holds these plugins:
       | name | version | path |

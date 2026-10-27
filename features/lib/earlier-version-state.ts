@@ -81,6 +81,31 @@ export async function recordEarlierVersionMarketplace(args: {
   return record;
 }
 
+/**
+ * Rewrites the url source of the marketplace `name` in the scope's `state.json`
+ * under `scopeRoot` to name `url`, the way an earlier version recorded a url
+ * marketplace whose clone URL ends in `.json`. The checkout and every other
+ * member of the record stay as they were. Returns the source it wrote.
+ */
+export async function recordEarlierVersionCloneUrl(args: {
+  readonly scopeRoot: string;
+  readonly name: string;
+  readonly url: string;
+}): Promise<unknown> {
+  const { scopeRoot, name, url } = args;
+  const stateFile = stateFilePath(scopeRoot);
+  const state = await readObject(stateFile);
+  const marketplaces = objectMember(state, "marketplaces");
+  const record = jsonObject(marketplaces[name], `the record of the marketplace ${name}`);
+  const source = { ...objectMember(record, "source"), kind: "url", raw: url, url };
+  await writeFile(
+    stateFile,
+    `${JSON.stringify({ ...state, marketplaces: { ...marketplaces, [name]: { ...record, source } } }, null, 2)}\n`,
+  );
+
+  return source;
+}
+
 /** The record of the marketplace `name` in the scope's `state.json` under `scopeRoot`. */
 export async function recordedMarketplace(scopeRoot: string, name: string): Promise<unknown> {
   return objectMember(await readObject(stateFilePath(scopeRoot)), "marketplaces")[name];

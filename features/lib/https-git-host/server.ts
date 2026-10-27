@@ -66,13 +66,14 @@ export type ArmedStatus = (typeof ARMED_STATUSES)[number];
 /**
  * How an armed repository fails until it is disarmed or the host is reset
  * (HOST-03): it answers an error status, drops the connection on every
- * request, or answers 401 to every request that does not carry one user and
- * password.
+ * request, answers 401 to every request that does not carry one user and
+ * password, or answers 302 to a location.
  */
 export type GitHostArm =
   | { readonly kind: "status"; readonly status: ArmedStatus }
   | { readonly kind: "drop" }
-  | { readonly kind: "credential"; readonly user: string; readonly password: string };
+  | { readonly kind: "credential"; readonly user: string; readonly password: string }
+  | { readonly kind: "redirect"; readonly location: string };
 
 /** Returns `status` as an armed status, throwing on a status the host cannot be armed with. */
 export function armedStatus(status: number): ArmedStatus {
@@ -219,13 +220,16 @@ function basicAuthorization(user: string, password: string): string {
  * whether it did. A `drop` arm destroys the socket before any answer. A
  * `credential` arm lets a request with its credential through to the CGI;
  * it compares the header in memory, and the log keeps only the status
- * (HOST-04).
+ * (HOST-04). A `redirect` arm answers 302 to its location, and lets the
+ * request for the location's own path through, so a redirect inside the arm's
+ * directory ends.
  */
 function failArmed(
   arm: GitHostArm,
   logged: LoggedRequest,
   req: IncomingMessage,
   res: ServerResponse,
+  served: string,
 ): boolean {
   switch (arm.kind) {
     case "drop":
@@ -244,6 +248,15 @@ function failArmed(
 
       logged.status = 401;
       res.writeHead(401, { "WWW-Authenticate": 'Basic realm="git host"' });
+      res.end();
+      return true;
+    case "redirect":
+      if (servedPath(arm.location, `https://${req.headers.host ?? ""}`) === served) {
+        return false;
+      }
+
+      logged.status = 302;
+      res.writeHead(302, { location: arm.location });
       res.end();
       return true;
   }
@@ -499,7 +512,7 @@ export class HttpsGitHost {
     }
 
     const arm = armFor(this.arms, served);
-    if (arm !== undefined && failArmed(arm, logged, req, res)) {
+    if (arm !== undefined && failArmed(arm, logged, req, res, served)) {
       return;
     }
 

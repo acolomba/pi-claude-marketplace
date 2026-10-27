@@ -18,6 +18,7 @@ import path from "node:path";
 import { type DataTable, Given } from "@cucumber/cucumber";
 
 import {
+  recordEarlierVersionCloneUrl,
   recordEarlierVersionMarketplace,
   recordedMarketplace,
 } from "../../lib/earlier-version-state.ts";
@@ -42,6 +43,7 @@ import {
   requireFreeRoot,
   rewritePublishedManifest,
 } from "../../lib/published-marketplace.ts";
+import { expandTokens } from "../../lib/run-tokens.ts";
 
 import type { OfferedPlugin } from "../../lib/path-marketplace.ts";
 import type { SourceKind } from "../../lib/published-marketplace.ts";
@@ -218,6 +220,20 @@ Given(
       published,
     });
     assert.deepStrictEqual(await recordedMarketplace(scopeRoot, name), record);
+  },
+);
+
+Given(
+  "an earlier version recorded the clone url of the marketplace {string} in the {word} scope as {string}",
+  async function (this: ScenarioWorld, name: string, scope: string, url: string) {
+    const scopeRoot = this.scopeRoot(scope);
+    const source = await recordEarlierVersionCloneUrl({
+      scopeRoot,
+      name,
+      url: expandTokens(url, this.tokens),
+    });
+    const record = await recordedMarketplace(scopeRoot, name);
+    assert.deepStrictEqual(Reflect.get(Object(record), "source"), source);
   },
 );
 
