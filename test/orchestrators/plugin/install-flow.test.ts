@@ -18397,6 +18397,134 @@ test("UPD-DEP-D1: installing a plugin moves an installed dependency outside its 
   });
 });
 
+/** The commit the mock git host's HEAD names. */
+const HOST_HEAD = "3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f";
+
+/**
+ * Offers `name` in marketplace `mp` as an unpinned url source, and answers the
+ * repository directory the mock clone copies. Runs after the last
+ * `publishCatalog`, which rewrites the catalog.
+ */
+async function offerGitPlugin(
+  marketplaceRoot: string,
+  name: string,
+  dependencies?: readonly string[],
+): Promise<string> {
+  const repository = path.join(path.dirname(marketplaceRoot), `${name}-repository`);
+  await mkdir(path.join(repository, "skills", "probe"), { recursive: true });
+  await writeFile(path.join(repository, "skills", "probe", "SKILL.md"), "---\nname: probe\n---\n");
+  const declared = dependencies === undefined ? {} : { dependencies };
+  await mkdir(path.join(repository, ".claude-plugin"));
+  await writeFile(
+    path.join(repository, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name, version: "1.0.0", ...declared }),
+  );
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  const catalog = JSON.parse(await readFile(manifestPath, "utf8")) as { plugins: object[] };
+  catalog.plugins.push({
+    name,
+    source: { source: "url", url: "https://example.com/org/repo" },
+    ...declared,
+  });
+  await writeFile(manifestPath, JSON.stringify(catalog));
+  return repository;
+}
+
+/**
+ * Installs `app@mp` into the project scope from a git host whose HEAD is
+ * `HOST_HEAD`, counting each mirror resolve (one network read each) and the
+ * pin of each pinned clone.
+ */
+async function installAppCountingResolves(
+  owner: InstallTestOwner,
+  cwd: string,
+  repository: string,
+): Promise<{ readonly status: string; readonly mirrors: number; readonly pins: string[] }> {
+  const inner = seamWith(
+    createGitOps({
+      fixtureSourceDir: repository,
+      head: HOST_HEAD,
+      localRefs: { "refs/heads/main": HOST_HEAD },
+      remoteRefs: { "refs/remotes/origin/main": HOST_HEAD },
+    }).gitOps,
+  );
+  let mirrors = 0;
+  const pins: string[] = [];
+  const { ctx, run } = makeCtx();
+  const outcome = await owner.installPlugin({
+    ctx,
+    run,
+    scope: "project",
+    cwd,
+    marketplace: "mp",
+    plugin: "app",
+    cloneCacheSeam: {
+      ...inner,
+      materializeOrRefreshPluginMirror: (args) => {
+        mirrors += 1;
+        return inner.materializeOrRefreshPluginMirror(args);
+      },
+      materializePluginClone: (args) => {
+        pins.push(args.pin);
+        return inner.materializePluginClone(args);
+      },
+    },
+  });
+  return { status: outcome.status, mirrors, pins };
+}
+
+/** The commit `plugin@mp`'s record names. */
+async function recordedSha(cwd: string, plugin: string): Promise<string | undefined> {
+  const state = await loadState(locationsFor("project", cwd).extensionRoot);
+  return state.marketplaces.mp?.plugins[plugin]?.resolvedSha;
+}
+
+const FRESH_GIT_DEPENDENCY_CASES: readonly {
+  readonly title: string;
+  readonly catalog: Readonly<Record<string, CatalogPlugin>>;
+}[] = [
+  {
+    title:
+      "an install that moves a dependency installs a fresh git dependency at the commit its preview resolved, resolving it once",
+    catalog: {
+      app: { version: "1.0.0", dependencies: ["lib@^2.0.0", "util"] },
+      lib: { version: "2.0.0" },
+    },
+  },
+  {
+    title:
+      "a fresh git dependency a moved dependency's new version needs installs at its previewed commit before the move",
+    catalog: {
+      app: { version: "1.0.0", dependencies: ["lib@^2.0.0"] },
+      lib: { version: "2.0.0", dependencies: ["util"] },
+    },
+  },
+];
+
+for (const { title, catalog } of FRESH_GIT_DEPENDENCY_CASES) {
+  test(`D-PL4-01: ${title}`, async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({ lib: { version: "1.2.0" } });
+      await installed(owner, cwd, "lib");
+      await publishCatalog(marketplaceRoot, catalog);
+      const repository = await offerGitPlugin(marketplaceRoot, "util");
+
+      // act
+      const install = await installAppCountingResolves(owner, cwd, repository);
+
+      // assert
+      assert.deepStrictEqual(install, { status: "installed", mirrors: 1, pins: [HOST_HEAD] });
+      assert.deepStrictEqual(await recordedVersions(cwd), {
+        app: ["1.0.0", true],
+        lib: ["2.0.0", true],
+        util: ["1.0.0", true],
+      });
+      assert.strictEqual(await recordedSha(cwd, "util"), HOST_HEAD);
+    });
+  });
+}
+
 test("UPD-DEP-D1: installing refuses a plugin whose installed dependency no release moves inside its range", async () => {
   await withHermeticHome(async (owner) => {
     // arrange

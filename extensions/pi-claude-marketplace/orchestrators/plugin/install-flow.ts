@@ -985,11 +985,33 @@ async function sharedCascadeOptions(args: {
 }
 
 /**
+ * The commit a cascade member installs and the version it records, when the
+ * walk or the plan chose them. RESV-03 / GV-01: a member whose constraint
+ * selected a release tag installs that tag's commit and records the tag's
+ * semver as `resolvedVersion`. D-PL4-01: otherwise a member the plan
+ * previewed installs the commit its preview resolved. That commit carries no
+ * `resolvedVersion`, so the recorded version derives as an unpinned install
+ * of the same commit derives it; setting one here would record a tag-shaped
+ * version the plan never chose.
+ */
+function memberLedgerPin(member: ResolvedCascadeMember): {
+  readonly sourcePin?: string;
+  readonly resolvedVersion?: string;
+} {
+  if (member.pin !== undefined) {
+    return { sourcePin: member.pin.oid, resolvedVersion: member.pin.version };
+  }
+
+  return member.previewedCommit === undefined ? {} : { sourcePin: member.previewedCommit };
+}
+
+/**
  * D-04-01: the per-member ledger options of a cascade whose every member
  * exists to satisfy a declaration -- the reload's missing-dependency install
  * and an update's new closure (UPD-DEP-D1). RESV-03: a member whose
  * constraint selected a release tag installs that tag's commit and records
- * its semver as `resolvedVersion` (GV-01).
+ * its semver as `resolvedVersion` (GV-01). D-PL4-01: a member the plan
+ * previewed installs the commit its preview resolved.
  */
 function dependencyLedgerOptions(
   opts: InstallLedgerCallerOptions,
@@ -1002,10 +1024,7 @@ function dependencyLedgerOptions(
       cwd: core.cwd,
       marketplace: member.marketplace,
       plugin: member.name,
-      ...(member.pin !== undefined && {
-        sourcePin: member.pin.oid,
-        resolvedVersion: member.pin.version,
-      }),
+      ...memberLedgerPin(member),
       ...(member.directoryPin !== undefined && { directoryPin: member.directoryPin }),
       provenance: "dependency",
       marketplaceAdd: core.adds.marketplaceAdd,
@@ -2315,9 +2334,10 @@ async function installPluginWithTransaction(
           })),
           // RESV-03: a member whose constraint selected a release tag carries the
           // commit that tag resolves to AND the semver that tag names, and this
-          // builder is where both enter that member's install. An unconstrained
-          // member carries neither and installs from the ref its marketplace
-          // entry names.
+          // builder is where both enter that member's install. D-PL4-01:
+          // otherwise a member the plan previewed installs the commit its
+          // preview resolved. An unconstrained member the plan never previewed
+          // installs from the ref its marketplace entry names.
           //
           // RESV-05 / GV-01: the tag's semver is recorded as `resolvedVersion`
           // beside the version Claude Code records there, which carries the
@@ -2341,10 +2361,7 @@ async function installPluginWithTransaction(
               cwd,
               marketplace: member.marketplace,
               plugin: member.name,
-              ...(member.pin !== undefined && {
-                sourcePin: member.pin.oid,
-                resolvedVersion: member.pin.version,
-              }),
+              ...memberLedgerPin(member),
               ...(member.directoryPin !== undefined && { directoryPin: member.directoryPin }),
               ...(pinVersion !== undefined && { pinVersion }),
               // D-04-01: the root is the one member the closure walk never
