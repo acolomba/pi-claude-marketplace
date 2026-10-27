@@ -105,7 +105,7 @@ parent session applies them at merge.
 4. Git-source `list` rows, `required by` lists, and truncation match Claude Code or carry a recorded ID (CAS-04, CAS-05).
 5. The offline git-move refusal names a next step, and no hold cause carries an unbounded `version` string (CAS-06, CAS-07).
 
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans executed
 
 Plans:
 **Wave 1**
@@ -122,7 +122,7 @@ Plans:
 - [x] 03-05-PLAN.md — Tracer: a `cannot move:` refusal ends with `To look for a version in range, run /claude:plugin update <key>.` when the named plugin declares the dependency; offline git scenario (CAS-06)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 03-06-PLAN.md — Record D-PL3-06 and D-PL3-07, align `docs/dependency-resolution.md`, and run the `npm run check` phase gate (CAS-03, CAS-04)
+- [x] 03-06-PLAN.md — Record D-PL3-06 and D-PL3-07, align `docs/dependency-resolution.md`, and run the `npm run check` phase gate (CAS-03, CAS-04)
 
 ### Phase 4: Dependency Resolver Residue
 

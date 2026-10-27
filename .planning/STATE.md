@@ -4,17 +4,17 @@ milestone: plugin-lifecycle
 milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 3
 current_phase_name: Dependency Cascade Rows and Status
-status: executing
-stopped_at: Completed 03-05-PLAN.md
-last_updated: "2026-10-27T05:59:13.607Z"
+status: verifying
+stopped_at: Completed 03-06-PLAN.md
+last_updated: "2026-10-27T06:16:17.748Z"
 last_activity: 2026-10-26
 last_activity_desc: Phase 3 execution started
-state_head: a1e5f3c0563b94d171ba9132bbdc81eaa232d3ef
+state_head: 0f6ebdb0bf677c312bc8f15d6f31691ac1f63c41
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 3 (Dependency Cascade Rows and Status) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-26 — Phase 3 execution started
 
 
@@ -191,8 +191,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-27T05:59:13.422Z
-**Stopped at:** Completed 03-05-PLAN.md
+**Last session:** 2026-10-27T06:16:17.604Z
+**Stopped at:** Completed 03-06-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -409,6 +409,7 @@ archived milestone artifacts.
 | Phase 03 P03 | 70min | 3 tasks | 11 files |
 | Phase 03 P04 | 15min | 2 tasks | 7 files |
 | Phase 03 P05 | 15 min | 2 tasks | 11 files |
+| Phase 03 P06 | 12min | 2 tasks | 2 files |
 
 ## Decisions
 
@@ -618,6 +619,8 @@ archived milestone artifacts.
 - [Phase 03]: D-PL3-09: the directory pin refusal cuts name, listed version, joined ranges, and each requirer at 120 code units with an ellipsis
 - [Phase 03]: D-PL3-10: other refusals keep the 200-character range bound
 - [Phase 03]: D-PL3-11: a cannot-move refusal ends with 'To look for a version in range, run /claude:plugin update <dependency>.' when the named plugin declares the dependency directly, for every source kind
+- [Phase 03]: D-PL3-06: a dependency's partial availability does not change its dependents' status (as Claude Code); recorded in docs, no code change
+- [Phase 03]: D-PL3-07: git-source list rows keep the upgrade state; recorded divergence licensed by PL-5 and RSTA/FTCH
 
 ### mcp-4 decisions
 
