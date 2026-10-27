@@ -104,3 +104,39 @@ Feature: Marketplace github source
       | acme/tools@stable                    |
       | acme/tools#stable                    |
       | https://github.com/acme/tools#stable |
+
+  Scenario: Adding a github marketplace at a ref that contains an @ clones that ref
+    Given the marketplace "tools" is published as a github source
+    Given the marketplace "tools" has the description "Tools for formatting"
+    Given the branch "release@2026" of the marketplace "tools" has the description "Release tools"
+    When the user runs "/claude:plugin marketplace add acme/tools@release@2026 --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                  |
+      | tools | acme/tools@release@2026 |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+    When the user runs "/claude:plugin marketplace info tools --scope project"
+    Then the marketplace info result has these fields:
+      | kind                    | marketplace-info |
+      | name                    | tools            |
+      | scope                   | project          |
+      | details autoupdate      | false            |
+      | details last updated at | {scenario time}  |
+      | source kind             | github           |
+      | source abs path         |                  |
+      | source url              |                  |
+      | source owner            | acme             |
+      | source repo             | tools            |
+      | source ref              | release@2026     |
+      | description             | Release tools    |
+      | severity                | info             |
+      | needs reload            | false            |

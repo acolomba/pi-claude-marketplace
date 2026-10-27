@@ -110,6 +110,22 @@ const PARSE_CASES: readonly ParseCase[] = [
     source: { kind: "github", raw: "acme/tools@v1#x", owner: "acme", repo: "tools", ref: "v1#x" },
   },
   {
+    name: "keeps an @ after the first @ in the shorthand reference",
+    raw: "acme/tools@a@b",
+    source: { kind: "github", raw: "acme/tools@a@b", owner: "acme", repo: "tools", ref: "a@b" },
+  },
+  {
+    name: "splits a shorthand reference that contains an @ at the first @",
+    raw: "acme/tools@release@2026",
+    source: {
+      kind: "github",
+      raw: "acme/tools@release@2026",
+      owner: "acme",
+      repo: "tools",
+      ref: "release@2026",
+    },
+  },
+  {
     name: "parses a GitHub URL",
     raw: "https://github.com/o/r",
     source: {
@@ -499,6 +515,15 @@ const UNKNOWN_PARSE_CASES: readonly ParseCase[] = [
       kind: "unknown",
       raw: "acme/tools@",
       reason: "non-relative string source acme/tools@ cannot be classified",
+    },
+  },
+  {
+    name: "rejects a shorthand whose text before the first @ is not an owner and repository pair",
+    raw: "a@b/c@d",
+    source: {
+      kind: "unknown",
+      raw: "a@b/c@d",
+      reason: "non-relative string source a@b/c@d cannot be classified",
     },
   },
   {

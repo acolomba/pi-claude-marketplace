@@ -397,52 +397,35 @@ function parseUrlSourceForm(raw: string): GitHubSource | UrlSource | UnknownSour
 /**
  * The scheme-less `owner/repo` shorthands.
  *
- * SRC-03: `owner/repo#<ref>` folds into `github` plus a ref. The split is on
- * the first `#` when no `@` comes before it, as Claude Code 2.1.296's shorthand
- * does. An empty `#` ref reads as no ref, the way the URL form drops an empty
- * fragment (D-MF-07, a recorded divergence: Claude Code refuses it).
+ * D-PL5-13: `owner/repo@<ref>` and `owner/repo#<ref>` fold into `github` plus a
+ * ref. The split is on the FIRST `@` or `#`, as Claude Code's
+ * `^([^#@]+)(?:[#@](.+))?$` splits it, so `acme/tools@release@2026` names the
+ * ref `release@2026`. The fold only happens when the left side is a valid
+ * `owner/repo`. An empty `@` ref is unknown. An empty `#` ref reads as no ref,
+ * the way the URL form drops an empty fragment (D-MF-07, a recorded divergence:
+ * Claude Code refuses it).
  *
- * D-76-04: `owner/repo@<ref>` folds into `github` plus a ref. The split is on
- * the LAST `@`, and the fold only happens when the left side is a valid
- * `owner/repo`. SP-5: a bare `owner/repo` is exactly one slash with both
- * halves non-empty. MM-4: anything else (`foo/bar/baz`, `foo`, the empty
- * string, whitespace) is unknown.
+ * SP-5: a bare `owner/repo` is exactly one slash with both halves non-empty.
+ * MM-4: anything else (`foo/bar/baz`, `foo`, the empty string, whitespace) is
+ * unknown.
  */
 function parseShorthandSourceForm(raw: string): ParsedSource {
-  const hashIdx = raw.indexOf("#");
-  const firstAtIdx = raw.indexOf("@");
-  if (hashIdx !== -1 && (firstAtIdx === -1 || firstAtIdx > hashIdx)) {
-    return parseShorthandHashRef(raw, hashIdx);
-  }
-
-  const atIdx = raw.lastIndexOf("@");
-  if (atIdx !== -1) {
-    const github = parseOwnerRepo(raw.slice(0, atIdx), raw);
-    const ref = raw.slice(atIdx + 1);
-    if (github.kind === "github" && ref.length > 0) {
-      return { ...github, ref };
-    }
-
-    return { kind: "unknown", raw, reason: nonRelativeReason(raw) };
-  }
-
-  const slashCount = (raw.match(/\//g) ?? []).length;
-  if (slashCount === 1) {
+  const delimIdx = raw.search(/[@#]/);
+  if (delimIdx === -1) {
     return parseOwnerRepo(raw, raw);
   }
 
-  return { kind: "unknown", raw, reason: nonRelativeReason(raw) };
-}
-
-/** SRC-03 / D-MF-07: split `owner/repo#<ref>` at its first `#`, `hashIdx`. */
-function parseShorthandHashRef(raw: string, hashIdx: number): ParsedSource {
-  const github = parseOwnerRepo(raw.slice(0, hashIdx), raw);
-  if (github.kind !== "github") {
-    return { kind: "unknown", raw, reason: nonRelativeReason(raw) };
+  const github = parseOwnerRepo(raw.slice(0, delimIdx), raw);
+  const ref = raw.slice(delimIdx + 1);
+  if (github.kind === "github" && ref.length > 0) {
+    return { ...github, ref };
   }
 
-  const ref = raw.slice(hashIdx + 1);
-  return ref.length > 0 ? { ...github, ref } : github;
+  if (github.kind === "github" && raw[delimIdx] === "#") {
+    return github;
+  }
+
+  return { kind: "unknown", raw, reason: nonRelativeReason(raw) };
 }
 
 /** Parses a manifest or user-supplied source into its `ParsedSource` variant; never throws. */
@@ -462,10 +445,10 @@ export function parsePluginSource(raw: unknown): ParsedSource {
 }
 
 /**
- * D-76-04: parse a bare `owner/repo` candidate into a `GitHubSource`, echoing
- * `raw` (which may carry an `@ref` suffix the caller strips) as the verbatim
- * input. Returns `unknown` when the candidate is not exactly one non-empty
- * slash-separated pair.
+ * D-PL5-13: parse a bare `owner/repo` candidate into a `GitHubSource`, echoing
+ * `raw` (which may carry an `@ref` or `#ref` suffix the caller strips) as the
+ * verbatim input. Returns `unknown` when the candidate is not exactly one
+ * non-empty slash-separated pair.
  */
 function parseOwnerRepo(candidate: string, raw: string): ParsedSource {
   const slashCount = (candidate.match(/\//g) ?? []).length;
