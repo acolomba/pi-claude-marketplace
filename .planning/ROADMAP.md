@@ -194,6 +194,15 @@ parent session applies them at merge.
 2. A failing, timed-out, or lockfile-less package install leaves the plugin installed with a warning (PKD-02).
 3. The NFR-5 amendment and the spawn rule carry a decision ID, and `npm run check` is green (PKD-03).
 
+**Plans:** 5 plans
+
+Plans:
+- [ ] 09-01-PLAN.md — tracer: the package step through the install ledger, the spawn module and its gates, then Claude Code's lockfile refusals
+- [ ] 09-02-PLAN.md — D-PL9-17 spike, loopback npm registry stand-in, and the install success, failure, and hook-proof scenarios
+- [ ] 09-03-PLAN.md — the local-folder note (D-PL9-03) and the update hook in the shared runner (D-PL9-07)
+- [ ] 09-04-PLAN.md — scenarios for the local-folder note, the lockfile refusals, the update, and the offline reinstall
+- [ ] 09-05-PLAN.md — full `npm run check` on the combined tree and the parent's merge handoff
+
 ### Phase 10: Lifecycle Test and Harness Gaps
 
 **Goal:** Every behavior lifecycle-coverage left without a scenario or unit case has one, and the harness items are fixed.
