@@ -179,6 +179,7 @@ New entry proposals:
   - A disabled dependency that the plan re-enables runs the install ledger again, and its agents commit can refuse an occupied target.
   - The plan previews fresh nodes only. Both items are deferred in 04-CONTEXT.md.
 - **The plain-update agent refusal reads as `unreadable manifest`.** Since D-PL4-04, an update whose new version's agent target is occupied refuses in WR-C with a plain `Error`. `update-flow.ts::narrowDirectFailReason` then gives it the generic fallback reason `unreadable manifest`. Before the phase, the swap-time refusal showed no reason. The cause text is right, but the label blames a manifest. A fix needs a typed error, with either a fitting closed-set reason or no reason. `features/plugin/update-dependencies.feature` pins the current row, so the fix updates that cell.
+- **One rule, two copies (review WR-03).** `bridges/agents/target-check.ts` repeats the agents commit's target rule from `stage.ts` (`assertAgentCommitTargets`) instead of sharing it, and no test runs one fixture through both. If they drift, a refusal lands after a move again. Share the predicate or add a parity test.
 - **For TST-01:** the install-plan root's previewed commit (D-PL4-01, `rootCommit`) has unit proof only, because of a harness limit (RESEARCH A3). No step offers a git plugin whose catalog entry declares dependencies, and a git plugin's own `plugin.json` is not visible to the first walk before it is cloned. The proof is the 04-05 unit case in `install-flow.test.ts`.
 
 ## Uncertain choices (for user review)

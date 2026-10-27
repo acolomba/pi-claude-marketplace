@@ -181,6 +181,10 @@ phase), the workflow-target refusal (see Deferred).
   the refusal (`dependency-plan.ts::unmovable`). Today a move that fails in
   the swap shows the redacted basename (`failedMoveRow`, T-55-02-02); the
   same failure found by the plan must read the same.
+  Scope (review WR-02): only the move refusal is redacted. A fresh
+  dependency's preview refusal and the update root's WR-C refusal keep the
+  full path, as their commit-time refusals (the install ledger, the swap)
+  always showed it.
 
 ### RSV-05: probe and outcome types
 - **D-PL4-05 (b2):** remove the unread `range` from the `no-matching-tag` arm

@@ -53,11 +53,11 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 
 ### Dependency resolver (RSV)
 
-- [ ] **RSV-01**: A fresh unpinned git dependency installs the commit the plan previewed, with one network resolve (UPDDEP-01 b1)
-- [ ] **RSV-02**: Whether one bad dependency refuses the root under `apply` before its moves land is decided against Claude Code and implemented (UPDDEP-01 b4)
-- [ ] **RSV-03**: The greedy resolver's completeness is compared with Claude Code's resolver; it is made complete or its limit is recorded with an ID (UPDDEP-01 b5)
-- [ ] **RSV-04**: An agent-target refusal in an update is found before any move lands (UPDDEP-01 b6)
-- [ ] **RSV-05**: The `no-matching-tag` outcome's range field is read or removed, and the failed arm of `InstallMissingDependencyOutcome` declares `rollbackPartials` (LCCODE-01 b2, b3)
+- [x] **RSV-01**: A fresh unpinned git dependency installs the commit the plan previewed, with one network resolve (UPDDEP-01 b1)
+- [x] **RSV-02**: Whether one bad dependency refuses the root under `apply` before its moves land is decided against Claude Code and implemented (UPDDEP-01 b4)
+- [x] **RSV-03**: The greedy resolver's completeness is compared with Claude Code's resolver; it is made complete or its limit is recorded with an ID (UPDDEP-01 b5)
+- [x] **RSV-04**: An agent-target refusal in an update is found before any move lands (UPDDEP-01 b6)
+- [x] **RSV-05**: The `no-matching-tag` outcome's range field is read or removed, and the failed arm of `InstallMissingDependencyOutcome` declares `rollbackPartials` (LCCODE-01 b2, b3)
 
 ### Marketplace commands (MKT)
 
@@ -155,11 +155,11 @@ None.
 | CAS-05 | Phase 3 | Pending |
 | CAS-06 | Phase 3 | Pending |
 | CAS-07 | Phase 3 | Pending |
-| RSV-01 | Phase 4 | Pending |
-| RSV-02 | Phase 4 | Pending |
-| RSV-03 | Phase 4 | Pending |
-| RSV-04 | Phase 4 | Pending |
-| RSV-05 | Phase 4 | Pending |
+| RSV-01 | Phase 4 | Complete |
+| RSV-02 | Phase 4 | Complete |
+| RSV-03 | Phase 4 | Complete |
+| RSV-04 | Phase 4 | Complete |
+| RSV-05 | Phase 4 | Complete |
 | MKT-01 | Phase 5 | Pending |
 | MKT-02 | Phase 5 | Pending |
 | MKT-03 | Phase 5 | Pending |
