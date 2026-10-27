@@ -374,8 +374,9 @@ export class ScenarioWorld extends World {
   /**
    * Starts a second Pi as `usePiWithGitHubBaseUrl()` does, except that the
    * maximum delay of the background update is `value` (D-PL8-09) instead of
-   * the GitHub base override. The run's Pi reads that variable once, at start,
-   * and never sets it, so its background update keeps the ten-minute maximum.
+   * the GitHub base override. A Pi's environment is fixed when it starts, and
+   * the run's Pi never sets that variable, so its background update keeps the
+   * ten-minute maximum.
    */
   async usePiWithBackgroundUpdateDelay(value: string): Promise<void> {
     await this.usePiWith({
