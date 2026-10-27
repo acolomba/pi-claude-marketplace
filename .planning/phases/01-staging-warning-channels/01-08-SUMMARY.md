@@ -218,7 +218,8 @@ format. Replace `#NNN` with the PR number.
 | **D-PL1-05: the staging diagnostic header names the scope** (PR #NNN, 2026-10-27): `Plugin "<name>" [<scope>] <verb>; N declared component(s) has/have a note(s).` on every verb | The bracketed scope matches the row grammar, and it closes the UPCASC-01 parity gap for install, update and reinstall at once | -- Locked |
 | **D-PL1-06: closed header verb union** (PR #NNN, 2026-10-27): `installed`, `updated`, `reinstalled`, `enabled`, `install failed`, `update failed`, `reinstall failed` | A closed union makes the compiler name every header site | -- Locked |
 | **D-PL1-07: one placement rule** (PR #NNN, 2026-10-27): after a command's rows, one `notifyDiagnostic` per plugin with discovery warnings, in row order, then the MCP config notices; lines redacted with `redactAbsolutePaths` (NFR-9) | One rule for every verb and cascade keeps the output order predictable: row, then the detail that qualifies it, then the file notices | -- Locked |
-| **D-PL1-08: cascades render the discovery half only** (PR #NNN, 2026-10-27): the update and reinstall cascades show discovery warnings; hygiene warnings stay on the orchestrated payload (D-19-01) | The header says declared components have notes, which is false over hygiene lines such as an index corruption. It also gives standalone verbs and cascades one rule | -- Locked |
+| **D-PL1-08: cascades render the discovery half only** (PR #NNN, 2026-10-27): the update and reinstall cascades show discovery warnings; hygiene warnings stay on the orchestrated payload (D-19-01) | The header says declared components have notes, which is false over hygiene lines such as an index corruption. It also gives standalone verbs and cascades one rule | -- Reversed by D-PL1-25 |
+| **D-PL1-25: cascades render both halves** (PR #NNN, 2026-10-27): `marketplace update`, autoupdate and `apply`'s catalog moves, backfills and enables show each plugin's discovery notes, then its hygiene warnings, in one diagnostic per plugin under `Plugin "<name>" [<scope>] <verb>; N declared component(s) ...; N staging warning(s).`; the standalone verbs keep the discovery half. It reverses D-PL1-08 and amends D-PL1-05, D-PL1-07 and D-PL1-12 in cascades | WRN-02 asks for the warnings each plugin's materialization produced, and a cascade must not drop a cleanup leak or an index corruption. One clause per half keeps the header true, and discovery-only diagnostics keep their bytes | -- Locked |
 | **D-PL1-09: the three cascades** (PR #NNN, 2026-10-27): `marketplace update` and autoupdate (one path, `cascadeAutoupdates`) render after the cascade rows through `update.messaging.ts`; `apply` renders its catalog moves and enables after its install post-commit block | The two marketplace cascades share one code path, so one call covers both. The reconcile backfill UPCASC-01 named no longer exists, because a growth move goes through the update runner | -- Locked |
 | **D-PL1-10: the update runner carries tagged warnings** (PR #NNN, 2026-10-27): the `updated` and `failed` arms of `PluginUpdateOutcome` carry `stagingWarnings?` (both halves, omitted when empty); the string fold into `notes` is removed | The warnings start inside the runner, but the rows render after it. The typed carrier lets every consumer pick its half | -- Locked |
 | **D-PL1-11: reinstall carries the discovery half typed** (PR #NNN, 2026-10-27): `ReinstallReinstalledOutcome.discoveryWarnings` and the new `ReinstallFailedOutcome.discoveryWarnings` are `readonly DiscoveryWarning[]`; `notes` keeps its orchestrated string fold | Reinstall renders only the discovery half, and its orchestrated readers keep the existing `notes` bytes | -- Locked |
@@ -240,7 +241,7 @@ format. Replace `#NNN` with the PR number.
 | Entry | Disposition | Decisions | Commits | Proof |
 | ----- | ----------- | --------- | ------- | ----- |
 | ENWARN-01 | Closed | D-PL1-12, D-PL1-07 | 97fde69d, 41f39739, d915c147 (apply renders the enable) | Scenarios "Enabling a plugin whose skills collide reports the skip install reports, under a header that names the scope" and "Apply that enables a plugin whose skills collide reports the skip under its header" |
-| UPCASC-01 | Closed | D-PL1-05, D-PL1-07, D-PL1-08, D-PL1-09, D-PL1-20 | 58a2111a (header), d8d46674, d915c147 | Scenarios "A marketplace update with autoupdate on reports a moved plugin's skip under its header" and "Apply that moves a plugin to its catalog version reports the moved plugin's skip under its header" |
+| UPCASC-01 | Closed | D-PL1-05, D-PL1-07, D-PL1-08 (reversed by D-PL1-25), D-PL1-09, D-PL1-20, D-PL1-25 | 58a2111a (header), d8d46674, d915c147 | Scenarios "A marketplace update with autoupdate on reports a moved plugin's skip under its header" and "Apply that moves a plugin to its catalog version reports the moved plugin's skip under its header"; for D-PL1-25, the two "... reports the moved plugin's skip and its dropped agent field under one header" scenarios |
 | WCHAN-01 | Closed | D-PL1-01, D-PL1-02, D-PL1-03, D-PL1-04 | d13f32e9, cc945def, e173016c | The `@ts-expect-error` cases in `test/shared/staging-warnings.test.ts` and `test/orchestrators/plugin/shared.test.ts`, plus `npm run typecheck`; scenario "Installing a plugin whose agents share a name reports the skipped agent" |
 | WARN-01 | Closed | D-PL1-13, D-PL1-14, D-PL1-24 | cd02a3e5, 6bc5603f, 3356955f | Scenarios "An install that fails in its mcp phase reports the skill the skills phase skipped after the failed row", and the update and reinstall variants of it |
 | AGIDX-01 | Closed | D-PL1-15 | b6177e7c | Unit case "D-PL1-15: force replaces a staged row whose bytes a user changed and keeps a hand-named row with its file" in `test/bridges/agents/stage.test.ts` |
@@ -253,11 +254,12 @@ installed-copy containment bullets.
 
 ## Uncertain choices (for user review)
 
-1. **Cascades render the discovery half only (D-PL1-08).** Shipped: the
+1. ~~**Cascades render the discovery half only (D-PL1-08).** Shipped: the
    `marketplace update`, autoupdate, `apply` and reinstall cascades show only
    discovery warnings. The hygiene half stays on the orchestrated payload.
    The install cascade's existing `postCommitWarnings` (both halves, rendered
-   by `apply` and `import`) is unchanged.
+   by `apply` and `import`) is unchanged.~~ Resolved 2026-10-27: reversed by
+   D-PL1-25.
 2. **Commit cleanup leaks are tagged at the orchestrator (D-PL1-02).**
    Shipped: `commitPrepared*` still returns `string | undefined`, and the
    install ledger pushes `hygieneWarning(leak)` at its one push site.
@@ -278,13 +280,20 @@ installed-copy containment bullets.
    "N post-install warnings surfaced from reconcile installs." is unchanged.
    Only apply's catalog moves and enables use the per-plugin header, so one
    `apply` run can show both shapes.
+8. **Cascade header for hygiene lines (D-PL1-25).** Shipped: one diagnostic
+   per plugin, with one clause per half, such as `Plugin "demo" [project]
+   updated; 1 declared component has a note; 1 staging warning.` The
+   alternatives were a second diagnostic for the hygiene half, or one
+   generic `N staging warnings` header over all lines.
 
 ## Docs note for CLN-03
 
 `docs/output-catalog.md` does not describe the per-plugin staging diagnostic:
 the `Plugin "<name>" [<scope>] <verb>; N declared components have notes.`
 header, its seven verbs, or where it sits after the rows and before the MCP
-config notices. The docs cleanup phase (CLN-03) adds it.
+config notices. In a cascade, the header also carries the
+`; N staging warning(s)` clause for hygiene lines (D-PL1-25), so the docs
+describe the whole header. The docs cleanup phase (CLN-03) adds it.
 
 ## Known Stubs
 
@@ -323,8 +332,10 @@ Phase threat register, with evidence:
   only in the standalone branch. Each catch site creates one `CandidateReport`
   per target (01-06).
 - **T-01-15 (mitigate) holds, T-01-16 (accept).** Cascades render only
-  through `surfaceStagingDiagnostics`. There is one diagnostic per moved or
-  enabled plugin with discovery warnings (01-07).
+  through `surfaceCascadeStagingDiagnostics`, which shows both halves
+  (D-PL1-25). There is one diagnostic per moved or enabled plugin with any
+  staging warning, every line redacted, under a header with one clause per
+  half (01-07).
 - **T-01-17 (mitigate) holds.** The settle now carries the notices to the
   update outcome, so the user hears about every rewrite of their MCP file
   (AFILE-04). A notice names only its kind, scope and file name, never a
