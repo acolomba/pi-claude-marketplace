@@ -100,7 +100,7 @@ import {
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
 import { MarketplaceRemoveFailureError, removeMarketplace } from "../marketplace/remove.ts";
-import { garbageCollectPluginClones } from "../plugin/clone-gc.ts";
+import { collectPluginClonesLocked } from "../plugin/clone-gc.ts";
 import {
   createConvergeOperation,
   createDependencyInstallOperation,
@@ -113,6 +113,7 @@ import { UninstallRefusedError } from "../plugin/uninstall.ts";
 
 import {
   carriedMcpConfigNotices,
+  carriedPackageNote,
   cascadeDisabledOutcome,
   classifyOrchestratorThrow,
   installFailureReasonFields,
@@ -1617,11 +1618,12 @@ function deferCollection(collect: { requested: boolean }): () => Promise<void> {
 /**
  * D-19-01 / Review 4 WR-2: clone cleanup is hygienic, as the runner's own is
  * (`update-preflight.ts::refreshDisabledPluginUpdate`): a failure is traced and
- * a later lifecycle operation retries it.
+ * a later lifecycle operation retries it. D-PL7-05: the GC takes a fresh scope
+ * lock, so a held lock is such a failure.
  */
 async function collectClones(locations: ScopedLocations): Promise<void> {
   try {
-    await garbageCollectPluginClones(locations);
+    await collectPluginClonesLocked(locations);
   } catch (err) {
     hookDebugLog(`apply: clone cleanup failed: ${errorMessage(err)}`, "reconcile");
   }
@@ -1888,6 +1890,7 @@ function grownMoveOutcomes(move: PlannedMove, result: PluginUpdateOutcome): PerE
       unsupported,
       ...installedRowDegradation(result),
       ...carriedMcpConfigNotices(result),
+      ...carriedPackageNote(result),
     },
   ];
 }
@@ -2054,25 +2057,33 @@ export function createApplyReconcile(
   };
 }
 
+/**
+ * The post-commit warnings one outcome carries. Both install-driven arms carry
+ * the field: `installPlugin` collects its post-commit warnings after the state
+ * commit and gates none of them on the DFEN-04 disabled verdict, so an install
+ * that landed disabled has the same hygiene facts to report as one that landed
+ * enabled. PKD-02: a realized catalog or growth move carries its package note.
+ */
+function postCommitWarningsOf(o: PerEntryOutcome): readonly string[] {
+  if (
+    o.kind === "plugin-installed" ||
+    o.kind === "plugin-disabled" ||
+    o.kind === "plugin-converged" ||
+    o.kind === "plugin-backfilled"
+  ) {
+    return o.postCommitWarnings ?? [];
+  }
+
+  return [];
+}
+
 function surfacePostCommitWarnings(
   opts: ApplyReconcileOptions,
   outcomes: readonly PerEntryOutcome[],
 ): void {
   const lines: string[] = [];
   for (const o of outcomes) {
-    // Both install-driven arms carry the field: `installPlugin` collects its
-    // post-commit warnings after the state commit and gates none of them on the
-    // DFEN-04 disabled verdict, so an install that landed disabled has the same
-    // hygiene facts to report as one that landed enabled.
-    if (o.kind !== "plugin-installed" && o.kind !== "plugin-disabled") {
-      continue;
-    }
-
-    if (o.postCommitWarnings === undefined) {
-      continue;
-    }
-
-    for (const w of o.postCommitWarnings) {
+    for (const w of postCommitWarningsOf(o)) {
       // T-86-03 / NFR-9: collapse any absolute source path embedded in a
       // frontmatter parse-error detail (or any other post-commit warning) to
       // its basename before it reaches the operator-facing notifyDiagnostic

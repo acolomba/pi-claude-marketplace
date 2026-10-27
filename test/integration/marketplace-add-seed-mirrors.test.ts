@@ -14,7 +14,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { loadMarketplaceManifest } from "../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import { addMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
-import { garbageCollectPluginClones } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts";
+import { collectPluginClonesLocked } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts";
 import {
   probeManifestEntry,
   type ManifestEntry,
@@ -414,7 +414,7 @@ test("lets normal clone garbage collection sweep an unreferenced seeded mirror",
     assert.strictEqual(await pathExists(mirror), true);
 
     // act
-    await garbageCollectPluginClones(locations);
+    await collectPluginClonesLocked(locations);
 
     // assert
     assert.strictEqual(await pathExists(mirror), false);

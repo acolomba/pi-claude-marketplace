@@ -11,13 +11,17 @@ import {
   readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { preparePluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
-import { swapPluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
+import {
+  assertUpdateNamesFree,
+  swapPluginUpdate,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { AgentTargetOccupiedError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { PluginUpdateConcurrencyError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
@@ -246,7 +250,7 @@ async function assertAgentsMigrated(params: {
       hooks: [],
       workflows: [],
     },
-    updatedAt: "2026-01-02T00:00:00.000Z",
+    updatedAt: "2026-01-02T00:00:00.001Z",
   });
   if (!coexist) {
     await assert.rejects(readFile(oldTarget), { code: "ENOENT" });
@@ -312,6 +316,47 @@ test("AGENT-01 / NFR-3: update refuses an occupied agent target before its inten
   });
 });
 
+test("D-PL4-04: assertUpdateNamesFree admits a candidate whose agent targets are free and writes nothing", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    const fixture = await seedLegacyAgentUpdate(t, false);
+    const { locations, newTarget, oldTarget, oldBytes, oldIndexBytes, options } = fixture;
+    const preflight = await preparePluginUpdate({ ...options, policy: UPDATE_POLICY });
+    assert.ok(!("partition" in preflight));
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+
+    // act & assert
+    await assert.doesNotReject(assertUpdateNamesFree(options, preflight));
+    assert.strictEqual(await readFile(oldTarget, "utf8"), oldBytes);
+    assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), oldIndexBytes);
+    assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    await assert.rejects(readFile(newTarget), { code: "ENOENT" });
+  });
+});
+
+test("D-PL4-04: assertUpdateNamesFree refuses a candidate whose new agent target holds a user's file, before anything changes", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    const fixture = await seedLegacyAgentUpdate(t, false);
+    const { locations, newTarget, oldTarget, oldBytes, oldIndexBytes, options } = fixture;
+    await writeFile(newTarget, "User's own agent.\n");
+    const preflight = await preparePluginUpdate({ ...options, policy: UPDATE_POLICY });
+    assert.ok(!("partition" in preflight));
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+
+    // act & assert
+    await assert.rejects(assertUpdateNamesFree(options, preflight), (error: unknown) => {
+      assert.ok(error instanceof AgentTargetOccupiedError);
+      assert.strictEqual(error.targetPath, newTarget);
+      return true;
+    });
+    assert.strictEqual(await readFile(oldTarget, "utf8"), oldBytes);
+    assert.strictEqual(await readFile(newTarget, "utf8"), "User's own agent.\n");
+    assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), oldIndexBytes);
+    assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+  });
+});
+
 /** Cascade-mode swap arguments for `hello@mp` in the project scope of `cwd`. */
 function cascadeSwapArgs(cwd: string): ThreePhaseArgsBase & { readonly cascade: true } {
   return {
@@ -359,6 +404,46 @@ test("D-18-06: a partially available candidate's swap records the plugin as not 
   });
 });
 
+/** Same-revision knobs (a reinstall's): neither the version nor the sha moves. */
+const SAME_REVISION_POLICY = {
+  refreshSource: false,
+  skipSameRevision: false,
+  overwrite: true,
+  searchReleaseTags: true,
+} satisfies MaterializationPolicy;
+
+/** A `saveState` that lets the intent mark through and refuses the finalize save. */
+function refuseFinalizeSave(): typeof saveState {
+  let saves = 0;
+  return async (extensionRoot, state) => {
+    saves += 1;
+    if (saves === 2) {
+      throw new Error("finalize refused");
+    }
+
+    await saveState(extensionRoot, state);
+  };
+}
+
+/** Seeds `hello` 1.0.0 installed at 1.0.0, recorded with `updatedAt`. */
+async function seedSameRevisionUpdate(t: TestContext, prefix: string, updatedAt: string) {
+  const { cwd } = await createHermeticEnvironment(t, prefix);
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "1.0.0", hasSkill: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const args = cascadeSwapArgs(cwd);
+  const state = await loadState(args.locations.extensionRoot);
+  const record = state.marketplaces.mp?.plugins.hello;
+  assert.ok(record);
+  record.updatedAt = updatedAt;
+  await saveState(args.locations.extensionRoot, state);
+  return args;
+}
+
 test("ST-9: a same-revision swap prepared before another swap's intent mark fails concurrently updated and a fresh run converges", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "update-swap-overlap-");
@@ -370,28 +455,13 @@ test("ST-9: a same-revision swap prepared before another swap's intent mark fail
     installedVersions: { hello: "1.0.0" },
   });
   const args = cascadeSwapArgs(cwd);
-  const policy = {
-    refreshSource: false,
-    skipSameRevision: false,
-    overwrite: true,
-    searchReleaseTags: true,
-  } as const;
+  const policy = SAME_REVISION_POLICY;
   const first = await preparePluginUpdate({ ...args, policy });
   const second = await preparePluginUpdate({ ...args, policy });
   assert.ok(!("partition" in first));
   assert.ok(!("partition" in second));
-  let saves = 0;
-  const refuseFinalize: typeof saveState = async (extensionRoot, state) => {
-    saves += 1;
-    if (saves === 2) {
-      throw new Error("finalize refused");
-    }
-
-    await saveState(extensionRoot, state);
-  };
-
   const firstOutcome = await swapPluginUpdate(
-    { ...args, stateTransaction: { saveState: refuseFinalize } },
+    { ...args, stateTransaction: { saveState: refuseFinalizeSave() } },
     first,
     policy,
   );
@@ -430,6 +500,105 @@ test("ST-9: a same-revision swap prepared before another swap's intent mark fail
     supported: ["skills"],
     unsupported: [],
   });
+});
+
+test("GLK-06: a swap prepared in the millisecond of another swap's intent mark fails concurrently updated", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-01T00:00:00.000Z") });
+  const args = await seedSameRevisionUpdate(t, "update-swap-same-ms-", "2026-01-01T00:00:00.000Z");
+  const first = await preparePluginUpdate({ ...args, policy: SAME_REVISION_POLICY });
+  const second = await preparePluginUpdate({ ...args, policy: SAME_REVISION_POLICY });
+  assert.ok(!("partition" in first));
+  assert.ok(!("partition" in second));
+  const firstOutcome = await swapPluginUpdate(
+    { ...args, stateTransaction: { saveState: refuseFinalizeSave() } },
+    first,
+    SAME_REVISION_POLICY,
+  );
+  assert.strictEqual(firstOutcome.partition, "failed");
+  const markedState = await readFile(args.locations.stateJsonPath, "utf8");
+  const marked = (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  assert.strictEqual(marked?.updatedAt, "2026-01-01T00:00:00.001Z");
+
+  // act & assert
+  await assert.rejects(swapPluginUpdate(args, second, SAME_REVISION_POLICY), (error: unknown) => {
+    assert.ok(error instanceof PluginUpdateConcurrencyError);
+    assert.deepStrictEqual(
+      {
+        kind: error.kind,
+        plugin: error.plugin,
+        marketplace: error.marketplace,
+        lifecycle: error.lifecycle,
+      },
+      { kind: "plugin-updated", plugin: "hello", marketplace: "mp", lifecycle: "intent" },
+    );
+    return true;
+  });
+  assert.strictEqual(await readFile(args.locations.stateJsonPath, "utf8"), markedState);
+});
+
+test("GLK-06: an intent mark replaces an unparseable updatedAt with the current time", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-03T00:00:00.000Z") });
+  const args = await seedSameRevisionUpdate(t, "update-swap-bad-stamp-", "not a date");
+  const preflight = await preparePluginUpdate({ ...args, policy: SAME_REVISION_POLICY });
+  assert.ok(!("partition" in preflight));
+
+  // act
+  const outcome = await swapPluginUpdate(
+    { ...args, stateTransaction: { saveState: refuseFinalizeSave() } },
+    preflight,
+    SAME_REVISION_POLICY,
+  );
+
+  // assert
+  assert.strictEqual(outcome.partition, "failed");
+  const marked = (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  assert.strictEqual(marked?.updatedAt, "2026-01-03T00:00:00.000Z");
+});
+
+test("GLK-06: an intent mark replaces an updatedAt at the largest date with the current time", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-04T00:00:00.000Z") });
+  const args = await seedSameRevisionUpdate(
+    t,
+    "update-swap-max-stamp-",
+    "+275760-09-13T00:00:00.000Z",
+  );
+  const preflight = await preparePluginUpdate({ ...args, policy: SAME_REVISION_POLICY });
+  assert.ok(!("partition" in preflight));
+
+  // act
+  const outcome = await swapPluginUpdate(
+    { ...args, stateTransaction: { saveState: refuseFinalizeSave() } },
+    preflight,
+    SAME_REVISION_POLICY,
+  );
+
+  // assert
+  assert.strictEqual(outcome.partition, "failed");
+  const marked = (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  assert.strictEqual(marked?.updatedAt, "2026-01-04T00:00:00.000Z");
+});
+
+test("GLK-06: a finalize stamps the record one millisecond after the intent mark of the same instant", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const args = await seedSameRevisionUpdate(
+    t,
+    "update-swap-finalize-stamp-",
+    "2026-01-01T00:00:00.000Z",
+  );
+  const preflight = await preparePluginUpdate({ ...args, policy: SAME_REVISION_POLICY });
+  assert.ok(!("partition" in preflight));
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, SAME_REVISION_POLICY);
+
+  // assert
+  assert.strictEqual(outcome.partition, "updated");
+  const record = (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  assert.strictEqual(record?.updatedAt, "2026-01-02T00:00:00.001Z");
 });
 
 /**
@@ -545,7 +714,7 @@ test("D-18-15: an overwrite policy commits over a previous agent file a user edi
     version: "2.0.0",
     resolvedSource: pluginRoot,
     compatibility: { installable: true, notes: [], supported: ["agents"], unsupported: [] },
-    updatedAt: "2026-01-02T00:00:00.000Z",
+    updatedAt: "2026-01-02T00:00:00.001Z",
   });
 });
 

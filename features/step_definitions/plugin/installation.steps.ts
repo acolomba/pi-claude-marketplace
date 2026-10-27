@@ -8,9 +8,11 @@
  * the git clones of plugins and marketplaces the scope keeps. A clone is shown
  * by its origin URL and, when pinned, by its revision, never by its directory
  * name, which hashes a URL with the git host's random port.
- * Two setup steps change the files of an installed plugin as a user can: one
- * plants a file in its data directory, and one deletes its installed skills.
- * The other steps only read.
+ * Three setup steps change files as a user can: one plants a file in an
+ * installed plugin's data directory, one deletes a plugin's installed skills,
+ * and one writes a file of the user's own in the scope's shared `agents/`
+ * directory, where an install writes the agents of every plugin. The other
+ * steps only read; one of them lists the files of that `agents/` directory.
  *
  * A missing installation record fails the step; it never reads as no plugins.
  * A scope that has a marketplace added always has one.
@@ -18,7 +20,7 @@
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
@@ -119,6 +121,48 @@ function pluginDataDirectory(world: ScenarioWorld, scope: string, id: string): s
   return path.join(extensionRoot(world, scope), "data", marketplace, plugin);
 }
 
+// The scope's shared directory of Pi agents.
+function agentsDirectory(world: ScenarioWorld, scope: string): string {
+  return path.join(world.scopeRoot(scope), "agents");
+}
+
+// Writes the user's file `name` holding `text` in `directory`, which must not
+// hold it yet, and removes it on release.
+async function writeUserFile(
+  world: ScenarioWorld,
+  directory: string,
+  name: string,
+  text: string,
+): Promise<void> {
+  assert.ok(isEntryName(name), `${name} is not a file name`);
+  const file = path.join(directory, name);
+  await writeFile(file, text, { flag: "wx" });
+  world.onRelease(() => rm(file, { force: true }));
+  assert.equal(await readFile(file, "utf8"), text);
+}
+
+// The `| file | text |` rows of every file under `directory`, which must
+// exist, sorted by the file's `/`-separated path inside it.
+async function fileRows(directory: string): Promise<string[][]> {
+  assert.ok(existsSync(directory), `${directory} does not exist`);
+  const entries = await readdir(directory, { recursive: true, withFileTypes: true });
+  const files = await Promise.all(
+    entries
+      .filter((entry) => entry.isFile())
+      .map(async (entry) => {
+        const file = path.join(entry.parentPath, entry.name);
+        return {
+          name: path.relative(directory, file).split(path.sep).join("/"),
+          text: await readFile(file, "utf8"),
+        };
+      }),
+  );
+  const rows = files
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((file) => [file.name, file.text]);
+  return [["file", "text"], ...rows];
+}
+
 // The entries a staged-resource directory holds; an absent directory holds none.
 async function stagedEntries(directory: string): Promise<readonly string[]> {
   return existsSync(directory) ? readdir(directory) : [];
@@ -133,11 +177,16 @@ Given(
       `${directory} does not exist, so the install did not create it`,
     );
     assert.ok((await stat(directory)).isDirectory(), `${directory} is not a directory`);
-    assert.ok(isEntryName(name), `${name} is not a file name`);
-    const file = path.join(directory, name);
-    await writeFile(file, text, { flag: "wx" });
-    this.onRelease(() => rm(file, { force: true }));
-    assert.equal(await readFile(file, "utf8"), text);
+    await writeUserFile(this, directory, name, text);
+  },
+);
+
+Given(
+  "the agents directory of the {word} scope holds the file {string} with the text {string}",
+  async function (this: ScenarioWorld, scope: string, name: string, text: string) {
+    const directory = agentsDirectory(this, scope);
+    await mkdir(directory, { recursive: true });
+    await writeUserFile(this, directory, name, text);
   },
 );
 
@@ -228,24 +277,14 @@ Then(
 Then(
   "the data directory of {string} in the {word} scope holds these files:",
   async function (this: ScenarioWorld, id: string, scope: string, table: DataTable) {
-    const directory = pluginDataDirectory(this, scope, id);
-    assert.ok(existsSync(directory), `${directory} does not exist`);
-    const entries = await readdir(directory, { recursive: true, withFileTypes: true });
-    const files = await Promise.all(
-      entries
-        .filter((entry) => entry.isFile())
-        .map(async (entry) => {
-          const file = path.join(entry.parentPath, entry.name);
-          return {
-            name: path.relative(directory, file).split(path.sep).join("/"),
-            text: await readFile(file, "utf8"),
-          };
-        }),
-    );
-    const rows = files
-      .sort((left, right) => left.name.localeCompare(right.name))
-      .map((file) => [file.name, file.text]);
-    assert.deepStrictEqual([["file", "text"], ...rows], table.raw());
+    assert.deepStrictEqual(await fileRows(pluginDataDirectory(this, scope, id)), table.raw());
+  },
+);
+
+Then(
+  "the agents directory of the {word} scope holds these files:",
+  async function (this: ScenarioWorld, scope: string, table: DataTable) {
+    assert.deepStrictEqual(await fileRows(agentsDirectory(this, scope)), table.raw());
   },
 );
 

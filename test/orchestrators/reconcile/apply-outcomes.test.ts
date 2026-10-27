@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import { UninstallRefusedError } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import {
   carriedMcpConfigNotices,
+  carriedPackageNote,
   classifyOrchestratorThrow,
   installFailureReasonFields,
   classifyReadPassThrow,
@@ -1280,6 +1281,28 @@ describe("carriedMcpConfigNotices", () => {
 
     // act
     const carried = carriedMcpConfigNotices(outcome);
+
+    // assert
+    assert.deepStrictEqual(carried, {});
+  });
+});
+
+describe("carriedPackageNote", () => {
+  test("PKD-02: lifts the package note onto the post-install warnings", () => {
+    // act
+    const carried = carriedPackageNote({
+      packageNote: "Plugin dependency install failed (npm): E404",
+    });
+
+    // assert
+    assert.deepStrictEqual(carried, {
+      postCommitWarnings: ["Plugin dependency install failed (npm): E404"],
+    });
+  });
+
+  test("PKD-02: lifts nothing when the carrier has no package note", () => {
+    // act
+    const carried = carriedPackageNote({});
 
     // assert
     assert.deepStrictEqual(carried, {});
