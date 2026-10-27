@@ -23,6 +23,7 @@ import type {
   ResolvedRow,
 } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type {
+  BackgroundUpdateSurface,
   CascadeNotificationMessage,
   MarketplaceNotAddedMessage,
   MarketplaceNotificationMessage,
@@ -1670,6 +1671,56 @@ describe("resolveRawSurface", () => {
       kind: "plugin-path-skipped",
       scope: "project",
       reason: "fetch with Bearer *** failed",
+    });
+  });
+
+  test("PMOD-04 redacts a credential in every string field of a background update row", () => {
+    // arrange
+    const surface = {
+      kind: "background-update",
+      plugins: [
+        {
+          name: "https://user:tok@host/alpha",
+          marketplace: "tools-ghp_0123456789abcdefghijklmnopqrstuvwxyz",
+          scope: "project",
+          fromVersion: "https://user:tok@host/1.0.0",
+          toVersion: "ghp_0123456789abcdefghijklmnopqrstuvwxyz",
+        },
+      ],
+    } satisfies BackgroundUpdateSurface;
+
+    // act
+    const resolved = resolveRawSurface(surface);
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "background-update",
+      plugins: [
+        {
+          name: "https://***@host/alpha",
+          marketplace: "tools-***",
+          scope: "project",
+          fromVersion: "https://***@host/1.0.0",
+          toVersion: "***",
+        },
+      ],
+    });
+  });
+
+  test("D-PL8-16 resolves a background update row without a from version", () => {
+    // arrange
+    const surface = {
+      kind: "background-update",
+      plugins: [{ name: "alpha", marketplace: "tools", scope: "user", toVersion: "1.1.0" }],
+    } satisfies BackgroundUpdateSurface;
+
+    // act
+    const resolved = resolveRawSurface(surface);
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "background-update",
+      plugins: [{ name: "alpha", marketplace: "tools", scope: "user", toVersion: "1.1.0" }],
     });
   });
 

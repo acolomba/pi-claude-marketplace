@@ -171,13 +171,13 @@ Every kind includes these fields. The `internal-error` kind narrows origin and s
 
 <!-- fields: common-fields -->
 
-| Field path      | Type              | Presence | Meaning                                               |
-| --------------- | ----------------- | -------- | ----------------------------------------------------- |
-| `schemaVersion` | integer `1`       | required | Payload compatibility version.                        |
-| `kind`          | string            | required | Payload kind from the twenty-one kind sections below. |
-| `origin`        | [Origin](#origin) | required | Source of this notification.                          |
-| `severity`      | string            | required | `info`, `warning`, or `error`, in increasing order.   |
-| `needsReload`   | boolean           | required | Whether completed changes need `/reload`.             |
+| Field path      | Type              | Presence | Meaning                                                 |
+| --------------- | ----------------- | -------- | ------------------------------------------------------- |
+| `schemaVersion` | integer `1`       | required | Payload compatibility version.                          |
+| `kind`          | string            | required | Payload kind from the twenty-three kind sections below. |
+| `origin`        | [Origin](#origin) | required | Source of this notification.                            |
+| `severity`      | string            | required | `info`, `warning`, or `error`, in increasing order.     |
+| `needsReload`   | boolean           | required | Whether completed changes need `/reload`.               |
 
 <!-- /fields -->
 
@@ -207,7 +207,7 @@ The ten structured kinds through `prune-committed-warning` also permit this fiel
 
 Load and hook origins have only `kind`. Command IDs can repeat across runs. Invocation IDs keep their results separate, including overlapping commands.
 
-A load reports its pending changes as a `cascade` whose `origin.kind` is `load`, and its per-session warnings as a `reconcile-applied-cascade`. When a config turns `autoapply` on, the load runs `apply` instead and reports its changes as a `reconcile-applied-cascade` whose `origin.kind` is `load`. Such a load with nothing to change emits nothing.
+A load reports its pending changes as a `cascade` whose `origin.kind` is `load`, and its per-session warnings as a `reconcile-applied-cascade`. When a config turns `autoapply` on, the load runs `apply` instead and reports its changes as a `reconcile-applied-cascade` whose `origin.kind` is `load`. Such a load with nothing to change emits nothing. A background update reports the plugins it moved as one `background-update` whose `origin.kind` is `load`.
 
 ### Command origin
 
@@ -558,6 +558,21 @@ The one notice of a load pass that moved plugin MCP servers from `mcp.json` to `
 
 <!-- /fields -->
 
+#### background-update
+
+The one notice of a background update, which runs after the first message of a session, when the update moved at least one plugin. Its origin is `load`, severity is always `info`, and `needsReload` is always `true`. A background update that moved nothing emits nothing.
+
+<!-- fields: kind:background-update -->
+
+<!-- use: common-fields -->
+
+| Field path    | Type                                                    | Presence | Meaning                                                                                                   |
+| ------------- | ------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
+| `needsReload` | boolean                                                 | required | Always `true`.                                                                                            |
+| `plugins`     | [Background update plugin](#background-update-plugin)[] | required | At least one row, one per updated install, in update order. A plugin updated in both scopes has two rows. |
+
+<!-- /fields -->
+
 #### internal-error
 
 An unexpected command failure or a final outcome when ordinary delivery failed. Its origin is always `command`, severity is always `error`, and `summary` is required.
@@ -790,6 +805,20 @@ The plain branch has `event` and an optional `matcher`. The lenient branch adds 
 | `key`         | string          | conditional | Required for `collision`. Server key that another config source already defines.                                                     |
 | `source`      | string          | conditional | Required for `collision`. That config source, as a scope file or a home-relative path.                                               |
 | `file`        | string          | conditional | Required for `file-unreadable` (`mcp.json` or `mcp-adapter.json`) and `unfinished` (`mcp.json` or `project-scope mcp-adapter.json`). |
+
+<!-- /fields -->
+
+### Background update plugin
+
+<!-- fields: background-update-plugin -->
+
+| Field path    | Type   | Presence | Meaning                              |
+| ------------- | ------ | -------- | ------------------------------------ |
+| `name`        | string | required | Plugin name, without `@marketplace`. |
+| `marketplace` | string | required | Marketplace of the plugin.           |
+| `scope`       | Scope  | required | Scope of the updated install.        |
+| `fromVersion` | string | optional | Version the install moved from.      |
+| `toVersion`   | string | required | Version the install moved to.        |
 
 <!-- /fields -->
 

@@ -514,6 +514,45 @@ for (const { title, cause, expectedValid } of [
   });
 }
 
+for (const { title, needsReload, plugins, expectedValid } of [
+  {
+    title: "accepts a load-origin payload whose row omits its from version",
+    needsReload: true,
+    plugins: [{ name: "alpha", marketplace: "tools", scope: "user", toVersion: "1.1.0" }],
+    expectedValid: true,
+  },
+  {
+    title: "rejects a payload with no plugin row",
+    needsReload: true,
+    plugins: [],
+    expectedValid: false,
+  },
+  {
+    title: "rejects a payload that needs no reload",
+    needsReload: false,
+    plugins: [{ name: "alpha", marketplace: "tools", scope: "user", toVersion: "1.1.0" }],
+    expectedValid: false,
+  },
+]) {
+  test(`AUP-03: ${title}`, () => {
+    // arrange
+    const payload = {
+      schemaVersion: 1,
+      origin: { kind: "load" },
+      kind: "background-update",
+      severity: "info",
+      needsReload,
+      plugins,
+    };
+
+    // act
+    const valid = Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload);
+
+    // assert
+    assert.strictEqual(valid, expectedValid);
+  });
+}
+
 for (const { title, status, expectedValid } of [
   {
     title: "accepts an MCP server with a closed-set status",

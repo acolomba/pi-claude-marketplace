@@ -15,6 +15,7 @@ import type {
 } from "./notification-resolve.ts";
 import type { NotificationOrigin } from "./notification-run.ts";
 import type {
+  BackgroundUpdatePlugin,
   MarketplaceDetails,
   MarketplaceInfoMessage,
   McpMigrationRow,
@@ -168,8 +169,9 @@ function wirePresentation(
 /**
  * D-01 / D-02: the payload of one resolved raw surface. Its severity comes from
  * `RAW_SURFACE_SEVERITY`, the table the text strategy reads (PMOD-01), except
- * the migration notice's, which resolve decides. Only the migration notice can
- * need a reload, as resolve decides. A raw kind carries no `summary`; the
+ * the migration notice's, which resolve decides. The migration notice needs a
+ * reload when resolve says so, and the background update notice always does
+ * (D-PL8-11); every other raw kind never does. A raw kind carries no `summary`; the
  * rewake summary is copied verbatim into `text` (D-08).
  */
 function wireRawSurface(
@@ -240,7 +242,25 @@ function wireRawSurface(
         kind: surface.kind,
         notices: surface.notices.map((notice) => wireNotice(notice)),
       };
+    case "background-update":
+      return {
+        ...envelope,
+        needsReload: true,
+        kind: surface.kind,
+        plugins: surface.plugins.map((plugin) => wireBackgroundUpdatePlugin(plugin)),
+      };
   }
+}
+
+/** D-PL8-10 / D-03: one updated install, field by field (WIRE-04). */
+function wireBackgroundUpdatePlugin(plugin: BackgroundUpdatePlugin) {
+  return {
+    name: plugin.name,
+    marketplace: plugin.marketplace,
+    scope: plugin.scope,
+    ...(plugin.fromVersion === undefined ? {} : { fromVersion: plugin.fromVersion }),
+    toVersion: plugin.toVersion,
+  };
 }
 
 /** AFILE-04: one config notice, field by field. */

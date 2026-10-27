@@ -33,6 +33,7 @@ import {
   notify,
   notifyAsyncRewakeSummary,
   notifyAutoapplyStatus,
+  notifyBackgroundUpdate,
   notifyCommandError,
   notifyDeviceFlowPrompt,
   notifyDiagnostic,
@@ -178,6 +179,7 @@ const RAW_ORIGINS: Readonly<Record<RawSurface["kind"], NotificationOrigin>> = {
     invocationId: "raw-mcp-config-notices",
   },
   "mcp-migration": { kind: "load" },
+  "background-update": { kind: "load" },
 };
 
 /**
@@ -251,6 +253,18 @@ const RAW_SAMPLES: { readonly [K in RawSurface["kind"]]: Extract<RawSurface, { k
       },
     ],
     notices: [],
+  },
+  "background-update": {
+    kind: "background-update",
+    plugins: [
+      {
+        name: "demo",
+        marketplace: "tools",
+        scope: "user",
+        fromVersion: "1.0.0",
+        toVersion: "1.10.0",
+      },
+    ],
   },
 };
 
@@ -332,6 +346,9 @@ function emitRawSample(ctx: NotificationContext, run: NotificationRun, surface: 
       return;
     case "mcp-migration":
       notifyMcpMigration(ctx, run, { rows: surface.rows, notices: surface.notices });
+      return;
+    case "background-update":
+      notifyBackgroundUpdate(ctx, run, surface.plugins);
       return;
   }
 }
@@ -477,7 +494,7 @@ function realPayloads(): {
   }));
 }
 
-test("WIRE-02: the retained inventory and separate command error cover all 22 kinds", () => {
+test("WIRE-02: the retained inventory and separate command error cover all 23 kinds", () => {
   // arrange
   const error = resolveCommandError(new Error("operation failed"), false);
   const origin = {
@@ -493,6 +510,7 @@ test("WIRE-02: the retained inventory and separate command error cover all 22 ki
   assert.deepStrictEqual([...new Set(payloads.map(({ kind }) => kind))].sort(), [
     "async-rewake-summary",
     "autoapply-status",
+    "background-update",
     "cascade",
     "device-flow-prompt",
     "diagnostic",
@@ -514,7 +532,7 @@ test("WIRE-02: the retained inventory and separate command error cover all 22 ki
     "usage-error",
     "usage-info",
   ]);
-  assert.strictEqual(PRESENTED.length, 334);
+  assert.strictEqual(PRESENTED.length, 335);
 
   for (const payload of payloads) {
     assert.ok(PAYLOAD_VALIDATOR.Check(payload));

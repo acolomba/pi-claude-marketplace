@@ -1612,8 +1612,33 @@ export interface PluginPathSkippedSurface {
   readonly reason: string;
 }
 
+/**
+ * AUP-03 / D-PL8-10: one install a background update moved. `fromVersion` is
+ * optional on the wire (D-PL8-16).
+ */
+export interface BackgroundUpdatePlugin {
+  readonly name: string;
+  readonly marketplace: string;
+  readonly scope: Scope;
+  readonly fromVersion?: string;
+  readonly toVersion: string;
+}
+
+/**
+ * AUP-03 / D-PL8-10: the plugins one background update moved, in update
+ * order, one row per updated install. A load-origin surface (D-14).
+ */
+export interface BackgroundUpdateSurface {
+  readonly kind: "background-update";
+  readonly plugins: readonly BackgroundUpdatePlugin[];
+}
+
 /** D-14: the load-origin group of raw output surfaces. */
-export type LoadSurface = ReconcileAbortedSurface | PluginPathSkippedSurface | McpMigrationSurface;
+export type LoadSurface =
+  | ReconcileAbortedSurface
+  | PluginPathSkippedSurface
+  | McpMigrationSurface
+  | BackgroundUpdateSurface;
 
 /** RAWS-01 / D-06: an argv-validation error with the verb's usage block. */
 export interface UsageErrorSurface extends UsageErrorMessage {

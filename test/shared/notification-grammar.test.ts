@@ -25,6 +25,7 @@ import type {
   ResolvedRow,
 } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type {
+  BackgroundUpdatePlugin,
   MarketplaceNotAddedMessage,
   MarketplaceNotificationMessage,
   McpServerSummaryEntry,
@@ -2048,6 +2049,21 @@ const RAW_SURFACE_ROWS: {
       "info",
     ],
   },
+  "background-update": {
+    surface: {
+      kind: "background-update",
+      plugins: [
+        {
+          name: "demo",
+          marketplace: "tools",
+          scope: "user",
+          fromVersion: "1.0.0",
+          toVersion: "1.10.0",
+        },
+      ],
+    },
+    expectedArguments: ["Plugin updated: demo · Run /reload to apply", "info"],
+  },
 };
 
 for (const [kind, { surface, expectedArguments }] of Object.entries(RAW_SURFACE_ROWS)) {
@@ -2057,6 +2073,49 @@ for (const [kind, { surface, expectedArguments }] of Object.entries(RAW_SURFACE_
 
     // assert
     assert.deepStrictEqual(notifyArguments, expectedArguments);
+  });
+}
+
+function updatedRow(
+  name: string,
+  marketplace: string,
+  scope: BackgroundUpdatePlugin["scope"],
+): BackgroundUpdatePlugin {
+  return { name, marketplace, scope, fromVersion: "1.0.0", toVersion: "1.1.0" };
+}
+
+for (const { title, plugins, text } of [
+  {
+    title: "joins two names with and",
+    plugins: [updatedRow("alpha", "tools", "user"), updatedRow("beta", "tools", "user")],
+    text: "Plugins updated: alpha and beta · Run /reload to apply",
+  },
+  {
+    title: "counts three or more names",
+    plugins: [
+      updatedRow("alpha", "tools", "user"),
+      updatedRow("beta", "tools", "user"),
+      updatedRow("gamma", "tools", "user"),
+    ],
+    text: "Plugins updated: 3 plugins · Run /reload to apply",
+  },
+  {
+    title: "names a plugin updated in both scopes once",
+    plugins: [updatedRow("alpha", "tools", "project"), updatedRow("alpha", "tools", "user")],
+    text: "Plugin updated: alpha · Run /reload to apply",
+  },
+  {
+    title: "names a plugin of two marketplaces twice",
+    plugins: [updatedRow("alpha", "tools", "user"), updatedRow("alpha", "extras", "user")],
+    text: "Plugins updated: alpha and alpha · Run /reload to apply",
+  },
+] as const) {
+  test(`D-PL8-10: formatRawSurface background-update ${title}`, () => {
+    // act
+    const notifyArguments = formatRawSurface({ kind: "background-update", plugins });
+
+    // assert
+    assert.deepStrictEqual(notifyArguments, [text, "info"]);
   });
 }
 

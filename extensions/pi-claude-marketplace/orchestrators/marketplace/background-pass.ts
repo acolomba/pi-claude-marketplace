@@ -11,6 +11,11 @@
 // D-PL8-04: each marketplace refresh and each plugin update is one gate step,
 // so a `/claude:plugin` command waits for at most one of them.
 //
+// AUP-03 / D-PL8-10 / D-PL8-15: after the last marketplace, a pass that
+// updated at least one plugin raises one `background-update` notice through the
+// real context and a load-origin run, unless the runtime stopped. Up-to-date,
+// skipped, and failed plugins stay in the debug log.
+//
 // D-PL8-05: a scope lock that another Pi process holds needs no code here.
 // `updateMarketplace` turns a refresh lock miss into a failed row, and the
 // cascade turns a plugin lock miss into a failed outcome. Both stay silent,
@@ -21,7 +26,8 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
-import { openNotificationSnapshot } from "../../shared/notification-run.ts";
+import { notifyBackgroundUpdate } from "../../shared/notification-dispatch.ts";
+import { openNotificationRun, openNotificationSnapshot } from "../../shared/notification-run.ts";
 import { ownValue } from "../../shared/own-key.ts";
 
 import type { BackgroundGate } from "./background-gate.ts";
@@ -29,6 +35,7 @@ import type { UpdateMarketplaceOptions } from "./update.ts";
 import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationEntrySink, NotificationRun } from "../../shared/notification-run.ts";
+import type { BackgroundUpdatePlugin } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateFailedOutcome, PluginUpdateFn } from "../types.ts";
 
@@ -46,7 +53,7 @@ export interface BackgroundPassRun {
 export type BackgroundPass = (run: BackgroundPassRun) => Promise<void>;
 
 export interface BackgroundPassDeps {
-  readonly pi: PiInventory;
+  readonly pi: PiInventory & NotificationEntrySink;
   readonly gate: BackgroundGate;
   readonly completionCache: CompletionCache;
   /** The same shape as the edge's `beginPluginUpdateRun`; `orchestrators/` may not import `edge/`. */
@@ -132,12 +139,14 @@ async function updateOneMarketplace(step: PassStep, name: string, scope: Scope):
  * D-PL8-04 / D-PL8-15: ends the step in flight, waits for the commands that
  * arrived, and runs the plugin update as a new step. After a shutdown it
  * returns a failed outcome with no reason instead, because a throw would get a
- * reason from the cascade's classifier.
+ * reason from the cascade's classifier. Each `updated` outcome adds a row to
+ * `updated`, in update order (D-PL8-10).
  */
 function yieldingPluginUpdate(
   gate: BackgroundGate,
   isStopped: () => boolean,
   updatePlugin: PluginUpdateFn,
+  updated: BackgroundUpdatePlugin[],
 ): PluginUpdateFn {
   return async (plugin, marketplace, scope) => {
     gate.endStep();
@@ -154,7 +163,18 @@ function yieldingPluginUpdate(
       } satisfies PluginUpdateFailedOutcome;
     }
 
-    return updatePlugin(plugin, marketplace, scope);
+    const outcome = await updatePlugin(plugin, marketplace, scope);
+    if (outcome.partition === "updated") {
+      updated.push({
+        name: outcome.name,
+        marketplace,
+        scope,
+        fromVersion: outcome.fromVersion,
+        toVersion: outcome.toVersion,
+      });
+    }
+
+    return outcome;
   };
 }
 
@@ -169,12 +189,13 @@ export function createBackgroundPass(deps: BackgroundPassDeps): BackgroundPass {
     };
     // D-10-18: one plugin update run, so one tag memo pair, per pass.
     const updatePlugin = deps.beginPluginUpdateRun({ ctx: SILENT_CONTEXT, run });
+    const updated: BackgroundUpdatePlugin[] = [];
     const step: PassStep = {
       deps,
       run,
       cwd,
       isStopped,
-      pluginUpdate: yieldingPluginUpdate(deps.gate, isStopped, updatePlugin),
+      pluginUpdate: yieldingPluginUpdate(deps.gate, isStopped, updatePlugin, updated),
     };
     for (const scope of SCOPES) {
       // eslint-disable-next-line no-await-in-loop -- MSG-GR-3: the project scope runs before the user scope.
@@ -186,5 +207,12 @@ export function createBackgroundPass(deps: BackgroundPassDeps): BackgroundPass {
         }
       }
     }
+
+    // D-PL8-15: a stopped runtime's `pi` is stale, so the run opens after the check.
+    if (updated.length === 0 || isStopped()) {
+      return;
+    }
+
+    notifyBackgroundUpdate(ctx, openNotificationRun(deps.pi, { kind: "load" }), updated);
   };
 }

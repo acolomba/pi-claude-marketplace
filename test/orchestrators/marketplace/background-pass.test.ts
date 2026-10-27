@@ -7,7 +7,8 @@
 // runner are recording doubles: the pass reuses their real bodies unchanged,
 // so this suite owns only what the pass hands them and when. The context the
 // pass receives refuses every UI read, so any output that leaks to the session
-// fails the case.
+// fails the case. The `pi` double's entry sink records the one notice a pass
+// that updated plugins raises in json and rpc mode.
 
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -24,6 +25,7 @@ import {
   mergeMarketplaceIntoState,
   seedAutoupdateConfig,
 } from "../../edge/handlers/marketplace-seed.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { emptyPiInventory } from "../../platform/pi-inventory-seed.ts";
 
@@ -37,13 +39,18 @@ import type {
   PluginUpdateFailedOutcome,
   PluginUpdateFn,
   PluginUpdateOutcome,
+  PluginUpdateSkippedOutcome,
   PluginUpdateUnchangedOutcome,
+  PluginUpdateUpdatedOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type {
   NotificationContext,
   NotificationUi,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type {
+  NotificationEntrySink,
+  NotificationRun,
+} from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 type MarketplaceScript = (opts: UpdateMarketplaceOptions) => Promise<void>;
@@ -57,6 +64,7 @@ interface PassUnderTest {
   readonly gate: BackgroundGate;
   readonly calls: UpdateMarketplaceOptions[];
   readonly notifications: PluginUpdateNotification[];
+  readonly capture: ReturnType<typeof createJsonCapture>;
   readonly deps: BackgroundPassDeps;
 }
 
@@ -89,28 +97,75 @@ function unchangedOutcome(name: string): PluginUpdateUnchangedOutcome {
   };
 }
 
+function updatedOutcome(name: string, toVersion: string): PluginUpdateUpdatedOutcome {
+  return {
+    partition: "updated",
+    name,
+    fromVersion: "1.0.0",
+    toVersion,
+    constraint: undefined,
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  };
+}
+
+function skippedOutcome(name: string): PluginUpdateSkippedOutcome {
+  return {
+    partition: "skipped",
+    name,
+    notes: [],
+    reasons: ["not installed"],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  };
+}
+
+function failedOutcome(name: string): PluginUpdateFailedOutcome {
+  return {
+    partition: "failed",
+    name,
+    notes: [],
+    reasons: ["lock held"],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  };
+}
+
 /**
  * A pass over recording doubles. Each marketplace's update runs its script, if
- * any; each plugin update runs its hook, if any, then logs `update <plugin>`.
+ * any; each plugin update runs its hook, if any, then logs `update <plugin>`
+ * and returns the plugin's scripted outcome, or `unchanged`. The `pi` entry
+ * sink is `appendEntry` when given, or a JSON capture.
  */
 function createPassUnderTest(options: {
   readonly log?: string[];
   readonly scripts?: ReadonlyMap<string, MarketplaceScript>;
   readonly pluginHooks?: ReadonlyMap<string, () => void>;
+  readonly outcomes?: ReadonlyMap<string, PluginUpdateOutcome>;
+  readonly appendEntry?: NotificationEntrySink["appendEntry"];
   readonly gate?: BackgroundGate;
 }): PassUnderTest {
   const log = options.log ?? [];
   const gate = options.gate ?? createBackgroundGate();
   const calls: UpdateMarketplaceOptions[] = [];
   const notifications: PluginUpdateNotification[] = [];
+  const capture = createJsonCapture();
   const pluginUpdate: PluginUpdateFn = (plugin) => {
     options.pluginHooks?.get(plugin)?.();
     log.push(`update ${plugin}`);
-    return Promise.resolve(unchangedOutcome(plugin));
+    return Promise.resolve(options.outcomes?.get(plugin) ?? unchangedOutcome(plugin));
   };
 
   const deps: BackgroundPassDeps = {
-    pi: emptyPiInventory(),
+    pi: {
+      ...emptyPiInventory(),
+      appendEntry: options.appendEntry ?? capture.entrySink.appendEntry,
+    },
     gate,
     completionCache: createCompletionCache(),
     beginPluginUpdateRun: (notification) => {
@@ -122,13 +177,13 @@ function createPassUnderTest(options: {
       await options.scripts?.get(opts.name)?.(opts);
     },
   };
-  return { gate, calls, notifications, deps };
+  return { gate, calls, notifications, capture, deps };
 }
 
 /** The `input` event's context; any UI read fails the case. */
-function sessionContext(cwd: string): BackgroundContext {
+function sessionContext(cwd: string, mode = "tui"): BackgroundContext {
   return {
-    mode: "tui",
+    mode,
     cwd,
     get ui(): NotificationUi {
       throw new Error("the background pass must not touch the session UI");
@@ -158,6 +213,20 @@ async function seedMarketplace(
   if (autoupdate !== undefined) {
     await seedAutoupdateConfig(locations, name, autoupdate);
   }
+}
+
+/** A script that updates `plugins` of `marketplace` in `scope`, in order. */
+function updatesPlugins(
+  marketplace: string,
+  scope: Scope,
+  plugins: readonly string[],
+): MarketplaceScript {
+  return async (opts) => {
+    const pluginUpdate = requirePluginUpdate(opts);
+    for (const plugin of plugins) {
+      await pluginUpdate(plugin, marketplace, scope);
+    }
+  };
 }
 
 /** Project `alpha` and user `gamma` with autoupdate on. */
@@ -502,4 +571,133 @@ test("a runtime stopped while the pass waits for a command starts no update", as
 
   // assert
   assert.deepStrictEqual(calls, []);
+});
+
+test("AUP-03: reports the plugins the pass updated across both scopes in one load entry", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-pass-notice-");
+  await seedTwoAutoupdateMarketplaces(cwd);
+  const { capture, deps } = createPassUnderTest({
+    scripts: new Map([
+      ["alpha", updatesPlugins("alpha", "project", ["one", "same"])],
+      ["gamma", updatesPlugins("gamma", "user", ["two", "skip", "fail"])],
+    ]),
+    outcomes: new Map<string, PluginUpdateOutcome>([
+      ["one", updatedOutcome("one", "1.1.0")],
+      ["two", updatedOutcome("two", "2.0.0")],
+      ["skip", skippedOutcome("skip")],
+      ["fail", failedOutcome("fail")],
+    ]),
+  });
+  const pass = createBackgroundPass(deps);
+
+  // act
+  await pass({ ctx: sessionContext(cwd, "rpc"), isStopped: () => false });
+
+  // assert
+  assert.deepStrictEqual(capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin: { kind: "load" },
+        kind: "background-update",
+        severity: "info",
+        needsReload: true,
+        plugins: [
+          {
+            name: "one",
+            marketplace: "alpha",
+            scope: "project",
+            fromVersion: "1.0.0",
+            toVersion: "1.1.0",
+          },
+          {
+            name: "two",
+            marketplace: "gamma",
+            scope: "user",
+            fromVersion: "1.0.0",
+            toVersion: "2.0.0",
+          },
+        ],
+      },
+    },
+  ]);
+  capture.assertValid();
+});
+
+test("AUP-03: a pass that updated no plugin raises no notice", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-pass-no-notice-");
+  await seedTwoAutoupdateMarketplaces(cwd);
+  const { capture, deps } = createPassUnderTest({
+    scripts: new Map([
+      ["alpha", updatesPlugins("alpha", "project", ["same"])],
+      ["gamma", updatesPlugins("gamma", "user", ["skip", "fail"])],
+    ]),
+    outcomes: new Map<string, PluginUpdateOutcome>([
+      ["skip", skippedOutcome("skip")],
+      ["fail", failedOutcome("fail")],
+    ]),
+  });
+  const pass = createBackgroundPass(deps);
+
+  // act
+  await pass({ ctx: sessionContext(cwd, "rpc"), isStopped: () => false });
+
+  // assert
+  assert.deepStrictEqual(capture.entries, []);
+  capture.assertValid();
+});
+
+test("D-PL8-15: a runtime stopped after a plugin moved raises no notice", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-pass-stopped-notice-");
+  await seedMarketplace(cwd, "project", "alpha", true);
+  let stopped = false;
+  const update = updatesPlugins("alpha", "project", ["one"]);
+  const { capture, deps } = createPassUnderTest({
+    scripts: new Map([
+      [
+        "alpha",
+        async (opts: UpdateMarketplaceOptions): Promise<void> => {
+          await update(opts);
+          stopped = true;
+        },
+      ],
+    ]),
+    outcomes: new Map([["one", updatedOutcome("one", "1.1.0")]]),
+  });
+  const pass = createBackgroundPass(deps);
+
+  // act
+  await pass({ ctx: sessionContext(cwd, "rpc"), isStopped: () => stopped });
+
+  // assert
+  assert.deepStrictEqual(capture.entries, []);
+  capture.assertValid();
+});
+
+test("D-PL8-15: a notice that throws on a stale context rejects the pass", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-pass-stale-notice-");
+  await seedMarketplace(cwd, "project", "alpha", true);
+  const staleError = new Error("the session is stale");
+  const { deps } = createPassUnderTest({
+    scripts: new Map([["alpha", updatesPlugins("alpha", "project", ["one"])]]),
+    outcomes: new Map([["one", updatedOutcome("one", "1.1.0")]]),
+    appendEntry: () => {
+      throw staleError;
+    },
+  });
+  const pass = createBackgroundPass(deps);
+
+  // act & assert
+  await assert.rejects(
+    pass({ ctx: sessionContext(cwd, "rpc"), isStopped: () => false }),
+    (error) => {
+      assert.strictEqual(error, staleError);
+      return true;
+    },
+  );
 });
