@@ -1070,7 +1070,7 @@ test("fetchPlugins answers a warm pinned source from the bound status capability
 
   // assert
   assert.deepStrictEqual(boundary.notifications, [
-    { message: "● mp [project]\n  ⊘ p1 (skipped) {up-to-date}" },
+    { message: "● mp [project]\n  ⊘ p1 v2.0.0 (skipped) {up-to-date}" },
   ]);
 
   // Derive-not-persist: fetch's only write is the clone seam's, and the warm

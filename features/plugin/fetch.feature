@@ -23,8 +23,8 @@ Feature: Plugin fetch
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons |
-      | gits             | project           | ghp@gits | ghp  | available |         |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | version |
+      | gits             | project           | ghp@gits | ghp  | available |         | 1.0.0   |
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
@@ -49,8 +49,8 @@ Feature: Plugin fetch
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons |
-      | gits             | project           | ghp@gits | ghp  | available |         |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | version |
+      | gits             | project           | ghp@gits | ghp  | available |         | 2.0.0   |
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
@@ -100,8 +100,8 @@ Feature: Plugin fetch
       | ghp  | 2.0.0   |      |
     When the user runs "/claude:plugin fetch ghp@gits --scope project"
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons |
-      | gits             | project           | ghp@gits | ghp  | available |         |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | version |
+      | gits             | project           | ghp@gits | ghp  | available |         | 2.0.0   |
     Then the fetched copy of the plugin "ghp" in the project scope holds revision 2 of its repository
     Then the git-source plugin "ghp" installed in the project scope runs revision 1 of its repository
     Then the project scope holds these git clones:
@@ -152,7 +152,7 @@ Feature: Plugin fetch
       | marketplace name | marketplace scope | id        | name | status    | reasons        | scope   | version | cause chain                                                                                                 | cause truncated | leaks | rollback partial |
       | gits             | project           | demo@gits | demo | skipped   | up-to-date     | project | 1.0.0   |                                                                                                             |                 |       |                  |
       | gits             | project           | ghp@gits  | ghp  | failed    | source missing | project |         | 404 on https://{git host}/acme/ghp.git, HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git  | false           |       |                  |
-      | gits             | project           | urlp@gits | urlp | available |                |         |         |                                                                                                             |                 |       |                  |
+      | gits             | project           | urlp@gits | urlp | available |                |         | 1.0.0   |                                                                                                             |                 |       |                  |
     Then the git host receives these requests:
       | method | path                                             | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack  | 404    |
@@ -221,9 +221,9 @@ Feature: Plugin fetch
       | tally warnings      | 0            |
       | tally success count | 2            |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name | status    | reasons |
-      | gits             | project           | ghp@gits  | ghp  | available |         |
-      | more             | project           | urlp@more | urlp | available |         |
+      | marketplace name | marketplace scope | id        | name | status    | reasons | version |
+      | gits             | project           | ghp@gits  | ghp  | available |         | 1.0.0   |
+      | more             | project           | urlp@more | urlp | available |         | 1.0.0   |
     # A new copy of an unpinned plugin is cloned once, so each repository
     # answers one round.
     Then the git host receives these requests:
@@ -249,6 +249,30 @@ Feature: Plugin fetch
       | fixtures         | project           | demo@fixtures | demo | skipped | up-to-date | project | 1.0.0   |
     Then the git host receives no request
 
+  Scenario: Fetching a path-source plugin shows the version its plugin.json declares over its entry's
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 2.0.0   |
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {
+        "name": "fixtures",
+        "owner": { "name": "features" },
+        "plugins": [{ "name": "demo", "source": "./plugins/demo", "version": "1.0.0" }]
+      }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin fetch demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons    | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | skipped | up-to-date | project | 2.0.0   |
+    Then the git host receives no request
+
   Scenario: Fetching a pinned plugin whose clone is present makes no request and reports it up to date
     Given the git repository "mono" holds these plugins:
       | name | version | path         |
@@ -265,8 +289,8 @@ Feature: Plugin fetch
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name | status  | reasons    | scope   |
-      | gits             | project           | subp@gits | subp | skipped | up-to-date | project |
+      | marketplace name | marketplace scope | id        | name | status  | reasons    | scope   | version |
+      | gits             | project           | subp@gits | subp | skipped | up-to-date | project | 1.0.0   |
     Then the git host receives no request
 
   Scenario: Fetching a git-source plugin while another process holds the state lock fails as lock held

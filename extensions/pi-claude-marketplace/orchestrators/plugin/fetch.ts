@@ -14,8 +14,13 @@
 //   - auth: `auth-host.ts`'s `buildCloneAuth` with a single sweep-wide
 //     `authMemo` so a bulk sweep triggers each host's device flow at most once
 //     (FTCH-06).
-//   - classification: the fs-only `git-source-probe.ts` (`makePresenceProbe`
-//     for the no-op gate, `probeManifestEntry` for the post-fetch row).
+//   - classification: the fs-only presence probe (`makePresenceProbe`) for the
+//     no-op gate, and `list`'s own rule (`resolveListCandidate`) for every row
+//     that shows a status or a version, so a fetch row reads as the `list` row
+//     of the same plugin (D-PL7-09, D-PL7-17).
+//   - locking: an unpinned fetch refreshes the shared mirror and reads its row
+//     inside one scope-lock body, so no other command changes the tree between
+//     the two (GIT-03, D-PL7-07). A pinned clone is immutable and takes no lock.
 //   - cascade: `notify-context.ts::notifyWithContext` with FETCH_CONTEXT.
 //
 // The enumeration is MANIFEST-driven (D-81 fetchable-set): the fetchable set
@@ -27,7 +32,6 @@
 // the clone seam's, which lives in clone-cache.ts.
 
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
@@ -61,9 +65,10 @@ import {
 } from "./clone-cache.ts";
 import { FETCH_CONTEXT, type FetchMsg } from "./fetch.messaging.ts";
 
-import type { makePresenceProbe, probeManifestEntry } from "./git-source-probe.ts";
+import type { makePresenceProbe } from "./git-source-probe.ts";
+import type { ListCandidate, resolveListCandidate } from "./list-candidate-version.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
-import type { ResolveContext } from "../../domain/resolver-types.ts";
+import type { ResolveContext, ResolvedPlugin } from "../../domain/resolver-types.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionContext } from "../../platform/pi-api.ts";
@@ -107,7 +112,7 @@ export interface FetchCloneCacheSeam {
 /** Reads the two fetch-owned status boundaries without granting mutation authority. */
 export interface FetchStatus {
   readonly makePresenceProbe: typeof makePresenceProbe;
-  readonly probeManifestEntry: typeof probeManifestEntry;
+  readonly resolveListCandidate: typeof resolveListCandidate;
 }
 
 export interface FetchPluginsOptions {
@@ -345,22 +350,37 @@ interface FetchOneDeps {
  *       pinned arm -> resolvePluginPin + materializePluginClone; unpinned arm ->
  *       canonicalCloneUrl + materializeOrRefreshPluginMirror (a cold mirror is
  *       cloned, a warm one refreshed; either IS the consented fetch).
- *   (3) After the seam returns, derive the row FRESH from `probeManifestEntry`
- *       against the now-warm tree (never a pre-materialize probe).
+ *   (3) After the seam returns, derive the row FRESH from `resolveListCandidate`
+ *       against the now-warm tree (never a pre-materialize probe). The unpinned
+ *       arm runs the materialize and this read in one `withExistingScopeLock`
+ *       body (D-PL7-07); a held lock fails the row `lock held`.
+ *
+ * Every row that shows a version takes it from the same list rule: the
+ * version of the warm or path tree, else the entry's (D-PL7-09, D-PL7-17).
  */
 async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<FetchMsg> {
   const { entry, locations } = target;
   const source = parsePluginSource(entry.source);
+  const marketplaceContext = {
+    marketplaceRoot: target.marketplaceRoot,
+    marketplaceName: target.marketplace,
+  };
+  const readCandidate = (): Promise<CandidateRead> =>
+    readListCandidate(entry, marketplaceContext, locations, deps.status);
 
   const isGitSource =
     source.kind === "url" || source.kind === "git-subdir" || source.kind === "github";
 
   // (1) Non-git source: nothing to fetch -> a no-op skipped row.
   if (!isGitSource) {
-    return skippedUpToDate(entry);
+    return skippedUpToDate(entry, await readCandidate());
   }
 
   const gitSource: GitBackedSource = source;
+  const fetchAndRead = async (): Promise<FetchMsg> => {
+    await materializeThroughSeam(gitSource, deps, locations);
+    return freshRow(entry, await readCandidate());
+  };
 
   try {
     // (2) fs-only no-op gate. A PINNED source whose clone is already present is
@@ -369,24 +389,17 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
     if (gitSource.sha !== undefined) {
       const presence = await deps.status.makePresenceProbe(locations)(gitSource);
       if (presence.kind === "materialized") {
-        return skippedUpToDate(entry);
+        return skippedUpToDate(entry, await readCandidate());
       }
+
+      // (3) A pinned clone is immutable and never touches the mirror: no lock.
+      return await fetchAndRead();
     }
 
-    // (3) Materialize through the clone-cache seam (the consented fetch). A
-    // mirror refresh runs under the scope's state lock so no install copies
-    // from a mirror mid-refresh (GIT-03); a held lock fails the row `lock
-    // held`. A pinned clone is immutable and never touches the mirror.
-    await (gitSource.sha === undefined
-      ? withExistingScopeLock(locations, () => materializeThroughSeam(gitSource, deps, locations))
-      : materializeThroughSeam(gitSource, deps, locations));
-
-    // Derive the post-fetch row FRESH against the now-warm tree.
-    const marketplaceContext = {
-      marketplaceRoot: target.marketplaceRoot,
-      marketplaceName: target.marketplace,
-    };
-    return await freshRow(entry, marketplaceContext, locations, deps.status);
+    // (3) A mirror refresh and the row read run under the scope's state lock,
+    // so no install copies from a mirror mid-refresh and no cleanup removes
+    // the tree the row reads (GIT-03, D-PL7-07).
+    return await withExistingScopeLock(locations, fetchAndRead);
   } catch (err) {
     rethrowInvalidGitHubBaseUrl(err);
     return failedRow(entry, err, networkCloneUrl(gitSource));
@@ -434,10 +447,35 @@ async function materializeThroughSeam(
 // Row builders (derived post-fetch status / no-op / failure)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Optional-version + optional-description carry from the manifest entry (PL-4). */
-function entryMeta(entry: ManifestEntry): { version?: string; description?: string } {
+/** A list-rule read of one entry; a throw is kept so the row can narrow it. */
+type CandidateRead = ListCandidate | { readonly kind: "unreadable"; readonly error: unknown };
+
+/** Read the entry through `list`'s offline rule, keeping a throw as `unreadable`. */
+async function readListCandidate(
+  entry: ManifestEntry,
+  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
+  locations: ScopedLocations,
+  status: FetchStatus,
+): Promise<CandidateRead> {
+  try {
+    return await status.resolveListCandidate(entry, marketplaceContext, locations);
+  } catch (error) {
+    return { kind: "unreadable", error };
+  }
+}
+
+/**
+ * The version and description a row carries (PL-4). The version is `list`'s:
+ * the one the warm or path tree declares, else the entry's, which a cold or
+ * unreadable read keeps (D-PL7-09).
+ */
+function rowMeta(
+  entry: ManifestEntry,
+  candidate: CandidateRead,
+): { version?: string; description?: string } {
+  const version = (candidate.kind === "resolved" ? candidate.version : undefined) ?? entry.version;
   return {
-    ...(entry.version !== undefined && { version: entry.version }),
+    ...(version !== undefined && { version }),
     ...(entry.description !== undefined && { description: entry.description }),
   };
 }
@@ -445,102 +483,64 @@ function entryMeta(entry: ManifestEntry): { version?: string; description?: stri
 /**
  * D-81-02: the no-op row (path source or pinned-warm clone with nothing to
  * fetch). Renders `(skipped)` carrying the existing `up-to-date` REASONS member
- * at info severity -- no new closed-set token (FTCH-03).
+ * at info severity -- no new closed-set token (FTCH-03) -- with `list`'s
+ * version (D-PL7-17).
  */
-function skippedUpToDate(entry: ManifestEntry): FetchMsg {
+function skippedUpToDate(entry: ManifestEntry, candidate: CandidateRead): FetchMsg {
   return {
     status: "skipped",
     name: entry.name,
     reasons: ["up-to-date"] as const,
-    ...entryMeta(entry),
+    ...rowMeta(entry, candidate),
   };
 }
 
 /**
- * Derive the FRESH post-fetch status row from `probeManifestEntry` against the
- * now-warm tree (never a pre-materialize probe). The classification maps 1:1
- * onto the fetch row status: `remote` (still unmaterialized), `available`,
- * `partially-available` (carries the dropped-kind reasons), `unavailable`
- * (carries the structural reasons). Mirrors `list-candidate-row`'s `availableRowMessage`.
+ * Derive the FRESH post-fetch status row from the list-rule read of the
+ * now-warm tree, as `list-candidate-row.ts::availableRowMessage` does: `cold`
+ * (still unmaterialized) is `remote`, a resolved tree takes the resolver's
+ * three-way state, and a read that threw is `unavailable` with the narrowed
+ * probe-error class.
  */
-async function freshRow(
-  entry: ManifestEntry,
-  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
-  locations: ScopedLocations,
-  status: FetchStatus,
-): Promise<FetchMsg> {
-  const meta = entryMeta(entry);
-  const classification = await status.probeManifestEntry(entry, marketplaceContext, locations);
-  if (classification === "remote") {
-    return { status: "remote", name: entry.name, ...meta };
-  }
-
-  if (classification === "available") {
-    return { status: "available", name: entry.name, ...meta };
-  }
-
-  // partially-available / unavailable carry REQUIRED reasons. Re-resolve to read
-  // the typed reason source: the unsupported component kinds (partially-
-  // available) or the structural notes (unavailable), narrowed through the SAME
-  // helpers `list` uses (byte-parity). A probe throw folds to `unavailable` with
-  // the narrowed cause class.
-  return await reasonedRow(entry, marketplaceContext, locations, meta, status);
-}
-
-/**
- * Build the reasons-bearing `partially-available` / `unavailable` row. Re-runs
- * the fs-only resolver (via the presence probe) to read the typed reason source
- * and narrows it with the shared list-surface helpers. A resolver throw folds to
- * `(unavailable)` carrying the narrowed probe-error class (parity with list's
- * per-row probe-failure narrowing).
- */
-async function reasonedRow(
-  entry: ManifestEntry,
-  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
-  locations: ScopedLocations,
-  meta: { version?: string; description?: string },
-  status: FetchStatus,
-): Promise<FetchMsg> {
-  try {
-    // `reasonedRow` is reached only after `fetchOne` has materialized a git
-    // source and `freshRow` has classified that warm source as reason-bearing.
-    // Non-git sources return from `fetchOne` before `freshRow`, so the presence
-    // probe is the only reachable resolver policy here.
-    const resolved = await resolveStrict(entry, {
-      ...marketplaceContext,
-      resolveGitPluginRoot: status.makePresenceProbe(locations),
-    });
-
-    // Discriminate on the resolver's own three-way state so the reasons source
-    // matches the classification (list-parity).
-    if (resolved.state === "partially-available") {
-      return {
-        status: "partially-available",
-        name: entry.name,
-        reasons: narrowUnsupportedKinds(resolved.unsupported),
-        ...meta,
-      };
-    }
-
-    if (resolved.state === "unavailable") {
+function freshRow(entry: ManifestEntry, candidate: CandidateRead): FetchMsg {
+  const meta = rowMeta(entry, candidate);
+  switch (candidate.kind) {
+    case "cold":
+      return { status: "remote", name: entry.name, ...meta };
+    case "unreadable":
       return {
         status: "unavailable",
         name: entry.name,
-        reasons: narrowResolverNotes(resolved.notes),
+        reasons: [narrowProbeError(candidate.error)],
         ...meta,
       };
-    }
+    case "resolved":
+      return resolvedRow(entry.name, candidate.resolved, meta);
+  }
+}
 
-    // An `installable` resolve slipped past the classifier (concurrent warm) --
-    // render it as `available` rather than fabricating reasons.
-    return { status: "available", name: entry.name, ...meta };
-  } catch (probeErr) {
-    return {
-      status: "unavailable",
-      name: entry.name,
-      reasons: [narrowProbeError(probeErr)],
-      ...meta,
-    };
+/**
+ * The row of a resolved tree: the unsupported component kinds of a
+ * partially-available plugin and the structural notes of an unavailable one
+ * narrow through the SAME helpers `list` uses (byte-parity).
+ */
+function resolvedRow(
+  name: string,
+  resolved: ResolvedPlugin,
+  meta: { version?: string; description?: string },
+): FetchMsg {
+  switch (resolved.state) {
+    case "installable":
+      return { status: "available", name, ...meta };
+    case "partially-available":
+      return {
+        status: "partially-available",
+        name,
+        reasons: narrowUnsupportedKinds(resolved.unsupported),
+        ...meta,
+      };
+    case "unavailable":
+      return { status: "unavailable", name, reasons: narrowResolverNotes(resolved.notes), ...meta };
   }
 }
 
