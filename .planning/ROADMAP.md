@@ -49,7 +49,7 @@ parent session applies them at merge.
 - [ ] **Phase 3: Dependency Cascade Rows and Status** - cascade rows name every member, declarer, and degraded dependency
 - [ ] **Phase 4: Dependency Resolver Residue** - the resolver installs what it previewed and refuses before it moves
 - [ ] **Phase 5: Marketplace Command Parity** - reserved names, hosted manifests, `market` alias, row ids, shorthand, remove reporting
-- [ ] **Phase 6: Import Marketplace Planning** - import plans marketplaces the way Claude Code registers them
+- [x] **Phase 6: Import Marketplace Planning** - import plans marketplaces the way Claude Code registers them
 - [ ] **Phase 7: Git Errors and Lock Discipline** - one git-host classifier, and every clone read or cleanup under the lock
 - [ ] **Phase 8: Background Autoupdate** - autoupdate updates in the background, as Claude Code does
 - [ ] **Phase 9: Plugin Package Dependencies** - a plugin's own npm or bun dependencies install with it
