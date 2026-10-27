@@ -136,6 +136,26 @@ parent session applies them at merge.
 4. `marketplace remove` reporting of stranded dependents is settled, and its fold covers the hooks axis through the shared exhaustive fold (MKT-06, MKT-08).
 5. `marketplace add` classifies a crash apart from a malformed manifest, handles a missing clone behind a record, and maps EISDIR (MKT-07).
 
+**Plans:** 9 plans in 4 waves
+
+Plans:
+**Wave 1**
+- [ ] 05-01-PLAN.md — `market` alias for every marketplace command, help topic, and completion (MKT-03) — wave 1
+- [ ] 05-02-PLAN.md — exhaustive cascade `dropped` fold used by `marketplace remove`; D-PL5-14 recorded (MKT-08, MKT-06) — wave 1
+- [ ] 05-03-PLAN.md — first-`@`/`#` shorthand split; the `hosted` source kind in the shared funnel and state load (MKT-05, MKT-02) — wave 1
+- [ ] 05-04-PLAN.md — reserved official marketplace names refused on every add path; fixtures moved under `anthropics` (MKT-01) — wave 1
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 05-05-PLAN.md — cucumber stand-in: the git host serves hosted catalogs; `hosted` publication kind (MKT-02) — wave 2
+- [ ] 05-06-PLAN.md — `marketplace add` classification: EISDIR, missing-clone repair, crash vs malformed, no-op status (MKT-07) — wave 2
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 05-07-PLAN.md — hosted `marketplace.json` add: fetch seam, staged download, failure tokens, network gates (MKT-02) — wave 3
+- [ ] 05-08-PLAN.md — bare marketplace JSON ids on marketplace-level failure rows and info failures (MKT-04) — wave 3
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 05-09-PLAN.md — hosted refresh, remove, and info; phase gate and phase records (MKT-02, MKT-04) — wave 4
+
 ### Phase 6: Import Marketplace Planning
 
 **Goal:** `import` registers marketplaces as Claude Code does and reports partial rollbacks with install's detail.
