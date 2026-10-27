@@ -266,6 +266,7 @@ test("TC-1 offers the whole top-level vocabulary at an empty prefix, in declarat
     { label: "import", value: "import " },
     { label: "browse", value: "browse " },
     { label: "marketplace", value: "marketplace " },
+    { label: "market", value: "market " },
     { label: "help", value: "help " },
   ]);
 });
@@ -277,6 +278,13 @@ for (const { prefix, expected } of [
     expected: [
       { label: "list", value: "list " },
       { label: "ls", value: "ls " },
+    ],
+  },
+  {
+    prefix: "m",
+    expected: [
+      { label: "marketplace", value: "marketplace " },
+      { label: "market", value: "market " },
     ],
   },
   { prefix: "INS", expected: [] },
@@ -942,6 +950,83 @@ test("TC-6 routes plugin references through the required completion cache", asyn
     { label: "cache-row@hub", value: "uninstall --scope user cache-row@hub " },
   ]);
 });
+
+// ---------------------------------------------------------------------------
+// D-PL5-11: a leading `market` completes as `marketplace`, and every value
+// keeps the `market` the user typed.
+// ---------------------------------------------------------------------------
+
+for (const prefix of ["market", "market "]) {
+  test(`offers the marketplace vocabulary under the market alias for ${JSON.stringify(prefix)}`, async (t) => {
+    // arrange
+    const { completionCache, resolver } = await seedResolver(t, "market-vocabulary");
+
+    // act
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
+
+    // assert
+    assert.deepStrictEqual(suggestions, [
+      { label: "add", value: "market add " },
+      { label: "remove", value: "market remove " },
+      { label: "rm", value: "market rm " },
+      { label: "list", value: "market list " },
+      { label: "ls", value: "market ls " },
+      { label: "info", value: "market info " },
+      { label: "update", value: "market update " },
+      { label: "autoupdate", value: "market autoupdate " },
+      { label: "noautoupdate", value: "market noautoupdate " },
+      { label: "help", value: "market help " },
+    ]);
+  });
+}
+
+test("narrows the marketplace vocabulary under the market alias", async (t) => {
+  // arrange
+  const { completionCache, resolver } = await seedResolver(t, "market-narrow");
+
+  // act
+  const suggestions = await getArgumentCompletions("market ad", resolver, completionCache);
+
+  // assert
+  assert.deepStrictEqual(suggestions, [{ label: "add", value: "market add " }]);
+});
+
+test("offers the marketplace add flags under the market alias", async (t) => {
+  // arrange
+  const { completionCache, resolver } = await seedResolver(t, "market-flags");
+
+  // act
+  const suggestions = await getArgumentCompletions("market add -", resolver, completionCache);
+
+  // assert
+  assert.deepStrictEqual(suggestions, [
+    { label: "--scope", value: "market add --scope ", description: "Scope: user or project" },
+    {
+      label: "--local",
+      value: "market add --local ",
+      description:
+        "Write to the local config (claude-plugins.local.json), not the base config (claude-plugins.json)",
+    },
+  ]);
+});
+
+for (const verb of ["remove", "rm", "info", "update"]) {
+  for (const prefix of [`market ${verb} `, `market ${verb}`]) {
+    test(`offers marketplace names under the market alias for ${JSON.stringify(prefix)}`, async (t) => {
+      // arrange
+      const { completionCache, resolver } = await seedResolver(t, "market-names");
+
+      // act
+      const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
+
+      // assert
+      assert.deepStrictEqual(suggestions, [
+        { label: "hub", value: `market ${verb} hub ` },
+        { label: "lab", value: `market ${verb} lab ` },
+      ]);
+    });
+  }
+}
 
 for (const verb of ["add", "remove", "rm", "autoupdate", "noautoupdate"]) {
   test(`offers local for marketplace ${verb} with its command-specific description`, async (t) => {
