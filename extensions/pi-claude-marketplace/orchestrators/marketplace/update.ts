@@ -656,29 +656,35 @@ async function cascadeAutoupdates(
     }
   }
 
-  return { outcomes, installs: await installAutoupdateDependencies(args) };
+  return { outcomes, installs: await installAutoupdateDependencies(args, outcomes) };
 }
 
 /**
  * D-PL2-10: the missing-dependency step after an autoupdate, in the
  * marketplace's scope, for missing dependencies that a plugin of this
  * marketplace declares, as Claude Code limits it to declarers whose
- * marketplace has autoupdate on (E1).
+ * marketplace has autoupdate on (E1). A dependency an update of this cascade
+ * already reported a row for is not tried again, so one command reports one
+ * row per dependency (D-PL2-01).
  */
 async function installAutoupdateDependencies(
   args: RefreshOneArgs,
+  outcomes: readonly PluginUpdateOutcome[],
 ): Promise<ScopeDependencyInstallResult> {
   const { installMissingDependencies, name } = args;
   if (installMissingDependencies === undefined) {
     return NO_DEPENDENCY_INSTALLS;
   }
 
+  const reported = new Set(outcomes.flatMap((o) => (o.dependencyRows ?? []).map((r) => r.name)));
   return installMissingDependencies({
     ctx: args.ctx,
     run: args.run,
     scope: args.scope,
     cwd: args.cwd,
-    select: (install) => install.declarers.some((declarer) => declarer.endsWith(`@${name}`)),
+    select: (install) =>
+      !reported.has(`${install.plugin}@${install.marketplace}`) &&
+      install.declarers.some((declarer) => declarer.endsWith(`@${name}`)),
   });
 }
 

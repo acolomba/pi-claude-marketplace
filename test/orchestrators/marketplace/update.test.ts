@@ -6065,6 +6065,58 @@ test("D-PL2-10: the autoupdate cascade runs the missing-dependency step once, af
   });
 });
 
+test("D-PL2-10: the step does not try again a dependency an update of the cascade already reported", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedDependencyStepMarketplace(cwd, true);
+    const { ctx, run } = makeCtx();
+    const pluginUpdate: PluginUpdateFn = (plugin) =>
+      Promise.resolve({
+        partition: "failed",
+        name: plugin,
+        notes: ["dependency failed"],
+        reasons: ["dependency failed"],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        dependencyRows:
+          plugin === "alpha"
+            ? [
+                {
+                  status: "failed",
+                  name: "lib@deps-mp",
+                  reasons: [],
+                  severity: "error",
+                  needsReload: false,
+                },
+              ]
+            : [],
+      });
+    const selects: boolean[] = [];
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "deps-mp",
+      scope: "project",
+      cwd,
+      pluginUpdate,
+      installMissingDependencies: (request) => {
+        selects.push(
+          request.select({ plugin: "lib", marketplace: "deps-mp", declarers: ["alpha@deps-mp"] }),
+          request.select({ plugin: "core", marketplace: "deps-mp", declarers: ["alpha@deps-mp"] }),
+        );
+        return Promise.resolve({ rows: [], mcpConfigNotices: [] });
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(selects, [false, true]);
+  });
+});
+
 test("D-PL2-10: an unchanged autoupdate whose step installs nothing still reports up to date", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
