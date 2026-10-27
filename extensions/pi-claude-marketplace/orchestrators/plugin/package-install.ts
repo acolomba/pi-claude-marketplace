@@ -45,7 +45,6 @@ import {
 import { errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
-import type { MaterializationPolicy } from "./update-preflight.ts";
 import type { UpdateRunOutcome } from "./update-swap.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { PackageManagerRun, PackageManagerRunner } from "../../platform/package-manager.ts";
@@ -477,18 +476,18 @@ export function createPackagesPhase(ops: PackageInstallOps): Phase<PackagesPhase
 export interface UpdatedPackagesTarget {
   readonly locations: ScopedLocations;
   readonly pluginRoot: string;
-  readonly policy: MaterializationPolicy;
+  /**
+   * D-PL9-06: `true` when the swap moved to another revision, which may carry
+   * another lockfile, so the step replaces an existing node_modules. A swap
+   * that re-materialized the recorded revision keeps it and stays offline.
+   */
+  readonly force: boolean;
 }
 
 /**
  * D-PL9-07: an update's new version gets the package install, and a failure
  * is a note on the `updated` outcome that never turns it into a failure
  * (PKD-02). Every other outcome passes through unread.
- *
- * D-PL9-06: a policy that skips the recorded revision moves to a new one, so
- * the step replaces an existing node_modules. A policy that re-materializes
- * the recorded revision keeps an existing node_modules, so reinstall stays
- * offline.
  */
 export async function installUpdatedPackages(
   ops: PackageInstallOps,
@@ -503,7 +502,7 @@ export async function installUpdatedPackages(
     target.pluginRoot,
     target.locations,
     ops,
-    target.policy.skipSameRevision,
+    target.force,
   );
   return note === undefined ? outcome : { ...outcome, notes: [...(outcome.notes ?? []), note] };
 }

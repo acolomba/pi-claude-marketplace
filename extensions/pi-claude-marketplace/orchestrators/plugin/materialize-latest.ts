@@ -103,21 +103,34 @@ export async function materializeLatestVersion(
     };
   }
 
+  // D-PL9-07: an updated plugin gets the packages its new version lists.
+  const packageTarget = {
+    locations: args.locations,
+    pluginRoot: preflight.installable.pluginRoot,
+    force: revisionMoved(move),
+  };
   if (settled === undefined || settled.rows.length === 0) {
-    // D-PL9-07: an updated plugin gets the packages its new version lists.
     return installUpdatedPackages(
       packageInstallOps,
       await swapPluginUpdate(args, preflight, policy),
-      { locations: args.locations, pluginRoot: preflight.installable.pluginRoot, policy },
+      packageTarget,
     );
   }
 
-  // D-PL9-07: an updated plugin gets the packages its new version lists.
   return installUpdatedPackages(
     packageInstallOps,
     await swapAfterSettle(args, preflight, policy, settled.rows),
-    { locations: args.locations, pluginRoot: preflight.installable.pluginRoot, policy },
+    packageTarget,
   );
+}
+
+/**
+ * D-PL9-06: whether the swap lands another revision than the record holds.
+ * Every verb may move: a reinstall lands the version the marketplace offers
+ * now (REI-04), so the policy's `skipSameRevision` does not tell.
+ */
+function revisionMoved(move: RevisionMove): boolean {
+  return move.toCommit !== move.fromCommit || move.toVersion !== move.fromVersion;
 }
 
 /** The command's context for the preflight's prompts, when it has one. */

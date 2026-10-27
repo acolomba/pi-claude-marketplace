@@ -31,7 +31,6 @@ import type {
   PackageInstallOps,
   PackagesPhaseContext,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts";
-import type { MaterializationPolicy } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import type { UpdateRunOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 import type { PluginUpdateUpdatedOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -917,18 +916,6 @@ describe("createPackagesPhase", () => {
   });
 });
 
-const REVISION_MOVE = {
-  refreshSource: true,
-  skipSameRevision: true,
-  overwrite: false,
-  searchReleaseTags: true,
-} satisfies MaterializationPolicy;
-const SAME_REVISION = {
-  refreshSource: false,
-  skipSameRevision: false,
-  overwrite: true,
-  searchReleaseTags: true,
-} satisfies MaterializationPolicy;
 const FAILED_RUN: PackageManagerRun = { code: 1, stdout: "", stderr: "boom", timedOut: false };
 
 function updatedOutcome(): PluginUpdateUpdatedOutcome {
@@ -996,7 +983,7 @@ describe("installUpdatedPackages", () => {
       const hookedOutcome = await installUpdatedPackages(
         opsWith(runPackageManager),
         expectedOutcome,
-        { locations: seeded.locations, pluginRoot: seeded.pluginRoot, policy: REVISION_MOVE },
+        { locations: seeded.locations, pluginRoot: seeded.pluginRoot, force: true },
       );
 
       // assert
@@ -1009,7 +996,7 @@ describe("installUpdatedPackages", () => {
     });
   }
 
-  test("installs the new version's packages over the existing node_modules when the policy skips the recorded revision", async (t) => {
+  test("installs the new version's packages over the existing node_modules when the swap moved to another revision", async (t) => {
     // arrange
     const seeded = await seedPlugin(t, filesWithOldModule());
     const requests: PackageManagerRequest[] = [];
@@ -1018,7 +1005,7 @@ describe("installUpdatedPackages", () => {
     const hookedOutcome = await installUpdatedPackages(
       opsWith(installingRunner(requests)),
       updatedOutcome(),
-      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, policy: REVISION_MOVE },
+      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, force: true },
     );
 
     // assert
@@ -1039,7 +1026,7 @@ describe("installUpdatedPackages", () => {
     );
   });
 
-  test("keeps an installed node_modules and runs nothing when the policy re-materializes the recorded revision", async (t) => {
+  test("keeps an installed node_modules and runs nothing when the swap re-materialized the recorded revision", async (t) => {
     // arrange
     const seeded = await seedPlugin(t, filesWithOldModule());
     const runPackageManager = idleRunner();
@@ -1049,7 +1036,7 @@ describe("installUpdatedPackages", () => {
     const hookedOutcome = await installUpdatedPackages(
       opsWith(runPackageManager),
       expectedOutcome,
-      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, policy: SAME_REVISION },
+      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, force: false },
     );
 
     // assert
@@ -1071,7 +1058,7 @@ describe("installUpdatedPackages", () => {
     const hookedOutcome = await installUpdatedPackages(
       opsWith(answeringRunner(FAILED_RUN)),
       { ...updatedOutcome(), notes: ["first"] },
-      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, policy: REVISION_MOVE },
+      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, force: true },
     );
 
     // assert
@@ -1092,7 +1079,7 @@ describe("installUpdatedPackages", () => {
     const hookedOutcome = await installUpdatedPackages(
       opsWith(answeringRunner(FAILED_RUN)),
       updatedOutcome(),
-      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, policy: REVISION_MOVE },
+      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, force: true },
     );
 
     // assert
@@ -1102,7 +1089,7 @@ describe("installUpdatedPackages", () => {
     });
   });
 
-  test("D-PL9-03: leaves an outside folder that has node_modules as it is even when the policy skips the recorded revision", async (t) => {
+  test("D-PL9-03: leaves an outside folder that has node_modules as it is even when the swap moved to another revision", async (t) => {
     // arrange
     const seeded = await seedPlugin(t, filesWithOldModule(), "outside");
     const runPackageManager = idleRunner();
@@ -1112,7 +1099,7 @@ describe("installUpdatedPackages", () => {
     const hookedOutcome = await installUpdatedPackages(
       opsWith(runPackageManager),
       expectedOutcome,
-      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, policy: REVISION_MOVE },
+      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, force: true },
     );
 
     // assert
@@ -1151,7 +1138,7 @@ describe("installUpdatedPackages", () => {
         return SUCCESS;
       }),
       updatedOutcome(),
-      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, policy: REVISION_MOVE },
+      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, force: true },
     );
 
     // assert
@@ -1177,7 +1164,7 @@ describe("installUpdatedPackages", () => {
     const hookedOutcome = await installUpdatedPackages(
       opsWith(answeringRunner(SUCCESS)),
       updatedOutcome(),
-      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, policy: REVISION_MOVE },
+      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, force: true },
     );
 
     // assert

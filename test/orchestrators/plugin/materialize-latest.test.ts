@@ -583,6 +583,11 @@ const REINSTALL_POLICY = {
   overwrite: true,
   searchReleaseTags: true,
 } satisfies MaterializationPolicy;
+const REMATERIALIZE_POLICY = {
+  ...REINSTALL_POLICY,
+  overwrite: false,
+  searchReleaseTags: false,
+} satisfies MaterializationPolicy;
 
 for (const { verb, policy, offered, installs } of [
   { verb: "an update", policy: UPDATE_POLICY, offered: "1.1.0", installs: "new" },
@@ -593,12 +598,14 @@ for (const { verb, policy, offered, installs } of [
     installs: "new",
   },
   { verb: "a reinstall", policy: REINSTALL_POLICY, offered: "1.0.0", installs: "old" },
+  { verb: "a reinstall", policy: REINSTALL_POLICY, offered: "1.1.0", installs: "new" },
   {
     verb: "a rematerialize",
-    policy: { ...REINSTALL_POLICY, overwrite: false, searchReleaseTags: false },
+    policy: REMATERIALIZE_POLICY,
     offered: "1.0.0",
     installs: "old",
   },
+  { verb: "a rematerialize", policy: REMATERIALIZE_POLICY, offered: "1.1.0", installs: "new" },
 ]) {
   test(`D-PL9-06: ${verb} from 1.0.0 to ${offered} leaves the plugin with the ${installs} node_modules`, async (t) => {
     // arrange
