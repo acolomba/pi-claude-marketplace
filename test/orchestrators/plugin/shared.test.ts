@@ -7,6 +7,10 @@ import { describe, test, type TestContext } from "node:test";
 import { mock, verify, when } from "strong-mock";
 
 import {
+  copyManifestBoundary,
+  inPlaceManifestBoundary,
+} from "../../../extensions/pi-claude-marketplace/domain/manifest-containment.ts";
+import {
   githubSource,
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -29,6 +33,7 @@ import {
   namedPluginLayerRefusal,
   overwriteDisabledMemberEntries,
   pluginLayerVerdict,
+  readDeclaredPluginVersion,
   removePluginRecord,
   resolveCrossScopePluginTarget,
   resolveInstalledMarketplaceTarget,
@@ -37,6 +42,7 @@ import {
   resolvePluginVersion,
   resolveTagPinnedPluginVersion,
   retiresWorkflowCommand,
+  sourceTreeBoundary,
   splitStagingWarnings,
   surfaceDiscoveryWarnings,
   sweepWorkflowsStaging,
@@ -2464,7 +2470,7 @@ describe("resolvePluginVersion", () => {
       const version = await resolvePluginVersion(
         entry,
         installable,
-        "mp",
+        { marketplaceName: "mp", marketplaceRoot: root },
         "0123456789abcdef0123456789abcdef01234567",
       );
 
@@ -2485,7 +2491,7 @@ describe("resolvePluginVersion", () => {
       const version = await resolvePluginVersion(
         entry,
         installable,
-        "mp",
+        { marketplaceName: "mp", marketplaceRoot: root },
         "0123456789abcdef0123456789abcdef01234567",
       );
 
@@ -2507,7 +2513,10 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable, "mp");
+      const version = await resolvePluginVersion(entry, installable, {
+        marketplaceName: "mp",
+        marketplaceRoot: root,
+      });
 
       // assert
       assert.equal(version, "2.0.0");
@@ -2527,7 +2536,10 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable, "mp");
+      const version = await resolvePluginVersion(entry, installable, {
+        marketplaceName: "mp",
+        marketplaceRoot: root,
+      });
 
       // assert
       assert.equal(version, "1.0.0");
@@ -2547,7 +2559,10 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable, "mp");
+      const version = await resolvePluginVersion(entry, installable, {
+        marketplaceName: "mp",
+        marketplaceRoot: root,
+      });
 
       // assert
       assert.equal(version, "1.0.0");
@@ -2569,7 +2584,10 @@ describe("resolvePluginVersion", () => {
         const installable = makeMaterializablePlugin(pluginRoot);
 
         // act
-        const version = await resolvePluginVersion(entry, installable, "mp");
+        const version = await resolvePluginVersion(entry, installable, {
+          marketplaceName: "mp",
+          marketplaceRoot: root,
+        });
 
         // assert
         assert.equal(version, "1.0.0");
@@ -2587,7 +2605,10 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable, "mp");
+      const version = await resolvePluginVersion(entry, installable, {
+        marketplaceName: "mp",
+        marketplaceRoot: root,
+      });
 
       // assert
       assert.equal(version, "1.0.0");
@@ -2606,7 +2627,10 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable, "mp");
+      const version = await resolvePluginVersion(entry, installable, {
+        marketplaceName: "mp",
+        marketplaceRoot: root,
+      });
 
       // assert
       assert.strictEqual(version, "1.0.0");
@@ -2624,7 +2648,10 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable, "mp");
+      const version = await resolvePluginVersion(entry, installable, {
+        marketplaceName: "mp",
+        marketplaceRoot: root,
+      });
 
       // assert
       assert.strictEqual(version, "9.9.9");
@@ -2640,7 +2667,10 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable, "mp");
+      const version = await resolvePluginVersion(entry, installable, {
+        marketplaceName: "mp",
+        marketplaceRoot: root,
+      });
 
       // assert
       assert.equal(version, "hash-e3b0c44298fc");
@@ -2657,7 +2687,10 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable, "mp");
+      const version = await resolvePluginVersion(entry, installable, {
+        marketplaceName: "mp",
+        marketplaceRoot: root,
+      });
 
       // assert
       assert.equal(version, "2.0.0");
@@ -2678,7 +2711,10 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable, "mp");
+      const version = await resolvePluginVersion(entry, installable, {
+        marketplaceName: "mp",
+        marketplaceRoot: root,
+      });
 
       // assert
       assert.equal(version, "2.0.0");
@@ -2698,7 +2734,10 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable, "mp");
+      const version = await resolvePluginVersion(entry, installable, {
+        marketplaceName: "mp",
+        marketplaceRoot: root,
+      });
 
       // assert
       assert.equal(version, "1.0.0");
@@ -2720,7 +2759,7 @@ describe("resolvePluginVersion", () => {
       const version = await resolvePluginVersion(
         entry,
         installable,
-        "mp",
+        { marketplaceName: "mp", marketplaceRoot: root },
         "0123456789abcdef0123456789abcdef01234567",
       );
 
@@ -2746,13 +2785,200 @@ describe("resolvePluginVersion", () => {
       const version = await resolvePluginVersion(
         entry,
         installable,
-        "anthropic-plugin-directory",
+        { marketplaceName: "anthropic-plugin-directory", marketplaceRoot: root },
         sha,
       );
 
       // assert
       assert.equal(version, "1.0.0-0123456789ab");
     });
+  });
+});
+
+/** A marketplace holding the plugin `alpha` with its wrapper directory, and a root outside it. */
+async function plantLinkedAlpha(t: TestContext): Promise<{
+  readonly marketplaceRoot: string;
+  readonly pluginRoot: string;
+  readonly wrapped: string;
+  readonly outside: string;
+}> {
+  const marketplaceRoot = await mkdtemp(path.join(tmpdir(), "linked-version-mp-"));
+  const outside = await mkdtemp(path.join(tmpdir(), "linked-version-outside-"));
+  t.after(() => rm(marketplaceRoot, { recursive: true, force: true }));
+  t.after(() => rm(outside, { recursive: true, force: true }));
+  const pluginRoot = path.join(marketplaceRoot, "alpha");
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  return {
+    marketplaceRoot,
+    pluginRoot,
+    wrapped: path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    outside,
+  };
+}
+
+describe("readDeclaredPluginVersion", () => {
+  test("D-PL2-24: reads the version of a manifest linked inside the plugin", async (t) => {
+    // arrange
+    const tree = await plantLinkedAlpha(t);
+    await writeFile(path.join(tree.pluginRoot, "manifest.json"), '{"version":"3.0.0"}');
+    await symlink(path.join(tree.pluginRoot, "manifest.json"), tree.wrapped);
+
+    // act
+    const version = await readDeclaredPluginVersion(copyManifestBoundary(tree.pluginRoot));
+
+    // assert
+    assert.strictEqual(version, "3.0.0");
+  });
+
+  test("D-PL2-24: declares no version for a manifest linked outside the boundary", async (t) => {
+    // arrange
+    const tree = await plantLinkedAlpha(t);
+    await writeFile(path.join(tree.outside, "plugin.json"), '{"version":"3.0.0"}');
+    await symlink(path.join(tree.outside, "plugin.json"), tree.wrapped);
+    await writeFile(path.join(tree.pluginRoot, "plugin.json"), '{"version":"9.9.9"}');
+    const logged = captureDebugLog(t);
+
+    // act
+    const version = await readDeclaredPluginVersion(
+      inPlaceManifestBoundary(tree.pluginRoot, tree.marketplaceRoot),
+    );
+
+    // assert
+    assert.strictEqual(version, undefined);
+    assert.deepStrictEqual(logged, [
+      "[hooks] resolvePluginVersion: plugin manifest not confirmed inside the plugin directory and its marketplace directory",
+    ]);
+  });
+
+  test("D-PL2-24: declares no version for a manifest link loop", async (t) => {
+    // arrange
+    const tree = await plantLinkedAlpha(t);
+    await symlink(tree.wrapped, tree.wrapped);
+    await writeFile(path.join(tree.pluginRoot, "plugin.json"), '{"version":"9.9.9"}');
+
+    // act
+    const version = await readDeclaredPluginVersion(copyManifestBoundary(tree.pluginRoot));
+
+    // assert
+    assert.strictEqual(version, undefined);
+  });
+
+  test("D-01-06: reads the bare manifest past a dangling wrapped link", async (t) => {
+    // arrange
+    const tree = await plantLinkedAlpha(t);
+    await symlink(path.join(tree.pluginRoot, "missing.json"), tree.wrapped);
+    await writeFile(path.join(tree.pluginRoot, "plugin.json"), '{"version":"9.9.9"}');
+
+    // act
+    const version = await readDeclaredPluginVersion(copyManifestBoundary(tree.pluginRoot));
+
+    // assert
+    assert.strictEqual(version, "9.9.9");
+  });
+});
+
+describe("sourceTreeBoundary", () => {
+  test("D-PL2-17: reads an unpinned path source in place", () => {
+    // act
+    const boundary = sourceTreeBoundary(
+      { name: "alpha", source: "./alpha" },
+      "/mp/alpha",
+      "/mp",
+      undefined,
+    );
+
+    // assert
+    assert.deepStrictEqual(boundary, inPlaceManifestBoundary("/mp/alpha", "/mp"));
+  });
+
+  test("D-PL2-17: bounds a pinned path source by its plugin directory", () => {
+    // act
+    const boundary = sourceTreeBoundary(
+      { name: "alpha", source: "./alpha" },
+      "/clones/alpha",
+      "/mp",
+      "0123456789abcdef0123456789abcdef01234567",
+    );
+
+    // assert
+    assert.deepStrictEqual(boundary, copyManifestBoundary("/clones/alpha"));
+  });
+
+  test("D-PL2-17: bounds a git source by its plugin directory", () => {
+    // act
+    const boundary = sourceTreeBoundary(
+      { name: "alpha", source: { source: "github", repo: "acme/alpha" } },
+      "/clones/alpha",
+      "/mp",
+      undefined,
+    );
+
+    // assert
+    assert.deepStrictEqual(boundary, copyManifestBoundary("/clones/alpha"));
+  });
+});
+
+describe("resolvePluginVersion boundaries", () => {
+  test("D-PL2-17: a path source reads a manifest linked into its marketplace directory", async (t) => {
+    // arrange
+    const tree = await plantLinkedAlpha(t);
+    await writeFile(path.join(tree.marketplaceRoot, "shared.json"), '{"version":"3.0.0"}');
+    await symlink(path.join(tree.marketplaceRoot, "shared.json"), tree.wrapped);
+    const entry = { name: "alpha", source: "./alpha", version: "1.0.0" } satisfies PluginEntry;
+
+    // act
+    const version = await resolvePluginVersion(entry, makeMaterializablePlugin(tree.pluginRoot), {
+      marketplaceName: "mp",
+      marketplaceRoot: tree.marketplaceRoot,
+    });
+
+    // assert
+    assert.strictEqual(version, "3.0.0");
+  });
+
+  test("D-PL2-17: a git source refuses that link and falls to its commit", async (t) => {
+    // arrange
+    const tree = await plantLinkedAlpha(t);
+    await writeFile(path.join(tree.marketplaceRoot, "shared.json"), '{"version":"3.0.0"}');
+    await symlink(path.join(tree.marketplaceRoot, "shared.json"), tree.wrapped);
+    const entry = {
+      name: "alpha",
+      source: { source: "github", repo: "acme/alpha" },
+    } satisfies PluginEntry;
+
+    // act
+    const version = await resolvePluginVersion(
+      entry,
+      makeMaterializablePlugin(tree.pluginRoot),
+      { marketplaceName: "mp", marketplaceRoot: tree.marketplaceRoot },
+      "0123456789abcdef0123456789abcdef01234567",
+    );
+
+    // assert
+    assert.strictEqual(version, "0123456789ab");
+  });
+
+  test("D-PL2-17: a git source refuses that link and falls to its entry version first", async (t) => {
+    // arrange
+    const tree = await plantLinkedAlpha(t);
+    await writeFile(path.join(tree.marketplaceRoot, "shared.json"), '{"version":"3.0.0"}');
+    await symlink(path.join(tree.marketplaceRoot, "shared.json"), tree.wrapped);
+    const entry = {
+      name: "alpha",
+      source: { source: "github", repo: "acme/alpha" },
+      version: "1.0.0",
+    } satisfies PluginEntry;
+
+    // act
+    const version = await resolvePluginVersion(
+      entry,
+      makeMaterializablePlugin(tree.pluginRoot),
+      { marketplaceName: "mp", marketplaceRoot: tree.marketplaceRoot },
+      "0123456789abcdef0123456789abcdef01234567",
+    );
+
+    // assert
+    assert.strictEqual(version, "1.0.0");
   });
 });
 

@@ -18,7 +18,11 @@ import {
   type StatusToken,
 } from "../../shared/notification-types.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
-import { narrowUnsupportedKinds, SOURCE_DIR_MISSING_NOTE } from "../../shared/probe-classifiers.ts";
+import {
+  MANIFEST_ESCAPE_NOTE,
+  narrowUnsupportedKinds,
+  SOURCE_DIR_MISSING_NOTE,
+} from "../../shared/probe-classifiers.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -576,6 +580,12 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
     return ["source missing"];
   }
 
+  // D-PL2-24: a manifest link that leaves its boundary, mirroring
+  // `classifyResolverNote`.
+  if (reason.startsWith(MANIFEST_ESCAPE_NOTE)) {
+    return ["unreadable manifest"];
+  }
+
   if (reason.includes("source")) {
     return ["unsupported source"];
   }
@@ -602,7 +612,9 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
  *      `unavailable` arm it stays on the source axis as `unsupported source`,
  *      mirroring `narrowResolverNotes`'s catch-all (SURF-01 / WR-01 / D-64-07)
  *   2. the `source dir does not exist` note -> `source missing` (SRC-01);
- *      any other "source" substring -> `unsupported source`
+ *      the `plugin manifest resolves outside the` note -> `unreadable
+ *      manifest` (D-PL2-24); any other "source" substring -> `unsupported
+ *      source`
  *   3. errno-like substrings (EACCES / EPERM / ENOENT / SyntaxError)
  *   4. permissive fallback: `unsupported source`
  * Steps 3-4 are defensive for notes already serialised by deeper helpers;

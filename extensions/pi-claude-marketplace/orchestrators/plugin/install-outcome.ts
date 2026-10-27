@@ -153,6 +153,7 @@ import {
   resolveInstallMarketplaceSource,
   resolvePluginVersion,
   resolveTagPinnedPluginVersion,
+  sourceTreeBoundary,
   type LedgerDegradationSignals,
 } from "./shared.ts";
 
@@ -163,8 +164,9 @@ import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PreparedWorkflowsStaging } from "../../bridges/workflows/index.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
+import type { ManifestBoundary } from "../../domain/manifest-containment.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
-import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
+import type { MaterializablePlugin, ResolveContext } from "../../domain/resolver-types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
@@ -482,7 +484,7 @@ type InstallLedgerContextResult =
 async function deriveInstallVersion(args: {
   entry: PluginEntry;
   installable: MaterializablePlugin;
-  marketplaceName: string;
+  marketplace: Pick<ResolveContext, "marketplaceName" | "marketplaceRoot">;
   resolvedSha: string | undefined;
   pinVersionOverride: string | undefined;
   resolvedVersion: string | undefined;
@@ -495,7 +497,7 @@ async function deriveInstallVersion(args: {
     return resolveTagPinnedPluginVersion(
       args.entry,
       args.installable,
-      args.marketplaceName,
+      args.marketplace.marketplaceName,
       args.resolvedSha,
     );
   }
@@ -505,7 +507,7 @@ async function deriveInstallVersion(args: {
   return resolvePluginVersion(
     args.entry,
     args.installable,
-    args.marketplaceName,
+    args.marketplace,
     isGitSource ? args.resolvedSha : undefined,
   );
 }
@@ -692,6 +694,8 @@ async function preflightInstallResolve(
       readonly entry: PluginEntry;
       readonly installable: MaterializablePlugin;
       readonly resolvedSha: string | undefined;
+      /** The target record's marketplace root, which bounds an in-place manifest read. */
+      readonly marketplaceRoot: string;
     }
 > {
   const { marketplace, plugin } = opts;
@@ -801,7 +805,16 @@ async function preflightInstallResolve(
   }
 
   if (opts.directoryPin !== undefined) {
-    await assertDirectoryPinSatisfied(entry.name, resolved.pluginRoot, opts.directoryPin);
+    await assertDirectoryPinSatisfied(
+      entry.name,
+      sourceTreeBoundary(
+        entry,
+        resolved.pluginRoot,
+        targetMp.marketplaceRoot,
+        opts.sourcePinOverride,
+      ),
+      opts.directoryPin,
+    );
   }
 
   // After the gate `resolved` is narrowed to the materializable union
@@ -809,20 +822,28 @@ async function preflightInstallResolve(
   // The `partially-available` arm carries only supported kinds in
   // componentPaths, so the shared materialize phases degrade it naturally
   // (D-65-02, no partial branch).
-  return { kind: "ready", entry, installable: resolved, resolvedSha };
+  return {
+    kind: "ready",
+    entry,
+    installable: resolved,
+    resolvedSha,
+    marketplaceRoot: targetMp.marketplaceRoot,
+  };
 }
 
 /**
  * GV-01: Claude Code checks the `plugin.json` version of a plugin directory
  * copy against its dependents' range after the fetch, and refuses the install
- * when it falls outside or declares none.
+ * when it falls outside or declares none. `boundary` is the one the resolver
+ * read the copy's manifest within (D-PL2-17), so a manifest it refused
+ * declares no version here either.
  */
 async function assertDirectoryPinSatisfied(
   plugin: string,
-  pluginRoot: string,
+  boundary: ManifestBoundary,
   pin: DirectoryPinRange,
 ): Promise<void> {
-  const manifestVersion = await readDeclaredPluginVersion(pluginRoot);
+  const manifestVersion = await readDeclaredPluginVersion(boundary);
   if (manifestVersion !== undefined && recordedVersionSatisfies(manifestVersion, pin.range)) {
     return;
   }
@@ -984,7 +1005,7 @@ async function runInstallLedgerBody(
     return { kind: "marketplace-absent" };
   }
 
-  const { entry, installable, resolvedSha } = preflight;
+  const { entry, installable, resolvedSha, marketplaceRoot } = preflight;
 
   // Generated-name discovery (PI-6 input). Walks the bridges' discover.ts
   // to enumerate source artifacts under componentPaths, then applies the
@@ -1019,7 +1040,7 @@ async function runInstallLedgerBody(
   const version = await deriveInstallVersion({
     entry,
     installable,
-    marketplaceName: marketplace,
+    marketplace: { marketplaceName: marketplace, marketplaceRoot },
     resolvedSha,
     pinVersionOverride: opts.pinVersionOverride,
     resolvedVersion: opts.resolvedVersion,

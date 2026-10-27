@@ -56,7 +56,7 @@ import type {
 } from "./dependency-verdict.ts";
 import type { PlannedPluginEnable, ReconcilePlan } from "./types.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
-import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
+import type { MaterializablePlugin, ResolveContext } from "../../domain/resolver-types.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -297,19 +297,22 @@ interface Offer {
   readonly resolved?: MaterializablePlugin;
 }
 
+/** The marketplace a candidate is offered by: its name and the root its path trees read in. */
+type OfferMarketplace = Pick<ResolveContext, "marketplaceName" | "marketplaceRoot">;
+
 /** A path source moves when its version or plugin root differs (D-18-11). */
 async function pathOffer(
   entry: PluginEntry,
   candidate: ListCandidate,
   record: PluginRecord,
-  marketplaceName: string,
+  marketplace: OfferMarketplace,
 ): Promise<Offer | undefined> {
   if (candidate.kind === "cold" || candidate.resolved.state === "unavailable") {
     return undefined;
   }
 
   const resolved = candidate.resolved;
-  const toVersion = await resolvePluginVersion(entry, resolved, marketplaceName);
+  const toVersion = await resolvePluginVersion(entry, resolved, marketplace);
   const pluginRoot = resolved.pluginRoot;
   return {
     toVersion,
@@ -362,10 +365,10 @@ async function gitOffer(
   entry: PluginEntry,
   candidate: ListCandidate,
   record: PluginRecord,
-  marketplaceName: string,
+  marketplace: OfferMarketplace,
 ): Promise<Offer | undefined> {
   if (candidate.kind === "cold" || candidate.resolvedSha === undefined) {
-    return coldGitOffer(source, entry, record, marketplaceName);
+    return coldGitOffer(source, entry, record, marketplace.marketplaceName);
   }
 
   if (candidate.resolved.state === "unavailable") {
@@ -373,7 +376,7 @@ async function gitOffer(
   }
 
   const { resolved, resolvedSha } = candidate;
-  const toVersion = await resolvePluginVersion(entry, resolved, marketplaceName, resolvedSha);
+  const toVersion = await resolvePluginVersion(entry, resolved, marketplace, resolvedSha);
   return {
     toVersion,
     toCommit: resolvedSha,
@@ -403,15 +406,12 @@ async function recordMove(
   }
 
   const entry = declared.entry;
-  const candidate = await resolveListCandidate(
-    entry,
-    { marketplaceRoot: mp.marketplaceRoot, marketplaceName: mp.name },
-    input.locations,
-  );
+  const marketplace = { marketplaceRoot: mp.marketplaceRoot, marketplaceName: mp.name };
+  const candidate = await resolveListCandidate(entry, marketplace, input.locations);
   const source = gitSourceOf(entry.source);
   const offer = await (source === undefined
-    ? pathOffer(entry, candidate, record, mp.name)
-    : gitOffer(source, entry, candidate, record, mp.name));
+    ? pathOffer(entry, candidate, record, marketplace)
+    : gitOffer(source, entry, candidate, record, marketplace));
   if (offer === undefined) {
     return undefined;
   }

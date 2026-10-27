@@ -462,6 +462,163 @@ test("D-01-32: the production reader reads a bare manifest off real disk", async
   assert.deepStrictEqual(declaration, dependsOn("from-manifest"));
 });
 
+/**
+ * A marketplace holding `alpha` read in place, for the catalog read over real
+ * disk. `real.json` declares `linked@mp` and the bare `plugin.json` declares
+ * `bare@mp`; the entry declares `entry@mp`.
+ */
+async function linkedCatalogPlugin(
+  testContext: TestContext,
+): Promise<{ readonly marketplaceRoot: string; readonly pluginRoot: string }> {
+  const marketplaceRoot = await freshRoot(testContext, "ddr-catalog-link-");
+  const pluginRoot = path.join(marketplaceRoot, "alpha");
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, "real.json"),
+    JSON.stringify({ dependencies: ["linked@mp"] }),
+  );
+  await writeFile(
+    path.join(pluginRoot, "plugin.json"),
+    JSON.stringify({ dependencies: ["bare@mp"] }),
+  );
+  return { marketplaceRoot, pluginRoot };
+}
+
+/** The catalog read of `alpha` in `marketplaceRoot`, refusing an unusable manifest when asked. */
+function readCatalogAlpha(
+  marketplaceRoot: string,
+  refuse: boolean,
+): ReturnType<typeof readDependencyDeclaration> {
+  return readDependencyDeclaration({
+    marketplaceRoot,
+    entry: entryWith("./alpha", ["entry@mp"]),
+    locations: locationsFor("project", marketplaceRoot),
+    ...(refuse && { refuseUnusableOwnManifest: true }),
+  });
+}
+
+const CATALOG_LINK_SHAPES: readonly {
+  readonly label: string;
+  readonly plant: (testContext: TestContext, pluginRoot: string) => Promise<void>;
+  readonly followed: boolean;
+}[] = [
+  {
+    label: "a direct link to a file in the plugin",
+    plant: async (_testContext, pluginRoot) => {
+      await symlink(
+        path.join(pluginRoot, "real.json"),
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+      );
+    },
+    followed: true,
+  },
+  {
+    label: "a chain of links inside the plugin",
+    plant: async (_testContext, pluginRoot) => {
+      await symlink(path.join(pluginRoot, "real.json"), path.join(pluginRoot, "hop.json"));
+      await symlink(
+        path.join(pluginRoot, "hop.json"),
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+      );
+    },
+    followed: true,
+  },
+  {
+    label: "a relative link inside the plugin",
+    plant: async (_testContext, pluginRoot) => {
+      await symlink(
+        path.join("..", "real.json"),
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+      );
+    },
+    followed: true,
+  },
+  {
+    label: "an absolute link outside the marketplace",
+    plant: async (testContext, pluginRoot) => {
+      await symlink(
+        await outsideManifest(testContext),
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+      );
+    },
+    followed: false,
+  },
+  {
+    label: "a relative link that climbs out of the marketplace",
+    plant: async (testContext, pluginRoot) => {
+      const wrapped = path.join(pluginRoot, ".claude-plugin", "plugin.json");
+      await symlink(
+        path.relative(path.dirname(wrapped), await outsideManifest(testContext)),
+        wrapped,
+      );
+    },
+    followed: false,
+  },
+  {
+    label: "a link loop",
+    plant: async (_testContext, pluginRoot) => {
+      const wrapped = path.join(pluginRoot, ".claude-plugin", "plugin.json");
+      await symlink(wrapped, wrapped);
+    },
+    followed: false,
+  },
+];
+
+for (const { label, plant } of CATALOG_LINK_SHAPES.filter(({ followed }) => followed)) {
+  test(`D-PL2-24: the catalog read follows ${label} to the file it names`, async (testContext) => {
+    // arrange
+    const { marketplaceRoot, pluginRoot } = await linkedCatalogPlugin(testContext);
+    await plant(testContext, pluginRoot);
+
+    // act
+    const declaration = await readCatalogAlpha(marketplaceRoot, true);
+
+    // assert
+    assert.deepStrictEqual(declaration, dependsOn("linked"));
+  });
+}
+
+for (const { label, plant } of CATALOG_LINK_SHAPES.filter(({ followed }) => !followed)) {
+  test(`D-01-07 / D-PL2-24: the catalog read lets the entry answer for ${label}`, async (testContext) => {
+    // arrange
+    const { marketplaceRoot, pluginRoot } = await linkedCatalogPlugin(testContext);
+    await plant(testContext, pluginRoot);
+
+    // act
+    const declaration = await readCatalogAlpha(marketplaceRoot, false);
+
+    // assert
+    assert.deepStrictEqual(declaration, dependsOn("entry"));
+  });
+
+  test(`D-05-07 / D-PL2-24: the refusing catalog read refuses ${label}`, async (testContext) => {
+    // arrange
+    const { marketplaceRoot, pluginRoot } = await linkedCatalogPlugin(testContext);
+    await plant(testContext, pluginRoot);
+
+    // act
+    const declaration = await readCatalogAlpha(marketplaceRoot, true);
+
+    // assert
+    assert.deepStrictEqual(declaration, ownManifestRefusal());
+  });
+}
+
+test("D-01-06: the catalog read passes a dangling wrapped link to the bare manifest", async (testContext) => {
+  // arrange
+  const { marketplaceRoot, pluginRoot } = await linkedCatalogPlugin(testContext);
+  await symlink(
+    path.join(pluginRoot, "missing.json"),
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+  );
+
+  // act
+  const declaration = await readCatalogAlpha(marketplaceRoot, true);
+
+  // assert
+  assert.deepStrictEqual(declaration, dependsOn("bare"));
+});
+
 /** `readInstalledCopyDeclaration` of `PLUGIN_ROOT`, owned by the marketplace root. */
 function readInstalledCopy(
   reader: RecordingReader,

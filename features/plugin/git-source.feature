@@ -447,3 +447,30 @@ Feature: Plugin git source
     Then the result lists these plugins:
       | marketplace name           | marketplace scope | id                              | name | status    | reasons | scope   | version                 |
       | anthropic-plugin-directory | project           | dirp@anthropic-plugin-directory | dirp | installed |         | project | 1.0.0-{dirp revision 1} |
+
+  Scenario: Installing a git-source plugin whose manifest links outside its plugin directory refuses it and installs nothing
+    Given the git repository "app" holds these plugins:
+      | name | version | path | dependencies |
+      | app  | 1.0.0   |      | lib          |
+    Given the git repository "app" links the manifest of the plugin "app" to a file outside the repository
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | lib  | 1.2.0   |              |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | app  | url         | app        | true   |
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status      | reasons             |
+      | tools            | project           | app@tools | app  | unavailable | unreadable manifest |
+    Then the project scope has no installed plugins
+    Then the project scope holds these git clones:
+      | clone  | origin                          | revision         |
+      | plugin | https://{git host}/acme/app.git | {app revision 2} |

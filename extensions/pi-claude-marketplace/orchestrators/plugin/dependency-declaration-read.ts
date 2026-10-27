@@ -49,6 +49,12 @@ import path from "node:path";
 
 import { parseDeclaredDependencies } from "../../domain/dependencies.ts";
 import { toClosureLookupResult } from "../../domain/dependency-closure.ts";
+import {
+  copyManifestBoundary,
+  inPlaceManifestBoundary,
+  isAbsenceError,
+  locateManifestCandidate,
+} from "../../domain/manifest-containment.ts";
 import { MANIFEST_CANDIDATES } from "../../domain/manifest-path.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { isErrnoException } from "../../shared/errors.ts";
@@ -57,6 +63,7 @@ import { assertPathInside, PathContainmentError } from "../../shared/path-safety
 import { makePresenceProbe } from "./git-source-probe.ts";
 
 import type { DeclarationLookupResult } from "../../domain/dependency-closure.ts";
+import type { ManifestBoundary } from "../../domain/manifest-containment.ts";
 import type { ManifestPluginEntry } from "../../domain/manifest-lookup.ts";
 import type { GitPluginRootResult } from "../../domain/resolver-types.ts";
 import type { GitBackedSource, PathSource } from "../../domain/source.ts";
@@ -160,11 +167,11 @@ const OWN_MANIFEST_REFUSAL: OwnManifestRefusal = {
 async function derivePathPluginRoot(
   marketplaceRoot: string,
   source: PathSource,
-): Promise<string | undefined> {
+): Promise<ManifestBoundary | undefined> {
   try {
     const pluginRoot = path.resolve(marketplaceRoot, source.raw);
     await assertPathInside(marketplaceRoot, pluginRoot, `dependency source for "${source.raw}"`);
-    return pluginRoot;
+    return inPlaceManifestBoundary(pluginRoot, marketplaceRoot);
   } catch {
     return undefined;
   }
@@ -180,7 +187,7 @@ async function probeGitPluginRoot(
   reader: DependencyDeclarationReader,
   locations: ScopedLocations,
   source: GitBackedSource,
-): Promise<string | undefined> {
+): Promise<ManifestBoundary | undefined> {
   let presence: GitPluginRootResult;
   try {
     presence = await reader.makePresenceProbe(locations)(source);
@@ -188,18 +195,20 @@ async function probeGitPluginRoot(
     return undefined;
   }
 
-  return presence.kind === "materialized" ? presence.pluginRoot : undefined;
+  return presence.kind === "materialized" ? copyManifestBoundary(presence.pluginRoot) : undefined;
 }
 
 /**
- * The plugin root this read may open, WITHOUT a network call. The exhaustive
- * switch keeps a future source kind a compile error rather than silently
- * routing it at one of the arms below.
+ * The manifest boundary of the plugin root this read may open, WITHOUT a
+ * network call (D-PL2-17): a path source is read in place from its
+ * marketplace tree, and a warm git clone is a copy. The exhaustive switch
+ * keeps a future source kind a compile error rather than silently routing it
+ * at one of the arms below.
  */
 async function resolvePluginRootFsOnly(
   reader: DependencyDeclarationReader,
   options: DependencyDeclarationReadOptions,
-): Promise<string | undefined> {
+): Promise<ManifestBoundary | undefined> {
   const source = parsePluginSource(options.entry.source);
   switch (source.kind) {
     case "path":
@@ -232,12 +241,6 @@ function parseOwnManifest(raw: string): OwnManifestRead {
     : UNUSABLE;
 }
 
-/** D-01-06: ENOENT and ENOTDIR mean the candidate does not exist. */
-function isAbsenceError(err: unknown): boolean {
-  const code = isErrnoException(err) ? err.code : undefined;
-  return code === "ENOENT" || code === "ENOTDIR";
-}
-
 /**
  * Reads ONE candidate. `undefined` means ABSENT and is the only answer the walk
  * may continue past; every other answer ENDS the walk (D-01-07).
@@ -263,6 +266,29 @@ async function readManifestCandidate(
   }
 
   return parseOwnManifest(raw);
+}
+
+/**
+ * D-PL2-24 / D-PL2-17: one candidate, located inside `boundary` before it is
+ * read. A link whose target leaves the boundary, or that cannot be resolved,
+ * is a present-but-unusable manifest and ends the walk (D-01-07); a dangling
+ * link is no manifest.
+ */
+async function readBoundedCandidate(
+  reader: DependencyDeclarationReader,
+  boundary: ManifestBoundary,
+  candidatePath: string,
+): Promise<OwnManifestRead | undefined> {
+  const location = await locateManifestCandidate(boundary, candidatePath);
+  switch (location.kind) {
+    case "open":
+      return readManifestCandidate(reader, location.path);
+    case "absent":
+      return undefined;
+    case "escapes":
+    case "unresolvable":
+      return UNUSABLE;
+  }
 }
 
 /** Walks the shared candidate ordering under one plugin root, each read by `readCandidate`. */
@@ -295,13 +321,23 @@ async function readOwnManifest(
  * D-05-07: under `refuseUnusableOwnManifest`, a present-but-unusable own
  * manifest is the unusable arm with a fixed detail, and the entry never
  * answers for it.
+ *
+ * D-PL2-24 / D-PL2-17: a manifest link that leaves the plugin's boundary, or
+ * cannot be resolved, is such a present-but-unusable manifest. The boundary is
+ * the plugin and marketplace directories for a path source, and the plugin
+ * directory for a warm git clone.
  */
 export async function readDependencyDeclaration(
   options: DependencyDeclarationReadOptions,
 ): Promise<DeclarationLookupResult | OwnManifestRefusal> {
   const reader = options.reader ?? REAL_DEPENDENCY_DECLARATION_READER;
-  const pluginRoot = await resolvePluginRootFsOnly(reader, options);
-  const own = pluginRoot === undefined ? ABSENT : await readOwnManifest(reader, pluginRoot);
+  const boundary = await resolvePluginRootFsOnly(reader, options);
+  const own =
+    boundary === undefined
+      ? ABSENT
+      : await readOwnManifest(reader, boundary.pluginRoot, (absPath) =>
+          readBoundedCandidate(reader, boundary, absPath),
+        );
   if (own.kind === "unusable" && options.refuseUnusableOwnManifest !== undefined) {
     return OWN_MANIFEST_REFUSAL;
   }

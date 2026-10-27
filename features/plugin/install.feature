@@ -305,3 +305,22 @@ Feature: Plugin install
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: Installing a plugin whose manifest links outside its marketplace refuses it and installs nothing
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.2.0   |              |
+    Given the published plugin "app" of the marketplace "tools" links its manifest to a file outside the marketplace
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status      | reasons             |
+      | tools            | project           | app@tools | app  | unavailable | unreadable manifest |
+    Then the project scope has no installed plugins

@@ -12,7 +12,7 @@
  */
 
 import assert from "node:assert/strict";
-import { lstat, mkdir, readFile, rm, stat } from "node:fs/promises";
+import { lstat, mkdir, readFile, readlink, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { type DataTable, Given } from "@cucumber/cucumber";
@@ -29,6 +29,7 @@ import {
 } from "../../lib/git-plugin.ts";
 import { runGit } from "../../lib/hermetic-git.ts";
 import {
+  linkPublishedManifest,
   publishOutputStyle,
   removePublishedOutputStyle,
   rewritePublishedManifest,
@@ -153,6 +154,27 @@ Given(
   async function (this: ScenarioWorld, plugin: string, name: string) {
     const file = await publishOutputStyle(this.requirePublished(name), plugin);
     assert.strictEqual((await stat(file)).isFile(), true, `${file} is not a file`);
+  },
+);
+
+Given(
+  "the published plugin {string} of the marketplace {string} links its manifest to a file outside the marketplace",
+  async function (this: ScenarioWorld, plugin: string, name: string) {
+    const published = this.requirePublished(name);
+    const directory = path.join(this.tokens.home, LINKED_MANIFESTS_DIRECTORY, name);
+    this.onRelease(() => rm(directory, { recursive: true, force: true }));
+    const manifest = await linkPublishedManifest(
+      published,
+      plugin,
+      path.join(directory, `${plugin}.json`),
+    );
+    assert.strictEqual((await lstat(manifest)).isSymbolicLink(), true, `${manifest} is not a link`);
+    const relative = path.relative(published.root, await readlink(manifest));
+    assert.strictEqual(
+      relative.startsWith(`..${path.sep}`),
+      true,
+      `the manifest link of ${plugin} stays inside the marketplace ${name}`,
+    );
   },
 );
 
