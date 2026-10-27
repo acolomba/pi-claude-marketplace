@@ -615,7 +615,7 @@ function surfaceReinstallMcpConfigNotices(
 /**
  * D-141-03 / D-141-05: render each reinstalled plugin's discovery warnings
  * after the cascade its row lives in -- the user reads the row, then the
- * detail that qualifies it. Mirrors `update.ts::surfaceUpdateDiscoveryWarnings`.
+ * detail that qualifies it. Mirrors `update-flow.ts::surfaceUpdateDiscoveryWarnings`.
  *
  * It renders through the list renderer `surfaceStagingDiagnostics`
  * (D-PL1-07). This function, not the `render !== "none"` arm of

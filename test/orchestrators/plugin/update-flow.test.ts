@@ -11177,17 +11177,16 @@ test("D-PL1-10: an updateSinglePlugin cascade emits no notification and carries 
 
       assert.equal(outcome.partition, "updated");
       const warnings = outcome.partition === "updated" ? (outcome.stagingWarnings ?? []) : [];
-      assert.ok(
-        warnings.some((w) => w.kind === "discovery" && w.message.includes('"hello-foo"')),
-        `expected the discovery warning; got: ${JSON.stringify(warnings)}`,
-      );
-      assert.ok(
-        warnings.some(
-          (w) =>
-            w.kind === "hygiene" && w.message.includes("source description was missing or empty"),
-        ),
-        `expected the agents hygiene warning; got: ${JSON.stringify(warnings)}`,
-      );
+      assert.deepStrictEqual(warnings, [
+        {
+          kind: "discovery",
+          message: `skill source "hello-foo" in "${path.join(seeded.marketplaceRoot, "plugins", "hello", "skills")}" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.`,
+        },
+        {
+          kind: "hygiene",
+          message: "[bot] source description was missing or empty -- using fallback",
+        },
+      ]);
 
       // The agents half must NOT reach a standalone run's notifications.
       const cwd2 = await createCaseDir("update-discwarn-std-");
@@ -11899,16 +11898,12 @@ test("WLIF-02: the same workflow warning rides the cascade outcome's stagingWarn
       // assert
       assert.equal(outcome.partition, "updated");
       const warnings = outcome.partition === "updated" ? (outcome.stagingWarnings ?? []) : [];
-      assert.equal(
-        warnings.some(
-          (w) =>
-            w.kind === "discovery" &&
-            w.message.includes('workflow script "broken.js"') &&
-            w.message.includes("was not installed"),
-        ),
-        true,
-        JSON.stringify(warnings),
-      );
+      assert.deepStrictEqual(warnings, [
+        {
+          kind: "discovery",
+          message: `workflow script "broken.js" in "${path.join(marketplaceRoot, "plugins", "hello", "workflows")}" was not installed: broken.js declares no \`meta\`, so there is nothing to install`,
+        },
+      ]);
     } finally {
       process.chdir(previousCwd);
       await rm(cwd, { recursive: true, force: true });

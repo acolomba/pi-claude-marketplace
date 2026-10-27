@@ -2908,8 +2908,8 @@ function stagingWarningsMember(warnings: readonly StagingWarning[]): {
 /**
  * D-PL1-12 / D-PL1-07: a standalone enable shows the discovery half of its
  * root's staging warnings after its rows and before its MCP config notices.
- * Only a realized enable renders; `enable failed` is deferred, so an
- * `enable-failed` outcome renders nothing even when the sink holds warnings.
+ * Only a realized enable renders; the header verb union has no `enable failed`,
+ * so an `enable-failed` outcome renders nothing even when the sink holds warnings.
  */
 function surfaceEnableStagingWarnings(args: {
   readonly ctx: NotificationContext;

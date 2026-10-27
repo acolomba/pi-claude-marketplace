@@ -1143,8 +1143,8 @@ function unwrapCascade<S extends Exclude<InstallCascadeResult, CascadeFailureArm
  * warning says the installed artifact set does not match what the plugin
  * author shipped, and the install row's resource count gives the user no
  * baseline to notice the shortfall. The caller renders the standalone half
- * through `./staging-diagnostics.ts::surfaceDiscoveryWarnings`, which update and
- * reinstall also call (D-141-05). Every bridge tags its warnings at the
+ * through `./staging-diagnostics.ts::surfaceDiscoveryWarnings`; update, reinstall and
+ * enable render theirs through `surfaceStagingDiagnostics` (D-141-05). Every bridge tags its warnings at the
  * producer, and the ledger partitions them by tag (D-PL1-02, D-PL1-03).
  */
 async function collectPostCommitWarnings(
@@ -1165,9 +1165,9 @@ async function collectPostCommitWarnings(
     }
   };
 
-  // D-141-03: never gated. In standalone mode these are the only strings the
-  // returned array carries; the caller renders the typed
-  // `installCtx.discoveryWarnings` itself (D-PL1-04).
+  // D-141-03: never gated. The standalone caller does not read the returned
+  // array; it renders the typed `installCtx.discoveryWarnings` itself
+  // (D-PL1-04).
   warnings.push(...installCtx.discoveryWarnings.map((w) => w.message));
 
   // AS-6 / D-08: eager per-plugin data dir mkdir.

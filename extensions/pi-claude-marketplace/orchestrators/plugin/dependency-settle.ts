@@ -26,7 +26,8 @@
 //
 // D-PL1-16: a settle reports the MCP config notices of the dependencies its
 // cascades install, in step order, on both of its arms, so an update can show
-// them ahead of its own. A move reports none: its notices stay with the move.
+// them ahead of its own. The MCP notices and staging warnings of a dependency
+// move are not reported; that is deferred (D-PL1-16).
 
 import { DependencyCascadeError, rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
 import { mcpConfigNoticesMember } from "../marketplace/shared.ts";
