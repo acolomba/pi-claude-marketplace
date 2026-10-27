@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import { chmod, mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 import test from "node:test";
@@ -30,6 +30,7 @@ import {
   DirectoryPinUnsatisfiedError,
   InstallMarketplaceAddError,
   InvalidMarketplaceManifestError,
+  ManualRecoveryError,
   PluginShapeError,
   StaleSourceCloneError,
   UnsupportedSourceError,
@@ -48,6 +49,7 @@ import type {
   InstallFailureCapture,
   InstallLedgerOptions,
   InstallLedgerSummary,
+  InstallLedgerTransaction,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import type { PackageInstallOps } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -149,6 +151,8 @@ interface SeedOptions {
   readonly gitSource?: unknown;
   /** The marketplace's own name; defaults to `marketplace`. */
   readonly marketplaceName?: string;
+  /** The plugin's name in its entry and its `plugin.json`; defaults to `empty`. */
+  readonly pluginName?: string;
   /** The marketplace record's stored source; defaults to `./marketplace`. */
   readonly marketplaceSource?: ExtensionState["marketplaces"][string]["source"];
 }
@@ -158,6 +162,7 @@ async function seedPlugin(
   options: SeedOptions = {},
 ): Promise<{ readonly pluginRoot: string; readonly state: ExtensionState }> {
   const marketplaceName = options.marketplaceName ?? "marketplace";
+  const pluginName = options.pluginName ?? "empty";
   const marketplaceRoot = path.join(cwd, "marketplace");
   const pluginRoot =
     options.gitSource === undefined
@@ -168,13 +173,13 @@ async function seedPlugin(
   await mkdir(path.dirname(manifestPath), { recursive: true });
   await writeFile(
     path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-    JSON.stringify({ name: "empty", version: "0.0.1", ...options.pluginJson }),
+    JSON.stringify({ name: pluginName, version: "0.0.1", ...options.pluginJson }),
   );
   await writeFile(
     manifestPath,
     JSON.stringify({
       name: marketplaceName,
-      plugins: [{ name: "empty", source: options.gitSource ?? "./plugins/empty" }],
+      plugins: [{ name: pluginName, source: options.gitSource ?? "./plugins/empty" }],
     }),
   );
   await writeComponents(pluginRoot, options.components ?? {});
@@ -812,6 +817,274 @@ test("a failed workflows removal during rollback surfaces as its own partial rat
   assert.strictEqual(partial?.phase, "workflows");
   assert.strictEqual(partial.cause?.name, "WorkflowsUnstageFailureError");
   assert.match(partial.cause.message, /^empty:delta: /);
+});
+
+/**
+ * A transaction whose skills phase runs `afterSkills` once its own `do`
+ * resolves and whose commands phase then fails, so the ledger's reverse walk
+ * reaches the skills undo over committed skill directories.
+ */
+function commandsFailAfterSkills(afterSkills: () => Promise<void>): InstallLedgerTransaction {
+  return {
+    runPhases: <C>(phases: readonly Phase<C>[], ctx: C) =>
+      runPhases(
+        phases.map((phase): Phase<C> => {
+          if (phase.name === "skills") {
+            return {
+              ...phase,
+              do: async (c) => {
+                await phase.do(c);
+                await afterSkills();
+              },
+            };
+          }
+
+          return phase.name === "commands"
+            ? { ...phase, do: () => Promise.reject(new Error("commands phase failed")) }
+            : phase;
+        }),
+        ctx,
+      ),
+  };
+}
+
+function skillsLedgerOptions(cwd: string): InstallLedgerOptions {
+  return {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  };
+}
+
+test("D-PL6-20: a skills undo that cannot remove a skill names its directory as the leak", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-skills-undo-leak-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["alpha", "beta"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const stuckDir = path.join(locations.skillsTargetDir, "empty-beta");
+  const removalDenied = "EACCES: permission denied, rm 'empty-beta'";
+  let undoing = false;
+  const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+  t.mock.method(filesystemPromises, "rm", async (...args: Parameters<typeof originalRm>) => {
+    if (undoing && String(args[0]) === stuckDir) {
+      throw Object.assign(new Error(removalDenied), { code: "EACCES" });
+    }
+
+    return originalRm(...args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  const transaction = commandsFailAfterSkills(() => {
+    undoing = true;
+    return Promise.resolve();
+  });
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    skillsLedgerOptions(environment.cwd),
+    capture,
+    transaction,
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.strictEqual(error.message, "commands phase failed");
+    return true;
+  });
+  assert.deepStrictEqual(capture.rollbackPartials, [
+    {
+      phase: "skills",
+      msg: removalDenied,
+      cause: new ManualRecoveryError(removalDenied, [stuckDir]),
+    },
+  ]);
+  assert.deepStrictEqual(await readdir(locations.skillsTargetDir), ["empty-beta"]);
+});
+
+test("D-PL6-20: a skills undo keeps the removal failure's own cause under the leak list", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-skills-undo-cause-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["alpha", "beta"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const stuckDir = path.join(locations.skillsTargetDir, "empty-beta");
+  const removalDenied = "EACCES: permission denied, rm 'empty-beta'";
+  const rootCause = new Error("root cause");
+  let undoing = false;
+  const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+  t.mock.method(filesystemPromises, "rm", async (...args: Parameters<typeof originalRm>) => {
+    if (undoing && String(args[0]) === stuckDir) {
+      throw Object.assign(new Error(removalDenied, { cause: rootCause }), { code: "EACCES" });
+    }
+
+    return originalRm(...args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  const transaction = commandsFailAfterSkills(() => {
+    undoing = true;
+    return Promise.resolve();
+  });
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    skillsLedgerOptions(environment.cwd),
+    capture,
+    transaction,
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.strictEqual(error.message, "commands phase failed");
+    return true;
+  });
+  const partial = capture.rollbackPartials[0]?.cause;
+  assert.ok(partial instanceof ManualRecoveryError);
+  assert.deepStrictEqual(partial.leaks, [stuckDir]);
+  assert.strictEqual(partial.cause, rootCause);
+});
+
+test("D-PL6-20: a skills undo that fails but leaves no directory passes the failure through", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-skills-undo-clean-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["alpha"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const stagedDir = path.join(locations.skillsTargetDir, "empty-alpha");
+  const removalDenied = "EIO: i/o error, rm 'empty-alpha'";
+  let undoing = false;
+  const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+  t.mock.method(filesystemPromises, "rm", async (...args: Parameters<typeof originalRm>) => {
+    await originalRm(...args);
+
+    if (undoing && String(args[0]) === stagedDir) {
+      throw Object.assign(new Error(removalDenied), { code: "EIO" });
+    }
+  });
+  syncBuiltinESMExports();
+  t.after(() => {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  const transaction = commandsFailAfterSkills(() => {
+    undoing = true;
+    return Promise.resolve();
+  });
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    skillsLedgerOptions(environment.cwd),
+    capture,
+    transaction,
+  );
+
+  // assert
+  await assert.rejects(operation, /commands phase failed/);
+  assert.strictEqual(capture.rollbackPartials.length, 1);
+  const cause = capture.rollbackPartials[0]?.cause;
+  assert.ok(cause instanceof Error);
+  assert.ok(!(cause instanceof ManualRecoveryError));
+  assert.strictEqual(cause.message, removalDenied);
+});
+
+test("D-PL6-20: a skills undo keeps the unstage failure when probing the leftovers fails", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-skills-undo-probe-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["alpha"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const stagedDir = path.join(locations.skillsTargetDir, "empty-alpha");
+  const removalDenied = "EIO: i/o error, rm 'empty-alpha'";
+  let undoing = false;
+  let removalFailed = false;
+  const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+  const originalLstat = filesystemPromises.lstat.bind(filesystemPromises);
+  t.mock.method(filesystemPromises, "rm", async (...args: Parameters<typeof originalRm>) => {
+    if (undoing && String(args[0]) === stagedDir) {
+      removalFailed = true;
+      throw Object.assign(new Error(removalDenied), { code: "EIO" });
+    }
+
+    return originalRm(...args);
+  });
+  t.mock.method(filesystemPromises, "lstat", async (...args: Parameters<typeof originalLstat>) => {
+    if (removalFailed && String(args[0]) === stagedDir) {
+      throw Object.assign(new Error("EACCES: permission denied, lstat"), { code: "EACCES" });
+    }
+
+    return originalLstat(...args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  const transaction = commandsFailAfterSkills(() => {
+    undoing = true;
+    return Promise.resolve();
+  });
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    skillsLedgerOptions(environment.cwd),
+    capture,
+    transaction,
+  );
+
+  // assert
+  await assert.rejects(operation, /commands phase failed/);
+  assert.strictEqual(capture.rollbackPartials[0]?.msg, removalDenied);
+});
+
+test("PI-14: a skills undo that meets a symlink rethrows the containment refusal unwrapped", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-skills-undo-symlink-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["alpha"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const stagedDir = path.join(locations.skillsTargetDir, "empty-alpha");
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  const transaction = commandsFailAfterSkills(async () => {
+    await rm(stagedDir, { recursive: true });
+    await symlink("/nonexistent-decoy", stagedDir);
+  });
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    skillsLedgerOptions(environment.cwd),
+    capture,
+    transaction,
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof PathContainmentError);
+    return true;
+  });
+  assert.deepStrictEqual(capture.rollbackPartials, []);
 });
 
 test("surfaces the agents staging cleanup leak and still lands the install", async (t) => {
@@ -2634,6 +2907,18 @@ for (const { label, pluginJson, requiredBy, message } of [
     message:
       '"empty" from the Anthropic Directory is pinned to its listed commit (no version), which does not satisfy ^1.0.0.',
   },
+  {
+    label: "a 120-character version and requirer",
+    pluginJson: { version: `0.0.1-${"z".repeat(114)}` },
+    requiredBy: [`${"r".repeat(120)}@marketplace`],
+    message: `"empty" from the Anthropic Directory is pinned to its listed commit (version 0.0.1-${"z".repeat(114)}), which does not satisfy ^1.0.0 required by "${"r".repeat(120)}".`,
+  },
+  {
+    label: "a version and a requirer past 120 characters",
+    pluginJson: { version: `0.0.1-${"z".repeat(124)}` },
+    requiredBy: [`${"r".repeat(130)}@marketplace`],
+    message: `"empty" from the Anthropic Directory is pinned to its listed commit (version 0.0.1-${"z".repeat(114)}…), which does not satisfy ^1.0.0 required by "${"r".repeat(120)}…".`,
+  },
 ]) {
   test(`GV-01: a plugin directory copy with ${label} refuses the install as Claude Code does`, async (t) => {
     // arrange
@@ -2655,6 +2940,31 @@ for (const { label, pluginJson, requiredBy, message } of [
     );
   });
 }
+
+test("GV-01 / D-PL3-09: a plugin directory refusal cuts a plugin name past 120 characters at 120", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-directory-long-name-");
+  const pluginName = "p".repeat(130);
+  const seeded = await seedPlugin(environment.cwd, { pluginName });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act & assert
+  await assert.rejects(
+    previewInstall(seeded.state, locations, {
+      ...projectInstallOptions(environment.cwd),
+      plugin: pluginName,
+      directoryPin: { range: ">=1.0.0 <2.0.0-0", declared: "^1.0.0", requiredBy: [] },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof DirectoryPinUnsatisfiedError);
+      assert.strictEqual(
+        error.message,
+        `"${"p".repeat(120)}…" from the Anthropic Directory is pinned to its listed commit (version 0.0.1), which does not satisfy ^1.0.0.`,
+      );
+      return true;
+    },
+  );
+});
 
 test("UPD-DEP-D1: previewInstall throws what the gate throws for a plugin pi supports only in part", async (t) => {
   // arrange

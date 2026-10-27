@@ -365,9 +365,9 @@ void ({
   scope: "project",
   marketplace: "official",
   plugin: "formatter",
-  reason: "unreadable",
-  // @ts-expect-error install failure causes are DependencyCascadeError, not a bare Error
+  reason: "rollback partial",
   cause: new Error("boom"),
+  rollbackPartials: [{ phase: "skills", cause: new Error("skill rollback denied") }],
 } satisfies PluginInstallFailedOutcome);
 void ({
   kind: "plugin-uninstalled",
@@ -1181,7 +1181,7 @@ describe("dependencyDisabledOutcome", () => {
   test("T-06-05: prints the range the verdict already bounded verbatim", () => {
     // arrange -- the verdict bounds the declared ranges once, so a second
     // bound here would cut the text and replace its true overflow count.
-    const bounded = `>=${"1".repeat(198)}... (+12 chars)`;
+    const bounded = `>=${"1".repeat(198)}… (+12 chars)`;
     const held = {
       scope: "user",
       marketplace: "official",

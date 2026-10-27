@@ -75,10 +75,10 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 
 ### Import (MIM)
 
-- [ ] **MIM-01**: `import` handles a settings marketplace whose source the scope records under another name as Claude Code does (IMPNAME-01)
-- [ ] **MIM-02**: `import` adds the `extraKnownMarketplaces` entries Claude Code adds, referenced or not (IMPEXTRA-01)
-- [ ] **MIM-03**: `import` and `apply` report a partial rollback with the detail `install` shows (LCORCH-01 b2)
-- [ ] **MIM-04**: The import enable outcome carries the companion facts once (LCCODE-01 b7)
+- [x] **MIM-01**: `import` handles a settings marketplace whose source the scope records under another name as Claude Code does (IMPNAME-01)
+- [x] **MIM-02**: `import` adds the `extraKnownMarketplaces` entries Claude Code adds, referenced or not (IMPEXTRA-01)
+- [x] **MIM-03**: `import` and `apply` report a partial rollback with the detail `install` shows (LCORCH-01 b2)
+- [x] **MIM-04**: The import enable outcome carries the companion facts once (LCCODE-01 b7)
 
 ### Git errors and lock discipline (GLK)
 
@@ -93,9 +93,9 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 
 ### Background autoupdate (AUP)
 
-- [ ] **AUP-01**: With autoupdate on for a marketplace, a session refreshes that marketplace and updates its installed plugins in the background after a delay, as Claude Code does, without blocking or racing a foreground command (AUTOUP-01)
-- [ ] **AUP-02**: The default autoupdate setting per marketplace and the operator opt-outs match Claude Code, mapped to Pi where Pi lacks the concept, with each mapping recorded (AUTOUP-01)
-- [ ] **AUP-03**: When a background update changed anything, the user gets one passive notice that names what changed and the `/reload` step (AUTOUP-01)
+- [x] **AUP-01**: With autoupdate on for a marketplace, a session refreshes that marketplace and updates its installed plugins in the background after a delay, as Claude Code does, without blocking or racing a foreground command (AUTOUP-01)
+- [x] **AUP-02**: The default autoupdate setting per marketplace and the operator opt-outs match Claude Code, mapped to Pi where Pi lacks the concept, with each mapping recorded (AUTOUP-01)
+- [x] **AUP-03**: When a background update changed anything, the user gets one passive notice that names what changed and the `/reload` step (AUTOUP-01)
 
 ### Plugin package dependencies (PKD)
 
@@ -174,10 +174,10 @@ None.
 | MKT-06 | Phase 5 | Pending |
 | MKT-07 | Phase 5 | Pending |
 | MKT-08 | Phase 5 | Pending |
-| MIM-01 | Phase 6 | Pending |
-| MIM-02 | Phase 6 | Pending |
-| MIM-03 | Phase 6 | Pending |
-| MIM-04 | Phase 6 | Pending |
+| MIM-01 | Phase 6 | Complete |
+| MIM-02 | Phase 6 | Complete |
+| MIM-03 | Phase 6 | Complete |
+| MIM-04 | Phase 6 | Complete |
 | GLK-01 | Phase 7 | Complete |
 | GLK-02 | Phase 7 | Complete |
 | GLK-03 | Phase 7 | Complete |
@@ -186,9 +186,9 @@ None.
 | GLK-06 | Phase 7 | Complete |
 | GLK-07 | Phase 7 | Complete |
 | GLK-08 | Phase 7 | Complete |
-| AUP-01 | Phase 8 | Pending |
-| AUP-02 | Phase 8 | Pending |
-| AUP-03 | Phase 8 | Pending |
+| AUP-01 | Phase 8 | Complete |
+| AUP-02 | Phase 8 | Complete |
+| AUP-03 | Phase 8 | Complete |
 | PKD-01 | Phase 9 | Complete |
 | PKD-02 | Phase 9 | Complete |
 | PKD-03 | Phase 9 | Complete |

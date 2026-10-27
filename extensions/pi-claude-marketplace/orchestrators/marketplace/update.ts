@@ -75,7 +75,7 @@
 //  else if path:
 //  manifest = read+validate recordedManifestPath(record) // NO gitOps; NFR-5
 //  // capture snapshot for cascade-outside-guard:
-//  snapshot = { autoupdate: record.autoupdate ?? false, plugins: Object.keys(record.plugins) }
+//  snapshot = { autoupdate: effectiveMarketplaceAutoupdate(name, <config value>), plugins: Object.keys(record.plugins) }
 //  return snapshot
 //  })
 //
@@ -101,7 +101,8 @@ import { isDeepStrictEqual } from "node:util";
 
 import { networkCloneUrl } from "../../domain/clone-key.ts";
 import { loadMarketplaceManifestDocument } from "../../domain/manifest.ts";
-import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
+import { effectiveMarketplaceAutoupdate } from "../../domain/official-marketplaces.ts";
+import { hasInvalidConfigLayer, loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -535,8 +536,13 @@ async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapsh
   // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config), not
   // state. Read it OUTSIDE the lock (read-only seam; mergeScopeConfigs is a
   // pure reducer over loadConfig, which never throws).
-  const { merged } = await loadMergedScopeConfig(locations);
-  const autoupdate = ownValue(merged.marketplaces, name)?.entry.autoupdate ?? false;
+  const outcome = await loadMergedScopeConfig(locations);
+  const autoupdate =
+    !hasInvalidConfigLayer(outcome) &&
+    effectiveMarketplaceAutoupdate(
+      name,
+      ownValue(outcome.merged.marketplaces, name)?.entry.autoupdate,
+    );
   return withLockedStateTransaction(
     locations,
     async (tx) => {

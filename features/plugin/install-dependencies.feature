@@ -86,6 +86,7 @@ Feature: Plugin install dependencies
       | marketplace name | marketplace scope | id         | name       | status | reasons           | scope   | cause chain                                                 | cause truncated | leaks | rollback partial |
       | tools            | project           | app@tools  | app        | failed | dependency failed | project |                                                             |                 |       |                  |
       | tools            | project           | base@tools | base@tools | failed | not in manifest   | project | Dependency "base@tools" is not declared by its marketplace. | false           |       |                  |
+      | tools            | project           | lib@tools  | lib@tools  | failed | dependency failed | project |                                                             |                 |       |                  |
     Then the project scope has no installed plugins
     Then the "claude-plugins.json" file of the project scope declares no plugins
 
@@ -140,8 +141,29 @@ Feature: Plugin install dependencies
       | marketplace name | marketplace scope | id        | name      | status | reasons           | scope   | cause chain                                                                                                               | cause truncated | leaks | rollback partial |
       | tools            | project           | app@tools | app       | failed | dependency failed | project |                                                                                                                           |                 |       |                  |
       | tools            | project           | lib@tools | lib@tools | failed | version conflict  | project | Dependency "lib@tools" has contradictory version constraints ^1.0.0, ^2.0.0 (no version satisfies all 2 declared ranges). | false           |       |                  |
+      | tools            | project           | mid@tools | mid@tools | failed | dependency failed | project |                                                                                                                           |                 |       |                  |
     Then the project scope has no installed plugins
     Then the "claude-plugins.json" file of the project scope declares no plugins
+
+  Scenario: Installing a plugin whose dependencies ask for long versions that do not overlap shows the ranges cut to 200 characters in the version conflict
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies                                                                          |
+      | app   | 1.0.0   | lib@^1.0.0-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, one, two, three |
+      | one   | 1.0.0   | lib@^2.0.0-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa                  |
+      | two   | 1.0.0   | lib@^3.0.0-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa                  |
+      | three | 1.0.0   | lib@^4.0.0-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa                  |
+      | lib   | 1.2.0   |                                                                                       |
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id          | name        | status | reasons           | scope   | cause chain                                                                                                                                                                                                                                                                                                                      | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools   | app         | failed | dependency failed | project |                                                                                                                                                                                                                                                                                                                                  |                 |       |                  |
+      | tools            | project           | lib@tools   | lib@tools   | failed | version conflict  | project | Dependency "lib@tools" has contradictory version constraints ^1.0.0-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, ^2.0.0-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, ^3.0.0-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, ^4… (+62 chars) (no version satisfies all 4 declared ranges). | false           |       |                  |
+      | tools            | project           | one@tools   | one@tools   | failed | dependency failed | project |                                                                                                                                                                                                                                                                                                                                  |                 |       |                  |
+      | tools            | project           | three@tools | three@tools | failed | dependency failed | project |                                                                                                                                                                                                                                                                                                                                  |                 |       |                  |
+      | tools            | project           | two@tools   | two@tools   | failed | dependency failed | project |                                                                                                                                                                                                                                                                                                                                  |                 |       |                  |
+    Then the project scope has no installed plugins
 
   Scenario: Installing a plugin whose installed dependency is outside its version constraint moves the dependency first
     Given the marketplace "tools" is published as a dir source
@@ -188,9 +210,9 @@ Feature: Plugin install dependencies
       | needs reload | false                               |
       | summary      | Some plugin operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name      | status | reasons                             | scope   | version | cause chain                                                                                                                                                                                          | cause truncated | leaks | rollback partial |
-      | tools            | project           | app@tools | app       | failed | dependency failed                   | project |         |                                                                                                                                                                                                      |                 |       |                  |
-      | tools            | project           | lib@tools | lib@tools | failed | already installed, version conflict | project | 1.2.0   | Dependency "lib@tools" is installed at version 1.2.0, which does not satisfy ^2.0.0, and cannot move: version 1.2.0 falls outside what the combined range admits (^2.0.0) -- required by "app@tools" | false           |       |                  |
+      | marketplace name | marketplace scope | id        | name      | status | reasons                             | scope   | version | cause chain                                                                                                                                                                                                                                                                | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | failed | dependency failed                   | project |         |                                                                                                                                                                                                                                                                            |                 |       |                  |
+      | tools            | project           | lib@tools | lib@tools | failed | already installed, version conflict | project | 1.2.0   | Dependency "lib@tools" is installed at version 1.2.0, which does not satisfy ^2.0.0, and cannot move: version 1.2.0 falls outside what the combined range admits (^2.0.0) -- required by "app@tools". To look for a version in range, run /claude:plugin update lib@tools. | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id        | version | enabled |
       | lib@tools | 1.2.0   | true    |
@@ -200,6 +222,28 @@ Feature: Plugin install dependencies
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id        |
       | lib@tools |
+
+  Scenario: Installing a plugin whose installed dependency records a very long version shows the version cut to 64 characters in the version conflict
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version                                                                          | dependencies |
+      | app  | 1.0.0                                                                            | lib@^2.0.0   |
+      | lib  | 1.2.0-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install lib@tools --scope project"
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | Some plugin operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status | reasons                             | scope   | version                                                                          | cause chain                                                                                                                                                                                                                                                                                                                                                                                        | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | failed | dependency failed                   | project |                                                                                  |                                                                                                                                                                                                                                                                                                                                                                                                    |                 |       |                  |
+      | tools            | project           | lib@tools | lib@tools | failed | already installed, version conflict | project | 1.2.0-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz | Dependency "lib@tools" is installed at version 1.2.0-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz…, which does not satisfy ^2.0.0, and cannot move: version 1.2.0-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz… falls outside what the combined range admits (^2.0.0) -- required by "app@tools". To look for a version in range, run /claude:plugin update lib@tools. | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version                                                                          | enabled |
+      | lib@tools | 1.2.0-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz | true    |
 
   Scenario: Installing a plugin whose installed dependency another plugin holds outside its version constraint fails as a version conflict and changes nothing
     Given the marketplace "tools" is published as a dir source
@@ -221,9 +265,9 @@ Feature: Plugin install dependencies
       | needs reload | false                               |
       | summary      | Some plugin operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name      | status | reasons                             | scope   | version | cause chain                                                                                                                                                                                                     | cause truncated | leaks | rollback partial |
-      | tools            | project           | app@tools | app       | failed | dependency failed                   | project |         |                                                                                                                                                                                                                 |                 |       |                  |
-      | tools            | project           | lib@tools | lib@tools | failed | already installed, version conflict | project | 1.2.0   | Dependency "lib@tools" is installed at version 1.2.0, which does not satisfy ^2.0.0, and cannot move: the declared ranges admit no version in common (^2.0.0, ^1.0.0) -- required by "app@tools", "other@tools" | false           |       |                  |
+      | marketplace name | marketplace scope | id        | name      | status | reasons                             | scope   | version | cause chain                                                                                                                                                                                                                                                                           | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | failed | dependency failed                   | project |         |                                                                                                                                                                                                                                                                                       |                 |       |                  |
+      | tools            | project           | lib@tools | lib@tools | failed | already installed, version conflict | project | 1.2.0   | Dependency "lib@tools" is installed at version 1.2.0, which does not satisfy ^2.0.0, and cannot move: the declared ranges admit no version in common (^2.0.0, ^1.0.0) -- required by "app@tools", "other@tools". To look for a version in range, run /claude:plugin update lib@tools. | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id          | version | enabled |
       | lib@tools   | 1.2.0   | true    |
@@ -318,6 +362,40 @@ Feature: Plugin install dependencies
       | id        | version                | enabled |
       | app@tools | 1.0.0                  | true    |
       | lib@tools | 2.0.0-{lib revision 2} | true    |
+
+  Scenario: Installing a plugin whose installed git-source dependency cannot move while the git host drops the connection names the update that looks for a version in range
+    Given the git repository "lib" holds these plugins:
+      | name | version | path |
+      | lib  | 1.0.0   |      |
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | lib  | url         | lib        | false  |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install lib@tools --scope project"
+    Given the git repository "lib" has a revision only the tag "lib--v2.0.0" reaches, holding these plugins:
+      | name | version | path |
+      | lib  | 2.0.0   |      |
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^2.0.0   |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | lib  | url         | lib        | false  |
+    Given the git host drops the connection for the plugin "lib"
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | Some plugin operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status | reasons                             | scope   | version | cause chain                                                                                                                                                                                                                                                       | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | failed | dependency failed                   | project |         |                                                                                                                                                                                                                                                                   |                 |       |                  |
+      | tools            | project           | lib@tools | lib@tools | failed | already installed, version conflict | project | 1.0.0   | Dependency "lib@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: the release tags could not be listed (network unreachable) -- required by "app@tools". To look for a version in range, run /claude:plugin update lib@tools. | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | lib@tools | 1.0.0   | true    |
 
   Scenario: Installing a plugin records a git-source dependency installed at a release tag with the tag's commit
     Given the git repository "lib" holds these plugins:
@@ -434,6 +512,91 @@ Feature: Plugin install dependencies
       | marketplace name           | marketplace scope | id                              | name                            | status | reasons           | scope   | cause chain                                                                                                                          | cause truncated | leaks | rollback partial |
       | anthropic-plugin-directory | project           | app@anthropic-plugin-directory  | app                             | failed | dependency failed | project |                                                                                                                                      |                 |       |                  |
       | anthropic-plugin-directory | project           | dirp@anthropic-plugin-directory | dirp@anthropic-plugin-directory | failed | version conflict  | project | "dirp" from the Anthropic Directory is pinned to its listed commit (version 1.0.0), which does not satisfy ^2.0.0 required by "app". | false           |       |                  |
+    Then the project scope has no installed plugins
+
+  Scenario: Installing a plugin whose second dependency fails to install lists the dependency it rolled back as failed
+    Given the git repository "dirp" holds these plugins:
+      | name | version | path |
+      | dirp | 1.0.0   |      |
+    Given the git repository "dirp" has a revision only the tag "dirp--v2.0.0" reaches, holding these plugins:
+      | name | version | path |
+      | dirp | 2.0.0   |      |
+    Given the marketplace "anthropic-plugin-directory" is published as a dir source
+    Given the marketplace "anthropic-plugin-directory" offers these plugins with dependencies:
+      | name | version | dependencies     |
+      | app  | 1.0.0   | mid, dirp@^2.0.0 |
+      | mid  | 1.0.0   |                  |
+    Given the marketplace "anthropic-plugin-directory" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | dirp | url         | dirp       | false  |
+    Given the marketplace "anthropic-plugin-directory" is added to the project scope
+    When the user runs "/claude:plugin install app@anthropic-plugin-directory --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | Some plugin operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name           | marketplace scope | id                              | name                            | status | reasons           | scope   | cause chain                                                                                                                          | cause truncated | leaks | rollback partial |
+      | anthropic-plugin-directory | project           | app@anthropic-plugin-directory  | app                             | failed | dependency failed | project |                                                                                                                                      |                 |       |                  |
+      | anthropic-plugin-directory | project           | dirp@anthropic-plugin-directory | dirp@anthropic-plugin-directory | failed | version conflict  | project | "dirp" from the Anthropic Directory is pinned to its listed commit (version 1.0.0), which does not satisfy ^2.0.0 required by "app". | false           |       |                  |
+      | anthropic-plugin-directory | project           | mid@anthropic-plugin-directory  | mid@anthropic-plugin-directory  | failed | dependency failed | project |                                                                                                                                      |                 |       |                  |
+    Then the project scope has no installed plugins
+
+  Scenario: Installing a plugin whose anthropic-plugin-directory dependency two of its plugins constrain names both plugins in the version conflict
+    Given the git repository "dirp" holds these plugins:
+      | name | version | path |
+      | dirp | 1.0.0   |      |
+    Given the git repository "dirp" has a revision only the tag "dirp--v2.0.0" reaches, holding these plugins:
+      | name | version | path |
+      | dirp | 2.0.0   |      |
+    Given the marketplace "anthropic-plugin-directory" is published as a dir source
+    Given the marketplace "anthropic-plugin-directory" offers these plugins with dependencies:
+      | name | version | dependencies     |
+      | app  | 1.0.0   | dirp@^2.0.0, mid |
+      | mid  | 1.0.0   | dirp (>=2.0.0)   |
+    Given the marketplace "anthropic-plugin-directory" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | dirp | url         | dirp       | false  |
+    Given the marketplace "anthropic-plugin-directory" is added to the project scope
+    When the user runs "/claude:plugin install app@anthropic-plugin-directory --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | Some plugin operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name           | marketplace scope | id                              | name                            | status | reasons           | scope   | cause chain                                                                                                                                          | cause truncated | leaks | rollback partial |
+      | anthropic-plugin-directory | project           | app@anthropic-plugin-directory  | app                             | failed | dependency failed | project |                                                                                                                                                      |                 |       |                  |
+      | anthropic-plugin-directory | project           | dirp@anthropic-plugin-directory | dirp@anthropic-plugin-directory | failed | version conflict  | project | "dirp" from the Anthropic Directory is pinned to its listed commit (version 1.0.0), which does not satisfy ^2.0.0, >=2.0.0 required by "app", "mid". | false           |       |                  |
+      | anthropic-plugin-directory | project           | mid@anthropic-plugin-directory  | mid@anthropic-plugin-directory  | failed | dependency failed | project |                                                                                                                                                      |                 |       |                  |
+    Then the project scope has no installed plugins
+
+  Scenario: Installing a plugin whose anthropic-plugin-directory dependency lists a very long version shows the version cut to 120 characters in the version conflict
+    Given the git repository "dirp" holds these plugins:
+      | name | version                                                                                                                            | path |
+      | dirp | 1.0.0-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz |      |
+    Given the git repository "dirp" has a revision only the tag "dirp--v2.0.0" reaches, holding these plugins:
+      | name | version | path |
+      | dirp | 2.0.0   |      |
+    Given the marketplace "anthropic-plugin-directory" is published as a dir source
+    Given the marketplace "anthropic-plugin-directory" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | dirp@^2.0.0  |
+    Given the marketplace "anthropic-plugin-directory" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | dirp | url         | dirp       | false  |
+    Given the marketplace "anthropic-plugin-directory" is added to the project scope
+    When the user runs "/claude:plugin install app@anthropic-plugin-directory --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | Some plugin operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name           | marketplace scope | id                              | name                            | status | reasons           | scope   | cause chain                                                                                                                                                                                                                                              | cause truncated | leaks | rollback partial |
+      | anthropic-plugin-directory | project           | app@anthropic-plugin-directory  | app                             | failed | dependency failed | project |                                                                                                                                                                                                                                                          |                 |       |                  |
+      | anthropic-plugin-directory | project           | dirp@anthropic-plugin-directory | dirp@anthropic-plugin-directory | failed | version conflict  | project | "dirp" from the Anthropic Directory is pinned to its listed commit (version 1.0.0-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz…), which does not satisfy ^2.0.0 required by "app". | false           |       |                  |
     Then the project scope has no installed plugins
 
   Scenario: Installing a plugin that asks for an installed pinned anthropic-plugin-directory plugin's range leaves that plugin in place
@@ -653,9 +816,9 @@ Feature: Plugin install dependencies
       | xx   | url         | xx         | false  |
     When the user runs "/claude:plugin install app@tools --scope project"
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name      | status | reasons                             | scope   | version | cause chain                                                                                                                                                                                          | cause truncated | leaks | rollback partial |
-      | tools            | project           | app@tools | app       | failed | dependency failed                   | project |         |                                                                                                                                                                                                      |                 |       |                  |
-      | tools            | project           | lib@tools | lib@tools | failed | already installed, version conflict | project | 1.2.0   | Dependency "lib@tools" is installed at version 1.2.0, which does not satisfy ^2.0.0, and cannot move: version 1.5.0 falls outside what the combined range admits (^2.0.0) -- required by "app@tools" | false           |       |                  |
+      | marketplace name | marketplace scope | id        | name      | status | reasons                             | scope   | version | cause chain                                                                                                                                                                                                                                                                | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | failed | dependency failed                   | project |         |                                                                                                                                                                                                                                                                            |                 |       |                  |
+      | tools            | project           | lib@tools | lib@tools | failed | already installed, version conflict | project | 1.2.0   | Dependency "lib@tools" is installed at version 1.2.0, which does not satisfy ^2.0.0, and cannot move: version 1.5.0 falls outside what the combined range admits (^2.0.0) -- required by "app@tools". To look for a version in range, run /claude:plugin update lib@tools. | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id        | version | enabled |
       | lib@tools | 1.2.0   | true    |
@@ -1121,6 +1284,35 @@ Feature: Plugin install dependencies
     Then the installation record of the project scope holds these plugins:
       | id        | version | enabled |
       | aaa@tools | 1.0.0   | true    |
+      | ddd@tools | 2.0.0   | false   |
+
+  Scenario: Installing a plugin whose new dependency fails to install after a disabled dependency moved lists the moved dependency once
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | ddd  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install ddd@tools --scope project"
+    Given the user has run "/claude:plugin disable ddd@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies    |
+      | app  | 1.0.0   | ddd@^2.0.0, xxx |
+      | ddd  | 2.0.0   |                 |
+      | xxx  | 1.0.0   |                 |
+    Given the published plugin "xxx" of the marketplace "tools" has an unreadable skill file
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | Some plugin operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status  | reasons           | scope   | from  | to    | cause chain                        | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | failed  | dependency failed | project |       |       |                                    |                 |       |                  |
+      | tools            | project           | xxx@tools | xxx@tools | failed  |                   | project |       |       | {unreadable skill file copy error} | false           |       |                  |
+      | tools            | project           | ddd@tools | ddd@tools | updated | already disabled  | project | 1.0.0 | 2.0.0 |                                    |                 |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
       | ddd@tools | 2.0.0   | false   |
 
   Scenario: Installing a plugin whose moved dependency needs an installed dependency in range lists that dependency as already installed

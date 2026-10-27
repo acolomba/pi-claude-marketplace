@@ -231,6 +231,27 @@ describe("judgeDependencyMove", () => {
     });
   });
 
+  test("D-PL3-16: a ruled-out version past 64 code units is cut in the refusal", async (t) => {
+    // arrange
+    const offered = `release-7-${"z".repeat(66)}`;
+    const { context } = await seedDependency(t, { recorded: "1.0.0", offered });
+
+    // act
+    const judgement = await judgeDependencyMove(
+      request({
+        requesters: [{ key: "widget@mp", ranges: [">=2.0.0"] }],
+        excludedVersions: [offered],
+      }),
+      context,
+    );
+
+    // assert
+    assert.deepStrictEqual(judgement, {
+      ok: false,
+      cause: `version release-7-${"z".repeat(54)}\u2026 was ruled out by the plan`,
+    });
+  });
+
   test("refuses a move whose new version's names another plugin already owns", async (t) => {
     // arrange
     const { context, pluginRoot } = await seedDependency(t, {
@@ -250,6 +271,7 @@ describe("judgeDependencyMove", () => {
     assert.deepStrictEqual(judgement, {
       ok: false,
       cause: 'Cross-plugin name conflict:\n  - skill "zcore-tool" already owned by plugin "other"',
+      updateBlocked: true,
     });
   });
 
@@ -264,6 +286,27 @@ describe("judgeDependencyMove", () => {
     assert.deepStrictEqual(judgement, {
       ok: false,
       cause: "version 2.0.0 is the newest version it can move to",
+    });
+  });
+
+  test("D-PL3-16: a newest version past 64 code units is cut in the refusal", async (t) => {
+    // arrange
+    const version = `2.0.0-${"z".repeat(70)}`;
+    const { context } = await seedDependency(t, { recorded: version, offered: version });
+
+    // act
+    const judgement = await judgeDependencyMove(
+      request({
+        recordedVersion: version,
+        requesters: [{ key: "widget@mp", ranges: [">=2.0.0-0"] }],
+      }),
+      context,
+    );
+
+    // assert
+    assert.deepStrictEqual(judgement, {
+      ok: false,
+      cause: `version 2.0.0-${"z".repeat(58)}\u2026 is the newest version it can move to`,
     });
   });
 

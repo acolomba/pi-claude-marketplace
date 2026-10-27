@@ -41,7 +41,10 @@
 //     the candidate version the one version rule derives offline
 //     (plugin.json, then the entry, then the tree's commit version for an
 //     undeclared git plugin), falling back to the entry version when no
-//     candidate resolves (VER-01, VER-02). NOT semver.
+//     candidate resolves (VER-01, VER-02). NOT semver. Claude Code's `list`
+//     shows no upgrade state for any source, so this state is a recorded
+//     divergence, kept for git sources too because `fetch` exists to feed it
+//     (D-PL3-07).
 //   - PL-6 manifest soft-fail: per-marketplace manifest load failure
 //     surfaces as a `(failed)` MarketplaceNotificationMessage with
 //     `status: "failed"` and `plugins: []`. No marketplace-level cause
@@ -57,7 +60,12 @@
 
 import { lookupDeclaredPlugin, type ManifestLookup } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
-import { loadMergedScopeConfig, type MergedConfig } from "../../persistence/config-merge.ts";
+import { effectiveMarketplaceAutoupdate } from "../../domain/official-marketplaces.ts";
+import {
+  hasInvalidConfigLayer,
+  loadMergedScopeConfig,
+  type MergedConfig,
+} from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -657,14 +665,16 @@ export async function loadPluginListPayload(
   // D-13-19: read both scopes' state.
   const userLocations = locationsFor("user", opts.cwd);
   const projectLocations = locationsFor("project", opts.cwd);
-  const [userState, projectState, userMerged, projectMerged] = await Promise.all([
+  const [userState, projectState, userOutcome, projectOutcome] = await Promise.all([
     loadState(userLocations.extensionRoot),
     loadState(projectLocations.extensionRoot),
     // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config).
     // Pre-compute the merged view per scope ONCE before the fold loops below.
-    loadMergedScopeConfig(userLocations).then((r) => r.merged),
-    loadMergedScopeConfig(projectLocations).then((r) => r.merged),
+    loadMergedScopeConfig(userLocations),
+    loadMergedScopeConfig(projectLocations),
   ]);
+  const userMerged = userOutcome.merged;
+  const projectMerged = projectOutcome.merged;
 
   const blocks: BuiltMarketplace[] = [];
 
@@ -689,7 +699,12 @@ export async function loadPluginListPayload(
       mpName,
       mpScope: "project",
       mpRecord,
-      autoupdate: ownValue(projectMerged.marketplaces, mpName)?.entry.autoupdate ?? false,
+      autoupdate:
+        !hasInvalidConfigLayer(projectOutcome) &&
+        effectiveMarketplaceAutoupdate(
+          mpName,
+          ownValue(projectMerged.marketplaces, mpName)?.entry.autoupdate,
+        ),
       scopeConfig: projectMerged,
       extraPlugins: [],
     });
@@ -716,7 +731,12 @@ export async function loadPluginListPayload(
       mpName,
       mpScope: "user",
       mpRecord,
-      autoupdate: ownValue(userMerged.marketplaces, mpName)?.entry.autoupdate ?? false,
+      autoupdate:
+        !hasInvalidConfigLayer(userOutcome) &&
+        effectiveMarketplaceAutoupdate(
+          mpName,
+          ownValue(userMerged.marketplaces, mpName)?.entry.autoupdate,
+        ),
       scopeConfig: userMerged,
       extraPlugins: folded,
       excludeFromAvailable: foldedNames,

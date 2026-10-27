@@ -2668,6 +2668,59 @@
     },
     {
       "type": "object",
+      "required": ["schemaVersion", "origin", "severity", "needsReload", "kind", "plugins"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean", "const": true },
+        "kind": { "type": "string", "const": "background-update" },
+        "plugins": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "marketplace", "scope", "toVersion"],
+            "properties": {
+              "name": { "type": "string" },
+              "marketplace": { "type": "string" },
+              "scope": { "enum": ["user", "project"] },
+              "fromVersion": { "type": "string" },
+              "toVersion": { "type": "string" }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
       "required": [
         "schemaVersion",
         "kind",

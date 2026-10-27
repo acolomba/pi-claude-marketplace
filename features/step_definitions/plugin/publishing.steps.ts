@@ -12,7 +12,7 @@
  */
 
 import assert from "node:assert/strict";
-import { readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { type DataTable, Given } from "@cucumber/cucumber";
@@ -29,10 +29,14 @@ import { runGit } from "../../lib/hermetic-git.ts";
 import {
   publishAgent,
   publishOutputStyle,
+  publishReadOnlySkillDirectory,
+  readOnlySkillRemovalError,
   removePublishedOutputStyle,
+  restoreDirectoryWrites,
   rewritePublishedManifest,
   writePublishedPluginFile,
 } from "../../lib/published-marketplace.ts";
+import { READ_ONLY_SKILL_REMOVAL_ERROR_TOKEN } from "../../lib/run-tokens.ts";
 
 import type { GitPluginRepository, RepositoryPlugin } from "../../lib/git-plugin.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
@@ -165,6 +169,25 @@ Given(
       text,
     );
     assert.strictEqual(await readFile(file, "utf8"), text);
+  },
+);
+
+Given(
+  "the published plugin {string} of the marketplace {string} has a read-only skill directory",
+  async function (this: ScenarioWorld, plugin: string, name: string) {
+    const published = this.requirePublished(name);
+    const scratch = await mkdtemp(path.join(this.tokens.home, "skill-removal-"));
+    this.onRelease(() => rm(scratch, { recursive: true, force: true }));
+    // Releases run most recent first, so the restore runs before every removal
+    // registered so far, including one of a read-only copy Pi leaves behind.
+    const { home, agentDir, projectDir } = this.tokens;
+    this.onRelease(() => restoreDirectoryWrites([home, agentDir, projectDir]));
+    const directory = await publishReadOnlySkillDirectory(published, plugin);
+    assert.strictEqual((await stat(directory)).mode & 0o777, 0o555);
+    assert.deepStrictEqual(await readdir(directory), ["data.txt"]);
+    const error = await readOnlySkillRemovalError(published, plugin, scratch);
+    assert.deepStrictEqual([error.code, error.syscall], ["EACCES", "unlink"]);
+    this.recordErrorMessage(READ_ONLY_SKILL_REMOVAL_ERROR_TOKEN, error.message);
   },
 );
 

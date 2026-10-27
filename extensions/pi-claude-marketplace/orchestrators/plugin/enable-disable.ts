@@ -217,6 +217,11 @@ export type EnableDisablePluginOutcome =
       readonly reason: Reason;
       readonly error: Error;
       readonly cause: string;
+      /**
+       * MIM-03 / D-PL6-11: the undo steps a failed re-materialization could
+       * not finish, with their raw causes. Omitted when every undo finished.
+       */
+      readonly rollbackPartials?: readonly RollbackPartial[];
     } & McpConfigNoticesCarrier);
 
 /** AFILE-04: the MCP config file notices an outcome carries, when any. */
@@ -2986,11 +2991,10 @@ function outcomeToTypedResult(args: {
     }
 
     case "enable-failed": {
-      // I4: orchestrated callers cannot consume the structured
-      // `rollbackPartial[]` rows (they aggregate into the reconcile cascade
-      // which already composes its own per-plugin rows), but the
-      // `rollback partial` reason on the typed outcome lets the caller pick
-      // the catalog `(failed) {rollback partial}` byte form when rendering.
+      // MIM-03 / D-PL6-03: orchestrated callers get the partials on the outcome
+      // and render the per-phase rows themselves (import does), redacting each
+      // cause first (D-PL6-12). The `rollback partial` reason still selects
+      // the catalog `(failed) {rollback partial}` brace.
       const partials = outcome.rollbackPartials ?? [];
       const reason: ContentReason =
         partials.length > 0
@@ -3001,6 +3005,7 @@ function outcomeToTypedResult(args: {
         reason,
         error: outcome.cause,
         cause: errorMessage(outcome.cause),
+        ...(partials.length > 0 ? { rollbackPartials: partials } : {}),
         ...notices,
       };
     }

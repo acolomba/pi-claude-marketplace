@@ -49,9 +49,9 @@ parent session applies them at merge.
 - [ ] **Phase 3: Dependency Cascade Rows and Status** - cascade rows name every member, declarer, and degraded dependency
 - [x] **Phase 4: Dependency Resolver Residue** - the resolver installs what it previewed and refuses before it moves (completed 2026-10-27)
 - [ ] **Phase 5: Marketplace Command Parity** - reserved names, hosted manifests, `market` alias, row ids, shorthand, remove reporting
-- [ ] **Phase 6: Import Marketplace Planning** - import plans marketplaces the way Claude Code registers them
+- [x] **Phase 6: Import Marketplace Planning** - import plans marketplaces the way Claude Code registers them
 - [x] **Phase 7: Git Errors and Lock Discipline** - one git-host classifier, and every clone read or cleanup under the lock (completed 2026-10-27)
-- [ ] **Phase 8: Background Autoupdate** - autoupdate updates in the background, as Claude Code does
+- [x] **Phase 8: Background Autoupdate** - autoupdate updates in the background, as Claude Code does (completed 2026-10-27)
 - [x] **Phase 9: Plugin Package Dependencies** - a plugin's own npm or bun dependencies install with it (completed 2026-10-27)
 - [ ] **Phase 10: Lifecycle Test and Harness Gaps** - the open scenario, unit, and harness gaps are closed
 - [ ] **Phase 11: Cleanup, Split, and Docs** - dead code, the install-flow split, docs, and backlog closures
@@ -104,6 +104,25 @@ parent session applies them at merge.
 3. A plugin depending on a partially available plugin shows the decided status on `list`, `info`, and install, or the decision not to is recorded (CAS-03).
 4. Git-source `list` rows, `required by` lists, and truncation match Claude Code or carry a recorded ID (CAS-04, CAS-05).
 5. The offline git-move refusal names a next step, and no hold cause carries an unbounded `version` string (CAS-06, CAS-07).
+
+**Plans:** 6/6 plans executed
+
+Plans:
+**Wave 1**
+- [x] 03-01-PLAN.md — Tracer: `truncateForRefusal` cuts a hold cause's and a move refusal's version to 64 code units, proven by an `update.feature` hold scenario (CAS-07)
+- [x] 03-02-PLAN.md — Tracer: an install looks an invalid root id up first and refuses a listed one with Claude Code's invalid-id cause; integration pin, two `install.feature` scenarios, new catalog state (CAS-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 03-03-PLAN.md — Tracer: every dependency a failed install would have installed gets a `{dependency failed}` row on the walk, constraint, and member routes, moved keys once; catalog examples kept true (CAS-01)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 03-04-PLAN.md — Tracer: the plugin directory refusal names every range-declaring member in Claude Code's order and cuts its fields at 120 code units (CAS-05)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 03-05-PLAN.md — Tracer: a `cannot move:` refusal ends with `To look for a version in range, run /claude:plugin update <key>.` when the named plugin declares the dependency; offline git scenario (CAS-06)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [x] 03-06-PLAN.md — Record D-PL3-06 and D-PL3-07, align `docs/dependency-resolution.md`, and run the `npm run check` phase gate (CAS-03, CAS-04)
 
 ### Phase 4: Dependency Resolver Residue
 

@@ -65,9 +65,10 @@ function codeUnitEscapes(char: string): string {
 /**
  * AMIG-03: escapes each control, format, line separator and paragraph
  * separator code point, so a file-derived name cannot move the cursor, end a
- * line, or reorder the text around it in the notice.
+ * line, or reorder the text around it in the notice. The install cascade's
+ * invalid-id cause uses it too (D-PL3-14).
  */
-function printable(text: string): string {
+export function printable(text: string): string {
   return Array.from(text, (char) =>
     ESCAPED_CODE_POINT.test(char) ? codeUnitEscapes(char) : char,
   ).join("");

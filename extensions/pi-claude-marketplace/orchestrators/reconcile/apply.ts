@@ -76,6 +76,7 @@
 // stable pi-subagents / pi-mcp-adapter status.
 
 import { locationsFor } from "../../persistence/locations.ts";
+import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { declaredDependencies } from "../../shared/concerns/soft-dep.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
@@ -90,7 +91,12 @@ import {
 } from "../../shared/notification-dispatch.ts";
 import { type ContentReason, type Reason } from "../../shared/notification-types.ts";
 import { ownValue } from "../../shared/own-key.ts";
-import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
+import {
+  redactAbsolutePaths,
+  redactCauseChain,
+  redactedRollbackPartials,
+  splitDependencyPartials,
+} from "../../shared/redact-absolute-paths.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
 import { MarketplaceRemoveFailureError, removeMarketplace } from "../marketplace/remove.ts";
@@ -138,6 +144,7 @@ import type {
   PluginConvergedOutcome,
   PluginDependencyDisabledOutcome,
   PluginEnableFailedOutcome,
+  PluginInstallFailedOutcome,
 } from "./apply-outcomes.ts";
 import type { ConvergenceCascade, PlannedMove } from "./convergence.ts";
 import type { ScopeSatisfactionVerdict, UnsatisfiedDeclaration } from "./dependency-verdict.ts";
@@ -463,6 +470,147 @@ function redactedDependencyCascadeError(error: DependencyCascadeError): Dependen
     : new DependencyCascadeError(message, error.key, { cause });
 }
 
+/** The failed arm of an orchestrated install, as `installFailedOutcomes` reads it. */
+type FailedPluginInstall = Parameters<typeof carriedMcpConfigNotices>[0] & {
+  readonly error: Error;
+  readonly rollbackPartials?: readonly { readonly phase: string; readonly cause?: Error }[];
+};
+
+/**
+ * MIM-03 / D-PL6-05: the row of a dependency whose undo could not finish,
+ * under the dependency's own marketplace and by its bare name, as apply's
+ * other dependency rows read. The key splits at its last `@`, as a plugin key
+ * does (T-06-12).
+ */
+function dependencyRollbackOutcome(
+  scope: Scope,
+  error: DependencyCascadeError,
+  rollbackPartials: NonNullable<FailedPluginInstall["rollbackPartials"]>,
+): PluginInstallFailedOutcome {
+  const at = error.key.lastIndexOf("@");
+  return {
+    kind: "plugin-install-failed",
+    scope,
+    marketplace: error.key.slice(at + 1),
+    plugin: error.key.slice(0, at),
+    reason: "rollback partial",
+    cause: redactedDependencyCascadeError(error),
+    rollbackPartials,
+  };
+}
+
+/** Whether `outcome` is a failed-install row of `dependency` that lists its rollback phases. */
+function showsFailedDependency(
+  outcome: PerEntryOutcome,
+  dependency: PluginInstallFailedOutcome,
+): boolean {
+  return (
+    outcome.kind === "plugin-install-failed" &&
+    outcome.rollbackPartials !== undefined &&
+    outcome.scope === dependency.scope &&
+    outcome.marketplace === dependency.marketplace &&
+    outcome.plugin === dependency.plugin
+  );
+}
+
+/**
+ * The rows of one failed install in `applyPluginInstalls`.
+ *
+ * MIM-03 / D-PL6-05: an install whose undo could not finish reads `(failed)
+ * {rollback partial}` with the per-phase rows, as `install` does, and its
+ * cause is the install error rebuilt with every link redacted (D-PL6-12).
+ * When the undo that could not finish was a dependency's, the dependency gets
+ * that row of its own, and the requested plugin's row reads `{dependency
+ * failed}` with no cause, as `install`'s does.
+ *
+ * RESV-06: otherwise only a dependency-cascade failure carries a cause onto
+ * the row. Redact defensively (T-55-02-02 / T-53-02-02) -- the
+ * closure/constraint arms build their message from keys and version
+ * constraints alone, but a dependency's own ledger failure can carry a path
+ * anywhere in its cause chain. `causeChainTrailer` walks `.cause` without
+ * redacting, so `redactedDependencyCascadeError` rebuilds the FULL chain (via
+ * `redactCauseChain`) with every link redacted, instead of dropping it.
+ *
+ * Two installs can fail on the same dependency, so the dependency's row is
+ * left out when `outcomes` already holds one that carries its rollback phases.
+ * An earlier row for it without phases (its own planned install failed) does
+ * not count, so this row still shows the phases.
+ *
+ * The undo steps of the other members the cascade had materialized ride the
+ * requested plugin's row, because they belong to those members and not to the
+ * dependency that failed.
+ *
+ * D-PL6-15: the requested plugin's row and the dependency's row are ordered by
+ * name, as `install` and import order them. The order shows only when the
+ * dependency comes from the requested plugin's marketplace, because rows of
+ * other marketplaces go to their own blocks.
+ *
+ * AFILE-04: dependencies that committed before the failure rewrote the MCP
+ * config, so their notices ride the requested plugin's failed row.
+ */
+function installFailedOutcomes(
+  op: ReconcilePlan["pluginsToInstall"][number],
+  result: FailedPluginInstall,
+  outcomes: readonly PerEntryOutcome[],
+): PerEntryOutcome[] {
+  const { error, rollbackPartials = [] } = result;
+  const subject = {
+    kind: "plugin-install-failed",
+    scope: op.scope,
+    marketplace: op.marketplace,
+    plugin: op.plugin,
+  } as const;
+  if (rollbackPartials.length === 0) {
+    return [
+      {
+        ...subject,
+        ...installFailureReasonFields(error),
+        ...(error instanceof DependencyCascadeError && {
+          cause: redactedDependencyCascadeError(error),
+        }),
+        ...carriedMcpConfigNotices(result),
+      },
+    ];
+  }
+
+  if (error instanceof DependencyCascadeError) {
+    const { dependency: own, others } = splitDependencyPartials(error.key, rollbackPartials);
+    const requested: PluginInstallFailedOutcome = {
+      ...subject,
+      reason: "dependency failed",
+      ...(others.length > 0 && { rollbackPartials: redactedRollbackPartials(others) }),
+      ...carriedMcpConfigNotices(result),
+    };
+    if (own.length === 0) {
+      return [requested];
+    }
+
+    const dependency = dependencyRollbackOutcome(op.scope, error, redactedRollbackPartials(own));
+    if (outcomes.some((outcome) => showsFailedDependency(outcome, dependency))) {
+      return [requested];
+    }
+
+    return [requested, dependency].sort((a, b) =>
+      compareByNameThenScope(
+        { name: a.plugin, scope: a.scope },
+        { name: b.plugin, scope: b.scope },
+      ),
+    );
+  }
+
+  const phases = redactedRollbackPartials(rollbackPartials);
+  const cause = redactCauseChain(error);
+  return [
+    {
+      ...subject,
+      reason: "rollback partial",
+      ...(cause !== undefined && { cause }),
+      rollbackPartials: phases,
+      ...carriedMcpConfigNotices(result),
+    },
+  ];
+}
+
 /**
  * UPD-DEP-D1 / CR-05: the dependency moves an install made, as `apply` rows
  * under each dependency's own marketplace and by its bare name, as a catalog
@@ -609,27 +757,7 @@ async function applyPluginInstalls(
         ...carriedMcpConfigNotices(result),
       });
     } else {
-      outcomes.push({
-        kind: "plugin-install-failed",
-        scope: op.scope,
-        marketplace: op.marketplace,
-        plugin: op.plugin,
-        ...installFailureReasonFields(result.error),
-        // RESV-06: only a dependency-cascade failure carries a cause onto
-        // this row. Redact defensively (T-55-02-02 / T-53-02-02) -- the
-        // closure/constraint arms build their message from keys and version
-        // constraints alone, but a dependency's own ledger failure can carry
-        // a path anywhere in its cause chain. `causeChainTrailer` walks
-        // `.cause` without redacting, so `redactedDependencyCascadeError`
-        // rebuilds the FULL chain (via `redactCauseChain`) with every link
-        // redacted, instead of dropping it.
-        ...(result.error instanceof DependencyCascadeError && {
-          cause: redactedDependencyCascadeError(result.error),
-        }),
-        // AFILE-04: dependencies that committed before the failure rewrote
-        // the MCP config, so their notices ride the failed row.
-        ...carriedMcpConfigNotices(result),
-      });
+      outcomes.push(...installFailedOutcomes(op, result, outcomes));
     }
   }
 

@@ -897,7 +897,7 @@ A plugin that declares `dependencies` installs as a CASCADE: the requesting plug
 
 **Cardinality.** The cascade emits `single`, not `plural`: the user named ONE plugin, and the members are that install's transitive consequence rather than a bulk operation. So no trailing tally line appears, and a plugin that declares nothing renders exactly as it always did.
 
-**Failure attribution.** One failing dependency fails the whole install, and the row that carries the reason is the DEPENDENCY's, never only the requesting plugin's. The requesting plugin still gets its own row, stamped `{dependency failed}`, so the command the user typed is visibly accounted for. Both rows stamp `error`, so the summary line counts two operations. No cascade row interpolates a filesystem path: every rendered value is a token-allowlisted key, a bounded rendered constraint, a recorded version, or a closed-set reason.
+**Failure attribution.** One failing dependency fails the whole install, and the row that carries the reason is the DEPENDENCY's, never only the requesting plugin's. The requesting plugin still gets its own row, stamped `{dependency failed}`, so the command the user typed is visibly accounted for. Every other dependency the install would have installed, and did not, because it was rolled back or never reached, also gets a `{dependency failed}` row with no cause line, as Claude Code names every member on success (CAS-01, D-PL3-01). A dependency that was already installed and is left alone gets no row, and a dependency that a moved row already reports gets no second row. Every row stamps `error`, so the summary line counts each one. Three routes still show one failure row (D-PL3-15): the requesting plugin's own install failing, a step of a dependency move failing, and a catalog read that fails during the walk. No cascade row interpolates a filesystem path: every rendered value is a token-allowlisted key, a bounded rendered constraint, a recorded version, or a closed-set reason.
 
 ### Dependency cascade -- success (RESV-01 / RESV-05)
 
@@ -968,9 +968,10 @@ Some plugin operations have failed.
   ⊘ formatter@tools (failed) {version conflict}
     cause: Dependency "formatter@tools" has contradictory version constraints ^1.0.0, ^2.0.0 (inputs 1 and 2 do not overlap).
   ⊘ helper (failed) {dependency failed}
+  ⊘ linter@tools (failed) {dependency failed}
 ```
 
-Two plugins in one graph declared version sets for `formatter` that do not overlap, so the intersection is empty and no version can satisfy both. The cause names the JOINED DECLARED ranges rather than a combined one, because an intersection that failed produced no combined range to report. The parenthesised detail is the evaluator's own measurement (which inputs, by position), never a declaration's prose.
+`helper` asks for `formatter@tools` at ^1.0.0 and depends on `linter@tools`, which asks for it at ^2.0.0. The two version sets do not overlap, so the intersection is empty and no version can satisfy both. `linter` was resolved but not installed, so it gets its own `{dependency failed}` row. The cause names the JOINED DECLARED ranges rather than a combined one, because an intersection that failed produced no combined range to report. The parenthesised detail is the evaluator's own measurement (which inputs, by position), never a declaration's prose.
 
 ### Dependency cascade -- an installed copy the constraint rejects (RESV-05)
 
@@ -981,11 +982,11 @@ Some plugin operations have failed.
 
 ● official [user]
   ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}
-    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: version 1.5.0 falls outside what the combined range admits (^2.0.0) -- required by "helper@official"
+    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: version 1.5.0 falls outside what the combined range admits (^2.0.0) -- required by "helper@official". To look for a version in range, run /claude:plugin update formatter@tools.
   ⊘ helper (failed) {dependency failed}
 ```
 
-The SAME `version conflict` token as the row above, over a different subject: the copy already on disk. The pair `{already installed, version conflict}` and the recorded version on the row are what separate the two, which is why the cascade mints one token rather than two -- the fact is identical and only the subject moves. UPD-DEP-D1 amends RESV-05: the cascade first tries to move the copy into the constraint (the state below), and this row is what it reports when no version can move there. After `cannot move:` the cause gives `update`'s own reason: the version the move would reach falls outside the range, or the dependency's other dependents hold it (`the declared ranges admit no version in common (...) -- required by ...`). A range or a plugin that repeats is named once. The whole dependency graph is planned before anything changes, so a refusal changes nothing.
+The SAME `version conflict` token as the row above, over a different subject: the copy already on disk. The pair `{already installed, version conflict}` and the recorded version on the row are what separate the two, which is why the cascade mints one token rather than two -- the fact is identical and only the subject moves. UPD-DEP-D1 amends RESV-05: the cascade first tries to move the copy into the constraint (the state below), and this row is what it reports when no version can move there. After `cannot move:` the cause gives `update`'s own reason: the version the move would reach falls outside the range, or the dependency's other dependents hold it (`the declared ranges admit no version in common (...) -- required by ...`). A range or a plugin that repeats is named once. The whole dependency graph is planned before anything changes, so a refusal changes nothing. When the plugin you named declares the dependency itself, the cause ends with Claude Code's next step, `To look for a version in range, run /claude:plugin update <dependency>.`, for every source kind (D-PL3-11). A refusal that judged no move, which ends at `which does not satisfy <range>.`, has no hint.
 
 ### Dependency cascade -- an installed copy moved into the constraint first (UPD-DEP-D1)
 
@@ -1031,7 +1032,7 @@ Some plugin operations have failed.
   ⊘ helper (failed) {dependency failed}
 ```
 
-A declared constraint is not a range the evaluator can read. Distinct from the inherited `{unparseable}`, whose subject is a whole document: here exactly one field of one declaration is at fault, and the row says so. The rendered range is bounded by the shared constraint renderer, so a very long declaration cannot flood the block.
+A declared constraint is not a range the evaluator can read. Distinct from the inherited `{unparseable}`, whose subject is a whole document: here exactly one field of one declaration is at fault, and the row says so. The rendered range is bounded by the shared constraint renderer, so a very long declaration cannot flood the block. As Claude Code does, the real row shows a text that is not a valid range in curly quotes, cut to 64 characters (D-PL3-10); the sample leaves them out because the repository's text fixers turn curly quotes into straight ones.
 
 ### Dependency cascade -- the tag listing could not be read (RESV-03)
 
@@ -1108,9 +1109,10 @@ Some plugin operations have failed.
   ⊘ formatter@tools (failed) {dependency cycle}
     cause: Dependency cycle: helper@official -> formatter@tools -> linter@tools -> formatter@tools.
   ⊘ helper (failed) {dependency failed}
+  ⊘ linter@tools (failed) {dependency failed}
 ```
 
-The subject is the key the walk met a second time on its own ancestor chain, and the cause renders the whole chain in walk order with that key shown where it recurs -- a cycle is a property of the PATH, so a row alone cannot state it. A legal diamond (two siblings depending on the same third plugin) is deduped by the walk's visited memo and never reaches this row (D-03-11).
+The subject is the key the walk met a second time on its own ancestor chain, and the cause renders the whole chain in walk order with that key shown where it recurs -- a cycle is a property of the PATH, so a row alone cannot state it. The walk reached `linter` before it found the cycle, so `linter` gets its own `{dependency failed}` row. A legal diamond (two siblings depending on the same third plugin) is deduped by the walk's visited memo and never reaches this row (D-03-11).
 
 ### Dependency cascade -- an unusable `dependencies` declaration (RESV-01)
 
@@ -1126,6 +1128,20 @@ A plugin operation has failed.
 
 One element breaking a character rule refuses the WHOLE `dependencies` array -- a constraint that disappears quietly is worse than a declaration that is refused, because the install would then pin a version nobody asked for. The subject is the plugin whose declaration is at fault, which here is the requesting plugin itself, so there is no second row to add and the summary counts one operation. The cause carries the validator's field path, never the manifest's text.
 
+### Dependency cascade -- the plugin's own id breaks the plugin id rule (CAS-02 / D-PL3-04)
+
+<!-- catalog-state: dependency-invalid-root-id -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ _helper (failed) {invalid manifest}
+    cause: Plugin "_helper@official" cannot be installed, because its id is invalid: Each part of a plugin id (plugin@marketplace) may use only the letters a-z and A-Z, digits, ".", "_" and "-", and must start with a letter or digit. Here the plugin's name does not; the marketplace's maintainer can rename it.
+```
+
+The install looks the plugin up first, as Claude Code does. A plugin the marketplace does not list keeps the `{not in manifest}` row. A listed plugin whose name or marketplace name breaks the id rule gets this refusal, in Claude Code's wording and its three variants: the plugin's name does not, the marketplace's name does not, or they do not, in which case the maintainer can rename both. The subject is the requesting plugin, so there is one row. The id is printed with its control and format characters escaped (D-PL3-14). `apply`, a load, and `import` report the same cause under `{dependency failed}` (D-PL3-17, a known limit).
+
 ### Dependency cascade -- a dependency whose own install threw (RESV-06 / D-03-07)
 
 <!-- catalog-state: dependency-install-failed -->
@@ -1139,7 +1155,7 @@ Some plugin operations have failed.
   ⊘ helper (failed) {dependency failed}
 ```
 
-The dependency resolved cleanly and its own six-phase ledger then failed. There is no cascade reason to add -- the ledger's error IS the fact -- so the row carries an empty reasons array and the renderer suppresses the brace. The requesting plugin's row still says why it is there. Everything this command had already materialized is unwound; a dependency installed BEFORE the command ran is not touched (D-03-07). Re-running the same command after fixing the cause starts from the same state as the first attempt.
+The dependency resolved cleanly and its own six-phase ledger then failed. There is no cascade reason to add -- the ledger's error IS the fact -- so the row carries an empty reasons array and the renderer suppresses the brace. The requesting plugin's row still says why it is there. Any other dependency the command would have installed gets a `{dependency failed}` row. Everything this command had already materialized is unwound; a dependency installed BEFORE the command ran is not touched (D-03-07). Re-running the same command after fixing the cause starts from the same state as the first attempt.
 
 ### Dependency cascade -- a plugin directory copy outside the constraint (GV-01)
 
@@ -1154,7 +1170,7 @@ Some plugin operations have failed.
   ⊘ helper (failed) {dependency failed}
 ```
 
-A plugin of the `anthropic-plugin-directory` marketplace never installs at a release tag, as in Claude Code: the dependency installs the copy its catalog entry lists, and that copy's `plugin.json` version must satisfy the constraint. It does not here, so the cascade fails and unwinds what it had materialized. The `version conflict` token is the one the other version rows use. The cause is Claude Code's own message, naming the listed version (`no version` when the copy declares none), the declared ranges, and each plugin that asked for the dependency with a range, comma-separated. No reload-hint.
+A plugin of the `anthropic-plugin-directory` marketplace never installs at a release tag, as in Claude Code: the dependency installs the copy its catalog entry lists, and that copy's `plugin.json` version must satisfy the constraint. It does not here, so the cascade fails and unwinds what it had materialized. The `version conflict` token is the one the other version rows use. The cause is Claude Code's own message, naming the listed version (`no version` when the copy declares none), the declared ranges, and each plugin that asked for the dependency with a range, comma-separated. It names every plugin of the install that declared a range on the dependency, nearest the requested plugin first, as Claude Code does. An installed plugin outside the install is not named, although Claude Code names it too, because its range is not checked (D-PL3-13). The plugin name, the listed version, the joined ranges, and each requirer are each cut to 120 characters with `…`, as Claude Code cuts them (D-PL3-09). No reload-hint.
 
 ### Dependency promoted to a direct install (D-04-07)
 
@@ -2636,7 +2652,7 @@ Single-shot setup of `anthropics/claude-plugins-official` in user scope. The mar
 ● claude-plugins-official [user] (added)
 ```
 
-The bootstrap path is a marketplace add; the marketplace status `added` carries the `(added)` header arm. No reload-hint: a marketplace record is not a Pi-visible resource (SNM-33 / D-22-01). Bootstrap also enables autoupdate on the marketplace persistence record, but the v2 state-change header arm (`added`) does not carry the `<autoupdate>` marker -- the marker only appears on the list-surface header form (`mp.status === undefined`, `mp.details.autoupdate === true`). Subsequent `marketplace list` renders the marketplace with the marker.
+The bootstrap path is a marketplace add; the marketplace status `added` carries the `(added)` header arm. No reload-hint: a marketplace record is not a Pi-visible resource (SNM-33 / D-22-01). The official name `claude-plugins-official` has autoupdate on by default (D-PL8-07), so bootstrap's autoupdate step writes no value and reports `{already autoupdate}` unless `claude-plugins.json` sets the value off (D-PL8-19). The v2 state-change header arm (`added`) does not carry the `<autoupdate>` marker -- the marker only appears on the list-surface header form (`mp.status === undefined`, `mp.details.autoupdate === true`). Subsequent `marketplace list` renders the marketplace with the marker.
 
 ### Re-run when already bootstrapped
 
@@ -2710,7 +2726,7 @@ D-48-A / ATTR-07: the `failed` marketplace header MAY now carry a closed-set rea
 ● local-mp [user] (added)
 ```
 
-Path-source marketplaces default to autoupdate OFF; the `added` arm does not carry the marker. No reload-hint: `marketplace add` changes a marketplace record, not a Pi-visible resource (SNM-33 / D-22-01).
+A path-source marketplace with no `autoupdate` value takes the default for its name: on for an official Claude Code marketplace name other than `knowledge-work-plugins` and `first-party-plugins`, off for any other name (D-PL8-07). The `added` arm does not carry the marker. No reload-hint: `marketplace add` changes a marketplace record, not a Pi-visible resource (SNM-33 / D-22-01).
 
 ### Success -- GitHub source
 
@@ -2720,7 +2736,7 @@ Path-source marketplaces default to autoupdate OFF; the `added` arm does not car
 ● claude-plugins-official [user] (added)
 ```
 
-`marketplace add` never enables autoupdate for any source kind (github or path); the persisted record stores no `autoupdate` field on add. Autoupdate is opt-in -- enabled later via an explicit `marketplace autoupdate`, or by `bootstrap`. The `added` state-change arm carries `(added)`; subsequent `marketplace list` surfaces show the `<autoupdate>` / `<no autoupdate>` marker on the SUB-BRANCH B list-surface header only once the flag has been set. No reload-hint: a marketplace record is not a Pi-visible resource (SNM-33 / D-22-01).
+`marketplace add` writes no `autoupdate` value for any source kind (github or path). Without a value, a marketplace takes the default for its name: on for an official Claude Code marketplace name other than `knowledge-work-plugins` and `first-party-plugins`, off for any other name (D-PL8-07). Otherwise autoupdate is opt-in -- enabled later via an explicit `marketplace autoupdate`. The `added` state-change arm carries `(added)`; subsequent `marketplace list` surfaces show the `<autoupdate>` marker on the SUB-BRANCH B list-surface header only once autoupdate is on, by a set value or by the default. No reload-hint: a marketplace record is not a Pi-visible resource (SNM-33 / D-22-01).
 
 ### Skipped -- already added
 
@@ -4050,7 +4066,7 @@ Reconcile: 1 warning
 
 ### Apply disable, declared dependency version unsatisfied (LOAD-01)
 
-The third shape `/claude:plugin apply` disables a plugin for. The dependency is recorded AND enabled, and its recorded version falls outside the range the dependent declared. This row carries the second closed-set token, `{dependency version unsatisfied}`, mirroring upstream's second error code `dependency-version-unsatisfied`. The split is deliberate: the two remedies differ in kind -- one says install or enable a thing that is not usable, the other says move an existing thing's version -- so one token for both would make a grep for either fact return the other. The range on the cause line is every constraint the dependent declared for that dependency, as written and separated by commas as Claude Code prints them (INR-05): a `^2.0.0` renders as `^2.0.0`, and several declarations of one dependency render as their declared texts in declaration order. The satisfaction check still tests their intersection; only the reported text is the declared one. The verdict bounds the joined text once through the project renderer, so a pathological declared list ends with its `... (+N chars)` overflow marker instead of flooding the row. Severity, tally, write-back and lift behave exactly as on the two rows above.
+The third shape `/claude:plugin apply` disables a plugin for. The dependency is recorded AND enabled, and its recorded version falls outside the range the dependent declared. This row carries the second closed-set token, `{dependency version unsatisfied}`, mirroring upstream's second error code `dependency-version-unsatisfied`. The split is deliberate: the two remedies differ in kind -- one says install or enable a thing that is not usable, the other says move an existing thing's version -- so one token for both would make a grep for either fact return the other. The range on the cause line is every constraint the dependent declared for that dependency, as written and separated by commas as Claude Code prints them (INR-05): a `^2.0.0` renders as `^2.0.0`, and several declarations of one dependency render as their declared texts in declaration order. The satisfaction check still tests their intersection; only the reported text is the declared one. The verdict bounds the joined text once through the project renderer, so a pathological declared list ends with Claude Code's `… (+N chars)` overflow marker (D-PL3-10) instead of flooding the row. Severity, tally, write-back and lift behave exactly as on the two rows above.
 
 <!-- catalog-state: reconcile-dependency-version-unsatisfied -->
 
@@ -5013,7 +5029,7 @@ Changed and already-correct rows both count as successful plural outcomes.
 
 ### Config files
 
-A named flip changes only its target layer: the base config (`claude-plugins.json`), or the local config (`claude-plugins.local.json`) with `--local` (LAYER-02). When only the other layer declares the marketplace, the flip is refused before anything changes, with the `{marketplace in local layer only}` or `{marketplace in base layer only}` rows documented under [`## /claude:plugin marketplace remove <name>`](#claudeplugin-marketplace-remove-name). A flip row reports the outcome in the target layer. A local entry without an `autoupdate` value has the value it inherits: the base entry's value, or off when the base config does not declare the marketplace or sets no value (MAU-4). So `{already autoupdate}` means the target layer already has the value, its own or inherited, and a flip writes a local value only when it changes the value that applies. When a local entry without a value needs the inherited value and the base config cannot be read, the flip fails with `{invalid manifest}` and writes nothing in that scope. `marketplace list` and `marketplace info` show the value that the two layers merge to, where a local entry's `autoupdate` wins over the base one (D-07). A flip without a name sets the value in the base config of each marketplace that config declares. It writes a local entry only when the value that applies to the entry still differs, so a local entry without a value takes the new base value when the base config declares the marketplace. With `--local`, it changes only the local config.
+A named flip changes only its target layer: the base config (`claude-plugins.json`), or the local config (`claude-plugins.local.json`) with `--local` (LAYER-02). When only the other layer declares the marketplace, the flip is refused before anything changes, with the `{marketplace in local layer only}` or `{marketplace in base layer only}` rows documented under [`## /claude:plugin marketplace remove <name>`](#claudeplugin-marketplace-remove-name). A flip row reports the outcome in the target layer. A base entry without an `autoupdate` value has the default for the marketplace name: on for an official Claude Code marketplace name other than `knowledge-work-plugins` and `first-party-plugins`, off for any other name (MAU-4; D-PL8-07). A local entry without an `autoupdate` value has the value it inherits: the base entry's value, or the default for the name when the base config does not declare the marketplace or sets no value. So `{already autoupdate}` means the target layer already has the value, its own or inherited, and a flip writes a local value only when it changes the value that applies. When a local entry without a value needs the inherited value and the base config cannot be read, the flip fails with `{invalid manifest}` and writes nothing in that scope. `marketplace list` and `marketplace info` show the value that the two layers merge to, where a local entry's `autoupdate` wins over the base one (D-07). A flip without a name sets the value in the base config of each marketplace that config declares. It writes a local entry only when the value that applies to the entry still differs, so a local entry without a value takes the new base value when the base config declares the marketplace. With `--local`, it changes only the local config.
 
 A flip that fails after it has written something reports both in one emission: the rows of the marketplaces it flipped in an earlier scope, or in an earlier file of the same scope, then the failed header with its failed child. A marketplace whose files were only partly written gets no row of its own; the failed row covers it. The failed child carries `{lock held}` for a held state lock, `{invalid manifest}` for an invalid config file, `{permission denied}` when the file system refuses a write, and `{unreadable}` for any other failure, such as a config file the writer refuses to replace.
 
@@ -5332,6 +5348,28 @@ Left in mcp.json:
 ```
 
 Emitted by `notifyMcpMigration` when the step wrote a plugin's servers to `mcp-adapter.json` but could not remove the old entries from `mcp.json`, for example because the file could not be written. The step writes `mcp-adapter.json` first, then `state.json`, then `mcp.json`, so a fault between the writes loses no server: `mcp-adapter.json` and `mcp.json` both hold it for one session. The next `/reload` finds the old entries again, leaves `mcp-adapter.json` unchanged, removes the old entries and reports the move once. A user-scope move also removes the plugin's old-name disable stubs from the project `mcp-adapter.json` before it removes the old entries. When that write fails, for example because a project-scope operation holds the lock, the old entries and the stubs stay, and the row names the `project-scope mcp-adapter.json` in place of `mcp.json`. The row lists the plugin's old names in file order and a detail with no absolute path and no final period of its own. It sorts with the other rows left in `mcp.json`. Severity: `warning`. The byte form is locked by `test/architecture/mcp-migration-notice.test.ts`.
+
+### Background update notice (AUP-03 / D-PL8-10)
+
+<!-- catalog-state: background-update-one -->
+
+```text
+Plugin updated: demo · Run /reload to apply
+```
+
+<!-- catalog-state: background-update-two -->
+
+```text
+Plugins updated: alpha and beta · Run /reload to apply
+```
+
+<!-- catalog-state: background-update-many -->
+
+```text
+Plugins updated: 3 plugins · Run /reload to apply
+```
+
+Emitted once by `notifyBackgroundUpdate` after a background update that moved at least one plugin. A background update runs after the first message of a tui session, once for each extension runtime. The notice names plugins, without their marketplace. A plugin is named once even when it was updated in both scopes or from two marketplaces (D-PL8-21), and names keep the order of the update. Two names are joined with "and". Three or more names are counted instead. Severity: `info`. The notice always asks for `/reload`, because Claude Code reloads a plugin in the running session only for a plugin source kind this extension does not have (D-PL8-11). A background update that moved nothing, failed, or was skipped prints nothing, and its detail goes to the debug log (`PI_CLAUDE_MARKETPLACE_DEBUG=1`). A json or rpc session never runs the background update, so it never receives its `background-update` entry; the payload kind stays in the schema (D-PL8-20, see [`docs/json-output.md`](json-output.md)). The byte form is locked by `test/architecture/background-update-notice.test.ts`, not by the catalog-uat walk, whose parser skips this section.
 
 ______________________________________________________________________
 

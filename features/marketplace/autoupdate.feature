@@ -81,6 +81,43 @@ Feature: Marketplace autoupdate
       | source kind | source     |
       | github      | acme/tools |
 
+  Scenario Outline: A newly added marketplace named <name> has autoupdate <setting> until a config file sets it
+    Given the marketplace "<name>" is published as a dir source
+    Given the marketplace "<name>" is added to the project scope
+    When the user runs "/claude:plugin marketplace list"
+    Then the result has these fields:
+      | kind                | cascade          |
+      | severity            | info             |
+      | needs reload        | false            |
+      | tally label         | Marketplace list |
+      | tally failures      | 0                |
+      | tally warnings      | 0                |
+      | tally success count | 1                |
+    Then the result lists these marketplaces:
+      | name   | scope   | details autoupdate | details last updated at |
+      | <name> | project | <setting>          | {scenario time}         |
+
+    Examples:
+      | name                    | setting |
+      | claude-plugins-official | true    |
+      | knowledge-work-plugins  | false   |
+      | first-party-plugins     | false   |
+
+  Scenario: Disabling autoupdate of a marketplace with an official Claude Code name writes the setting off
+    Given the marketplace "claude-plugins-official" is published as a dir source
+    Given the marketplace "claude-plugins-official" is added to the project scope
+    When the user runs "/claude:plugin marketplace noautoupdate claude-plugins-official --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name                    | scope   | status              |
+      | claude-plugins-official | project | autoupdate disabled |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name                    | source                                      | autoupdate |
+      | claude-plugins-official | {home}/marketplaces/claude-plugins-official | false      |
+
   Scenario: An enabled autoupdate shows in the marketplace list of a new session
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope

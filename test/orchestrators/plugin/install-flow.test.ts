@@ -1634,7 +1634,7 @@ test("D-PL1-24: a dependency whose skills collide and whose mcp phase fails rend
             "● mp [project]",
             "  ⊘ hello (failed) {dependency failed}",
             "  ⊘ some-other-plugin@mp (failed)",
-            `    cause: ${readFailure}`,
+            `    cause: ${readFailure.replace(locationsFor("project", cwd).mcpAdapterJsonPath, "mcp-adapter.json")}`,
           ].join("\n"),
           severity: "error",
         },
@@ -5349,6 +5349,7 @@ for (const allowGamma of [false, true]) {
                 "Some plugin operations have failed.\n\n" +
                 "● alpha [project]\n" +
                 "  ⊘ hello (failed) {dependency failed}\n" +
+                "  ⊘ some-other-plugin@beta (failed) {dependency failed}\n" +
                 "  ⊘ some-other-plugin@gamma (failed) {cross-marketplace}\n" +
                 '    cause: Dependency "some-other-plugin@gamma", declared by "some-other-plugin@beta", is from marketplace "gamma", which root marketplace "alpha" does not allow. Install "some-other-plugin@gamma" manually first, or add "gamma" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "alpha".',
             },
@@ -5490,7 +5491,7 @@ test("RESV-03 regression: an unreadable version constraint still fails the insta
       // ledger phase, so state.json and the scope root are byte-identical.
       assertRetryFailure(
         outcome,
-        'Dependency "some-other-plugin@mp" declares an unparseable version constraint not-a-version-range (input 1 of 1 is not a valid version range).',
+        'Dependency "some-other-plugin@mp" declares an unparseable version constraint \u201cnot-a-version-range\u201d (input 1 of 1 is not a valid version range).',
       );
       assert.deepStrictEqual(notifications, []);
       assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
@@ -5555,6 +5556,133 @@ test("RESV-06 / NFR-3: a failed cascade never reaches tx.save() and replays the 
       assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
       assert.deepStrictEqual(await artifacts(), beforeArtifacts);
       await assert.rejects(stat(locations.baseConfigJsonPath), /ENOENT/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * MIM-03: fails the first per-plugin ledger the cascade runs, the
+ * dependency's, in its mcp phase, and makes its skills undo throw
+ * `skillsUndoError` when one is given.
+ */
+function faultDependencyLedger(
+  transactionControl: InstallTransactionControl,
+  skillsUndoError?: Error,
+): void {
+  const faultedLedgers = { remaining: 1 };
+  transactionControl.runPhases = async <C>(phases: readonly Phase<C>[], ctx: C) => {
+    if (phases[0]?.name !== "skills" || faultedLedgers.remaining === 0) {
+      return runPhases(phases, ctx);
+    }
+
+    faultedLedgers.remaining -= 1;
+    return runPhases(
+      phases.map((phase): Phase<C> => {
+        if (phase.name === "mcp") {
+          return {
+            ...phase,
+            do: () => {
+              throw new Error("mcp staging denied");
+            },
+          };
+        }
+
+        return phase.name === "skills" && skillsUndoError !== undefined
+          ? {
+              ...phase,
+              undo: () => {
+                throw skillsUndoError;
+              },
+            }
+          : phase;
+      }),
+      ctx,
+    );
+  };
+}
+
+/** MIM-03: `hello`, which depends on `some-other-plugin`, installed orchestrated. */
+async function installHelloWithDependency(
+  installPlugin: InstallOperation,
+  cwd: string,
+): Promise<{
+  readonly outcome: Awaited<ReturnType<InstallOperation>>;
+  readonly notifications: readonly NotifyRecord[];
+}> {
+  await seedPathMarketplaceWithPlugin({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    pluginName: "hello",
+    skills: [{ sourceName: "tool" }],
+    declareDependencies: true,
+    siblingPlugins: [{ name: "some-other-plugin" }],
+  });
+  const { ctx, run, notifications } = makeCtx();
+  const outcome = await installPlugin({
+    ctx,
+    cwd,
+    marketplace: "mp",
+    notifications: { mode: "orchestrated" },
+    run,
+    plugin: "hello",
+    scope: "project",
+  });
+  return { outcome, notifications };
+}
+
+test("MIM-03 / D-PL6-04: an orchestrated install whose dependency could not finish its rollback carries that dependency's rollback partials", async () => {
+  await withHermeticHome(async ({ installPlugin, transactionControl }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-mim03-dependency-partial-"));
+    try {
+      // arrange
+      const skillsUndoError = new Error("skills undo denied");
+      faultDependencyLedger(transactionControl, skillsUndoError);
+
+      // act
+      const { outcome, notifications } = await installHelloWithDependency(installPlugin, cwd);
+
+      // assert
+      assert.ok(outcome.status === "failed");
+      const { error, ...failure } = outcome;
+      assert.ok(error instanceof DependencyCascadeError);
+      assert.strictEqual(error.key, "some-other-plugin@mp");
+      assert.strictEqual(error.message, "mcp staging denied");
+      assert.deepStrictEqual(failure, {
+        status: "failed",
+        cause: "mcp staging denied\n\ncause: mcp staging denied -> mcp staging denied",
+        rollbackPartials: [{ phase: "skills", msg: "skills undo denied", cause: skillsUndoError }],
+      });
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("MIM-03 / D-PL6-04: an orchestrated install whose dependency finished its rollback carries no rollback partials", async () => {
+  await withHermeticHome(async ({ installPlugin, transactionControl }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-mim03-dependency-clean-"));
+    try {
+      // arrange
+      faultDependencyLedger(transactionControl);
+
+      // act
+      const { outcome, notifications } = await installHelloWithDependency(installPlugin, cwd);
+
+      // assert
+      assert.ok(outcome.status === "failed");
+      const { error, ...failure } = outcome;
+      assert.ok(error instanceof DependencyCascadeError);
+      assert.strictEqual(error.key, "some-other-plugin@mp");
+      assert.strictEqual(error.message, "mcp staging denied");
+      assert.deepStrictEqual(failure, {
+        status: "failed",
+        cause: "mcp staging denied\n\ncause: mcp staging denied",
+      });
+      assert.deepStrictEqual(notifications, []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -18807,7 +18935,7 @@ test("UPD-DEP-D1: installing refuses a plugin whose installed dependency no rele
           "● mp [project]",
           "  ⊘ app (failed) {dependency failed}",
           "  ⊘ lib@mp v1.2.0 (failed) {already installed, version conflict}",
-          '    cause: Dependency "lib@mp" is installed at version 1.2.0, which does not satisfy ^2.0.0, and cannot move: version 1.2.0 falls outside what the combined range admits (^2.0.0) -- required by "app@mp"',
+          '    cause: Dependency "lib@mp" is installed at version 1.2.0, which does not satisfy ^2.0.0, and cannot move: version 1.2.0 falls outside what the combined range admits (^2.0.0) -- required by "app@mp". To look for a version in range, run /claude:plugin update lib@mp.',
         ].join("\n"),
         severity: "error",
       },

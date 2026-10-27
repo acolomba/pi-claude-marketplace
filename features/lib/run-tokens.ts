@@ -18,10 +18,17 @@
  * so a result is projected through the commit tokens first. An error token
  * such as `{mcp-adapter.json read error}` stands for the message this Node
  * gives a file call that a step set up to fail, which differs between Node
- * majors; the step reads it back by making the same call. A message can hold
- * a sandbox path, so a result is projected through the error tokens before
- * any other.
+ * majors; the step reads it back by making the same call. An error token also
+ * stands for its message with each quoted path cut to its last segment, which
+ * is how import and apply show a redacted cause. Only
+ * `{read-only skill directory removal error}` also stands for its message with
+ * each quoted path replaced by any path that ends in that segment, because
+ * install shows that cause at a path where the step cannot make its call
+ * (D-PL6-16). A message can hold a sandbox path, so a result is projected
+ * through the error tokens before any other.
  */
+
+import path from "node:path";
 
 /** The values the tokens stand for in one scenario. */
 export interface RunTokens {
@@ -49,6 +56,14 @@ const AGENT_DIR_TOKEN = "{agent dir}";
 const GIT_HOST_TOKEN = "{git host}";
 const SCENARIO_TIME_TOKEN = "{scenario time}";
 
+/**
+ * The error token of a skill file that a read-only skill directory keeps from
+ * being removed. It alone matches a quoted path by its last segment at any
+ * path, because install shows the skills undo cause at the staged copy's
+ * path, where the step cannot make its call (D-PL6-16).
+ */
+export const READ_ONLY_SKILL_REMOVAL_ERROR_TOKEN = "{read-only skill directory removal error}";
+
 // Pi stamps with `toISOString()` on the worker's clock, so a timestamp of
 // this scenario is an exact ISO string inside the window, to the millisecond.
 function isScenarioTime(value: string, startedAt: number): boolean {
@@ -56,6 +71,28 @@ function isScenarioTime(value: string, startedAt: number): boolean {
   return (
     !Number.isNaN(at) && new Date(at).toISOString() === value && at >= startedAt && at <= Date.now()
   );
+}
+
+/**
+ * Returns `message` with each single-quoted path cut to its last segment, as
+ * a redacted cause shows it.
+ */
+export function cutQuotedPaths(message: string): string {
+  return message.replaceAll(
+    /'([^']+)'/gu,
+    (_quoted, quotedPath: string) => `'${path.basename(quotedPath)}'`,
+  );
+}
+
+// Matches `message` with each quoted path cut to its last segment, or with
+// that path replaced by any path that ends in the segment.
+function anyQuotedPathPattern(message: string): RegExp {
+  const escape = (text: string): string => text.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const pattern = cutQuotedPaths(message)
+    .split(/'([^']+)'/u)
+    .map((part, index) => (index % 2 === 0 ? escape(part) : `'(?:[^']*/)?${escape(part)}'`))
+    .join("");
+  return new RegExp(pattern, "gu");
 }
 
 /**
@@ -80,8 +117,11 @@ export function expandTokens(text: string, tokens: RunTokens): string {
 /**
  * Projects the result value `value` of the field `key` back to tokens. A
  * `lastUpdatedAt` inside the scenario's window becomes `{scenario time}`;
- * otherwise every occurrence of a recorded error message becomes its error
- * token, then every occurrence of a sandbox directory becomes its token, every
+ * otherwise every occurrence of a recorded error message, then of that
+ * message with its quoted paths cut, becomes its error token. For
+ * `{read-only skill directory removal error}` alone, the cut paths can also
+ * stand at any path that ends in the same segment (D-PL6-16). Then every
+ * occurrence of a sandbox directory becomes its token, every
  * occurrence of the git host's address becomes `{git host}`, every
  * occurrence of a revision's commit becomes its commit token, and every
  * remaining occurrence of a revision's 12 digits becomes its revision token.
@@ -93,7 +133,11 @@ export function projectTokens(key: string, value: string, tokens: RunTokens): st
 
   let projected = value;
   for (const [token, standsFor] of tokens.errors) {
-    projected = projected.replaceAll(standsFor, token);
+    const shorter =
+      token === READ_ONLY_SKILL_REMOVAL_ERROR_TOKEN
+        ? anyQuotedPathPattern(standsFor)
+        : cutQuotedPaths(standsFor);
+    projected = projected.replaceAll(standsFor, token).replaceAll(shorter, token);
   }
 
   projected = projected
