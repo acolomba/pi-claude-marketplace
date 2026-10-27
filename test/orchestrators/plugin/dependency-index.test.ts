@@ -73,8 +73,12 @@ function marketplaceRecord(
     addedFromCwd: SCOPE_ROOT,
     manifestPath: path.join(root, ".claude-plugin", "marketplace.json"),
     marketplaceRoot: root,
+    // A path record runs its marketplace tree's files, so its copy sits there.
     plugins: Object.fromEntries(
-      Object.entries(plugins).map(([plugin, seed]) => [plugin, pluginRecord(seed)]),
+      Object.entries(plugins).map(([plugin, seed]) => [
+        plugin,
+        pluginRecord({ resolvedSource: path.join(root, "plugins", plugin), ...seed }),
+      ]),
     ),
   };
 }
@@ -925,10 +929,10 @@ test("DLS-01 / NFR-10: a delisted git-source record reads its copy under the sco
 });
 
 /** The not-in-manifest failure of a delisted `app@mp` whose copy cannot be read. */
-const APP_NOT_IN_MANIFEST = {
-  reason: "not in manifest",
-  message:
-    "cannot read the dependencies of app@mp: not declared by its marketplace, and its installed copy cannot be read",
+/** D-PL2-12 / D-05-07: the failure a refused copy of `app@mp` ends the walk with. */
+const APP_UNREADABLE_MANIFEST = {
+  reason: "unreadable manifest",
+  message: "cannot read the dependencies of app@mp: its own manifest is present but cannot be read",
 };
 
 /** The delisted `app@mp`'s declarations, its copy at `resolvedSource` declaring `lib@^2.0.0`. */
@@ -952,25 +956,48 @@ async function readDelistedApp(
   );
 }
 
-test("D-PL2-12 / NFR-10: a delisted record with no recorded commit whose copy sits under the plugin clones fails closed", async () => {
+test("D-PL2-12 / NFR-10: a delisted record with no recorded commit whose copy sits under the plugin clones fails as unreadable manifest", async () => {
   // act
   const read = await readDelistedApp({ resolvedSource: APP_CLONE });
 
   // assert
   assert.deepStrictEqual(
     read.ok ? undefined : { reason: read.reason, message: read.cause.message },
-    APP_NOT_IN_MANIFEST,
+    APP_UNREADABLE_MANIFEST,
   );
 });
 
-test("D-PL2-12 / NFR-10: a delisted record pinned to a commit whose copy sits under the marketplace clone fails closed", async () => {
+test("D-PL2-12 / NFR-10: a delisted record pinned to a commit whose copy sits under the marketplace clone fails as unreadable manifest", async () => {
   // act
   const read = await readDelistedApp({ resolvedSource: copyRoot("app"), resolvedSha: APP_SHA });
 
   // assert
   assert.deepStrictEqual(
     read.ok ? undefined : { reason: read.reason, message: read.cause.message },
-    APP_NOT_IN_MANIFEST,
+    APP_UNREADABLE_MANIFEST,
+  );
+});
+
+test("D-PL2-12 / NFR-10: the installed-first read of a record pinned to a commit whose copy sits outside the plugin clones fails closed with no catalog read", async () => {
+  // arrange
+  const mp = marketplaceRecord("mp", {
+    app: { resolvedSource: copyRoot("app"), resolvedSha: APP_SHA },
+  });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", { app: { dependencies: ["entry@mp"] } }),
+  });
+
+  // act
+  const read = await readInstalledRecordDeclarations(
+    { state: stateOf(mp), locations: LOCATIONS, reader: ownManifests(), loadManifest },
+    mp,
+    "app",
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    read.ok ? undefined : { reason: read.reason, message: read.cause.message },
+    APP_UNREADABLE_MANIFEST,
   );
 });
 
@@ -1171,12 +1198,6 @@ async function linkedManifestScope(
   await symlink(linked, path.join(copy, ".claude-plugin", "plugin.json"));
   return { locations, marketplaceRoot, copy };
 }
-
-/** The unreadable-manifest failure of `app@mp` whose own manifest is refused. */
-const APP_UNREADABLE_MANIFEST = {
-  reason: "unreadable manifest",
-  message: "cannot read the dependencies of app@mp: its own manifest is present but cannot be read",
-};
 
 /** The delisted `app@mp`, its copy in the marketplace clone linking its manifest to `target`. */
 async function readDelistedLinkedApp(

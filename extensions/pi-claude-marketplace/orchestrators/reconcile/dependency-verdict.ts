@@ -64,7 +64,11 @@ import type { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { DependencyDeclarationReader } from "../plugin/dependency-declaration-read.ts";
-import type { AddressedDependency, DeclarerReadFailure } from "../plugin/dependency-index.ts";
+import type {
+  AddressedDependency,
+  DeclarerReadFailure,
+  RecordDeclarations,
+} from "../plugin/dependency-index.ts";
 
 /** Inputs of one scope-wide satisfaction verdict. */
 export interface ScopeSatisfactionOptions {
@@ -547,11 +551,16 @@ export function stillHeld(
   return new Set([...released].filter((dependent) => held.has(dependent)));
 }
 
-/** What a record's installed copy declares, or `undefined` when its copy is the catalog's. */
+/**
+ * What the record `plugin`'s installed copy adds to its declarations: none when
+ * its copy is the catalog's or holds no manifest, or the failure arm that
+ * names it when the copy cannot be used (D-PL2-25).
+ */
 export type InstalledDeclarationsReader = (
   marketplace: ExtensionState["marketplaces"][string],
+  plugin: string,
   record: ExtensionState["marketplaces"][string]["plugins"][string],
-) => Promise<readonly AddressedDependency[] | undefined>;
+) => Promise<RecordDeclarations>;
 
 /** Inputs of the judgement `apply` makes once its cascade has run. */
 export interface FinalScopeOptions extends ScopeSatisfactionOptions {
@@ -565,7 +574,8 @@ export interface FinalScopeOptions extends ScopeSatisfactionOptions {
  * version and enabled state. Unlike the load-time verdict, a record held down
  * by the marker is disabled here (no LOAD-02 optimism): the pass runs after
  * every lift `apply` makes. A record that cannot be read ends the judgement
- * with the walk's failure arm, as the load-time check does (D-05-07).
+ * with the walk's failure arm, as the load-time check does (D-05-07), and so
+ * does a record whose installed copy cannot be used (D-PL2-25).
  */
 export async function judgeFinalScope(
   options: FinalScopeOptions,
@@ -592,8 +602,12 @@ export async function judgeFinalScope(
       }
 
       // eslint-disable-next-line no-await-in-loop -- one installed-copy read per enabled record
-      const installed = (await options.installedDeclarations(marketplace, record)) ?? [];
-      declarations.set(key, [...read.declared, ...installed]);
+      const installed = await options.installedDeclarations(marketplace, name, record);
+      if (!installed.ok) {
+        return installed;
+      }
+
+      declarations.set(key, [...read.declared, ...installed.declared]);
     }
   }
 

@@ -6,7 +6,7 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 
 import {
-  installedCopyOwnerRoot,
+  installedCopyReadOptions,
   readCandidateDeclaration,
   readDependencyDeclaration,
   readInstalledCopyDeclaration,
@@ -619,33 +619,78 @@ test("D-01-06: the catalog read passes a dangling wrapped link to the bare manif
   assert.deepStrictEqual(declaration, dependsOn("bare"));
 });
 
-/** `readInstalledCopyDeclaration` of `PLUGIN_ROOT`, owned by the marketplace root. */
-function readInstalledCopy(
-  reader: RecordingReader,
-  pluginRoot: string = PLUGIN_ROOT,
-): ReturnType<typeof readInstalledCopyDeclaration> {
-  return readInstalledCopyDeclaration({ pluginRoot, ownerRoot: MARKETPLACE_ROOT, reader });
-}
-
 /** A plugin-clones root beside, not under, the marketplace root. */
 const CLONES_ROOT = path.join(tmpdir(), "dependency-declaration-read-clones");
 
 const OWNER_ROOTS = { marketplaceRoot: MARKETPLACE_ROOT, pluginClonesDir: CLONES_ROOT };
 
-test("D-PL2-12: a record pinned to a commit owns the scope's plugin clones", () => {
+/** `readInstalledCopyDeclaration` of a path record's `pluginRoot`, owned by the marketplace root. */
+function readInstalledCopy(
+  reader: RecordingReader,
+  pluginRoot: string = PLUGIN_ROOT,
+): ReturnType<typeof readInstalledCopyDeclaration> {
+  return readInstalledCopyDeclaration({
+    ...installedCopyReadOptions({ resolvedSource: pluginRoot }, OWNER_ROOTS),
+    reader,
+  });
+}
+
+/** The installed copy of a path record read in place from the marketplace tree at `root`. */
+function readPathRecordCopy(
+  pluginRoot: string,
+  root: string,
+): ReturnType<typeof readInstalledCopyDeclaration> {
+  return readInstalledCopyDeclaration(
+    installedCopyReadOptions(
+      { resolvedSource: pluginRoot },
+      { marketplaceRoot: root, pluginClonesDir: path.join(root, "unused-plugin-clones") },
+    ),
+  );
+}
+
+/** The installed copy of a record pinned to a commit, under the plugin clones at `root`. */
+function readGitRecordCopy(
+  pluginRoot: string,
+  root: string,
+): ReturnType<typeof readInstalledCopyDeclaration> {
+  return readInstalledCopyDeclaration(
+    installedCopyReadOptions(
+      { resolvedSource: pluginRoot, resolvedSha: "0123456" },
+      { marketplaceRoot: path.join(root, "unused-marketplace"), pluginClonesDir: root },
+    ),
+  );
+}
+
+test("D-PL2-12 / D-PL2-17: a record pinned to a commit is a copy owned by the scope's plugin clones", () => {
   // act
-  const root = installedCopyOwnerRoot({ resolvedSha: "0123456" }, OWNER_ROOTS);
+  const options = installedCopyReadOptions(
+    { resolvedSource: "/clones/alpha", resolvedSha: "0123456" },
+    { marketplaceRoot: "/mp", pluginClonesDir: "/clones" },
+  );
 
   // assert
-  assert.equal(root, CLONES_ROOT);
+  assert.deepStrictEqual(options, {
+    boundary: { pluginRoot: "/clones/alpha", roots: ["/clones/alpha"], label: "plugin directory" },
+    ownerRoot: "/clones",
+  });
 });
 
-test("D-PL2-12: a record with no recorded commit owns its marketplace clone", () => {
+test("D-PL2-12 / D-PL2-17: a record with no recorded commit is read in place, owned by its marketplace clone", () => {
   // act
-  const root = installedCopyOwnerRoot({}, OWNER_ROOTS);
+  const options = installedCopyReadOptions(
+    { resolvedSource: "/mp/alpha" },
+    { marketplaceRoot: "/mp", pluginClonesDir: "/clones" },
+  );
 
   // assert
-  assert.equal(root, MARKETPLACE_ROOT);
+  assert.deepStrictEqual(options, {
+    boundary: {
+      pluginRoot: "/mp/alpha",
+      roots: ["/mp/alpha", "/mp"],
+      label: "plugin directory and its marketplace directory",
+    },
+    ownerRoot: "/mp",
+  });
 });
 
 test("DLS-01: a delisted plugin's installed copy answers with its own manifest", async () => {
@@ -711,7 +756,7 @@ test("RESV-02: an installed copy's rejected declaration is the unusable arm", as
   assert.ok(!("ownManifest" in read));
 });
 
-test("NFR-10: an installed copy outside its owning root is never opened", async () => {
+test("D-PL2-12 / NFR-10: an installed copy outside its owning root is the fixed-detail refusal, never opened", async () => {
   // arrange
   const reader = buildReader({});
 
@@ -719,11 +764,11 @@ test("NFR-10: an installed copy outside its owning root is never opened", async 
   const read = await readInstalledCopy(reader, path.join(tmpdir(), "elsewhere", "alpha"));
 
   // assert
-  assert.deepStrictEqual(read, { kind: "absent" });
+  assert.deepStrictEqual(read, ownManifestRefusal());
   assert.deepStrictEqual(reader.opened, []);
 });
 
-test("D-PL2-12 / NFR-10: an installed copy under the other clone root is never opened", async () => {
+test("D-PL2-12 / NFR-10: an installed copy under the other clone root is the fixed-detail refusal, never opened", async () => {
   // arrange
   const reader = buildReader({});
 
@@ -731,8 +776,19 @@ test("D-PL2-12 / NFR-10: an installed copy under the other clone root is never o
   const read = await readInstalledCopy(reader, path.join(CLONES_ROOT, "alpha"));
 
   // assert
-  assert.deepStrictEqual(read, { kind: "absent" });
+  assert.deepStrictEqual(read, ownManifestRefusal());
   assert.deepStrictEqual(reader.opened, []);
+});
+
+test("DLS-01: a missing installed copy under its owning root answers absent", async (testContext) => {
+  // arrange
+  const root = await freshRoot(testContext, "installed-copy-missing-");
+
+  // act
+  const read = await readPathRecordCopy(path.join(root, "plugins", "gone"), root);
+
+  // assert
+  assert.deepStrictEqual(read, { kind: "absent" });
 });
 
 test("DLS-01: the production reader reads an installed copy off real disk", async (testContext) => {
@@ -746,7 +802,7 @@ test("DLS-01: the production reader reads an installed copy off real disk", asyn
   );
 
   // act
-  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+  const read = await readPathRecordCopy(pluginRoot, root);
 
   // assert
   assert.deepStrictEqual(read, dependsOn("beta"));
@@ -802,7 +858,7 @@ test("D-PL2-13: an installed copy whose manifest links to a file inside the plug
   await linkWrappedManifest(pluginRoot, path.join(pluginRoot, "real.json"));
 
   // act
-  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+  const read = await readPathRecordCopy(pluginRoot, root);
 
   // assert
   assert.deepStrictEqual(read, dependsOn("linked"));
@@ -819,7 +875,7 @@ test("D-PL2-13: an installed copy whose manifest directory links inside the plug
   await symlink(path.join(pluginRoot, "meta"), path.join(pluginRoot, ".claude-plugin"));
 
   // act
-  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+  const read = await readPathRecordCopy(pluginRoot, root);
 
   // assert
   assert.deepStrictEqual(read, dependsOn("linked"));
@@ -832,7 +888,7 @@ test("D-PL2-13: an installed copy with no wrapped manifest reads a bare manifest
   await symlink(path.join(pluginRoot, "real.json"), path.join(pluginRoot, "plugin.json"));
 
   // act
-  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+  const read = await readPathRecordCopy(pluginRoot, root);
 
   // assert
   assert.deepStrictEqual(read, dependsOn("linked"));
@@ -845,13 +901,13 @@ test("D-PL2-13: an installed copy whose manifest links through a chain inside th
   await linkWrappedManifest(pluginRoot, path.join(pluginRoot, "hop.json"));
 
   // act
-  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+  const read = await readPathRecordCopy(pluginRoot, root);
 
   // assert
   assert.deepStrictEqual(read, dependsOn("linked"));
 });
 
-test("D-PL2-13: an installed copy whose manifest links outside the plugin but inside its owning root reads that file", async (testContext) => {
+test("D-PL2-17: a path record read in place follows a manifest link into its marketplace directory", async (testContext) => {
   // arrange
   const { root, pluginRoot } = await linkedManifestCopy(testContext);
   await mkdir(path.join(root, "shared"));
@@ -862,10 +918,27 @@ test("D-PL2-13: an installed copy whose manifest links outside the plugin but in
   await linkWrappedManifest(pluginRoot, path.join(root, "shared", "plugin.json"));
 
   // act
-  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+  const read = await readPathRecordCopy(pluginRoot, root);
 
   // assert
   assert.deepStrictEqual(read, dependsOn("shared"));
+});
+
+test("D-PL2-17: a git record's copy refuses a manifest link outside its plugin directory but inside the plugin clones", async (testContext) => {
+  // arrange
+  const { root, pluginRoot } = await linkedManifestCopy(testContext);
+  await mkdir(path.join(root, "shared"));
+  await writeFile(
+    path.join(root, "shared", "plugin.json"),
+    JSON.stringify({ dependencies: ["shared@mp"] }),
+  );
+  await linkWrappedManifest(pluginRoot, path.join(root, "shared", "plugin.json"));
+
+  // act
+  const read = await readGitRecordCopy(pluginRoot, root);
+
+  // assert
+  assert.deepStrictEqual(read, ownManifestRefusal());
 });
 
 test("D-PL2-17: an installed copy whose manifest links outside its owning root is the fixed-detail refusal", async (testContext) => {
@@ -874,7 +947,7 @@ test("D-PL2-17: an installed copy whose manifest links outside its owning root i
   await linkWrappedManifest(pluginRoot, await outsideManifest(testContext));
 
   // act
-  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+  const read = await readPathRecordCopy(pluginRoot, root);
 
   // assert: the bare manifest is not read in its place
   assert.deepStrictEqual(read, ownManifestRefusal());
@@ -887,7 +960,7 @@ test("D-PL2-17: an installed copy whose manifest links through a chain that leav
   await linkWrappedManifest(pluginRoot, path.join("..", "hop.json"));
 
   // act
-  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+  const read = await readPathRecordCopy(pluginRoot, root);
 
   // assert
   assert.deepStrictEqual(read, ownManifestRefusal());
@@ -900,7 +973,7 @@ test("D-PL2-17: an installed copy whose manifest directory links outside its own
   await symlink(outside, path.join(pluginRoot, ".claude-plugin"));
 
   // act
-  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+  const read = await readPathRecordCopy(pluginRoot, root);
 
   // assert
   assert.deepStrictEqual(read, ownManifestRefusal());
@@ -916,7 +989,7 @@ test("D-PL2-17: an installed copy whose manifest link climbs out of its owning r
   );
 
   // act
-  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+  const read = await readPathRecordCopy(pluginRoot, root);
 
   // assert
   assert.deepStrictEqual(read, ownManifestRefusal());
@@ -928,7 +1001,7 @@ test("D-PL2-17: an installed copy whose manifest link loops is the fixed-detail 
   await linkWrappedManifest(pluginRoot, "plugin.json");
 
   // act
-  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+  const read = await readPathRecordCopy(pluginRoot, root);
 
   // assert
   assert.deepStrictEqual(read, ownManifestRefusal());
@@ -940,7 +1013,7 @@ test("D-01-06: an installed copy whose wrapped manifest link dangles reads its b
   await linkWrappedManifest(pluginRoot, path.join(pluginRoot, "missing.json"));
 
   // act
-  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+  const read = await readPathRecordCopy(pluginRoot, root);
 
   // assert
   assert.deepStrictEqual(read, dependsOn("bare"));
@@ -952,7 +1025,7 @@ test("D-01-06: an installed copy whose wrapped manifest link runs through a regu
   await linkWrappedManifest(pluginRoot, path.join(pluginRoot, "real.json", "plugin.json"));
 
   // act
-  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+  const read = await readPathRecordCopy(pluginRoot, root);
 
   // assert
   assert.deepStrictEqual(read, dependsOn("bare"));
@@ -969,7 +1042,7 @@ test("D-PL2-13: an installed copy whose wrapped manifest is a regular file is re
   await symlink(path.join(pluginRoot, "real.json"), path.join(pluginRoot, "linked.json"));
 
   // act
-  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+  const read = await readPathRecordCopy(pluginRoot, root);
 
   // assert
   assert.deepStrictEqual(read, dependsOn("wrapped"));
@@ -981,10 +1054,191 @@ test("WR-03: an installed copy whose wrapped manifest path runs through a regula
   await writeFile(path.join(pluginRoot, ".claude-plugin"), "not a directory\n");
 
   // act
-  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+  const read = await readPathRecordCopy(pluginRoot, root);
 
   // assert
   assert.deepStrictEqual(read, dependsOn("bare"));
+});
+
+/** One manifest link shape planted under a copy from `linkedManifestCopy`. */
+interface CopyLinkShape {
+  readonly label: string;
+  readonly plant: (testContext: TestContext, pluginRoot: string) => Promise<void>;
+  /** The `name@mp` the read declares, or `undefined` for the fixed-detail refusal. */
+  readonly declares: string | undefined;
+}
+
+const COPY_LINK_SHAPES: readonly CopyLinkShape[] = [
+  {
+    label: "a direct link to a file in the plugin",
+    plant: (_testContext, pluginRoot) =>
+      linkWrappedManifest(pluginRoot, path.join(pluginRoot, "real.json")),
+    declares: "linked",
+  },
+  {
+    label: "a chain of links inside the plugin",
+    plant: async (_testContext, pluginRoot) => {
+      await symlink("real.json", path.join(pluginRoot, "hop.json"));
+      await linkWrappedManifest(pluginRoot, path.join(pluginRoot, "hop.json"));
+    },
+    declares: "linked",
+  },
+  {
+    label: "an absolute link outside every root",
+    plant: async (testContext, pluginRoot) =>
+      linkWrappedManifest(pluginRoot, await outsideManifest(testContext)),
+    declares: undefined,
+  },
+  {
+    label: "a relative link that climbs out of every root",
+    plant: async (testContext, pluginRoot) =>
+      linkWrappedManifest(
+        pluginRoot,
+        path.relative(path.join(pluginRoot, ".claude-plugin"), await outsideManifest(testContext)),
+      ),
+    declares: undefined,
+  },
+  {
+    label: "a link loop",
+    plant: (_testContext, pluginRoot) =>
+      linkWrappedManifest(pluginRoot, path.join(pluginRoot, ".claude-plugin", "plugin.json")),
+    declares: undefined,
+  },
+  {
+    label: "a dangling link",
+    plant: (_testContext, pluginRoot) =>
+      linkWrappedManifest(pluginRoot, path.join(pluginRoot, "missing.json")),
+    declares: "bare",
+  },
+];
+
+/** What a read of a `linkedManifestCopy` answers for `declares`. */
+function expectedCopyRead(
+  declares: string | undefined,
+): Awaited<ReturnType<typeof readInstalledCopyDeclaration>> {
+  return declares === undefined ? ownManifestRefusal() : dependsOn(declares);
+}
+
+for (const { label, plant, declares } of COPY_LINK_SHAPES) {
+  test(`D-PL2-17: a git record's copy reads ${label} inside its plugin directory boundary`, async (testContext) => {
+    // arrange
+    const { root, pluginRoot } = await linkedManifestCopy(testContext);
+    await plant(testContext, pluginRoot);
+
+    // act
+    const read = await readGitRecordCopy(pluginRoot, root);
+
+    // assert
+    assert.deepStrictEqual(read, expectedCopyRead(declares));
+  });
+
+  test(`D-PL2-17: a path record's copy reads ${label} inside its in-place boundary`, async (testContext) => {
+    // arrange
+    const { root, pluginRoot } = await linkedManifestCopy(testContext);
+    await plant(testContext, pluginRoot);
+
+    // act
+    const read = await readPathRecordCopy(pluginRoot, root);
+
+    // assert
+    assert.deepStrictEqual(read, expectedCopyRead(declares));
+  });
+}
+
+/** The candidate read of a `linkedManifestCopy` tree read in place from `root`. */
+function readInPlaceCandidate(pluginRoot: string, root: string): Promise<ClosureLookupResult> {
+  return readCandidateDeclaration({
+    pluginRoot,
+    entry: entryWith("./plugins/alpha", ["entry@mp"]),
+    marketplace: { marketplaceRoot: root },
+    pin: undefined,
+  });
+}
+
+for (const { label, plant, declares } of COPY_LINK_SHAPES) {
+  test(`D-PL2-24: a candidate tree read in place answers ${label} by ${declares ?? "its entry"}`, async (testContext) => {
+    // arrange
+    const { root, pluginRoot } = await linkedManifestCopy(testContext);
+    await plant(testContext, pluginRoot);
+
+    // act
+    const read = await readInPlaceCandidate(pluginRoot, root);
+
+    // assert
+    assert.deepStrictEqual(read, dependsOn(declares ?? "entry"));
+  });
+}
+
+/** A `linkedManifestCopy` whose wrapped manifest links to a file in its marketplace directory. */
+async function marketplaceLinkedCopy(
+  testContext: TestContext,
+): Promise<{ readonly root: string; readonly pluginRoot: string }> {
+  const copy = await linkedManifestCopy(testContext);
+  await writeFile(
+    path.join(copy.root, "shared.json"),
+    JSON.stringify({ dependencies: ["shared@mp"] }),
+  );
+  await linkWrappedManifest(copy.pluginRoot, path.join(copy.root, "shared.json"));
+  return copy;
+}
+
+test("D-PL2-17: a path candidate read in place follows a link into its marketplace directory", async (testContext) => {
+  // arrange
+  const { root, pluginRoot } = await marketplaceLinkedCopy(testContext);
+
+  // act
+  const read = await readInPlaceCandidate(pluginRoot, root);
+
+  // assert
+  assert.deepStrictEqual(read, dependsOn("shared"));
+});
+
+test("D-PL2-17: a tag-pinned path candidate is a copy, so its entry answers for that link", async (testContext) => {
+  // arrange
+  const { root, pluginRoot } = await marketplaceLinkedCopy(testContext);
+
+  // act
+  const read = await readCandidateDeclaration({
+    pluginRoot,
+    entry: entryWith("./plugins/alpha", ["entry@mp"]),
+    marketplace: { marketplaceRoot: root },
+    pin: "2.0.0",
+  });
+
+  // assert
+  assert.deepStrictEqual(read, dependsOn("entry"));
+});
+
+test("D-PL2-17: a git candidate is a copy, so its entry answers for that link", async (testContext) => {
+  // arrange
+  const { root, pluginRoot } = await marketplaceLinkedCopy(testContext);
+
+  // act
+  const read = await readCandidateDeclaration({
+    pluginRoot,
+    entry: entryWith({ source: "github", repo: "acme/alpha" }, ["entry@mp"]),
+    marketplace: { marketplaceRoot: root },
+    pin: undefined,
+  });
+
+  // assert
+  assert.deepStrictEqual(read, dependsOn("entry"));
+});
+
+test("D-PL2-17: a candidate with no marketplace record is a copy, so its entry answers for that link", async (testContext) => {
+  // arrange
+  const { pluginRoot } = await marketplaceLinkedCopy(testContext);
+
+  // act
+  const read = await readCandidateDeclaration({
+    pluginRoot,
+    entry: entryWith("./plugins/alpha", ["entry@mp"]),
+    marketplace: undefined,
+    pin: undefined,
+  });
+
+  // assert
+  assert.deepStrictEqual(read, dependsOn("entry"));
 });
 
 /**
@@ -1022,7 +1276,7 @@ test("WR-03 / D-05-07: an installed copy whose manifest directory cannot be insp
   const { root, pluginRoot } = await deniedManifestDirectoryCopy(testContext);
 
   // act
-  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+  const read = await readPathRecordCopy(pluginRoot, root);
 
   // assert
   assert.deepStrictEqual(read, {
@@ -1038,10 +1292,7 @@ test("WR-03 / D-05-07: an installed copy whose recorded root cannot be inspected
   await mkdir(path.join(root, "plugins"));
 
   // act
-  const read = await readInstalledCopyDeclaration({
-    pluginRoot: path.join(root, "plugins", "al\0pha"),
-    ownerRoot: root,
-  });
+  const read = await readPathRecordCopy(path.join(root, "plugins", "al\0pha"), root);
 
   // assert
   assert.deepStrictEqual(read, {
@@ -1061,6 +1312,8 @@ test("UPD-DEP-D1: a resolved candidate's own manifest answers over its marketpla
   const read = await readCandidateDeclaration({
     pluginRoot: PLUGIN_ROOT,
     entry: entryWith("./alpha", ["head@mp"]),
+    marketplace: { marketplaceRoot: MARKETPLACE_ROOT },
+    pin: undefined,
     reader,
   });
 
@@ -1076,6 +1329,8 @@ test("UPD-DEP-D1: a resolved candidate with no manifest is answered by its marke
   const read = await readCandidateDeclaration({
     pluginRoot: PLUGIN_ROOT,
     entry: entryWith("./alpha", ["head@mp"]),
+    marketplace: { marketplaceRoot: MARKETPLACE_ROOT },
+    pin: undefined,
     reader,
   });
 
@@ -1094,7 +1349,12 @@ test("UPD-DEP-D1: the production reader reads a candidate's manifest off real di
   );
 
   // act
-  const read = await readCandidateDeclaration({ pluginRoot: root, entry: entryWith("./alpha") });
+  const read = await readCandidateDeclaration({
+    pluginRoot: root,
+    entry: entryWith("./alpha"),
+    marketplace: undefined,
+    pin: undefined,
+  });
 
   // assert
   assert.deepStrictEqual(read, dependsOn("disk"));

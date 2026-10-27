@@ -7973,6 +7973,31 @@ function coShippedSeed(widget: Omit<RecordSeed, "pluginRoot" | "supported"> = {}
   } as const;
 }
 
+/**
+ * Records `widget` at a per-commit copy under the plugin clones whose manifest
+ * links to a file in the project directory, outside its plugin directory.
+ */
+async function pinWidgetToEscapingCopy(project: ScopedLocations, cwd: string): Promise<void> {
+  const copy = path.join(project.pluginClonesDir, "widget-copy");
+  const outside = path.join(cwd, "outside-plugin.json");
+  await writeUnder(outside, JSON.stringify({ name: "widget", version: "1.0.0" }));
+  await mkdir(path.join(copy, ".claude-plugin"), { recursive: true });
+  await symlink(outside, path.join(copy, ".claude-plugin", "plugin.json"));
+  const seeded = await loadState(project.extensionRoot);
+  const widget = seeded.marketplaces.mp?.plugins.widget;
+  assert.ok(widget !== undefined);
+  widget.resolvedSource = copy;
+  widget.resolvedSha = "a".repeat(40);
+  await saveState(project.extensionRoot, seeded);
+}
+
+/** D-PL2-25 / REC-05: the one row an apply reports for `widget`'s refused copy. */
+const REFUSED_WIDGET_COPY_NOTIFICATION = {
+  message:
+    "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ widget (failed) {unreadable manifest}\n    cause: cannot read the dependencies of widget@mp: its own manifest is present but cannot be read\n\nReconcile: 1 warning",
+  severity: "warning",
+};
+
 /** Leaves a file nobody may read in `plugin`'s skill, so its move fails to copy it. */
 async function unreadableSkill(marketplaceRoot: string, plugin: string): Promise<void> {
   if (typeof process.getuid === "function" && process.getuid() === 0) {
@@ -8726,6 +8751,54 @@ describe("applyReconcile catalog convergence", () => {
       ["1.0.0", copy, "a".repeat(40), false],
     );
     assert.equal(await pathExists(copy), true);
+    verifyBoundary();
+  });
+
+  test("D-PL2-25: an apply whose cascade and final judgement meet a refused installed copy report it once and move nothing", async (t) => {
+    // arrange -- `widget` runs a per-commit copy whose manifest links outside
+    // its plugin directory, and both plugins have a catalog move
+    const { cwd, project } = await seedConvergenceScope(t, "refused-copy-moves", {
+      ...coShippedSeed(),
+      dependencies: {},
+    });
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    await pinWidgetToEscapingCopy(project, cwd);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [REFUSED_WIDGET_COPY_NOTIFICATION]);
+    assert.deepStrictEqual(
+      [
+        (await recordFor(project, "mp", "widget"))?.enabled,
+        (await recordFor(project, "mp", "zcore"))?.version,
+      ],
+      [true, "1.0.0"],
+    );
+    verifyBoundary();
+  });
+
+  test("D-PL2-25: an apply whose final judgement alone meets a refused installed copy reports it once", async (t) => {
+    // arrange -- as above, with no catalog move for either plugin
+    const { cwd, project } = await seedConvergenceScope(t, "refused-copy-steady", {
+      ...coShippedSeed(),
+      offered: { widget: "1.0.0", zcore: "1.0.0" },
+      dependencies: {},
+    });
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    await pinWidgetToEscapingCopy(project, cwd);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [REFUSED_WIDGET_COPY_NOTIFICATION]);
+    assert.equal((await recordFor(project, "mp", "widget"))?.enabled, true);
     verifyBoundary();
   });
 

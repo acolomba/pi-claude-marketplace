@@ -42,7 +42,6 @@ import {
   resolvePluginVersion,
   resolveTagPinnedPluginVersion,
   retiresWorkflowCommand,
-  sourceTreeBoundary,
   splitStagingWarnings,
   surfaceDiscoveryWarnings,
   sweepWorkflowsStaging,
@@ -207,7 +206,11 @@ async function saveToolsScope(args: {
   const plugins = Object.fromEntries(
     Object.entries(args.records).map(([name, provenance]) => [
       name,
-      { ...makePluginRecord({}), provenance },
+      {
+        ...makePluginRecord({}),
+        provenance,
+        resolvedSource: path.join(marketplaceRoot, "plugins", name),
+      },
     ]),
   );
   await saveState(locations.extensionRoot, {
@@ -2874,47 +2877,6 @@ describe("readDeclaredPluginVersion", () => {
 
     // assert
     assert.strictEqual(version, "9.9.9");
-  });
-});
-
-describe("sourceTreeBoundary", () => {
-  test("D-PL2-17: reads an unpinned path source in place", () => {
-    // act
-    const boundary = sourceTreeBoundary(
-      { name: "alpha", source: "./alpha" },
-      "/mp/alpha",
-      "/mp",
-      undefined,
-    );
-
-    // assert
-    assert.deepStrictEqual(boundary, inPlaceManifestBoundary("/mp/alpha", "/mp"));
-  });
-
-  test("D-PL2-17: bounds a pinned path source by its plugin directory", () => {
-    // act
-    const boundary = sourceTreeBoundary(
-      { name: "alpha", source: "./alpha" },
-      "/clones/alpha",
-      "/mp",
-      "0123456789abcdef0123456789abcdef01234567",
-    );
-
-    // assert
-    assert.deepStrictEqual(boundary, copyManifestBoundary("/clones/alpha"));
-  });
-
-  test("D-PL2-17: bounds a git source by its plugin directory", () => {
-    // act
-    const boundary = sourceTreeBoundary(
-      { name: "alpha", source: { source: "github", repo: "acme/alpha" } },
-      "/clones/alpha",
-      "/mp",
-      undefined,
-    );
-
-    // assert
-    assert.deepStrictEqual(boundary, copyManifestBoundary("/clones/alpha"));
   });
 });
 

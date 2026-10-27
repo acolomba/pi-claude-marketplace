@@ -136,6 +136,7 @@ import {
   planConvergenceCascade,
   stepsAfterInstalls,
 } from "./convergence.ts";
+import { reportDeclarerFailure } from "./delisted-plugins.ts";
 import { buildScopeSatisfactionVerdict, judgeFinalScope } from "./dependency-verdict.ts";
 import {
   blockedMoveOutcomes,
@@ -173,6 +174,7 @@ import type {
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { IndexFailure } from "../plugin/dependency-index.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 import type { UninstallPluginOperation } from "../plugin/uninstall.ts";
 import type { MovedDependency, PluginUpdateOutcome, ScopeDependencyInstallFn } from "../types.ts";
@@ -1246,6 +1248,7 @@ async function convergeScope(
     const disabled: PluginRow[] = [];
     const enabledAtEnd = new Set<string>();
     const trailing = new Set<string>();
+    const copyFailures: IndexFailure[] = [];
     await runScopeIsolated(scope, outcomes, () =>
       judgeScopeAfterCascade(reader, opts, scope, {
         cascade,
@@ -1262,8 +1265,10 @@ async function convergeScope(
           ),
         ),
         trailing,
+        copyFailures,
       }),
     );
+    reportRefusedCopies(scope, [cascade.installedCopyFailure, ...copyFailures], outcomes);
     const kept = withoutUndoneEnables(outcomes, scope, disabled);
     const steps = withoutUndoneStepEnables(after.steps, scope, kept);
     outcomes.push(
@@ -1791,6 +1796,25 @@ interface CascadeJudgement {
   readonly refusedInstalls: ReadonlySet<string>;
   /** Filled with the plugins disabled for one of them (D-PL2-11). */
   readonly trailing: Set<string>;
+  /** Filled with each record whose installed copy the judgement could not use (D-PL2-25). */
+  readonly copyFailures: IndexFailure[];
+}
+
+/**
+ * D-PL2-25 / REC-05: reports each record whose installed copy the cascade
+ * plan or the final judgement could not use, once, as the read pass reports
+ * an unreadable declarer.
+ */
+function reportRefusedCopies(
+  scope: Scope,
+  failures: readonly (IndexFailure | null)[],
+  outcomes: PerEntryOutcome[],
+): void {
+  for (const failure of failures) {
+    if (failure !== null) {
+      reportDeclarerFailure(scope, failure, outcomes);
+    }
+  }
 }
 
 /**
@@ -1807,7 +1831,9 @@ interface CascadeJudgement {
  * unknown, and it is held when the dependency it needed moved for it (its
  * catalog range was unmet before). A plugin whose disable this apply already
  * tried and was refused is not tried again. A judgement whose walk fails
- * disables nothing, as the load-time check does (D-05-07).
+ * disables nothing, as the load-time check does (D-05-07). A record whose
+ * installed copy cannot be used fails it the same way, and is reported
+ * (D-PL2-25).
  */
 async function judgeScopeAfterCascade(
   reader: ReconcileStateReader,
@@ -1829,10 +1855,18 @@ async function judgeScopeAfterCascade(
     }
   }
 
+  const readCopy = installedCopyReader(locations);
   const after = await judgeFinalScope({
     state,
     locations,
-    installedDeclarations: installedCopyReader(locations),
+    installedDeclarations: async (mp, plugin, record) => {
+      const copy = await readCopy(mp, plugin, record);
+      if (!copy.ok) {
+        judged.copyFailures.push(copy);
+      }
+
+      return copy;
+    },
     seeded,
   });
   const ops = enabledHolds(after, state, scope).filter((op) => !judged.refused.has(pluginKey(op)));

@@ -937,6 +937,9 @@ test("APPLY1-01 / GV-01: a record at a release tag is measured at the version a 
   ]);
 });
 
+/** A record whose installed copy adds no declarations. */
+const NO_COPY_DECLARATIONS = { ok: true, declared: [] } as const;
+
 test("APPLY1-01: the final judgement reads a held-down record as disabled and holds what declares it", async () => {
   // arrange: `lib` is disabled with the marker; the load-time verdict would
   // read it as enabled (LOAD-02), the final judgement does not.
@@ -958,7 +961,7 @@ test("APPLY1-01: the final judgement reads a held-down record as disabled and ho
   const load = await buildScopeSatisfactionVerdict(options);
   const final = await judgeFinalScope({
     ...options,
-    installedDeclarations: () => Promise.resolve(undefined),
+    installedDeclarations: () => Promise.resolve(NO_COPY_DECLARATIONS),
   });
 
   // assert
@@ -982,11 +985,11 @@ test("APPLY1-01 / D-12a: the final judgement adds what an installed copy declare
     locations: LOCATIONS,
     loadManifest,
     reader: ownManifests(),
-    installedDeclarations: (_marketplace, record) =>
+    installedDeclarations: (_marketplace, _plugin, record) =>
       Promise.resolve(
         record.version === "1.0.0"
-          ? [{ name: "lib", marketplace: "mp", version: "^1.0.0" }]
-          : undefined,
+          ? { ok: true, declared: [{ name: "lib", marketplace: "mp", version: "^1.0.0" }] }
+          : NO_COPY_DECLARATIONS,
       ),
   });
 
@@ -1007,11 +1010,62 @@ test("D-PL2-05 / D-05-07: a final judgement whose walk fails answers the walk's 
     locations: LOCATIONS,
     loadManifest,
     reader: ownManifests(),
-    installedDeclarations: () => Promise.resolve(undefined),
+    installedDeclarations: () => Promise.resolve(NO_COPY_DECLARATIONS),
   });
 
   // assert
   assert.equal(final.ok, false);
+});
+
+test("D-PL2-25: a final judgement ends with the failure of an installed copy that cannot be used", async () => {
+  // arrange
+  const mp = marketplaceRecord("mp", { app: {}, lib: {} });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", { app: { dependencies: ["lib"] }, lib: {} }),
+  });
+  const refusal = {
+    ok: false,
+    declarer: "app@mp",
+    reason: "unreadable manifest",
+    cause: new Error(
+      "cannot read the dependencies of app@mp: its own manifest is present but cannot be read",
+    ),
+  } as const;
+
+  // act
+  const final = await judgeFinalScope({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    loadManifest,
+    reader: ownManifests(),
+    installedDeclarations: (_marketplace, plugin) =>
+      Promise.resolve(plugin === "app" ? refusal : NO_COPY_DECLARATIONS),
+  });
+
+  // assert
+  assert.strictEqual(final, refusal);
+});
+
+test("D-PL2-25: an installed copy that adds no declarations leaves the final judgement to the catalog", async () => {
+  // arrange
+  const mp = marketplaceRecord("mp", { app: {} });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", { app: { dependencies: ["vault"] } }),
+  });
+
+  // act
+  const final = await judgeFinalScope({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    loadManifest,
+    reader: ownManifests(),
+    installedDeclarations: () => Promise.resolve({ ok: true, declared: [] }),
+  });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(final), [
+    { dependent: "app@mp", dependency: "vault@mp", kind: "missing" },
+  ]);
 });
 
 test("APPLY1-01: a seeded declaration holds its dependent from the start, and the walk holds what declares it", async () => {
@@ -1049,7 +1103,7 @@ test("APPLY1-01 / D-21: the final judgement counts a dependency the same apply i
     locations: LOCATIONS,
     loadManifest,
     reader: ownManifests(),
-    installedDeclarations: () => Promise.resolve(undefined),
+    installedDeclarations: () => Promise.resolve(NO_COPY_DECLARATIONS),
   };
 
   // act

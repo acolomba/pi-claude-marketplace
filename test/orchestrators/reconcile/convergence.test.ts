@@ -6,7 +6,7 @@
 // cache the fs-only presence probe reads; nothing reaches a network.
 
 import assert from "node:assert/strict";
-import { chmod, mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
@@ -27,6 +27,10 @@ import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { seedWarmMirror } from "../plugin/warm-mirror-seed.ts";
 
+import type {
+  IndexFailure,
+  RecordDeclarations,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts";
 import type {
   ConvergenceCascade,
   ConvergenceInput,
@@ -220,7 +224,12 @@ test("D-10: a move from a recorded commit carries it as the from side", async (t
   // arrange
   const fixture = await createFixture(t, "commit");
   const fromCommit = "a".repeat(40);
-  const state = await stageDemo(fixture, "1.1.0", { resolvedSha: fromCommit });
+  const copy = path.join(fixture.locations.pluginClonesDir, "demo-copy");
+  await stagePlugin(copy, "1.0.0");
+  const state = await stageDemo(fixture, "1.1.0", {
+    resolvedSha: fromCommit,
+    resolvedSource: copy,
+  });
 
   // act
   const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
@@ -939,6 +948,24 @@ function heldDependentChain(installedDir: string): readonly StagedPlugin[] {
   ];
 }
 
+/** D-PL2-25: the failure a refused installed copy of `widget@tools` names. */
+const WIDGET_UNREADABLE_MANIFEST = {
+  ok: false,
+  declarer: "widget@tools",
+  reason: "unreadable manifest",
+  message:
+    "cannot read the dependencies of widget@tools: its own manifest is present but cannot be read",
+};
+
+/** A declaration read with its failure's cause reduced to its message. */
+function describeFailure(
+  read: RecordDeclarations | IndexFailure | null,
+): RecordDeclarations | Record<string, unknown> | null {
+  return read === null || read.ok
+    ? read
+    : { ok: read.ok, declarer: read.declarer, reason: read.reason, message: read.cause.message };
+}
+
 const WIDGET_HOLD = toolsHold(
   "widget",
   'version 1.1.0 falls outside what the combined range admits (~1.0.0) -- required by "zhost@tools"',
@@ -1099,7 +1126,7 @@ test("D-12 / WCONV-01: a clean record whose candidate would drop components is d
   });
 });
 
-test("D-PL2-12 / NFR-10: a held dependent whose copy sits outside the root its record owns keeps its catalog declarations", async (t) => {
+test("D-PL2-12 / D-PL2-25: a dependent whose copy sits outside the root its record owns ends the cascade with no move", async (t) => {
   // arrange: `widget` is pinned to a commit, so it owns the plugin clones, but
   // its recorded copy sits under the marketplace clone
   const fixture = await createFixture(t, "foreign-root-copy");
@@ -1111,14 +1138,63 @@ test("D-PL2-12 / NFR-10: a held dependent whose copy sits outside the root its r
   const state = await stageTools(fixture, chain);
 
   // act
-  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+  const cascade = await planConvergenceCascade({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+  });
 
   // assert
-  assert.deepStrictEqual(plan, {
-    moves: [demoMove({ plugin: "core", toVersion: "2.0.0" })],
-    holds: [WIDGET_HOLD],
-    declines: [],
+  assert.deepStrictEqual(
+    { plan: cascade.plan, failure: describeFailure(cascade.installedCopyFailure) },
+    { plan: { moves: [], holds: [], declines: [] }, failure: WIDGET_UNREADABLE_MANIFEST },
+  );
+});
+
+test("D-PL2-25: a candidate whose installed copy's manifest links outside its boundary ends the cascade with no move", async (t) => {
+  // arrange: `widget` runs its copy in place, and that copy's manifest links
+  // to a file outside the marketplace
+  const fixture = await createFixture(t, "escaping-copy");
+  const state = await stageTools(fixture, heldDependentChain("widget-installed"));
+  const outside = path.join(fixture.cwd, "outside-plugin.json");
+  await writeFile(outside, JSON.stringify({ dependencies: [] }), "utf8");
+  const manifest = path.join(
+    marketplaceRootOf(fixture, "tools"),
+    "widget-installed",
+    ".claude-plugin",
+    "plugin.json",
+  );
+  await rm(manifest);
+  await symlink(outside, manifest);
+
+  // act
+  const cascade = await planConvergenceCascade({
+    scope: "project",
+    state,
+    locations: fixture.locations,
   });
+
+  // assert
+  assert.deepStrictEqual(
+    { plan: cascade.plan, failure: describeFailure(cascade.installedCopyFailure) },
+    { plan: { moves: [], holds: [], declines: [] }, failure: WIDGET_UNREADABLE_MANIFEST },
+  );
+});
+
+test("D-12 / DLS-D1: a cascade whose installed copies are all usable carries no copy failure", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "usable-copies");
+  const state = await stageTools(fixture, heldDependentChain("widget-installed"));
+
+  // act
+  const cascade = await planConvergenceCascade({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+  });
+
+  // assert
+  assert.equal(cascade.installedCopyFailure, null);
 });
 
 test("D-12: a record already installed partial moves to a partial candidate", async (t) => {
@@ -1467,15 +1543,26 @@ test("APPLY1-01: the installed-copy reader reads a pinned copy and leaves a path
   const marketplace = { ...mp, plugins: {} };
 
   // act
-  const fromPinned = await read(marketplace, pluginRecord(pinned, { resolvedSha: "a".repeat(40) }));
-  const fromPath = await read(marketplace, pluginRecord(path.join(mp.marketplaceRoot, "widget")));
+  const fromPinned = await read(
+    marketplace,
+    "widget",
+    pluginRecord(pinned, { resolvedSha: "a".repeat(40) }),
+  );
+  const fromPath = await read(
+    marketplace,
+    "widget",
+    pluginRecord(path.join(mp.marketplaceRoot, "widget")),
+  );
 
   // assert
-  assert.deepStrictEqual(fromPinned, [{ name: "zcore", marketplace: "tools", version: "^1.0.0" }]);
-  assert.equal(fromPath, undefined);
+  assert.deepStrictEqual(fromPinned, {
+    ok: true,
+    declared: [{ name: "zcore", marketplace: "tools", version: "^1.0.0" }],
+  });
+  assert.deepStrictEqual(fromPath, { ok: true, declared: [] });
 });
 
-test("D-PL2-12: the installed-copy reader ignores a copy under the plugin clones of a record with no recorded commit", async (t) => {
+test("D-PL2-12 / D-PL2-25: the installed-copy reader fails closed on a copy under the plugin clones of a record with no recorded commit", async (t) => {
   // arrange
   const fixture = await createFixture(t, "copy-reader-unowned");
   const copy = path.join(fixture.locations.pluginClonesDir, "widget-copy");
@@ -1485,11 +1572,12 @@ test("D-PL2-12: the installed-copy reader ignores a copy under the plugin clones
   // act
   const read = await installedCopyReader(fixture.locations)(
     { ...mp, plugins: {} },
+    "widget",
     pluginRecord(copy),
   );
 
   // assert
-  assert.equal(read, undefined);
+  assert.deepStrictEqual(describeFailure(read), WIDGET_UNREADABLE_MANIFEST);
 });
 
 test("APPLY1-01 / CR-A: a held-down record with a move of its own waits for its move, released or not", async (t) => {
@@ -2027,6 +2115,7 @@ function cascadeOver(
         names.map((name) => ({ name, marketplace: "tools" })),
       ]),
     ),
+    installedCopyFailure: null,
   };
 }
 

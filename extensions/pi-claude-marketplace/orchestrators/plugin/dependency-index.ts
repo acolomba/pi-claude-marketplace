@@ -78,7 +78,7 @@ import { ownValue } from "../../shared/own-key.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 
 import {
-  installedCopyOwnerRoot,
+  installedCopyReadOptions,
   readDependencyDeclaration,
   readInstalledCopyDeclaration,
 } from "./dependency-declaration-read.ts";
@@ -257,9 +257,11 @@ async function loadDeclarerManifest(
 
 /**
  * D-05-07: a declaration read that answered unusable -- a present-but-unusable
- * own manifest, or a declaration the parser rejects.
+ * own manifest, or a declaration the parser rejects. Convergence reports a
+ * refused installed copy through the same arm (D-PL2-25), so the cause wording
+ * has this one home.
  */
-function unusableDeclaration(
+export function unusableDeclaration(
   key: string,
   read: Extract<DeclarationLookupResult | OwnManifestRefusal, { readonly kind: "unusable" }>,
 ): IndexFailure {
@@ -352,7 +354,9 @@ export async function readRecordDeclarations(
  * A record with `resolvedSha` installed a per-commit clone of that commit
  * under `plugin-clones/` (every git source, and a tag-pinned path-source
  * dependency), so its `resolvedSource` is read, admitted only inside
- * `plugin-clones/` (NFR-10). A readable copy answers, still flagged
+ * `plugin-clones/` (NFR-10) and bounded by its plugin directory (D-PL2-17).
+ * A recorded root outside `plugin-clones/` fails closed (D-PL2-12). A
+ * readable copy answers, still flagged
  * `delisted` when the loaded manifest no longer lists the record, so the
  * enable root's DLS-01 exemption keeps working. A present-but-unusable copy
  * fails closed (D-05-07). A copy that answers `absent` -- gone, or holding no
@@ -380,8 +384,7 @@ export async function readInstalledRecordDeclarations(
     record?.resolvedSha === undefined
       ? ({ kind: "absent" } as const)
       : await readInstalledCopyDeclaration({
-          pluginRoot: record.resolvedSource,
-          ownerRoot: installedCopyOwnerRoot(record, {
+          ...installedCopyReadOptions(record, {
             marketplaceRoot: marketplace.marketplaceRoot,
             pluginClonesDir: options.locations.pluginClonesDir,
           }),
@@ -404,7 +407,8 @@ export async function readInstalledRecordDeclarations(
 /**
  * DLS-01: a delisted record's declarations come from its installed copy, the
  * root its install recorded (`resolvedSource`), admitted only inside the one
- * clone root that owns the record (NFR-10, D-PL2-12).
+ * clone root that owns the record (NFR-10, D-PL2-12) and read inside Claude
+ * Code's boundary (D-PL2-17).
  */
 async function readInstalledCopy(
   options: ScopeDeclarationDetailOptions,
@@ -417,8 +421,7 @@ async function readInstalledCopy(
   }
 
   return readInstalledCopyDeclaration({
-    pluginRoot: record.resolvedSource,
-    ownerRoot: installedCopyOwnerRoot(record, {
+    ...installedCopyReadOptions(record, {
       marketplaceRoot: marketplace.marketplaceRoot,
       pluginClonesDir: options.locations.pluginClonesDir,
     }),

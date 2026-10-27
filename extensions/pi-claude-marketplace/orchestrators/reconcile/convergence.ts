@@ -33,10 +33,14 @@ import { ownValue } from "../../shared/own-key.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { admitResolvedVersion, foldDeclaredConstraint } from "../plugin/constraint-fold.ts";
 import {
-  installedCopyOwnerRoot,
+  installedCopyReadOptions,
   readInstalledCopyDeclaration,
 } from "../plugin/dependency-declaration-read.ts";
-import { buildScopeDeclarationDetail, readRecordDeclarations } from "../plugin/dependency-index.ts";
+import {
+  buildScopeDeclarationDetail,
+  readRecordDeclarations,
+  unusableDeclaration,
+} from "../plugin/dependency-index.ts";
 import { resolveListCandidate } from "../plugin/list-candidate-version.ts";
 import { isRecordedCandidate, isSameRevision, resolvePluginVersion } from "../plugin/shared.ts";
 
@@ -61,7 +65,11 @@ import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { AddressedDependency } from "../plugin/dependency-index.ts";
+import type {
+  AddressedDependency,
+  IndexFailure,
+  RecordDeclarations,
+} from "../plugin/dependency-index.ts";
 import type { ListCandidate } from "../plugin/list-candidate-version.ts";
 import type { RevisionMove } from "../types.ts";
 
@@ -133,8 +141,8 @@ interface CandidateMove {
   readonly move: PlannedMove;
   /** The kinds a clean record's partial candidate would drop (D-12). */
   readonly consent?: readonly string[];
-  /** DLS-D1: what the installed copy declares; absent when it cannot be read. */
-  readonly installed?: readonly AddressedDependency[];
+  /** DLS-D1: what the installed copy declares; none when it has no copy or no manifest. */
+  readonly installed: readonly AddressedDependency[];
 }
 
 type FoundMove = Pick<CandidateMove, "move" | "consent">;
@@ -442,45 +450,60 @@ async function recordMove(
   return { move, ...(consent !== undefined && { consent }) };
 }
 
+/** A record whose installed copy adds no declarations. */
+const NO_COPY_DECLARATIONS: RecordDeclarations = Object.freeze({ ok: true, declared: [] });
+
 /**
  * DLS-D1: what the record's installed copy declares, which a move that stays
- * put adds to its catalog declarations (D-12a). A copy that cannot be read
- * answers `undefined`, and the catalog declarations stand alone.
+ * put adds to its catalog declarations (D-12a). A missing copy, or one with no
+ * manifest, adds nothing, and the catalog declarations stand alone.
+ *
+ * D-PL2-25: a copy that cannot be used -- refused by its boundary (D-PL2-17)
+ * or its owning root (D-PL2-12), or unusable as a manifest -- is the failure
+ * arm that names the record, never "no copy declarations".
  */
 async function installedCopyDeclarations(
   input: Pick<ConvergenceInput, "locations">,
   mp: MarketplaceRecord,
+  plugin: string,
   record: PluginRecord,
-): Promise<readonly AddressedDependency[] | undefined> {
-  const read = await readInstalledCopyDeclaration({
-    pluginRoot: record.resolvedSource,
-    ownerRoot: installedCopyOwnerRoot(record, {
+): Promise<RecordDeclarations> {
+  const read = await readInstalledCopyDeclaration(
+    installedCopyReadOptions(record, {
       marketplaceRoot: mp.marketplaceRoot,
       pluginClonesDir: input.locations.pluginClonesDir,
     }),
-  });
-  if (read.kind !== "found") {
-    return undefined;
+  );
+  switch (read.kind) {
+    case "absent":
+      return NO_COPY_DECLARATIONS;
+    case "unusable":
+      return unusableDeclaration(`${plugin}@${mp.name}`, read);
+    case "found":
+      return {
+        ok: true,
+        declared: read.dependencies.map((dep) => ({
+          ...dep,
+          marketplace: dep.marketplace ?? mp.name,
+        })),
+      };
   }
-
-  return read.dependencies.map((dep) => ({ ...dep, marketplace: dep.marketplace ?? mp.name }));
 }
 
-/** T-29-22: a candidate that cannot be read is skipped, never thrown. */
+/**
+ * T-29-22: a candidate whose move cannot be read is skipped, never thrown.
+ * D-PL2-25: a candidate whose installed copy cannot be used answers the
+ * failure arm instead, and ends the cascade.
+ */
 async function recordMoveIsolated(
   input: ConvergenceInput,
   mp: MarketplaceRecord,
   plugin: string,
   record: PluginRecord,
-): Promise<CandidateMove | undefined> {
+): Promise<CandidateMove | IndexFailure | undefined> {
+  let found: FoundMove | undefined;
   try {
-    const found = await recordMove(input, mp, plugin, record);
-    if (found === undefined) {
-      return undefined;
-    }
-
-    const installed = await installedCopyDeclarations(input, mp, record);
-    return { key: `${plugin}@${mp.name}`, ...found, ...(installed !== undefined && { installed }) };
+    found = await recordMove(input, mp, plugin, record);
   } catch (err) {
     hookDebugLog(
       `planConvergence: skipped ${plugin}@${mp.name}: ${errorMessage(err)}`,
@@ -488,6 +511,15 @@ async function recordMoveIsolated(
     );
     return undefined;
   }
+
+  if (found === undefined) {
+    return undefined;
+  }
+
+  const installed = await installedCopyDeclarations(input, mp, plugin, record);
+  return installed.ok
+    ? { key: `${plugin}@${mp.name}`, ...found, installed: installed.declared }
+    : installed;
 }
 
 /**
@@ -565,7 +597,7 @@ function declarationsWhileBlocked(
   const declarations = new Map(walked);
   for (const { key, installed } of candidates) {
     const catalog = walked.get(key);
-    if (installed === undefined || catalog === undefined || !blocked.has(key)) {
+    if (catalog === undefined || !blocked.has(key)) {
       continue;
     }
 
@@ -645,6 +677,12 @@ function plannedView(input: ConvergenceInput): ExtensionState {
 export interface ConvergenceCascade {
   readonly plan: ConvergencePlan;
   readonly declarations: Declarations;
+  /**
+   * D-PL2-25: the record whose installed copy could not be used, which ended
+   * the cascade with no move. Required but nullable, so no construction site
+   * can leave it out.
+   */
+  readonly installedCopyFailure: IndexFailure | null;
 }
 
 /** The `plugin@marketplace` keys the record `key` declares once the plan lands. */
@@ -696,14 +734,16 @@ function moveKey(move: PlannedMove): string {
  * D-10 / D-06: every catalog move in one scope, offline, as one cascade
  * (APPLY1-01). A scope whose declaration walk cannot be read previews no
  * move, the fail-closed stance `update` takes (D-05-07, D-18-17); the
- * per-session warning names the declarer (REC-05). Disabled records never
- * move (ENBL-08), except the ones `input.enable` names.
+ * per-session warning names the declarer (REC-05). A candidate whose
+ * installed copy cannot be used ends the cascade the same way, and the
+ * result carries its failure (D-PL2-25). Disabled records never move
+ * (ENBL-08), except the ones `input.enable` names.
  */
 export async function planConvergenceCascade(input: ConvergenceInput): Promise<ConvergenceCascade> {
   const view = plannedView(input);
   const walk = await buildScopeDeclarationDetail({ state: view, locations: input.locations });
   if (!walk.ok) {
-    return { plan: NO_CONVERGENCE, declarations: new Map() };
+    return { plan: NO_CONVERGENCE, declarations: new Map(), installedCopyFailure: null };
   }
 
   const candidates: CandidateMove[] = [];
@@ -719,6 +759,10 @@ export async function planConvergenceCascade(input: ConvergenceInput): Promise<C
 
       // eslint-disable-next-line no-await-in-loop -- one offline resolve per record, in the order the moves are reported
       const candidate = await recordMoveIsolated(input, mp, plugin, record);
+      if (candidate !== undefined && "ok" in candidate) {
+        return { plan: NO_CONVERGENCE, declarations: new Map(), installedCopyFailure: candidate };
+      }
+
       if (candidate !== undefined) {
         candidates.push(candidate);
       }
@@ -730,6 +774,7 @@ export async function planConvergenceCascade(input: ConvergenceInput): Promise<C
   return {
     plan: { ...settled, moves: dependenciesFirst(settled.moves, moveKey, landed.declarations) },
     declarations: landed.declarations,
+    installedCopyFailure: null,
   };
 }
 
@@ -1066,8 +1111,10 @@ async function judgePlannedScope(
   const verdict = await judgeFinalScope({
     state: landedView,
     locations: input.locations,
-    installedDeclarations: (mp, record) =>
-      movedRecords.has(record) ? Promise.resolve(undefined) : readCopy(mp, record),
+    installedDeclarations: (mp, plugin, record) =>
+      movedRecords.has(record)
+        ? Promise.resolve(NO_COPY_DECLARATIONS)
+        : readCopy(mp, plugin, record),
     scheduled: plannedInstallKeys(plan),
   });
   const holds = (verdict.ok ? verdict.unsatisfied : []).filter(
@@ -1154,12 +1201,13 @@ export async function isPinnedCopy(
  * APPLY1-01 / DLS-D1: reads what a record's installed copy declares, for the
  * judgement `apply` makes after its cascade. Only a git source keeps a copy of
  * the version it runs (a per-commit copy); a path source's files are the
- * marketplace's, which the catalog read already covers, so it answers
- * `undefined`, as does a copy that cannot be read.
+ * marketplace's, which the catalog read already covers, so it adds no
+ * declarations. A per-commit copy that cannot be used answers the failure arm
+ * that names the record (D-PL2-25).
  */
 export function installedCopyReader(locations: ScopedLocations): InstalledDeclarationsReader {
-  return async (mp, record) =>
+  return async (mp, plugin, record) =>
     (await isPinnedCopy(locations, record.resolvedSource))
-      ? installedCopyDeclarations({ locations }, mp, record)
-      : undefined;
+      ? installedCopyDeclarations({ locations }, mp, plugin, record)
+      : NO_COPY_DECLARATIONS;
 }

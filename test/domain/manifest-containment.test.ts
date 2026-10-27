@@ -9,6 +9,7 @@ import {
   inPlaceManifestBoundary,
   isAbsenceError,
   locateManifestCandidate,
+  sourceManifestBoundary,
 } from "../../extensions/pi-claude-marketplace/domain/manifest-containment.ts";
 
 import type {
@@ -356,6 +357,49 @@ describe("inPlaceManifestBoundary", () => {
       pluginRoot: "/mp/plugins/alpha",
       roots: ["/mp/plugins/alpha", "/mp"],
       label: "plugin directory and its marketplace directory",
+    } satisfies ManifestBoundary);
+  });
+});
+
+describe("sourceManifestBoundary", () => {
+  test("D-PL2-17: reads an unpinned path source in place", () => {
+    // act
+    const boundary = sourceManifestBoundary("./alpha", "/mp/alpha", "/mp", undefined);
+
+    // assert
+    assert.deepStrictEqual(boundary, {
+      pluginRoot: "/mp/alpha",
+      roots: ["/mp/alpha", "/mp"],
+      label: "plugin directory and its marketplace directory",
+    } satisfies ManifestBoundary);
+  });
+
+  test("D-PL2-17: bounds a path source pinned to a tag by its plugin directory", () => {
+    // act
+    const boundary = sourceManifestBoundary("./alpha", "/clones/alpha", "/mp", "2.0.0");
+
+    // assert
+    assert.deepStrictEqual(boundary, {
+      pluginRoot: "/clones/alpha",
+      roots: ["/clones/alpha"],
+      label: "plugin directory",
+    } satisfies ManifestBoundary);
+  });
+
+  test("D-PL2-17: bounds a git source by its plugin directory", () => {
+    // act
+    const boundary = sourceManifestBoundary(
+      { source: "github", repo: "acme/alpha" },
+      "/clones/alpha",
+      "/mp",
+      undefined,
+    );
+
+    // assert
+    assert.deepStrictEqual(boundary, {
+      pluginRoot: "/clones/alpha",
+      roots: ["/clones/alpha"],
+      label: "plugin directory",
     } satisfies ManifestBoundary);
   });
 });

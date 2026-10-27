@@ -29,6 +29,8 @@ import { realpath } from "node:fs/promises";
 import { isErrnoException } from "../shared/errors.ts";
 import { assertPathInside, PathContainmentError } from "../shared/path-safety.ts";
 
+import { parsePluginSource } from "./source.ts";
+
 /** The directories a plugin's manifest may resolve into, and their name. */
 export interface ManifestBoundary {
   /** The plugin directory every candidate is joined under. */
@@ -67,6 +69,24 @@ export function inPlaceManifestBoundary(
     roots: [pluginRoot, marketplaceRoot],
     label: "plugin directory and its marketplace directory",
   };
+}
+
+/**
+ * D-PL2-17: the manifest boundary of the tree a plugin `source` resolved to. An
+ * unpinned `path` source is read in place from its marketplace tree, bounded
+ * by its plugin and marketplace directories. Every git source's tree, and a
+ * `path` tree materialized at a pinned tag (`pin`), is a copy bounded by its
+ * plugin directory.
+ */
+export function sourceManifestBoundary(
+  source: unknown,
+  pluginRoot: string,
+  marketplaceRoot: string,
+  pin: string | undefined,
+): ManifestBoundary {
+  return pin === undefined && parsePluginSource(source).kind === "path"
+    ? inPlaceManifestBoundary(pluginRoot, marketplaceRoot)
+    : copyManifestBoundary(pluginRoot);
 }
 
 /** D-01-06: ENOENT and ENOTDIR mean the candidate does not exist. */

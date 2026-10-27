@@ -18,8 +18,8 @@ import path from "node:path";
 
 import {
   copyManifestBoundary,
-  inPlaceManifestBoundary,
   locateManifestCandidate,
+  sourceManifestBoundary,
 } from "../../domain/manifest-containment.ts";
 import { MANIFEST_CANDIDATES } from "../../domain/manifest-path.ts";
 import { parsePluginSource } from "../../domain/source.ts";
@@ -1192,24 +1192,6 @@ export async function resolveInstalledMarketplaceTarget(opts: {
 }
 
 /**
- * D-PL2-17: the manifest boundary of the tree `entry` resolved to. A `path`
- * source the resolver read in place from its marketplace tree is bounded by
- * its plugin and marketplace directories. Every git source's tree, and a
- * `path` tree materialized at the commit `pathPin`, is a copy bounded by its
- * plugin directory.
- */
-export function sourceTreeBoundary(
-  entry: PluginEntry,
-  pluginRoot: string,
-  marketplaceRoot: string,
-  pathPin: string | undefined,
-): ManifestBoundary {
-  return pathPin === undefined && parsePluginSource(entry.source).kind === "path"
-    ? inPlaceManifestBoundary(pluginRoot, marketplaceRoot)
-    : copyManifestBoundary(pluginRoot);
-}
-
-/**
  * D-01-07 / D-01-11: is this manifest candidate THERE? Only a path that is not
  * there may advance the walk to the next candidate, so a stat this process was
  * not allowed to make (EACCES and friends) counts as present -- it is not
@@ -1342,7 +1324,7 @@ export async function resolveDeclaredPluginVersion(
  * The plugin.json read is re-done here independently (D-23-02): the NFR-7
  * discriminated `ResolvedPluginInstallable` union is NOT widened with a
  * `manifest` field. D-PL2-17: it is bounded as the resolver bounded it, by
- * `sourceTreeBoundary` with no pin.
+ * `sourceManifestBoundary` with no pin.
  */
 export async function resolvePluginVersion(
   entry: PluginEntry,
@@ -1353,7 +1335,12 @@ export async function resolvePluginVersion(
   const source = parsePluginSource(entry.source);
   const declared = await resolveDeclaredPluginVersion(
     entry,
-    sourceTreeBoundary(entry, installable.pluginRoot, marketplace.marketplaceRoot, undefined),
+    sourceManifestBoundary(
+      entry.source,
+      installable.pluginRoot,
+      marketplace.marketplaceRoot,
+      undefined,
+    ),
   );
   if (declared !== undefined) {
     return declaredVersionWithPin(declared, source, marketplace.marketplaceName);

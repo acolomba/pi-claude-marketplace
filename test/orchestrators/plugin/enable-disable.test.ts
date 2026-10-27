@@ -9047,6 +9047,8 @@ test("GIT-01: enable re-materializes the commit the record names", async () => {
     const record = state.marketplaces["mp"]?.plugins["foo"];
     assert.ok(record !== undefined);
     record["resolvedSha"] = recordedSha;
+    // D-PL2-12: a record pinned to a commit owns a copy under the plugin clones.
+    record["resolvedSource"] = path.join(locationsFor("user", cwd).pluginClonesDir, "foo-copy");
     await writeFile(statePath, JSON.stringify(state), "utf8");
     const pins: (string | undefined)[] = [];
     const transaction: EnableDisableTransaction = {
@@ -9094,6 +9096,8 @@ test("GIT-01 / GV-01: enable keeps the release tag version the record holds", as
     assert.ok(record !== undefined);
     record["version"] = "1.2.3-111111111111";
     record["resolvedSha"] = recordedSha;
+    // D-PL2-12: a record pinned to a commit owns a copy under the plugin clones.
+    record["resolvedSource"] = path.join(locationsFor("user", cwd).pluginClonesDir, "foo-copy");
     record["resolvedVersion"] = "1.2.3";
     await writeFile(statePath, JSON.stringify(state), "utf8");
     const pins: (string | undefined)[][] = [];

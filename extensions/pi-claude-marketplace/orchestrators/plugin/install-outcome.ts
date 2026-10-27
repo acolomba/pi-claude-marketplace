@@ -103,6 +103,7 @@ import {
 } from "../../bridges/workflows/index.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import { recordedVersionSatisfies } from "../../domain/dependency-range.ts";
+import { sourceManifestBoundary } from "../../domain/manifest-containment.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import {
   requirePartialInstallable,
@@ -153,7 +154,6 @@ import {
   resolveInstallMarketplaceSource,
   resolvePluginVersion,
   resolveTagPinnedPluginVersion,
-  sourceTreeBoundary,
   type LedgerDegradationSignals,
 } from "./shared.ts";
 
@@ -807,8 +807,8 @@ async function preflightInstallResolve(
   if (opts.directoryPin !== undefined) {
     await assertDirectoryPinSatisfied(
       entry.name,
-      sourceTreeBoundary(
-        entry,
+      sourceManifestBoundary(
+        entry.source,
         resolved.pluginRoot,
         targetMp.marketplaceRoot,
         opts.sourcePinOverride,

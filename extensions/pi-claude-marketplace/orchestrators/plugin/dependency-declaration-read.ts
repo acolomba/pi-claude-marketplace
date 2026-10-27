@@ -44,7 +44,7 @@
 // Neither failure is this module's to classify; all it decides is whether a
 // manifest can be opened.
 
-import { readFile, realpath, stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { parseDeclaredDependencies } from "../../domain/dependencies.ts";
@@ -54,11 +54,12 @@ import {
   inPlaceManifestBoundary,
   isAbsenceError,
   locateManifestCandidate,
+  sourceManifestBoundary,
 } from "../../domain/manifest-containment.ts";
 import { MANIFEST_CANDIDATES } from "../../domain/manifest-path.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { isErrnoException } from "../../shared/errors.ts";
-import { assertPathInside, PathContainmentError } from "../../shared/path-safety.ts";
+import { assertPathInside } from "../../shared/path-safety.ts";
 
 import { makePresenceProbe } from "./git-source-probe.ts";
 
@@ -291,16 +292,18 @@ async function readBoundedCandidate(
   }
 }
 
-/** Walks the shared candidate ordering under one plugin root, each read by `readCandidate`. */
+/** Walks the shared candidate ordering under the boundary's plugin root (D-PL2-24). */
 async function readOwnManifest(
   reader: DependencyDeclarationReader,
-  pluginRoot: string,
-  readCandidate: (absPath: string) => Promise<OwnManifestRead | undefined> = (absPath) =>
-    readManifestCandidate(reader, absPath),
+  boundary: ManifestBoundary,
 ): Promise<OwnManifestRead> {
   for (const candidate of MANIFEST_CANDIDATES) {
     // eslint-disable-next-line no-await-in-loop -- the first existing manifest candidate decides the read
-    const read = await readCandidate(path.join(pluginRoot, candidate));
+    const read = await readBoundedCandidate(
+      reader,
+      boundary,
+      path.join(boundary.pluginRoot, candidate),
+    );
     if (read !== undefined) {
       return read;
     }
@@ -332,12 +335,7 @@ export async function readDependencyDeclaration(
 ): Promise<DeclarationLookupResult | OwnManifestRefusal> {
   const reader = options.reader ?? REAL_DEPENDENCY_DECLARATION_READER;
   const boundary = await resolvePluginRootFsOnly(reader, options);
-  const own =
-    boundary === undefined
-      ? ABSENT
-      : await readOwnManifest(reader, boundary.pluginRoot, (absPath) =>
-          readBoundedCandidate(reader, boundary, absPath),
-        );
+  const own = boundary === undefined ? ABSENT : await readOwnManifest(reader, boundary);
   if (own.kind === "unusable" && options.refuseUnusableOwnManifest !== undefined) {
     return OWN_MANIFEST_REFUSAL;
   }
@@ -354,42 +352,74 @@ export async function readDependencyDeclaration(
  * the update lands -- a release tag's copy when a range chose one -- in the
  * D-01-32 order: the tree's own manifest, else the marketplace entry. The
  * catalog read reads the marketplace's head, which can be another version.
+ *
+ * D-PL2-24 / D-PL2-17: the manifest is read inside the boundary the candidate
+ * tree was resolved with: a copy for a git candidate or a tag-pinned one, else
+ * in place with its marketplace root. A link that leaves it, or cannot be resolved, is a
+ * present-but-unusable manifest, so the entry answers (D-01-07). The update's
+ * resolver has already refused such a tree; this read is defence in depth.
  */
 export async function readCandidateDeclaration(options: {
   /** The resolved candidate's plugin root. */
   readonly pluginRoot: string;
   readonly entry: ManifestPluginEntry;
+  /**
+   * The marketplace record the candidate is offered by, which bounds a `path`
+   * tree read in place; a candidate with none is read as a copy.
+   */
+  readonly marketplace: { readonly marketplaceRoot: string } | undefined;
+  /** The release tag a range pinned the candidate to, which makes a `path` tree a copy. */
+  readonly pin: string | undefined;
   /** Filesystem seam; production omits it and reads real disk. */
   readonly reader?: DependencyDeclarationReader;
 }): Promise<DeclarationLookupResult> {
   const reader = options.reader ?? REAL_DEPENDENCY_DECLARATION_READER;
-  const own = await readOwnManifest(reader, options.pluginRoot);
+  const boundary =
+    options.marketplace === undefined
+      ? copyManifestBoundary(options.pluginRoot)
+      : sourceManifestBoundary(
+          options.entry.source,
+          options.pluginRoot,
+          options.marketplace.marketplaceRoot,
+          options.pin,
+        );
+  const own = await readOwnManifest(reader, boundary);
   const declared = own.kind === "readable" ? own.dependencies : options.entry.dependencies;
   return toClosureLookupResult(parseDeclaredDependencies(declared));
 }
 
 /**
- * NFR-10 / D-PL2-12: the one clone root that owns a record's installed copy. A
- * record with `resolvedSha` installed a per-commit clone under `plugin-clones/`
- * -- every git source, and a tag-pinned path-source dependency -- and one
- * without it runs the marketplace clone's files. Records carry no source kind,
- * and a delisted git record no longer has the catalog source its clone key
- * hashes, so the whole `plugin-clones/` is the narrowest root it can be given.
+ * NFR-10 / D-PL2-17: how to read a record's installed copy. A record with
+ * `resolvedSha` installed a per-commit clone under `plugin-clones/` -- every
+ * git source, and a tag-pinned path-source dependency -- so its copy is
+ * bounded by its plugin directory, as Claude Code bounds a cached copy. One
+ * without it runs the marketplace clone's files in place, bounded by its
+ * plugin and marketplace directories.
+ *
+ * D-PL2-12: the owning root is the one clone root the copy must sit in. Records
+ * carry no source kind, and a delisted git record no longer has the catalog
+ * source its clone key hashes, so the whole `plugin-clones/` is the narrowest
+ * root a per-commit copy can be given.
  */
-export function installedCopyOwnerRoot(
-  record: { readonly resolvedSha?: string },
+export function installedCopyReadOptions(
+  record: { readonly resolvedSource: string; readonly resolvedSha?: string },
   roots: { readonly marketplaceRoot: string; readonly pluginClonesDir: string },
-): string {
-  return record.resolvedSha === undefined ? roots.marketplaceRoot : roots.pluginClonesDir;
+): Pick<InstalledCopyDeclarationReadOptions, "boundary" | "ownerRoot"> {
+  return record.resolvedSha === undefined
+    ? {
+        boundary: inPlaceManifestBoundary(record.resolvedSource, roots.marketplaceRoot),
+        ownerRoot: roots.marketplaceRoot,
+      }
+    : { boundary: copyManifestBoundary(record.resolvedSource), ownerRoot: roots.pluginClonesDir };
 }
 
 /** Inputs of one read of an installed copy. */
 export interface InstalledCopyDeclarationReadOptions {
-  /** The record's `resolvedSource`: the plugin root its install materialized. */
-  readonly pluginRoot: string;
+  /** The boundary of the record's `resolvedSource`, the plugin root its install materialized. */
+  readonly boundary: ManifestBoundary;
   /**
-   * NFR-10 / D-PL2-12: the one clone root that owns the record, from
-   * `installedCopyOwnerRoot`. A copy anywhere else is never opened.
+   * NFR-10 / D-PL2-12: the one clone root that owns the record. A copy
+   * anywhere else is never opened.
    */
   readonly ownerRoot: string;
   /** Filesystem seam; production omits it and reads real disk. */
@@ -401,92 +431,18 @@ export interface InstalledCopyAbsent {
   readonly kind: "absent";
 }
 
-/** What `assertPathInside` answers for `child` under `parent`. */
-type Containment = "admitted" | "refused" | "unusable";
-
 /**
- * WR-03: only a containment refusal (a symlink, a traversal, a path outside)
- * is `refused`. An ENOTDIR from its lstat walk is `admitted`, because the read
- * itself answers it as absence, and every other fault of the walk (EACCES,
- * EIO) is `unusable`, so the read fails closed (D-05-07).
+ * NFR-10 / D-PL2-12: whether the copy root sits under its owning root. An
+ * ENOTDIR from the lstat walk admits it, because the read itself answers that
+ * as absence (WR-03); a containment refusal and every other fault of the walk
+ * do not.
  */
-async function containment(parent: string, child: string, label: string): Promise<Containment> {
+async function copyRootAdmitted(ownerRoot: string, pluginRoot: string): Promise<boolean> {
   try {
-    await assertPathInside(parent, child, label);
-    return "admitted";
+    await assertPathInside(ownerRoot, pluginRoot, "installed plugin copy");
+    return true;
   } catch (err) {
-    if (err instanceof PathContainmentError) {
-      return "refused";
-    }
-
-    return isErrnoException(err) && err.code === "ENOTDIR" ? "admitted" : "unusable";
-  }
-}
-
-/** The read a copy-root check that did not admit the copy answers (D-PL2-12). */
-const NOT_ADMITTED: Readonly<Record<Exclude<Containment, "admitted">, OwnManifestRead>> = {
-  refused: ABSENT,
-  unusable: UNUSABLE,
-};
-
-/**
- * D-PL2-13 / D-PL2-17: a manifest candidate reached through a symlink, read
- * only when its fully resolved target stays inside the record's owning root.
- *
- * Both paths are resolved, so an owning root under a linked ancestor still
- * contains its own files. A resolution that fails as absence (a dangling link,
- * or a target path that runs through a regular file) is no manifest, and the
- * walk goes on. Any other failure (a loop, EACCES) and a target outside the
- * owning root answer `unusable`.
- *
- * The read opens the resolved target, never the spelled link, so swapping the
- * link after the check cannot redirect it. The containment walk over the
- * target refuses a link planted on it before the walk. The window between the
- * walk and the open is the one `createPathSafetyGuard` documents.
- */
-async function readLinkedCandidate(
-  reader: DependencyDeclarationReader,
-  ownerRoot: string,
-  candidate: string,
-): Promise<OwnManifestRead | undefined> {
-  let realOwnerRoot: string;
-  let target: string;
-  try {
-    realOwnerRoot = await realpath(ownerRoot);
-    target = await realpath(candidate);
-  } catch (err) {
-    return isAbsenceError(err) ? undefined : UNUSABLE;
-  }
-
-  const answer = await containment(realOwnerRoot, target, "installed plugin manifest target");
-  return answer === "admitted" ? readManifestCandidate(reader, target) : UNUSABLE;
-}
-
-/**
- * NFR-10: one manifest candidate of an installed copy. A candidate with no
- * symlink from the copy's root down to it is read in place. One reached
- * through a symlink is read from its resolved target when that target stays
- * inside the owning root (D-PL2-13), and is refused as `unusable` when it
- * leaves it (D-PL2-17), which ends the walk (D-01-07).
- *
- * The boundary is the owning root, by decision. Claude Code uses the plugin
- * directory for a cached copy, and the plugin and marketplace directories for
- * a plugin it loads in place.
- */
-async function readContainedCandidate(
-  reader: DependencyDeclarationReader,
-  ownerRoot: string,
-  pluginRoot: string,
-  absPath: string,
-): Promise<OwnManifestRead | undefined> {
-  const answer = await containment(pluginRoot, absPath, "installed plugin manifest");
-  switch (answer) {
-    case "admitted":
-      return readManifestCandidate(reader, absPath);
-    case "refused":
-      return readLinkedCandidate(reader, ownerRoot, absPath);
-    case "unusable":
-      return UNUSABLE;
+    return isErrnoException(err) && err.code === "ENOTDIR";
   }
 }
 
@@ -494,28 +450,24 @@ async function readContainedCandidate(
  * DLS-01 / DLS-D1: what an installed plugin declares, read from the copy on
  * disk -- the version actually installed. Pi keeps a plugin its marketplace no
  * longer lists running, so it keeps the dependencies it runs with. There is no
- * entry to fall back on: a copy with no manifest, a missing copy, or a
- * recorded root outside the record's owning clone root (NFR-10, D-PL2-12)
- * answers `absent`, and the caller decides what that means.
+ * entry to fall back on: a copy with no manifest, or a missing copy, answers
+ * `absent`, and the caller decides what that means.
  *
- * A manifest reached through a symlink is read from its resolved target when
- * that target stays inside the owning root (D-PL2-13). One that leaves it or
- * cannot be resolved (D-PL2-17), a present-but-unusable manifest, and a copy
- * whose containment check cannot inspect a path segment all answer the same
- * refusal `refuseUnusableOwnManifest` gives.
+ * D-PL2-17: each manifest candidate is read inside the record's boundary from
+ * `installedCopyReadOptions`, which is Claude Code's boundary, not the owning
+ * root. A link that resolves inside it is read at its target; a dangling link
+ * is no manifest. A link that leaves it or cannot be resolved, a
+ * present-but-unusable manifest, a copy whose containment check cannot inspect
+ * a path segment, and a recorded root outside the owning root (D-PL2-12) all
+ * answer the same refusal `refuseUnusableOwnManifest` gives.
  */
 export async function readInstalledCopyDeclaration(
   options: InstalledCopyDeclarationReadOptions,
 ): Promise<DeclarationLookupResult | OwnManifestRefusal | InstalledCopyAbsent> {
   const reader = options.reader ?? REAL_DEPENDENCY_DECLARATION_READER;
-  const { pluginRoot } = options;
-  const copy = await containment(options.ownerRoot, pluginRoot, "installed plugin copy");
-  const own =
-    copy === "admitted"
-      ? await readOwnManifest(reader, pluginRoot, (absPath) =>
-          readContainedCandidate(reader, options.ownerRoot, pluginRoot, absPath),
-        )
-      : NOT_ADMITTED[copy];
+  const own = (await copyRootAdmitted(options.ownerRoot, options.boundary.pluginRoot))
+    ? await readOwnManifest(reader, options.boundary)
+    : UNUSABLE;
   switch (own.kind) {
     case "absent":
       return { kind: "absent" };
