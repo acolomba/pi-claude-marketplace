@@ -279,6 +279,7 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
     locations: resolved.locations,
     gitOps,
     credentialOps,
+    reportedDependencies: new Set(),
     ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     ...(opts.pluginUpdate !== undefined && { pluginUpdate: opts.pluginUpdate }),
     ...(opts.installMissingDependencies !== undefined && {
@@ -321,6 +322,9 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
     return;
   }
 
+  // WR-04: one set for the whole command, so a dependency that two
+  // autoupdated marketplaces of one scope declare is tried and reported once.
+  const reportedDependencies = new Set<string>();
   // Process sequentially.
   for (const t of targets) {
     // eslint-disable-next-line no-await-in-loop -- each refresh locks the scope and notifies in order
@@ -335,6 +339,7 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
       locations: t.locations,
       gitOps,
       credentialOps,
+      reportedDependencies,
       ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
       ...(opts.pluginUpdate !== undefined && { pluginUpdate: opts.pluginUpdate }),
       ...(opts.installMissingDependencies !== undefined && {
@@ -356,10 +361,20 @@ interface RefreshOneArgs {
   readonly gitOps: GitOps;
   readonly pluginUpdate?: PluginUpdateFn;
   readonly installMissingDependencies?: ScopeDependencyInstallFn;
+  /**
+   * D-PL2-01 / WR-04: the dependency rows this command already reported, as
+   * `dependencyRowKey` keys. The missing-dependency step adds its own.
+   */
+  readonly reportedDependencies: Set<string>;
   readonly run: NotificationRun;
   readonly credentialOps: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly stateTransaction?: LockedStateTransactionDeps;
+}
+
+/** A dependency row's key in `reportedDependencies`: the same key in two scopes is two installs. */
+function dependencyRowKey(scope: Scope, name: string): string {
+  return `${scope}:${name}`;
 }
 
 /**
@@ -663,29 +678,39 @@ async function cascadeAutoupdates(
  * D-PL2-10: the missing-dependency step after an autoupdate, in the
  * marketplace's scope, for missing dependencies that a plugin of this
  * marketplace declares, as Claude Code limits it to declarers whose
- * marketplace has autoupdate on (E1). A dependency an update of this cascade
- * already reported a row for is not tried again, so one command reports one
- * row per dependency (D-PL2-01).
+ * marketplace has autoupdate on (E1). A dependency this command already
+ * reported a row for, in an update of any cascade or in an earlier step, is
+ * not tried again, so one command reports one row per dependency (D-PL2-01,
+ * WR-04).
  */
 async function installAutoupdateDependencies(
   args: RefreshOneArgs,
   outcomes: readonly PluginUpdateOutcome[],
 ): Promise<ScopeDependencyInstallResult> {
-  const { installMissingDependencies, name } = args;
+  const { installMissingDependencies, name, reportedDependencies, scope } = args;
+  for (const row of outcomes.flatMap((o) => o.dependencyRows ?? [])) {
+    reportedDependencies.add(dependencyRowKey(scope, row.name));
+  }
+
   if (installMissingDependencies === undefined) {
     return NO_DEPENDENCY_INSTALLS;
   }
 
-  const reported = new Set(outcomes.flatMap((o) => (o.dependencyRows ?? []).map((r) => r.name)));
-  return installMissingDependencies({
+  const installs = await installMissingDependencies({
     ctx: args.ctx,
     run: args.run,
-    scope: args.scope,
+    scope,
     cwd: args.cwd,
     select: (install) =>
-      !reported.has(`${install.plugin}@${install.marketplace}`) &&
-      install.declarers.some((declarer) => declarer.endsWith(`@${name}`)),
+      !reportedDependencies.has(
+        dependencyRowKey(scope, `${install.plugin}@${install.marketplace}`),
+      ) && install.declarers.some((declarer) => declarer.endsWith(`@${name}`)),
   });
+  for (const row of installs.rows) {
+    reportedDependencies.add(dependencyRowKey(scope, row.name));
+  }
+
+  return installs;
 }
 
 /**

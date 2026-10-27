@@ -6234,6 +6234,89 @@ test("D-PL2-10: an update with no plugin-update seam runs no missing-dependency 
   });
 });
 
+test("D-PL2-01 / WR-04: a bare update tries a dependency two autoupdated marketplaces of one scope declare once, and again in the other scope", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedDependencyStepMarketplace(cwd, true);
+    const moreRoot = path.join(cwd, "more-marketplace");
+    await cp(fixtureMarketplaceDir("valid-marketplace"), moreRoot, { recursive: true });
+    const project = locationsFor("project", cwd);
+    const state = await loadState(project.extensionRoot);
+    const depsRecord = state.marketplaces["deps-mp"];
+    assert.ok(depsRecord !== undefined);
+    state.marketplaces["more-mp"] = {
+      ...depsRecord,
+      name: "more-mp",
+      source: pathSource(moreRoot),
+      manifestPath: path.join(moreRoot, ".claude-plugin", "marketplace.json"),
+      marketplaceRoot: moreRoot,
+    };
+    await saveState(project.extensionRoot, state);
+    await saveConfig(
+      project.baseConfigJsonPath,
+      {
+        schemaVersion: 1,
+        marketplaces: {
+          "deps-mp": { source: path.join(cwd, "deps-marketplace"), autoupdate: true },
+          "more-mp": { source: moreRoot, autoupdate: true },
+        },
+      },
+      project.scopeRoot,
+    );
+    const userRoot = path.join(cwd, "user-marketplace");
+    await cp(fixtureMarketplaceDir("valid-marketplace"), userRoot, { recursive: true });
+    await seedPathMarketplace({
+      cwd,
+      name: "deps-mp",
+      marketplaceRoot: userRoot,
+      scope: "user",
+      autoupdate: true,
+      plugins: { alpha: makePluginRecord() },
+    });
+    const { ctx, run } = makeCtx();
+    const selected: { readonly scope: Scope; readonly selected: boolean }[] = [];
+    const installMissingDependencies: ScopeDependencyInstallFn = (request) => {
+      const lib = request.select({
+        plugin: "lib",
+        marketplace: "shared",
+        declarers: ["alpha@deps-mp", "alpha@more-mp"],
+      });
+      selected.push({ scope: request.scope, selected: lib });
+      return Promise.resolve({
+        rows: lib
+          ? [
+              {
+                status: "failed",
+                name: "lib@shared",
+                reasons: [],
+                severity: "error",
+                needsReload: false,
+              },
+            ]
+          : [],
+        mcpConfigNotices: [],
+      });
+    };
+
+    // act
+    await updateAllMarketplaces({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      cwd,
+      pluginUpdate: recordingPluginUpdate("unchanged", []),
+      installMissingDependencies,
+    });
+
+    // assert
+    assert.deepStrictEqual(selected, [
+      { scope: "project", selected: true },
+      { scope: "project", selected: false },
+      { scope: "user", selected: true },
+    ]);
+  });
+});
+
 test("D-PL2-10: updateAllMarketplaces forwards the missing-dependency step to each autoupdate cascade", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
