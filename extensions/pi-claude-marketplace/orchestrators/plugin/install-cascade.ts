@@ -371,6 +371,11 @@ interface MemberConstraintOptions {
    * is a recorded member a plan moves; the rest install fresh.
    */
   readonly closure: readonly ClosureMember[];
+  /** What each plugin the walk found declares, as `recordingLookup` recorded it. */
+  readonly declared: ReadonlyMap<
+    string,
+    readonly { readonly key: string; readonly range?: string }[]
+  >;
   /** UPD-DEP-D1: the recorded ENABLED keys a dependency plan moves. */
   readonly readThrough: ReadonlySet<string>;
   /**
@@ -946,18 +951,30 @@ function effectiveRanges(
 
 /**
  * GV-01: the plugins a member's ranges came from, as Claude Code names them
- * when a plugin directory copy falls outside them: the caller's requirers for
- * the root (MISS-01), else the plugin whose declaration reached the member.
+ * when a plugin directory copy falls outside them. The root gets the caller's
+ * requirers (MISS-01). Any other member gets every cascade member that
+ * declared a range on it, nearest the requested plugin first, which is the
+ * reverse of the closure's post order (D-PL3-08). An installed plugin outside
+ * the closure is not named, because D-03-10 keeps its range out of the walk
+ * and out of the check (D-PL3-13).
  */
 function rangeRequirers(
   options: MemberConstraintOptions,
   member: ClosureMember,
 ): readonly string[] {
-  if (member.key === options.rootKey && options.rootRequiredBy !== undefined) {
-    return options.rootRequiredBy;
+  if (member.key === options.rootKey) {
+    return options.rootRequiredBy ?? [];
   }
 
-  return member.requiredBy === undefined ? [] : [member.requiredBy];
+  const declarers = new Set(
+    requestersOf(options.declared, member.key)
+      .filter((requester) => requester.ranges.length > 0)
+      .map((requester) => requester.key),
+  );
+  return [...options.closure]
+    .reverse()
+    .filter((declarer) => declarers.has(declarer.key))
+    .map((declarer) => declarer.key);
 }
 
 /**
@@ -1606,6 +1623,7 @@ async function resolveCascade(
     state: options.state,
     rootKey: options.rootKey,
     closure: closure.closure,
+    declared,
     readThrough,
     alreadyInstalled: closure.alreadyInstalled,
     ledgerOptionsFor: options.ledgerOptionsFor,
@@ -1797,7 +1815,10 @@ function unmaterialized(
 }
 
 /** Every plugin the walk read that declares `key`, with the ranges it declares, in walk order. */
-function requestersOf(declared: DeclaredEdges, key: string): GraphRequester[] {
+function requestersOf(
+  declared: ReadonlyMap<string, readonly { readonly key: string; readonly range?: string }[]>,
+  key: string,
+): GraphRequester[] {
   const requesters: GraphRequester[] = [];
   for (const [declarer, edges] of declared) {
     const toKey = edges.filter((edge) => edge.key === key);

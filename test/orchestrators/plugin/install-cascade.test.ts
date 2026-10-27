@@ -1553,6 +1553,92 @@ test("GV-01: a constrained plugin directory member makes no tag query and carrie
   );
 });
 
+const PLUGIN_DIRECTORY = "anthropic-plugin-directory";
+
+for (const { label, graph, materializedPins } of [
+  {
+    label: "names every member that declared a range on it, nearest the requested plugin first",
+    graph: {
+      [`foo@${MARKETPLACE}`]: [
+        { name: "a", marketplace: MARKETPLACE },
+        { name: "b", marketplace: MARKETPLACE },
+      ],
+      [`a@${MARKETPLACE}`]: [{ name: "dirp", marketplace: PLUGIN_DIRECTORY, version: "^1.0.0" }],
+      [`b@${MARKETPLACE}`]: [{ name: "dirp", marketplace: PLUGIN_DIRECTORY, version: ">=1.0.0" }],
+      [`dirp@${PLUGIN_DIRECTORY}`]: [],
+    },
+    materializedPins: [
+      [
+        "dirp",
+        {
+          range: ">=1.0.0 <2.0.0-0 >=1.0.0",
+          declared: "^1.0.0, >=1.0.0",
+          requiredBy: [`b@${MARKETPLACE}`, `a@${MARKETPLACE}`],
+        },
+      ],
+      ["a", undefined],
+      ["b", undefined],
+      ["foo", undefined],
+    ],
+  },
+  {
+    label: "does not name a member that declared it with no range",
+    graph: {
+      [`foo@${MARKETPLACE}`]: [
+        { name: "a", marketplace: MARKETPLACE },
+        { name: "c", marketplace: MARKETPLACE },
+      ],
+      [`a@${MARKETPLACE}`]: [{ name: "dirp", marketplace: PLUGIN_DIRECTORY, version: "^1.0.0" }],
+      [`c@${MARKETPLACE}`]: [{ name: "dirp", marketplace: PLUGIN_DIRECTORY }],
+      [`dirp@${PLUGIN_DIRECTORY}`]: [],
+    },
+    materializedPins: [
+      ["dirp", { range: ">=1.0.0 <2.0.0-0", declared: "^1.0.0", requiredBy: [`a@${MARKETPLACE}`] }],
+      ["a", undefined],
+      ["c", undefined],
+      ["foo", undefined],
+    ],
+  },
+]) {
+  test(`GV-01 / D-PL3-08: a plugin directory member's range ${label}`, async (t) => {
+    // arrange
+    const environment = await createHermeticEnvironment(t, "install-cascade-directory-declarers-");
+    const state = await seedMarketplace(environment.cwd, ["foo"]);
+    const locations = locationsFor("project", environment.cwd);
+    const materialized: InstallLedgerOptions[] = [];
+    const seen: DependencyTagProbeOptions[] = [];
+    const baseOptions = ledgerOptionsFor(environment.cwd);
+
+    // act
+    const cascade = await runInstallCascade({
+      state,
+      locations,
+      rootKey: `foo@${MARKETPLACE}`,
+      lookup: catalog(graph),
+      ledgerOptionsFor: (member) => ({
+        ...baseOptions(member),
+        ...(member.directoryPin !== undefined && { directoryPin: member.directoryPin }),
+      }),
+      rootAllowedMarketplaces: new Set([PLUGIN_DIRECTORY]),
+      installedKeys: new Set(),
+      knownMarketplaces: new Set([MARKETPLACE, PLUGIN_DIRECTORY]),
+      seam: recordingLedgerSeam(environment.cwd, locations, materialized),
+      tagProbe: tagProbeAnswering(
+        { kind: "pinned", tag: "dirp--v1.4.0", oid: PINNED_OID, version: "1.4.0" },
+        seen,
+      ),
+    });
+
+    // assert
+    assert.strictEqual(cascade.kind, "installed");
+    assert.deepStrictEqual(seen, []);
+    assert.deepStrictEqual(
+      materialized.map((options) => [options.plugin, options.directoryPin]),
+      materializedPins,
+    );
+  });
+}
+
 for (const { label, rootRequiredBy, requiredBy } of [
   { label: "names no requirer", rootRequiredBy: undefined, requiredBy: [] },
   {
