@@ -1255,6 +1255,7 @@ void test("D-18-04: refresh: false refreshes a declared ref the mirror never fet
     networkUrl: "https://example.com/repo",
     ref: "dev",
     gitOps,
+    resolveTagOid: () => Promise.reject(gitNotFound("refs/tags/dev")),
     refresh: false,
   });
 
@@ -1307,6 +1308,53 @@ void test("GLK-08 / D-PL7-10: refresh: false answers a declared tag from the mir
     },
   );
 });
+
+for (const { title, resolveTagOid } of [
+  {
+    title: "a declared ref the mirror holds no tag for",
+    resolveTagOid: () => Promise.reject(gitNotFound("refs/tags/v2.0.0")),
+  },
+  {
+    title: "a declared tag that names no commit",
+    resolveTagOid: () => Promise.resolve(undefined),
+  },
+]) {
+  void test(`GLK-08 / D-PL7-10: refresh: false refreshes ${title}, as a cache miss`, async (t) => {
+    // arrange
+    const tagSha = "fedcba9876543210fedcba9876543210fedcba98";
+    const auth = publicCloneAuth();
+    const locations = await freshLocations(t);
+    const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
+    await mkdir(mirrorRoot, { recursive: true });
+    const { gitOps, state } = createGitOps({
+      head: MIRROR_HEAD,
+      localRefs: { "refs/heads/main": MIRROR_HEAD },
+      remoteRefs: { "v2.0.0": tagSha },
+    });
+
+    // act
+    const mirror = await materializeOrRefreshPluginMirror({
+      auth,
+      locations,
+      cloneUrl: "https://example.com/repo",
+      networkUrl: "https://example.com/repo",
+      ref: "v2.0.0",
+      gitOps,
+      resolveTagOid,
+      refresh: false,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      { mirror, clones: state.cloneCalls, fetches: state.fetchCalls },
+      {
+        mirror: { pluginRoot: mirrorRoot, resolvedSha: tagSha },
+        clones: [],
+        fetches: [{ dir: mirrorRoot, remote: "origin", ref: "v2.0.0", auth }],
+      },
+    );
+  });
+}
 
 void test("GLK-08 / D-PL7-10: refresh: false propagates a local tag read that fails for a reason other than a missing tag", async (t) => {
   // arrange
