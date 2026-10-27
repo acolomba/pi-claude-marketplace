@@ -36,10 +36,11 @@
 // time spends it on a candidate the user is watching; this walk spends it on a
 // dependent that is installed and working. The load only reports it and
 // changes nothing (APL-D1); `apply` disables the dependent, with a remedy
-// naming a semver version the dependency does not have. The behaviour is kept -- the walk is not the place to special-case one version
-// form the single evaluator accepts -- and `docs/dependency-resolution.md`
-// describes the case under "The load-time check" so an operator who hits it
-// can recognize it.
+// naming a semver version the dependency does not have. The behaviour is
+// kept -- the walk is not the place to special-case one version form the
+// single evaluator accepts -- and `docs/dependency-resolution.md` describes
+// the case under "The load-time check" so an operator who hits it can
+// recognize it.
 //
 // D-05-07: the walk inherits the declaration read's fail-closed posture. A
 // declarer whose manifest cannot be read ends the walk with the typed failure

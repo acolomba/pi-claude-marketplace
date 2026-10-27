@@ -1003,7 +1003,7 @@ test("D-PL2-17: an installed copy whose manifest links outside its owning root i
   // act
   const read = await readPathRecordCopy(pluginRoot, root);
 
-  // assert: the bare manifest is not read in its place
+  // assert
   assert.deepStrictEqual(read, ownManifestRefusal());
 });
 

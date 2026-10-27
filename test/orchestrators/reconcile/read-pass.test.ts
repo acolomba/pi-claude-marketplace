@@ -504,7 +504,6 @@ describe("readPassForScope", () => {
   });
 });
 
-/** Fresh accumulators for one pass over both scopes. */
 describe("readPlainPlanForScope", () => {
   test("WR-05: a scope with neither a state file nor a config returns no plan and creates nothing", async (t) => {
     // arrange
@@ -620,6 +619,7 @@ describe("readPlainPlanForScope", () => {
   });
 });
 
+/** Fresh accumulators for one pass over both scopes. */
 function accumulators(): ScopePassAccumulators {
   return { outcomes: [], migration: { rows: [], notices: [] } };
 }

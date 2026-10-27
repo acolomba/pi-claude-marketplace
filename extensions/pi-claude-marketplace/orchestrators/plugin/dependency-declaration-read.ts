@@ -355,9 +355,10 @@ export async function readDependencyDeclaration(
  *
  * D-PL2-24 / D-PL2-17: the manifest is read inside the boundary the candidate
  * tree was resolved with: a copy for a git candidate or a tag-pinned one, else
- * in place with its marketplace root. A link that leaves it, or cannot be resolved, is a
- * present-but-unusable manifest, so the entry answers (D-01-07). The update's
- * resolver has already refused such a tree; this read is defence in depth.
+ * in place with its marketplace root. A link that leaves it, or cannot be
+ * resolved, is a present-but-unusable manifest, so the entry answers
+ * (D-01-07). The update's resolver has already refused such a tree; this read
+ * is defence in depth.
  */
 export async function readCandidateDeclaration(options: {
   /** The resolved candidate's plugin root. */

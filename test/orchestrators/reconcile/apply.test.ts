@@ -9633,9 +9633,15 @@ describe("createScopeDependencyInstall", () => {
     select: (install: { readonly plugin: string; readonly marketplace: string }) => boolean,
   ): Promise<ScopeDependencyInstallResult> {
     const { ctx, verifyBoundary } = createNotificationBoundary(0);
-    const result = await step({ ctx, run: runWithNothingLoaded(), scope: "project", cwd, select });
+    const scopeInstall = await step({
+      ctx,
+      run: runWithNothingLoaded(),
+      scope: "project",
+      cwd,
+      select,
+    });
     verifyBoundary();
-    return result;
+    return scopeInstall;
   }
 
   test("installs a selected missing dependency and reports it by its full key", async (t) => {
@@ -9647,14 +9653,14 @@ describe("createScopeDependencyInstall", () => {
     const selected: string[] = [];
 
     // act
-    const result = await runStep(scopeDependencyInstall(), cwd, (install) => {
+    const scopeInstall = await runStep(scopeDependencyInstall(), cwd, (install) => {
       selected.push(`${install.plugin}@${install.marketplace}`);
       return true;
     });
 
     // assert
     assert.deepStrictEqual(selected, ["secrets-vault@mp"]);
-    assert.deepStrictEqual(result, {
+    assert.deepStrictEqual(scopeInstall, {
       rows: [
         {
           status: "installed",
@@ -9681,10 +9687,10 @@ describe("createScopeDependencyInstall", () => {
     });
 
     // act
-    const result = await runStep(scopeDependencyInstall(), cwd, () => false);
+    const scopeInstall = await runStep(scopeDependencyInstall(), cwd, () => false);
 
     // assert
-    assert.deepStrictEqual(result, { rows: [], mcpConfigNotices: [] });
+    assert.deepStrictEqual(scopeInstall, { rows: [], mcpConfigNotices: [] });
     assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
   });
 
@@ -9693,10 +9699,10 @@ describe("createScopeDependencyInstall", () => {
     const { cwd, project } = await createHermeticScopes(t, "scope-step-pristine");
 
     // act
-    const result = await runStep(scopeDependencyInstall(), cwd, () => true);
+    const scopeInstall = await runStep(scopeDependencyInstall(), cwd, () => true);
 
     // assert
-    assert.deepStrictEqual(result, { rows: [], mcpConfigNotices: [] });
+    assert.deepStrictEqual(scopeInstall, { rows: [], mcpConfigNotices: [] });
     assert.equal(await pathExists(project.stateJsonPath), false);
   });
 
@@ -9706,10 +9712,10 @@ describe("createScopeDependencyInstall", () => {
     await writeUnder(project.baseConfigJsonPath, "{");
 
     // act
-    const result = await runStep(scopeDependencyInstall(), cwd, () => true);
+    const scopeInstall = await runStep(scopeDependencyInstall(), cwd, () => true);
 
     // assert
-    assert.deepStrictEqual(result, { rows: [], mcpConfigNotices: [] });
+    assert.deepStrictEqual(scopeInstall, { rows: [], mcpConfigNotices: [] });
   });
 
   test("D-PL2-11: a refused install reports the failed row apply reports, with its cause", async (t) => {
@@ -9720,10 +9726,10 @@ describe("createScopeDependencyInstall", () => {
     });
 
     // act
-    const result = await runStep(scopeDependencyInstall(), cwd, () => true);
+    const scopeInstall = await runStep(scopeDependencyInstall(), cwd, () => true);
 
     // assert
-    const [row, ...rest] = result.rows;
+    const [row, ...rest] = scopeInstall.rows;
     assert.deepStrictEqual(rest, []);
     assert.equal(row?.status, "failed");
     const { cause, ...fields } = row;
@@ -9735,7 +9741,7 @@ describe("createScopeDependencyInstall", () => {
       needsReload: false,
     });
     assert.equal(cause?.message, 'Dependency "crypto-core@mp" is not declared by its marketplace.');
-    assert.deepStrictEqual(result.mcpConfigNotices, []);
+    assert.deepStrictEqual(scopeInstall.mcpConfigNotices, []);
     assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
   });
 
@@ -9760,10 +9766,10 @@ describe("createScopeDependencyInstall", () => {
       const step = scopeDependencyInstall({ loadState: () => Promise.reject(failure) });
 
       // act
-      const result = await runStep(step, cwd, () => true);
+      const scopeInstall = await runStep(step, cwd, () => true);
 
       // assert
-      const [row, ...rest] = result.rows;
+      const [row, ...rest] = scopeInstall.rows;
       assert.deepStrictEqual(rest, []);
       assert.equal(row?.status, "failed");
       const { cause, ...fields } = row;
@@ -9775,7 +9781,7 @@ describe("createScopeDependencyInstall", () => {
         needsReload: false,
       });
       assert.equal(cause?.message, failure.message);
-      assert.deepStrictEqual(result.mcpConfigNotices, []);
+      assert.deepStrictEqual(scopeInstall.mcpConfigNotices, []);
       assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
     });
   }
@@ -9788,14 +9794,14 @@ describe("createScopeDependencyInstall", () => {
     });
 
     // act
-    const result = await runStep(scopeDependencyInstall(), cwd, () => true);
+    const scopeInstall = await runStep(scopeDependencyInstall(), cwd, () => true);
 
     // assert
-    assert.deepStrictEqual(result.mcpConfigNotices, [
+    assert.deepStrictEqual(scopeInstall.mcpConfigNotices, [
       { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
     ]);
     assert.deepStrictEqual(
-      result.rows.map((row) => [row.status, row.name]),
+      scopeInstall.rows.map((row) => [row.status, row.name]),
       [["installed", "secrets-vault@mp"]],
     );
   });

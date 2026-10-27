@@ -961,7 +961,10 @@ export function withPlannedInstallsLanded(
   let released = releasedDependents(verdict.unsatisfied, installed, state, enabled);
   let fresh = replanWithout(released);
   for (;;) {
-    pluginKeys(fresh.pluginsToEnable).forEach((key) => enabled.add(key));
+    for (const key of pluginKeys(fresh.pluginsToEnable)) {
+      enabled.add(key);
+    }
+
     const next = releasedDependents(verdict.unsatisfied, installed, state, enabled);
     if (next.size === released.size) {
       break;

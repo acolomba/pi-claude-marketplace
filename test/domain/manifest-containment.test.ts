@@ -11,6 +11,7 @@ import {
   locateManifestCandidate,
   sourceManifestBoundary,
 } from "../../extensions/pi-claude-marketplace/domain/manifest-containment.ts";
+import { isErrnoException } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type {
   ManifestBoundary,
@@ -437,6 +438,9 @@ function describeLocation(
   location: ManifestLocation,
 ): ManifestLocation | { readonly kind: "unresolvable"; readonly code: unknown } {
   return location.kind === "unresolvable"
-    ? { kind: "unresolvable", code: (location.error as { code?: unknown }).code }
+    ? {
+        kind: "unresolvable",
+        code: isErrnoException(location.error) ? location.error.code : undefined,
+      }
     : location;
 }
