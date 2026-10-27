@@ -22,7 +22,8 @@ warning reason; the rule-pack and ESLint rules.
 
 **Out of scope (deferred, see `<deferred>`):** the load-time "packages not
 installed" diagnostic, `update` retrying the package install on an up-to-date
-plugin, and Claude Code's lockfile-content sanitizer.
+plugin, and Claude Code's secret redaction of npm output. (The lockfile
+sanitizer was ported on 2026-10-27; see D-PL9-08.)
 
 </domain>
 
@@ -89,8 +90,9 @@ Confidence: **high** for the table, commands, and timeout (literal constants);
   `dependencies`, `optionalDependencies`, `peerDependencies`, `workspaces`
   (upstream `_Ss`). A `package.json` with no recognized lockfile is skipped
   silently (upstream, and BACKLOG PKGDEP-01). The upstream zero-package
-  lockfile check is not copied (it needs the lockfile parser D-PL9-08 defers);
-  the `package.json` check covers the common empty case.
+  lockfile check now applies too (amended 2026-10-27): it came with the
+  sanitizer (D-PL9-08), and a checked lockfile that lists no package runs
+  nothing and says nothing.
 - **D-PL9-03 (where it runs, NFR-10):** The plugin root must resolve inside
   `locations.extensionRoot` (a git marketplace clone under `sources/` or a
   plugin clone under `plugin-clones/`). A plugin root outside it -- a
@@ -127,10 +129,27 @@ Confidence: **high** for the table, commands, and timeout (literal constants);
   step after a successful swap (`partition` updated), on the new version's
   plugin root, and adds its warning to the outcome. A failure never turns the
   updated row into a failure (PKD-02).
-- **D-PL9-08 (sanitizer declined for now):** Claude Code's lockfile-content
-  sanitizer is not copied. `--ignore-scripts` plus the isolated work dir carry
-  the main protection (no lifecycle scripts, no plugin `.npmrc`). Recorded as
-  a backlog entry, not silently dropped.
+- **D-PL9-08 (reversed 2026-10-27: sanitizer ported):** Claude Code
+  2.1.310's lockfile check (`k6n` for npm, `E6n` for bun, `J4n` for download
+  links) is ported in `domain/package-lockfile.ts`. Before npm or bun runs,
+  the plugin's `package.json` and lockfile are checked. Refused: a dependency
+  that is not a registry package with a range, dist-tag, or `npm:` alias
+  (`file:`, git, URL, tarball specs), a folder link or bundled copy, an entry
+  without an exact version, a download link without an integrity hash, a link
+  on GitHub, GitLab (outside its package API), Bitbucket, or SourceHut, a
+  link whose path starts with `//`, an http link outside npm's own registry,
+  `overrides`, and `patchedDependencies`, plus lockfiles that are not JSON,
+  are in an old format, or disagree with `package.json`. A refusal is the
+  note `Skipped installing this plugin's dependencies: <reason>.`, and npm or
+  bun never runs. A lockfile that passes is rewritten: the root becomes
+  `plugin-dependencies` at 0.0.0, each entry keeps only the fields that decide
+  the install, and npm always reads `package-lock.json`. A lockfile with no
+  package runs nothing (the zero-package skip, D-PL9-02). npm runs as
+  `npm --git=<workDir>/git-is-disabled ci ...`. When the lockfile holds an
+  `"http://` link, `npm config get registry` runs first in the work dir, with
+  only a `{}` package.json there and Claude Code's 30-second limit (`uks`);
+  the install keeps its 60 seconds. PKGDEP-03 now covers only the secret
+  redaction of npm output.
 - **D-PL9-09 (warning surface):** A failed, timed-out, or refused package
   install is a warning on the plugin's row with one new closed-set reason,
   `packages not installed`, and a note carrying upstream's message text
@@ -216,6 +235,31 @@ Confidence: **high** for the table, commands, and timeout (literal constants);
   entries are not edited here; the phase SUMMARY carries them for the
   parent (`## Decision rows`, `## Backlog dispositions`).
 
+### Decisions settled after review (2026-10-27)
+
+- **D-PL9-18 (Windows launch):** On Windows a package manager is looked up
+  only in the absolute entries of PATH (read through any spelling of the
+  variable's name, split on `;`, one pair of quotes stripped), never in the
+  current directory. In PATH order, `<command>.exe` comes before
+  `<command>.cmd` in each directory. An `.exe` starts directly. `npm.cmd`
+  becomes `<Node binary> <npm.cmd folder>\node_modules\npm\bin\npm-cli.js
+  <args>` with `shell: false`. A `bun.cmd`, an `npm.cmd` with no `npm-cli.js`
+  beside it, and a command that is not found become the failure note. Linux
+  and macOS launches do not change. Divergence license: a Pi capability gap.
+  Node refuses to spawn a `.cmd` without a shell, so the npm entry route
+  replaces upstream's execa/cross-spawn shell route.
+- **D-PL9-19 (process-tree kill):** A package manager that outlives the
+  timeout is stopped with its whole process tree. On POSIX it starts
+  detached, so it leads its own process group; the timeout sends SIGTERM to
+  the group and the grace sends SIGKILL to the group. A group signal that
+  throws falls back to the process alone, and a pid that is not an integer
+  above 1 signals the process alone. On Windows both steps run
+  `<SystemRoot>\System32\taskkill.exe /PID <pid> /T /F` with `shell: false`.
+  The run never rejects, and it still settles one grace after SIGKILL
+  (WR-01). This closes the process-group residue of 09-REVIEW WR-01.
+  Divergence license: none needed for the behavior (upstream bounds its
+  install too); the mechanism is ours because the launcher is.
+
 ### Claude's Discretion
 
 - Module names (`orchestrators/plugin/package-install.ts` suggested), the
@@ -254,9 +298,9 @@ Confidence: **high** for the table, commands, and timeout (literal constants);
   diagnostic and `update` retrying the package install on an up-to-date
   plugin (upstream 2.1.310). Needs `orchestrators/reconcile/load.ts` and the
   up-to-date path of `update-flow.ts`, outside this phase's files.
-- **PKGDEP-03:** Claude Code's lockfile-content sanitizer (registry-only
-  dependencies, integrity required, no `overrides`/`patchedDependencies`,
-  root renamed `plugin-dependencies`, zero-package skip).
+- **PKGDEP-03:** Claude Code's secret redaction of npm output. (The
+  lockfile-content sanitizer it also named was ported on 2026-10-27,
+  D-PL9-08.)
 
 </deferred>
 
@@ -276,7 +320,7 @@ Confidence: **high** for the table, commands, and timeout (literal constants);
    Alternative: amend NFR-10 to allow `node_modules` in the user's folder.
 4. **Sanitizer deferred (D-PL9-08).** A plugin lockfile with `git:` or
    `file:` dependencies installs with us and is refused upstream.
-   Alternative: port the sanitizer now.
+   Alternative: port the sanitizer now. Superseded: D-PL9-08 reversed.
 6. **No row reason token (D-PL9-14).** The failure shows as a warning
    diagnostic note, not a `{packages not installed}` reason on the row,
    to stay out of Phase 1/3 files. Alternative: widen this phase to the

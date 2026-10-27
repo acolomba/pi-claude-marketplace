@@ -68,7 +68,12 @@ function createPackageManagerProcess(pid?: number): PackageManagerProcessControl
         listener(code);
       }
     },
+    // Like Node's EventEmitter, an error nothing listens for throws.
     fail: (error) => {
+      if (errorListeners.length === 0) {
+        throw error;
+      }
+
       for (const listener of errorListeners) {
         listener(error);
       }
@@ -87,21 +92,28 @@ function createPackageManagerProcess(pid?: number): PackageManagerProcessControl
   };
 }
 
-// A Linux host: it never looks a command up, so its file probe fails a case
-// that reaches it.
-const LINUX_HOST: PackageManagerHost = {
-  platform: "linux",
-  execPath: "/usr/bin/node",
-  isFile: () => assert.fail("a Linux launch probes no file"),
-};
+type GroupSignal = readonly [number, string];
 
-function runnerFor(control: PackageManagerProcessControl) {
+// A Linux host that records each group signal. It never looks a command up,
+// so its file probe fails a case that reaches it.
+function linuxHost(groupSignals: GroupSignal[] = []): PackageManagerHost {
+  return {
+    platform: "linux",
+    execPath: "/usr/bin/node",
+    isFile: () => assert.fail("a Linux launch probes no file"),
+    signalGroup: (pid, signal) => {
+      groupSignals.push([pid, signal]);
+    },
+  };
+}
+
+function runnerFor(control: PackageManagerProcessControl, host: PackageManagerHost = linuxHost()) {
   return createPackageManagerRunner({
     spawn: () => control.process,
     timeoutMs: TIMEOUT_MS,
     killGraceMs: KILL_GRACE_MS,
     env: {},
-    host: LINUX_HOST,
+    host,
   });
 }
 
@@ -132,7 +144,7 @@ test("starts no process until a request runs", () => {
     timeoutMs: TIMEOUT_MS,
     killGraceMs: KILL_GRACE_MS,
     env: {},
-    host: LINUX_HOST,
+    host: linuxHost(),
   });
 
   // assert
@@ -151,7 +163,7 @@ test("spawns the command with its arguments verbatim, no shell, the request dire
     timeoutMs: TIMEOUT_MS,
     killGraceMs: KILL_GRACE_MS,
     env: { HOME: "/home/user" },
-    host: LINUX_HOST,
+    host: linuxHost(),
   });
 
   // act
@@ -178,6 +190,7 @@ test("spawns the command with its arguments verbatim, no shell, the request dire
         },
         shell: false,
         stdio: ["ignore", "pipe", "pipe"],
+        detached: true,
       },
     ],
   ]);
@@ -227,7 +240,7 @@ test("resolves with the launch error when the launcher throws", async () => {
     timeoutMs: TIMEOUT_MS,
     killGraceMs: KILL_GRACE_MS,
     env: {},
-    host: LINUX_HOST,
+    host: linuxHost(),
   });
 
   // act
@@ -295,7 +308,8 @@ test("settles the run one grace after SIGKILL when the process never closes", as
   // arrange
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const control = createPackageManagerProcess(42);
-  const runPackageManager = runnerFor(control);
+  const groupSignals: GroupSignal[] = [];
+  const runPackageManager = runnerFor(control, linuxHost(groupSignals));
   let settled = false;
 
   // act
@@ -313,7 +327,10 @@ test("settles the run one grace after SIGKILL when the process never closes", as
 
   // assert
   assert.strictEqual(settledBeforeDeadline, false);
-  assert.deepStrictEqual(control.kills(), ["SIGTERM", "SIGKILL"]);
+  assert.deepStrictEqual(groupSignals, [
+    [42, "SIGTERM"],
+    [42, "SIGKILL"],
+  ]);
   assert.deepStrictEqual(run, {
     code: null,
     stdout: "",
@@ -443,6 +460,7 @@ async function runOnWindows(
         probes.push(file);
         return Promise.resolve(files.includes(file));
       },
+      signalGroup: () => assert.fail("Windows signals no process group"),
     },
   });
   const run = await runPackageManager({ command, args: ["ci"], cwd: "C:\\work" });
@@ -583,7 +601,7 @@ test("D-PL9-18: spawns the bare command on Linux without looking it up", async (
     timeoutMs: TIMEOUT_MS,
     killGraceMs: KILL_GRACE_MS,
     env: { PATH: "/usr/bin" },
-    host: LINUX_HOST,
+    host: linuxHost(),
   });
 
   // act
@@ -594,4 +612,253 @@ test("D-PL9-18: spawns the bare command on Linux without looking it up", async (
   // assert
   assert.deepStrictEqual(launches, ["npm"]);
   assert.deepStrictEqual(run, CLOSED);
+});
+
+// A grandchild that ignores SIGTERM, prints "started" at once, and prints
+// "late" at the epoch its argument names, then exits.
+const LATE_GRANDCHILD = [
+  'process.on("SIGTERM", () => {});',
+  'process.stdout.write("started\\n");',
+  'setTimeout(() => process.stdout.write("late\\n"), Number(process.argv[1]) - Date.now());',
+].join("\n");
+
+// A child that starts the grandchild on its own output streams and idles.
+const IDLE_PARENT = [
+  'const { spawn } = require("node:child_process");',
+  `spawn(process.execPath, ["-e", ${JSON.stringify(LATE_GRANDCHILD)}, process.argv[1]], { stdio: "inherit" });`,
+  "setInterval(() => {}, 1_000);",
+].join("\n");
+
+test("D-PL9-19: stops the whole process tree of a package manager that outlives the timeout", async () => {
+  // arrange
+  const timeoutMs = 2_000;
+  const killGraceMs = 1_000;
+  const runPackageManager = createPackageManagerRunner({
+    spawn: NODE_PACKAGE_MANAGER_SPAWN,
+    timeoutMs,
+    killGraceMs,
+    env: {},
+    host: NODE_PACKAGE_MANAGER_HOST,
+  });
+  const late = Date.now() + timeoutMs + 1.5 * killGraceMs;
+
+  // act
+  const run = await runPackageManager({
+    command: process.execPath,
+    args: ["-e", IDLE_PARENT, String(late)],
+    cwd: process.cwd(),
+  });
+
+  // assert
+  assert.deepStrictEqual(run, { code: null, stdout: "started\n", stderr: "", timedOut: true });
+});
+
+test("D-PL9-19: sends SIGTERM and then SIGKILL to the process group on POSIX and never to the process alone", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const control = createPackageManagerProcess(42);
+  const groupSignals: GroupSignal[] = [];
+  const runPackageManager = runnerFor(control, linuxHost(groupSignals));
+
+  // act
+  const pending = runPackageManager(request);
+  t.mock.timers.tick(TIMEOUT_MS);
+  t.mock.timers.tick(KILL_GRACE_MS);
+  control.close(null);
+  const run = await pending;
+
+  // assert
+  assert.deepStrictEqual(groupSignals, [
+    [42, "SIGTERM"],
+    [42, "SIGKILL"],
+  ]);
+  assert.deepStrictEqual(control.kills(), []);
+  assert.deepStrictEqual(run, { code: null, stdout: "", stderr: "", timedOut: true });
+});
+
+test("D-PL9-19: signals the process alone when its process group cannot be signalled", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const control = createPackageManagerProcess(42);
+  const runPackageManager = runnerFor(control, {
+    ...linuxHost(),
+    signalGroup: () => {
+      throw Object.assign(new Error("kill ESRCH"), { code: "ESRCH" });
+    },
+  });
+
+  // act
+  const pending = runPackageManager(request);
+  t.mock.timers.tick(TIMEOUT_MS);
+  t.mock.timers.tick(KILL_GRACE_MS);
+  control.close(null);
+  const run = await pending;
+
+  // assert
+  assert.deepStrictEqual(control.kills(), ["SIGTERM", "SIGKILL"]);
+  assert.deepStrictEqual(run, { code: null, stdout: "", stderr: "", timedOut: true });
+});
+
+for (const pid of [undefined, 0, 1]) {
+  test(`D-PL9-19: signals only the process itself for the pid ${pid}`, async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const control = createPackageManagerProcess(pid);
+    const groupSignals: GroupSignal[] = [];
+    const runPackageManager = runnerFor(control, linuxHost(groupSignals));
+
+    // act
+    const pending = runPackageManager(request);
+    t.mock.timers.tick(TIMEOUT_MS);
+    t.mock.timers.tick(KILL_GRACE_MS);
+    control.close(null);
+    await pending;
+
+    // assert
+    assert.deepStrictEqual(control.kills(), ["SIGTERM", "SIGKILL"]);
+    assert.deepStrictEqual(groupSignals, []);
+  });
+}
+
+type Launched = readonly [string, readonly string[], PackageManagerSpawnOptions];
+
+interface WindowsTimeout {
+  readonly control: PackageManagerProcessControl;
+  readonly launches: Launched[];
+  readonly pending: Promise<PackageManagerRun>;
+}
+
+// Starts npm.exe from C:\\tools on a win32 host and waits until it runs. Every
+// later launch is a taskkill, which `startKiller` stands in for.
+async function startOnWindows(
+  env: NodeJS.ProcessEnv,
+  startKiller: () => PackageManagerProcess,
+): Promise<WindowsTimeout> {
+  const control = createPackageManagerProcess(42);
+  const launches: Launched[] = [];
+  let markStarted: () => void = () => undefined;
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  const runPackageManager = createPackageManagerRunner({
+    spawn: (command, args, options) => {
+      launches.push([command, args, options]);
+      if (launches.length > 1) {
+        return startKiller();
+      }
+
+      markStarted();
+      return control.process;
+    },
+    timeoutMs: TIMEOUT_MS,
+    killGraceMs: KILL_GRACE_MS,
+    env,
+    host: {
+      platform: "win32",
+      execPath: WINDOWS_NODE,
+      isFile: (file) => Promise.resolve(file === "C:\\tools\\npm.exe"),
+      signalGroup: () => assert.fail("Windows signals no process group"),
+    },
+  });
+  const pending = runPackageManager({ command: "npm", args: ["ci"], cwd: "C:\\work" });
+  await started;
+  return { control, launches, pending };
+}
+
+function windowsSpawnOptions(env: NodeJS.ProcessEnv): PackageManagerSpawnOptions {
+  return {
+    cwd: "C:\\work",
+    env: { ...env, npm_config_update_notifier: "false" },
+    shell: false,
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: false,
+  };
+}
+
+const TASKKILL_ARGS = ["/PID", "42", "/T", "/F"];
+
+for (const { situation, env, taskkill } of [
+  {
+    situation: "the system folder its env names",
+    env: { PATH: "C:\\tools", systemroot: "D:\\Windows" },
+    taskkill: "D:\\Windows\\System32\\taskkill.exe",
+  },
+  {
+    situation: "C:\\Windows when its env names no system folder",
+    env: { PATH: "C:\\tools" },
+    taskkill: "C:\\Windows\\System32\\taskkill.exe",
+  },
+]) {
+  test(`D-PL9-19: runs taskkill /T /F from ${situation} at each step on Windows`, async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const windows = await startOnWindows(env, () => createPackageManagerProcess(7).process);
+
+    // act
+    t.mock.timers.tick(TIMEOUT_MS);
+    t.mock.timers.tick(KILL_GRACE_MS);
+    windows.control.close(null);
+    const run = await windows.pending;
+
+    // assert
+    const options = windowsSpawnOptions(env);
+    assert.deepStrictEqual(windows.launches, [
+      ["C:\\tools\\npm.exe", ["ci"], options],
+      [taskkill, TASKKILL_ARGS, options],
+      [taskkill, TASKKILL_ARGS, options],
+    ]);
+    assert.deepStrictEqual(windows.control.kills(), []);
+    assert.deepStrictEqual(run, { code: null, stdout: "", stderr: "", timedOut: true });
+  });
+}
+
+test("D-PL9-19: settles at the deadline when taskkill cannot start", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const env = { PATH: "C:\\tools" };
+  const windows = await startOnWindows(env, () => {
+    throw new Error("spawn taskkill.exe ENOENT");
+  });
+
+  // act
+  t.mock.timers.tick(TIMEOUT_MS);
+  t.mock.timers.tick(KILL_GRACE_MS);
+  t.mock.timers.tick(KILL_GRACE_MS);
+  const run = await windows.pending;
+
+  // assert
+  assert.deepStrictEqual(
+    windows.launches.map(([command]) => command),
+    [
+      "C:\\tools\\npm.exe",
+      "C:\\Windows\\System32\\taskkill.exe",
+      "C:\\Windows\\System32\\taskkill.exe",
+    ],
+  );
+  assert.deepStrictEqual(run, { code: null, stdout: "", stderr: "", timedOut: true });
+});
+
+test("D-PL9-19: settles at the deadline when taskkill fails after it starts", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const killers: PackageManagerProcessControl[] = [];
+  const windows = await startOnWindows({ PATH: "C:\\tools" }, () => {
+    const killer = createPackageManagerProcess();
+    killers.push(killer);
+    return killer.process;
+  });
+
+  // act
+  t.mock.timers.tick(TIMEOUT_MS);
+  t.mock.timers.tick(KILL_GRACE_MS);
+  for (const killer of killers) {
+    killer.fail(new Error("spawn taskkill.exe EACCES"));
+  }
+
+  t.mock.timers.tick(KILL_GRACE_MS);
+  const run = await windows.pending;
+
+  // assert
+  assert.strictEqual(killers.length, 2);
+  assert.deepStrictEqual(run, { code: null, stdout: "", stderr: "", timedOut: true });
 });

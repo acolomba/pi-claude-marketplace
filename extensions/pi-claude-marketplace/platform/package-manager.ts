@@ -2,12 +2,21 @@
 //
 // D-PL9-12: runs one package-manager command for a plugin's own package
 // install. The launcher, the timeout, the kill grace, the environment, and
-// the host (platform, Node binary, file probe) are parameters. A run never rejects for a process failure: a process that cannot
-// start, exits non-zero, or outlives the timeout resolves with what happened.
+// the host (platform, Node binary, file probe, group signal) are parameters.
+// A run never rejects for a process failure: a process that cannot start,
+// exits non-zero, or outlives the timeout resolves with what happened.
 // A run that outlives the timeout settles one kill grace after its SIGKILL
 // even when the process never closes, because a child it started may hold the
 // output pipes open, or the kill may fail. The process may then still be
 // running, so its work dir may be busy when the caller removes it.
+//
+// D-PL9-19: the timeout stops the package manager's whole process tree, so a
+// child it started cannot keep running and hold the output pipes. On POSIX
+// the package manager leads its own process group, which gets SIGTERM and
+// then SIGKILL; a group signal that fails falls back to the process alone.
+// On Windows both steps run taskkill /T /F from the system folder. A pid
+// below 2 signals the process alone, because a group signal to it would reach
+// Pi's own group or every process.
 //
 // D-PL9-15: the argv passes through verbatim, with no shell. The child
 // environment adds `npm_config_update_notifier=false`, so npm neither asks the
@@ -51,6 +60,8 @@ export interface PackageManagerSpawnOptions {
   readonly env: NodeJS.ProcessEnv;
   readonly shell: false;
   readonly stdio: readonly ["ignore", "pipe", "pipe"];
+  /** POSIX: the package manager leads a process group of its own. */
+  readonly detached: boolean;
 }
 
 export type PackageManagerSpawn = (
@@ -91,9 +102,13 @@ export interface PackageManagerHost {
   readonly execPath: string;
   /** Resolves false for a missing path or a non-file, and never rejects. */
   readonly isFile: (file: string) => Promise<boolean>;
+  /** Sends `signal` to the POSIX process group `pid` leads. Throws when it cannot. */
+  readonly signalGroup: (pid: number, signal: "SIGTERM" | "SIGKILL") => void;
 }
 
-/** This process's platform and Node binary, and a stat probe. */
+type KillSignal = "SIGTERM" | "SIGKILL";
+
+/** This process's platform and Node binary, a stat probe, and `process.kill`. */
 export const NODE_PACKAGE_MANAGER_HOST: PackageManagerHost = Object.freeze({
   platform: process.platform,
   execPath: process.execPath,
@@ -102,6 +117,9 @@ export const NODE_PACKAGE_MANAGER_HOST: PackageManagerHost = Object.freeze({
       (stats) => stats.isFile(),
       () => false,
     ),
+  signalGroup: (pid: number, signal: KillSignal) => {
+    process.kill(-pid, signal);
+  },
 });
 
 export interface PackageManagerRunnerOptions {
@@ -140,7 +158,7 @@ function appendCapped(captured: string, chunk: Buffer): string {
 // more grace later. Every timer is unref'd so a pending one never keeps the Pi
 // process alive. Returns the function that cancels them all.
 function startKillTimers(
-  child: PackageManagerProcess,
+  stop: (signal: KillSignal) => void,
   options: PackageManagerRunnerOptions,
   captured: CapturedOutput,
   abandon: () => void,
@@ -149,9 +167,9 @@ function startKillTimers(
   let deadlineTimer: NodeJS.Timeout | undefined;
   const timeoutTimer = setTimeout(() => {
     captured.timedOut = true;
-    child.kill("SIGTERM");
+    stop("SIGTERM");
     graceTimer = setTimeout(() => {
-      child.kill("SIGKILL");
+      stop("SIGKILL");
       deadlineTimer = setTimeout(abandon, options.killGraceMs);
       deadlineTimer.unref();
     }, options.killGraceMs);
@@ -169,6 +187,7 @@ function watchProcess(
   child: PackageManagerProcess,
   options: PackageManagerRunnerOptions,
   resolve: (run: PackageManagerRun) => void,
+  stop: (signal: KillSignal) => void,
 ): void {
   const captured: CapturedOutput = { stdout: "", stderr: "", timedOut: false };
   child.stdout.on("data", (chunk: Buffer) => {
@@ -180,7 +199,7 @@ function watchProcess(
   // Node emits `close` after `error` for a process that cannot start; the
   // first event settles the run and the rest are ignored.
   let settled = false;
-  const stopTimers = startKillTimers(child, options, captured, () => {
+  const stopTimers = startKillTimers(stop, options, captured, () => {
     settle(null);
   });
   function settle(code: number | null, error?: Error): void {
@@ -206,20 +225,75 @@ function watchProcess(
   });
 }
 
+// The value of the variable `name`, read through any spelling of its name.
+function variable(env: NodeJS.ProcessEnv, name: string): string | undefined {
+  return Object.entries(env).find(([key]) => key.toUpperCase() === name)?.[1];
+}
+
+function ignoreKillError(): undefined {
+  return undefined;
+}
+
+// taskkill.exe from the system folder, never from PATH. A launch that fails
+// leaves the run to the deadline that settles it anyway.
+function killWindowsTree(
+  pid: number,
+  options: PackageManagerRunnerOptions,
+  spawnOptions: PackageManagerSpawnOptions,
+): void {
+  const systemRoot = variable(options.env, "SYSTEMROOT") ?? "C:\\Windows";
+  const taskkill = path.win32.join(systemRoot, "System32", "taskkill.exe");
+  try {
+    const killer = options.spawn(taskkill, ["/PID", String(pid), "/T", "/F"], spawnOptions);
+    killer.on("error", ignoreKillError);
+  } catch {
+    // The deadline settles the run when the tree outlives a failed taskkill.
+  }
+}
+
+// Runs in a timer callback, so nothing here may throw.
+function stopTree(
+  child: PackageManagerProcess,
+  signal: KillSignal,
+  options: PackageManagerRunnerOptions,
+  spawnOptions: PackageManagerSpawnOptions,
+): void {
+  const { pid } = child;
+  if (pid === undefined || !Number.isSafeInteger(pid) || pid <= 1) {
+    child.kill(signal);
+    return;
+  }
+
+  if (options.host.platform === "win32") {
+    killWindowsTree(pid, options, spawnOptions);
+    return;
+  }
+
+  try {
+    options.host.signalGroup(pid, signal);
+  } catch {
+    // The group is gone or cannot be signalled; the process alone still can.
+    child.kill(signal);
+  }
+}
+
 function startProcess(
   options: PackageManagerRunnerOptions,
   request: PackageManagerRequest,
   launch: Launch,
 ): Promise<PackageManagerRun> {
   return new Promise((resolve) => {
+    // A detached Windows process would open a console window of its own.
+    const spawnOptions: PackageManagerSpawnOptions = {
+      cwd: request.cwd,
+      env: { ...options.env, npm_config_update_notifier: "false", ...(request.env ?? {}) },
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: options.host.platform !== "win32",
+    };
     let child: PackageManagerProcess;
     try {
-      child = options.spawn(launch.command, launch.args, {
-        cwd: request.cwd,
-        env: { ...options.env, npm_config_update_notifier: "false", ...(request.env ?? {}) },
-        shell: false,
-        stdio: ["ignore", "pipe", "pipe"],
-      });
+      child = options.spawn(launch.command, launch.args, spawnOptions);
     } catch (error: unknown) {
       // Node's spawn throws only Error instances (an invalid argument or an
       // aborted signal), so the cast holds.
@@ -227,7 +301,9 @@ function startProcess(
       return;
     }
 
-    watchProcess(child, options, resolve);
+    watchProcess(child, options, resolve, (signal) => {
+      stopTree(child, signal, options, { ...spawnOptions, detached: false });
+    });
   });
 }
 
@@ -237,8 +313,7 @@ function notStarted(error: Error): PackageManagerRun {
 
 // The absolute directories of PATH, read through any spelling of its name.
 function windowsPathDirectories(env: NodeJS.ProcessEnv): string[] {
-  const value = Object.entries(env).find(([name]) => name.toUpperCase() === "PATH")?.[1] ?? "";
-  return value
+  return (variable(env, "PATH") ?? "")
     .split(";")
     .map((entry) => (entry.startsWith('"') && entry.endsWith('"') ? entry.slice(1, -1) : entry))
     .filter((entry) => path.win32.isAbsolute(entry));
