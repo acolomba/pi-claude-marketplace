@@ -225,7 +225,7 @@ test("D-PL8-19: adds the canonical marketplace, whose autoupdate is on by defaul
       },
     },
   });
-  // D-PL8-07 (reversed): the official default holds, so the autoupdate step writes no value.
+  // D-PL8-07: the official default holds, so the autoupdate step writes no value.
   assert.deepStrictEqual(JSON.parse(await readFile(locations.baseConfigJsonPath, "utf8")), {
     schemaVersion: 1,
     marketplaces: {

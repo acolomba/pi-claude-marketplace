@@ -78,9 +78,9 @@ export interface BootstrapOptions {
 }
 
 /**
- * Add the canonical Anthropic marketplace to user scope and enable
- * autoupdate for it. Its official name already turns autoupdate on by default
- * (D-PL8-07, reversed), so the autoupdate step writes no value and reports
+ * Add the canonical Anthropic marketplace to user scope and make sure
+ * autoupdate is on for it. Its official name already turns autoupdate on by default
+ * (D-PL8-07), so the autoupdate step writes no value and reports
  * `(skipped) {already autoupdate}` unless `claude-plugins.json` sets the value
  * off (D-PL8-19). Idempotent end-to-end:
  *   - first run on clean state: emits the add's `(added)` row, then the

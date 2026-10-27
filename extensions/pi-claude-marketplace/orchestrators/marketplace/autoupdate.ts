@@ -52,8 +52,7 @@
 //    value, own or inherited, differs from the request; with --local,
 //    claude-plugins.local.json only. A local entry without a value inherits
 //    the base entry's value, or the default for its name when the base config
-//    does not declare the marketplace or sets no value (LAYER-09; D-PL8-07,
-//    reversed)
+//    does not declare the marketplace or sets no value (LAYER-09; D-PL8-07)
 //   each changed layer gets one batched config write; WR-05: a flip reads and
 //   writes only config, never state.json (SPLIT-01)
 //  accumulate the changed and unchanged names across scopes
@@ -300,7 +299,7 @@ async function loadFlipLayer(filePath: string, local: boolean): Promise<FlipLaye
 
 /**
  * The base entry's current value, or the default for the name when the base
- * config is absent or does not set it (D-PL8-07, reversed). An invalid base
+ * config is absent or does not set it (D-PL8-07). An invalid base
  * config fails closed, and only when a local entry without a value asks
  * (CFG-03).
  */
@@ -319,8 +318,7 @@ function inheritFrom(base: ConfigLoadResult): InheritedValue {
 
 /**
  * After a flip of the base layer, a base config that declares the marketplace
- * holds `enable`; one that does not gives the default for the name (D-PL8-07,
- * reversed).
+ * holds `enable`; one that does not gives the default for the name (D-PL8-07).
  */
 function inheritAfterFlip(base: FlipLayer, enable: boolean): InheritedValue {
   return (name) =>
@@ -331,8 +329,8 @@ function inheritAfterFlip(base: FlipLayer, enable: boolean): InheritedValue {
 
 /**
  * Whether a layer's `autoupdate` value already matches the request. A base
- * entry without a value reads as the default for its name (MAU-4; D-PL8-07,
- * reversed). A local entry without a value has the value it inherits: the base
+ * entry without a value reads as the default for its name (MAU-4; D-PL8-07).
+ * A local entry without a value has the value it inherits: the base
  * entry's value, or the default for the name when the base config does not
  * declare the marketplace or the base entry has no value (D-MF-03 / LAYER-09).
  * So a flip writes a local value only when it changes the value that applies.
