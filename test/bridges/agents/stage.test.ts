@@ -1678,6 +1678,67 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     });
   });
 
+  test("D-PL1-15: force drops a staged-name row that points at another file and leaves that file", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-commit-force-moved-",
+    );
+    await writeFile(
+      path.join(agentsSourceDir, "current.md"),
+      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
+    );
+    const currentTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-current.md");
+    const userTarget = path.join(locations.agentsDir, "my-notes.md");
+    const userBytes = "---\nname: my-notes\n---\nWritten by hand.\n";
+    await mkdir(locations.agentsDir, { recursive: true });
+    await writeFile(userTarget, userBytes);
+    await mkdir(locations.extensionRoot, { recursive: true });
+    await writeFile(
+      locations.agentsIndexPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        agents: [
+          {
+            plugin: "acme",
+            marketplace: "catalog",
+            sourceAgent: "current",
+            // A hand-edited row: the staged name, but another file's path.
+            generatedName: "pi-claude-marketplace-acme-current",
+            sourcePath: "/previous/current.md",
+            targetPath: userTarget,
+            sourceHash: "hash-current",
+            droppedFields: [],
+            droppedTools: [],
+            warnings: [],
+          },
+        ],
+      }),
+    );
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+    });
+
+    // act
+    const cleanupLeak = await commitPreparedAgents(createRemovalOps(), prepared, { force: true });
+
+    // assert
+    assert.strictEqual(cleanupLeak, undefined);
+    assert.strictEqual(await readFile(userTarget, "utf8"), userBytes);
+    assert.strictEqual(await exists(currentTarget), true);
+    const index = JSON.parse(await readFile(locations.agentsIndexPath, "utf8")) as AgentsIndex;
+    assert.deepStrictEqual(
+      index.agents.map(({ generatedName, targetPath }) => ({ generatedName, targetPath })),
+      [{ generatedName: "pi-claude-marketplace-acme-current", targetPath: currentTarget }],
+    );
+  });
+
   test("force still refuses a file no index row names at a new target", async (t) => {
     // arrange
     const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
@@ -1748,7 +1809,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     assert.strictEqual(await exists(prepared.stagingDir), false);
   });
 
-  test("NFR-10: force refuses a staged-name index row whose target is outside the agents directory and removes nothing", async (t) => {
+  test("NFR-10: force refuses an owned index row whose target is outside the agents directory and removes nothing", async (t) => {
     // arrange
     const { scopeRoot, pluginRoot, agentsSourceDir, locations, pluginDataDir } =
       await createStageTree(t, "agents-commit-force-escape-");
@@ -1757,8 +1818,11 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       sourcePath,
       "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
     );
+    // The generated marker makes the row pass the ownership check, so only the
+    // containment check stands between the forced commit and this file.
     const outsideTarget = path.join(scopeRoot, "pi-claude-marketplace-acme-outside.md");
-    const outsideBytes = "---\nname: outside\n---\nNot an agent file.\n";
+    const outsideBytes =
+      "---\nname: outside\nprovenance:\n  generatedBy: pi-claude-marketplace\n---\nMoved away.\n";
     await writeFile(outsideTarget, outsideBytes);
     await mkdir(locations.agentsDir, { recursive: true });
     await mkdir(locations.extensionRoot, { recursive: true });
@@ -1769,9 +1833,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
           plugin: "acme",
           marketplace: "catalog",
           sourceAgent: "outside",
-          // D-PL1-15: force replaces only rows with a staged name, so only such a
-          // row reaches the containment check.
-          generatedName: "pi-claude-marketplace-acme-current",
+          generatedName: "pi-claude-marketplace-acme-outside",
           sourcePath: "/previous/outside.md",
           targetPath: outsideTarget,
           sourceHash: "hash-outside",

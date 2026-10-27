@@ -296,11 +296,14 @@ function formatAgentWarnings(converted: ConvertedAgent): string[] {
  * replaced; the AG-5 rows (this plugin's own agent files whose bytes a user
  * changed) stay on disk and in the index. `force` is reinstall's repair
  * overwrite: it also replaces the AG-5 rows whose `generatedName` this
- * staging produces (D-PL1-15). Any other AG-5 row, such as one the user
- * named by hand, keeps its file and its row, as an unforced commit keeps it.
- * A kept row whose target equals a new entry's target makes the commit
- * refuse before it removes anything. A file no index row names is never in
- * either set.
+ * staging produces (D-PL1-15), but only when the row's `targetPath` is the
+ * path this staging writes for that name. A staged-name row that points
+ * anywhere else, as a hand-edited index can, is in neither set: the commit
+ * drops the row, since the new entry takes its name, and leaves the file.
+ * Any other AG-5 row, such as one the user named by hand, keeps its file and
+ * its row, as an unforced commit keeps it. A kept row whose target equals a
+ * new entry's target makes the commit refuse before it removes anything. A
+ * file no index row names is never in either set.
  */
 function partitionPreviousEntries(
   prepared: PreparedAgentsStaged,
@@ -310,10 +313,17 @@ function partitionPreviousEntries(
     return { replaced: prepared.previousEntries, kept: prepared.foreignPreservedEntries };
   }
 
-  const stagedNames = new Set(prepared.newEntries.map((entry) => entry.generatedName));
-  const isStaged = (entry: AgentsIndexEntry): boolean => stagedNames.has(entry.generatedName);
+  const stagedTargets = new Map(
+    prepared.newEntries.map((entry) => [entry.generatedName, entry.targetPath]),
+  );
+  const isStaged = (entry: AgentsIndexEntry): boolean => stagedTargets.has(entry.generatedName);
+  const isOverwritten = (entry: AgentsIndexEntry): boolean =>
+    stagedTargets.get(entry.generatedName) === entry.targetPath;
   return {
-    replaced: [...prepared.previousEntries, ...prepared.foreignPreservedEntries.filter(isStaged)],
+    replaced: [
+      ...prepared.previousEntries,
+      ...prepared.foreignPreservedEntries.filter(isOverwritten),
+    ],
     kept: prepared.foreignPreservedEntries.filter((entry) => !isStaged(entry)),
   };
 }
@@ -350,11 +360,12 @@ export async function assertAgentCommitTargets(
 }
 
 /**
- * NFR-10 / RINST-01: a forced commit removes index rows that failed the AG-5
- * ownership check, so the marker cannot vouch for their `targetPath`. Each
- * one must resolve inside `<scopeRoot>/agents/` before anything is removed;
- * a hand-edited index, or a project `.pi/` moved with absolute paths in it,
- * would otherwise point the removal at any file.
+ * NFR-10 / RINST-01: every row a forced commit replaces must resolve inside
+ * `<scopeRoot>/agents/` before anything is removed; a hand-edited index, or
+ * a project `.pi/` moved with absolute paths in it, would otherwise point the
+ * removal at any file. The AG-5 rows it replaces sit at a path this staging
+ * writes (D-PL1-15), so the check matters for the owned rows: their marker
+ * says the file is a generated agent, not where that file lives.
  */
 async function assertForcedTargetsContained(
   prepared: PreparedAgentsStaged,
@@ -376,10 +387,11 @@ async function assertForcedTargetsContained(
  * rename staged files into <scopeRoot>/agents/, persist the index, clean up.
  *
  * `options.force` is reinstall's repair overwrite (RINST-01, D-18-15): the
- * plugin's own user-edited previous agent files that this staging produces
- * again are replaced and their preserved index rows dropped; any other
- * preserved row keeps its file and row (D-PL1-15). `update` and install never
- * pass it. A file at
+ * plugin's own user-edited previous agent files that this staging writes
+ * again, at the same path, are replaced and their preserved index rows
+ * dropped. A preserved row with a staged name and another path loses its row
+ * and keeps its file; any other preserved row keeps its file and row
+ * (D-PL1-15). `update` and install never pass it. A file at
  * a new target that no index row names is refused with or without it (PI-6).
  *
  * If deletion, rename or index persistence fails, the index still describes
