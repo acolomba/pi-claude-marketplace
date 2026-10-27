@@ -7,7 +7,11 @@
 //
 // It sends no credential and no header of its own, because Claude Code's add
 // sends none. The Node network modules are banned in the extension, so the
-// host checks below read the hostname as text.
+// host checks below read the hostname as text. They refuse an address
+// literal, including an IPv6 form that embeds a refused IPv4 address, and
+// the names in the list below. They cannot see where a DNS name resolves: a
+// name whose record points at a loopback, link-local, or metadata address
+// passes. Closing that gap needs a resolver, which `no-network-modules` bans.
 
 import { HostedManifestFetchError, HostedManifestHttpError } from "../shared/errors.ts";
 
@@ -40,7 +44,17 @@ const LOCAL_OR_METADATA_HOSTS = new Set([
 ]);
 
 const IPV4_ADDRESS = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
-const IPV4_MAPPED_PREFIX = "::ffff:";
+
+// The first 96 bits, as 24 hex digits, of each IPv6 range whose last 32 bits
+// are an IPv4 address: IPv4-compatible (::/96, which holds :: and ::1),
+// IPv4-mapped (::ffff:0:0/96), IPv4-translated (::ffff:0:0:0/96), and the
+// NAT64 well-known prefix (64:ff9b::/96).
+const IPV4_EMBEDDING_PREFIXES = [
+  "000000000000000000000000",
+  "00000000000000000000ffff",
+  "0000000000000000ffff0000",
+  "0064ff9b0000000000000000",
+];
 
 /**
  * Whether the dotted-quad IPv4 address `[a, b]` starts with is this machine
@@ -65,25 +79,40 @@ function ipv4Head(host: string): readonly [number, number] | undefined {
 }
 
 /**
- * Whether the IPv6 address `host` (brackets removed, as the URL parser wrote
- * it) is unspecified (`::`), loopback (`::1`), link-local (fe80::/10),
- * unique-local (fc00::/7, which holds the EC2 metadata address
- * fd00:ec2::254), or an IPv4-mapped form of a local IPv4 address. The URL
- * parser writes `::ffff:127.0.0.1` as `::ffff:7f00:1`. `parseInt` reads a
- * hex group up to the next colon, and reads a leading `::` as NaN, which
- * matches no prefix.
+ * The 32 hex digits of the IPv6 address `host`, as the URL parser writes it:
+ * lowercase groups without a dotted quad, with at most one `::`.
+ */
+function expandIpv6(host: string): string {
+  const hex = (part: string): string =>
+    part
+      .split(":")
+      .filter((group) => group !== "")
+      .map((group) => group.padStart(4, "0"))
+      .join("");
+  const gap = host.indexOf("::");
+  if (gap === -1) {
+    return hex(host);
+  }
+
+  const head = hex(host.slice(0, gap));
+  const tail = hex(host.slice(gap + 2));
+  return head + "0".repeat(32 - head.length - tail.length) + tail;
+}
+
+/**
+ * Whether the IPv6 address `host` (brackets removed) is link-local
+ * (fe80::/10), unique-local (fc00::/7, which holds the EC2 metadata address
+ * fd00:ec2::254), or embeds an IPv4 address `isLocalIpv4` refuses. The URL
+ * parser writes `[::169.254.169.254]` as `[::a9fe:a9fe]`.
  */
 function isLocalIpv6(host: string): boolean {
-  if (host === "::" || host === "::1") {
-    return true;
+  const digits = expandIpv6(host);
+  const octet = (start: number): number => Number.parseInt(digits.slice(start, start + 2), 16);
+  if (IPV4_EMBEDDING_PREFIXES.some((prefix) => digits.startsWith(prefix))) {
+    return isLocalIpv4(octet(24), octet(26));
   }
 
-  if (host.startsWith(IPV4_MAPPED_PREFIX)) {
-    const high = Number.parseInt(host.slice(IPV4_MAPPED_PREFIX.length), 16);
-    return isLocalIpv4(high >> 8, high & 0xff);
-  }
-
-  const first = Number.parseInt(host, 16);
+  const first = Number.parseInt(digits.slice(0, 4), 16);
   return (first & 0xffc0) === 0xfe80 || (first & 0xfe00) === 0xfc00;
 }
 

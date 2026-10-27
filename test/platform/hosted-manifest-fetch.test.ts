@@ -160,6 +160,10 @@ for (const target of [
   "https://[fd00:ec2::254]/latest",
   "https://[::ffff:7f00:1]/tools.json",
   "https://[::ffff:a9fe:a9fe]/latest",
+  "https://[::a9fe:a9fe]/latest",
+  "https://[::ffff:0:7f00:1]/tools.json",
+  "https://[64:ff9b::a9fe:a9fe]/latest",
+  "https://[fe80:1:2:3:4:5:6:7]/tools.json",
 ]) {
   test(`refuses a cross-origin redirect to ${target}`, async (t) => {
     // arrange
@@ -178,6 +182,9 @@ for (const target of [
   "https://192.169.0.1/tools.json",
   "https://[2001:db8::1]/tools.json",
   "https://[::ffff:5db8:d822]/tools.json",
+  "https://[::5db8:d822]/tools.json",
+  "https://[64:ff9b::5db8:d822]/tools.json",
+  "https://[2001:db8:1:2:3:4:5:6]/tools.json",
   "https://instance-data.example/tools.json",
 ]) {
   test(`follows a cross-origin redirect to the public host of ${target}`, async (t) => {
