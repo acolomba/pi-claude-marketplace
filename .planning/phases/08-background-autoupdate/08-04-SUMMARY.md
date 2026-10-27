@@ -267,3 +267,13 @@ Quick task 261027-9nh carried out five user decisions after this phase closed. T
 - **D-PL8-25.** After an aborted step the pass runs no further step in that runtime. An unfinished aborted plugin update is skipped; a finished one keeps its outcome. The plugins that moved before the abort are still named while the runtime is alive.
 
 D-PL8-23 closes the "no gate timeout" known limit and review IN-04. These decisions settle 08-04 uncertain choices 1 (D-PL8-02), 6 (D-PL8-07), 10 (D-PL8-23), 13 (D-PL8-22), and 17 (D-PL8-21).
+
+## Babysit review changes (2026-10-27)
+
+PR review fixes that change behavior or a decision, for the parent session to apply at merge:
+
+- **D-PL8-26 (amends D-PL8-07).** A scope whose base or local config file is invalid counts every marketplace's autoupdate as off, so a corrupt file never falls back to the default-on official names. This also drops the D-18 one-invalid-file fallback for autoupdate: a valid layer's explicit `autoupdate: true` no longer applies while the other layer is invalid (fail closed on corrupt data). Applied by the background pass, `marketplace update`'s cascade snapshot, the install and update fan-out, `marketplace list`, and `plugin list` (`persistence/config-merge.ts::hasInvalidConfigLayer`). Uncertain choice: the narrower alternative gates only the default, keeping a valid layer's explicit value.
+- **D-PL8-24 (refined).** A network call whose abort lands after the call settled returns or throws as it settled. Only an abort that cuts off a pending HTTP hop or body read fails the call with the abort reason.
+- A stopped runtime keeps the step held through the rest of the cascade, so a shutdown waits until `updateMarketplace` returns (D-PL8-03). A notice that throws after the pass failed no longer hides the error that ended the pass.
+
+CHANGELOG addition (sub-bullet): a plain `marketplace update` of an official marketplace with no `autoupdate` value now updates its plugins, because the official names default to autoupdate on (D-PL8-07).
