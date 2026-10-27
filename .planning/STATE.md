@@ -6,10 +6,10 @@ current_phase: 1
 current_phase_name: Staging Warning Channels
 status: verifying
 stopped_at: Phase 02 complete, ready to verify Phase 1
-last_updated: "2026-10-27T13:19:17.448Z"
+last_updated: "2026-10-27T14:07:11.092Z"
 last_activity: 2026-10-27
 last_activity_desc: Phase 02 complete, transitioned to Phase 1
-state_head: 57a07ac54e27cc7d46e27fe5d191b796ff504655
+state_head: 61bbe422eb8f20c156b4e66c1bc30fbf84d2afe1
 progress:
   total_phases: 11
   completed_phases: 1
@@ -190,6 +190,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
 | 261027-92s | Follow installed manifest links inside the owning root; refuse escapes as unreadable | 2026-10-27 | 99157528 | — | [261027-92s-manifest-symlink-containment](./quick/261027-92s-manifest-symlink-containment/) |
 | 261027-a3r | Contain install-time manifest links; fail closed on unusable installed copies | 2026-10-27 | 57a07ac5 | — | [261027-a3r-install-time-manifest-link-containment](./quick/261027-a3r-install-time-manifest-link-containment/) |
+| 261027-cyg | Answer a manifest-less installed copy from its entry; read path records in their marketplace clone | 2026-10-27 | 61bbe422 | — | [261027-cyg-entry-only-fallback-and-path-source-owne](./quick/261027-cyg-entry-only-fallback-and-path-source-owne/) |
 
 ## Session Continuity
 
