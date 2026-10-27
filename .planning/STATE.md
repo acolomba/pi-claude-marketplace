@@ -5,16 +5,16 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 3
 current_phase_name: Dependency Cascade Rows and Status
 status: executing
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-10-27T05:11:05.413Z"
+stopped_at: Completed 03-04-PLAN.md
+last_updated: "2026-10-27T05:35:27.606Z"
 last_activity: 2026-10-26
 last_activity_desc: Phase 3 execution started
-state_head: 855ee41347319a7f5a8226cb33c27e7eddbb380f
+state_head: fda872e189d5493762609bb12a7f6dc3f3fb83af
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 6
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 3 (Dependency Cascade Rows and Status) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-10-26 — Phase 3 execution started
 
@@ -191,8 +191,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-27T05:11:05.300Z
-**Stopped at:** Completed 03-03-PLAN.md
+**Last session:** 2026-10-27T05:35:27.488Z
+**Stopped at:** Completed 03-04-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -407,6 +407,7 @@ archived milestone artifacts.
 | Phase 03 P01 | 17min | 2 tasks | 7 files |
 | Phase 03 P02 | 24min | 2 tasks | 15 files |
 | Phase 03 P03 | 70min | 3 tasks | 11 files |
+| Phase 03 P04 | 15min | 2 tasks | 7 files |
 
 ## Decisions
 
@@ -612,6 +613,9 @@ archived milestone artifacts.
 - [Phase 03]: D-PL3-01/02: every closure member a failed install would have newly materialized and did not gets a cause-less (failed) {dependency failed} row
 - [Phase 03]: D-PL3-15: a key a moved row reports gets no second row; root ledger, plan-step, and mid-walk lookup failures keep one row
 - [Phase 03]: T-03-48: a dependency's ledger error in a cascade row has absolute paths cut to basenames, as the move row already does
+- [Phase 03]: D-PL3-08/13: a directory pin refusal names every range-declaring cascade member, nearest the requested plugin first; installed plugins outside the closure are not named
+- [Phase 03]: D-PL3-09: the directory pin refusal cuts name, listed version, joined ranges, and each requirer at 120 code units with an ellipsis
+- [Phase 03]: D-PL3-10: other refusals keep the 200-character range bound
 
 ### mcp-4 decisions
 
