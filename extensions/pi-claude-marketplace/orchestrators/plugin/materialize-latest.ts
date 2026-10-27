@@ -18,22 +18,28 @@ import type {
   PreparePluginUpdateOptions,
 } from "./update-preflight.ts";
 import type { ThreePhaseArgs, ThreePhaseArgsBase, UpdateRunOutcome } from "./update-swap.ts";
-import type { RevisionMove, UpdateDependencyRow } from "../types.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
+import type { PluginUpdateFailedOutcome, RevisionMove, UpdateDependencyRow } from "../types.ts";
 
 /**
  * UPR-03: what one target's runner reported, so a thrown failure can name the
  * installed version once the preflight found the record, and the move it
  * attempted once it derived a candidate. A caller creates a fresh one per
  * target, so a later target never renders an earlier target's versions.
+ *
+ * D-PL1-14 / D-PL1-24: `stagingWarnings` holds the tagged warnings of the
+ * handles the swap prepared before it threw, so the same per-target holder
+ * carries them to the catch site that builds the failed outcome.
  */
 export interface CandidateReport {
   move?: Partial<RevisionMove>;
+  stagingWarnings?: readonly StagingWarning[];
 }
 
-/** UPR-03: the runner callbacks that fill `report`, for both verbs. */
+/** UPR-03 / D-PL1-14: the runner callbacks that fill `report`, for both verbs. */
 export function recordCandidate(
   report: CandidateReport,
-): Pick<ThreePhaseArgsBase, "onCandidate" | "onRecord"> {
+): Pick<ThreePhaseArgsBase, "onCandidate" | "onRecord" | "onStagingWarnings"> {
   return {
     onRecord: (fromVersion) => {
       report.move = { fromVersion };
@@ -41,7 +47,20 @@ export function recordCandidate(
     onCandidate: (move) => {
       report.move = move;
     },
+    onStagingWarnings: (warnings) => {
+      report.stagingWarnings = warnings;
+    },
   };
+}
+
+/**
+ * D-PL1-14: the reported warnings as a failed outcome's member, omitted when
+ * the swap reported none (NREG-01).
+ */
+export function reportedStagingWarnings(
+  report: CandidateReport,
+): Pick<PluginUpdateFailedOutcome, "stagingWarnings"> {
+  return report.stagingWarnings === undefined ? {} : { stagingWarnings: report.stagingWarnings };
 }
 
 /**
@@ -131,9 +150,14 @@ async function swapAfterSettle(
   rows: readonly UpdateDependencyRow[],
 ): Promise<UpdateRunOutcome> {
   const settledState = await loadState(args.locations.extensionRoot);
+  const report: CandidateReport = {};
   try {
     return {
-      ...(await swapPluginUpdate(args, { ...preflight, state: settledState }, policy)),
+      ...(await swapPluginUpdate(
+        forwardingStagingWarnings(args, report),
+        { ...preflight, state: settledState },
+        policy,
+      )),
       dependencyRows: rows,
     };
   } catch (err) {
@@ -149,6 +173,22 @@ async function swapAfterSettle(
       declaresAgents: false,
       declaresMcp: false,
       declaresWorkflows: false,
+      // D-PL1-14: the warnings of the handles prepared before the throw.
+      ...reportedStagingWarnings(report),
     };
   }
+}
+
+/**
+ * D-PL1-14: `args` whose swap reports its warnings into `report` as well as
+ * to the caller's own holder, so this module's failed outcome can carry them.
+ */
+function forwardingStagingWarnings(args: ThreePhaseArgs, report: CandidateReport): ThreePhaseArgs {
+  return {
+    ...args,
+    onStagingWarnings: (warnings) => {
+      report.stagingWarnings = warnings;
+      args.onStagingWarnings?.(warnings);
+    },
+  };
 }

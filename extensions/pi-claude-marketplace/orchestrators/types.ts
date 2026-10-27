@@ -585,6 +585,12 @@ export interface PluginUpdateFailedOutcome extends PluginUpdateBase {
    * there are none (NREG-01).
    */
   readonly mcpConfigNotices?: readonly McpConfigNotice[];
+  /**
+   * D-PL1-10 / D-PL1-14: the tagged staging warnings of the handles the
+   * failed update prepared, both halves, in bridge order. A consumer renders
+   * the discovery half after the failure row. Omitted when empty (NREG-01).
+   */
+  readonly stagingWarnings?: readonly StagingWarning[];
 }
 
 /**

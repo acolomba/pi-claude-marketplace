@@ -677,6 +677,99 @@ for (const [mode, swapArgs] of [
   });
 }
 
+/** D-PL1-14: the collided skill and the description-less agent `seedBothHalvesUpdate` yields. */
+function bothHalvesWarnings(skillsDir: string) {
+  return [
+    {
+      kind: "discovery",
+      message: `skill source "hello-foo" in "${skillsDir}" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.`,
+    },
+    {
+      kind: "hygiene",
+      message: "[bot] source description was missing or empty -- using fallback",
+    },
+  ];
+}
+
+test("D-PL1-14: a prepare that throws in its mcp step reports the warnings of the handles it prepared", async (t) => {
+  // arrange
+  const { cwd, skillsDir } = await seedBothHalvesUpdate(t, "update-swap-prepare-throw-");
+  const reports: unknown[] = [];
+  const args = {
+    ...cascadeSwapArgs(cwd),
+    onStagingWarnings: (warnings: readonly unknown[]) => {
+      reports.push(warnings);
+    },
+  };
+  const preflight = await preflightOf(args);
+  await mkdir(args.locations.mcpAdapterJsonPath, { recursive: true });
+
+  // act
+  const swap = swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  await assert.rejects(swap, { code: "EISDIR" });
+  assert.deepStrictEqual(reports, [bothHalvesWarnings(skillsDir)]);
+});
+
+test("D-PL1-14: an agent-target refusal after a full prepare reports every handle's warnings once", async (t) => {
+  // arrange
+  const { cwd, skillsDir } = await seedBothHalvesUpdate(t, "update-swap-intent-throw-");
+  const reports: unknown[] = [];
+  const args = {
+    ...cascadeSwapArgs(cwd),
+    onStagingWarnings: (warnings: readonly unknown[]) => {
+      reports.push(warnings);
+    },
+  };
+  const preflight = await preflightOf(args);
+  const agentTarget = path.join(args.locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
+  await mkdir(args.locations.agentsDir, { recursive: true });
+  await writeFile(agentTarget, "Foreign agent.\n");
+
+  // act
+  const swap = swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  await assert.rejects(swap, {
+    message: `Cannot replace agent target with non-previous content at ${agentTarget}`,
+  });
+  assert.deepStrictEqual(reports, [bothHalvesWarnings(skillsDir)]);
+});
+
+test("D-PL1-14: a phase-3 failure puts every handle's warnings on its failed outcome", async (t) => {
+  // arrange
+  const { cwd, skillsDir } = await seedBothHalvesUpdate(t, "update-swap-phase3-warnings-");
+  const args = cascadeSwapArgs(cwd);
+  const foreignPath = await seedRefusedWorkflowTarget(
+    args.locations,
+    path.join(cwd, "mp-src", "plugins", "hello"),
+  );
+  const preflight = await preflightOf(args);
+  const refusal = `Cannot replace workflow target with non-previous content at ${foreignPath}`;
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "failed",
+    name: "hello",
+    fromVersion: "1.0.0",
+    toVersion: "2.0.0",
+    notes: [
+      'Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it.',
+      `workflows: ${refusal}`,
+    ],
+    reasons: ["rollback partial"],
+    phaseFailures: [{ phase: "workflows", msg: refusal }],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    stagingWarnings: bothHalvesWarnings(skillsDir),
+  });
+});
+
 test("NREG-01: a clean swap's updated outcome has neither stagingWarnings nor notes", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "update-swap-clean-warnings-");

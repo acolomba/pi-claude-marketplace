@@ -228,6 +228,13 @@ export interface ThreePhaseArgsBase {
   /** UPR-03: the installed version, reported before any candidate; see `onCandidate`. */
   readonly onRecord?: NonNullable<PreparePluginUpdateOptions["onRecord"]>;
   /**
+   * D-PL1-14: receives the tagged staging warnings of the handles prepared so
+   * far, when there are any, so a caller can report them on a failure the
+   * swap throws. The swap reports from a failed prepare, or once after a full
+   * prepare and before the intent mark.
+   */
+  readonly onStagingWarnings?: (warnings: readonly StagingWarning[]) => void;
+  /**
    * UPD-DEP-D1: the command's context for a cascade-mode run's credential
    * prompts. A dependency move runs in cascade mode, so its rows return to the
    * command; on an interactive command it still authenticates as the command
@@ -416,6 +423,7 @@ async function prepareUpdateHandles(
       previousWorkflowNames: record.resources.workflows,
     });
   } catch (err) {
+    reportStagingWarnings(args, handles);
     throw errorWithCleanupFailures(err, await abortPartialHandles(ops, handles, "prepare"));
   }
 
@@ -423,22 +431,37 @@ async function prepareUpdateHandles(
 }
 
 /**
+ * D-PL1-14 / D-PL1-24: hand the prepared handles' warnings to the caller's
+ * holder; a holder hears nothing when there are none (NREG-01).
+ */
+function reportStagingWarnings(args: ThreePhaseArgsBase, handles: Partial<PrepHandles>): void {
+  const warnings = collectUpdateWarnings(handles);
+  if (warnings.length > 0) {
+    args.onStagingWarnings?.(warnings);
+  }
+}
+
+/**
  * D-PL1-10: the five bridges' tagged staging warnings for the `updated`
  * outcome, both halves, in bridge order (skills, commands, agents, mcp,
  * workflows). No mode seam: each reader takes the half it renders.
+ *
+ * D-PL1-14: it also reads a partial set, the handles a failed prepare had
+ * already prepared.
  *
  * Its own function rather than a few lines inside the finalize window:
  * `prepareUpdateHandles` and that window already sit near the fallow
  * `maxCognitive: 15` ceiling.
  */
-function collectUpdateWarnings(handles: PrepHandles): readonly StagingWarning[] {
-  return Object.freeze([
-    ...handles.skills.result.warnings,
-    ...handles.commands.result.warnings,
-    ...handles.agents.result.warnings,
-    ...handles.mcp.result.warnings,
-    ...handles.workflows.result.warnings,
-  ]);
+function collectUpdateWarnings(handles: Partial<PrepHandles>): readonly StagingWarning[] {
+  const ordered = [
+    handles.skills,
+    handles.commands,
+    handles.agents,
+    handles.mcp,
+    handles.workflows,
+  ];
+  return Object.freeze(ordered.flatMap((handle) => handle?.result.warnings ?? []));
 }
 
 async function abortPartialHandles(
@@ -1293,6 +1316,7 @@ function composePhase3FailureOutcome(
   failures: NonEmptyUpdatePhase3Failures,
   move: RevisionMove,
   mcpConfigNotices: readonly McpConfigNotice[],
+  stagingWarnings: readonly StagingWarning[],
 ): UpdatePhase3FailedOutcome {
   const { plugin, marketplace } = args;
   // D-18-10: running `reinstall` again repairs a partial replace for either
@@ -1343,6 +1367,8 @@ function composePhase3FailureOutcome(
     declaresWorkflows: false,
     // NREG-01: absent when the MCP commit threw or reported nothing.
     ...(mcpConfigNotices.length > 0 && { mcpConfigNotices }),
+    // D-PL1-14: every prepared handle's warnings; NREG-01, absent when none.
+    ...(stagingWarnings.length > 0 && { stagingWarnings }),
   };
 }
 
@@ -1403,6 +1429,8 @@ export async function swapPluginUpdate(
     generatedNames.agentsDirs,
     generatedNames,
   );
+  // D-PL1-24: reported before the intent-mark window, so its throws carry them.
+  reportStagingWarnings(args, handles);
 
   // ─── Phase 2a: pre-commit intent-mark (TR-04) ─────────────────────────────
   //
@@ -1483,6 +1511,7 @@ export async function swapPluginUpdate(
       phase3aFailures,
       preflightMove(preflight),
       mcpConfigNotices,
+      collectUpdateWarnings(handles),
     );
   }
 

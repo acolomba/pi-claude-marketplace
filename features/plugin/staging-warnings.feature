@@ -73,3 +73,19 @@ Feature: Plugin staging warnings
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status | reasons | scope   | version | cause chain                   | cause truncated | leaks | rollback partial |
       | fixtures         | project           | demo@fixtures | demo | failed |         | project | 1.0.0   | {mcp-adapter.json read error} | false           |       |                  |
+
+  Scenario: An update that fails in its mcp phase reports the skill the skills phase skipped after the failed row
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
+    Given a directory blocks the mcp-adapter.json file of the project scope
+    When the user runs "/claude:plugin update demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | summary                        | header                                                                  | lines                                                                                                                                      |
+      | cascade    | error    | false        | A plugin operation has failed. |                                                                         |                                                                                                                                            |
+      | diagnostic | warning  | false        |                                | Plugin "demo" [project] update failed; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons    | scope   | from  | version | cause chain                   | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | unreadable | project | 1.0.0 | 1.1.0   | {mcp-adapter.json read error} | false           |       |                  |

@@ -88,7 +88,11 @@ import { DEFAULT_GIT_OPS, refreshGitHubClone, refreshUrlClone } from "../marketp
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 
 import { garbageCollectPluginClones } from "./clone-gc.ts";
-import { materializeLatestVersion, recordCandidate } from "./materialize-latest.ts";
+import {
+  materializeLatestVersion,
+  recordCandidate,
+  reportedStagingWarnings,
+} from "./materialize-latest.ts";
 import {
   emitMarketplaceNotAddedSignal,
   keepLocalLayerTargets,
@@ -138,6 +142,7 @@ import type {
 } from "../types.ts";
 import type { CandidateReport } from "./materialize-latest.ts";
 import type { StagingDiagnostic } from "./shared.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 
 /** Runs one prepared update target for the update flow. */
 type UpdatePluginRunner = (args: ThreePhaseArgs) => Promise<UpdateRunOutcome>;
@@ -380,7 +385,7 @@ async function updatePluginsWith(
         pluginName: t.marketplace,
         err,
       });
-      abortUpdateBatch(ctx, run, outcomes, cardinality, composeCascade);
+      abortUpdateBatch(ctx, run, outcomes, cardinality, composeCascade, []);
       return;
     }
 
@@ -419,7 +424,9 @@ async function updatePluginsWith(
         err,
         report,
       });
-      abortUpdateBatch(ctx, run, outcomes, cardinality, composeCascade);
+      abortUpdateBatch(ctx, run, outcomes, cardinality, composeCascade, [
+        updateFailedDiagnostic(t.plugin, t.scope, report),
+      ]);
       return;
     }
 
@@ -443,7 +450,15 @@ async function updatePluginsWith(
     // throw and are handled by the `catch` block above, never reaching
     // this branch.
     if (isPhase3aAggregateFailure(outcome)) {
-      abortUpdateBatch(ctx, run, outcomes, cardinality, composeCascade, outcome);
+      abortUpdateBatch(
+        ctx,
+        run,
+        outcomes,
+        cardinality,
+        composeCascade,
+        [updateFailedDiagnostic(t.plugin, t.scope, outcome)],
+        outcome,
+      );
       return;
     }
 
@@ -465,8 +480,11 @@ async function updatePluginsWith(
  * orchestrated readers and is not shown (D-PL1-08), the same property
  * install's standalone arm relies on.
  *
- * Deliberately NOT called from `abortUpdateBatch`: an aborted batch has a
- * failure to explain, and a skipped-component note is noise against it.
+ * D-PL1-14: a `failed` outcome the batch kept renders with `update failed`.
+ *
+ * Deliberately NOT called from `abortUpdateBatch`: the targets that succeeded
+ * before an abort render no diagnostic, and only the failed target's renders
+ * there (D-PL1-22).
  */
 function surfaceUpdateDiscoveryWarnings(
   ctx: NotificationContext,
@@ -476,20 +494,44 @@ function surfaceUpdateDiscoveryWarnings(
   surfaceStagingDiagnostics(ctx, run, outcomes.flatMap(updateStagingDiagnostic));
 }
 
-/** D-PL1-07: the staging diagnostic of an updated outcome; none for any other partition. */
+/**
+ * D-PL1-07 / D-PL1-14: the staging diagnostic of an updated or failed
+ * outcome; none for any other partition.
+ */
 function updateStagingDiagnostic({ target, outcome }: UpdateCascadeOutcome): StagingDiagnostic[] {
-  if (outcome.partition !== "updated") {
-    return [];
+  switch (outcome.partition) {
+    case "updated":
+      return [
+        {
+          plugin: outcome.name,
+          scope: target.scope,
+          verb: "updated",
+          warnings: outcome.stagingWarnings ?? [],
+        },
+      ];
+    case "failed":
+      return [updateFailedDiagnostic(outcome.name, target.scope, outcome)];
+    case "skipped":
+    case "unchanged":
+      return [];
   }
+}
 
-  return [
-    {
-      plugin: outcome.name,
-      scope: target.scope,
-      verb: "updated",
-      warnings: outcome.stagingWarnings ?? [],
-    },
-  ];
+/**
+ * D-PL1-14: the `update failed` diagnostic of one target, from the warnings
+ * its failed outcome or its report holder carries.
+ */
+function updateFailedDiagnostic(
+  plugin: string,
+  scope: Scope,
+  carrier: { readonly stagingWarnings?: readonly StagingWarning[] },
+): StagingDiagnostic {
+  return {
+    plugin,
+    scope,
+    verb: "update failed",
+    warnings: carrier.stagingWarnings ?? [],
+  };
 }
 
 /**
@@ -616,6 +658,10 @@ function isPhase3aAggregateFailure(
  * `failed` is the phase-3a aggregate outcome, when the abort came from one.
  * Its MCP notices follow the cascade, because its MCP commit may have
  * rewritten the file before a later bridge failed.
+ *
+ * D-PL1-14 / D-PL1-22: `failedDiagnostics` holds the failed target's staging
+ * diagnostic, which renders after the cascade and before the MCP notices; the
+ * targets that succeeded before the abort render none.
  */
 function abortUpdateBatch(
   ctx: NotificationContext,
@@ -623,12 +669,14 @@ function abortUpdateBatch(
   outcomes: readonly UpdateCascadeOutcome[],
   cardinality: "single" | "plural",
   composeCascade: UpdateCascadeComposer,
+  failedDiagnostics: readonly StagingDiagnostic[],
   failed?: UpdatePhase3FailedOutcome,
 ): void {
   if (outcomes.length > 0) {
     composeCascade(ctx, run, outcomes, cardinality, true);
   }
 
+  surfaceStagingDiagnostics(ctx, run, failedDiagnostics);
   surfaceUpdateMcpConfigNotices(ctx, run, outcomes, failed);
 }
 
@@ -720,7 +768,7 @@ function convergePluginWith(
  */
 async function runCascadeTarget(
   runner: UpdatePluginRunner,
-  args: Omit<CascadeThreePhaseArgs, "onCandidate" | "onRecord">,
+  args: Omit<CascadeThreePhaseArgs, "onCandidate" | "onRecord" | "onStagingWarnings">,
 ): Promise<PluginUpdateOutcome> {
   const report: CandidateReport = {};
   try {
@@ -729,7 +777,11 @@ async function runCascadeTarget(
     // GHB-03: an invalid GitHub base override fails the command that runs
     // the cascade.
     rethrowInvalidGitHubBaseUrl(err);
-    return cascadeFailureOutcome(args.plugin, report, err);
+    // D-PL1-14: the warnings of the handles the swap prepared before it threw.
+    return {
+      ...cascadeFailureOutcome(args.plugin, report, err),
+      ...reportedStagingWarnings(report),
+    };
   }
 }
 

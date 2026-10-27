@@ -301,6 +301,40 @@ test("UPR-03: a candidate report holds the installed version when no candidate w
   assert.deepStrictEqual(report, { move: { fromVersion: "1.0.0" } });
 });
 
+/**
+ * D-PL1-14: give the offered `hello` a second skill whose generated name
+ * collides with `tool`'s, and return the discovery warning its prepare yields.
+ */
+async function seedCollidingSkill(pluginRoot: string) {
+  const skillsDir = path.join(pluginRoot, "skills");
+  await mkdir(path.join(skillsDir, "hello-tool"), { recursive: true });
+  await writeFile(path.join(skillsDir, "hello-tool", "SKILL.md"), "---\nname: tool\n---\n");
+  return {
+    kind: "discovery",
+    message: `skill source "tool" in "${skillsDir}" elides to generated name "hello-tool", already produced by skill source "hello-tool"; ignoring duplicate.`,
+  };
+}
+
+test("D-PL1-14: a candidate report holds the warnings the swap reported", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { base, pluginRoot } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  const warning = await seedCollidingSkill(pluginRoot);
+  const report: CandidateReport = {};
+
+  // act
+  await materializeLatestVersion(
+    { ...base, cascade: true, ...recordCandidate(report) },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.deepStrictEqual(report, {
+    move: { fromVersion: "1.0.0", toVersion: "1.1.0" },
+    stagingWarnings: [warning],
+  });
+});
+
 const ZCORE_ROW = {
   status: "installed",
   name: "zcore@mp",
@@ -476,4 +510,68 @@ test("UPD-DEP-D1: a cascade run authenticates in the command's context when it c
 
   // assert
   assert.strictEqual(outcome.partition, "updated");
+});
+
+test("D-PL1-14: a swap that fails after the settle carries the warnings it reported and forwards them", async (t) => {
+  // arrange
+  const { base, pluginRoot } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  const warning = await seedCollidingSkill(pluginRoot);
+  const diskFull = new Error("disk full");
+  const report: CandidateReport = {};
+
+  // act
+  const outcome = await materializeLatestVersion(
+    {
+      ...base,
+      cascade: true,
+      ...recordCandidate(report),
+      settleDependencies: () => Promise.resolve({ kind: "settled", rows: [ZCORE_ROW] }),
+      stateTransaction: { saveState: () => Promise.reject(diskFull) },
+    },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "failed",
+    name: "hello",
+    fromVersion: "1.0.0",
+    notes: ["disk full\n\ncause: disk full"],
+    reasons: [],
+    cause: diskFull,
+    dependencyRows: [ZCORE_ROW],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    stagingWarnings: [warning],
+  });
+  assert.deepStrictEqual(report.stagingWarnings, [warning]);
+});
+
+test("D-PL1-14: a swap that fails after the settle before any prepare carries no warnings", async (t) => {
+  // arrange
+  const { base } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  const report: CandidateReport = {};
+  const settleDependencies: UpdateDependencySettler = async (args) => {
+    // A later plugin of the scope now owns the name the candidate's skill generates.
+    const state = await loadState(args.locations.extensionRoot);
+    const mp = state.marketplaces.mp;
+    assert.ok(mp !== undefined);
+    mp.plugins.other = recordedPlugin("1.0.0", "/nonexistent-other");
+    await saveState(args.locations.extensionRoot, state);
+    return { kind: "settled", rows: [ZCORE_ROW] };
+  };
+
+  // act
+  const outcome = await materializeLatestVersion(
+    { ...base, cascade: true, ...recordCandidate(report), settleDependencies },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.ok(outcome.partition === "failed");
+  assert.deepStrictEqual(
+    { stagingWarnings: "stagingWarnings" in outcome, report },
+    { stagingWarnings: false, report: { move: { fromVersion: "1.0.0", toVersion: "1.1.0" } } },
+  );
 });
