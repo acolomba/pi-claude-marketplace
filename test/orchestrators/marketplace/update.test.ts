@@ -241,8 +241,8 @@ async function withHermeticHome<T>(
  * accepts a single `https://github.com/<owner>/<repo>[#<ref>]` URL;
  * tests synthesize a stable owner/repo and append the optional fragment.
  */
-function makeGithubSource(ref?: string): ReturnType<typeof githubSource> {
-  const url = `https://github.com/anthropics/claude-plugins-official${ref === undefined ? "" : `#${ref}`}`;
+function makeGithubSource(ref?: string, owner = "anthropics"): ReturnType<typeof githubSource> {
+  const url = `https://github.com/${owner}/claude-plugins-official${ref === undefined ? "" : `#${ref}`}`;
   return githubSource(url);
 }
 
@@ -250,6 +250,7 @@ async function seedGithubMarketplace(opts: {
   cwd: string;
   name: string;
   ref?: string;
+  owner?: string;
   autoupdate?: boolean;
   plugins?: Record<string, ExtensionState["marketplaces"][string]["plugins"][string]>;
   fixture?: "valid-marketplace" | "invalid-manifest";
@@ -270,7 +271,7 @@ async function seedGithubMarketplace(opts: {
       [opts.name]: {
         name: opts.name,
         scope: "project",
-        source: makeGithubSource(opts.ref),
+        source: makeGithubSource(opts.ref, opts.owner),
         addedFromCwd: opts.cwd,
         manifestPath: path.join(cloneDir, ".claude-plugin", "marketplace.json"),
         marketplaceRoot: cloneDir,
@@ -294,7 +295,7 @@ async function seedGithubMarketplace(opts: {
         schemaVersion: 1,
         marketplaces: {
           [opts.name]: {
-            source: "anthropics/claude-plugins-official",
+            source: `${opts.owner ?? "anthropics"}/claude-plugins-official`,
             autoupdate: opts.autoupdate,
           },
         },
@@ -6153,5 +6154,197 @@ test("D-PL5-09: a bare update refreshes a hosted marketplace through the injecte
     ]);
     assert.deepStrictEqual(urls, [HOSTED_URL]);
     assert.strictEqual(await readFile(manifestPath, "utf8"), CHANGED_HOSTED_CATALOG);
+  });
+});
+
+const RESERVED_MANIFEST_JSON = JSON.stringify({
+  name: "claude-plugins-official",
+  owner: { name: "acme" },
+  plugins: [],
+});
+const ORGANIZATION_REFUSAL =
+  "The name 'claude-plugins-official' is reserved for official Anthropic marketplaces and can only be used with GitHub sources from the 'anthropics' organization.";
+const REPOSITORY_REFUSAL =
+  "The name 'claude-plugins-official' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/anthropics/' can use this name.";
+
+test("D-PL5-27: a hosted refresh to a reserved name fails, keeps every byte, and runs no autoupdate cascade", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const { manifestPath } = await seedHostedMarketplace({
+      cwd,
+      autoupdate: true,
+      plugins: { hello: makePluginRecord() },
+    });
+    const stateJsonPath = locationsFor("project", cwd).stateJsonPath;
+    const stateBefore = await readFile(stateJsonPath, "utf8");
+    const { ctx, run, notifications } = makeCtx();
+    const { fetchCatalog } = hostedServing(RESERVED_MANIFEST_JSON);
+    const calls: string[] = [];
+    const pluginUpdate: PluginUpdateFn = (plugin) => {
+      calls.push(plugin);
+      return Promise.reject(new Error("unexpected plugin update"));
+    };
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "tools",
+      scope: "project",
+      cwd,
+      hostedManifestFetch: fetchCatalog,
+      pluginUpdate,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {invalid manifest}\n    cause: Failed to update marketplace "tools". -> ${ORGANIZATION_REFUSAL}`,
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(
+      {
+        catalog: await readFile(manifestPath, "utf8"),
+        state: await readFile(stateJsonPath, "utf8"),
+        calls,
+      },
+      { catalog: HOSTED_CATALOG, state: stateBefore, calls: [] },
+    );
+  });
+});
+
+test("D-PL5-27: a path refresh to a reserved name fails and leaves the record unstamped", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const marketplaceRoot = path.join(cwd, "local-mp");
+    await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+    await seedPathMarketplace({ cwd, name: "local-mp", marketplaceRoot });
+    await writeFile(
+      path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+      RESERVED_MANIFEST_JSON,
+    );
+    const extensionRoot = locationsFor("project", cwd).extensionRoot;
+    const recordBefore = (await loadState(extensionRoot)).marketplaces["local-mp"];
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "local-mp",
+      scope: "project",
+      cwd,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `Some operations have failed.\n\n⊘ local-mp [project] (failed)\n  ⊘ local-mp (failed) {invalid manifest}\n    cause: Failed to update marketplace "local-mp". -> ${ORGANIZATION_REFUSAL}`,
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual((await loadState(extensionRoot)).marketplaces["local-mp"], recordBefore);
+  });
+});
+
+for (const { kind, seed } of [
+  {
+    kind: "github",
+    seed: (cwd: string) => seedGithubMarketplace({ cwd, name: "tools", owner: "acme" }),
+  },
+  { kind: "url", seed: (cwd: string) => seedUrlMarketplace({ cwd, name: "tools" }) },
+]) {
+  test(`D-PL5-27: a ${kind} refresh to a reserved name fails, leaves the record unstamped, and keeps the advanced checkout`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const { cloneDir } = await seed(cwd);
+      const manifestPath = path.join(cloneDir, ".claude-plugin", "marketplace.json");
+      const extensionRoot = locationsFor("project", cwd).extensionRoot;
+      const recordBefore = (await loadState(extensionRoot)).marketplaces.tools;
+      const { ctx, run, notifications } = makeCtx();
+      const { credOps: credentialOps } = createCredentialOps();
+      const { gitOps } = createGitOps({
+        remoteRefs: { "refs/remotes/origin/HEAD": "abcdef0000000000000000000000000000000003" },
+        localRefs: { HEAD: "abcdef0000000000000000000000000000000003" },
+      });
+      const renamingGitOps: typeof gitOps = {
+        ...gitOps,
+        async checkout(opts): Promise<void> {
+          await gitOps.checkout(opts);
+          await writeFile(manifestPath, RESERVED_MANIFEST_JSON);
+        },
+      };
+
+      // act
+      await updateMarketplace({
+        completionCache: createCompletionCache(),
+        ctx,
+        run,
+        name: "tools",
+        scope: "project",
+        cwd,
+        gitOps: renamingGitOps,
+        credentialOps,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: `Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {invalid manifest}\n    cause: Marketplace "tools" clone advanced but manifest could not be persisted. -> ${REPOSITORY_REFUSAL}`,
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(
+        {
+          record: (await loadState(extensionRoot)).marketplaces.tools,
+          manifest: await readFile(manifestPath, "utf8"),
+        },
+        { record: recordBefore, manifest: RESERVED_MANIFEST_JSON },
+      );
+    });
+  });
+}
+
+test("D-PL5-27: a github refresh from the anthropics organization keeps a reserved name", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const { cloneDir } = await seedGithubMarketplace({ cwd, name: "claude-plugins-official" });
+    const manifestPath = path.join(cloneDir, ".claude-plugin", "marketplace.json");
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      remoteRefs: { "refs/remotes/origin/HEAD": "abcdef0000000000000000000000000000000003" },
+      localRefs: { HEAD: "abcdef0000000000000000000000000000000003" },
+    });
+    const renamingGitOps: typeof gitOps = {
+      ...gitOps,
+      async checkout(opts): Promise<void> {
+        await gitOps.checkout(opts);
+        await writeFile(manifestPath, RESERVED_MANIFEST_JSON);
+      },
+    };
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "claude-plugins-official",
+      scope: "project",
+      cwd,
+      gitOps: renamingGitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● claude-plugins-official [project] (updated)" },
+    ]);
+    const state = await loadState(locationsFor("project", cwd).extensionRoot);
+    assert.strictEqual(
+      state.marketplaces["claude-plugins-official"]?.lastSuccessfulManifest,
+      RESERVED_MANIFEST_JSON,
+    );
   });
 });

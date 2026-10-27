@@ -99,6 +99,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { networkCloneUrl } from "../../domain/clone-key.ts";
 import { loadMarketplaceManifestDocument } from "../../domain/manifest.ts";
+import { reservedMarketplaceNameRefusal } from "../../domain/name.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
@@ -109,6 +110,7 @@ import {
   MarketplaceBaselineUnreadableError,
   MarketplaceUpdateError,
   PluginShapeError,
+  ReservedMarketplaceNameError,
   StateLockHeldError,
   composeErrorWithCauseChain,
   errorMessage,
@@ -424,6 +426,19 @@ async function refreshGitHubSource(
   }
 }
 
+/**
+ * MKT-01 / D-PL5-27: refuses a refreshed manifest that now declares a name
+ * Claude Code reserves for the anthropics GitHub organization. It runs before
+ * the record is stamped, so a refused refresh keeps its baseline. A hosted
+ * catalog was already refused before its rename.
+ */
+function refuseReservedRefreshName(name: string, source: ParsedSource): void {
+  const refusal = reservedMarketplaceNameRefusal(name, source);
+  if (refusal !== undefined) {
+    throw new ReservedMarketplaceNameError(refusal);
+  }
+}
+
 async function refreshRecord(
   record: ExtensionState["marketplaces"][string],
   args: RefreshOneArgs,
@@ -499,6 +514,7 @@ async function refreshRecord(
     }
 
     const document = await loadMarketplaceManifestDocument(recordedManifestPath(record));
+    refuseReservedRefreshName(document.manifest.name, source);
 
     const changed =
       preKey === undefined || !isDeepStrictEqual(baseline, JSON.parse(document.comparisonJson));
