@@ -5,9 +5,10 @@
 // git seam and must map the SAME underlying failure onto the SAME closed-set
 // REASON, so the ladder lives here once in `classifyGitFailure`, the
 // module's one entry point. Each operation passes its own not-found rule
-// (D-PL7-02). Three fixed-rule wrappers serve callers whose modules other work
-// owns (D-PL7-11): `classifyGitHostFailure`, `classifyGitSourceAccessFailure`,
-// and `hostHttpFailureFrame`.
+// (D-PL7-02). Three fixed-rule wrappers bind a rule for their callers:
+// `classifyGitHostFailure` (the plugin-clone rule: install, import, apply),
+// and `classifyGitSourceAccessFailure` and `hostHttpFailureFrame` (the
+// `marketplace add` rule) (D-PL7-11).
 //
 // Duck-typed on the isomorphic-git error shapes (D-13: no isomorphic-git
 // import outside the platform tier); the project's own

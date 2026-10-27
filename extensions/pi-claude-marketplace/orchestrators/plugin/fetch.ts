@@ -588,8 +588,8 @@ function failedRow(
  * itself succeeded and the source is not missing; then `classifyGitFailure`
  * with the plugin-clone rule (D-PL7-02), so a host 404/410 is `source
  * missing`, any other non-auth HTTP status `network error` (with its frame),
- * and the credential and network-errno arms keep their reasons; then the fs
- * errno arms of `reasonsFromTypedError` (EACCES/EPERM -> `permission denied`);
+ * and the credential and network-errno arms keep their reasons; then
+ * EACCES/EPERM on the thrown error -> `permission denied`;
  * and any other throw folds to `source missing` (the fail-clean default -- the
  * tree could not be produced).
  */
