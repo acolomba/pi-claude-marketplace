@@ -70,6 +70,7 @@ import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   FetchedUrlCause,
+  HostedManifestFetchError,
   InvalidMarketplaceManifestError,
   MarketplaceDuplicateNameError,
   StaleSourceCloneError,
@@ -275,6 +276,8 @@ export interface AddMarketplaceOptions {
  *
  * GHB-01: a clone failure whose cause is a `FetchedUrlCause` is the failure
  * itself, so it is not unwrapped; its code stays readable to the classifier.
+ * A `HostedManifestFetchError` carries the connection error as its cause, so
+ * it is returned as it is too (D-PL5-10).
  */
 function unwrapAddError(err: unknown): unknown {
   if (
@@ -283,7 +286,8 @@ function unwrapAddError(err: unknown): unknown {
     err instanceof UnreadableSourceCloneError ||
     err instanceof InvalidMarketplaceManifestError ||
     err instanceof UnsupportedSourceError ||
-    err instanceof ManifestReadDeniedError
+    err instanceof ManifestReadDeniedError ||
+    err instanceof HostedManifestFetchError
   ) {
     return err;
   }
@@ -354,6 +358,13 @@ export function classifyAddError(rawErr: unknown): ContentReason | undefined {
 
   if (err instanceof RecordedNameMismatchError) {
     return "source mismatch";
+  }
+
+  // D-PL5-10: a hosted download that got no answer is `network unreachable`;
+  // an answer it refuses (too large, a refused redirect, a URL with userinfo)
+  // is `unreadable`. Its HTTP statuses take the git host ladder below.
+  if (err instanceof HostedManifestFetchError) {
+    return err.failure === "network" ? "network unreachable" : "unreadable";
   }
 
   return err instanceof Error ? errorAddReason(err) : undefined;

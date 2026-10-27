@@ -39,6 +39,8 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import {
   CleanupLeakError,
   FetchedUrlCause,
+  HostedManifestFetchError,
+  HostedManifestHttpError,
   InvalidGitHubBaseUrlError,
   InvalidMarketplaceManifestError,
   MarketplaceDuplicateNameError,
@@ -5749,5 +5751,130 @@ test("D-PL5-20: addMarketplaceToState returns the download directory of a hosted
       await readFile(path.join(cloneDir, ".claude-plugin", "marketplace.json"), "utf8"),
       VALID_MANIFEST_JSON,
     );
+  });
+});
+
+/** The entry names of `dir`; an absent directory holds none. */
+async function entriesOf(dir: string): Promise<readonly string[]> {
+  return (await pathExists(dir)) ? readdir(dir) : [];
+}
+
+/** What a failed add may have left in the scope: records, config, and checkouts. */
+async function scopeLeftovers(locations: ScopedLocations): Promise<unknown> {
+  return {
+    state: await loadState(locations.extensionRoot),
+    config: await pathExists(locations.baseConfigJsonPath),
+    sources: await entriesOf(path.join(locations.extensionRoot, "sources")),
+    staging: await entriesOf(path.join(locations.extensionRoot, "sources-staging")),
+  };
+}
+
+const NOTHING_LEFT = {
+  state: { schemaVersion: 3, marketplaces: {} },
+  config: false,
+  sources: [],
+  staging: [],
+};
+
+const HOSTED_FAILURES: readonly { readonly answer: string | Error; readonly reason: string }[] = [
+  {
+    answer: new HostedManifestFetchError("network", `Could not connect to ${HOSTED_URL}`, {
+      cause: new TypeError("fetch failed"),
+    }),
+    reason: "network unreachable",
+  },
+  { answer: new HostedManifestFetchError("unreadable", "too large"), reason: "unreadable" },
+  { answer: new HostedManifestHttpError(HOSTED_URL, 404), reason: "source missing" },
+  { answer: new HostedManifestHttpError(HOSTED_URL, 410), reason: "source missing" },
+  { answer: new HostedManifestHttpError(HOSTED_URL, 401), reason: "authentication required" },
+  { answer: new HostedManifestHttpError(HOSTED_URL, 403), reason: "authentication required" },
+  { answer: "{", reason: "unparseable" },
+  { answer: '{"name":"tools"}', reason: "invalid manifest" },
+];
+
+for (const { answer, reason } of HOSTED_FAILURES) {
+  const title = answer instanceof Error ? answer.message : answer;
+  test(`D-PL5-10: a hosted download answering ${title} fails as ${reason} and leaves nothing`, async () => {
+    await withTmpScope(async ({ cwd, locations }) => {
+      // arrange
+      const { ctx, run, notifications } = makeCtx();
+      const { hostedManifestFetch } = createHostedManifestFetch(answer);
+
+      // act
+      await addMarketplace({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        rawSource: HOSTED_URL,
+        hostedManifestFetch,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: `A marketplace operation has failed.\n\n⊘ ${HOSTED_URL} [project] (failed) {${reason}}`,
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(await scopeLeftovers(locations), NOTHING_LEFT);
+    });
+  });
+
+  test(`D-PL5-10: an orchestrated hosted download answering ${title} returns ${reason}`, async () => {
+    await withTmpScope(async ({ cwd, locations }) => {
+      // arrange
+      const { ctx, run } = makeCtx(0);
+      const { hostedManifestFetch } = createHostedManifestFetch(answer);
+
+      // act
+      const outcome = await addMarketplace({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        rawSource: HOSTED_URL,
+        hostedManifestFetch,
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.strictEqual(outcome.status, "failed");
+      assert.strictEqual(outcome.reason, reason);
+      assert.deepStrictEqual(await scopeLeftovers(locations), NOTHING_LEFT);
+    });
+  });
+}
+
+test("D-PL5-10 / ADD-10: a hosted download answering HTTP 500 renders {network error} with the status on the URL", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const { hostedManifestFetch } = createHostedManifestFetch(
+      new HostedManifestHttpError(HOSTED_URL, 500),
+    );
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: HOSTED_URL,
+      hostedManifestFetch,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n" +
+          `⊘ ${HOSTED_URL} [project] (failed)\n` +
+          `  ⊘ ${HOSTED_URL} (failed) {network error}\n` +
+          `    cause: 500 on ${HOSTED_URL} -> HTTP 500 error while downloading marketplace from ${HOSTED_URL}. The marketplace file may not exist at this URL.`,
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await scopeLeftovers(locations), NOTHING_LEFT);
   });
 });
