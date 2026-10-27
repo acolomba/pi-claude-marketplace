@@ -164,15 +164,12 @@ describe("HttpsGitHost", () => {
     // act
     const file = await send(host, CATALOG);
     const refs = await get(host, INFO_REFS);
+    const url = host.fileUrl("catalog", "marketplace.json");
+    const traffic = host.requestsSince(window);
 
     // assert
     assert.deepStrictEqual(
-      {
-        file,
-        refs,
-        url: host.fileUrl("catalog", "marketplace.json"),
-        traffic: host.requestsSince(window),
-      },
+      { file, refs, url, traffic },
       {
         file: { status: 200, body: '{"name":"catalog"}' },
         refs: 200,
@@ -210,10 +207,12 @@ describe("HttpsGitHost", () => {
 
     // act
     const status = await get(host, CATALOG);
+    const traffic = host.requestsSince(window);
+    const { arms } = await host.snapshot();
 
     // assert
     assert.deepStrictEqual(
-      { status, traffic: host.requestsSince(window), arms: (await host.snapshot()).arms },
+      { status, traffic, arms },
       {
         status: 404,
         traffic: { requests: [{ method: "GET", path: CATALOG, status: 404 }], connections: 1 },
@@ -229,9 +228,10 @@ describe("HttpsGitHost", () => {
 
     // act
     await host.reset();
+    const { files } = await host.snapshot();
+    const status = await get(host, CATALOG);
 
     // assert
-    const files = (await host.snapshot()).files;
-    assert.deepStrictEqual({ files, status: await get(host, CATALOG) }, { files: [], status: 404 });
+    assert.deepStrictEqual({ files, status }, { files: [], status: 404 });
   });
 });

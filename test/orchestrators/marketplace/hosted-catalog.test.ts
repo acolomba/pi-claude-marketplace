@@ -76,9 +76,11 @@ function assertStale(finalDir: string): (error: unknown) => boolean {
   };
 }
 
-test("the default download is the platform hosted fetch", () => {
-  // assert
-  assert.strictEqual(DEFAULT_HOSTED_MANIFEST_FETCH, fetchHostedManifest);
+describe("DEFAULT_HOSTED_MANIFEST_FETCH", () => {
+  test("is the platform hosted fetch", () => {
+    // assert
+    assert.strictEqual(DEFAULT_HOSTED_MANIFEST_FETCH, fetchHostedManifest);
+  });
 });
 
 describe("downloadHostedCatalog", () => {

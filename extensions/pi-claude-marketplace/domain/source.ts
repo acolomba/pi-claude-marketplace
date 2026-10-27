@@ -401,8 +401,8 @@ function parsePathSourceForm(raw: string): ParsedSource | undefined {
  * authority up to the first `?` or `#`, ends in `.json` names a hosted
  * `marketplace.json`. The `.json` match ignores case, as Claude Code reads any
  * such URL as a catalog (D-PL5-33). `url` drops the fragment, as Claude Code
- * drops it, and keeps the query. Returns undefined
- * for anything else, so the caller falls through to the URL arm.
+ * drops it, and keeps the query. Returns undefined for anything else, so the
+ * caller falls through to the URL arm.
  *
  * A catalog URL the WHATWG URL parser refuses, such as one with a space in
  * its host or a port over 65535, is unknown: the download could not request

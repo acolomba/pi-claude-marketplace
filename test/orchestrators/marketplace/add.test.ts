@@ -3941,9 +3941,8 @@ test("D-PL5-17: re-adding a github marketplace whose checkout is gone re-clones 
     );
     const repaired = (await loadState(locations.extensionRoot)).marketplaces["valid-marketplace"];
     assert.ok(repaired);
-    const { lastUpdatedAt, lastSuccessfulManifest, ...kept } = repaired;
-    const { lastUpdatedAt: _, lastSuccessfulManifest: __, ...recordKept } = record;
-    assert.deepStrictEqual(kept, recordKept);
+    const { lastUpdatedAt, lastSuccessfulManifest } = repaired;
+    assert.deepStrictEqual(repaired, { ...record, lastUpdatedAt, lastSuccessfulManifest });
     assert.notStrictEqual(lastUpdatedAt, record.lastUpdatedAt);
     assert.deepStrictEqual(
       JSON.parse(lastSuccessfulManifest ?? ""),
@@ -5659,8 +5658,8 @@ test("MKT-02: a hosted add downloads the catalog once and records it like a clon
     assert.deepStrictEqual(urls, [HOSTED_URL]);
     const recorded = (await loadState(locations.extensionRoot)).marketplaces["valid-marketplace"];
     assert.ok(recorded);
-    const { lastUpdatedAt: _, ...kept } = recorded;
-    assert.deepStrictEqual(kept, {
+    assert.deepStrictEqual(recorded, {
+      lastUpdatedAt: recorded.lastUpdatedAt,
       name: "valid-marketplace",
       scope: "project",
       source: { kind: "hosted", raw: rawSource, url: HOSTED_URL },
@@ -6035,9 +6034,7 @@ test("D-PL5-17: re-adding a hosted marketplace whose download is gone downloads 
     assert.deepStrictEqual(urls, [HOSTED_URL]);
     const repaired = (await loadState(locations.extensionRoot)).marketplaces["valid-marketplace"];
     assert.ok(repaired);
-    const { lastUpdatedAt: _, ...kept } = repaired;
-    const { lastUpdatedAt: __, ...recordKept } = record;
-    assert.deepStrictEqual(kept, recordKept);
+    assert.deepStrictEqual(repaired, { ...record, lastUpdatedAt: repaired.lastUpdatedAt });
     assert.deepStrictEqual(
       {
         catalog: await readFile(record.manifestPath, "utf8"),

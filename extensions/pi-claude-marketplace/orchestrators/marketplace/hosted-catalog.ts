@@ -78,9 +78,9 @@ export async function downloadHostedCatalog(args: {
  * stored file. A catalog that now declares a reserved name is refused before
  * the rename (D-PL5-27), and so is one that declares a look-alike or one of
  * Claude Code's own names, judged against the record's `name` (D-PL5-28). A
- * failed download, an invalid or refused catalog, or a
- * failed rename leaves the stored file as it was, and a staging cleanup that
- * leaks is appended to the thrown error (MA-9).
+ * failed download, an invalid or refused catalog, or a failed rename leaves
+ * the stored file as it was, and a staging cleanup that leaks is appended to
+ * the thrown error (MA-9).
  */
 export async function refreshHostedCatalog(args: {
   readonly name: string;

@@ -124,6 +124,12 @@ Feature: Marketplace github source
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+
+  Scenario: Info on a github marketplace added at a ref that contains an @ shows that ref and its catalog
+    Given the marketplace "tools" is published as a github source
+    Given the marketplace "tools" has the description "Tools for formatting"
+    Given the branch "release@2026" of the marketplace "tools" has the description "Release tools"
+    Given the user has run "/claude:plugin marketplace add acme/tools@release@2026 --scope project"
     When the user runs "/claude:plugin marketplace info tools --scope project"
     Then the marketplace info result has these fields:
       | kind                    | marketplace-info |

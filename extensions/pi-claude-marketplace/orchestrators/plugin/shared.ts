@@ -1595,7 +1595,7 @@ export function applyPartialCascadeFold(
 ): void {
   // Object.keys widens to string[]; the table's keys are exactly the dropped
   // axes, which the `satisfies` clause above holds.
-  const axes = Object.keys(DROPPED_AXIS_FIELDS) as (keyof typeof DROPPED_AXIS_FIELDS)[];
+  const axes = Object.keys(DROPPED_AXIS_FIELDS) as Array<keyof typeof DROPPED_AXIS_FIELDS>;
   for (const axis of axes) {
     const field = DROPPED_AXIS_FIELDS[axis];
     installed.resources[field] = installed.resources[field].filter(

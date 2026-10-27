@@ -22,18 +22,18 @@ Feature: Marketplace reserved name
     Then the "claude-plugins.json" file of the project scope does not exist
 
     Examples:
-      | source kind | source                                                                      | refusal                                                                                                                                                       |
+      | source kind | source                                                                      | refusal                                                                                                                                                         |
       | dir         | {home}/marketplaces/claude-plugins-official                                 | The name 'claude-plugins-official' is reserved for official Anthropic marketplaces and can only be used with GitHub sources from the 'anthropics' organization. |
       | file        | {home}/marketplaces/claude-plugins-official/.claude-plugin/marketplace.json | The name 'claude-plugins-official' is reserved for official Anthropic marketplaces and can only be used with GitHub sources from the 'anthropics' organization. |
 
     @url
     Examples:
-      | source kind | source                                              | refusal                                                                                                                                       |
+      | source kind | source                                              | refusal                                                                                                                                                |
       | url         | https://{git host}/acme/claude-plugins-official.git | The name 'claude-plugins-official' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/anthropics/' can use this name. |
 
     @github
     Examples:
-      | source kind | source                       | refusal                                                                                                                                       |
+      | source kind | source                       | refusal                                                                                                                                                |
       | github      | acme/claude-plugins-official | The name 'claude-plugins-official' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/anthropics/' can use this name. |
 
   Scenario Outline: Adding a marketplace whose name Claude Code keeps for itself fails with Claude Code's refusal
@@ -45,8 +45,8 @@ Feature: Marketplace reserved name
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name              | marketplace scope | marketplace status | id                            | name                          | status | reasons          | scope   | leaks | rollback partial | cause chain | cause truncated |
-      | {home}/marketplaces/<name>    | project           | failed             | {home}/marketplaces/<name>    | {home}/marketplaces/<name>    | failed | invalid manifest | project |       |                  | <refusal>   | false           |
+      | marketplace name           | marketplace scope | marketplace status | id                         | name                       | status | reasons          | scope   | leaks | rollback partial | cause chain | cause truncated |
+      | {home}/marketplaces/<name> | project           | failed             | {home}/marketplaces/<name> | {home}/marketplaces/<name> | failed | invalid manifest | project |       |                  | <refusal>   | false           |
     Then the project scope holds no marketplace checkout
     Then the "claude-plugins.json" file of the project scope does not exist
 

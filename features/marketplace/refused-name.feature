@@ -34,7 +34,7 @@ Feature: Marketplace refused name
       | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
       | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id         | name | status | reasons          | scope   | cause chain                                                                         | cause truncated | leaks | rollback partial |
+      | marketplace name | marketplace scope | id         | name | status | reasons          | scope   | cause chain                                                                            | cause truncated | leaks | rollback partial |
       | tools            | project           | demo@tools | demo | failed | invalid manifest | project | Claude Code refuses the marketplace name "tools": it looks like one of Anthropic's own | false           |       |                  |
       | tools            | project           | demo@tools | demo | failed | invalid manifest | project | Claude Code refuses the marketplace name "tools": it looks like one of Anthropic's own | false           |       |                  |
     Then the session offers these skills:

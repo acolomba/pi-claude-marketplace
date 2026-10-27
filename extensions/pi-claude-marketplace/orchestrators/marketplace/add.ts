@@ -637,10 +637,10 @@ type RecordedSourceAction<U> =
 /**
  * D-PL5-17: Claude Code re-fetches a registered marketplace whose cache is
  * gone. A github, url, or hosted record whose checkout under `sources/<name>/`
- * is gone returns the source to re-clone or download it from. A path record whose recorded
- * manifest is gone throws an ENOENT error, which reads `source missing`: the
- * add cannot rebuild a directory the user owns. Any other record is intact
- * and returns `undefined`.
+ * is gone returns the source to re-clone or download it from. A path record
+ * whose recorded manifest is gone throws an ENOENT error, which reads `source
+ * missing`: the add cannot rebuild a directory the user owns. Any other record
+ * is intact and returns `undefined`.
  */
 async function repairableSource(
   record: MarketplaceRecord,

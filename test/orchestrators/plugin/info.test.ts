@@ -1077,20 +1077,21 @@ test("D-PL5-05: a hosted plugin source emits `    components: not resolved` like
     });
 
     const { ctx, run, notifications } = makeCtx();
+
     // act
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "remote", scope: "user", cwd });
+
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp [user] <no autoupdate>",
-        "  ● remote v1.0.0 (installed)",
-        "    Remote plugin sourced from a hosted catalog URL.",
-        "    components: not resolved",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● remote v1.0.0 (installed)",
+          "    Remote plugin sourced from a hosted catalog URL.",
+          "    components: not resolved",
+        ].join("\n"),
+      },
+    ]);
   });
 });
 

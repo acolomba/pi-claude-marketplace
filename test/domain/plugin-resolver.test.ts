@@ -4647,6 +4647,8 @@ test("parallel strict resolution keep independent deterministic outcomes", async
   }
 });
 
+// The em dash stays escaped as `\u2014` because the fix-unicode-dashes hook
+// rewrites a literal one.
 const HOSTED_ENTRY_REFUSED_NOTE =
   "its marketplace entry path does not stay inside the marketplace directory (an absolute, climbing, network-shaped, backslash-containing or link-traversing entry, an entry of a fetched marketplace that resolves or opens outside its tree \u2014 or a relative entry in a url-catalog marketplace, which has no local directory)";
 const HOSTED_CATALOG_URL = "https://h.example/acme/tools/marketplace.json";
