@@ -894,15 +894,19 @@ test("D-05-07: a name with neither a record nor a catalog entry fails closed as 
   );
 });
 
+/** The per-commit clone of `app` that a record pinned to a commit installed. */
+const APP_CLONE = path.join(LOCATIONS.pluginClonesDir, "acme-app", "0123456");
+const APP_SHA = "0123456789abcdef0123456789abcdef01234567";
+
+/** The manifest of `APP_CLONE`. */
+const APP_CLONE_MANIFEST = path.join(APP_CLONE, ".claude-plugin", "plugin.json");
+
 test("DLS-01 / NFR-10: a delisted git-source record reads its copy under the scope's plugin clones", async () => {
   // arrange
-  const clone = path.join(LOCATIONS.pluginClonesDir, "acme-app", "0123456");
-  const mp = marketplaceRecord("mp", { app: { resolvedSource: clone } });
+  const mp = marketplaceRecord("mp", { app: { resolvedSource: APP_CLONE, resolvedSha: APP_SHA } });
   const loadManifest = manifestLoader({ [mp.manifestPath]: manifestOf("mp", {}) });
   const reader = ownManifests({
-    [path.join(clone, ".claude-plugin", "plugin.json")]: JSON.stringify({
-      dependencies: ["lib@^2.0.0"],
-    }),
+    [APP_CLONE_MANIFEST]: JSON.stringify({ dependencies: ["lib@^2.0.0"] }),
   });
 
   // act
@@ -920,12 +924,71 @@ test("DLS-01 / NFR-10: a delisted git-source record reads its copy under the sco
   });
 });
 
-/** The per-commit clone of `app` that a record pinned to a commit installed. */
-const APP_CLONE = path.join(LOCATIONS.pluginClonesDir, "acme-app", "0123456");
-const APP_SHA = "0123456789abcdef0123456789abcdef01234567";
+/** The not-in-manifest failure of a delisted `app@mp` whose copy cannot be read. */
+const APP_NOT_IN_MANIFEST = {
+  reason: "not in manifest",
+  message:
+    "cannot read the dependencies of app@mp: not declared by its marketplace, and its installed copy cannot be read",
+};
 
-/** The manifest of `APP_CLONE`. */
-const APP_CLONE_MANIFEST = path.join(APP_CLONE, ".claude-plugin", "plugin.json");
+/** The delisted `app@mp`'s declarations, its copy at `resolvedSource` declaring `lib@^2.0.0`. */
+async function readDelistedApp(
+  seed: RecordSeed & { readonly resolvedSource: string },
+): Promise<Awaited<ReturnType<typeof readRecordDeclarations>>> {
+  const mp = marketplaceRecord("mp", { app: seed });
+  return readRecordDeclarations(
+    {
+      state: stateOf(mp),
+      locations: LOCATIONS,
+      reader: ownManifests({
+        [path.join(seed.resolvedSource, ".claude-plugin", "plugin.json")]: JSON.stringify({
+          dependencies: ["lib@^2.0.0"],
+        }),
+      }),
+      loadManifest: manifestLoader({ [mp.manifestPath]: manifestOf("mp", {}) }),
+    },
+    mp,
+    "app",
+  );
+}
+
+test("D-PL2-12 / NFR-10: a delisted record with no recorded commit whose copy sits under the plugin clones fails closed", async () => {
+  // act
+  const read = await readDelistedApp({ resolvedSource: APP_CLONE });
+
+  // assert
+  assert.deepStrictEqual(
+    read.ok ? undefined : { reason: read.reason, message: read.cause.message },
+    APP_NOT_IN_MANIFEST,
+  );
+});
+
+test("D-PL2-12 / NFR-10: a delisted record pinned to a commit whose copy sits under the marketplace clone fails closed", async () => {
+  // act
+  const read = await readDelistedApp({ resolvedSource: copyRoot("app"), resolvedSha: APP_SHA });
+
+  // assert
+  assert.deepStrictEqual(
+    read.ok ? undefined : { reason: read.reason, message: read.cause.message },
+    APP_NOT_IN_MANIFEST,
+  );
+});
+
+test("D-PL2-12: a delisted tag-pinned path-source dependency reads its copy under the plugin clones", async () => {
+  // act
+  const read = await readDelistedApp({
+    resolvedSource: path.join(LOCATIONS.pluginClonesDir, "mp-tag", "plugins", "app"),
+    resolvedSha: APP_SHA,
+    provenance: "dependency",
+  });
+
+  // assert
+  assert.deepStrictEqual(read, {
+    ok: true,
+    declared: [{ name: "lib", version: "^2.0.0", marketplace: "mp" }],
+    delisted: true,
+  });
+});
 
 /** `mp` recording `app` at `APP_CLONE` and `lib`, the catalog listing `app` as `entries` says. */
 function pinnedAppScope(entries: Readonly<Record<string, EntrySeed>>): {

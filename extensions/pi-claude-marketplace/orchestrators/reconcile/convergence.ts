@@ -32,7 +32,10 @@ import { errorMessage } from "../../shared/errors.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { admitResolvedVersion, foldDeclaredConstraint } from "../plugin/constraint-fold.ts";
-import { readInstalledCopyDeclaration } from "../plugin/dependency-declaration-read.ts";
+import {
+  installedCopyOwnerRoot,
+  readInstalledCopyDeclaration,
+} from "../plugin/dependency-declaration-read.ts";
 import { buildScopeDeclarationDetail, readRecordDeclarations } from "../plugin/dependency-index.ts";
 import { resolveListCandidate } from "../plugin/list-candidate-version.ts";
 import { isRecordedCandidate, isSameRevision, resolvePluginVersion } from "../plugin/shared.ts";
@@ -451,7 +454,10 @@ async function installedCopyDeclarations(
 ): Promise<readonly AddressedDependency[] | undefined> {
   const read = await readInstalledCopyDeclaration({
     pluginRoot: record.resolvedSource,
-    ownerRoots: [mp.marketplaceRoot, input.locations.pluginClonesDir],
+    ownerRoot: installedCopyOwnerRoot(record, {
+      marketplaceRoot: mp.marketplaceRoot,
+      pluginClonesDir: input.locations.pluginClonesDir,
+    }),
   });
   if (read.kind !== "found") {
     return undefined;

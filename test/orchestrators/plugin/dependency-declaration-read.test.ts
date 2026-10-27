@@ -6,6 +6,7 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 
 import {
+  installedCopyOwnerRoot,
   readCandidateDeclaration,
   readDependencyDeclaration,
   readInstalledCopyDeclaration,
@@ -466,12 +467,29 @@ function readInstalledCopy(
   reader: RecordingReader,
   pluginRoot: string = PLUGIN_ROOT,
 ): ReturnType<typeof readInstalledCopyDeclaration> {
-  return readInstalledCopyDeclaration({
-    pluginRoot,
-    ownerRoots: [path.join(tmpdir(), "dependency-declaration-read-clones"), MARKETPLACE_ROOT],
-    reader,
-  });
+  return readInstalledCopyDeclaration({ pluginRoot, ownerRoot: MARKETPLACE_ROOT, reader });
 }
+
+/** A plugin-clones root beside, not under, the marketplace root. */
+const CLONES_ROOT = path.join(tmpdir(), "dependency-declaration-read-clones");
+
+const OWNER_ROOTS = { marketplaceRoot: MARKETPLACE_ROOT, pluginClonesDir: CLONES_ROOT };
+
+test("D-PL2-12: a record pinned to a commit owns the scope's plugin clones", () => {
+  // act
+  const root = installedCopyOwnerRoot({ resolvedSha: "0123456" }, OWNER_ROOTS);
+
+  // assert
+  assert.equal(root, CLONES_ROOT);
+});
+
+test("D-PL2-12: a record with no recorded commit owns its marketplace clone", () => {
+  // act
+  const root = installedCopyOwnerRoot({}, OWNER_ROOTS);
+
+  // assert
+  assert.equal(root, MARKETPLACE_ROOT);
+});
 
 test("DLS-01: a delisted plugin's installed copy answers with its own manifest", async () => {
   // arrange
@@ -536,12 +554,24 @@ test("RESV-02: an installed copy's rejected declaration is the unusable arm", as
   assert.ok(!("ownManifest" in read));
 });
 
-test("NFR-10: an installed copy outside every owning root is never opened", async () => {
+test("NFR-10: an installed copy outside its owning root is never opened", async () => {
   // arrange
   const reader = buildReader({});
 
   // act
   const read = await readInstalledCopy(reader, path.join(tmpdir(), "elsewhere", "alpha"));
+
+  // assert
+  assert.deepStrictEqual(read, { kind: "absent" });
+  assert.deepStrictEqual(reader.opened, []);
+});
+
+test("D-PL2-12 / NFR-10: an installed copy under the other clone root is never opened", async () => {
+  // arrange
+  const reader = buildReader({});
+
+  // act
+  const read = await readInstalledCopy(reader, path.join(CLONES_ROOT, "alpha"));
 
   // assert
   assert.deepStrictEqual(read, { kind: "absent" });
@@ -559,7 +589,7 @@ test("DLS-01: the production reader reads an installed copy off real disk", asyn
   );
 
   // act
-  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoots: [root] });
+  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
 
   // assert
   assert.deepStrictEqual(read, dependsOn("beta"));

@@ -78,6 +78,7 @@ import { ownValue } from "../../shared/own-key.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 
 import {
+  installedCopyOwnerRoot,
   readDependencyDeclaration,
   readInstalledCopyDeclaration,
 } from "./dependency-declaration-read.ts";
@@ -380,7 +381,10 @@ export async function readInstalledRecordDeclarations(
       ? ({ kind: "absent" } as const)
       : await readInstalledCopyDeclaration({
           pluginRoot: record.resolvedSource,
-          ownerRoots: [options.locations.pluginClonesDir],
+          ownerRoot: installedCopyOwnerRoot(record, {
+            marketplaceRoot: marketplace.marketplaceRoot,
+            pluginClonesDir: options.locations.pluginClonesDir,
+          }),
           ...(options.reader !== undefined && { reader: options.reader }),
         });
   switch (copy.kind) {
@@ -399,8 +403,8 @@ export async function readInstalledRecordDeclarations(
 
 /**
  * DLS-01: a delisted record's declarations come from its installed copy, the
- * root its install recorded (`resolvedSource`), admitted only inside the
- * marketplace clone or the scope's `plugin-clones/` (NFR-10).
+ * root its install recorded (`resolvedSource`), admitted only inside the one
+ * clone root that owns the record (NFR-10, D-PL2-12).
  */
 async function readInstalledCopy(
   options: ScopeDeclarationDetailOptions,
@@ -414,7 +418,10 @@ async function readInstalledCopy(
 
   return readInstalledCopyDeclaration({
     pluginRoot: record.resolvedSource,
-    ownerRoots: [marketplace.marketplaceRoot, options.locations.pluginClonesDir],
+    ownerRoot: installedCopyOwnerRoot(record, {
+      marketplaceRoot: marketplace.marketplaceRoot,
+      pluginClonesDir: options.locations.pluginClonesDir,
+    }),
     ...(options.reader !== undefined && { reader: options.reader }),
   });
 }

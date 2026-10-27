@@ -1090,6 +1090,28 @@ test("D-12 / WCONV-01: a clean record whose candidate would drop components is d
   });
 });
 
+test("D-PL2-12 / NFR-10: a held dependent whose copy sits outside the root its record owns keeps its catalog declarations", async (t) => {
+  // arrange: `widget` is pinned to a commit, so it owns the plugin clones, but
+  // its recorded copy sits under the marketplace clone
+  const fixture = await createFixture(t, "foreign-root-copy");
+  const chain = heldDependentChain("widget-installed").map((plugin) =>
+    plugin.installed === undefined
+      ? plugin
+      : { ...plugin, record: { resolvedSha: "a".repeat(40) } },
+  );
+  const state = await stageTools(fixture, chain);
+
+  // act
+  const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    moves: [demoMove({ plugin: "core", toVersion: "2.0.0" })],
+    holds: [WIDGET_HOLD],
+    declines: [],
+  });
+});
+
 test("D-12: a record already installed partial moves to a partial candidate", async (t) => {
   // arrange
   const fixture = await createFixture(t, "partial-to-partial");
@@ -1436,12 +1458,29 @@ test("APPLY1-01: the installed-copy reader reads a pinned copy and leaves a path
   const marketplace = { ...mp, plugins: {} };
 
   // act
-  const fromPinned = await read(marketplace, pluginRecord(pinned));
+  const fromPinned = await read(marketplace, pluginRecord(pinned, { resolvedSha: "a".repeat(40) }));
   const fromPath = await read(marketplace, pluginRecord(path.join(mp.marketplaceRoot, "widget")));
 
   // assert
   assert.deepStrictEqual(fromPinned, [{ name: "zcore", marketplace: "tools", version: "^1.0.0" }]);
   assert.equal(fromPath, undefined);
+});
+
+test("D-PL2-12: the installed-copy reader ignores a copy under the plugin clones of a record with no recorded commit", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "copy-reader-unowned");
+  const copy = path.join(fixture.locations.pluginClonesDir, "widget-copy");
+  await stagePlugin(copy, "1.0.0", [{ name: "zcore", version: "^1.0.0" }]);
+  const mp = await stageMarketplace(fixture, "tools", []);
+
+  // act
+  const read = await installedCopyReader(fixture.locations)(
+    { ...mp, plugins: {} },
+    pluginRecord(copy),
+  );
+
+  // assert
+  assert.equal(read, undefined);
 });
 
 test("APPLY1-01 / CR-A: a held-down record with a move of its own waits for its move, released or not", async (t) => {

@@ -325,15 +325,30 @@ export async function readCandidateDeclaration(options: {
   return toClosureLookupResult(parseDeclaredDependencies(declared));
 }
 
-/** Inputs of one read of an installed copy its marketplace no longer lists. */
+/**
+ * NFR-10 / D-PL2-12: the one clone root that owns a record's installed copy. A
+ * record with `resolvedSha` installed a per-commit clone under `plugin-clones/`
+ * -- every git source, and a tag-pinned path-source dependency -- and one
+ * without it runs the marketplace clone's files. Records carry no source kind,
+ * and a delisted git record no longer has the catalog source its clone key
+ * hashes, so the whole `plugin-clones/` is the narrowest root it can be given.
+ */
+export function installedCopyOwnerRoot(
+  record: { readonly resolvedSha?: string },
+  roots: { readonly marketplaceRoot: string; readonly pluginClonesDir: string },
+): string {
+  return record.resolvedSha === undefined ? roots.marketplaceRoot : roots.pluginClonesDir;
+}
+
+/** Inputs of one read of an installed copy. */
 export interface InstalledCopyDeclarationReadOptions {
   /** The record's `resolvedSource`: the plugin root its install materialized. */
   readonly pluginRoot: string;
   /**
-   * NFR-10: the clone roots an installed copy may sit under -- the marketplace
-   * clone for a path source, `plugin-clones/` for a git source.
+   * NFR-10 / D-PL2-12: the one clone root that owns the record, from
+   * `installedCopyOwnerRoot`. A copy anywhere else is never opened.
    */
-  readonly ownerRoots: readonly string[];
+  readonly ownerRoot: string;
   /** Filesystem seam; production omits it and reads real disk. */
   readonly reader?: DependencyDeclarationReader;
 }
@@ -343,38 +358,30 @@ export interface InstalledCopyAbsent {
   readonly kind: "absent";
 }
 
-/** Whether `pluginRoot` sits inside one of `ownerRoots`. */
-async function isInsideAnyRoot(
-  pluginRoot: string,
-  ownerRoots: readonly string[],
-): Promise<boolean> {
-  for (const ownerRoot of ownerRoots) {
-    try {
-      // eslint-disable-next-line no-await-in-loop -- the first owning root that admits the copy decides
-      await assertPathInside(ownerRoot, pluginRoot, "installed plugin copy");
-      return true;
-    } catch {
-      // Not under this root; the next one may own it.
-    }
+/** Whether `assertPathInside` admits `child` under `parent`. */
+async function isAdmitted(parent: string, child: string, label: string): Promise<boolean> {
+  try {
+    await assertPathInside(parent, child, label);
+    return true;
+  } catch {
+    return false;
   }
-
-  return false;
 }
 
 /**
- * DLS-01 / DLS-D1: what an installed plugin declares once its marketplace no
- * longer lists it, read from the copy on disk -- the version actually
- * installed. Pi keeps such a plugin running, so it keeps the dependencies it
- * runs with. There is no entry to fall back on: a copy with no manifest, a
- * missing copy, or a recorded root outside every owning clone root answers
- * `absent`, and the caller fails closed (D-05-07). A present-but-unusable
+ * DLS-01 / DLS-D1: what an installed plugin declares, read from the copy on
+ * disk -- the version actually installed. Pi keeps a plugin its marketplace no
+ * longer lists running, so it keeps the dependencies it runs with. There is no
+ * entry to fall back on: a copy with no manifest, a missing copy, or a recorded
+ * root outside the record's owning clone root (NFR-10, D-PL2-12) answers
+ * `absent`, and the caller decides what that means. A present-but-unusable
  * manifest is the same refusal `refuseUnusableOwnManifest` gives.
  */
 export async function readInstalledCopyDeclaration(
   options: InstalledCopyDeclarationReadOptions,
 ): Promise<DeclarationLookupResult | OwnManifestRefusal | InstalledCopyAbsent> {
   const reader = options.reader ?? REAL_DEPENDENCY_DECLARATION_READER;
-  const own = (await isInsideAnyRoot(options.pluginRoot, options.ownerRoots))
+  const own = (await isAdmitted(options.ownerRoot, options.pluginRoot, "installed plugin copy"))
     ? await readOwnManifest(reader, options.pluginRoot)
     : ABSENT;
   switch (own.kind) {
