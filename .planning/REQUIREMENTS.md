@@ -50,6 +50,7 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 - [ ] **CAS-05**: A refusal for a non-root cascade member names every declarer that required it, and names and ranges in those refusals are truncated as Claude Code truncates them (PARITYGV-01 b2, b3)
 - [ ] **CAS-06**: The offline refusal of an install that would move a git dependency names the next step (UPDDEP-01 b2)
 - [ ] **CAS-07**: A hold row's cause never interpolates an unbounded catalog `version` string (VERSTR-01)
+- [ ] **CAS-08**: The routes D-PL3-15 left with one failed row (the root's own ledger failure, UPD-DEP-D1 plan-step failures, a catalog lookup that throws mid-walk) also give a row to each member that resolved but did not install (CLOSUREROW-01 residue)
 
 ### Dependency resolver (RSV)
 
@@ -155,6 +156,7 @@ None.
 | CAS-05 | Phase 3 | Pending |
 | CAS-06 | Phase 3 | Pending |
 | CAS-07 | Phase 3 | Pending |
+| CAS-08 | Phase 10 | Pending |
 | RSV-01 | Phase 4 | Pending |
 | RSV-02 | Phase 4 | Pending |
 | RSV-03 | Phase 4 | Pending |
