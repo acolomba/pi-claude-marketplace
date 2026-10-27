@@ -996,7 +996,7 @@ test("APPLY1-01 / D-12a: the final judgement adds what an installed copy declare
   ]);
 });
 
-test("APPLY1-01 / D-05-07: a final judgement whose walk fails answers the walk's failure", async () => {
+test("D-PL2-05 / D-05-07: a final judgement whose walk fails answers the walk's failure", async () => {
   // arrange
   const mp = marketplaceRecord("mp", { app: {} });
   const loadManifest = manifestLoader({ [mp.manifestPath]: new Error("EACCES") });

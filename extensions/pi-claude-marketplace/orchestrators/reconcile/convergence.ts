@@ -751,11 +751,16 @@ function independentlyDisabledKeys(state: ExtensionState): ReadonlySet<string> {
  * satisfy, run to a fixpoint: a `missing` dependency is satisfied once a
  * planned install names it, and a `disabled` one once the check releases it
  * and nothing else disabled it.
+ *
+ * D-PL2-14: a dependency the user or a config disabled that the plan
+ * `enabled` names counts as released too. `apply` enables it in the same
+ * pass, so `pending` must not list its dependent as disabled.
  */
 function releasedDependents(
   unsatisfied: readonly UnsatisfiedDeclaration[],
   installed: ReadonlySet<string>,
   state: ExtensionState,
+  enabled: ReadonlySet<string>,
 ): ReadonlySet<string> {
   const disabled = independentlyDisabledKeys(state);
   const released = new Set<string>();
@@ -764,7 +769,7 @@ function releasedDependents(
       ? installed.has(entry.dependency)
       : entry.kind === "disabled" &&
         released.has(entry.dependency) &&
-        !disabled.has(entry.dependency);
+        (enabled.has(entry.dependency) || !disabled.has(entry.dependency));
   const dependents = [...new Set(unsatisfied.map((entry) => entry.dependent))];
   let batch: readonly string[];
   do {
@@ -789,6 +794,10 @@ function releasedDependents(
  * the verdict each dependent the planned installs satisfy and plans again.
  * `pending` and `apply`'s read pass both plan through here, so the two agree.
  * The install buckets stay the first plan's.
+ *
+ * D-PL2-14: a record a replan enables releases its dependents, so the release
+ * runs again with every record a replan has enabled. The released set only
+ * grows, and it is bounded by the scope's dependents, so the loop ends.
  */
 export function withPlannedInstallsLanded(
   plan: ReconcilePlan,
@@ -801,17 +810,60 @@ export function withPlannedInstallsLanded(
     return plan;
   }
 
-  const released = releasedDependents(verdict.unsatisfied, installed, state);
-  const fresh = replan({
-    ok: true,
-    unsatisfied: verdict.unsatisfied.filter((entry) => !released.has(entry.dependent)),
-  });
+  const replanWithout = (released: ReadonlySet<string>): ReconcilePlan =>
+    replan({
+      ok: true,
+      unsatisfied: verdict.unsatisfied.filter((entry) => !released.has(entry.dependent)),
+    });
+  const enabled = new Set<string>();
+  let released = releasedDependents(verdict.unsatisfied, installed, state, enabled);
+  let fresh = replanWithout(released);
+  for (;;) {
+    pluginKeys(fresh.pluginsToEnable).forEach((key) => enabled.add(key));
+    const next = releasedDependents(verdict.unsatisfied, installed, state, enabled);
+    if (next.size === released.size) {
+      break;
+    }
+
+    released = next;
+    fresh = replanWithout(released);
+  }
+
   return {
     ...plan,
     pluginsToEnable: fresh.pluginsToEnable,
     pluginsToDisable: fresh.pluginsToDisable,
     pluginsToDependencyDisable: fresh.pluginsToDependencyDisable,
   };
+}
+
+/**
+ * D-PL2-16: the records that wait on an install the plan schedules: a record
+ * with a `missing` declaration a planned install satisfies, or a `disabled`
+ * one whose dependency itself waits, run to a fixpoint. The set only grows
+ * and is bounded by the verdict's dependents, so a declaration cycle ends.
+ */
+function waitingOnInstalls(
+  verdict: ScopeSatisfactionVerdict,
+  installed: ReadonlySet<string>,
+): ReadonlySet<string> {
+  const waiting = new Set<string>();
+  const unsatisfied = verdict.ok ? verdict.unsatisfied : [];
+  let size: number;
+  do {
+    size = waiting.size;
+    for (const entry of unsatisfied) {
+      const waits =
+        entry.kind === "missing"
+          ? installed.has(entry.dependency)
+          : entry.kind === "disabled" && waiting.has(entry.dependency);
+      if (waits) {
+        waiting.add(entry.dependent);
+      }
+    }
+  } while (waiting.size > size);
+
+  return waiting;
 }
 
 /** One scope's plan and the verdict it was planned from, for `settleMoveCascade`. */
@@ -838,6 +890,13 @@ export interface MoveCascade {
    * listed beside its `(will update)` row.
    */
   readonly preview: ReconcilePlan;
+  /**
+   * D-PL2-16: the enables of records that wait on a planned install. `enable`
+   * refuses a record whose closure holds an uninstalled member, so `apply`
+   * runs these after its missing-dependency install, and they are in neither
+   * `plan`, `deferredEnables` nor `preview`.
+   */
+  readonly enablesAfterInstalls: readonly PlannedPluginEnable[];
 }
 
 function isDependencyHeld(state: ExtensionState, op: PlannedPluginEnable): boolean {
@@ -877,7 +936,13 @@ export async function settleMoveCascade(input: MoveCascadeInput): Promise<MoveCa
     return settled.released.has(key) || (moved.has(key) && isDependencyHeld(input.state, op));
   });
   const deferred = new Set(deferredEnables.map((op) => `${op.plugin}@${op.marketplace}`));
-  const plan = await judgePlannedScope(input, settled.plan, { moves, deferred });
+  const judged = await judgePlannedScope(input, settled.plan, { moves, deferred });
+  // D-PL2-16: the cascade above is planned before the split, so a withheld
+  // record's own move stays planned.
+  const waiting = waitingOnInstalls(input.verdict, plannedInstallKeys(judged));
+  const ready = (op: PlannedPluginEnable): boolean =>
+    !waiting.has(`${op.plugin}@${op.marketplace}`);
+  const plan = { ...judged, pluginsToEnable: judged.pluginsToEnable.filter(ready) };
   const preview = {
     ...plan,
     pluginsToEnable: plan.pluginsToEnable.filter((op) => {
@@ -885,7 +950,13 @@ export async function settleMoveCascade(input: MoveCascadeInput): Promise<MoveCa
       return !(deferred.has(key) && moved.has(key));
     }),
   };
-  return { plan, ...(cascade !== undefined && { cascade }), deferredEnables, preview };
+  return {
+    plan,
+    ...(cascade !== undefined && { cascade }),
+    deferredEnables: deferredEnables.filter(ready),
+    preview,
+    enablesAfterInstalls: judged.pluginsToEnable.filter((op) => !ready(op)),
+  };
 }
 
 /**

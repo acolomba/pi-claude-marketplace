@@ -91,7 +91,7 @@ import {
 
 import type { PlannedDecline, PlannedHold, PlannedMove } from "./convergence.ts";
 import type { ScopeSatisfactionVerdict } from "./dependency-verdict.ts";
-import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
+import type { PlannedPluginEnable, PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -333,6 +333,7 @@ export async function composePendingReport(opts: {
     { readonly marketplaceRoot: string; readonly manifestPath: string }
   >();
   const recordedVersions: (readonly [string, string])[] = [];
+  const enablesAfterInstalls: PlannedPluginEnable[] = [];
   const convergence: {
     readonly moves: PlannedMove[];
     readonly holds: PlannedHold[];
@@ -450,6 +451,8 @@ export async function composePendingReport(opts: {
     // WR-02: a held-down record `apply` moves and then enables lists one row.
     const scopePlan = settled.preview;
     plans.push(scopePlan);
+    // D-PL2-16: the enables `apply` runs after its missing-dependency install.
+    enablesAfterInstalls.push(...settled.enablesAfterInstalls);
     convergence.moves.push(...scoped.moves);
     convergence.holds.push(...scoped.holds);
     convergence.declines.push(...scoped.declines);
@@ -472,7 +475,7 @@ export async function composePendingReport(opts: {
   if (
     invalidBlocks.length === 0 &&
     isReconcilePlanListEmpty(plans) &&
-    moves.length + holds.length + declines.length === 0
+    moves.length + holds.length + declines.length + enablesAfterInstalls.length === 0
   ) {
     return { marketplaces: [], retained, needsApply: false };
   }
@@ -516,6 +519,7 @@ export async function composePendingReport(opts: {
     forceInstallKeys,
     new Map(recordedVersions),
     convergence,
+    enablesAfterInstalls,
   );
   // D-12 / OUT-07: the pending diff is bulk (it spans both scopes and many
   // marketplaces) -> Plural row cardinality. D-02: thread PENDING_CONTEXT so the
@@ -535,7 +539,7 @@ export async function composePendingReport(opts: {
   return {
     marketplaces,
     retained,
-    needsApply: planListNeedsApply(plans) || moves.length > 0,
+    needsApply: planListNeedsApply(plans) || moves.length + enablesAfterInstalls.length > 0,
   };
 }
 

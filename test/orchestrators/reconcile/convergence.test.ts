@@ -1357,6 +1357,7 @@ test("APPLY1-01: a released dependent whose own move stays held keeps the caller
     plan: settled.input,
     deferredEnables: [],
     preview: settled.input,
+    enablesAfterInstalls: [],
   });
   assert.deepStrictEqual(
     settled.input.pluginsToDependencyDisable.map((op) => op.plugin),
@@ -1403,6 +1404,7 @@ test("APPLY1-01: a held-down dependent that waits on no move is enabled with the
   assert.deepStrictEqual(settled.deferredEnables, []);
   assert.deepStrictEqual(settled.plan.pluginsToEnable, [{ ...DEMO_OP, plugin: "widget" }]);
   assert.deepStrictEqual(settled.preview, settled.plan);
+  assert.deepStrictEqual(settled.enablesAfterInstalls, []);
 });
 
 test("APPLY1-01: a disabled record the caller enables after its move is planned as enabled", async (t) => {
@@ -1813,3 +1815,139 @@ for (const { title, core, unsatisfied, kept } of [
     assert.deepStrictEqual(seen, [{ ok: true, unsatisfied: kept }]);
   });
 }
+
+test("D-PL2-14: withPlannedInstallsLanded releases a dependent whose user-disabled dependency the replan enables", () => {
+  // arrange -- `core` is off by the user's hand and waits on `vault`; the
+  // config enables `core` once nothing holds it.
+  const plan = planWith({ pluginsToDependencyInstall: [VAULT_INSTALL] });
+  const seen: ScopeSatisfactionVerdict[] = [];
+  const replan = (verdict: ScopeSatisfactionVerdict): ReconcilePlan => {
+    seen.push(verdict);
+    const holdsCore =
+      verdict.ok && verdict.unsatisfied.some((entry) => entry.dependent === "core@tools");
+    return planWith({ pluginsToEnable: holdsCore ? [] : [{ ...DEMO_OP, plugin: "core" }] });
+  };
+
+  // act
+  const landed = withPlannedInstallsLanded(
+    plan,
+    { ok: true, unsatisfied: [missingEntry("core", "vault"), disabledEntry("app", "core")] },
+    appAndCore({ enabled: false }),
+    replan,
+  );
+
+  // assert
+  assert.deepStrictEqual(landed, { ...plan, pluginsToEnable: [{ ...DEMO_OP, plugin: "core" }] });
+  assert.deepStrictEqual(seen, [
+    { ok: true, unsatisfied: [disabledEntry("app", "core")] },
+    { ok: true, unsatisfied: [] },
+  ]);
+});
+
+/** `settleMoveCascade` over a fixed plan and a given verdict. */
+async function settleOver(
+  fixture: Fixture,
+  state: ExtensionState,
+  plan: ReconcilePlan,
+  verdict: ScopeSatisfactionVerdict,
+): Promise<Awaited<ReturnType<typeof settleMoveCascade>>> {
+  return settleMoveCascade({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    plan,
+    verdict,
+    replan: () => plan,
+  });
+}
+
+function liftAndInstallExtra(...lifted: readonly string[]): ReconcilePlan {
+  return planWith({
+    pluginsToEnable: lifted.map((plugin) => ({ ...DEMO_OP, plugin })),
+    pluginsToDependencyInstall: [EXTRA_INSTALL],
+  });
+}
+
+const MARKER = { enabled: false, dependencyDisabled: true } as const;
+
+test("D-PL2-16: a lift whose record waits on a planned install is enabled after the installs", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "lift-after-install");
+  const state = withoutToolsRecord(
+    await stageTools(fixture, [
+      { name: "widget", offered: "1.0.0", declares: [{ name: "extra" }], record: MARKER },
+      { name: "extra", offered: "1.0.0" },
+    ]),
+    "extra",
+  );
+  const verdict = await buildScopeSatisfactionVerdict({ state, locations: fixture.locations });
+
+  // act
+  const settled = await settleOver(fixture, state, liftAndInstallExtra("widget"), verdict);
+
+  // assert
+  assert.deepStrictEqual(settled.enablesAfterInstalls, [{ ...DEMO_OP, plugin: "widget" }]);
+  assert.deepStrictEqual(settled.plan, planWith({ pluginsToDependencyInstall: [EXTRA_INSTALL] }));
+  assert.deepStrictEqual(settled.deferredEnables, []);
+  assert.deepStrictEqual(settled.preview, settled.plan);
+});
+
+test("D-PL2-16: a released record that waits on a move and a planned install keeps its move and is enabled after the installs", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "deferred-after-install");
+  const state = withoutToolsRecord(
+    await stageTools(fixture, [
+      {
+        name: "widget",
+        offered: "1.1.0",
+        declares: [{ name: "zcore", version: "^2.0.0" }, { name: "extra" }],
+        record: MARKER,
+      },
+      { name: "zcore", offered: "2.0.0" },
+      { name: "extra", offered: "1.0.0" },
+    ]),
+    "extra",
+  );
+  const verdict = await buildScopeSatisfactionVerdict({ state, locations: fixture.locations });
+
+  // act
+  const settled = await settleOver(fixture, state, liftAndInstallExtra("widget"), verdict);
+
+  // assert
+  assert.deepStrictEqual(moveKeys(settled.cascade?.plan.moves), ["zcore@tools", "widget@tools"]);
+  assert.deepStrictEqual(settled.enablesAfterInstalls, [{ ...DEMO_OP, plugin: "widget" }]);
+  assert.deepStrictEqual(settled.deferredEnables, []);
+  assert.deepStrictEqual(settled.plan.pluginsToEnable, []);
+  assert.deepStrictEqual(settled.preview.pluginsToEnable, []);
+});
+
+test("D-PL2-16: records that wait on each other and on a planned install are all enabled after it", async (t) => {
+  // arrange -- the verdict names a declaration cycle between `alpha` and `beta`.
+  const fixture = await createFixture(t, "cycle-after-install");
+  const state = withoutToolsRecord(
+    await stageTools(fixture, [
+      { name: "alpha", offered: "1.0.0", declares: [{ name: "extra" }], record: MARKER },
+      { name: "beta", offered: "1.0.0", record: MARKER },
+      { name: "extra", offered: "1.0.0" },
+    ]),
+    "extra",
+  );
+  const verdict: ScopeSatisfactionVerdict = {
+    ok: true,
+    unsatisfied: [
+      disabledEntry("alpha", "beta"),
+      missingEntry("alpha", "extra"),
+      disabledEntry("beta", "alpha"),
+    ],
+  };
+
+  // act
+  const settled = await settleOver(fixture, state, liftAndInstallExtra("alpha", "beta"), verdict);
+
+  // assert
+  assert.deepStrictEqual(settled.enablesAfterInstalls, [
+    { ...DEMO_OP, plugin: "alpha" },
+    { ...DEMO_OP, plugin: "beta" },
+  ]);
+  assert.deepStrictEqual(settled.plan.pluginsToEnable, []);
+});

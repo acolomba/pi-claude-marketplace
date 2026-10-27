@@ -3095,6 +3095,61 @@ describe("buildReconcilePendingNotification", () => {
     });
   });
 
+  test("D-PL2-16: lists an enable that waits on a dependency install after it and before the holds", () => {
+    // arrange
+    const plans = [
+      reconcilePlan("project", {
+        pluginsToEnable: [{ scope: "project", plugin: "ready", marketplace: "mp" }],
+        pluginsToDependencyInstall: [
+          {
+            scope: "project",
+            plugin: "vault",
+            marketplace: "mp",
+            ranges: [],
+            requiredBy: "app@mp",
+            declarers: ["app@mp"],
+          },
+        ],
+      }),
+    ];
+    const convergence = {
+      moves: [],
+      holds: [
+        { scope: "project", marketplace: "mp", plugin: "lib", version: "1.0.0", cause: "held" },
+      ],
+      declines: [],
+    } as const;
+
+    // act
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), convergence, [
+      { scope: "project", plugin: "app", marketplace: "mp" },
+    ]);
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            { status: "will enable", name: "ready" },
+            { status: "will install", name: "vault" },
+            { status: "will enable", name: "app" },
+            {
+              status: "skipped",
+              name: "lib",
+              version: "1.0.0",
+              reasons: ["dependents constrain"],
+              cause: new Error("held"),
+              severity: "warning",
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   test("D-14 / UPR-02: a same-version move names its commits after the plan's rows", () => {
     // arrange
     const fromCommit = "a".repeat(40);

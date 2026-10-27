@@ -34,9 +34,9 @@
 //
 // WR-07: the coercion costs more here than it does at install time. Install
 // time spends it on a candidate the user is watching; this walk spends it on a
-// dependent that is installed and working, and disables it on the next reload
-// with a remedy naming a semver version the dependency does not have. The
-// behaviour is kept -- the walk is not the place to special-case one version
+// dependent that is installed and working. The load only reports it and
+// changes nothing (APL-D1); `apply` disables the dependent, with a remedy
+// naming a semver version the dependency does not have. The behaviour is kept -- the walk is not the place to special-case one version
 // form the single evaluator accepts -- and `docs/dependency-resolution.md`
 // describes the case under "The load-time check" so an operator who hits it
 // can recognize it.
@@ -585,6 +585,8 @@ export async function judgeFinalScope(
 
       // eslint-disable-next-line no-await-in-loop -- the first unreadable record ends the judgement
       const read = await readRecordDeclarations(options, marketplace, name);
+      // D-PL2-05: the whole scope fails closed on the first unreadable record
+      // (D-05-07), as Claude Code's removal guards abort for the whole scope.
       if (!read.ok) {
         return read;
       }

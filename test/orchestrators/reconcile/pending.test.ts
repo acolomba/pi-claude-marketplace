@@ -1008,7 +1008,16 @@ const dependencyRows = [
         { key: "core@tools", enabled: true },
       ],
     },
-    expected: pendingList(["● core (will enable)", "● vault (will install)"]),
+    expected: pendingList(["● vault (will install)", "● core (will enable)"]),
+  },
+  {
+    condition: "a plugin the check holds down whose missing dependency the same apply installs",
+    seed: {
+      offered: { app: { version: "1.0.0", dependencies: ["vault"] }, vault: { version: "1.0.0" } },
+      recorded: { app: { version: "1.0.0", enabled: false, dependencyDisabled: true } },
+      declared: [{ key: "app@tools", enabled: true }],
+    },
+    expected: pendingList(["● vault (will install)", "● app (will enable)"]),
   },
   {
     condition: "a dependency the config disables",
@@ -1227,6 +1236,35 @@ test("APL-02 / D-14: composePendingReport counts a catalog move alone as a chang
         name: "tools",
         scope: "project",
         plugins: [{ status: "will update", name: "demo", from: "1.0.0", to: "1.1.0" }],
+      },
+    ],
+    retained: {},
+    needsApply: true,
+  });
+});
+
+test("D-PL2-16: composePendingReport lists an enable that waits on a planned install after it", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "compose-after-install");
+  await stageDependencyScope(cwd, project, {
+    offered: { app: { version: "1.0.0", dependencies: ["vault"] }, vault: { version: "1.0.0" } },
+    recorded: { app: { version: "1.0.0", enabled: false, dependencyDisabled: true } },
+    declared: [{ key: "app@tools", enabled: true }],
+  });
+
+  // act
+  const report = await composePendingReport({ cwd, scopes: ["project"] });
+
+  // assert
+  assert.deepStrictEqual(report, {
+    marketplaces: [
+      {
+        name: "tools",
+        scope: "project",
+        plugins: [
+          { status: "will install", name: "vault" },
+          { status: "will enable", name: "app" },
+        ],
       },
     ],
     retained: {},
