@@ -5,16 +5,16 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 2
 current_phase_name: Apply Ordering and Installed Declarations
 status: executing
-stopped_at: "Phase 29 complete; next: milestone audit (`/gsd-audit-milestone`)"
-last_updated: "2026-10-27T03:07:24.316Z"
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-10-27T03:43:27.531Z"
 last_activity: 2026-10-26
 last_activity_desc: Phase 2 execution started
-state_head: c761fec33dca3eed71bbbcb530040b6643647c52
+state_head: 3684379c77f12fbca52f6412006a17344283968b
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 6
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -32,8 +32,8 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 2 (Apply Ordering and Installed Declarations) — EXECUTING
-Plan: 1 of 6
-Status: Executing Phase 2
+Plan: 2 of 6
+Status: Ready to execute
 Last activity: 2026-10-26 — Phase 2 execution started
 
 
@@ -191,8 +191,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-25T12:00:00.000Z
-**Stopped at:** Phase 29 complete; next: milestone audit (`/gsd-audit-milestone`)
+**Last session:** 2026-10-27T03:43:27.307Z
+**Stopped at:** Completed 02-01-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -404,6 +404,7 @@ archived milestone artifacts.
 | Phase 29 P12 | 70 min | 3 tasks | 34 files |
 | Phase 29 P13 | 48 min | 3 tasks | 44 files |
 | Phase 29 P14 | 20 min | 2 tasks | 9 files |
+| Phase 02 P01 | 33min | 2 tasks | 8 files |
 
 ## Decisions
 
@@ -603,6 +604,9 @@ archived milestone artifacts.
 - [Phase 29]: The cascade failure classifier reads the errno a BridgeStagingError carries on its cause, so an unreadable plugin source is permission denied (also in the autoupdate cascade)
 - [Phase 29]: apply runs growth-only moves through convergePlugin with rematerialize (skipSameRevision off, overwrite off) and reports them with the plugin-backfilled row; the load-time backfill, its stamp gate and EXTENSION_VERSION are deleted, lastReconciledExtensionVersion stays readable and nothing writes it (D-10, D-13, D-25)
 - [Phase 29]: README.md's dependents sentence says apply reinstalls an uninstalled dependency a dependent still declares and disables the dependents only if that install fails; the APL-D1 and APL-D2 rows record the read-only load and the NFR-2 amendment
+- [Phase 02]: D-PL2-02: the shared planner counts every planned install as present; a released dependent keeps its scheduled missing entries so the replan still plans those installs; pending lists moves, then dependency installs
+- [Phase 02]: D-PL2-14: withPlannedInstallsLanded counts a dependency the replan enables as released, to a grow-only fixpoint
+- [Phase 02]: D-PL2-16: enables that wait on a planned install travel as MoveCascade.enablesAfterInstalls and pending lists them after the installs
 
 ### mcp-4 decisions
 
