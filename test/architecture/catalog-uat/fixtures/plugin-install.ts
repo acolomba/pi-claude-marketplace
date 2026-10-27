@@ -1117,6 +1117,32 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
       },
     },
 
+    // CAS-02: a listed plugin whose own id breaks the plugin id rule.
+    "dependency-invalid-root-id": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "_helper",
+                reasons: ["invalid manifest"],
+                cause: new Error(
+                  'Plugin "_helper@official" cannot be installed, because its id is invalid: Each part of a plugin id (plugin@marketplace) may use only the letters a-z and A-Z, digits, ".", "_" and "-", and must start with a letter or digit. Here the plugin\'s name does not; the marketplace\'s maintainer can rename it.',
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // RESV-06 / D-03-07: the dependency resolved cleanly and its own
     // materialization then threw. The row carries no cascade reason at all --
     // the ledger's own error is the fact -- and the requesting plugin's row

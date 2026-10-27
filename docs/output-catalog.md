@@ -1126,6 +1126,20 @@ A plugin operation has failed.
 
 One element breaking a character rule refuses the WHOLE `dependencies` array -- a constraint that disappears quietly is worse than a declaration that is refused, because the install would then pin a version nobody asked for. The subject is the plugin whose declaration is at fault, which here is the requesting plugin itself, so there is no second row to add and the summary counts one operation. The cause carries the validator's field path, never the manifest's text.
 
+### Dependency cascade -- the plugin's own id breaks the plugin id rule (CAS-02 / D-PL3-04)
+
+<!-- catalog-state: dependency-invalid-root-id -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ _helper (failed) {invalid manifest}
+    cause: Plugin "_helper@official" cannot be installed, because its id is invalid: Each part of a plugin id (plugin@marketplace) may use only the letters a-z and A-Z, digits, ".", "_" and "-", and must start with a letter or digit. Here the plugin's name does not; the marketplace's maintainer can rename it.
+```
+
+The install looks the plugin up first, as Claude Code does. A plugin the marketplace does not list keeps the `{not in manifest}` row. A listed plugin whose name or marketplace name breaks the id rule gets this refusal, in Claude Code's wording and its three variants: the plugin's name does not, the marketplace's name does not, or they do not, in which case the maintainer can rename both. The subject is the requesting plugin, so there is one row. The id is printed with its control and format characters escaped (D-PL3-14). `apply`, a load, and `import` report the same cause under `{dependency failed}` (D-PL3-17, a known limit).
+
 ### Dependency cascade -- a dependency whose own install threw (RESV-06 / D-03-07)
 
 <!-- catalog-state: dependency-install-failed -->
