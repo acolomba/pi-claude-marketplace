@@ -75,6 +75,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 
 import {
+  assertAgentTargetsFree,
   commitPreparedAgents,
   prepareStagePluginAgents,
   unstagePluginAgents,
@@ -838,12 +839,13 @@ async function assertDirectoryPinSatisfied(
 /**
  * UPD-DEP-D1: whether the ledger would install one plugin, decided with no
  * write: the PI-15 / PI-3 / PI-4 preflight behind the same installability
- * gate, then the PI-6 name check. It runs over a copy of `state`, and a
- * marketplace only the user scope records is read from the user record rather
- * than added (D-MF-04), so a refused plan adds nothing. A git source clones on
- * a cache miss, as the install it previews would. Throws what the ledger
- * would throw; a marketplace neither scope records resolves quietly, since
- * the ledger reports it.
+ * gate, then the PI-6 name check, then the D-PL4-04 refusal of an agent
+ * target that holds a file the agents commit would not replace. It runs over
+ * a copy of `state`, and a marketplace only the user scope records is read
+ * from the user record rather than added (D-MF-04), so a refused plan adds
+ * nothing. A git source clones on a cache miss, as the install it previews
+ * would. Throws what the ledger would throw; a marketplace neither scope
+ * records resolves quietly, since the ledger reports it.
  */
 export async function previewInstall(
   state: ExtensionState,
@@ -873,6 +875,11 @@ export async function previewInstall(
     opts.scope,
     generatedNames,
     removePluginRecord(preview, opts.marketplace, opts.plugin),
+  );
+  await assertAgentTargetsFree(
+    locations,
+    { marketplace: opts.marketplace, plugin: opts.plugin },
+    generatedNames.agents,
   );
 }
 

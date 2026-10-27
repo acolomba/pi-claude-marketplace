@@ -2561,6 +2561,33 @@ test("UPD-DEP-D1: previewInstall leaves a marketplace neither scope records to t
   assert.deepStrictEqual(state, { marketplaces: {}, schemaVersion: 2 });
 });
 
+test("D-PL4-04: previewInstall refuses an agent target a user's file holds and writes nothing", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-preview-agent-");
+  const seeded = await seedPlugin(environment.cwd, { components: { agents: ["gamma"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const target = path.join(locations.agentsDir, "pi-claude-marketplace-empty-gamma.md");
+  await mkdir(locations.agentsDir, { recursive: true });
+  await writeFile(target, "User's own agent.\n");
+  const stateBefore = structuredClone(seeded.state);
+
+  // act & assert
+  await assert.rejects(
+    previewInstall(seeded.state, locations, projectInstallOptions(environment.cwd)),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.strictEqual(
+        error.message,
+        `Cannot replace agent target with non-previous content at ${target}`,
+      );
+      return true;
+    },
+  );
+  assert.strictEqual(await readFile(target, "utf8"), "User's own agent.\n");
+  await assert.rejects(readFile(locations.agentsIndexPath), { code: "ENOENT" });
+  assert.deepStrictEqual(seeded.state, stateBefore);
+});
+
 test("UPD-DEP-D1: previewInstall throws the PI-6 conflict with a name another plugin owns", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-preview-conflict-");
