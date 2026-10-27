@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -1524,6 +1524,49 @@ test("CR-05 / MU-5: pre-fetch failure (gitOps.fetch throws) does NOT append 'Ret
   });
 });
 
+/** Every file under `dir` with its bytes, keyed by its path relative to `dir`. */
+async function directoryBytes(dir: string): Promise<Map<string, Buffer>> {
+  const entries = await readdir(dir, { recursive: true, withFileTypes: true });
+  const files = entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => path.join(entry.parentPath, entry.name));
+  return new Map(
+    await Promise.all(
+      files.map(async (file) => [path.relative(dir, file), await readFile(file)] as const),
+    ),
+  );
+}
+
+test("D-PL8-24: a refresh whose fetch is aborted leaves state.json, the clone, and the state lock as they were", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const { cloneDir } = await seedGithubMarketplace({ cwd, name: "offline", ref: "main" });
+    const locations = locationsFor("project", cwd);
+    const stateBefore = await readFile(locations.stateJsonPath);
+    const cloneBefore = await directoryBytes(cloneDir);
+    const { ctx, run } = makeCtx();
+    const { gitOps } = createGitOps({
+      fetchThrows: new DOMException("This operation was aborted", "AbortError"),
+    });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "offline",
+      scope: "project",
+      cwd,
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
+    assert.deepStrictEqual(await directoryBytes(cloneDir), cloneBefore);
+    assert.strictEqual(await pathExists(locations.stateLockFile), false);
+  });
+});
+
 test("MU-5: clone advances + manifest re-validation fails -- 'Retry the command.' retry hint", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
@@ -2452,6 +2495,57 @@ test("autoupdate off never invokes a plugin update", async () => {
     assert.equal(pluginUpdateCalled, false);
   });
 });
+
+for (const { name, expectedCalls } of [
+  { name: "claude-plugins-official", expectedCalls: ["hello"] },
+  { name: "knowledge-work-plugins", expectedCalls: [] },
+  { name: "tools", expectedCalls: [] },
+]) {
+  test(`D-PL8-07: a marketplace named ${name} without a config value cascades to ${JSON.stringify(expectedCalls)}`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      await seedGithubMarketplace({
+        cwd,
+        name,
+        ref: "main",
+        plugins: { hello: makePluginRecord() },
+      });
+      const { ctx, run } = makeCtx();
+      const { gitOps } = createGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000005" },
+      });
+      const calls: string[] = [];
+      const pluginUpdate: PluginUpdateFn = async (plugin) => {
+        calls.push(plugin);
+        return Promise.resolve({
+          partition: "unchanged",
+          name: plugin,
+          fromVersion: "0.0.1",
+          toVersion: "0.0.1",
+          declaresAgents: false,
+          declaresMcp: false,
+          constraint: undefined,
+          declaresWorkflows: false,
+        });
+      };
+
+      // act
+      await updateMarketplace({
+        completionCache: createCompletionCache(),
+        ctx,
+        run,
+        name,
+        scope: "project",
+        cwd,
+        gitOps,
+        pluginUpdate,
+      });
+
+      // assert
+      assert.deepStrictEqual(calls, expectedCalls);
+    });
+  });
+}
 
 test("autoupdate continues in installed order after an ordinary plugin failure", async () => {
   await withHermeticHome(async ({ cwd }) => {
@@ -6466,3 +6560,79 @@ test("D-PL5-28: a soft look-alike record whose source renames it to another look
     );
   });
 });
+
+for (const { layer, runsCascade } of [
+  { layer: undefined, runsCascade: true },
+  { layer: "localConfigJsonPath", runsCascade: false },
+  { layer: "baseConfigJsonPath", runsCascade: false },
+] as const) {
+  test(`D-PL8-07: an official marketplace with ${layer ?? "no invalid config layer"} ${runsCascade ? "runs" : "does not run"} the plugin cascade`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const name = "claude-plugins-official";
+      const installed = makePluginRecord();
+      // D-PL5-01: an official name is legal only from a github source of the anthropics organization.
+      const { cloneDir } = await seedGithubMarketplace({
+        cwd,
+        name,
+        plugins: { hello: installed },
+      });
+      const manifestPath = path.join(cloneDir, ".claude-plugin", "marketplace.json");
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.scopeRoot, { recursive: true });
+      if (layer !== undefined) {
+        await writeFile(locations[layer], "{ invalid", "utf8");
+      }
+
+      const { gitOps: baseGitOps } = createGitOps({
+        remoteRefs: { "refs/remotes/origin/HEAD": "abcdef0000000000000000000000000000000003" },
+        localRefs: { HEAD: "abcdef0000000000000000000000000000000003" },
+      });
+      const gitOps: typeof baseGitOps = {
+        ...baseGitOps,
+        async checkout(opts): Promise<void> {
+          await baseGitOps.checkout(opts);
+          await writeFile(
+            manifestPath,
+            JSON.stringify({
+              ...(JSON.parse(VALID_MANIFEST_JSON) as Record<string, unknown>),
+              description: "Changed since the baseline",
+            }),
+            "utf8",
+          );
+        },
+      };
+      const cascadeCalls: string[] = [];
+      const pluginUpdate: PluginUpdateFn = (plugin) => {
+        cascadeCalls.push(plugin);
+        return Promise.resolve({
+          partition: "unchanged",
+          name: plugin,
+          fromVersion: installed.version,
+          toVersion: installed.version,
+          declaresAgents: false,
+          declaresMcp: false,
+          constraint: undefined,
+          declaresWorkflows: false,
+        });
+      };
+
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updateMarketplace({
+        completionCache: createCompletionCache(),
+        ctx,
+        run,
+        name,
+        scope: "project",
+        cwd,
+        gitOps: gitOps,
+        pluginUpdate,
+      });
+
+      // assert
+      assert.deepStrictEqual(cascadeCalls, runsCascade ? ["hello"] : []);
+    });
+  });
+}

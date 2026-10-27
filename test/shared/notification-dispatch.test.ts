@@ -14,6 +14,7 @@ import {
   notify,
   notifyCommandError,
   notifyAsyncRewakeSummary,
+  notifyBackgroundUpdate,
   notifyDeviceFlowPrompt,
   notifyDiagnostic,
   notifyMcpConfigNotices,
@@ -596,6 +597,15 @@ for (const { kind, outcome, emit } of [
         rows: [{ kind: "stopped", scope: "user", detail: "locked" }],
         notices: [],
       });
+    },
+  },
+  {
+    kind: "background-update",
+    outcome: false,
+    emit: (ctx, run) => {
+      notifyBackgroundUpdate(ctx, run, [
+        { name: "alpha", marketplace: "tools", scope: "user", toVersion: "1.1.0" },
+      ]);
     },
   },
 ] satisfies Array<{
@@ -7513,6 +7523,50 @@ test("AAP-04: autoapply status dispatch renders the effective value at info seve
     "Autoapply: off (default)\n\nclaude-plugins.json [user]: not set",
     "info",
   ]);
+});
+
+test("notifyBackgroundUpdate names the updated plugins at info severity", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyBackgroundUpdate(ctx, runWithNothingLoaded(), [
+    {
+      name: "alpha",
+      marketplace: "tools",
+      scope: "project",
+      fromVersion: "1.0.0",
+      toVersion: "1.1.0",
+    },
+    { name: "beta", marketplace: "tools", scope: "user", fromVersion: "2.0.0", toVersion: "2.1.0" },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [["Plugins updated: alpha and beta · Run /reload to apply", "info"]],
+  );
+});
+
+test("notifyBackgroundUpdate emits nothing for an empty plugin list", () => {
+  // arrange
+  const capture = createJsonCapture();
+  const ctx = {
+    get mode(): string {
+      throw new Error("stale mode");
+    },
+    get ui() {
+      return capture.ui;
+    },
+  };
+  const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+  // act
+  notifyBackgroundUpdate(ctx, run, []);
+
+  // assert
+  assert.deepStrictEqual(capture.entries, []);
+  capture.assertValid();
 });
 
 test("notifyReconcileAborted emits the serialized cause at error severity", (t) => {

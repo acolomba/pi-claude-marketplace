@@ -2615,10 +2615,40 @@ const RAW_CASES: {
       notices: [],
     },
   },
+  "background-update": {
+    surface: {
+      kind: "background-update",
+      plugins: [
+        {
+          name: "alpha",
+          marketplace: "tools",
+          scope: "user",
+          fromVersion: "1.0.0",
+          toVersion: "1.1.0",
+        },
+      ],
+    },
+    expected: {
+      schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+      kind: "background-update",
+      severity: "info",
+      needsReload: true,
+      plugins: [
+        {
+          name: "alpha",
+          marketplace: "tools",
+          scope: "user",
+          fromVersion: "1.0.0",
+          toVersion: "1.1.0",
+        },
+      ],
+    },
+  },
 };
 
 for (const [kind, { surface, expected }] of Object.entries(RAW_CASES)) {
-  test(`converts a ${kind} raw surface with its severity, no reload, and no summary`, () => {
+  test(`converts a ${kind} raw surface with its severity, its reload flag, and no summary`, () => {
     // arrange
     const expectedPayload = expected;
 
@@ -2633,6 +2663,27 @@ for (const [kind, { surface, expected }] of Object.entries(RAW_CASES)) {
     assert.deepStrictEqual(payload, expectedPayload);
   });
 }
+
+test("D-PL8-16: converts a background update row without a from version", () => {
+  // act
+  const payload = toWirePayload(
+    {
+      kind: "background-update",
+      plugins: [{ name: "alpha", marketplace: "tools", scope: "project", toVersion: "1.1.0" }],
+    },
+    { kind: "load" },
+  );
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    origin: { kind: "load" },
+    kind: "background-update",
+    severity: "info",
+    needsReload: true,
+    plugins: [{ name: "alpha", marketplace: "tools", scope: "project", toVersion: "1.1.0" }],
+  });
+});
 
 test("AAP-04: converts a default autoapply status without a source or a set", () => {
   // act

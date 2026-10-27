@@ -187,6 +187,7 @@ interface CommandProbes {
   readonly createRecoveryId?: () => string;
   readonly appendAttempts?: number;
   readonly updatePlugins?: UpdatePluginsFn;
+  readonly runForeground?: (command: () => Promise<void>) => Promise<void>;
 }
 
 interface WrapperUnderTest {
@@ -430,6 +431,7 @@ function registerCommandWithCache(
       ...(probes.createRecoveryId === undefined
         ? {}
         : { createRecoveryId: probes.createRecoveryId }),
+      ...(probes.runForeground === undefined ? {} : { runForeground: probes.runForeground }),
     },
   );
 
@@ -1676,6 +1678,84 @@ for (const mode of ["", "JSON", " json", "rpc ", "ｊｓｏｎ", "jsоn", "unkno
   });
 }
 
+test("runs the routed command inside the supplied foreground runner", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "foreground-runner");
+  const capture = createJsonCapture();
+  const log: string[] = [];
+  const { registration, verifyRegistrar } = registerCommandUnderTest({
+    runs: 1,
+    capture: {
+      entrySink: {
+        appendEntry: (customType, payload) => {
+          log.push("append");
+          capture.entrySink.appendEntry(customType, payload);
+        },
+      },
+    },
+    createInvocationId: () => "help-run",
+    runForeground: async (command) => {
+      log.push("enter");
+      await command();
+      log.push("exit");
+    },
+  });
+  const ctx = {
+    mode: "json",
+    cwd,
+    get ui() {
+      return capture.ui;
+    },
+  };
+
+  // act
+  await Reflect.apply(registration.handler, undefined, ["help", ctx]);
+
+  // assert
+  assert.deepStrictEqual(log, ["enter", "append", "exit"]);
+  assert.deepStrictEqual(capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        kind: "usage-info",
+        severity: "info",
+        needsReload: false,
+        origin: { kind: "command", commandId: "plugin help", invocationId: "help-run" },
+        usage: EXPECTED_TOP_LEVEL_USAGE,
+      },
+    },
+  ]);
+  capture.assertValid();
+  verifyRegistrar();
+});
+
+test("refuses an unsupported mode before it enters the foreground runner", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "foreground-mode");
+  const log: string[] = [];
+  const { registration, verifyRegistrar } = registerCommandUnderTest({
+    runs: 0,
+    runForeground: async (command) => {
+      log.push("enter");
+      await command();
+    },
+  });
+  const ctx = { mode: "unknown", cwd };
+
+  // act & assert
+  assert.throws(
+    () => Reflect.apply(registration.handler, undefined, ["help", ctx]),
+    (error: unknown) => {
+      assert.ok(error instanceof UnsupportedModeError);
+      assert.strictEqual(error.mode, "unknown");
+      return true;
+    },
+  );
+  assert.deepStrictEqual(log, []);
+  verifyRegistrar();
+});
+
 test("a stale command mode getter prevents routing and inventory reads", async (t) => {
   // arrange
   const { cwd } = await createHermeticScope(t, "stale-mode");
@@ -2096,7 +2176,7 @@ describe("registerClaudePluginCommand", () => {
     // assert
     assert.deepStrictEqual(notifications, [
       { message: "● claude-plugins-official [user] (added)" },
-      { message: "● claude-plugins-official [user] <autoupdate>" },
+      { message: "● claude-plugins-official [user] <autoupdate> {already autoupdate}" },
     ]);
     assert.deepStrictEqual(await loadState(userLocations.extensionRoot), {
       schemaVersion: 3,
@@ -2123,11 +2203,9 @@ describe("registerClaudePluginCommand", () => {
       schemaVersion: 1,
       marketplaces: {
         "claude-plugins-official": {
-          autoupdate: true,
           source: "anthropics/claude-plugins-official",
         },
       },
-      plugins: {},
     });
     assert.deepStrictEqual(userTree, [
       "claude-plugins.json",

@@ -1092,17 +1092,20 @@ test("a manifest failure names the marketplace alone as its JSON row id", async 
   });
 });
 
-for (const { title, name, manifest } of [
+for (const { title, name, manifest, autoupdate } of [
   {
     title: "schema-invalid manifest JSON renders the catalog invalid-manifest envelope",
     name: "bad-mp",
     manifest: { name: "bad-mp", plugins: "not-an-array" },
+    autoupdate: "no autoupdate",
   },
   {
     title:
       "D-PL5-28: a marketplace recorded under a reserved name from a path source renders the invalid-manifest envelope",
     name: "claude-plugins-official",
     manifest: { name: "claude-plugins-official", plugins: [] },
+    // D-PL8-07: an official name autoupdates unless a config file says otherwise.
+    autoupdate: "autoupdate",
   },
 ]) {
   test(title, async () => {
@@ -1128,7 +1131,7 @@ for (const { title, name, manifest } of [
         message: [
           "A plugin operation has failed.",
           "",
-          `● ${name} [user] <no autoupdate>`,
+          `● ${name} [user] <${autoupdate}>`,
           `  ⊘ ${name} (failed) {invalid manifest}`,
           "    components: not resolved",
         ].join("\n"),

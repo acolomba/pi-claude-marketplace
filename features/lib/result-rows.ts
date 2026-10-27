@@ -2,12 +2,13 @@
  * @fileoverview Projects the results of a command or a new session into the
  * records the field and row steps compare.
  *
- * A result's row arrays, `marketplaces` and `blocks`, have row steps of their
- * own. Every other field is an envelope field, which the field steps state.
- * A result with marketplace blocks is a `cascade` or a
+ * A result's row arrays, `marketplaces`, `blocks`, and `plugins`, have row
+ * steps of their own. Every other field is an envelope field, which the field
+ * steps state. A result with marketplace blocks is a `cascade` or a
  * `reconcile-applied-cascade`, and the row steps read both alike. The blocks
  * of an info fan-out are rows too: a `marketplace-info-cascade`'s are
- * marketplace rows, and a `plugin-info-cascade`'s are plugin rows.
+ * marketplace rows, and a `plugin-info-cascade`'s are plugin rows. So are the
+ * `plugins` of a `background-update`, one row per updated plugin.
  */
 
 import assert from "node:assert/strict";
@@ -17,10 +18,11 @@ import { fieldRecord, flatten, recordTable } from "./field-rows.ts";
 import type { NotificationPayload } from "./pi-commands.ts";
 import type { RunTokens } from "./run-tokens.ts";
 
-// The row arrays of a result: the marketplace rows of `marketplaces` and an
-// info fan-out's `blocks`. They have steps of their own, and a passing
-// scenario fails when one of them is not empty and no row step read it.
-const ROW_FIELDS: ReadonlySet<string> = new Set(["marketplaces", "blocks"]);
+// The row arrays of a result: the marketplace rows of `marketplaces`, an
+// info fan-out's `blocks`, and a background update's `plugins`. They have
+// steps of their own, and a passing scenario fails when one of them is not
+// empty and no row step read it.
+const ROW_FIELDS: ReadonlySet<string> = new Set(["marketplaces", "blocks", "plugins"]);
 
 // Fields no scenario states: `schemaVersion` is fixed by the schema the
 // driver checks, `origin` carries per-run ids, and the row arrays have steps
@@ -101,8 +103,9 @@ export function envelopeFields(
 
 /**
  * Returns one record per plugin row of `result`: the blocks of a plugin info
- * fan-out, named as the fields of a single plugin-info result are, or the
- * plugin rows of a result with marketplace blocks. Fails on any other result.
+ * fan-out, named as the fields of a single plugin-info result are, the
+ * plugins a background update moved, or the plugin rows of a result with
+ * marketplace blocks. Fails on any other result.
  */
 export function pluginRowRecords(
   result: NotificationPayload,
@@ -110,6 +113,10 @@ export function pluginRowRecords(
 ): Array<Map<string, string>> {
   if (result.kind === "plugin-info-cascade") {
     return infoBlockRecords(result.blocks, tokens);
+  }
+
+  if (result.kind === "background-update") {
+    return result.plugins.map((row) => fieldRecord(flatten(row, tokens)));
   }
 
   requireMarketplaceBlocks(result, "plugin-info-cascade");

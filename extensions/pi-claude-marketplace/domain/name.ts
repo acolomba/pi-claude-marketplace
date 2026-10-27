@@ -14,6 +14,8 @@ import {
   UnsafeGeneratedNameError,
 } from "../shared/errors.ts";
 
+import { OFFICIAL_MARKETPLACE_NAMES } from "./official-marketplaces.ts";
+
 import type { ParsedSource } from "./source.ts";
 
 /**
@@ -72,28 +74,6 @@ export function assertSafeName(name: string, label?: string): void {
 export function isReservedRecordKey(name: string): boolean {
   return name === "__proto__";
 }
-
-/**
- * The official marketplace names of Claude Code 2.1.291, copied
- * from the binary. Upstream lowercases a marketplace name before it checks
- * this set.
- */
-export const OFFICIAL_MARKETPLACE_NAMES: ReadonlySet<string> = new Set([
-  "claude-code-marketplace",
-  "claude-code-plugins",
-  "claude-plugins-official",
-  "anthropic-marketplace",
-  "anthropic-plugins",
-  "agent-skills",
-  "anthropic-agent-skills",
-  "life-sciences",
-  "knowledge-work-plugins",
-  "claude-for-legal",
-  "claude-for-financial-services",
-  "financial-services-plugins",
-  "first-party-plugins",
-  "claude-tag-plugins",
-]);
 
 /**
  * MKT-01: the marketplace names Claude Code 2.1.310 reserves for the

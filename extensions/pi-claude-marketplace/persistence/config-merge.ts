@@ -75,6 +75,16 @@ export interface ScopeLoadOutcome {
 }
 
 /**
+ * True when either config layer of the scope failed to load. A layer that is
+ * absent is not invalid. Autoupdate counts as off for such a scope, because the
+ * merged view reads an invalid layer as `{}` and would otherwise fall back to
+ * the default for the name.
+ */
+export function hasInvalidConfigLayer(outcome: ScopeLoadOutcome): boolean {
+  return outcome.base.status === "invalid" || outcome.local.status === "invalid";
+}
+
+/**
  * CFG-02 / LAYER-09 / D-MF-03: merges the base layer (`base`) and the local
  * layer (`local`) of one scope.
  *

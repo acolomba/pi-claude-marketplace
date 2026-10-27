@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { OFFICIAL_MARKETPLACE_NAMES } from "./name.ts";
+import { isOfficialMarketplaceName } from "./official-marketplaces.ts";
 
 import type { PluginEntry } from "./components/plugin.ts";
 import type { StatKindReader } from "./resolver-types.ts";
@@ -87,7 +87,7 @@ function declaresOfficialBinaries(input: {
   readonly manifest: Record<string, unknown> | null;
   readonly marketplaceName: string;
 }): boolean {
-  if (!OFFICIAL_MARKETPLACE_NAMES.has(input.marketplaceName.toLowerCase())) {
+  if (!isOfficialMarketplaceName(input.marketplaceName)) {
     return false;
   }
 

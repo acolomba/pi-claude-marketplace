@@ -6,6 +6,7 @@ import {
   pluginScopeOrFallback,
   pluginVersion,
   type AsyncRewakeSummarySurface,
+  type BackgroundUpdateSurface,
   type ContentReason,
   type CascadeNotificationMessage,
   type DeviceFlowPrompt,
@@ -379,6 +380,19 @@ void ({
 } satisfies PluginPathSkippedSurface);
 // @ts-expect-error D-01: a load surface is not a NotificationMessage
 void ({ kind: "reconcile-aborted", cause: "boom" } satisfies NotificationMessage);
+void ({
+  kind: "background-update",
+  plugins: [{ name: "alpha", marketplace: "tools", scope: "user", toVersion: "1.1.0" }],
+} satisfies BackgroundUpdateSurface);
+void ({
+  kind: "background-update",
+  plugins: [{ name: "alpha", marketplace: "tools", scope: "project", toVersion: "1.1.0" }],
+} satisfies LoadSurface);
+void ({
+  kind: "background-update",
+  // @ts-expect-error D-PL8-10: an updated install names the version it moved to
+  plugins: [{ name: "alpha", marketplace: "tools", scope: "user", fromVersion: "1.0.0" }],
+} satisfies BackgroundUpdateSurface);
 void ({
   kind: "plugin-path-skipped",
   // @ts-expect-error a skipped scope is only user or project

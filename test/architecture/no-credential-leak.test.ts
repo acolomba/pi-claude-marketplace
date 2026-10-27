@@ -900,6 +900,22 @@ const PLANTED_CREDENTIAL_SITES: ReadonlyArray<{
       }),
   },
   {
+    site: "a background update row's name and version",
+    planted: USERINFO,
+    probe: () =>
+      probeRawSurface({
+        kind: "background-update",
+        plugins: [
+          {
+            name: USERINFO_URL,
+            marketplace: "tools",
+            scope: "user",
+            toVersion: `${USERINFO_URL}#1.1.0`,
+          },
+        ],
+      }),
+  },
+  {
     site: "the usage-error message",
     planted: [GITHUB_TOKEN],
     probe: () =>

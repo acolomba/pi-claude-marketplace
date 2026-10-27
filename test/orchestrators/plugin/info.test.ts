@@ -1288,7 +1288,8 @@ test("D-PL5-28: info on a plugin of a marketplace recorded under a reserved name
         message: [
           "A plugin operation has failed.",
           "",
-          "● claude-plugins-official [user] <no autoupdate>",
+          // D-PL8-07: an official name defaults autoupdate on.
+          "● claude-plugins-official [user] <autoupdate>",
           "  ⊘ real (failed) {invalid manifest}",
         ].join("\n"),
         severity: "error",

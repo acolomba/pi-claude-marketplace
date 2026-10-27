@@ -1809,6 +1809,143 @@ test("D-MF-03: an unnamed disable writes the base entry and leaves a local entry
   });
 });
 
+const officialDefaultNamedCases = [
+  {
+    name: "claude-plugins-official",
+    enable: true,
+    expectedMessage: "● claude-plugins-official [project] <autoupdate> {already autoupdate}",
+    expectedBase: undefined,
+  },
+  {
+    name: "claude-plugins-official",
+    enable: false,
+    expectedMessage: "● claude-plugins-official [project] <no autoupdate>",
+    expectedBase:
+      '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "claude-plugins-official": {\n      "source": "./src",\n      "autoupdate": false\n    }\n  },\n  "plugins": {}\n}\n',
+  },
+  {
+    name: "knowledge-work-plugins",
+    enable: true,
+    expectedMessage: "● knowledge-work-plugins [project] <autoupdate>",
+    expectedBase:
+      '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "knowledge-work-plugins": {\n      "source": "./src",\n      "autoupdate": true\n    }\n  },\n  "plugins": {}\n}\n',
+  },
+] as const;
+
+for (const { name, enable, expectedMessage, expectedBase } of officialDefaultNamedCases) {
+  test(`D-PL8-07: a named ${enable ? "enable" : "disable"} of ${name} without a base value judges the default for the name`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await saveMarketplaces(locations, [marketplaceRecord(name, "project", cwd)]);
+      await writeConfig(locations, {
+        schemaVersion: 1,
+        marketplaces: { [name]: { source: "./src" } },
+      });
+      const bytesBefore = await scopeBytes(locations);
+      const boundary = notificationBoundary({ message: expectedMessage });
+
+      // act
+      await setMarketplaceAutoupdate({
+        ctx: boundary.ctx,
+        run: boundary.run,
+        name,
+        enable,
+        scope: "project",
+        cwd,
+      });
+
+      // assert
+      assert.deepEqual(await scopeBytes(locations), {
+        ...bytesBefore,
+        base: expectedBase ?? bytesBefore.base,
+      });
+      verify(boundary.ctx);
+      verify(boundary.ui);
+    });
+  });
+}
+
+const officialDefaultInheritedCases = [
+  { label: "a base config that does not declare it", base: {} },
+  {
+    label: "a base entry without a value",
+    base: { "claude-plugins-official": { source: "./src" } },
+  },
+] as const;
+
+for (const { label, base } of officialDefaultInheritedCases) {
+  test(`D-PL8-07: a named --local enable of an official local entry without a value over ${label} inherits the default`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await saveMarketplaces(locations, [
+        marketplaceRecord("claude-plugins-official", "project", cwd),
+      ]);
+      await writeConfig(
+        locations,
+        { schemaVersion: 1, marketplaces: { "claude-plugins-official": { source: "./src" } } },
+        true,
+      );
+      await writeConfig(locations, { schemaVersion: 1, marketplaces: base });
+      const bytesBefore = await scopeBytes(locations);
+      const boundary = notificationBoundary({
+        message: "● claude-plugins-official [project] <autoupdate> {already autoupdate}",
+      });
+
+      // act
+      await setMarketplaceAutoupdate({
+        ctx: boundary.ctx,
+        run: boundary.run,
+        name: "claude-plugins-official",
+        enable: true,
+        scope: "project",
+        cwd,
+        local: true,
+      });
+
+      // assert
+      assert.deepEqual(await scopeBytes(locations), bytesBefore);
+      verify(boundary.ctx);
+      verify(boundary.ui);
+    });
+  });
+}
+
+test("D-PL8-07: an unnamed enable leaves an official local entry the base config does not declare on its default", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await saveMarketplaces(locations, [
+      marketplaceRecord("claude-plugins-official", "project", cwd),
+    ]);
+    await writeConfig(
+      locations,
+      { schemaVersion: 1, marketplaces: { "claude-plugins-official": { source: "./src" } } },
+      true,
+    );
+    const bytesBefore = await scopeBytes(locations);
+    const boundary = notificationBoundary({
+      message:
+        "● claude-plugins-official [project] <autoupdate> {already autoupdate}\n\nMarketplace autoupdate: 1 success",
+    });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      run: boundary.run,
+      enable: true,
+      scope: "project",
+      cwd,
+    });
+
+    // assert
+    assert.deepEqual(await scopeBytes(locations), bytesBefore);
+    verify(boundary.ctx);
+    verify(boundary.ui);
+  });
+});
+
 test("D-09: an unnamed --local flip changes only the local config and skips what it does not declare", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange

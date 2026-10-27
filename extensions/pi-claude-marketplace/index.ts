@@ -9,7 +9,11 @@ import {
 import { registerClaudeMarketplaceTools, registerClaudePluginCommand } from "./edge/register.ts";
 import { registerSkillAliases } from "./edge/skill-aliases.ts";
 import { aggregateDiscoveredResources } from "./orchestrators/discover.ts";
-import { DEFAULT_GIT_OPS } from "./orchestrators/marketplace/shared.ts";
+import { createBackgroundGate } from "./orchestrators/marketplace/background-gate.ts";
+import { createBackgroundPass } from "./orchestrators/marketplace/background-pass.ts";
+import { createBackgroundUpdate } from "./orchestrators/marketplace/background-update.ts";
+import { DEFAULT_GIT_OPS, runWithGitAbortSignal } from "./orchestrators/marketplace/shared.ts";
+import { updateMarketplace } from "./orchestrators/marketplace/update.ts";
 import { createUpdateOperations } from "./orchestrators/plugin/operations.ts";
 import { recomputePluginPath } from "./orchestrators/plugin-path.ts";
 import { createApplyReconcile } from "./orchestrators/reconcile/apply.ts";
@@ -74,6 +78,10 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   const hooksRuntime = createHooksRuntime();
   const hooksRouting = createHooksRouting(hooksRuntime, { readHooksJson });
   const completionCache = createCompletionCache();
+  // D-PL8-04: one gate per extension runtime. Every `/claude:plugin` command
+  // runs through it, so it waits for the background autoupdate step in flight,
+  // for at most the gate's default wait cap (D-PL8-23).
+  const backgroundGate = createBackgroundGate();
   // ASTAT-01: one status tracker per extension load. Pi drops its subscription
   // when it invalidates this runtime, and the next load starts empty.
   const mcpStatus = createMcpStatusTracker(pi.events);
@@ -207,6 +215,27 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     }
   });
 
+  // AUP-01 / D-PL8-01 / D-PL8-13: the first message arms one background
+  // autoupdate pass. It is a separate run, not a load, so `resources_discover`
+  // still changes no installation state (APL-D1). The listeners come after
+  // `registerHooksBridge`, so a prompt that a UserPromptSubmit hook blocks arms
+  // nothing. `Math.random` is passed by reference, not called.
+  const backgroundUpdate = createBackgroundUpdate({
+    gate: backgroundGate,
+    pass: createBackgroundPass({
+      pi,
+      gate: backgroundGate,
+      completionCache,
+      beginPluginUpdateRun: pluginUpdateOperations.beginPluginUpdateRun,
+      updateMarketplace,
+      runWithAbortSignal: runWithGitAbortSignal,
+    }),
+    env: process.env,
+    random: Math.random,
+  });
+  pi.on("input", backgroundUpdate.onInput);
+  pi.on("session_shutdown", backgroundUpdate.onShutdown);
+
   registerClaudePluginCommand(
     pi,
     {
@@ -218,6 +247,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     },
     hooksRouting,
     pluginUpdateOperations.updatePlugins,
+    { runForeground: backgroundGate.runForeground },
   );
   registerClaudeMarketplaceTools(pi);
   registerSkillAliases(pi);
