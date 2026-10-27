@@ -169,7 +169,7 @@ import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { ContentReason, McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { runPhases } from "../../transaction/phase-ledger.ts";
+import type { RollbackPartial, runPhases } from "../../transaction/phase-ledger.ts";
 import type {
   LockedStateTransaction,
   withLockedStateTransaction,
@@ -2966,6 +2966,12 @@ export type InstallMissingDependencyOutcome =
       readonly error: Error;
       readonly cause: string;
       readonly reason?: "cross-marketplace";
+      /**
+       * REC-06: the undo steps the failed install's own ledger could not
+       * finish, so an orchestrated caller reports `{rollback partial}` as the
+       * standalone row does. Omitted when every undo finished (NREG-01).
+       */
+      readonly rollbackPartials?: readonly RollbackPartial[];
       /**
        * AFILE-04: the notices of the members that committed before a later
        * member failed; omitted when none (NREG-01).

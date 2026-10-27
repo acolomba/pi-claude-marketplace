@@ -4936,7 +4936,7 @@ test("WR-03: installPlugin's marketplaceTagProbe seam reaches a path-source depe
         plugin: "hello",
         marketplaceTagProbe: (options) => {
           seen.push(options);
-          return Promise.resolve({ kind: "no-matching-tag", range: options.range });
+          return Promise.resolve({ kind: "no-matching-tag" });
         },
       });
 
@@ -6356,6 +6356,77 @@ test("MISS-01 / WR-07: a failed missing-dependency install removes the clone its
       assert.deepStrictEqual(await readFile(projectLocations.stateJsonPath), stateBefore);
       assert.deepStrictEqual(settled, []);
     } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * Fails the per-plugin ledger at `commands` and makes the `skills` undo throw
+ * `undoError` after it runs. The outer cascade's phases are named by member
+ * key, so they pass through untouched.
+ */
+function failAfterSkillsWithUndoFault(
+  transactionControl: InstallTransactionControl,
+  undoError: Error,
+): () => void {
+  const originalRunPhases = transactionControl.runPhases;
+  transactionControl.runPhases = <C>(phases: readonly Phase<C>[], ctx: C) =>
+    originalRunPhases(
+      phases.map((phase): Phase<C> => {
+        if (phase.name === "skills") {
+          return {
+            ...phase,
+            undo: async (phaseCtx: C) => {
+              await phase.undo?.(phaseCtx);
+              throw undoError;
+            },
+          };
+        }
+
+        if (phase.name === "commands") {
+          return { ...phase, do: () => Promise.reject(new Error("commands phase failed")) };
+        }
+
+        return phase;
+      }),
+      ctx,
+    );
+  return () => {
+    transactionControl.runPhases = originalRunPhases;
+  };
+}
+
+test("REC-06: a missing-dependency install whose own ledger cannot finish an undo reports the rollback partial", async () => {
+  await withHermeticHome(async ({ installMissingDependency, transactionControl }) => {
+    const { cwd } = await seedCatalogScope({ widget: { version: "1.0.0" } });
+    const undoError = new Error("skills undo failed");
+    const restore = failAfterSkillsWithUndoFault(transactionControl, undoError);
+    try {
+      // arrange
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "widget",
+        ranges: [],
+        requiredBy: "app@mp",
+      });
+
+      // assert
+      assert.ok(outcome.status === "failed");
+      assert.deepStrictEqual(outcome.rollbackPartials, [
+        { phase: "skills", msg: undoError.message, cause: undoError },
+      ]);
+      const state = await loadState(locationsFor("project", cwd).extensionRoot);
+      assert.equal(state.marketplaces["mp"]?.plugins["widget"], undefined);
+    } finally {
+      restore();
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -16123,7 +16194,7 @@ test("D-09-05: a satisfiable root range reaches the marketplace tag probe throug
         plugin: "secrets-vault",
         ranges: ["^1.0.0"],
         requiredBy: "deploy-kit@mp",
-        marketplaceTagProbe: () => Promise.resolve({ kind: "no-matching-tag", range: "^1.0.0" }),
+        marketplaceTagProbe: () => Promise.resolve({ kind: "no-matching-tag" }),
       });
 
       // assert
