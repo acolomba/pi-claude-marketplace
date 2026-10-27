@@ -1229,7 +1229,7 @@ async function convergeScope(
     own: new Set(),
   };
   const reports: StepReport[] = [];
-  const after: AfterMoves = { rows: [], landed: false };
+  const after: AfterMoves = { rows: [], steps: [], landed: false };
   try {
     const run = {
       scope,
@@ -1265,10 +1265,12 @@ async function convergeScope(
       }),
     );
     const kept = withoutUndoneEnables(outcomes, scope, disabled);
+    const steps = withoutUndoneStepEnables(after.steps, scope, kept);
     outcomes.push(
       ...cascadeRows(cascade, reports, {
         after: after.rows,
-        disabled: withoutUndoneEnables(after.rows, scope, kept),
+        afterSteps: steps.reports,
+        disabled: withoutUndoneEnables(after.rows, scope, steps.disabled),
         enabledAtEnd,
         trailing,
       }),
@@ -1282,6 +1284,8 @@ async function convergeScope(
  */
 interface AfterMoves {
   readonly rows: PerEntryOutcome[];
+  /** The reports of the steps after the install, which follow `rows`. */
+  readonly steps: StepReport[];
   landed: boolean;
 }
 
@@ -1335,17 +1339,16 @@ async function installAfterMoves(
   );
   const steps = stepsAfterInstalls(run.cascade, run, enables);
   after.landed ||= steps.length > 0;
-  const reports: StepReport[] = [];
-  await runAfterInstallSteps(opts, steps, { ...run, reports });
-  after.rows.push(...reports.flatMap((report) => report.rows));
+  await runAfterInstallSteps(opts, steps, { ...run, reports: after.steps });
 }
 
 /**
  * Runs the steps after the missing-dependency install, in the order
  * `stepsAfterInstalls` gives them. WR-06: a step that declares a waiting
  * record whose enable did not come, or a step that did not land, does not
- * run, as in the cascade; the judgement's `(disabled)` row reports an enabled
- * record it held.
+ * run, as in the cascade, and reports what the cascade reports for it; the
+ * judgement's `(disabled)` row replaces that row for an enabled record it
+ * held.
  */
 async function runAfterInstallSteps(
   opts: ApplyReconcileOptions,
@@ -1356,19 +1359,17 @@ async function runAfterInstallSteps(
   const notLanded = new Set(
     [...run.afterInstalls].filter((key) => run.waiting.has(key) && !planned.has(key)),
   );
-  const convergePlugin = createConvergeOperation(opts.hooksRouting, opts.completionCache);
-  for (const step of steps) {
-    const blocked = cascadeDependencies(run.cascade, step.key).some(
-      (dep) => notLanded.has(dep) || run.failed.all.has(dep),
-    );
-    if (blocked && !run.waiting.has(step.key)) {
-      notLanded.add(step.key);
-      continue;
-    }
-
-    // eslint-disable-next-line no-await-in-loop -- each step locks the scope (retries: 0)
-    await runStep(opts, convergePlugin, step, run);
-  }
+  // WR-08: a step that does not run reports what the cascade reports for it.
+  await runSteps(
+    opts,
+    steps,
+    run,
+    (step) =>
+      !run.waiting.has(step.key) &&
+      cascadeDependencies(run.cascade, step.key).some(
+        (dep) => notLanded.has(dep) || run.failed.all.has(dep),
+      ),
+  );
 }
 
 /**
@@ -1409,6 +1410,27 @@ function withoutUndoneEnables(
   const undone = new Set(outcomes.filter(isUndone).map(pluginKey));
   outcomes.splice(0, outcomes.length, ...outcomes.filter((outcome) => !isUndone(outcome)));
   return disabled.filter((row) => !undone.has(pluginKey(row)));
+}
+
+/**
+ * WR-B over the reports of the steps after the install: an enable the
+ * judgement undid reports neither row, as `withoutUndoneEnables` drops them.
+ */
+function withoutUndoneStepEnables(
+  reports: readonly StepReport[],
+  scope: Scope,
+  disabled: readonly PluginRow[],
+): { readonly reports: StepReport[]; readonly disabled: PluginRow[] } {
+  const rows = reports.flatMap((report) => report.rows);
+  const remaining = withoutUndoneEnables(rows, scope, disabled);
+  const kept = new Set(rows);
+  return {
+    reports: reports.map((report) => ({
+      ...report,
+      rows: report.rows.filter((row) => kept.has(row)),
+    })),
+    disabled: remaining,
+  };
 }
 
 function failedEnables(outcomes: readonly PerEntryOutcome[], scope: Scope): readonly string[] {
@@ -1513,21 +1535,37 @@ interface CascadeRun {
 
 /**
  * APPLY1-01: runs the cascade's steps in order. A step that declares one that
- * did not land is not run. A move reports `(skipped) {dependency failed}`; a
- * deferred enable that does not run leaves its record as it was and reports
- * nothing (WR-B).
+ * did not land is not run (`runSteps`).
  */
 async function runCascade(
   opts: ApplyReconcileOptions,
   cascade: ConvergenceCascade,
   run: CascadeRun,
 ): Promise<void> {
-  const convergePlugin = createConvergeOperation(opts.hooksRouting, opts.completionCache);
-  for (const step of cascadeSteps(cascade, run)) {
-    if (
+  await runSteps(
+    opts,
+    cascadeSteps(cascade, run),
+    run,
+    (step) =>
       run.failed.all.has(step.key) ||
-      cascadeDependencies(cascade, step.key).some((dep) => run.failed.all.has(dep))
-    ) {
+      cascadeDependencies(cascade, step.key).some((dep) => run.failed.all.has(dep)),
+  );
+}
+
+/**
+ * Runs `steps` in order. A step `blocked` holds back is not run and did not
+ * land: a move reports `(skipped) {dependency failed}`; a deferred enable
+ * leaves its record as it was and reports nothing (WR-B).
+ */
+async function runSteps(
+  opts: ApplyReconcileOptions,
+  steps: readonly CascadeStep[],
+  run: CascadeRun,
+  blocked: (step: CascadeStep) => boolean,
+): Promise<void> {
+  const convergePlugin = createConvergeOperation(opts.hooksRouting, opts.completionCache);
+  for (const step of steps) {
+    if (blocked(step)) {
       run.failed.all.add(step.key);
       run.reports.push({ key: step.key, rows: dependencyFailedRows(step), replaceable: true });
       continue;
@@ -1877,6 +1915,7 @@ function cascadeRows(
   reports: readonly StepReport[],
   judged: {
     readonly after: readonly PerEntryOutcome[];
+    readonly afterSteps: readonly StepReport[];
     readonly disabled: readonly PluginRow[];
     readonly enabledAtEnd: ReadonlySet<string>;
     readonly trailing: ReadonlySet<string>;
@@ -1888,19 +1927,9 @@ function cascadeRows(
     byKey.set(pluginKey(row), [...(byKey.get(pluginKey(row)) ?? []), row]);
   }
 
-  const rows: PerEntryOutcome[] = [];
-  for (const report of reports) {
-    const replacement = byKey.get(report.key) ?? [];
-    const replaces = report.replaceable === true && replacement.length > 0;
-    if (!replaces && judged.trailing.has(report.key)) {
-      rows.push(...report.rows);
-      continue;
-    }
-
-    rows.push(...(replaces ? [] : report.rows), ...replacement);
-    byKey.delete(report.key);
-  }
-
+  const rows = reportRows(reports, byKey, judged.trailing);
+  // WR-08: a step after the install that did not run gives way the same way.
+  const afterSteps = reportRows(judged.afterSteps, byKey, judged.trailing);
   const holds = blockedMoveOutcomes(cascade.plan).filter((row) => enabledAtEnd.has(pluginKey(row)));
   // D-PL2-11: the trailing disables follow their dependencies' disables.
   const leftovers = [...byKey];
@@ -1910,7 +1939,39 @@ function cascadeRows(
     cascade.declarations,
   );
   const others = leftovers.filter(([key]) => !judged.trailing.has(key));
-  return [...rows, ...judged.after, ...holds, ...[...others, ...trailing].flatMap(([, r]) => r)];
+  return [
+    ...rows,
+    ...judged.after,
+    ...afterSteps,
+    ...holds,
+    ...[...others, ...trailing].flatMap(([, r]) => r),
+  ];
+}
+
+/**
+ * The rows of `reports` in order. A plugin the judgement disabled reports its
+ * `(disabled)` row from `byKey` in place of a step that did not run; a
+ * trailing disable stays in `byKey` to follow the steps (D-PL2-11).
+ */
+function reportRows(
+  reports: readonly StepReport[],
+  byKey: Map<string, PluginRow[]>,
+  trailing: ReadonlySet<string>,
+): PerEntryOutcome[] {
+  const rows: PerEntryOutcome[] = [];
+  for (const report of reports) {
+    const replacement = byKey.get(report.key) ?? [];
+    const replaces = report.replaceable === true && replacement.length > 0;
+    if (!replaces && trailing.has(report.key)) {
+      rows.push(...report.rows);
+      continue;
+    }
+
+    rows.push(...(replaces ? [] : report.rows), ...replacement);
+    byKey.delete(report.key);
+  }
+
+  return rows;
 }
 
 /** A row that names one plugin, as every disable row does. */

@@ -1379,6 +1379,53 @@ Feature: Plugin apply
       | severity     | info                    |
       | needs reload | false                   |
 
+  Scenario: Apply reports a plugin it moves after a missing dependency's install as skipped when its other dependency's move fails
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | alib  | 1.0.0   |              |
+      | xapp  | 1.0.0   |              |
+      | ycore | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install alib@tools --scope project"
+    Given the user has run "/claude:plugin install xapp@tools --scope project"
+    Given the user has run "/claude:plugin install ycore@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | alib  | 1.0.0   | cdep         |
+      | xapp  | 1.0.0   |              |
+      | ycore | 1.0.0   |              |
+    Given the user has run "/claude:plugin apply --scope project", which failed
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | alib  | 2.0.0   | cdep         |
+      | xapp  | 2.0.0   | alib, ycore  |
+      | ycore | 2.0.0   |              |
+      | cdep  | 1.0.0   |              |
+    Given the published plugin "ycore" of the marketplace "tools" has an unreadable skill file
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade      |
+      | severity            | error                          |
+      | needs reload        | true                           |
+      | summary             | A plugin operation has failed. |
+      | tally label         | Reconcile                      |
+      | tally failures      | 1                              |
+      | tally warnings      | 1                              |
+      | tally success count | 2                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id          | name  | status    | reasons              | scope   | version | from  | to    | leaks | rollback partial |
+      | tools            | project           | ycore@tools | ycore | failed    | permission denied    | project | 2.0.0   | 1.0.0 |       |       |                  |
+      | tools            | project           | cdep@tools  | cdep  | installed | dependency installed | project | 1.0.0   |       |       |       |                  |
+      | tools            | project           | alib@tools  | alib  | updated   |                      | project |         | 1.0.0 | 2.0.0 |       |                  |
+      | tools            | project           | xapp@tools  | xapp  | skipped   | dependency failed    | project | 1.0.0   |       |       |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id          | version | enabled |
+      | alib@tools  | 2.0.0   | true    |
+      | cdep@tools  | 1.0.0   | true    |
+      | xapp@tools  | 1.0.0   | true    |
+      | ycore@tools | 1.0.0   | true    |
+
   Scenario: Apply refuses a missing anthropic-plugin-directory dependency whose listed copy falls outside a plugin's range, naming that plugin
     Given the git repository "dirp" holds these plugins:
       | name | version | path |

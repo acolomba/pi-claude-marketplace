@@ -8281,6 +8281,63 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
+  test("WR-08: a move after the install whose other dependency failed to move reports dependency failed and stays enabled", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(t, "after-blocked-move", {
+      trees: {
+        xapp: { skill: "clean" },
+        alib: { skill: "clean" },
+        ycore: { skill: "clean" },
+        cdep: { skill: "clean" },
+      },
+      supported: { xapp: ["skills"], alib: ["skills"], ycore: ["skills"], cdep: ["skills"] },
+      offered: { xapp: "2.0.0", alib: "2.0.0", ycore: "2.0.0" },
+      dependencies: {
+        xapp: [
+          { name: "alib", version: "*" },
+          { name: "ycore", version: "*" },
+        ],
+        alib: [{ name: "cdep", version: "*" }],
+      },
+      records: { alib: { enabled: false, dependencyDisabled: true } },
+    });
+    await withoutRecords(project, ["cdep"]);
+    await declareEnabled(project, cwd, ["xapp", "alib", "ycore"]);
+    await unreadableSkill(marketplaceRoot, "ycore");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ ycore v1.0.0 → v2.0.0 (failed) {permission denied}\n" +
+          "  ● cdep v1.0.0 (installed) {dependency installed}\n" +
+          "  ● alib v1.0.0 → v2.0.0 (updated)\n" +
+          "  ⊘ xapp v1.0.0 (skipped) {dependency failed}\n" +
+          "\n" +
+          "Reconcile: 1 failure, 1 warning, 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await recordStates(project, ["alib", "xapp", "ycore", "cdep"]), [
+      ["2.0.0", true, undefined],
+      ["1.0.0", true, undefined],
+      ["1.0.0", true, undefined],
+      ["1.0.0", true, undefined],
+    ]);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
   test("D-26: a held-down plugin whose move declares a record waiting on a missing dependency moves and comes back after it", async (t) => {
     // arrange
     const { cwd, project } = await seedWaitingDependencyMoves(t, "waiting-held-dependent", {
