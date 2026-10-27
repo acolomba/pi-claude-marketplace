@@ -11,7 +11,10 @@ import {
   readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { preparePluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
-import { swapPluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
+import {
+  assertUpdateNamesFree,
+  swapPluginUpdate,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -309,6 +312,54 @@ test("AGENT-01 / NFR-3: update refuses an occupied agent target before its inten
 
     // assert
     await assertAgentsMigrated({ outcome, coexist: false, fixture });
+  });
+});
+
+test("D-PL4-04: assertUpdateNamesFree admits a candidate whose agent targets are free and writes nothing", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    const fixture = await seedLegacyAgentUpdate(t, false);
+    const { locations, newTarget, oldTarget, oldBytes, oldIndexBytes, options } = fixture;
+    const preflight = await preparePluginUpdate({ ...options, policy: UPDATE_POLICY });
+    assert.ok(!("partition" in preflight));
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+
+    // act & assert
+    await assert.doesNotReject(assertUpdateNamesFree(options, preflight));
+    assert.strictEqual(await readFile(oldTarget, "utf8"), oldBytes);
+    assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), oldIndexBytes);
+    assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    await assert.rejects(readFile(newTarget), { code: "ENOENT" });
+  });
+});
+
+test("D-PL4-04: assertUpdateNamesFree refuses a candidate whose new agent target holds a user's file, before anything changes", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    const fixture = await seedLegacyAgentUpdate(t, false);
+    const { locations, newTarget, oldTarget, oldBytes, oldIndexBytes, options } = fixture;
+    await writeFile(newTarget, "User's own agent.\n");
+    const preflight = await preparePluginUpdate({ ...options, policy: UPDATE_POLICY });
+    assert.ok(!("partition" in preflight));
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+
+    // act & assert
+    await assert.rejects(assertUpdateNamesFree(options, preflight), (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        { name: error.name, message: error.message, cause: error.cause },
+        {
+          name: "Error",
+          message: `Cannot replace agent target with non-previous content at ${newTarget}`,
+          cause: undefined,
+        },
+      );
+      return true;
+    });
+    assert.strictEqual(await readFile(oldTarget, "utf8"), oldBytes);
+    assert.strictEqual(await readFile(newTarget, "utf8"), "User's own agent.\n");
+    assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), oldIndexBytes);
+    assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
   });
 });
 

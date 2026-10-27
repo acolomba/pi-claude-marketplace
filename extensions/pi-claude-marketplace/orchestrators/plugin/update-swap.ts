@@ -65,6 +65,7 @@ import path from "node:path";
 import {
   abortPreparedAgents,
   assertAgentCommitTargets,
+  assertAgentTargetsFree,
   commitPreparedAgents,
   prepareStagePluginAgents,
 } from "../../bridges/agents/index.ts";
@@ -1367,7 +1368,7 @@ function composePhase3FailureOutcome(
  * "a"). Writes nothing, so UPD-DEP-D1's plan runs it before any dependency
  * moves, and the swap runs it again over the scope the moves left.
  */
-export async function assertUpdateNamesFree(
+async function assertNamesFree(
   args: Pick<ThreePhaseArgsBase, "marketplace" | "plugin" | "scope">,
   preflight: Pick<PreparedPluginUpdate, "installable" | "state">,
 ): Promise<Awaited<ReturnType<typeof discoverGeneratedNames>>> {
@@ -1378,6 +1379,21 @@ export async function assertUpdateNamesFree(
     removePluginRecord(preflight.state, args.marketplace, args.plugin),
   );
   return generatedNames;
+}
+
+/**
+ * PI-6, then D-PL4-04: the name check, then a refusal of a new agent target
+ * that holds a file the agents commit would not replace. It writes nothing.
+ * The move judge and the update's WR-C check run it, so an occupied target
+ * refuses before anything lands. It returns nothing, because only the swap
+ * reads the names, through `assertNamesFree`.
+ */
+export async function assertUpdateNamesFree(
+  args: Pick<ThreePhaseArgsBase, "marketplace" | "plugin" | "scope" | "locations">,
+  preflight: Pick<PreparedPluginUpdate, "installable" | "state">,
+): Promise<void> {
+  const names = await assertNamesFree(args, preflight);
+  await assertAgentTargetsFree(args.locations, args, names.agents);
 }
 
 // The three-phase update body sequences preflight, the D-UPD disabled-record
@@ -1404,7 +1420,10 @@ export async function swapPluginUpdate(
   // PI-6 cross-plugin guard: re-check generated names against the SAME-SCOPE
   // state EXCLUDING this plugin's currently-recorded resources.
 
-  const generatedNames = await assertUpdateNamesFree(args, preflight);
+  // The swap checks names only, so a forced reinstall (RINST-01, D-18-15) can
+  // overwrite a user-edited agent of its own. `assertAgentCommitTargets` below
+  // still refuses a file that appeared since the plan.
+  const generatedNames = await assertNamesFree(args, preflight);
   // D-08-12: this verb owns the swap lifecycle, so it constructs the removal
   // operations once and every prepare, commit, and abort step below performs its
   // cleanup through that one collaborator.
