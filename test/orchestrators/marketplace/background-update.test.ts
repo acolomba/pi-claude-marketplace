@@ -126,25 +126,23 @@ function observeDebugLog(t: TestContext): string[] {
   return lines;
 }
 
-for (const mode of ["tui", "rpc"]) {
-  test(`the first message in ${mode} arms one pass after the delay`, (t) => {
-    // arrange
-    observeTimers(t);
-    const { backgroundUpdate, runs } = createSchedulerUnderTest();
-    const ctx = sessionContext(mode);
+test("the first message in tui arms one pass after the delay", (t) => {
+  // arrange
+  observeTimers(t);
+  const { backgroundUpdate, runs } = createSchedulerUnderTest();
+  const ctx = sessionContext("tui");
 
-    // act
-    backgroundUpdate.onInput(inputEvent(), ctx);
-    t.mock.timers.tick(TEN_MINUTES_MS / 2);
+  // act
+  backgroundUpdate.onInput(inputEvent(), ctx);
+  t.mock.timers.tick(TEN_MINUTES_MS / 2);
 
-    // assert
-    assert.strictEqual(runs.length, 1);
-    assert.strictEqual(runs[0]?.ctx, ctx);
-    assert.strictEqual(runs[0].isStopped(), false);
-  });
-}
+  // assert
+  assert.strictEqual(runs.length, 1);
+  assert.strictEqual(runs[0]?.ctx, ctx);
+  assert.strictEqual(runs[0].isStopped(), false);
+});
 
-for (const mode of ["print", "json"]) {
+for (const mode of ["rpc", "print", "json"]) {
   test(`a message in ${mode} never arms a pass`, (t) => {
     // arrange
     const timers = observeTimers(t);

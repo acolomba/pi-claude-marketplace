@@ -72,11 +72,11 @@ const ENTRIES_VALIDATOR = Compile(
   }),
 );
 
-// The sandbox Pi waits no delay before the background update, so the wait
-// covers the marketplace refresh, the plugin updates, and the quiet window
-// below. It stays below the 30-second step timeout, so a missing result fails
-// with its own message.
-const BACKGROUND_RESULT_TIMEOUT_MS = 20_000;
+// The sandbox Pi waits no delay before the background update, so a pass that
+// armed would finish its marketplace refresh and plugin updates and append its
+// notice inside this window. It stays below the 30-second step timeout, so the
+// step ends with the payloads it read instead of a timeout.
+const BACKGROUND_RESULT_WINDOW_MS = 20_000;
 
 const BACKGROUND_RESULT_POLL_MS = 100;
 
@@ -195,11 +195,13 @@ export async function readSession(pi: PiProcess): Promise<SessionReport> {
  * Sends `message` as a plain prompt in `pi` and returns every payload that
  * follows it in the session, in session order, each valid against the payload
  * schema (DRV-01). The sandbox Pi has no model, so it refuses the prompt, but
- * only after its input handlers ran, and one of them arms the background
- * update. The background update appends its payloads after Pi has answered,
- * so this reads the session's entries until at least one payload follows the
- * message and no new one has arrived for `BACKGROUND_RESULT_QUIET_MS`. It
- * fails when that does not happen within `BACKGROUND_RESULT_TIMEOUT_MS`.
+ * only after its input handlers ran, and in a tui session one of them arms the
+ * background update. A background update appends its payloads after Pi has
+ * answered, so this reads the session's entries until at least one payload
+ * follows the message and no new one has arrived for
+ * `BACKGROUND_RESULT_QUIET_MS`. When `BACKGROUND_RESULT_WINDOW_MS` ends first,
+ * it returns the payloads read so far, which can be none: Pi runs over RPC
+ * here, and an RPC session never arms the background update (D-PL8-02).
  */
 export async function sendMessage(
   pi: PiProcess,
@@ -219,7 +221,7 @@ export async function sendMessage(
     [],
     `the background update ran before Pi answered the message ${JSON.stringify(message)}`,
   );
-  const deadline = Date.now() + BACKGROUND_RESULT_TIMEOUT_MS;
+  const deadline = Date.now() + BACKGROUND_RESULT_WINDOW_MS;
   let payloads: readonly NotificationPayload[] = [];
   let quietSince = Date.now();
   for (;;) {
@@ -232,9 +234,7 @@ export async function sendMessage(
     }
 
     if (Date.now() >= deadline) {
-      assert.fail(
-        `the claude-plugin results that followed the message ${JSON.stringify(message)} did not settle within ${BACKGROUND_RESULT_TIMEOUT_MS} ms: ${JSON.stringify(payloads)}`,
-      );
+      return payloads;
     }
 
     await delay(BACKGROUND_RESULT_POLL_MS);

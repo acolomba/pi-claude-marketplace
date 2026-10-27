@@ -192,7 +192,7 @@ The sections above cover the variables that the extension delivers to plugin com
 
 ### When the background update runs
 
-In an interactive session, the extension updates plugins in the background, as Claude Code does. The background update arms on the first message that you send in a session. A message is a prompt that is not an extension command. Only the `tui` and `rpc` modes arm the background update. The `print` and `json` modes never arm it.
+In an interactive session, the extension updates plugins in the background, as Claude Code does. The background update arms on the first message that you send in a session. A message is a prompt that is not an extension command. Only the `tui` mode arms the background update, as Claude Code updates in its interactive mode only. The `rpc`, `print`, and `json` modes never arm it.
 
 After the first message, the extension waits a random delay of up to ten minutes. Then it refreshes each marketplace whose autoupdate is on, and it updates the plugins installed from that marketplace, as `/claude:plugin marketplace update` does. The background update uses stored git credentials only and never prompts.
 

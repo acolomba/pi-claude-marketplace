@@ -1,7 +1,8 @@
-// D-PL8-02: the first message of an extension runtime in `tui` or `rpc` mode
-// arms one background autoupdate pass after a random delay of up to ten
-// minutes. A later message in the same runtime arms nothing, and `print` and
-// `json` never arm. Any input source arms (D-PL8-13).
+// D-PL8-02: the first message of an extension runtime in `tui` mode arms one
+// background autoupdate pass after a random delay of up to ten minutes, as
+// Claude Code updates in its interactive mode only. A later message in the
+// same runtime arms nothing, and `rpc`, `print`, and `json` never arm. Any
+// input source arms in `tui` (D-PL8-13).
 //
 // D-PL8-08 / D-PL8-09 / D-PL8-14: Claude Code's opt-out variables, read when
 // the pass arms, and the Pi-only delay knob.
@@ -41,8 +42,6 @@ const AUTOUPDATE_MAX_DELAY_MS = 600_000;
 const TIMER_MAX_DELAY_MS = 2_147_483_647;
 
 const TRUTHY_VALUES: ReadonlySet<string> = new Set(["1", "true", "yes", "on"]);
-
-const INTERACTIVE_MODES: ReadonlySet<string> = new Set(["tui", "rpc"]);
 
 const DEBUG_TAG = "autoupdate";
 
@@ -93,7 +92,7 @@ export function createBackgroundUpdate(deps: BackgroundUpdateDeps): BackgroundUp
   // returns at once and never awaits the pass.
   function onInput(_event: InputEvent, ctx: BackgroundContext): void {
     try {
-      if (armed || stopped || !INTERACTIVE_MODES.has(ctx.mode)) {
+      if (armed || stopped || ctx.mode !== "tui") {
         return;
       }
 

@@ -54,6 +54,12 @@ When("the user sends the message {string}", async function (this: ScenarioWorld,
   this.recordResults(await sendMessage(this.pi, message), "session");
 });
 
+// D-PL8-02: an RPC session never arms the background update, so nothing
+// follows its first message.
+Then("the session reports no results", function (this: ScenarioWorld) {
+  assert.deepStrictEqual(this.resultsOf("session"), []);
+});
+
 Then("the session offers these skills:", function (this: ScenarioWorld, table: DataTable) {
   const rows = this.sessionSkills().map((skill) => [skill.command, skill.description]);
   assert.deepStrictEqual([["command", "description"], ...rows], table.raw());

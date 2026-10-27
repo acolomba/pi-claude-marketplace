@@ -207,7 +207,7 @@ The ten structured kinds through `prune-committed-warning` also permit this fiel
 
 Load and hook origins have only `kind`. Command IDs can repeat across runs. Invocation IDs keep their results separate, including overlapping commands.
 
-A load reports its pending changes as a `cascade` whose `origin.kind` is `load`, and its per-session warnings as a `reconcile-applied-cascade`. When a config turns `autoapply` on, the load runs `apply` instead and reports its changes as a `reconcile-applied-cascade` whose `origin.kind` is `load`. Such a load with nothing to change emits nothing. A background update reports the plugins it moved as one `background-update` whose `origin.kind` is `load`.
+A load reports its pending changes as a `cascade` whose `origin.kind` is `load`, and its per-session warnings as a `reconcile-applied-cascade`. When a config turns `autoapply` on, the load runs `apply` instead and reports its changes as a `reconcile-applied-cascade` whose `origin.kind` is `load`. Such a load with nothing to change emits nothing. A background update reports the plugins it moved as one `background-update` whose `origin.kind` is `load`. Only a tui session runs the background update, so a json or rpc session never receives this entry; the kind stays in the schema (D-PL8-20).
 
 ### Command origin
 
@@ -560,7 +560,7 @@ The one notice of a load pass that moved plugin MCP servers from `mcp.json` to `
 
 #### background-update
 
-The one notice of a background update, which runs after the first message of a session, when the update moved at least one plugin. Its origin is `load`, severity is always `info`, and `needsReload` is always `true`. A background update that moved nothing emits nothing.
+The one notice of a background update, which runs after the first message of a session, when the update moved at least one plugin. Only a tui session runs the background update, so a json or rpc session never receives this entry; the kind stays in the schema (D-PL8-20). Its origin is `load`, severity is always `info`, and `needsReload` is always `true`. A background update that moved nothing emits nothing.
 
 <!-- fields: kind:background-update -->
 
