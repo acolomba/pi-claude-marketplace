@@ -2,7 +2,7 @@
 //
 // Tests for the /claude:plugin help handler:
 //   - empty args or "help" topic emits TOP_LEVEL_USAGE at info severity
-//   - "marketplace" topic emits MARKETPLACE_USAGE at info severity
+//   - "marketplace" and "market" topics emit MARKETPLACE_USAGE at info severity
 //   - unknown topic emits usage error at error severity
 
 import assert from "node:assert/strict";
@@ -45,18 +45,20 @@ test("help with 'help' topic emits top-level usage at info severity", async () =
   verifyBoundary();
 });
 
-test("help with 'marketplace' topic emits marketplace usage at info severity", async () => {
-  // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-  const helpHandler = makeHelpHandler();
+for (const topic of ["marketplace", "market"]) {
+  test(`help with '${topic}' topic emits marketplace usage at info severity`, async () => {
+    // arrange
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const helpHandler = makeHelpHandler();
 
-  // act
-  await helpHandler("marketplace", ctx, runWithNothingLoaded());
+    // act
+    await helpHandler(topic, ctx, runWithNothingLoaded());
 
-  // assert
-  assert.deepStrictEqual(notifications, [{ message: MARKETPLACE_USAGE, severity: "info" }]);
-  verifyBoundary();
-});
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: MARKETPLACE_USAGE, severity: "info" }]);
+    verifyBoundary();
+  });
+}
 
 test("help with unknown topic emits usage error at error severity", async () => {
   // arrange
@@ -102,6 +104,7 @@ for (const mode of ["json", "rpc"] as const) {
     { topic: "", usage: TOP_LEVEL_USAGE },
     { topic: "help", usage: TOP_LEVEL_USAGE },
     { topic: "marketplace", usage: MARKETPLACE_USAGE },
+    { topic: "market", usage: MARKETPLACE_USAGE },
   ]) {
     test(`appends help for ${topic} in ${mode}`, async () => {
       // arrange

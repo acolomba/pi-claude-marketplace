@@ -31,7 +31,7 @@ export function makeHelpHandler(): SubcommandHandler {
       return Promise.resolve();
     }
 
-    if (topic === "marketplace") {
+    if (topic === "marketplace" || topic === "market") {
       notifyUsageInfo(ctx, run, MARKETPLACE_USAGE);
       return Promise.resolve();
     }

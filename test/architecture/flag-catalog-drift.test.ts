@@ -210,7 +210,7 @@ for (const verb of EXPECTED_CATALOG_VERBS) {
 test("catalog and alias completions cover the complete router inventory", () => {
   // arrange
   const routerHeads = [
-    ...TOP_LEVEL_SUBCOMMANDS.filter((verb) => verb !== "marketplace"),
+    ...TOP_LEVEL_SUBCOMMANDS.filter((verb) => verb !== "marketplace" && verb !== "market"),
     ...MARKETPLACE_SUBCOMMANDS.map((verb) => `marketplace ${verb}`),
   ];
 
