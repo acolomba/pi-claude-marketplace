@@ -100,13 +100,13 @@ Feature: Marketplace reserved name
 
     @url
     Examples:
-      | source kind | cause chain                                                                                                                                                                                                                     |
-      | url         | Marketplace "tools" clone advanced but manifest could not be persisted., The name 'claude-plugins-official' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/anthropics/' can use this name. |
+      | source kind | cause chain                                                                                                                                                                                   |
+      | url         | Failed to update marketplace "tools"., The name 'claude-plugins-official' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/anthropics/' can use this name. |
 
     @github
     Examples:
-      | source kind | cause chain                                                                                                                                                                                                                     |
-      | github      | Marketplace "tools" clone advanced but manifest could not be persisted., The name 'claude-plugins-official' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/anthropics/' can use this name. |
+      | source kind | cause chain                                                                                                                                                                                   |
+      | github      | Failed to update marketplace "tools"., The name 'claude-plugins-official' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/anthropics/' can use this name. |
 
   Scenario Outline: Updating a marketplace whose manifest now declares a name Claude Code keeps for itself fails with Claude Code's refusal
     Given the marketplace "tools" is published as a <source kind> source
@@ -132,13 +132,13 @@ Feature: Marketplace reserved name
 
     @url
     Examples:
-      | source kind | declared name     | cause chain                                                                                                                                     |
-      | url         | claude-plugins-v2 | Marketplace "tools" clone advanced but manifest could not be persisted., Marketplace name impersonates an official Anthropic/Claude marketplace |
+      | source kind | declared name     | cause chain                                                                                                   |
+      | url         | claude-plugins-v2 | Failed to update marketplace "tools"., Marketplace name impersonates an official Anthropic/Claude marketplace |
 
     @github
     Examples:
-      | source kind | declared name | cause chain                                                                                                                                                                                                                           |
-      | github      | npm           | Marketplace "tools" clone advanced but manifest could not be persisted., Marketplace name "npm" is reserved for plugins installed from an npm registry (`<package>@npm`); remove this marketplace and add it again under another name |
+      | source kind | declared name | cause chain                                                                                                                                                                                         |
+      | github      | npm           | Failed to update marketplace "tools"., Marketplace name "npm" is reserved for plugins installed from an npm registry (`<package>@npm`); remove this marketplace and add it again under another name |
 
   Scenario: The anthropics organization's GitHub repository may use a reserved name
     Given the marketplace "claude-plugins-official" is published as the official marketplace

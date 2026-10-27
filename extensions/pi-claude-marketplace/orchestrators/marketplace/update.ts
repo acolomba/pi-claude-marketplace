@@ -120,10 +120,12 @@ import {
   errorMessage,
   isErrnoException,
   rethrowInvalidGitHubBaseUrl,
+  withoutCleanupLeaks,
 } from "../../shared/errors.ts";
-import { createRemovalOps } from "../../shared/fs-utils.ts";
+import { createRemovalOps, type RemovalOps } from "../../shared/fs-utils.ts";
 import {
   classifyGitTransportFailure,
+  hostedFetchFailureReason,
   hostHttpFailureFrame,
   hostHttpStatus,
 } from "../../shared/git-failure-classifiers.ts";
@@ -231,6 +233,8 @@ export interface UpdateMarketplaceOptions {
    * DEFAULT_HOSTED_MANIFEST_FETCH, which wraps platform/hosted-manifest-fetch.ts.
    */
   readonly hostedManifestFetch?: HostedManifestFetch;
+  /** Injection seam for the removal of a hosted refresh's staging directory (MA-9). */
+  readonly removalOps?: RemovalOps;
 }
 
 export interface UpdateAllMarketplacesOptions {
@@ -288,6 +292,7 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
     ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     ...(opts.pluginUpdate !== undefined && { pluginUpdate: opts.pluginUpdate }),
     ...(opts.stateTransaction !== undefined && { stateTransaction: opts.stateTransaction }),
+    ...(opts.removalOps !== undefined && { removalOps: opts.removalOps }),
   });
 }
 
@@ -359,6 +364,7 @@ interface RefreshOneArgs {
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly stateTransaction?: LockedStateTransactionDeps;
   readonly hostedManifestFetch: HostedManifestFetch;
+  readonly removalOps?: RemovalOps;
 }
 
 /**
@@ -521,7 +527,7 @@ async function refreshRecord(
         manifestPath: recordedManifestPath(record),
         locations,
         fetchCatalog: args.hostedManifestFetch,
-        removalOps: createRemovalOps(),
+        removalOps: args.removalOps ?? createRemovalOps(),
       });
     } else if (source.kind !== "path") {
       throw new Error(
@@ -541,11 +547,16 @@ async function refreshRecord(
     record.lastUpdatedAt = new Date().toISOString();
     return changed;
   } catch (err) {
-    throw new MarketplaceUpdateError(
-      refreshFailureMessage(name, err, remoteUrl, cloneAdvanced),
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside refreshGitHubClone.
-      { cause: err, retryHint: cloneAdvanced ? "Retry the command." : "" },
-    );
+    // A refused name is read from the advanced checkout, so the clone moved,
+    // but a retry cannot change the refusal: the persist-failure frame and
+    // its retry hint do not apply.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside refreshGitHubClone.
+    const retryable = cloneAdvanced && !(err instanceof ReservedMarketplaceNameError);
+    throw new MarketplaceUpdateError(refreshFailureMessage(name, err, remoteUrl, retryable), {
+      cause: err,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- see above: cloneAdvanced is set by callback.
+      retryHint: retryable ? "Retry the command." : "",
+    });
   }
 }
 
@@ -734,8 +745,9 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
   // ONE level of cause (mirrors add.ts::unwrapAddError); the cascadeAutoupdates
   // catch passes the raw error. Placed before the errno checks so the typed
   // class takes precedence over any incidental errno on the cause chain.
+  const manifestCause = err instanceof Error ? withoutCleanupLeaks(err.cause) : undefined;
   const manifestError =
-    err instanceof Error && err.cause instanceof InvalidMarketplaceManifestError ? err.cause : err;
+    manifestCause instanceof InvalidMarketplaceManifestError ? manifestCause : err;
   if (manifestError instanceof InvalidMarketplaceManifestError) {
     return [narrowProbeError(manifestError)] as const;
   }
@@ -768,12 +780,12 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
  * refuses is `unreadable`. A hosted HTTP status takes the git host ladder.
  */
 function hostedDownloadReason(err: unknown): ContentReason | undefined {
-  const cause = err instanceof Error ? err.cause : undefined;
+  const cause = err instanceof Error ? withoutCleanupLeaks(err.cause) : undefined;
   if (!(cause instanceof HostedManifestFetchError)) {
     return undefined;
   }
 
-  return cause.failure === "network" ? "network unreachable" : "unreadable";
+  return hostedFetchFailureReason(cause.failure);
 }
 
 /**

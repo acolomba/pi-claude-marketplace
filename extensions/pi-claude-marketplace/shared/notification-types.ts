@@ -629,9 +629,10 @@ export interface PluginFailedMessage extends MessageBase, RevisionMoveFields {
     readonly cause?: Error;
   }[];
   /**
-   * ADD-10: the row's subject is a marketplace, or the source a failed
-   * `marketplace add` was typed with, not a plugin, so its JSON id is its name
-   * alone.
+   * ADD-10 / D-PL5-12: the row's subject is a marketplace (or the source a
+   * failed `marketplace add` was typed with), not a plugin, as in a failed
+   * `marketplace add`, `info`, `remove`, `update`, or autoupdate, so its JSON
+   * id is its name alone.
    */
   readonly marketplaceSubject?: true;
 }
@@ -1119,8 +1120,10 @@ export interface PluginInfoRowBase {
    */
   readonly notes?: readonly string[];
   /**
-   * D-PL5-12: the row's subject is a marketplace, not a plugin (a failed
-   * `marketplace info`), so its JSON id is its name alone.
+   * ADD-10 / D-PL5-12: the row's subject is a marketplace (or the source a
+   * failed `marketplace add` was typed with), not a plugin, as in a failed
+   * `marketplace add`, `info`, `remove`, `update`, or autoupdate, so its JSON
+   * id is its name alone.
    */
   readonly marketplaceSubject?: true;
 }

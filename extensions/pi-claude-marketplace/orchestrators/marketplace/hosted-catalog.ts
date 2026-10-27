@@ -130,6 +130,7 @@ function marksDownloadOf(text: string, url: string): boolean {
       Reflect.get(marker, "url") === url
     );
   } catch {
+    // Text that is not JSON is not our marker.
     return false;
   }
 }
@@ -170,7 +171,7 @@ export async function recognizeHostedLeftover(args: {
     }
 
     const failure = code === "EACCES" || code === "EPERM" ? "permission-denied" : "unreadable";
-    throw new UnreadableSourceCloneError(finalDir, derivedName, failure);
+    throw new UnreadableSourceCloneError(finalDir, derivedName, failure, { cause: err });
   }
 
   if (!marksDownloadOf(text, url) || (await pathExists(path.join(finalDir, ".git")))) {

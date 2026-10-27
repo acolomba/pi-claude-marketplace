@@ -288,6 +288,7 @@ describe("recognizeHostedLeftover", () => {
           { absPath: error.absPath, mpName: error.mpName, failure: error.failure },
           { absPath: finalDir, mpName: "tools", failure: "unreadable" },
         );
+        assert.strictEqual((error.cause as NodeJS.ErrnoException).code, "EISDIR");
         return true;
       },
     );

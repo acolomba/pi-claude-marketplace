@@ -93,11 +93,15 @@ import {
 } from "../../shared/fs-utils.ts";
 import {
   classifyGitSourceAccessFailure,
+  hostedFetchFailureReason,
   hostHttpFailureFrame,
 } from "../../shared/git-failure-classifiers.ts";
 import { composeLeftoverRemovalAdvisories } from "../../shared/notification-summary.ts";
-import { type ContentReason } from "../../shared/notification-types.ts";
-import { type PluginFailedMessage, type Reason } from "../../shared/notification-types.ts";
+import {
+  type ContentReason,
+  type PluginFailedMessage,
+  type Reason,
+} from "../../shared/notification-types.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -365,7 +369,7 @@ export function classifyAddError(rawErr: unknown): ContentReason | undefined {
   // an answer it refuses (too large, a refused redirect, a URL with userinfo)
   // is `unreadable`. Its HTTP statuses take the git host ladder below.
   if (err instanceof HostedManifestFetchError) {
-    return err.failure === "network" ? "network unreachable" : "unreadable";
+    return hostedFetchFailureReason(err.failure);
   }
 
   return err instanceof Error ? errorAddReason(err) : undefined;

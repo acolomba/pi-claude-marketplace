@@ -408,6 +408,18 @@ test("refuses a URL the URL parser refuses before any request", async (t) => {
   assert.deepStrictEqual(requests, []);
 });
 
+test("refuses a URL that is not https before any request", async (t) => {
+  // arrange
+  const requests = serveAnswers(t, []);
+
+  // act & assert
+  await assert.rejects(
+    fetchHostedManifest("http://catalog.example/acme/marketplace.json"),
+    assertRefused("Marketplace URL must use https: http://catalog.example/acme/marketplace.json"),
+  );
+  assert.deepStrictEqual(requests, []);
+});
+
 test("refuses a URL with a user name and password before any request and masks them", async (t) => {
   // arrange
   const requests = serveAnswers(t, []);

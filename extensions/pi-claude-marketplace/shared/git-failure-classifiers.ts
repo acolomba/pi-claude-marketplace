@@ -18,8 +18,30 @@ import {
   PinnedCommitMissingError,
   StoredCredentialRejectedError,
   withoutCleanupLeaks,
+  type HostedManifestFetchError,
+  type HttpStatusError,
 } from "./errors.ts";
 import { gitHubWireUrl } from "./github-base-url.ts";
+
+/** Whether `error` has the shape of an isomorphic-git `HttpError` (see `HttpStatusError`). */
+function isHttpStatusError(error: Error): error is HttpStatusError {
+  return (error as NodeJS.ErrnoException).code === "HttpError";
+}
+
+/**
+ * D-PL5-10: the reason of a hosted download that got no usable answer. A
+ * `switch` over the closed `failure` set makes a new member a compile error.
+ */
+export function hostedFetchFailureReason(
+  failure: HostedManifestFetchError["failure"],
+): "network unreachable" | "unreadable" {
+  switch (failure) {
+    case "network":
+      return "network unreachable";
+    case "unreadable":
+      return "unreadable";
+  }
+}
 
 type GitTransportReason = "network unreachable" | "authentication required";
 
@@ -78,8 +100,8 @@ export function classifyGitTransportFailure(
   }
 
   const code = (error as NodeJS.ErrnoException).code;
-  const statusCode = (error as { data?: { statusCode?: number } }).data?.statusCode;
-  if (code === "HttpError" && (statusCode === 401 || statusCode === 403)) {
+  const statusCode = isHttpStatusError(error) ? error.data?.statusCode : undefined;
+  if (statusCode === 401 || statusCode === 403) {
     return "authentication required";
   }
 
@@ -97,11 +119,11 @@ export function classifyGitTransportFailure(
  */
 export function hostHttpStatus(thrown: unknown): number | undefined {
   const error = withoutCleanupLeaks(thrown);
-  if (!(error instanceof Error) || (error as NodeJS.ErrnoException).code !== "HttpError") {
+  if (!(error instanceof Error) || !isHttpStatusError(error)) {
     return undefined;
   }
 
-  const statusCode = (error as { data?: { statusCode?: unknown } }).data?.statusCode;
+  const statusCode = error.data?.statusCode;
   if (typeof statusCode !== "number" || classifyGitTransportFailure(error) !== undefined) {
     return undefined;
   }

@@ -57,8 +57,8 @@ const IPV4_EMBEDDING_PREFIXES = [
 ];
 
 /**
- * Whether the dotted-quad IPv4 address `[a, b]` starts with is this machine
- * (0/8, 127/8), link-local (169.254/16), or private (10/8, 172.16/12,
+ * Whether an IPv4 address whose first two octets are `a` and `b` is this
+ * machine (0/8, 127/8), link-local (169.254/16), or private (10/8, 172.16/12,
  * 192.168/16).
  */
 function isLocalIpv4(a: number, b: number): boolean {
@@ -272,6 +272,13 @@ export async function fetchHostedManifest(url: string): Promise<Uint8Array> {
     throw new HostedManifestFetchError(
       "unreadable",
       `Marketplace URL must not contain a user name or password: ${maskedHref(start)}`,
+    );
+  }
+
+  if (start.protocol !== "https:") {
+    throw new HostedManifestFetchError(
+      "unreadable",
+      `Marketplace URL must use https: ${start.href}`,
     );
   }
 

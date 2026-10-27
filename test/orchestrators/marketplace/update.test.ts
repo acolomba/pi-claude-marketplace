@@ -40,7 +40,10 @@ import {
   PluginShapeError,
   StoredCredentialRejectedError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import {
+  pathExists,
+  type RemovalOps,
+} from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { type Severity } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
@@ -6094,6 +6097,43 @@ for (const { title, fetchCatalog, row } of [
   });
 }
 
+test("MA-9: a hosted refresh whose staging cleanup leaks still reads the catalog's reason", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const { manifestPath, record } = await seedHostedMarketplace({ cwd });
+    const { ctx, run, notifications } = makeCtx();
+    const removalOps: RemovalOps = {
+      rm: () => Promise.reject(Object.assign(new Error("denied"), { code: "EACCES" })),
+    };
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "tools",
+      scope: "project",
+      cwd,
+      hostedManifestFetch: hostedServing("{").fetchCatalog,
+      removalOps,
+    });
+
+    // assert
+    assert.strictEqual(notifications.length, 1);
+    const [first] = notifications;
+    assert.ok(first !== undefined);
+    assert.ok(
+      first.message.startsWith(
+        "Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {unparseable}",
+      ),
+      first.message,
+    );
+    assert.strictEqual(await readFile(manifestPath, "utf8"), HOSTED_CATALOG);
+    const state = await loadState(locationsFor("project", cwd).extensionRoot);
+    assert.deepStrictEqual(state.marketplaces.tools, record);
+  });
+});
+
 test("D-PL5-09: a changed hosted refresh with autoupdate on runs the plugin cascade", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
@@ -6298,7 +6338,7 @@ for (const { kind, seed } of [
       // assert
       assert.deepStrictEqual(notifications, [
         {
-          message: `Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {invalid manifest}\n    cause: Marketplace "tools" clone advanced but manifest could not be persisted. -> ${REPOSITORY_REFUSAL}`,
+          message: `Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {invalid manifest}\n    cause: Failed to update marketplace "tools". -> ${REPOSITORY_REFUSAL}`,
           severity: "error",
         },
       ]);
@@ -6513,7 +6553,7 @@ test("D-PL5-28: a github refresh to one of Claude Code's own names fails and lea
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: `Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {invalid manifest}\n    cause: Marketplace "tools" clone advanced but manifest could not be persisted. -> Marketplace name "uv" is reserved for plugins installed from a Python package index through uv (reserved; not yet available)`,
+        message: `Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {invalid manifest}\n    cause: Failed to update marketplace "tools". -> Marketplace name "uv" is reserved for plugins installed from a Python package index through uv (reserved; not yet available)`,
         severity: "error",
       },
     ]);

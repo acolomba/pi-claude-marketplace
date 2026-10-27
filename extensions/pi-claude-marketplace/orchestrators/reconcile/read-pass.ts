@@ -17,8 +17,7 @@
 //   - Per scope, `openScopePass` runs the read pass and then the AMIG-01 MCP
 //     move; `closeScopePass` reports the unreadable declarer, the plugins of a
 //     marketplace Claude Code refuses, and the delisted plugins, and rebuilds
-//     the hook routing table. A caller's own steps run
-//     between the two.
+//     the hook routing table. A caller's own steps run between the two.
 //   - IL-2 / RECON-04: `notifyScopePasses` sends the one migration notice and
 //     at most one cascade for both scopes (`notifyScopeOutcomes`).
 //

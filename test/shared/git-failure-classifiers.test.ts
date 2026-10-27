@@ -11,6 +11,7 @@ import {
   classifyGitHostFailure,
   classifyGitSourceAccessFailure,
   classifyGitTransportFailure,
+  hostedFetchFailureReason,
   hostHttpFailureFrame,
   hostHttpStatus,
 } from "../../extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts";
@@ -504,3 +505,16 @@ test("frames nothing for a failure without a host HTTP status", () => {
   // assert
   assert.strictEqual(frame, undefined);
 });
+
+for (const { failure, reason } of [
+  { failure: "network", reason: "network unreachable" },
+  { failure: "unreadable", reason: "unreadable" },
+] as const) {
+  test(`D-PL5-10: maps a ${failure} hosted download failure to ${reason}`, () => {
+    // act
+    const mapped = hostedFetchFailureReason(failure);
+
+    // assert
+    assert.strictEqual(mapped, reason);
+  });
+}

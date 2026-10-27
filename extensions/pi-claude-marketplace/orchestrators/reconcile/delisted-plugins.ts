@@ -214,9 +214,9 @@ export async function reportRefusedMarketplaces(
 /**
  * Pushes one `{not in manifest}` warning for every enabled record in `state`
  * (the read-pass snapshot) whose loaded manifest does not list it, unless this
- * pass already reported, uninstalled, or disabled that plugin. The row reuses the walk's `plugin-declarer-unreadable` shape
- * (REC-05: `(failed)` at `warning`, with a cause), carrying upstream's words as
- * its cause.
+ * pass already reported, uninstalled, or disabled that plugin. The row reuses
+ * the walk's `plugin-declarer-unreadable` shape (REC-05: `(failed)` at
+ * `warning`, with a cause), carrying upstream's words as its cause.
  */
 export async function reportDelistedPlugins(
   scope: Scope,

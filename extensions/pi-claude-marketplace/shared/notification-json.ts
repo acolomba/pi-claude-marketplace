@@ -446,8 +446,9 @@ function wireRow(row: ResolvedRow, mp: ResolvedMarketplace) {
 
 /**
  * WIRE-04 / WIRE-06: a row's id, in one of three forms. A row whose subject is
- * a marketplace (ADD-10: the child row of a failed `marketplace add`) uses its
- * name alone, because it names no plugin. A cascade member row is named by its
+ * a marketplace (ADD-10 / D-PL5-12: the row of a failed `marketplace add`,
+ * `info`, `remove`, `update`, or autoupdate) uses its name alone, because it
+ * names no plugin. A cascade member row is named by its
  * `<plugin>@<marketplace>` key (RESV-06), which names a dependency's own
  * marketplace, so a name that carries an `@` is already the id. Any other row
  * joins its name, `@`, and the block name, verbatim. The name is the redacted

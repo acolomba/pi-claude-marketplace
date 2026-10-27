@@ -366,8 +366,13 @@ export class UnreadableSourceCloneError extends Error {
   readonly absPath: string;
   readonly mpName: string;
   readonly failure: "permission-denied" | "unreadable";
-  constructor(absPath: string, mpName: string, failure: "permission-denied" | "unreadable") {
-    super(`cannot read the source clone at ${absPath}: ${failure}`);
+  constructor(
+    absPath: string,
+    mpName: string,
+    failure: "permission-denied" | "unreadable",
+    options?: ErrorOptions,
+  ) {
+    super(`cannot read the source clone at ${absPath}: ${failure}`, options);
     this.name = "UnreadableSourceCloneError";
     this.absPath = absPath;
     this.mpName = mpName;
@@ -616,8 +621,7 @@ export class TooManyRedirectsError extends Error {
  * isomorphic-git `HttpError`, so the git host ladder classifies a hosted
  * status as it classifies a clone's: 401/403, 404/410, or any other status.
  */
-export class HostedManifestHttpError extends Error {
-  // fallow-ignore-next-line unused-class-member -- shared/git-failure-classifiers.ts reads it by duck type.
+export class HostedManifestHttpError extends Error implements HttpStatusError {
   readonly code = "HttpError";
   readonly data: { readonly statusCode: number };
   constructor(url: string, statusCode: number) {
@@ -627,6 +631,16 @@ export class HostedManifestHttpError extends Error {
     this.name = "HostedManifestHttpError";
     this.data = { statusCode };
   }
+}
+
+/**
+ * The shape of isomorphic-git's `HttpError`, which `shared/git-failure-classifiers.ts`
+ * reads without importing the library (D-13). `HostedManifestHttpError`
+ * implements it, so a hosted HTTP status takes the same ladder.
+ */
+export interface HttpStatusError extends Error {
+  readonly code: "HttpError";
+  readonly data?: { readonly statusCode?: number };
 }
 
 /**
