@@ -6480,6 +6480,75 @@ test("FTCH-06: info --fetch folds a UserCanceledError (denied/expired Device Flo
   });
 });
 
+for (const { title, statusCode, installed, expectedRow } of [
+  {
+    title: "GLK-01: info --fetch reads a host 404 on a not-installed plugin as source missing",
+    statusCode: 404,
+    installed: {},
+    expectedRow: "  ◌ gplug v1.0.0 (remote) {source missing}",
+  },
+  {
+    title: "GLK-01: info --fetch reads a host 503 on a not-installed plugin as network error",
+    statusCode: 503,
+    installed: {},
+    expectedRow: "  ◌ gplug v1.0.0 (remote) {network error}",
+  },
+  {
+    title: "GLK-01: info --fetch appends source missing to an installed plugin's row on a host 404",
+    statusCode: 404,
+    installed: { gplug: { version: "1.0.0" } },
+    expectedRow: "  ● gplug v1.0.0 (installed) {source missing}",
+  },
+]) {
+  test(title, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      await seedPathMarketplace({
+        scope: "user",
+        scopeRoot: path.join(home, ".pi", "agent"),
+        cwd,
+        mpName: "mp",
+        manifest: {
+          name: "mp",
+          plugins: [{ name: "gplug", source: "https://example.com/repo", version: "1.0.0" }],
+        },
+        installed,
+      });
+      const hostAnswer = Object.assign(new Error(`HTTP Error: ${statusCode}`), {
+        code: "HttpError",
+        data: { statusCode },
+      });
+      const { gitOps } = createGitOps({ cloneThrows: hostAnswer });
+      const { credOps: credentialOps } = createCredentialOps();
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await getPluginInfo({
+        ctx,
+        run,
+        marketplace: "mp",
+        plugin: "gplug",
+        scope: "user",
+        cwd,
+        fetch: true,
+        cloneCacheSeam: fetchSeamWith(gitOps),
+        credentialOps,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "● mp [user] <no autoupdate>",
+            expectedRow,
+            "    components: not resolved",
+          ].join("\n"),
+        },
+      ]);
+    });
+  });
+}
+
 // ---------------------------------------------------------------------------
 // OUT-03: the author-declared install-time claim on the info surface.
 //
