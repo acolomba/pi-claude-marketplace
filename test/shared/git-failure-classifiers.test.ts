@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   appendLeakToError,
   CrossOriginChallengeError,
+  HostedManifestHttpError,
   PinnedCommitMissingError,
   StoredCredentialRejectedError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -11,6 +12,7 @@ import {
   classifyGitFailure,
   classifyGitHostFailure,
   classifyGitSourceAccessFailure,
+  hostedFetchFailureReason,
   hostHttpFailureFrame,
 } from "../../extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts";
 
@@ -406,3 +408,27 @@ describe("hostHttpFailureFrame", () => {
     assert.strictEqual(frame, "500 on https://git.example.com/acme/mp.git");
   });
 });
+
+test("D-PL5-10: classifies a hosted HTTP status through the git host ladder", () => {
+  // arrange
+  const failure = new HostedManifestHttpError("https://example.com/m.json", 404);
+
+  // act
+  const classification = classifyGitFailure(failure, MARKETPLACE_ADD_RULE);
+
+  // assert
+  assert.deepStrictEqual(classification, { reason: "source missing" });
+});
+
+for (const { failure, reason } of [
+  { failure: "network", reason: "network unreachable" },
+  { failure: "unreadable", reason: "unreadable" },
+] as const) {
+  test(`D-PL5-10: maps a ${failure} hosted download failure to ${reason}`, () => {
+    // act
+    const mapped = hostedFetchFailureReason(failure);
+
+    // assert
+    assert.strictEqual(mapped, reason);
+  });
+}

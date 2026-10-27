@@ -103,6 +103,7 @@ interface SeedOptions {
   readonly version?: string;
   readonly source?: unknown;
   readonly marketplaceName?: string;
+  readonly marketplaceSource?: unknown;
   readonly pluginJson?: Record<string, unknown>;
 }
 
@@ -151,7 +152,7 @@ async function seedUpdate(options: SeedOptions = {}): Promise<{
       [marketplaceName]: {
         name: marketplaceName,
         scope: "project",
-        source: pathSource("./marketplace"),
+        source: options.marketplaceSource ?? pathSource("./marketplace"),
         addedFromCwd: cwd,
         manifestPath,
         marketplaceRoot,
@@ -629,6 +630,34 @@ test("keeps an unsupported candidate skipped with and without partial permission
     assert.strictEqual(outcome.partition, "skipped");
     assert.deepStrictEqual(outcome.reasons, ["no longer installable"]);
   }
+});
+
+test("D-PL5-32: skips a relative entry of a hosted marketplace as no longer installable", async (t) => {
+  // arrange
+  const catalogUrl = "https://h.example/acme/mp/marketplace.json";
+  const seed = await seedUpdate({
+    installed: pluginRecord("1.0.0"),
+    source: "./",
+    marketplaceSource: { kind: "hosted", raw: catalogUrl, url: catalogUrl },
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+
+  // act
+  const outcome = await prepare(seed);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "skipped",
+    name: "hello",
+    fromVersion: "1.0.0",
+    notes: [
+      'Plugin "hello" is no longer installable: its marketplace entry path does not stay inside the marketplace directory (an absolute, climbing, network-shaped, backslash-containing or link-traversing entry, an entry of a fetched marketplace that resolves or opens outside its tree \u2014 or a relative entry in a url-catalog marketplace, which has no local directory)',
+    ],
+    reasons: ["no longer installable"],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  });
 });
 
 test("SRC-01: fails a path source whose directory is missing as source missing at the installed version", async (t) => {

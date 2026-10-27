@@ -466,8 +466,9 @@ function wireRow(row: ResolvedRow, mp: ResolvedMarketplace) {
 
 /**
  * WIRE-04 / WIRE-06: a row's id, in one of three forms. A row whose subject is
- * a marketplace (ADD-10: the child row of a failed `marketplace add`) uses its
- * name alone, because it names no plugin. A cascade member row is named by its
+ * a marketplace (ADD-10 / D-PL5-12: the row of a failed `marketplace add`,
+ * `info`, `remove`, `update`, or autoupdate) uses its name alone, because it
+ * names no plugin. A cascade member row is named by its
  * `<plugin>@<marketplace>` key (RESV-06), which names a dependency's own
  * marketplace, so a name that carries an `@` is already the id. Any other row
  * joins its name, `@`, and the block name, verbatim. The name is the redacted
@@ -538,14 +539,18 @@ function wirePluginInfo(message: PluginInfoMessage) {
 
 /**
  * WIRE-04 / WIRE-06: one plugin-info row. `id` is the plugin name, `@`, and the
- * marketplace name. `componentsResolved` selects the arm; only a resolved row
- * carries `components`.
+ * marketplace name, except on a row whose subject is the marketplace
+ * (D-PL5-12), whose id is its name alone. `componentsResolved` selects the arm;
+ * only a resolved row carries `components`.
  */
 function wirePluginInfoRow(plugin: PluginInfoRow, message: PluginInfoMessage) {
   const fields = {
     status: plugin.status,
     name: plugin.name,
-    id: `${plugin.name}@${message.marketplaceName}`,
+    id:
+      plugin.marketplaceSubject === true
+        ? plugin.name
+        : `${plugin.name}@${message.marketplaceName}`,
     reasons: plugin.reasons === undefined ? [] : [...plugin.reasons],
     ...wireScope(plugin, message.marketplaceScope),
     ...versionField(plugin.version),

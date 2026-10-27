@@ -38,6 +38,21 @@ Feature: Marketplace failed add
       | name  | source                            |
       | tools | https://{git host}/acme/tools.git |
 
+  Scenario: Adding a marketplace whose manifest is a directory fails as unreadable and leaves nothing behind
+    Given the marketplace "tools" is published as a dir source
+    Given the manifest of the marketplace "tools" to add is a directory
+    When the user runs "/claude:plugin marketplace add {home}/marketplaces/tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name                      | scope   | status | reasons    |
+      | {home}/marketplaces/tools | project | failed | unreadable |
+    Then the project scope holds no marketplace checkout
+    Then the "claude-plugins.json" file of the project scope does not exist
+
   Scenario: A url marketplace add that the git host answered with 404 leaves no marketplace behind
     Given the marketplace "tools" is published as a url source
     Given the git host answers 404 for the marketplace "tools"

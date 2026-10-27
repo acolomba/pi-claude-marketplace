@@ -82,7 +82,7 @@ Feature: Marketplace autoupdate
       | github      | acme/tools |
 
   Scenario Outline: A newly added marketplace named <name> has autoupdate <setting> until a config file sets it
-    Given the marketplace "<name>" is published as a dir source
+    Given the marketplace "<name>" is published by the anthropics organization
     Given the marketplace "<name>" is added to the project scope
     When the user runs "/claude:plugin marketplace list"
     Then the result has these fields:
@@ -104,7 +104,7 @@ Feature: Marketplace autoupdate
       | first-party-plugins     | false   |
 
   Scenario: Disabling autoupdate of a marketplace with an official Claude Code name writes the setting off
-    Given the marketplace "claude-plugins-official" is published as a dir source
+    Given the marketplace "claude-plugins-official" is published by the anthropics organization
     Given the marketplace "claude-plugins-official" is added to the project scope
     When the user runs "/claude:plugin marketplace noautoupdate claude-plugins-official --scope project"
     Then the result has these fields:
@@ -115,8 +115,8 @@ Feature: Marketplace autoupdate
       | name                    | scope   | status              |
       | claude-plugins-official | project | autoupdate disabled |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
-      | name                    | source                                      | autoupdate |
-      | claude-plugins-official | {home}/marketplaces/claude-plugins-official | false      |
+      | name                    | source                             | autoupdate |
+      | claude-plugins-official | anthropics/claude-plugins-official | false      |
 
   Scenario: An enabled autoupdate shows in the marketplace list of a new session
     Given the marketplace "tools" is published as a dir source
@@ -269,8 +269,8 @@ Feature: Marketplace autoupdate
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons                         | scope   | cause chain                                                                                                                 | cause truncated | leaks | rollback partial |
-      | tools            | project           | failed             | tools@tools | tools | failed | marketplace in local layer only | project | The marketplace tools is declared only in the local config (claude-plugins.local.json). Run the command again with --local. | false           |       |                  |
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons                         | scope   | cause chain                                                                                                                 | cause truncated | leaks | rollback partial |
+      | tools            | project           | failed             | tools | tools | failed | marketplace in local layer only | project | The marketplace tools is declared only in the local config (claude-plugins.local.json). Run the command again with --local. | false           |       |                  |
     Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
       | name  | source                    |
       | tools | {home}/marketplaces/tools |
@@ -286,8 +286,8 @@ Feature: Marketplace autoupdate
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons                        | scope   | cause chain                                                                                                             | cause truncated | leaks | rollback partial |
-      | tools            | project           | failed             | tools@tools | tools | failed | marketplace in base layer only | project | The marketplace tools is declared only in the base config (claude-plugins.json). Run the command again without --local. | false           |       |                  |
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons                        | scope   | cause chain                                                                                                             | cause truncated | leaks | rollback partial |
+      | tools            | project           | failed             | tools | tools | failed | marketplace in base layer only | project | The marketplace tools is declared only in the base config (claude-plugins.json). Run the command again without --local. | false           |       |                  |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name  | source                    |
       | tools | {home}/marketplaces/tools |
@@ -561,8 +561,8 @@ Feature: Marketplace autoupdate
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons          | scope   | cause chain                                                 | cause truncated | leaks | rollback partial |
-      | tools            | project           | failed             | tools@tools | tools | failed | invalid manifest | project | Config file "claude-plugins.json" failed schema validation. | false           |       |                  |
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons          | scope   | cause chain                                                 | cause truncated | leaks | rollback partial |
+      | tools            | project           | failed             | tools | tools | failed | invalid manifest | project | Config file "claude-plugins.json" failed schema validation. | false           |       |                  |
     Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
       | name  | source                    |
       | tools | {home}/marketplaces/tools |

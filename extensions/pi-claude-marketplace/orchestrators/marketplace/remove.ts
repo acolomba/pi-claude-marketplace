@@ -98,6 +98,7 @@ import {
 } from "../../transaction/with-state-guard.ts";
 import { collectPluginClonesLocked } from "../plugin/clone-gc.ts";
 import { buildScopeDeclarationIndex, withoutDisabledHolders } from "../plugin/dependency-index.ts";
+import { applyPartialCascadeFold } from "../plugin/shared.ts";
 
 import { composeHeldRemovalCause, REMOVE_CONTEXT, type RemoveRowMsg } from "./remove.messaging.ts";
 import {
@@ -120,7 +121,7 @@ import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
-type RecordedSourceKind = "github" | "url" | "path" | "unknown";
+type RecordedSourceKind = "github" | "url" | "hosted" | "path" | "unknown";
 
 /**
  * AFILE-04: an orchestrated removal whose state transaction threw after its
@@ -437,25 +438,12 @@ async function cascadePluginsInPlace(args: {
     // D-03: outcome.cause is set when ok===false (see UnstageOutcome).
     const cause = outcome.cause ?? new Error(`unknown cascade failure for ${pluginName}`);
 
-    // TR-03: non-AG-5 partial-failure filters resources.* by outcome.dropped.*
-    // so the persisted row reflects only artifacts still on disk.
-    // AG-5 (AgentsUnstageFailureError) preserves the row INTACT.
+    // TR-03 / D-PL5-15: a non-AG-5 partial failure subtracts every dropped
+    // axis, so the persisted row names only artifacts still on disk (WLIF-03:
+    // a stale workflow name would steer the next removal). AG-5
+    // (AgentsUnstageFailureError) keeps the row intact.
     if (!(cause instanceof AgentsUnstageFailureError)) {
-      const dropped = outcome.dropped;
-      plugin.resources.skills = plugin.resources.skills.filter((n) => !dropped.skills.includes(n));
-      plugin.resources.prompts = plugin.resources.prompts.filter(
-        (n) => !dropped.commands.includes(n),
-      );
-      plugin.resources.agents = plugin.resources.agents.filter((n) => !dropped.agents.includes(n));
-      plugin.resources.mcpServers = plugin.resources.mcpServers.filter(
-        (n) => !dropped.mcpServers.includes(n),
-      );
-      // WLIF-03: workflow envelopes live outside every scope root, so a row
-      // still naming one the cascade deleted would drive the NEXT removal at a
-      // name it no longer owns.
-      plugin.resources.workflows = plugin.resources.workflows.filter(
-        (n) => !dropped.workflows.includes(n),
-      );
+      applyPartialCascadeFold(plugin, outcome.dropped);
     }
 
     failedPlugins.push({ name: pluginName, cause });
@@ -895,7 +883,11 @@ async function runRemoveLockBody(args: {
 
   const src = record.source as { kind?: unknown };
   const sourceKind: RecordedSourceKind | undefined =
-    src.kind === "github" || src.kind === "url" || src.kind === "path" || src.kind === "unknown"
+    src.kind === "github" ||
+    src.kind === "url" ||
+    src.kind === "hosted" ||
+    src.kind === "path" ||
+    src.kind === "unknown"
       ? src.kind
       : undefined;
 
@@ -1157,8 +1149,9 @@ function surfaceRemoveStop(
 }
 
 /**
- * MR-7 / MURL-04: the marketplace data dir and, for github and url sources, the
- * `sources/<name>/` clone of a marketplace whose state record is gone.
+ * MR-7 / MURL-04 / D-PL5-06: the marketplace data dir and, for github, url,
+ * and hosted sources, the `sources/<name>/` checkout or stored catalog of a
+ * marketplace whose state record is gone.
  */
 async function removeMarketplaceFootprint(
   locations: ScopedLocations,
@@ -1167,7 +1160,7 @@ async function removeMarketplaceFootprint(
 ): Promise<void> {
   await removePath(locations.marketplaceDataDir(name));
 
-  if (sourceKind === "github" || sourceKind === "url") {
+  if (sourceKind === "github" || sourceKind === "url" || sourceKind === "hosted") {
     await removePath(locations.sourceCloneDir(name));
   }
 }

@@ -387,7 +387,11 @@ export async function composePendingReport(opts: {
   // marketplace add is not yet cloned, so its installs stay `(will install)`.
   const recordedMarketplaces = new Map<
     string,
-    { readonly marketplaceRoot: string; readonly manifestPath: string }
+    {
+      readonly marketplaceRoot: string;
+      readonly marketplaceSource: unknown;
+      readonly manifestPath: string;
+    }
   >();
   const recordedVersions: (readonly [string, string])[] = [];
   const afterInstalls: CascadeStep[] = [];
@@ -452,6 +456,7 @@ export async function composePendingReport(opts: {
     for (const [mpName, record] of Object.entries(state.marketplaces)) {
       recordedMarketplaces.set(`${scope} ${mpName}`, {
         marketplaceRoot: record.marketplaceRoot,
+        marketplaceSource: record.source,
         manifestPath: record.manifestPath,
       });
     }
@@ -589,7 +594,11 @@ export async function composePendingReport(opts: {
       return undefined;
     }
 
-    return { marketplaceRoot: record.marketplaceRoot, manifestEntry };
+    return {
+      marketplaceRoot: record.marketplaceRoot,
+      marketplaceSource: record.marketplaceSource,
+      manifestEntry,
+    };
   };
 
   const forceInstallKeys = await resolvePendingForceInstalls(plans, locateCandidate);

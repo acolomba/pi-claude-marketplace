@@ -103,22 +103,34 @@ import { isDeepStrictEqual } from "node:util";
 
 import { networkCloneUrl } from "../../domain/clone-key.ts";
 import { loadMarketplaceManifestDocument } from "../../domain/manifest.ts";
+import {
+  assertRecordedMarketplaceName,
+  catalogMarketplaceNameRefusal,
+  reservedMarketplaceNameRefusal,
+} from "../../domain/name.ts";
 import { effectiveMarketplaceAutoupdate } from "../../domain/official-marketplaces.ts";
 import { hasInvalidConfigLayer, loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
+  HostedManifestFetchError,
   InvalidMarketplaceManifestError,
   MarketplaceBaselineUnreadableError,
   MarketplaceUpdateError,
+  ReservedMarketplaceNameError,
   StateLockHeldError,
   composeErrorWithCauseChain,
   errorMessage,
   isErrnoException,
   rethrowInvalidGitHubBaseUrl,
+  withoutCleanupLeaks,
 } from "../../shared/errors.ts";
-import { classifyGitFailure } from "../../shared/git-failure-classifiers.ts";
+import { createRemovalOps, type RemovalOps } from "../../shared/fs-utils.ts";
+import {
+  classifyGitFailure,
+  hostedFetchFailureReason,
+} from "../../shared/git-failure-classifiers.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
@@ -145,6 +157,11 @@ import {
 // import graph too, so no future edge can close an
 // `orchestrators/marketplace` <-> `orchestrators/plugin` cycle here.
 
+import {
+  DEFAULT_HOSTED_MANIFEST_FETCH,
+  refreshHostedCatalog,
+  type HostedManifestFetch,
+} from "./hosted-catalog.ts";
 import {
   DEFAULT_GIT_OPS,
   lacksStoredCredential,
@@ -226,6 +243,13 @@ export interface UpdateMarketplaceOptions {
    * forwarded unchanged.
    */
   readonly stateTransaction?: LockedStateTransactionDeps;
+  /**
+   * D-PL5-09 injection seam that downloads a hosted catalog again. Defaults to
+   * DEFAULT_HOSTED_MANIFEST_FETCH, which wraps platform/hosted-manifest-fetch.ts.
+   */
+  readonly hostedManifestFetch?: HostedManifestFetch;
+  /** Injection seam for the removal of a hosted refresh's staging directory (MA-9). */
+  readonly removalOps?: RemovalOps;
 }
 
 export interface UpdateAllMarketplacesOptions {
@@ -252,6 +276,8 @@ export interface UpdateAllMarketplacesOptions {
    * inside the orchestrator's onAuthRequired closure.
    */
   readonly deviceFlowHttp?: DeviceFlowHttp;
+  /** See `UpdateMarketplaceOptions.hostedManifestFetch`. */
+  readonly hostedManifestFetch?: HostedManifestFetch;
 }
 
 /** MU-1 single-name form. */
@@ -280,6 +306,7 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
     locations: resolved.locations,
     gitOps,
     credentialOps,
+    hostedManifestFetch: opts.hostedManifestFetch ?? DEFAULT_HOSTED_MANIFEST_FETCH,
     reportedDependencies: new Set(),
     ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     ...(opts.pluginUpdate !== undefined && { pluginUpdate: opts.pluginUpdate }),
@@ -287,6 +314,7 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
       installMissingDependencies: opts.installMissingDependencies,
     }),
     ...(opts.stateTransaction !== undefined && { stateTransaction: opts.stateTransaction }),
+    removalOps: opts.removalOps ?? createRemovalOps(),
   });
 }
 
@@ -297,6 +325,8 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
 export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions): Promise<void> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
   const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
+  const hostedManifestFetch = opts.hostedManifestFetch ?? DEFAULT_HOSTED_MANIFEST_FETCH;
+  const removalOps = createRemovalOps();
   // Iteration order is project-first per MSG-GR-3 so same-name cross-scope
   // stable-sort ties render project-before-user.
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
@@ -340,6 +370,8 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
       locations: t.locations,
       gitOps,
       credentialOps,
+      hostedManifestFetch,
+      removalOps,
       reportedDependencies,
       ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
       ...(opts.pluginUpdate !== undefined && { pluginUpdate: opts.pluginUpdate }),
@@ -371,6 +403,8 @@ interface RefreshOneArgs {
   readonly credentialOps: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly stateTransaction?: LockedStateTransactionDeps;
+  readonly hostedManifestFetch: HostedManifestFetch;
+  readonly removalOps: RemovalOps;
 }
 
 /** A dependency row's key in `reportedDependencies`: the same key in two scopes is two installs. */
@@ -447,16 +481,39 @@ async function refreshGitHubSource(
   }
 }
 
+/**
+ * MKT-01 / D-PL5-27 / D-PL5-28: refuses a refreshed manifest that now declares
+ * a look-alike or one of Claude Code's own names, grandfathered against the
+ * record's name `recordName`, or a name Claude Code reserves for the anthropics
+ * GitHub organization. It runs before the record is stamped, so a refused
+ * refresh keeps its baseline. A hosted catalog was already refused before its
+ * rename.
+ */
+function refuseReservedRefreshName(
+  declaredName: string,
+  recordName: string,
+  source: ParsedSource,
+): void {
+  const refusal =
+    catalogMarketplaceNameRefusal(declaredName, recordName) ??
+    reservedMarketplaceNameRefusal(declaredName, source);
+  if (refusal !== undefined) {
+    throw new ReservedMarketplaceNameError(refusal);
+  }
+}
+
 async function refreshRecord(
   record: ExtensionState["marketplaces"][string],
   args: RefreshOneArgs,
 ): Promise<boolean> {
   const { name, locations, gitOps } = args;
   const source = record.source as ParsedSource;
-  const remoteUrl =
-    source.kind === "github" || source.kind === "url" ? networkCloneUrl(source) : undefined;
+  const remoteUrl = refreshRemoteUrl(source);
   let cloneAdvanced = false;
   try {
+    // D-PL5-28: Claude Code checks the recorded name before it refreshes, so a
+    // refused record makes no request.
+    assertRecordedMarketplaceName(name, source);
     // A local legacy record has no historical content to compare. Its first
     // successful refresh establishes the baseline and reports a change.
     const preKey =
@@ -506,6 +563,17 @@ async function refreshRecord(
           cloneAdvanced = true;
         },
       });
+    } else if (source.kind === "hosted") {
+      // D-PL5-09: download the catalog again; it replaces the stored one only
+      // once it validates. Nothing is cloned, so no retry hint applies.
+      await refreshHostedCatalog({
+        name,
+        source,
+        manifestPath: recordedManifestPath(record),
+        locations,
+        fetchCatalog: args.hostedManifestFetch,
+        removalOps: args.removalOps,
+      });
     } else if (source.kind !== "path") {
       throw new Error(
         `Cannot update marketplace "${name}": unsupported source kind "${source.kind}"`,
@@ -513,6 +581,7 @@ async function refreshRecord(
     }
 
     const document = await loadMarketplaceManifestDocument(recordedManifestPath(record));
+    refuseReservedRefreshName(document.manifest.name, name, source);
 
     const changed =
       preKey === undefined || !isDeepStrictEqual(baseline, JSON.parse(document.comparisonJson));
@@ -523,11 +592,36 @@ async function refreshRecord(
     record.lastUpdatedAt = new Date().toISOString();
     return changed;
   } catch (err) {
-    throw new MarketplaceUpdateError(
-      refreshFailureMessage(name, err, remoteUrl, cloneAdvanced),
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside refreshGitHubClone.
-      { cause: err, retryHint: cloneAdvanced ? "Retry the command." : "" },
-    );
+    // A refused name is read from the advanced checkout, so the clone moved,
+    // but a retry cannot change the refusal: the persist-failure frame and
+    // its retry hint do not apply.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside refreshGitHubClone.
+    const retryable = cloneAdvanced && !(err instanceof ReservedMarketplaceNameError);
+    throw new MarketplaceUpdateError(refreshFailureMessage(name, err, remoteUrl, retryable), {
+      cause: err,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- see above: cloneAdvanced is set by callback.
+      retryHint: retryable ? "Retry the command." : "",
+    });
+  }
+}
+
+/**
+ * UPD-11: the URL a refresh of `source` requests, for the `{status} on {url}`
+ * frame: the clone URL of a github or url source, or the catalog URL of a
+ * hosted source (D-PL5-21). Any other source requests nothing.
+ */
+function refreshRemoteUrl(source: ParsedSource): string | undefined {
+  switch (source.kind) {
+    case "github":
+    case "url":
+      return networkCloneUrl(source);
+    case "hosted":
+      return source.url;
+    case "path":
+    case "git-subdir":
+    case "npm":
+    case "unknown":
+      return undefined;
   }
 }
 
@@ -791,12 +885,21 @@ function refreshFailureReasons(err: unknown): readonly ContentReason[] {
   // it with `{ cause }`, so it is read one level down (as add.ts::unwrapAddError
   // does), before the errno rules, so the typed class takes precedence over any
   // incidental errno on the cause chain.
-  if (err.cause instanceof InvalidMarketplaceManifestError) {
-    return [narrowProbeError(err.cause)];
+  // MA-9: a cleanup leak the refresh appended to its error does not hide the
+  // cause behind it, so every typed cause is read through `withoutCleanupLeaks`.
+  const cause = withoutCleanupLeaks(err.cause);
+  if (cause instanceof InvalidMarketplaceManifestError) {
+    return [narrowProbeError(cause)];
   }
 
-  if (err.cause instanceof MarketplaceBaselineUnreadableError) {
+  if (cause instanceof MarketplaceBaselineUnreadableError) {
     return ["unreadable"];
+  }
+
+  // D-PL5-10 / D-PL5-21: a hosted download that got no usable answer. A hosted
+  // HTTP status takes the git host ladder in `transportReason`.
+  if (cause instanceof HostedManifestFetchError) {
+    return [hostedFetchFailureReason(cause.failure)];
   }
 
   const reason = transportReason(err);
@@ -824,6 +927,8 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       name,
       reasons: refreshFailureReasons(err),
       cause: err as Error,
+      // D-PL5-12: the row stands for the marketplace; its JSON id is the name.
+      marketplaceSubject: true,
       // D-03/D-06: a marketplace-refresh failure -> error, no reload.
       severity: "error",
       needsReload: false,

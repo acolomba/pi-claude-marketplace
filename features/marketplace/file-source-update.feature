@@ -103,8 +103,8 @@ Feature: Marketplace file source update
       | tally failures | 2                            |
       | tally warnings | 0                            |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons        | scope   | leaks | rollback partial | cause chain                                                                                                                         | cause truncated |
-      | tools            | project           | failed             | tools@tools | tools | failed | source missing | project |       |                  | Failed to update marketplace "tools"., ENOENT: no such file or directory, open '{home}/marketplaces/tools/catalog/marketplace.json' | false           |
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons        | scope   | leaks | rollback partial | cause chain                                                                                                                         | cause truncated |
+      | tools            | project           | failed             | tools | tools | failed | source missing | project |       |                  | Failed to update marketplace "tools"., ENOENT: no such file or directory, open '{home}/marketplaces/tools/catalog/marketplace.json' | false           |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name  | source                                             |
       | tools | {home}/marketplaces/tools/catalog/marketplace.json |

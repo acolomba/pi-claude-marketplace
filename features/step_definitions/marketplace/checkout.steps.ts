@@ -3,16 +3,16 @@
  *
  * An add stages its checkout under `sources-staging/` and moves it to
  * `sources/` once it succeeds (FLR-03). A partial checkout may hold no `.git`
- * directory, so the git clone steps cannot see it; this step reads both
+ * directory, so the git clone steps cannot see it; the steps read both
  * directories whole.
  */
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { readdir } from "node:fs/promises";
+import { readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
-import { Then } from "@cucumber/cucumber";
+import { Given, Then } from "@cucumber/cucumber";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -25,10 +25,25 @@ async function entryNames(directory: string): Promise<string[]> {
   return (await readdir(directory)).sort((left, right) => left.localeCompare(right));
 }
 
+// The directory under which the scope keeps its marketplace checkouts.
+function extensionRootOf(world: ScenarioWorld, scope: string): string {
+  return path.join(world.scopeRoot(scope), "pi-claude-marketplace");
+}
+
+Given(
+  "the {word} scope has lost the checkout of the marketplace {string}",
+  async function (this: ScenarioWorld, scope: string, name: string) {
+    const checkout = path.join(extensionRootOf(this, scope), "sources", name);
+    assert.equal((await stat(checkout)).isDirectory(), true);
+    await rm(checkout, { recursive: true });
+    assert.equal(existsSync(checkout), false);
+  },
+);
+
 Then(
   "the {word} scope holds no marketplace checkout",
   async function (this: ScenarioWorld, scope: string) {
-    const extensionRoot = path.join(this.scopeRoot(scope), "pi-claude-marketplace");
+    const extensionRoot = extensionRootOf(this, scope);
     assert.deepStrictEqual(
       {
         sources: await entryNames(path.join(extensionRoot, "sources")),

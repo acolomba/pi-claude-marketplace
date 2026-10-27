@@ -96,6 +96,7 @@ import { materializeCommitCopyWith } from "./mirror-checkout.ts";
 import { retryTree } from "./scope-tree-inventory.ts";
 
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
+import type { ParsedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type {
   GitAuthBundle,
@@ -11624,6 +11625,8 @@ async function seedGitSourceMarketplace(opts: {
   fixtureRepoDir: string;
   subdirPath?: string;
   scope?: "user" | "project";
+  /** The marketplace record's stored source; defaults to a path source. */
+  marketplaceSource?: ParsedSource;
   /**
    * RESV-03: path-sourced plugins seeded beside the git-sourced one, each
    * declaring it as a dependency at its own version range. The cascade then has
@@ -11691,7 +11694,7 @@ async function seedGitSourceMarketplace(opts: {
       [opts.marketplaceName]: {
         name: opts.marketplaceName,
         scope,
-        source: pathSource(`./${path.basename(opts.marketplaceRoot)}`),
+        source: opts.marketplaceSource ?? pathSource(`./${path.basename(opts.marketplaceRoot)}`),
         addedFromCwd: opts.cwd,
         manifestPath,
         marketplaceRoot: opts.marketplaceRoot,
@@ -16622,6 +16625,17 @@ test("D-09-05: a pinned git-source root records the tag's commit and semver thro
   });
 });
 
+/**
+ * D-PL5-28: the anthropics organization's github source, the only source a
+ * marketplace recorded as `anthropic-plugin-directory` loads from.
+ */
+const ANTHROPIC_PLUGIN_DIRECTORY_SOURCE = {
+  kind: "github",
+  raw: "anthropics/anthropic-plugin-directory",
+  owner: "anthropics",
+  repo: "anthropic-plugin-directory",
+} satisfies ParsedSource;
+
 test("GV-01: a constrained plugin directory dependency installs its listed copy with no tag query", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-directory-dep-"));
@@ -16632,6 +16646,7 @@ test("GV-01: a constrained plugin directory dependency installs its listed copy 
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "anthropic-plugin-directory",
+        marketplaceSource: ANTHROPIC_PLUGIN_DIRECTORY_SOURCE,
         pluginName: "gp",
         source: { source: "url", url: "https://example.com/org/repo" },
         fixtureRepoDir,
@@ -16684,6 +16699,7 @@ for (const { label, requirers, requiredByText } of [
           cwd,
           marketplaceRoot: path.join(cwd, "mp-src"),
           marketplaceName: "anthropic-plugin-directory",
+          marketplaceSource: ANTHROPIC_PLUGIN_DIRECTORY_SOURCE,
           pluginName: "gp",
           source: { source: "url", url: "https://example.com/org/repo" },
           fixtureRepoDir,

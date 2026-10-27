@@ -176,8 +176,9 @@ async function seedAddedMarketplace(
   autoupdate: boolean,
   configPath = locations.baseConfigJsonPath,
 ): Promise<void> {
-  await mkdir(locations.extensionRoot, { recursive: true });
   const marketplaceRoot = await locations.sourceCloneDir("claude-plugins-official");
+  // D-PL5-17: a re-add repairs a recorded marketplace whose checkout is gone.
+  await mkdir(marketplaceRoot, { recursive: true });
   await saveState(locations.extensionRoot, {
     schemaVersion: 2,
     marketplaces: { "claude-plugins-official": addedMarketplaceRecord(cwd, marketplaceRoot) },
@@ -218,7 +219,13 @@ function bootstrappedScopeTree(): readonly string[] {
 
 /** The seeded tree, which a bootstrap that clones nothing leaves as it is. */
 function seededScopeTree(): readonly string[] {
-  return ["claude-plugins.json", "pi-claude-marketplace/", "pi-claude-marketplace/state.json"];
+  return [
+    "claude-plugins.json",
+    "pi-claude-marketplace/",
+    "pi-claude-marketplace/sources/",
+    "pi-claude-marketplace/sources/claude-plugins-official/",
+    "pi-claude-marketplace/state.json",
+  ];
 }
 
 test("D-PL8-19: adds the canonical marketplace, whose autoupdate is on by default, on a clean user scope", async (t) => {

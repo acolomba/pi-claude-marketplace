@@ -377,6 +377,27 @@ test("D-10: an unavailable candidate is not a move", async (t) => {
   assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
 });
 
+test("D-PL5-32: a hosted catalog's relative entry is not a move", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "hosted-relative");
+  const catalogUrl = "https://h.example/acme/tools/marketplace.json";
+  const mp = await stageMarketplace(fixture, "tools", [
+    { name: "demo", source: "./", version: "1.1.0" },
+  ]);
+  await stagePlugin(mp.marketplaceRoot, "1.1.0");
+  const state = stateOf({
+    ...mp,
+    source: { kind: "hosted", raw: catalogUrl, url: catalogUrl },
+    plugins: { demo: pluginRecord(path.join(mp.marketplaceRoot, "demo-old")) },
+  });
+
+  // act
+  const plan = await plannedMoves({ scope: "project", state, locations: fixture.locations });
+
+  // assert
+  assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
+});
+
 const DEMO_URL = "https://example.com/demo";
 const RECORDED_COMMIT = "a".repeat(40);
 const PINNED_COMMIT = "b".repeat(40);

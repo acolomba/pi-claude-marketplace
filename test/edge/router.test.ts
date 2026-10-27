@@ -95,7 +95,7 @@ test("executes a selected list route without selecting its handler again", async
 });
 
 const EXPECTED_TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|autoapply|enable|disable|import|browse|marketplace|help> ...\n" +
+  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|autoapply|enable|disable|import|browse|marketplace|market|help> ...\n" +
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
@@ -112,7 +112,7 @@ const EXPECTED_TOP_LEVEL_USAGE =
   "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  import [--scope user|project]\n" +
   "  browse\n" +
-  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
+  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...   (alias: market)\n" +
   "  help [marketplace]";
 
 test("preserves ordered duplicate rejections around a handler emission on the same run", async () => {
@@ -306,6 +306,7 @@ for (const mode of ["json", "rpc"] as const) {
   const spellings: readonly DispatchRow[] = [
     ...TOP_LEVEL_DISPATCH,
     ...MARKETPLACE_DISPATCH.map((row) => ({ ...row, subcommand: `marketplace ${row.subcommand}` })),
+    ...MARKETPLACE_DISPATCH.map((row) => ({ ...row, subcommand: `market ${row.subcommand}` })),
     { subcommand: "", handler: "browse", commandId: "plugin browse" },
     { subcommand: " \t ", handler: "browse", commandId: "plugin browse" },
     {
@@ -313,6 +314,12 @@ for (const mode of ["json", "rpc"] as const) {
       handler: "help",
       commandId: "marketplace help",
       expectedArgs: "marketplace",
+    },
+    {
+      subcommand: "help market",
+      handler: "help",
+      commandId: "marketplace help",
+      expectedArgs: "market",
     },
     {
       subcommand: 'help "marketplace"',
@@ -395,8 +402,11 @@ for (const { subcommand, handler } of TOP_LEVEL_DISPATCH) {
   });
 }
 
-for (const { subcommand, handler, expectedArgs, operand } of MARKETPLACE_DISPATCH) {
-  test(`dispatches the marketplace ${subcommand} subcommand to the ${handler} handler with the remaining argument text (AP-3)`, async () => {
+for (const [entry, { subcommand, handler, expectedArgs, operand }] of [
+  "marketplace",
+  "market",
+].flatMap((head) => MARKETPLACE_DISPATCH.map((row) => [head, row] as const))) {
+  test(`dispatches the ${entry} ${subcommand} subcommand to the ${handler} handler with the remaining argument text (AP-3)`, async () => {
     // arrange
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
     const run = runWithNothingLoaded();
@@ -406,7 +416,7 @@ for (const { subcommand, handler, expectedArgs, operand } of MARKETPLACE_DISPATC
     when(() => handlers[handler](forwardArg, ctx, run)).thenResolve(undefined);
 
     // act
-    await routeClaudePlugin(`marketplace ${subcommand} ${driven}`, handlers, ctx, run);
+    await routeClaudePlugin(`${entry} ${subcommand} ${driven}`, handlers, ctx, run);
 
     // assert
     assert.deepStrictEqual(notifications, []);
@@ -415,11 +425,12 @@ for (const { subcommand, handler, expectedArgs, operand } of MARKETPLACE_DISPATC
   });
 }
 
-test("accepts exactly the top-level names its dispatch rows serve, plus the marketplace entry token", () => {
+test("accepts exactly the top-level names its dispatch rows serve, plus the marketplace entry tokens", () => {
   // arrange
   const expectedVocabulary = [
     ...TOP_LEVEL_DISPATCH.slice(0, -1).map((row) => row.subcommand),
     "marketplace",
+    "market",
     TOP_LEVEL_DISPATCH[TOP_LEVEL_DISPATCH.length - 1]!.subcommand,
   ];
 
@@ -454,7 +465,7 @@ test("spells every marketplace name except help in both help headers", () => {
   // assert
   assert.deepStrictEqual(headers, [
     `Usage: /claude:plugin marketplace <${spellings}> ...`,
-    `  marketplace <${spellings}> ...`,
+    `  marketplace <${spellings}> ...   (alias: market)`,
   ]);
 });
 
@@ -752,6 +763,8 @@ test("names an unrecognized top-level token back to the operator with the top-le
 for (const { input, shape } of [
   { input: "marketplace", shape: "nothing after the marketplace token" },
   { input: "marketplace   ", shape: "nothing but whitespace after the marketplace token" },
+  { input: "market", shape: "nothing after the market alias" },
+  { input: "market   ", shape: "nothing but whitespace after the market alias" },
 ]) {
   test(`reports that marketplace needs a subcommand, with the marketplace usage block, for input with ${shape} (AP-3)`, async () => {
     // arrange
@@ -816,25 +829,27 @@ for (const args of ["--bogus", "official --bogus"]) {
   });
 }
 
-test("names an unrecognized marketplace token back to the operator with the marketplace usage block (AP-3)", async () => {
-  // arrange
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-  const run = runWithNothingLoaded();
-  const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+for (const entry of ["marketplace", "market"]) {
+  test(`names an unrecognized token after ${entry} back to the operator with the marketplace usage block (AP-3)`, async () => {
+    // arrange
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const run = runWithNothingLoaded();
+    const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
 
-  // act
-  await routeClaudePlugin("marketplace bogus official", handlers, ctx, run);
+    // act
+    await routeClaudePlugin(`${entry} bogus official`, handlers, ctx, run);
 
-  // assert
-  assert.deepStrictEqual(notifications, [
-    {
-      message: `Unknown marketplace subcommand: "bogus".\n\n${EXPECTED_MARKETPLACE_USAGE}`,
-      severity: "error",
-    },
-  ]);
-  verifyBoundary();
-  verify(handlers);
-});
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `Unknown marketplace subcommand: "bogus".\n\n${EXPECTED_MARKETPLACE_USAGE}`,
+        severity: "error",
+      },
+    ]);
+    verifyBoundary();
+    verify(handlers);
+  });
+}
 
 for (const mode of ["json", "rpc"] as const) {
   for (const { args, message, usage, commandId } of [
@@ -852,6 +867,18 @@ for (const mode of ["json", "rpc"] as const) {
     },
     {
       args: "marketplace unknown",
+      commandId: "marketplace",
+      message: 'Unknown marketplace subcommand: "unknown".',
+      usage: EXPECTED_MARKETPLACE_USAGE,
+    },
+    {
+      args: "market",
+      commandId: "marketplace",
+      message: "marketplace requires a subcommand.",
+      usage: EXPECTED_MARKETPLACE_USAGE,
+    },
+    {
+      args: "market unknown",
       commandId: "marketplace",
       message: 'Unknown marketplace subcommand: "unknown".',
       usage: EXPECTED_MARKETPLACE_USAGE,

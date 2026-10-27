@@ -306,7 +306,10 @@ interface Offer {
 }
 
 /** The marketplace a candidate is offered by: its name and the root its path trees read in. */
-type OfferMarketplace = Pick<ResolveContext, "marketplaceName" | "marketplaceRoot">;
+type OfferMarketplace = Pick<
+  ResolveContext,
+  "marketplaceName" | "marketplaceRoot" | "marketplaceSource"
+>;
 
 /** A path source moves when its version or plugin root differs (D-18-11). */
 async function pathOffer(
@@ -414,7 +417,11 @@ async function recordMove(
   }
 
   const entry = declared.entry;
-  const marketplace = { marketplaceRoot: mp.marketplaceRoot, marketplaceName: mp.name };
+  const marketplace = {
+    marketplaceRoot: mp.marketplaceRoot,
+    marketplaceName: mp.name,
+    marketplaceSource: mp.source,
+  };
   const candidate = await resolveListCandidate(entry, marketplace, input.locations);
   const source = gitSourceOf(entry.source);
   const offer = await (source === undefined

@@ -19,7 +19,11 @@ import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/
 
 type ComposeCandidateListRow = (
   manifestEntry: ManifestPluginEntry,
-  marketplaceContext: { readonly marketplaceRoot: string; readonly marketplaceName: string },
+  marketplaceContext: {
+    readonly marketplaceRoot: string;
+    readonly marketplaceName: string;
+    readonly marketplaceSource: unknown;
+  },
   locations: ScopedLocations,
   declaredEnabled: boolean | undefined,
 ) => Promise<CandidateRow>;
@@ -58,7 +62,11 @@ test("composes the complete available candidate projection", async (testContext)
   // act
   const row = await composeCandidateListRow(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    },
     environment.locations,
     undefined,
   );
@@ -90,7 +98,11 @@ test("appends installs-disabled to a partially available row", async (testContex
   // act
   const row = await composeCandidateListRow(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    },
     environment.locations,
     undefined,
   );
@@ -121,7 +133,11 @@ test("keeps a user-enabled partial row free of the author default", async (testC
   // act
   const row = await composeCandidateListRow(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    },
     environment.locations,
     true,
   );
@@ -150,7 +166,11 @@ test("composes structural unavailability without an installs-disabled claim", as
   // act
   const row = await composeCandidateListRow(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    },
     environment.locations,
     undefined,
   );
@@ -184,7 +204,11 @@ test("VER-02: an available path row shows the version its plugin.json declares o
   // act
   const row = await composeCandidateListRow(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    },
     environment.locations,
     undefined,
   );
@@ -214,7 +238,11 @@ test("VER-02: a partially available path row shows the version its plugin.json d
   // act
   const row = await composeCandidateListRow(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    },
     environment.locations,
     undefined,
   );
@@ -235,7 +263,11 @@ test("VER-02: an unavailable path row keeps the entry version", async (testConte
   // act
   const row = await composeCandidateListRow(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    },
     environment.locations,
     undefined,
   );
@@ -261,7 +293,11 @@ test("classifies a thrown candidate probe without leaking the error", async (tes
   // act
   const row = await composeCandidateListRow(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    },
     environment.locations,
     undefined,
   );
@@ -302,7 +338,11 @@ test("resolves a warm git mirror into an available row", async (testContext) => 
   // act
   const row = await composeCandidateListRow(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    },
     environment.locations,
     undefined,
   );
@@ -343,7 +383,11 @@ test("VER-01: a warm git mirror shows the version its plugin.json declares over 
   // act
   const row = await composeCandidateListRow(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    },
     environment.locations,
     undefined,
   );
@@ -380,7 +424,11 @@ test("VER-01: a warm git-subdir mirror that lacks the subdir keeps the entry ver
   // act
   const row = await composeCandidateListRow(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    },
     environment.locations,
     undefined,
   );
@@ -413,7 +461,11 @@ for (const entry of COLD_GIT_ENTRIES) {
     // act
     const row = await composeCandidateListRow(
       entry,
-      { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
+      {
+        marketplaceRoot: environment.marketplaceRoot,
+        marketplaceName: "third-party",
+        marketplaceSource: undefined,
+      },
       environment.locations,
       undefined,
     );
@@ -445,7 +497,11 @@ test("flags binaries as unsupported for an official marketplace name", async (te
   // act
   const row = await composeCandidateListRow(
     entry,
-    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "claude-plugins-official" },
+    {
+      marketplaceRoot: environment.marketplaceRoot,
+      marketplaceName: "claude-plugins-official",
+      marketplaceSource: undefined,
+    },
     environment.locations,
     undefined,
   );

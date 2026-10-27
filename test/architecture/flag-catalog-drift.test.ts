@@ -122,6 +122,17 @@ const COMPLETION_HEADS: { head: string; verb: CatalogVerb }[] = [
   { head: "ls", verb: "list" },
   { head: "marketplace ls", verb: "marketplace list" },
   { head: "marketplace rm", verb: "marketplace remove" },
+  // D-PL5-11: `market` completes exactly as `marketplace`.
+  { head: "market help", verb: "marketplace help" },
+  { head: "market add", verb: "marketplace add" },
+  { head: "market remove", verb: "marketplace remove" },
+  { head: "market rm", verb: "marketplace remove" },
+  { head: "market info", verb: "marketplace info" },
+  { head: "market list", verb: "marketplace list" },
+  { head: "market ls", verb: "marketplace list" },
+  { head: "market update", verb: "marketplace update" },
+  { head: "market autoupdate", verb: "marketplace autoupdate" },
+  { head: "market noautoupdate", verb: "marketplace noautoupdate" },
 ];
 
 function sorted(values: Iterable<string>): string[] {
@@ -210,8 +221,9 @@ for (const verb of EXPECTED_CATALOG_VERBS) {
 test("catalog and alias completions cover the complete router inventory", () => {
   // arrange
   const routerHeads = [
-    ...TOP_LEVEL_SUBCOMMANDS.filter((verb) => verb !== "marketplace"),
+    ...TOP_LEVEL_SUBCOMMANDS.filter((verb) => verb !== "marketplace" && verb !== "market"),
     ...MARKETPLACE_SUBCOMMANDS.map((verb) => `marketplace ${verb}`),
+    ...MARKETPLACE_SUBCOMMANDS.map((verb) => `market ${verb}`),
   ];
 
   // act

@@ -61,7 +61,11 @@ async function freshDirectory(testContext: TestContext, prefix: string): Promise
 async function freshLocations(testContext: TestContext): Promise<{
   locations: ScopedLocations;
   marketplaceRoot: string;
-  marketplaceContext: { readonly marketplaceRoot: string; readonly marketplaceName: string };
+  marketplaceContext: {
+    readonly marketplaceRoot: string;
+    readonly marketplaceName: string;
+    readonly marketplaceSource: unknown;
+  };
 }> {
   const marketplaceRoot = await freshDirectory(testContext, "git-source-probe-");
   const locations = locationsFor("project", marketplaceRoot);
@@ -69,7 +73,11 @@ async function freshLocations(testContext: TestContext): Promise<{
   return {
     locations,
     marketplaceRoot,
-    marketplaceContext: { marketplaceRoot, marketplaceName: "third-party" },
+    marketplaceContext: {
+      marketplaceRoot,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    },
   };
 }
 

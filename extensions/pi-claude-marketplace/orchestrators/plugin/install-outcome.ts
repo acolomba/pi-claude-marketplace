@@ -110,6 +110,7 @@ import {
 } from "../../domain/dependency-range.ts";
 import { sourceManifestBoundary } from "../../domain/manifest-containment.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { assertRecordedMarketplaceName } from "../../domain/name.ts";
 import {
   requirePartialInstallable,
   requireInstallable,
@@ -751,6 +752,8 @@ async function preflightInstallResolve(
   // PI-2 cached-manifest read -- NO network, no gitOps. PI-3: the entry must
   // exist in the manifest plugins[] array.
   const manifest = await loadCachedMarketplaceManifest(targetMp.manifestPath);
+  // D-PL5-28: Claude Code installs nothing from a marketplace it refuses.
+  assertRecordedMarketplaceName(targetMp.name, targetMp.source as ParsedSource, manifest.name);
   // The loader validated every entry against PLUGIN_ENTRY_SCHEMA as part of
   // MARKETPLACE_SCHEMA, so the chosen entry needs no second check.
   const entry = manifest.plugins.find((p) => p.name === plugin);
@@ -772,6 +775,7 @@ async function preflightInstallResolve(
   const resolved = await resolveStrict(entry, {
     marketplaceRoot: targetMp.marketplaceRoot,
     marketplaceName: marketplace,
+    marketplaceSource: targetMp.source,
     resolveGitPluginRoot: async (gitSource) => {
       const clone = await (opts.cloneProbe ?? probeInstallClone)({
         // RESV-03: a pinned dependency materializes the exact commit its

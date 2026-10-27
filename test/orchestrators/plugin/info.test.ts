@@ -88,6 +88,7 @@ import {
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
+import type { ParsedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type * as InfoOrchestrator from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
 import type { McpStatusReader } from "../../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
@@ -393,6 +394,8 @@ interface SeedPathMarketplaceOpts {
   readonly cwd: string;
   readonly mpName: string;
   readonly manifest: { name: string; plugins: readonly Record<string, unknown>[] };
+  /** The record's stored source; defaults to a path source. */
+  readonly source?: ParsedSource;
   /**
    * Installed plugin records. `disabled: true` seeds the ENBL-02
    * empty-resources marker (recorded-but-disabled); the default seeds a
@@ -471,7 +474,7 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
   const record: Record<string, unknown> = {
     name: mpName,
     scope,
-    source: pathSource(`./${mpName}-src`),
+    source: opts.source ?? pathSource(`./${mpName}-src`),
     addedFromCwd: cwd,
     manifestPath,
     marketplaceRoot: mpRoot,
@@ -812,6 +815,65 @@ test("VER-02: a partially available path plugin shows the version its plugin.jso
   });
 });
 
+test("D-PL5-32: a hosted marketplace's relative entry reads unavailable with an unsupported source", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const catalogUrl = "https://h.example/acme/mp/marketplace.json";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "root", source: "./", version: "1.0.0" }] },
+      source: { kind: "hosted", raw: catalogUrl, url: catalogUrl },
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "root", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ⊘ root v1.0.0 (unavailable) {unsupported source}",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("D-PL5-32: an installed plugin whose hosted entry now names a relative path reads installed with an unsupported source", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const catalogUrl = "https://h.example/acme/mp/marketplace.json";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "root", source: "./", version: "1.0.0" }] },
+      source: { kind: "hosted", raw: catalogUrl, url: catalogUrl },
+      installed: { root: { version: "1.0.0" } },
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "root", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● root v1.0.0 (installed) {unsupported source}",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
 test("SRC-01 / VER-02: a path plugin whose directory is missing reads source missing at the entry version", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
@@ -997,6 +1059,48 @@ test("INFO-05: external source (npm) emits `    components: not resolved` marker
   });
 });
 
+test("D-PL5-05: a hosted plugin source emits `    components: not resolved` like an external source", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "remote",
+            source: "https://h.example/remote/marketplace.json",
+            version: "1.0.0",
+            description: "Remote plugin sourced from a hosted catalog URL.",
+          },
+        ],
+      },
+      installed: { remote: { version: "1.0.0" } },
+    });
+
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "remote", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● remote v1.0.0 (installed)",
+          "    Remote plugin sourced from a hosted catalog URL.",
+          "    components: not resolved",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // (e) both-scopes fan-out -- project-first per MSG-GR-3 / INFO-03.
 // ---------------------------------------------------------------------------
@@ -1149,6 +1253,48 @@ test("UXG-08: missing plugin in known marketplace emits `⊘ <plugin> (failed) {
         "  ⊘ ghost (failed) {not in manifest}",
       ].join("\n"),
     );
+  });
+});
+
+test("D-PL5-28: info on a plugin of a marketplace recorded under a reserved name fails as an invalid manifest", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "claude-plugins-official",
+      manifest: {
+        name: "claude-plugins-official",
+        plugins: [{ name: "real", source: "./real", version: "1.0.0" }],
+      },
+      installablePluginDirs: ["real"],
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({
+      ctx,
+      run,
+      marketplace: "claude-plugins-official",
+      plugin: "real",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          // D-PL8-07: an official name defaults autoupdate on.
+          "● claude-plugins-official [user] <autoupdate>",
+          "  ⊘ real (failed) {invalid manifest}",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
   });
 });
 
@@ -5534,6 +5680,17 @@ test("RSTA-04: installed git-source plugin with a WARM mirror resolves its compo
   });
 });
 
+/**
+ * D-PL5-28: the anthropics organization's github source, the only source a
+ * marketplace recorded as `claude-plugins-official` loads from.
+ */
+const ANTHROPICS_OFFICIAL_SOURCE = {
+  kind: "github",
+  raw: "anthropics/claude-plugins-official",
+  owner: "anthropics",
+  repo: "claude-plugins-official",
+} satisfies ParsedSource;
+
 test("info flags binaries on an uninstalled path plugin of an official marketplace", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
@@ -5543,6 +5700,7 @@ test("info flags binaries on an uninstalled path plugin of an official marketpla
       scopeRoot: userRoot,
       cwd,
       mpName: "claude-plugins-official",
+      source: ANTHROPICS_OFFICIAL_SOURCE,
       manifest: {
         name: "claude-plugins-official",
         plugins: [
@@ -5586,6 +5744,7 @@ test("info flags binaries on an installed path plugin of an official marketplace
       scopeRoot: userRoot,
       cwd,
       mpName: "claude-plugins-official",
+      source: ANTHROPICS_OFFICIAL_SOURCE,
       manifest: {
         name: "claude-plugins-official",
         plugins: [
@@ -5631,6 +5790,7 @@ test("info flags binaries on an uninstalled warm git plugin of an official marke
       scopeRoot: userRoot,
       cwd,
       mpName: "claude-plugins-official",
+      source: ANTHROPICS_OFFICIAL_SOURCE,
       manifest: {
         name: "claude-plugins-official",
         plugins: [
@@ -5675,6 +5835,7 @@ test("info keeps an installed warm git plugin with binaries unresolved for an of
       scopeRoot: userRoot,
       cwd,
       mpName: "claude-plugins-official",
+      source: ANTHROPICS_OFFICIAL_SOURCE,
       manifest: {
         name: "claude-plugins-official",
         plugins: [

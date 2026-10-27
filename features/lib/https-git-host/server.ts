@@ -12,8 +12,11 @@
  * (HOST-04). A scenario can arm one repository to answer an error status, to
  * drop the connection, or to require one credential, and the other
  * repositories keep serving (HOST-03). An arm lasts until it is disarmed or
- * the host is reset. Before each scenario the run resets it to an empty host
- * with no arm.
+ * the host is reset. The host also serves the catalog files of hosted
+ * marketplaces, such as `/acme/tools/marketplace.json`, from memory, and an arm
+ * of `owner/directory` applies to the files under `/owner/directory/` too.
+ * Before each scenario the run resets it to an empty host with no arm and no
+ * file.
  */
 
 import { execFile } from "node:child_process";
@@ -63,13 +66,14 @@ export type ArmedStatus = (typeof ARMED_STATUSES)[number];
 /**
  * How an armed repository fails until it is disarmed or the host is reset
  * (HOST-03): it answers an error status, drops the connection on every
- * request, or answers 401 to every request that does not carry one user and
- * password.
+ * request, answers 401 to every request that does not carry one user and
+ * password, or answers 302 to a location.
  */
 export type GitHostArm =
   | { readonly kind: "status"; readonly status: ArmedStatus }
   | { readonly kind: "drop" }
-  | { readonly kind: "credential"; readonly user: string; readonly password: string };
+  | { readonly kind: "credential"; readonly user: string; readonly password: string }
+  | { readonly kind: "redirect"; readonly location: string };
 
 /** Returns `status` as an armed status, throwing on a status the host cannot be armed with. */
 export function armedStatus(status: number): ArmedStatus {
@@ -110,6 +114,8 @@ export interface GitHostTraffic {
 /** Everything the host holds, which the run checks is empty before each scenario. */
 export interface GitHostSnapshot {
   readonly repositories: readonly string[];
+  /** The served catalog files as decoded paths, such as `/acme/tools/marketplace.json`, sorted. */
+  readonly files: readonly string[];
   /** The armed repositories as `owner/directory`, in arming order. */
   readonly arms: readonly string[];
   readonly requests: readonly GitHostRequest[];
@@ -183,6 +189,11 @@ function repositoryKey(directory: string, owner: string): string {
   return `${owner}/${directory}`;
 }
 
+/** Returns the decoded path the host serves the file `file` of `directory` of `owner` at. */
+function filePath(directory: string, file: string, owner: string): string {
+  return `/${repositoryKey(directory, owner)}/${file}`;
+}
+
 /**
  * Returns the arm of the repository that `served` belongs to: a decoded path
  * the CGI serves, under `/<owner>/<directory>/` or `/<owner>/<directory>.git/`.
@@ -209,13 +220,16 @@ function basicAuthorization(user: string, password: string): string {
  * whether it did. A `drop` arm destroys the socket before any answer. A
  * `credential` arm lets a request with its credential through to the CGI;
  * it compares the header in memory, and the log keeps only the status
- * (HOST-04).
+ * (HOST-04). A `redirect` arm answers 302 to its location, and lets the
+ * request for the location's own path through, so a redirect inside the arm's
+ * directory ends.
  */
 function failArmed(
   arm: GitHostArm,
   logged: LoggedRequest,
   req: IncomingMessage,
   res: ServerResponse,
+  served: string,
 ): boolean {
   switch (arm.kind) {
     case "drop":
@@ -236,6 +250,15 @@ function failArmed(
       res.writeHead(401, { "WWW-Authenticate": 'Basic realm="git host"' });
       res.end();
       return true;
+    case "redirect":
+      if (servedPath(arm.location, `https://${req.headers.host ?? ""}`) === served) {
+        return false;
+      }
+
+      logged.status = 302;
+      res.writeHead(302, { location: arm.location });
+      res.end();
+      return true;
   }
 }
 
@@ -246,6 +269,16 @@ function writeResponse(res: ServerResponse, response: CgiResponse): void {
   }
 
   res.end(response.body);
+}
+
+/** Answers a served catalog file with 200 and its bytes, and logs it. */
+function answerFile(logged: LoggedRequest, bytes: Buffer, res: ServerResponse): void {
+  logged.status = 200;
+  res.writeHead(200, {
+    "content-type": "application/json",
+    "content-length": bytes.length,
+  });
+  res.end(bytes);
 }
 
 /**
@@ -287,6 +320,7 @@ export class HttpsGitHost {
   private readonly log: LoggedRequest[] = [];
   private readonly children = new Set<ChildProcess>();
   private readonly arms = new Map<string, GitHostArm>();
+  private readonly files = new Map<string, Buffer>();
   private connections = 0;
 
   private constructor(root: string, server: Server, port: number) {
@@ -339,17 +373,30 @@ export class HttpsGitHost {
     return `${owner}/${directory}`;
   }
 
+  /** Serves `bytes` as the file `file` of `directory` of `owner`, replacing any bytes served there. */
+  serveFile(directory: string, file: string, bytes: Buffer, owner = DEFAULT_OWNER): void {
+    this.files.set(filePath(directory, file, owner), bytes);
+  }
+
+  /** Returns the URL a user types to read the file `file` of `directory` of `owner`. */
+  fileUrl(directory: string, file: string, owner = DEFAULT_OWNER): string {
+    return `https://${this.address}${filePath(directory, file, owner)}`;
+  }
+
   /**
-   * Arms the published repository `directory` of `owner` to fail as `arm`
-   * until it is disarmed or the host is reset, failing when nothing is
-   * published there or when it is armed already.
+   * Arms the published repository, or the directory of served files,
+   * `directory` of `owner` to fail as `arm` until it is disarmed or the host
+   * is reset, failing when nothing is published there or when it is armed
+   * already.
    */
   async arm(directory: string, arm: GitHostArm, owner = DEFAULT_OWNER): Promise<void> {
     const key = repositoryKey(directory, owner);
-    const published = await stat(this.repositoryPath(directory, owner)).then(
-      () => true,
-      () => false,
-    );
+    const published =
+      this.servesFileUnder(key) ||
+      (await stat(this.repositoryPath(directory, owner)).then(
+        () => true,
+        () => false,
+      ));
     if (!published) {
       throw new Error(`the git host serves no repository ${key}.git to arm`);
     }
@@ -382,10 +429,11 @@ export class HttpsGitHost {
     };
   }
 
-  /** Returns the repositories, arms, requests, connections, and CGI children the host holds. */
+  /** Returns the repositories, files, arms, requests, connections, and CGI children the host holds. */
   async snapshot(): Promise<GitHostSnapshot> {
     return {
       repositories: await listRepositories(this.repositories),
+      files: [...this.files.keys()].sort(),
       arms: [...this.arms.keys()],
       requests: this.log.map((request) => copyRequest(request)),
       connections: this.connections,
@@ -395,12 +443,14 @@ export class HttpsGitHost {
 
   /**
    * Empties the host: kills every CGI child and waits for it to close, then
-   * clears the arms and the log, removes every repository, and closes idle
-   * connections, so no keep-alive socket reaches the next scenario.
+   * clears the arms, the served files, and the log, removes every repository,
+   * and closes idle connections, so no keep-alive socket reaches the next
+   * scenario.
    */
   async reset(): Promise<void> {
     await this.killChildren();
     this.arms.clear();
+    this.files.clear();
     this.log.splice(0);
     this.connections = 0;
     const entries = await readdir(this.repositories);
@@ -417,6 +467,11 @@ export class HttpsGitHost {
     this.server.closeAllConnections();
     await this.killChildren();
     await closeServer(this.server);
+  }
+
+  private servesFileUnder(key: string): boolean {
+    const prefix = `/${key}/`;
+    return [...this.files.keys()].some((served) => served.startsWith(prefix));
   }
 
   private async killChildren(): Promise<void> {
@@ -457,7 +512,13 @@ export class HttpsGitHost {
     }
 
     const arm = armFor(this.arms, served);
-    if (arm !== undefined && failArmed(arm, logged, req, res)) {
+    if (arm !== undefined && failArmed(arm, logged, req, res, served)) {
+      return;
+    }
+
+    const file = logged.method === "GET" ? this.files.get(served) : undefined;
+    if (file !== undefined) {
+      answerFile(logged, file, res);
       return;
     }
 

@@ -60,6 +60,7 @@
 
 import { lookupDeclaredPlugin, type ManifestLookup } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
+import { assertRecordedMarketplaceName } from "../../domain/name.ts";
 import { effectiveMarketplaceAutoupdate } from "../../domain/official-marketplaces.ts";
 import {
   hasInvalidConfigLayer,
@@ -95,6 +96,7 @@ import {
 } from "./list-orphan-fold.ts";
 import { LIST_CONTEXT, type ListMsg } from "./list.messaging.ts";
 
+import type { ParsedSource } from "../../domain/source.ts";
 import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -357,6 +359,7 @@ async function enumerateMarketplacePlugins(args: {
       pluginScope,
       marketplaceScope,
       marketplaceRoot: mpRecord.marketplaceRoot,
+      marketplaceSource: mpRecord.source,
       marketplaceName: mpName,
       record,
       lookup: manifestLookupFor(scopedManifest, pluginName),
@@ -398,7 +401,11 @@ async function enumerateMarketplacePlugins(args: {
     // eslint-disable-next-line no-await-in-loop -- bounded by the manifest's uninstalled entries, one row each
     const { message: row, bucket } = await availableRowMessage(
       manifestEntry,
-      { marketplaceRoot: mpRecord.marketplaceRoot, marketplaceName: mpName },
+      {
+        marketplaceRoot: mpRecord.marketplaceRoot,
+        marketplaceName: mpName,
+        marketplaceSource: mpRecord.source,
+      },
       locationsFor(pluginScope, opts.cwd),
       ownValue(pluginScopeConfig.plugins, `${manifestEntry.name}@${mpName}`)?.entry.enabled,
     );
@@ -464,6 +471,8 @@ async function loadMarketplaceManifestSoftly(
 ): Promise<ScopedManifest> {
   try {
     const manifest = await loadManifestSoftly(mpRecord.manifestPath);
+    // D-PL5-28: a marketplace Claude Code refuses reads as a failed one.
+    assertRecordedMarketplaceName(mpRecord.name, mpRecord.source as ParsedSource, manifest.name);
     return { ok: true, manifest };
   } catch (err) {
     // BOUND-03 / D-95-05: the failure stays off every rendered row (the

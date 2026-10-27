@@ -55,7 +55,7 @@ import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { MANIFEST_CANDIDATES } from "../../domain/manifest-path.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
 import { type DroppedMcpServer } from "../../domain/mcp-server-features.ts";
-import { mcpServerDisplayName } from "../../domain/name.ts";
+import { assertRecordedMarketplaceName, mcpServerDisplayName } from "../../domain/name.ts";
 import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import {
   parsePluginSource,
@@ -259,6 +259,7 @@ function isLocallyResolvable(src: ParsedSource): src is PathSource {
     case "url":
     case "git-subdir":
     case "npm":
+    case "hosted":
     case "unknown":
       return false;
   }
@@ -1253,6 +1254,8 @@ async function buildBlock(args: {
   let manifest: MarketplaceManifest;
   try {
     manifest = await loadMarketplaceManifest(mpRecord.manifestPath);
+    // D-PL5-28: a marketplace Claude Code refuses fails as an invalid manifest.
+    assertRecordedMarketplaceName(mpRecord.name, mpRecord.source as ParsedSource, manifest.name);
   } catch (err) {
     return wrapBlock(marketplace, scope, marketplaceDetails, {
       status: "failed",
@@ -2233,6 +2236,7 @@ async function buildInstalledGitRow(opts: {
         const resolved = await resolveStrict(entry, {
           marketplaceRoot: mpRecord.marketplaceRoot,
           marketplaceName: mpRecord.name,
+          marketplaceSource: mpRecord.source,
           readFileText: (filePath) => reader.readTextFile(filePath),
           // The tree the probe just materialized; probing again would fetch twice.
           resolveGitPluginRoot: () => Promise.resolve(presence),
@@ -2375,6 +2379,7 @@ async function buildInstalledRow(opts: {
     const resolved = await resolveStrict(entry, {
       marketplaceRoot: mpRecord.marketplaceRoot,
       marketplaceName: mpRecord.name,
+      marketplaceSource: mpRecord.source,
       readFileText: (filePath) => reader.readTextFile(filePath),
     });
     if (resolved.state === "installable") {
@@ -2584,6 +2589,7 @@ async function buildGitNotInstalledRow(opts: {
       const ctx: ResolveContext = {
         marketplaceRoot: mpRecord.marketplaceRoot,
         marketplaceName: mpRecord.name,
+        marketplaceSource: mpRecord.source,
         readFileText: (filePath) => reader.readTextFile(filePath),
         // The tree the probe just materialized; probing again would fetch twice.
         resolveGitPluginRoot: () => Promise.resolve(presence),
@@ -2773,6 +2779,7 @@ async function buildNotInstalledRow(opts: {
     resolved = await resolveStrict(entry, {
       marketplaceRoot: mpRecord.marketplaceRoot,
       marketplaceName: mpRecord.name,
+      marketplaceSource: mpRecord.source,
       readFileText: (filePath) => reader.readTextFile(filePath),
     });
   } catch (err) {

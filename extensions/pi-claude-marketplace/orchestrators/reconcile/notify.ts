@@ -601,6 +601,7 @@ export function recordedVersionEntries(
  */
 export interface PendingInstallCandidate {
   readonly marketplaceRoot: string;
+  readonly marketplaceSource: unknown;
   readonly manifestEntry: MarketplaceManifest["plugins"][number];
 }
 
@@ -661,6 +662,7 @@ export async function resolvePendingForceInstalls(
         const resolved = await resolveStrict(candidate.manifestEntry, {
           marketplaceRoot: candidate.marketplaceRoot,
           marketplaceName: install.marketplace,
+          marketplaceSource: candidate.marketplaceSource,
         });
         if (resolved.state === "partially-available") {
           keys.add(forceInstallKey(install.scope, install.marketplace, install.plugin));

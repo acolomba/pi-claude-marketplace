@@ -1952,6 +1952,74 @@ test("converts an unresolved catalogue plugin-info row with no scope and empty r
   });
 });
 
+for (const { title, marker, expectedId } of [
+  {
+    title:
+      "gives a failed plugin-info row whose subject is the marketplace its name alone as the id",
+    marker: { marketplaceSubject: true },
+    expectedId: "tools",
+  },
+  {
+    title:
+      "keeps the qualified id of a plugin-info row named like its marketplace without the marker",
+    marker: {},
+    expectedId: "tools@tools",
+  },
+] satisfies readonly {
+  readonly title: string;
+  readonly marker: { readonly marketplaceSubject?: true };
+  readonly expectedId: string;
+}[]) {
+  test(title, () => {
+    // arrange
+    const presentation = {
+      kind: "plugin-info",
+      envelope: infoEnvelope(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "tools",
+        marketplaceScope: "project",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "failed",
+          name: "tools",
+          scope: "project",
+          reasons: ["invalid manifest"],
+          componentsResolved: false,
+          ...marker,
+        },
+      },
+    } satisfies NotificationPresentation;
+
+    // act
+    const payload = toWirePayload(presentation, {
+      kind: "command",
+      commandId: "plugin",
+      invocationId: "test-run",
+    });
+
+    // assert
+    assert.deepStrictEqual(payload, {
+      schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+      kind: "plugin-info",
+      severity: "info",
+      needsReload: false,
+      marketplaceName: "tools",
+      marketplaceScope: "project",
+      marketplaceDetails: { autoupdate: false },
+      plugin: {
+        status: "failed",
+        name: "tools",
+        id: expectedId,
+        reasons: ["invalid manifest"],
+        scope: "project",
+        componentsResolved: false,
+      },
+    });
+  });
+}
+
 test("converts a remote plugin-info row with its dependencies and version", () => {
   // arrange
   const presentation = {

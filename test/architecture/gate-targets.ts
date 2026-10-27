@@ -163,6 +163,9 @@ export const CREDENTIAL_LEAK_TARGETS = [
   // was covered by nothing. Appended last so no existing positional binding in
   // no-credential-leak.test.ts is re-aimed.
   "extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts",
+  // D-PL5-07: the hosted catalog download, which must send no header,
+  // credential, or cookie. Appended last for the reason given above.
+  "extensions/pi-claude-marketplace/platform/hosted-manifest-fetch.ts",
 ] as const;
 
 /**

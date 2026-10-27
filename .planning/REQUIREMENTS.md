@@ -64,14 +64,14 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 
 ### Marketplace commands (MKT)
 
-- [ ] **MKT-01**: `marketplace add` refuses Claude Code's reserved official marketplace names, with `bootstrap` still able to add the official marketplace (MKTPAR-01 b1)
-- [ ] **MKT-02**: `marketplace add` accepts a plain https URL to a hosted `marketplace.json`, and `marketplace update` refreshes it, as Claude Code does (MKTPAR-01 b2)
-- [ ] **MKT-03**: `/claude:plugin market` is an alias of `marketplace` (MKTPAR-01 b3)
-- [ ] **MKT-04**: Marketplace-level failure rows carry the marketplace as their JSON id, not `<mp>@<mp>` (ROWID-01)
-- [ ] **MKT-05**: The `owner/repo@ref` shorthand splits as Claude Code splits it, or D-76-04 is recorded as a divergence (SHORTREF-01)
-- [ ] **MKT-06**: `marketplace remove` reports the dependents it strands as Claude Code does, or the choice is recorded with an ID (PRUNE-GUARD-MR-01)
-- [ ] **MKT-07**: `marketplace add` tells a malformed manifest from a crash, repairs or refuses an "already added" record whose clone is gone, and maps EISDIR as `list` and `info` do; its no-op returns a no-op status (LCORCH-01 b1, LCCODE-01 b6)
-- [ ] **MKT-08**: The cascade `dropped` fold is exhaustive over the unstage axes, and `marketplace remove` uses it, hooks axis included (CASCADEAX-01)
+- [x] **MKT-01**: `marketplace add` refuses Claude Code's reserved official marketplace names, with `bootstrap` still able to add the official marketplace (MKTPAR-01 b1)
+- [x] **MKT-02**: `marketplace add` accepts a plain https URL to a hosted `marketplace.json`, and `marketplace update` refreshes it, as Claude Code does (MKTPAR-01 b2)
+- [x] **MKT-03**: `/claude:plugin market` is an alias of `marketplace` (MKTPAR-01 b3)
+- [x] **MKT-04**: Marketplace-level failure rows carry the marketplace as their JSON id, not `<mp>@<mp>` (ROWID-01)
+- [x] **MKT-05**: The `owner/repo@ref` shorthand splits as Claude Code splits it, or D-76-04 is recorded as a divergence (SHORTREF-01)
+- [x] **MKT-06**: `marketplace remove` reports the dependents it strands as Claude Code does, or the choice is recorded with an ID (PRUNE-GUARD-MR-01)
+- [x] **MKT-07**: `marketplace add` tells a malformed manifest from a crash, repairs or refuses an "already added" record whose clone is gone, and maps EISDIR as `list` and `info` do; its no-op returns a no-op status (LCORCH-01 b1, LCCODE-01 b6)
+- [x] **MKT-08**: The cascade `dropped` fold is exhaustive over the unstage axes, and `marketplace remove` uses it, hooks axis included (CASCADEAX-01)
 
 ### Import (MIM)
 
@@ -166,14 +166,14 @@ None.
 | RSV-03 | Phase 4 | Complete |
 | RSV-04 | Phase 4 | Complete |
 | RSV-05 | Phase 4 | Complete |
-| MKT-01 | Phase 5 | Pending |
-| MKT-02 | Phase 5 | Pending |
-| MKT-03 | Phase 5 | Pending |
-| MKT-04 | Phase 5 | Pending |
-| MKT-05 | Phase 5 | Pending |
-| MKT-06 | Phase 5 | Pending |
-| MKT-07 | Phase 5 | Pending |
-| MKT-08 | Phase 5 | Pending |
+| MKT-01 | Phase 5 | Complete |
+| MKT-02 | Phase 5 | Complete |
+| MKT-03 | Phase 5 | Complete |
+| MKT-04 | Phase 5 | Complete |
+| MKT-05 | Phase 5 | Complete |
+| MKT-06 | Phase 5 | Complete |
+| MKT-07 | Phase 5 | Complete |
+| MKT-08 | Phase 5 | Complete |
 | MIM-01 | Phase 6 | Complete |
 | MIM-02 | Phase 6 | Complete |
 | MIM-03 | Phase 6 | Complete |

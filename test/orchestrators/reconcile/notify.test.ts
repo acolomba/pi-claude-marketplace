@@ -3747,6 +3747,7 @@ describe("resolvePendingForceInstalls", () => {
     const locate = (): Promise<PendingInstallCandidate> =>
       Promise.resolve({
         marketplaceRoot,
+        marketplaceSource: undefined,
         manifestEntry: { name: "cr", source: "./cr", version: "1.0.0" },
       });
 
@@ -3755,6 +3756,28 @@ describe("resolvePendingForceInstalls", () => {
 
     // assert
     assert.deepStrictEqual(forceInstallKeys, new Set(["project\u0000mp\u0000cr"]));
+  });
+
+  test("leaves a hosted marketplace's relative entry out of the partial installs", async (t) => {
+    // arrange
+    const marketplaceRoot = await mkdtemp(path.join(tmpdir(), "reconcile-hosted-"));
+    t.after(() => rm(marketplaceRoot, { recursive: true, force: true }));
+    await mkdir(path.join(marketplaceRoot, "cr"), { recursive: true });
+    await writeFile(path.join(marketplaceRoot, "cr", ".lsp.json"), "{}", "utf8");
+    const plans = [reconcilePlan("project", { pluginsToInstall: [install] })];
+    const hostedUrl = "https://h.example/acme/tools/marketplace.json";
+    const locate = (): Promise<PendingInstallCandidate> =>
+      Promise.resolve({
+        marketplaceRoot,
+        marketplaceSource: { kind: "hosted", raw: hostedUrl, url: hostedUrl },
+        manifestEntry: { name: "cr", source: "./cr", version: "1.0.0" },
+      });
+
+    // act
+    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate);
+
+    // assert
+    assert.deepStrictEqual(forceInstallKeys, new Set());
   });
 
   test("collects the key of an install whose binaries count for an official marketplace", async (t) => {
@@ -3770,6 +3793,7 @@ describe("resolvePendingForceInstalls", () => {
     const locate = (): Promise<PendingInstallCandidate> =>
       Promise.resolve({
         marketplaceRoot,
+        marketplaceSource: undefined,
         manifestEntry: {
           name: "cr",
           source: "./cr",
@@ -3797,6 +3821,7 @@ describe("resolvePendingForceInstalls", () => {
     const locate = (): Promise<PendingInstallCandidate> =>
       Promise.resolve({
         marketplaceRoot,
+        marketplaceSource: undefined,
         manifestEntry: { name: "cr", source: "./cr", version: "1.0.0" },
       });
 
@@ -3831,6 +3856,7 @@ describe("resolvePendingForceInstalls", () => {
     const locate = (): Promise<PendingInstallCandidate> =>
       Promise.resolve({
         marketplaceRoot: notADirectory,
+        marketplaceSource: undefined,
         manifestEntry: { name: "cr", source: "./cr", version: "1.0.0" },
       });
 

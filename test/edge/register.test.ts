@@ -145,7 +145,7 @@ type PiRegistrar = Omit<ExtensionAPI, "registerTool"> & {
 };
 
 const EXPECTED_TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|autoapply|enable|disable|import|browse|marketplace|help> ...\n" +
+  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|autoapply|enable|disable|import|browse|marketplace|market|help> ...\n" +
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
@@ -162,7 +162,7 @@ const EXPECTED_TOP_LEVEL_USAGE =
   "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  import [--scope user|project]\n" +
   "  browse\n" +
-  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
+  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...   (alias: market)\n" +
   "  help [marketplace]";
 
 interface HermeticScope {
@@ -683,7 +683,7 @@ for (const mode of ["json", "rpc"]) {
             plugin: {
               status: "failed",
               name: "demo",
-              id: "demo@demo",
+              id: "demo",
               scope,
               reasons: ["unparseable"],
               componentsResolved: false,
@@ -3443,44 +3443,50 @@ const COMMAND_ARGUMENT_CASES = [
   },
   {
     verb: "marketplace help",
+    aliases: ["market help"],
     operand: "",
     usage: "marketplace help",
     surplus: "marketplace help takes no arguments.",
   },
   {
     verb: "marketplace add",
+    aliases: ["market add"],
     operand: "./fixture-marketplace",
     usage: "marketplace add <source> [--scope user|project] [--local]",
   },
   {
     verb: "marketplace remove",
-    aliases: ["marketplace rm"],
+    aliases: ["marketplace rm", "market remove", "market rm"],
     operand: "official",
     usage: "marketplace <remove|rm> <name> [--scope user|project] [--local]",
   },
   {
     verb: "marketplace list",
-    aliases: ["marketplace ls"],
+    aliases: ["marketplace ls", "market list", "market ls"],
     operand: "",
     usage: "marketplace <list|ls> [--scope user|project]",
   },
   {
     verb: "marketplace info",
+    aliases: ["market info"],
     operand: "official",
     usage: "marketplace info <name> [--scope user|project]",
   },
   {
     verb: "marketplace update",
+    aliases: ["market update"],
     operand: "official",
     usage: "marketplace update [<name>] [--scope user|project]",
   },
   {
     verb: "marketplace autoupdate",
+    aliases: ["market autoupdate"],
     operand: "official",
     usage: "marketplace autoupdate [<name>] [--scope user|project] [--local]",
   },
   {
     verb: "marketplace noautoupdate",
+    aliases: ["market noautoupdate"],
     operand: "official",
     usage: "marketplace noautoupdate [<name>] [--scope user|project] [--local]",
   },
@@ -3490,8 +3496,9 @@ test("argument rejection cases cover every routed command and alias", () => {
   // arrange
   const exercised = COMMAND_ARGUMENT_CASES.flatMap(({ verb, aliases = [] }) => [verb, ...aliases]);
   const routed = [
-    ...TOP_LEVEL_SUBCOMMANDS.filter((verb) => verb !== "marketplace"),
+    ...TOP_LEVEL_SUBCOMMANDS.filter((verb) => verb !== "marketplace" && verb !== "market"),
     ...MARKETPLACE_SUBCOMMANDS.map((verb) => `marketplace ${verb}`),
+    ...MARKETPLACE_SUBCOMMANDS.map((verb) => `market ${verb}`),
   ];
 
   // act & assert

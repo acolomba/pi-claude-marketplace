@@ -127,9 +127,9 @@ Feature: Marketplace info
     Given the manifest of the marketplace "tools" has become invalid
     When the user runs "/claude:plugin marketplace info tools"
     Then the command reports these results:
-      | kind             | severity | needs reload | summary                        | name  | scope | details autoupdate | details last updated at | source kind | source abs path                | marketplace name | marketplace scope | marketplace details autoupdate | plugin status | plugin name | plugin id   | plugin reasons   | plugin scope | plugin components resolved |
-      | plugin-info      | error    | false        | A plugin operation has failed. |       |       |                    |                         |             |                                | tools            | project           | false                          | failed        | tools       | tools@tools | invalid manifest | project      | false                      |
-      | marketplace-info | info     | false        |                                | tools | user  | false              | {scenario time}         | path        | {home}/marketplaces/tools-user |                  |                   |                                |               |             |             |                  |              |                            |
+      | kind             | severity | needs reload | summary                        | name  | scope | details autoupdate | details last updated at | source kind | source abs path                | marketplace name | marketplace scope | marketplace details autoupdate | plugin status | plugin name | plugin id | plugin reasons   | plugin scope | plugin components resolved |
+      | plugin-info      | error    | false        | A plugin operation has failed. |       |       |                    |                         |             |                                | tools            | project           | false                          | failed        | tools       | tools     | invalid manifest | project      | false                      |
+      | marketplace-info | info     | false        |                                | tools | user  | false              | {scenario time}         | path        | {home}/marketplaces/tools-user |                  |                   |                                |               |             |           |                  |              |                            |
 
   Scenario: Info keeps a healthy project when the user manifest is invalid
     Given the marketplace "tools" is published as a dir source
@@ -140,9 +140,9 @@ Feature: Marketplace info
     Given the manifest of the marketplace "tools" has become invalid
     When the user runs "/claude:plugin marketplace info tools"
     Then the command reports these results:
-      | kind             | severity | needs reload | summary                        | name  | scope   | details autoupdate | details last updated at | source kind | source abs path                   | marketplace name | marketplace scope | marketplace details autoupdate | plugin status | plugin name | plugin id   | plugin reasons   | plugin scope | plugin components resolved |
-      | marketplace-info | info     | false        |                                | tools | project | false              | {scenario time}         | path        | {home}/marketplaces/tools-project |                  |                   |                                |               |             |             |                  |              |                            |
-      | plugin-info      | error    | false        | A plugin operation has failed. |       |         |                    |                         |             |                                   | tools            | user              | false                          | failed        | tools       | tools@tools | invalid manifest | user         | false                      |
+      | kind             | severity | needs reload | summary                        | name  | scope   | details autoupdate | details last updated at | source kind | source abs path                   | marketplace name | marketplace scope | marketplace details autoupdate | plugin status | plugin name | plugin id | plugin reasons   | plugin scope | plugin components resolved |
+      | marketplace-info | info     | false        |                                | tools | project | false              | {scenario time}         | path        | {home}/marketplaces/tools-project |                  |                   |                                |               |             |           |                  |              |                            |
+      | plugin-info      | error    | false        | A plugin operation has failed. |       |         |                    |                         |             |                                   | tools            | user              | false                          | failed        | tools       | tools     | invalid manifest | user         | false                      |
 
   Scenario: Info on a marketplace whose manifest became invalid reports a failed invalid manifest row
     Given the marketplace "tools" is published as a dir source
@@ -159,7 +159,7 @@ Feature: Marketplace info
       | marketplace details autoupdate | false                          |
       | plugin status                  | failed                         |
       | plugin name                    | tools                          |
-      | plugin id                      | tools@tools                    |
+      | plugin id                      | tools                          |
       | plugin reasons                 | invalid manifest               |
       | plugin scope                   | project                        |
       | plugin components resolved     | false                          |

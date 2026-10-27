@@ -16,6 +16,7 @@ import {
 } from "../platform/pi-inventory-seed.ts";
 
 import { installTargetWithMockPi, withE2EEnvironment } from "./_helpers.ts";
+import { E2E_MARKETPLACE_NAME } from "./_targets.ts";
 
 import type { E2EEnvironment } from "./_helpers.ts";
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -140,7 +141,7 @@ for (const { requirement, name, tools, commands, reasons } of MCP_STATES) {
       // assert
       assert.equal(rowReasons(installMessages, "context7"), reasons);
       assert.equal(rowReasons(listMessages, "context7"), reasons);
-      const record = state.marketplaces["claude-plugins-official"]?.plugins.context7;
+      const record = state.marketplaces[E2E_MARKETPLACE_NAME]?.plugins.context7;
       assert.ok(record);
       const mcpJson = JSON.parse(
         await readFile(locationsFor("project", env.cwd).mcpAdapterJsonPath, "utf8"),
@@ -184,7 +185,7 @@ for (const { requirement, name, tools, commands, reasons } of AGENT_STATES) {
       // assert
       assert.equal(rowReasons(installMessages, "code-simplifier"), reasons);
       assert.equal(rowReasons(listMessages, "code-simplifier"), reasons);
-      const record = state.marketplaces["claude-plugins-official"]?.plugins["code-simplifier"];
+      const record = state.marketplaces[E2E_MARKETPLACE_NAME]?.plugins["code-simplifier"];
       assert.ok(record);
       const { agentsDir } = locationsFor("project", env.cwd);
       for (const generatedName of record.resources.agents) {

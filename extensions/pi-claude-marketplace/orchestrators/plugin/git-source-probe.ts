@@ -260,7 +260,10 @@ export function makeRecordedShaPresenceProbe(
  */
 export async function probeManifestEntry(
   entry: ManifestEntry,
-  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
+  marketplaceContext: Pick<
+    ResolveContext,
+    "marketplaceRoot" | "marketplaceName" | "marketplaceSource"
+  >,
   locations: ScopedLocations,
 ): Promise<ManifestEntryClassification> {
   const parsedSource = parsePluginSource(entry.source);

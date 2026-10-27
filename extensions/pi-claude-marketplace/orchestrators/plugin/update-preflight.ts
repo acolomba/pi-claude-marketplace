@@ -457,6 +457,7 @@ async function resolveUpdateCandidate(
     const resolved = await resolveStrict(entry, {
       marketplaceRoot: marketplace.marketplaceRoot,
       marketplaceName: marketplace.name,
+      marketplaceSource: marketplace.source,
       resolveGitPluginRoot: (gitSource) => {
         remoteUrl = networkCloneUrl(gitSource);
         // D-10-17: overriding `sha` is what routes the EXISTING probe down

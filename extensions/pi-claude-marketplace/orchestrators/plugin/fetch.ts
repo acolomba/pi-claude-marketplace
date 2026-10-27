@@ -229,6 +229,7 @@ interface FetchTargetEntry {
   readonly entry: ManifestEntry;
   readonly marketplace: string;
   readonly marketplaceRoot: string;
+  readonly marketplaceSource: unknown;
   readonly scope: Scope;
   readonly locations: ScopedLocations;
 }
@@ -299,7 +300,7 @@ async function enumerateFetchTargets(opts: FetchPluginsOptions): Promise<FetchEn
  */
 async function enumerateMarketplaceEntries(
   mpName: string,
-  mp: { manifestPath: string; marketplaceRoot: string },
+  mp: { manifestPath: string; marketplaceRoot: string; source: unknown },
   scope: Scope,
   locations: ScopedLocations,
   wantPlugin: string | undefined,
@@ -312,6 +313,7 @@ async function enumerateMarketplaceEntries(
         entry,
         marketplace: mpName,
         marketplaceRoot: mp.marketplaceRoot,
+        marketplaceSource: mp.source,
         scope,
         locations,
       });
@@ -364,6 +366,7 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
   const marketplaceContext = {
     marketplaceRoot: target.marketplaceRoot,
     marketplaceName: target.marketplace,
+    marketplaceSource: target.marketplaceSource,
   };
   const readCandidate = (): Promise<CandidateRead> =>
     readListCandidate(entry, marketplaceContext, locations, deps.status);
@@ -456,7 +459,10 @@ type CandidateRead = ListCandidate | { readonly kind: "unreadable"; readonly err
 /** Read the entry through `list`'s offline rule, keeping a throw as `unreadable`. */
 async function readListCandidate(
   entry: ManifestEntry,
-  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
+  marketplaceContext: Pick<
+    ResolveContext,
+    "marketplaceRoot" | "marketplaceName" | "marketplaceSource"
+  >,
   locations: ScopedLocations,
   status: FetchStatus,
 ): Promise<CandidateRead> {

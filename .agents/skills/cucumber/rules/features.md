@@ -97,6 +97,8 @@ A marketplace can be published as one of several source kinds: `dir`, `file`, `u
 
 A behavior that only one kind has lives in a feature file of its own.
 
+A marketplace can also be published as `hosted`: one `marketplace.json` that the git host serves at an https URL, such as `https://{git host}/acme/tools/marketplace.json`. Every later change to the manifest is served again. A hosted marketplace has no branch, no unreadable file, and no source to remove; to make it fail, arm the git host for it. Its scenarios live in feature files of their own and never in a source-kind Outline, and `npm run check:features` rejects `hosted` in the `source kind` column of any `Examples:` block.
+
 A plugin can also come from a git repository on the git host, as a `github`, `url`, or `git-subdir` source. These are the plugin's source kinds, not the marketplace's: any marketplace kind can offer them. An Outline over the plugin source kinds names its column `plugin source kind` and keeps its `Examples:` blocks untagged, because `npm run check:features` reads a `source kind` column, and the `@url` and `@github` tags, as the marketplace's.
 
 ## Run tokens

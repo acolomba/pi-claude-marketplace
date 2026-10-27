@@ -15,7 +15,6 @@ import {
   publishUnreadableCommandFile,
   publishUnreadableSkillFile,
   restoreUnreadableSkillFile,
-  removePublishedSource,
   rewritePublishedManifest,
   unreadableSkillCopyError,
 } from "../../lib/published-marketplace.ts";
@@ -82,13 +81,6 @@ Given(
         marketplaces: [{ name, status: "failed", reasons: [["unparseable"]] }],
       },
     );
-  },
-);
-
-Given(
-  "the published source of the marketplace {string} is removed",
-  async function (this: ScenarioWorld, name: string) {
-    await removePublishedSource(this.requirePublished(name));
   },
 );
 

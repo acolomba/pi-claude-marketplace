@@ -8,7 +8,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdir, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { Given } from "@cucumber/cucumber";
@@ -20,7 +20,7 @@ import {
   requireFreeRoot,
 } from "../../lib/published-marketplace.ts";
 
-import type { ManifestProblem } from "../../lib/published-marketplace.ts";
+import type { ManifestProblem, PublishedMarketplace } from "../../lib/published-marketplace.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
 
 async function breakManifest(
@@ -29,6 +29,18 @@ async function breakManifest(
   problem: ManifestProblem,
 ): Promise<void> {
   await invalidateManifest(name, world.requirePublished(name), problem);
+}
+
+// A local publication's manifest is read where it is published; a git one's
+// is read from the clone, which this cannot reach.
+async function replaceManifestWithDirectory(published: PublishedMarketplace): Promise<void> {
+  if (published.kind !== "dir" && published.kind !== "file") {
+    throw new Error(`a ${published.kind} marketplace's manifest cannot be made a directory`);
+  }
+
+  await rm(published.manifestPath);
+  await mkdir(published.manifestPath);
+  await writeFile(path.join(published.manifestPath, "marketplace.json"), "{}\n");
 }
 
 // One literal text per row variant rather than one text with a parameter: a
@@ -55,6 +67,15 @@ Given(
     const published = this.requirePublished(name);
     await makeManifestUnreadable(published);
     await assert.rejects(readFile(published.manifestPath), { code: "EACCES" });
+  },
+);
+
+Given(
+  "the manifest of the marketplace {string} to add is a directory",
+  async function (this: ScenarioWorld, name: string) {
+    const published = this.requirePublished(name);
+    await replaceManifestWithDirectory(published);
+    assert.equal((await stat(published.manifestPath)).isDirectory(), true);
   },
 );
 

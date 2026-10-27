@@ -924,6 +924,42 @@ describe("runScopeIsolated", () => {
   });
 });
 
+/** `state` whose `recorded` marketplace holds only the enabled plugin `plugin`. */
+function withEnabledPlugin(
+  state: ExtensionState,
+  recorded: ExtensionState["marketplaces"][string],
+  marketplaceRoot: string,
+  plugin: string,
+): ExtensionState {
+  return {
+    ...state,
+    marketplaces: {
+      [recorded.name]: {
+        ...recorded,
+        plugins: {
+          [plugin]: {
+            version: "1.0.0",
+            resolvedSource: path.join(marketplaceRoot, "plugins", plugin),
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: [],
+            },
+            enabled: true,
+            provenance: "explicit",
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  };
+}
+
 describe("closeScopePass", () => {
   test("WR-05: a pristine scope reports nothing, skips the rebuild and creates nothing", async (t) => {
     // arrange
@@ -952,33 +988,7 @@ describe("closeScopePass", () => {
     const state = recordedState(scope);
     const recorded = state.marketplaces["mp"];
     assert.ok(recorded !== undefined);
-    const delisted: ExtensionState = {
-      ...state,
-      marketplaces: {
-        mp: {
-          ...recorded,
-          plugins: {
-            gone: {
-              version: "1.0.0",
-              resolvedSource: path.join(scope.marketplaceRoot, "plugins", "gone"),
-              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-              resources: {
-                skills: [],
-                prompts: [],
-                agents: [],
-                mcpServers: [],
-                hooks: [],
-                workflows: [],
-              },
-              enabled: true,
-              provenance: "explicit",
-              installedAt: "2026-01-01T00:00:00.000Z",
-              updatedAt: "2026-01-01T00:00:00.000Z",
-            },
-          },
-        },
-      },
-    };
+    const delisted = withEnabledPlugin(state, recorded, scope.marketplaceRoot, "gone");
     await mkdir(scope.project.extensionRoot, { recursive: true });
     await saveState(scope.project.extensionRoot, delisted);
     await writeUnder(recorded.manifestPath, JSON.stringify({ name: "mp", plugins: [] }));
@@ -1030,6 +1040,50 @@ describe("closeScopePass", () => {
       },
     ]);
     assert.deepStrictEqual(lockHeldAtRebuild, [true]);
+    verify(hooksRouting);
+  });
+
+  test("D-PL5-28: reports a plugin of a refused marketplace before the delisted check, which then skips it", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "close-refused");
+    const state = recordedState(scope);
+    const recorded = state.marketplaces["mp"];
+    assert.ok(recorded !== undefined);
+    const refused = withEnabledPlugin(state, recorded, scope.marketplaceRoot, "gone");
+    await mkdir(scope.project.extensionRoot, { recursive: true });
+    await saveState(scope.project.extensionRoot, refused);
+    await writeUnder(
+      recorded.manifestPath,
+      JSON.stringify({ name: "claude-plugins-v2", plugins: [] }),
+    );
+    const hooksRouting = mock<InstallHooksRouting>({ exactParams: true, name: "hooks routing" });
+    when(() => hooksRouting.rebuildRoutingTables)
+      .thenReturn(() => undefined)
+      .times(1);
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await closeScopePass(
+      "project",
+      { plan: planOf({}), invalidOutcomes: [], state: refused },
+      scope.cwd,
+      hooksRouting,
+      outcomes,
+    );
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-declarer-unreadable",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "gone",
+        reason: "invalid manifest",
+        cause: new Error(
+          'Claude Code refuses the marketplace name "mp": it looks like one of Anthropic\'s own',
+        ),
+      },
+    ]);
     verify(hooksRouting);
   });
 

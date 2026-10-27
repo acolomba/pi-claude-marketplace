@@ -121,7 +121,10 @@ async function classifyInstalledPluginRow(
   installed: ExtensionState["marketplaces"][string]["plugins"][string],
   manifestEntry: MarketplaceManifest["plugins"][number] | undefined,
   scope: Scope,
-  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
+  marketplaceContext: Pick<
+    ResolveContext,
+    "marketplaceRoot" | "marketplaceName" | "marketplaceSource"
+  >,
   cwd: string,
 ): Promise<PluginIndexRow> {
   const candidate: UpgradeCandidate =
@@ -153,7 +156,10 @@ async function classifyInstalledPluginRow(
  */
 async function classifyNotInstalledPluginRow(
   entry: MarketplaceManifest["plugins"][number],
-  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
+  marketplaceContext: Pick<
+    ResolveContext,
+    "marketplaceRoot" | "marketplaceName" | "marketplaceSource"
+  >,
   locations: ScopedLocations,
 ): Promise<PluginIndexRow> {
   // RSTA-01 / RSTA-03: the shared presence-derived probe owns the git-source
@@ -227,6 +233,7 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
         const marketplaceContext = {
           marketplaceRoot: mp.marketplaceRoot,
           marketplaceName: marketplace,
+          marketplaceSource: mp.source,
         };
 
         const installedNames = new Set(Object.keys(mp.plugins));

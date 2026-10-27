@@ -692,6 +692,11 @@ const SOURCE_CASES = [
     source: () => parsePluginSource("https://gitlab.example.com/team/marketplace"),
     cloneRemains: false,
   },
+  {
+    kind: "hosted",
+    source: () => parsePluginSource("https://catalog.example/acme/tools/marketplace.json"),
+    cloneRemains: false,
+  },
 ] as const;
 
 for (const sourceCase of SOURCE_CASES) {
@@ -906,7 +911,7 @@ test("retains the source clone when a forward-compatible recorded kind is unavai
       }
 
       sourceKindReads += 1;
-      return sourceKindReads <= 8 ? "unknown" : "future";
+      return sourceKindReads <= 10 ? "unknown" : "future";
     },
   });
   testContext.after(() => {
@@ -931,7 +936,7 @@ test("retains the source clone when a forward-compatible recorded kind is unavai
   // assert
   assert.strictEqual(outcome, undefined);
   assert.deepStrictEqual(notification.calls, [{ message: "● future-source [project] (removed)" }]);
-  assert.strictEqual(sourceKindReads, 12);
+  assert.strictEqual(sourceKindReads, 15);
   assert.strictEqual(await readFile(path.join(cloneDir, "sentinel"), "utf8"), "clone");
   assert.deepStrictEqual(await loadState(locations.extensionRoot), {
     schemaVersion: 3,
@@ -1492,14 +1497,10 @@ test("keeps exact partial state and silent cleanup residue before retry converge
   retryNotification.verifyInteractions();
 });
 
-test("subtracts a dropped workflow envelope from the persisted row and leaves hooks alone", async (testContext) => {
-  // arrange -- the per-plugin fold in this loop is hand-rolled and reads
-  // `outcome.dropped` structurally, so a six-axis argument satisfies it with no
-  // compile error. This case fails when the workflows filter line is absent.
-  //
-  // Its hooks half is the other direction: this filter omits the hooks axis and
-  // that omission predates this work (CASCADEAX-01 in .planning/BACKLOG.md), so
-  // the record is asserted to STILL name the hook the cascade dropped.
+test("D-PL5-15: a partial failure subtracts every dropped axis, hooks and workflows included, from the persisted row", async (testContext) => {
+  // arrange -- every axis keeps one name the cascade did not drop, and the
+  // dropped command sits in `prompts`, so a fold that skips an axis or maps
+  // one to the wrong field leaves a different row.
   const { cwd, locations } = await projectCase(testContext);
   const marketplace = "workflow-partial";
   await seedMarketplace(locations, {
@@ -1508,8 +1509,11 @@ test("subtracts a dropped workflow envelope from the persisted row and leaves ho
     source: pathSource("./workflow-partial"),
     plugins: {
       beta: pluginRecord({
-        hooks: ["beta"],
-        skills: ["beta-skill"],
+        agents: ["beta-agent", "beta-kept-agent"],
+        hooks: ["beta", "beta-kept-hook"],
+        mcpServers: ["beta-mcp", "beta-kept-mcp"],
+        prompts: ["beta-command", "beta-kept-command"],
+        skills: ["beta-skill", "beta-kept-skill"],
         workflows: ["beta:greet", "beta:farewell"],
       }),
     },
@@ -1518,10 +1522,10 @@ test("subtracts a dropped workflow envelope from the persisted row and leaves ho
     Promise.resolve({
       ok: false,
       dropped: {
-        agents: [],
-        commands: [],
+        agents: ["beta-agent"],
+        commands: ["beta-command"],
         hooks: ["beta"],
-        mcpServers: [],
+        mcpServers: ["beta-mcp"],
         skills: ["beta-skill"],
         workflows: ["beta:greet"],
       },
@@ -1543,10 +1547,14 @@ test("subtracts a dropped workflow envelope from the persisted row and leaves ho
   // assert
   const persisted = await loadState(locations.extensionRoot);
   const resources = persisted.marketplaces[marketplace]?.plugins["beta"]?.resources;
-  assert.ok(resources, "expected the failed plugin row to survive");
-  assert.deepStrictEqual(resources.workflows, ["beta:farewell"]);
-  assert.deepStrictEqual(resources.skills, []);
-  assert.deepStrictEqual(resources.hooks, ["beta"]);
+  assert.deepStrictEqual(resources, {
+    agents: ["beta-kept-agent"],
+    hooks: ["beta-kept-hook"],
+    mcpServers: ["beta-kept-mcp"],
+    prompts: ["beta-kept-command"],
+    skills: ["beta-kept-skill"],
+    workflows: ["beta:farewell"],
+  });
   notification.verifyInteractions();
 });
 

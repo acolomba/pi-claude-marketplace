@@ -15,9 +15,9 @@
 //   - WR-01: every per-scope step is isolated, so one scope's throw becomes
 //     one structured row and the other scope still runs.
 //   - Per scope, `openScopePass` runs the read pass and then the AMIG-01 MCP
-//     move; `closeScopePass` reports the unreadable declarer and the delisted
-//     plugins and rebuilds the hook routing table. A caller's own steps run
-//     between the two.
+//     move; `closeScopePass` reports the unreadable declarer, the plugins of a
+//     marketplace Claude Code refuses, and the delisted plugins, and rebuilds
+//     the hook routing table. A caller's own steps run between the two.
 //   - IL-2 / RECON-04: `notifyScopePasses` sends the one migration notice and
 //     at most one cascade for both scopes (`notifyScopeOutcomes`).
 //
@@ -38,7 +38,11 @@ import { withLockedStateTransaction } from "../../transaction/with-state-guard.t
 
 import { classifyReadPassThrow, MigrateConfigSaveError } from "./apply-outcomes.ts";
 import { settleMoveCascade, withPlannedInstallsLanded } from "./convergence.ts";
-import { reportDelistedPlugins, reportUnreadableDeclarer } from "./delisted-plugins.ts";
+import {
+  reportDelistedPlugins,
+  reportRefusedMarketplaces,
+  reportUnreadableDeclarer,
+} from "./delisted-plugins.ts";
 import { buildScopeSatisfactionVerdict, verdictAfterToggles } from "./dependency-verdict.ts";
 import { migrateLegacyMcpEntries } from "./mcp-migration.ts";
 import { buildReconcileAppliedCascade } from "./notify.ts";
@@ -501,7 +505,9 @@ export async function openScopePass(input: ScopePassInput): Promise<ScopeReadRes
  * declarer's row comes after the caller's own rows, so a failure the caller
  * reported for the same plugin suppresses it; the delisted rows follow the
  * walk's row, which names a delisted plugin whose installed copy cannot be
- * read with the fuller cause. The routing rebuild runs last, so the next Pi
+ * read with the fuller cause. The rows for the plugins of a marketplace Claude
+ * Code refuses come before the delisted rows, so a refused plugin gets one row
+ * (D-PL5-28). The routing rebuild runs last, so the next Pi
  * event fires against a bucket that reflects the scope after the pass.
  */
 export async function closeScopePass(
@@ -512,6 +518,7 @@ export async function closeScopePass(
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
   reportUnreadableDeclarer(scope, readResult, outcomes);
+  await reportRefusedMarketplaces(scope, readResult.state, outcomes);
   await reportDelistedPlugins(scope, readResult.state, outcomes);
   await rebuildScopeRoutingTableIsolated(scope, cwd, hooksRouting, outcomes);
 }

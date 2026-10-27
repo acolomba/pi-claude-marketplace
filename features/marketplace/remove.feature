@@ -208,8 +208,8 @@ Feature: Marketplace remove
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons                         | scope   | cause chain                                                                                                                 | cause truncated | leaks | rollback partial |
-      | tools            | project           | failed             | tools@tools | tools | failed | marketplace in local layer only | project | The marketplace tools is declared only in the local config (claude-plugins.local.json). Run the command again with --local. | false           |       |                  |
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons                         | scope   | cause chain                                                                                                                 | cause truncated | leaks | rollback partial |
+      | tools            | project           | failed             | tools | tools | failed | marketplace in local layer only | project | The marketplace tools is declared only in the local config (claude-plugins.local.json). Run the command again with --local. | false           |       |                  |
     Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
       | name  | source                    |
       | tools | {home}/marketplaces/tools |
@@ -350,8 +350,8 @@ Feature: Marketplace remove
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons                         | scope   | cause chain                                                                                                                 | cause truncated | leaks | rollback partial |
-      | tools            | project           | failed             | tools@tools | tools | failed | marketplace in local layer only | project | The marketplace tools is declared only in the local config (claude-plugins.local.json). Run the command again with --local. | false           |       |                  |
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons                         | scope   | cause chain                                                                                                                 | cause truncated | leaks | rollback partial |
+      | tools            | project           | failed             | tools | tools | failed | marketplace in local layer only | project | The marketplace tools is declared only in the local config (claude-plugins.local.json). Run the command again with --local. | false           |       |                  |
     Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
       | name  | source                    |
       | tools | {home}/marketplaces/tools |
@@ -367,8 +367,8 @@ Feature: Marketplace remove
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons                        | scope   | cause chain                                                                                                             | cause truncated | leaks | rollback partial |
-      | tools            | project           | failed             | tools@tools | tools | failed | marketplace in base layer only | project | The marketplace tools is declared only in the base config (claude-plugins.json). Run the command again without --local. | false           |       |                  |
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons                        | scope   | cause chain                                                                                                             | cause truncated | leaks | rollback partial |
+      | tools            | project           | failed             | tools | tools | failed | marketplace in base layer only | project | The marketplace tools is declared only in the base config (claude-plugins.json). Run the command again without --local. | false           |       |                  |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name  | source                    |
       | tools | {home}/marketplaces/tools |
@@ -605,8 +605,8 @@ Feature: Marketplace remove
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons    | scope   | cause chain                                                                    | cause truncated | leaks | rollback partial |
-      | tools            | project           | failed             | tools@tools | tools | failed | unreadable | project | cannot read the dependencies of lib@tools: its marketplace manifest is invalid | false           |       |                  |
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons    | scope   | cause chain                                                                    | cause truncated | leaks | rollback partial |
+      | tools            | project           | failed             | tools | tools | failed | unreadable | project | cannot read the dependencies of lib@tools: its marketplace manifest is invalid | false           |       |                  |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name  | source                    |
       | tools | {home}/marketplaces/tools |

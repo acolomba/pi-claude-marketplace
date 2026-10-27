@@ -2,7 +2,7 @@
  * The official marketplace names of Claude Code 2.1.310, copied from the
  * binary. Upstream lowercases a marketplace name before it checks this set.
  */
-const OFFICIAL_MARKETPLACE_NAMES: ReadonlySet<string> = new Set([
+export const OFFICIAL_MARKETPLACE_NAMES: ReadonlySet<string> = new Set([
   "claude-code-marketplace",
   "claude-code-plugins",
   "claude-plugins-official",

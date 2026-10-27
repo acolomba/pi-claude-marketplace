@@ -141,6 +141,7 @@ const gitPluginRootContract = {
 const resolveContextContract = {
   marketplaceRoot: "/marketplaces/main",
   marketplaceName: "third-party",
+  marketplaceSource: { kind: "hosted", raw: "https://h.example/m.json" },
   statKind: statKindReaderContract,
   resolveGitPluginRoot: () => Promise.resolve(gitPluginRootContract),
 } satisfies ResolveContext;

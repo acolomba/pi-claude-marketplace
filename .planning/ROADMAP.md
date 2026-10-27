@@ -48,7 +48,7 @@ parent session applies them at merge.
 - [x] **Phase 2: Apply Ordering and Installed Declarations** - `pending` and `apply` agree, and dependency reads come from the installed copy (completed 2026-10-27)
 - [ ] **Phase 3: Dependency Cascade Rows and Status** - cascade rows name every member, declarer, and degraded dependency
 - [x] **Phase 4: Dependency Resolver Residue** - the resolver installs what it previewed and refuses before it moves (completed 2026-10-27)
-- [ ] **Phase 5: Marketplace Command Parity** - reserved names, hosted manifests, `market` alias, row ids, shorthand, remove reporting
+- [x] **Phase 5: Marketplace Command Parity** - reserved names, hosted manifests, `market` alias, row ids, shorthand, remove reporting (completed 2026-10-27)
 - [x] **Phase 6: Import Marketplace Planning** - import plans marketplaces the way Claude Code registers them
 - [x] **Phase 7: Git Errors and Lock Discipline** - one git-host classifier, and every clone read or cleanup under the lock (completed 2026-10-27)
 - [x] **Phase 8: Background Autoupdate** - autoupdate updates in the background, as Claude Code does (completed 2026-10-27)
