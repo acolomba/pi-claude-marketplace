@@ -5484,8 +5484,7 @@ test("D-PL6-09: a settings marketplace whose source two records hold blocks its 
   const { cwd, project } = await createHermeticScopes(t, "source-ambiguous");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const cause =
-    "Existing marketplace source ambiguous recorded marketplaces: first-mp, second-mp " +
-    "does not match Claude settings source ./mp.";
+    "Claude settings source ./mp matches more than one recorded marketplace: first-mp, second-mp.";
 
   // act
   const importResult = await importClaudeSettings({
@@ -5534,8 +5533,7 @@ test("D-PL6-09: an extra known marketplace no plugin names fails when two record
   const { cwd, project } = await createHermeticScopes(t, "source-ambiguous-unreferenced");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const cause =
-    "Existing marketplace source ambiguous recorded marketplaces: first-mp, second-mp " +
-    "does not match Claude settings source ./mp.";
+    "Claude settings source ./mp matches more than one recorded marketplace: first-mp, second-mp.";
 
   // act
   const importResult = await importClaudeSettings({
@@ -5573,6 +5571,64 @@ test("D-PL6-09: an extra known marketplace no plugin names fails when two record
         "  ⊘ mp (failed)\n" +
         `    cause: ${cause}\n\n` +
         "Import: 2 failures",
+      severity: "error",
+    },
+  ]);
+  await assert.rejects(stat(project.baseConfigJsonPath), { code: "ENOENT" });
+  verifyBoundary();
+});
+
+test("D-PL6-09: two settings marketplaces that claim one record block each other before any add", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "source-multiply-claimed");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const cause =
+    "Recorded marketplace recorded-mp is claimed by more than one Claude settings marketplace.";
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: { "plugin@mp": true },
+            extraKnownMarketplaces: { mp: { directory: "./mp" }, twin: { directory: "./mp" } },
+          }),
+        ),
+      loadState: () =>
+        Promise.resolve(
+          recordedState([
+            recordedMarketplace({
+              name: "recorded-mp",
+              scope: "project",
+              source: pathSource("./mp"),
+            }),
+          ]),
+        ),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    marketplaceFailures: [addFailed("twin", "project", cause)],
+    sourceMismatches: [mismatched("plugin", "mp", "project", cause)],
+  });
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Some operations have failed.\n\n" +
+        "⊘ mp [project] (failed)\n" +
+        "  ⊘ plugin (failed) {source mismatch}\n\n" +
+        "⊘ twin [project] (failed)\n" +
+        "  ⊘ twin (failed)\n" +
+        `    cause: ${cause}\n\n` +
+        "Import: 4 failures",
       severity: "error",
     },
   ]);

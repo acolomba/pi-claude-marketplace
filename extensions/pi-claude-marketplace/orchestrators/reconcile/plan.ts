@@ -113,20 +113,30 @@ interface PendingMarketplaceClaim {
   readonly candidateMarketplace: string;
 }
 
-interface MarketplaceClaimConflict extends PlannedSourceDetail {
+/**
+ * D-PL6-09: why a declaration's source claim is conflicted. Its source matches
+ * more than one undeclared record (`ambiguous`), or the one record it matches
+ * is claimed by another declaration too (`multiply-claimed`).
+ */
+export type MarketplaceClaimConflict =
+  | { readonly kind: "ambiguous"; readonly recorded: readonly string[] }
+  | { readonly kind: "multiply-claimed"; readonly recorded: string };
+
+interface DeclaredClaimConflict extends PlannedSourceDetail {
   readonly declaredMarketplace: string;
+  readonly conflict: MarketplaceClaimConflict;
 }
 
 interface MarketplaceClaims {
   readonly recordedByDeclared: ReadonlyMap<string, string>;
-  readonly conflicts: readonly MarketplaceClaimConflict[];
+  readonly conflicts: readonly DeclaredClaimConflict[];
   readonly conflictedDeclared: ReadonlySet<string>;
   readonly conflictedRecorded: ReadonlySet<string>;
 }
 
 interface MarketplaceClaimAccumulator {
   readonly recordedByDeclared: Map<string, string>;
-  readonly conflicts: MarketplaceClaimConflict[];
+  readonly conflicts: DeclaredClaimConflict[];
   readonly pending: PendingMarketplaceClaim[];
   readonly conflictedRecorded: Set<string>;
 }
@@ -168,6 +178,7 @@ function collectMarketplaceClaim(
       declaredMarketplace,
       declaredSource: declaredEntry.entry.source,
       recordedSource: `ambiguous recorded marketplaces: ${candidates.join(", ")}`,
+      conflict: { kind: "ambiguous", recorded: candidates },
     });
     for (const candidate of candidates) {
       acc.conflictedRecorded.add(candidate);
@@ -214,6 +225,7 @@ function resolvePendingClaims(acc: MarketplaceClaimAccumulator): void {
         declaredMarketplace: claim.declaredMarketplace,
         declaredSource: claim.declaredSource,
         recordedSource: `recorded marketplace claimed by multiple declarations: ${candidateMarketplace}`,
+        conflict: { kind: "multiply-claimed", recorded: candidateMarketplace },
       });
     }
   }
@@ -259,6 +271,22 @@ export function marketplaceSourceClaims(
   recorded: ExtensionState["marketplaces"],
 ): ReadonlyMap<string, string> {
   return buildMarketplaceClaims(declared, recorded).recordedByDeclared;
+}
+
+/**
+ * D-PL6-09: why each declaration in a conflicted source claim is conflicted,
+ * read from the planner's own claim rule, keyed by the declared name.
+ */
+export function marketplaceClaimConflicts(
+  declared: MergedConfig["marketplaces"],
+  recorded: ExtensionState["marketplaces"],
+): ReadonlyMap<string, MarketplaceClaimConflict> {
+  return new Map(
+    buildMarketplaceClaims(declared, recorded).conflicts.map((conflict) => [
+      conflict.declaredMarketplace,
+      conflict.conflict,
+    ]),
+  );
 }
 
 /**

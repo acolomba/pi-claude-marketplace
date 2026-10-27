@@ -11,6 +11,7 @@ import {
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
+  marketplaceClaimConflicts,
   marketplaceSourceClaims,
   planReconcile,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
@@ -2095,5 +2096,62 @@ describe("marketplaceSourceClaims", () => {
 
     // assert
     assert.deepStrictEqual(claims, new Map());
+  });
+});
+
+describe("marketplaceClaimConflicts", () => {
+  test("names every record a source two records hold matches", () => {
+    // arrange
+    const declared = mergedConfig({ alias: { source: "acme/actual" } }).marketplaces;
+    const recorded = stateWith({
+      zeta: marketplaceRecord("zeta", githubSource("acme/actual")),
+      alpha: marketplaceRecord("alpha", githubSource("acme/actual")),
+    }).marketplaces;
+
+    // act
+    const conflicts = marketplaceClaimConflicts(declared, recorded);
+
+    // assert
+    assert.deepStrictEqual(
+      conflicts,
+      new Map([["alias", { kind: "ambiguous", recorded: ["alpha", "zeta"] }]]),
+    );
+  });
+
+  test("names the record two declarations claim on each declaration", () => {
+    // arrange
+    const declared = mergedConfig({
+      "alias-a": { source: "acme/actual" },
+      "alias-b": { source: "acme/actual" },
+    }).marketplaces;
+    const recorded = stateWith({
+      actual: marketplaceRecord("actual", githubSource("acme/actual")),
+    }).marketplaces;
+
+    // act
+    const conflicts = marketplaceClaimConflicts(declared, recorded);
+
+    // assert
+    assert.deepStrictEqual(
+      conflicts,
+      new Map([
+        ["alias-a", { kind: "multiply-claimed", recorded: "actual" }],
+        ["alias-b", { kind: "multiply-claimed", recorded: "actual" }],
+      ]),
+    );
+  });
+
+  test("names no conflict for a one-to-one claim", () => {
+    // arrange
+    const declared = mergedConfig({ alias: { source: "acme/actual" } }).marketplaces;
+    const recorded = stateWith({
+      actual: marketplaceRecord("actual", githubSource("acme/actual")),
+    }).marketplaces;
+
+    // act
+    const conflicts = marketplaceClaimConflicts(declared, recorded);
+
+    // assert
+    assert.deepStrictEqual(conflicts, new Map());
   });
 });

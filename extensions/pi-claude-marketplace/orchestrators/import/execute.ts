@@ -10,7 +10,12 @@ import {
 } from "../../orchestrators/plugin/operations.ts";
 import { buildScopeSatisfactionVerdict } from "../../orchestrators/reconcile/dependency-verdict.ts";
 import { enabledRowFromOutcome } from "../../orchestrators/reconcile/notify.ts";
-import { marketplaceSourceClaims, planReconcile } from "../../orchestrators/reconcile/plan.ts";
+import {
+  marketplaceClaimConflicts,
+  marketplaceSourceClaims,
+  planReconcile,
+  type MarketplaceClaimConflict,
+} from "../../orchestrators/reconcile/plan.ts";
 import { loadConfig, type PluginConfigEntry } from "../../persistence/config-io.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import {
@@ -980,6 +985,27 @@ type PlannedMismatch = ReconcilePlan["sourceMismatches"][number];
 type SettledMismatch = Extract<PlannedMismatch, { cause: "source-mismatch" | "unknown-stored" }>;
 
 /**
+ * D-PL6-09: the cause of a source mismatch. A conflicted source claim names
+ * what conflicts, because the settings source does match a record.
+ */
+function sourceMismatchCause(
+  marketplace: PlannedMarketplace,
+  recordedSource: string,
+  conflict: MarketplaceClaimConflict | undefined,
+): string {
+  if (conflict === undefined) {
+    return `Existing marketplace source ${recordedSource} does not match Claude settings source ${marketplace.source}.`;
+  }
+
+  switch (conflict.kind) {
+    case "ambiguous":
+      return `Claude settings source ${marketplace.source} matches more than one recorded marketplace: ${conflict.recorded.join(", ")}.`;
+    case "multiply-claimed":
+      return `Recorded marketplace ${conflict.recorded} is claimed by more than one Claude settings marketplace.`;
+  }
+}
+
+/**
  * IMP-05: settle a planned marketplace the reconcile planner reported as a
  * source mismatch, recording the blocked outcome directly on `result` /
  * `blockedMarketplaces`.
@@ -990,6 +1016,7 @@ function recordPlannedMismatch(
   scopePlan: ScopedImportPlan,
   marketplace: PlannedMarketplace,
   mismatch: SettledMismatch,
+  conflict: MarketplaceClaimConflict | undefined,
 ): void {
   switch (mismatch.cause) {
     case "unknown-stored":
@@ -1020,7 +1047,7 @@ function recordPlannedMismatch(
       );
       return;
     case "source-mismatch": {
-      const cause = `Existing marketplace source ${mismatch.recordedSource} does not match Claude settings source ${marketplace.source}.`;
+      const cause = sourceMismatchCause(marketplace, mismatch.recordedSource, conflict);
       const plugins = pluginsForMarketplace(scopePlan.pluginsToInstall, marketplace.marketplace);
       if (plugins.length === 0) {
         // D-PL6-09: no plugin row would carry the mismatch, so the
@@ -1444,6 +1471,8 @@ type ImportReadPass =
        * the name the config declares it under.
        */
       readonly configNames: ReadonlyMap<string, string>;
+      /** D-PL6-09: each settings marketplace in a conflicted source claim. */
+      readonly conflicts: ReadonlyMap<string, MarketplaceClaimConflict>;
     }
   | { readonly kind: "lock-held"; readonly error: StateLockHeldError };
 
@@ -1507,6 +1536,7 @@ async function readPassForImport(
             ),
           ),
           configNames: configNamesByRecorded(config.merged.marketplaces, tx.state.marketplaces),
+          conflicts: marketplaceClaimConflicts(desired.marketplaces, tx.state.marketplaces),
         };
       },
       { loadState: async () => loadState(scope, opts.cwd) },
@@ -1595,7 +1625,14 @@ async function ensurePlannedMarketplaces(
   for (const marketplace of scopePlan.marketplacesToEnsure) {
     const mismatch = plannedMismatchFor(read.plan, marketplace.marketplace);
     if (mismatch !== undefined) {
-      recordPlannedMismatch(result, blockedMarketplaces, scopePlan, marketplace, mismatch);
+      recordPlannedMismatch(
+        result,
+        blockedMarketplaces,
+        scopePlan,
+        marketplace,
+        mismatch,
+        read.conflicts.get(marketplace.marketplace),
+      );
     } else if (ownValue(read.state.marketplaces, marketplace.marketplace) === undefined) {
       // eslint-disable-next-line no-await-in-loop -- each add locks the scope (retries: 0)
       await addOnePlannedMarketplace(opts, result, blockedMarketplaces, scopePlan, marketplace);

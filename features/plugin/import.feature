@@ -778,6 +778,35 @@ Feature: Plugin import
       | other            | user              | failed             | other@other | other | failed |         | user  | Marketplace "fixtures" already exists in user scope. | false           |       |                  |
     Then the user scope has no installed plugins
 
+  Scenario: Importing two settings marketplaces that name one known marketplace's source fails both and says why
+    Given the marketplace "fixtures" is added to the user scope
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "extraKnownMarketplaces": {
+          "other": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          },
+          "twin": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade                      |
+      | severity            | error                        |
+      | needs reload        | false                        |
+      | summary             | Some operations have failed. |
+      | tally label         | Import                       |
+      | tally failures      | 4                            |
+      | tally warnings      | 0                            |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons | scope | cause chain                                                                             | cause truncated | leaks | rollback partial |
+      | other            | user              | failed             | other@other | other | failed |         | user  | Recorded marketplace fixtures is claimed by more than one Claude settings marketplace. | false           |       |                  |
+      | twin             | user              | failed             | twin@twin   | twin  | failed |         | user  | Recorded marketplace fixtures is claimed by more than one Claude settings marketplace. | false           |       |                  |
+
   Scenario: Importing a plugin whose install rollback cannot finish names the rollback phase
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
