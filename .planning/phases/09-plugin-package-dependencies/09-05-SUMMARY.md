@@ -141,7 +141,7 @@ For `.planning/PROJECT.md` "Key Decisions" (Decision | Rationale | Outcome):
 | D-PL9-03: A plugin root outside `<scopeRoot>/pi-claude-marketplace/` (a dir or file marketplace) is never written. Without node_modules, the install notes the folder and the command to run there | NFR-10, plus the Pi capability gap: plugins run in place, not from a per-version cache copy | Good (uncertain choice 3) |
 | D-PL9-04: The install runs in a `sources-staging` work dir that receives only `package.json` and the lockfile. node_modules is renamed into the plugin root. A replaced one is parked in the work dir and restored when the move fails | Same filesystem as both clone roots. No plugin `.npmrc` or `bunfig.toml` is read | Good |
 | D-PL9-05: `packages` is an install ledger phase between workflows and state. It never throws for a package failure. Its undo removes a node_modules it created | Every `runInstallLedger` caller gets it. A bridge failure never spends the network | Good |
-| D-PL9-06: The ledger skips a root that has node_modules. The update hook replaces it when the policy skips the recorded revision and keeps it otherwise | Enable and reinstall of an unchanged copy stay offline. A revision move can bring a new lockfile | Good (uncertain choice 5) |
+| D-PL9-06: The ledger skips a root that has node_modules. The update hook replaces it when the move changed the commit or the version, and keeps it otherwise | Enable and reinstall of an unchanged copy stay offline. A revision move can bring a new lockfile | Good (uncertain choice 5) |
 | D-PL9-07: The shared update runner (`materialize-latest.ts`) runs the package step after a swap that ends `updated` and appends its note to the outcome's notes | update, reinstall, apply catalog moves, and dependency moves share that runner | Good |
 | D-PL9-08: Claude Code's lockfile-content sanitizer is not ported (backlog PKGDEP-03) | `--ignore-scripts` and the isolated work dir carry the main protection | Pending |
 | D-PL9-09: Superseded by D-PL9-14 (no reason token; the note is the warning surface) | | Superseded |
@@ -149,7 +149,7 @@ For `.planning/PROJECT.md` "Key Decisions" (Decision | Rationale | Outcome):
 | D-PL9-11: Only `platform/git-credential.ts`, `bridges/hooks/dispatch-exec.ts`, `bridges/hooks/async-rewake/registry.ts`, and `platform/package-manager.ts` import `node:child_process`. `test/architecture/no-shell-out.test.ts` enforces it (it also rejects dynamic `import()` and `require`), and so does the rule-pack rule `child-process-chokepoint`. Only `orchestrators/plugin/package-install.ts` imports `platform/package-manager.ts` (`eslint.config.js` BLOCK C zone) | Corrected list: `exec-timer.ts` and `ring-buffer.ts` only name `child_process` in comments | Good |
 | D-PL9-12: `platform/package-manager.ts` exports one runner factory that takes the launcher, timeout, kill grace, and environment. The runner never rejects. `package-install.ts` binds the real launcher once | Dependency injection. No parameter defaults to a live boundary | Good |
 | D-PL9-13: Scenarios run the real npm against a loopback registry stand-in. The sandbox `~/.npmrc` pins the registry with `update-notifier=false`, `fetch-retries=0`, `logs-max=0`, `loglevel=silent` | No scenario reaches the public registry. The failure note is deterministic | Good |
-| D-PL9-14: A package note rides `discoveryWarnings` (install ledger) and the updated outcome's `notes` (update runner). No new Reason member (backlog PKGDEP-04) | A Reason member reaches files that Phases 1 and 3 own | Good (uncertain choice 6) |
+| D-PL9-14: A package note rides `discoveryWarnings` (install ledger) and the updated outcome's `notes` and `packageNote` (update runner); apply prints it as a post-commit warning and a dependency move puts it on the moved row's cause line. No new Reason member (backlog PKGDEP-04) | A Reason member reaches files that Phases 1 and 3 own | Good (uncertain choice 6) |
 | D-PL9-15: The spawn passes the argv verbatim, adds `npm_config_update_notifier=false`, never spawns synchronously, and takes the command as a parameter | The state lock's refresh needs the event loop. No banner in notes. `sonarjs/no-os-command-from-path` | Good |
 | D-PL9-16: An unparseable `package.json` gets the note "its package.json is not valid JSON". A non-object gets "its package.json is not a JSON object" | Claude Code's texts. Fail visibly, never block | Good |
 | D-PL9-17: The proof that a plugin finds its modules is a scenario where a session start hook of the installed plugin `require`s the npm package its lockfile lists and writes what it exports to a project file | The spike was positive: `SPIKE: positive -- SPIKE RESULT: ran from .../.pi/pi-claude-marketplace/sources/tools/plugins/pkp -- SPIKE PAYLOADS: []`. The hook runs from the plugin root, so Node resolves the package from its node_modules | Good |
@@ -193,6 +193,7 @@ D-PL9-10).
 - **PKGDEP-01: closed by this phase.** Commits: `f5ddedc8` feat(plugin): install a plugin's own npm or bun packages; `7e44cb66` feat(plugin): skip package installs that Claude Code refuses; `9eee85ff` test(features): prove plugin package installs end to end; `caf36f6b` test(features): prove a plugin hook loads its npm package; `ac0c892d` feat(plugin): note the package install a local plugin folder needs; `8a7b2348` feat(plugin): install the packages of an updated plugin; `f5d7880c` test(features): cover package notes for local folders and lockfiles; `949ff8c6` test(features): cover package installs on update and reinstall. The session-start rerun on a fresh machine moves to PKGDEP-02.
 - **PKGDEP-02 (new):** the load-time "packages not installed" / "packages refused" diagnostic, and `update` retrying the package install of an up-to-date plugin, as Claude Code 2.1.310 does (texts in the 09-CONTEXT.md upstream evidence). Seams: `orchestrators/reconcile/load.ts` and the up-to-date path of `update-flow.ts`.
 - **PKGDEP-03 (new):** Claude Code's lockfile-content sanitizer (registry-only dependencies, integrity required, no `overrides` or `patchedDependencies`, root renamed `plugin-dependencies`, zero-package skip), and its secret redaction of npm output (T-09-08, T-09-10).
+- **PKGDEP-05 (new):** uninstall removes the plugin's node_modules from a clone it keeps, so a later install of a new lockfile does not skip the package step (review WR-03).
 - **PKGDEP-04 (new):** a closed-set row reason for a package install that did not happen, on the install, update, enable, reconcile, and reinstall rows (the composer fan-out in 09-RESEARCH.md section 7).
 
 ## Uncertain choices (for user review)
@@ -304,6 +305,34 @@ Final disposition of the phase register:
 | T-09-23 | mitigate | The exit code was written into the log and read back (`CHECK_EXIT=0`), and the log body was read |
 | T-09-24 | mitigate | Every scenario that can spawn npm starts the loopback stand-in first; dir-marketplace scenarios spawn nothing |
 | T-09-SC | accept | No plan of the phase added a dependency (`package.json` and `package-lock.json` unchanged since 0483948f) |
+
+## Addendum: code review fixes
+
+The code review (`09-REVIEW.md`, disposition in `09-REVIEW-DISPOSITION.md`) found two blockers and five warnings. Six were fixed in a5ec61b8..adb28310; `npm run check` exited 0 at adb28310 (912 scenarios). D-PL9-06 and D-PL9-14 above carry the fixed behavior.
+
+### New uncertain choices (33-38; total 38)
+
+33. **A dependency move's package note rides the row's cause line (CR-02).** It reads `cause: <range disclosure> -> <note>` and raises the row to warning. A separate field would need `notification-types.ts`, which this phase may not edit.
+34. **`marketplace update` with autoupdate still drops the note.** Its rows render through `orchestrators/marketplace/update.messaging.ts`, outside the fix's functions. Follow-up.
+35. **The D-PL9-03 note names the marketplace, not the plugin's folder (WR-02).** It now reads `its folder in the marketplace "<name>" is outside the folders this extension manages ...`, so redaction leaves it whole. A relative path would need the marketplace root at both callers.
+36. **The failure note compacts npm output (WR-04).** It strips ANSI and control characters, drops `npm warn` lines when anything else printed, strips `npm error` / `npm ERR!` prefixes, and joins lines with "; " before the 500-character cut. Claude Code logs the raw text.
+37. **No process-group kill (WR-01).** The run settles one grace after SIGKILL, but a grandchild holding the pipes can keep running.
+38. **WR-03 not fixed.** Uninstall keeps node_modules in a kept clone, so a later install skips the step (PKGDEP-05).
+
+### Further files outside the Files line (review fixes)
+
+| File | Reason |
+| --- | --- |
+| `extensions/pi-claude-marketplace/orchestrators/types.ts` | `packageNote?` on `PluginUpdateUpdatedOutcome` (CR-02) |
+| `extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts` | `postCommitWarnings?` on converged and backfilled outcomes, `carriedPackageNote` (CR-02) |
+| `extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts` | `convergedMoveOutcomes` only (CR-02) |
+| `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts` | `grownMoveOutcomes`, `surfacePostCommitWarnings`, `postCommitWarningsOf` (CR-02) |
+| `extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts` | `moveRow`, `withPackageNote` (CR-02) |
+| `test/orchestrators/reconcile/{notify,apply,apply-outcomes}.test.ts`, `test/orchestrators/plugin/dependency-move.test.ts` | Paired tests of those sources (100% direct coverage) |
+
+### Further follow-ups (review info items)
+
+IN-01 a failed restore deletes the parked node_modules; IN-02 an unlistable root warns for a plugin with no package.json; IN-03 the BLOCK C zone exempts by basename; IN-04 captured output can split multi-byte characters; IN-05 the diagnostic header calls the note a "declared component"; IN-06 a rolled-back cascade leaves members' node_modules; IN-07 the timeout note uses the constant, not the runner's timeout; IN-08 an update that drops its dependencies keeps the old node_modules.
 
 ## Self-Check: PASSED
 
