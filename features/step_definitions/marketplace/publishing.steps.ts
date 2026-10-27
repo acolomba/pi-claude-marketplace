@@ -31,6 +31,7 @@ import {
   publishMarketplace,
   publishOfficialMarketplace,
   removePublishedPlugin,
+  removePublishedSource,
   republishMarketplace,
   requireFreeRoot,
   rewritePublishedManifest,
@@ -127,6 +128,13 @@ Given(
     const published = this.requirePublished(name);
     await removePublishedPlugin(published, plugin);
     await assert.rejects(stat(path.join(published.root, "plugins", plugin)), { code: "ENOENT" });
+  },
+);
+
+Given(
+  "the published source of the marketplace {string} is removed",
+  async function (this: ScenarioWorld, name: string) {
+    await removePublishedSource(this.requirePublished(name));
   },
 );
 
