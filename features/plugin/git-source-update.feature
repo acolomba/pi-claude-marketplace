@@ -153,6 +153,31 @@ Feature: Plugin git source update
     Then the git host receives no request
     Then the git-source plugin "ghp" installed in the project scope runs revision 2 of its repository
 
+  Scenario: Reinstalling a plugin at a release tag reads the tag from the fetched copy with no request
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the git repository "ghp" has a revision only the tag "v2.0.0" reaches, holding these plugins:
+      | name | version | path |
+      | ghp  | 2.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" names the ref "v2.0.0" for the plugin "ghp"
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project"
+    When the user runs "/claude:plugin reinstall ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status      | reasons | scope   | version |
+      | gits             | project           | ghp@gits | ghp  | reinstalled |         | project | 2.0.0   |
+    Then the git host receives no request
+    Then the git-source plugin "ghp" installed in the project scope runs revision 2 of its repository
+
   Scenario: Pending previews the revision a fetched git-source plugin now offers without a request
     Given the git repository "ghp" holds these plugins:
       | name | version | path |
@@ -307,7 +332,7 @@ Feature: Plugin git source update
     Then the git-source plugin "ghp" installed in the project scope runs revision 1 of its repository
 
     Examples:
-      | refusal              | reason              | status  | cause chain                                                                  |
-      | answers 404          | source missing      | 404     | HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git           |
-      | drops the connection | network unreachable | dropped | socket hang up, fetched https://{git host}/acme/ghp.git                      |
-      | answers 503          | network error       | 503     | HTTP Error: 503 Service Unavailable, fetched https://{git host}/acme/ghp.git |
+      | refusal              | reason              | status  | cause chain                                                                                                          |
+      | answers 404          | source missing      | 404     | 404 on https://{git host}/acme/ghp.git, HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git           |
+      | drops the connection | network unreachable | dropped | socket hang up, fetched https://{git host}/acme/ghp.git                                                              |
+      | answers 503          | network error       | 503     | 503 on https://{git host}/acme/ghp.git, HTTP Error: 503 Service Unavailable, fetched https://{git host}/acme/ghp.git |

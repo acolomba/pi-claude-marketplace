@@ -16,5 +16,6 @@ export {
 } from "./stage.ts";
 export { unstagePluginAgents } from "./unstage.ts";
 export { discoverPluginAgents } from "./discover.ts";
+export { assertAgentTargetsFree } from "./target-check.ts";
 
 export type { PreparedAgentsStaging } from "./types.ts";

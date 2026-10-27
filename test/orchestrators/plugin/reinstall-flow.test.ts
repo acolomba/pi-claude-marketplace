@@ -682,19 +682,26 @@ for (const coexist of [false, true]) {
         JSON.parse(await readFile(locations.agentsIndexPath, "utf8")),
         expectedIndex,
       );
-      const afterState = await loadState(locations.extensionRoot);
-      assert.deepStrictEqual(afterState, {
+      const migratedState = (updatedAt: string) => ({
         ...beforeState,
         marketplaces: {
           ...beforeState.marketplaces,
           mp: {
             ...beforeState.marketplaces.mp,
             plugins: {
-              hello: { ...oldRecord, resources: { ...oldRecord.resources, agents: expectedNames } },
+              hello: {
+                ...oldRecord,
+                resources: { ...oldRecord.resources, agents: expectedNames },
+                updatedAt,
+              },
             },
           },
         },
       });
+      assert.deepStrictEqual(
+        await loadState(locations.extensionRoot),
+        migratedState("2026-01-02T00:00:00.002Z"),
+      );
       if (!coexist) {
         await assert.rejects(readFile(oldTarget), { code: "ENOENT" });
       }
@@ -711,7 +718,10 @@ for (const coexist of [false, true]) {
         JSON.parse(await readFile(locations.agentsIndexPath, "utf8")),
         expectedIndex,
       );
-      assert.deepStrictEqual(await loadState(locations.extensionRoot), afterState);
+      assert.deepStrictEqual(
+        await loadState(locations.extensionRoot),
+        migratedState("2026-01-02T00:00:00.004Z"),
+      );
     });
   });
 }
@@ -4619,12 +4629,12 @@ test("SRC-01: a cold-cache reinstall whose git host answers 404 fails as source 
         fromVersion: "9.9.9",
         notes: ["HTTP Error: 404 Not Found"],
         reasons: ["source missing"],
-        cause: notFound,
+        cause: new Error("404 on https://github.com/org/repo.git", { cause: notFound }),
       });
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ gp v9.9.9 (failed) {source missing}\n    cause: HTTP Error: 404 Not Found",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ gp v9.9.9 (failed) {source missing}\n    cause: 404 on https://github.com/org/repo.git -> HTTP Error: 404 Not Found",
           severity: "error",
         },
       ]);

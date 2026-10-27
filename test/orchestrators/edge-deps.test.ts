@@ -54,6 +54,8 @@ interface FixturePlugin {
   /** Declare the plugin in `marketplace.json` (default true). */
   readonly inManifest?: boolean;
   readonly manifestVersion?: string;
+  /** The plugin.json version, when it differs from the manifest entry's. */
+  readonly pluginJsonVersion?: string;
   /** Declare an unsupported component kind on the manifest entry. */
   readonly declaresUnsupported?: boolean;
   /** Declare a non-empty `binaries` map, unsupported only for an official marketplace. */
@@ -178,12 +180,13 @@ async function layoutMarketplace(
   for (const plugin of plugins) {
     const pluginRoot = pluginRootIn(cwd, marketplaceName, plugin.name);
     if (plugin.pluginTree !== false) {
+      const pluginJsonVersion = plugin.pluginJsonVersion ?? plugin.manifestVersion;
       await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
       await writeFile(
         path.join(pluginRoot, ".claude-plugin", "plugin.json"),
         JSON.stringify({
           name: plugin.name,
-          ...(plugin.manifestVersion === undefined ? {} : { version: plugin.manifestVersion }),
+          ...(pluginJsonVersion === undefined ? {} : { version: pluginJsonVersion }),
         }),
         "utf8",
       );
@@ -303,6 +306,39 @@ const bucketizerCases = [
     title: "marks an installed record with a newer manifest version upgradable",
     marketplace: "upgradable-mp",
     plugins: () => [{ name: "plug", manifestVersion: "2.0.0", installed: { version: "1.0.0" } }],
+    rows: [{ name: "plug", status: "upgradable", version: "1.0.0" }],
+  },
+  {
+    title: "GLK-07: keeps a record at its plugin.json version installed when the entry differs",
+    marketplace: "plugin-json-current-mp",
+    plugins: () => [
+      {
+        name: "plug",
+        manifestVersion: "2.0.0",
+        pluginJsonVersion: "1.0.0",
+        installed: { version: "1.0.0" },
+      },
+    ],
+    rows: [{ name: "plug", status: "installed", version: "1.0.0" }],
+  },
+  {
+    title: "GLK-07: marks a record upgradable to a newer plugin.json version the entry omits",
+    marketplace: "plugin-json-newer-mp",
+    plugins: () => [{ name: "plug", pluginJsonVersion: "2.0.0", installed: { version: "1.0.0" } }],
+    rows: [{ name: "plug", status: "upgradable", version: "1.0.0" }],
+  },
+  {
+    title: "GLK-07: marks a git record with no mirror upgradable to a newer entry version",
+    marketplace: "cold-git-upgrade-mp",
+    plugins: () => [
+      {
+        name: "plug",
+        source: "https://example.com/plugin.git",
+        manifestVersion: "2.0.0",
+        pluginTree: false,
+        installed: { version: "1.0.0" },
+      },
+    ],
     rows: [{ name: "plug", status: "upgradable", version: "1.0.0" }],
   },
   {

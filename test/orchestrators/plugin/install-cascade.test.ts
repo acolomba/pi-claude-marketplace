@@ -1082,7 +1082,7 @@ for (const { label, declared } of [
       installedKeys: new Set(),
       knownMarketplaces: new Set([MARKETPLACE]),
       seam: recordingLedgerSeam(environment.cwd, locations, []),
-      tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, seen),
+      tagProbe: tagProbeAnswering({ kind: "no-matching-tag" }, seen),
     });
 
     // assert
@@ -1179,7 +1179,7 @@ for (const { label, declared, expected } of [
       rootAllowedMarketplaces: new Set<string>(),
       installedKeys: new Set(),
       knownMarketplaces: new Set([MARKETPLACE]),
-      tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, seen),
+      tagProbe: tagProbeAnswering({ kind: "no-matching-tag" }, seen),
     });
 
     // assert
@@ -1215,7 +1215,7 @@ test("T-03-19 a declaration past the input-size cap fails as too complex with no
     rootAllowedMarketplaces: new Set<string>(),
     installedKeys: new Set(),
     knownMarketplaces: new Set([MARKETPLACE]),
-    tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, seen),
+    tagProbe: tagProbeAnswering({ kind: "no-matching-tag" }, seen),
   });
 
   // assert
@@ -1450,10 +1450,7 @@ test("D-09-05: a root range on a path-source root reaches the marketplace tag pr
     rootAllowedMarketplaces: new Set<string>(),
     installedKeys: new Set(),
     knownMarketplaces: new Set([MARKETPLACE]),
-    marketplaceTagProbe: marketplaceTagProbeAnswering(
-      { kind: "no-matching-tag", range: "unreachable" },
-      seen,
-    ),
+    marketplaceTagProbe: marketplaceTagProbeAnswering({ kind: "no-matching-tag" }, seen),
   });
 
   // assert: TAGS-02 -- no satisfying tag, so the root falls back to the
@@ -1492,11 +1489,8 @@ test("D-09-05: a wildcard root range makes no query", async (t) => {
     installedKeys: new Set(),
     knownMarketplaces: new Set([MARKETPLACE]),
     seam: recordingLedgerSeam(environment.cwd, locations, []),
-    tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, seen),
-    marketplaceTagProbe: marketplaceTagProbeAnswering(
-      { kind: "no-matching-tag", range: "unreachable" },
-      seenPath,
-    ),
+    tagProbe: tagProbeAnswering({ kind: "no-matching-tag" }, seen),
+    marketplaceTagProbe: marketplaceTagProbeAnswering({ kind: "no-matching-tag" }, seenPath),
   });
 
   // assert
@@ -1524,7 +1518,7 @@ test("D-09-05 / T-06-10: contradictory root ranges fail the cascade as a range c
     rootAllowedMarketplaces: new Set<string>(),
     installedKeys: new Set(),
     knownMarketplaces: new Set([MARKETPLACE]),
-    tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, seen),
+    tagProbe: tagProbeAnswering({ kind: "no-matching-tag" }, seen),
   });
 
   // assert
@@ -1687,7 +1681,7 @@ test("TAGS-02 / D-07-03 a path-source member with no satisfying tag resolves any
     installedKeys: new Set(),
     knownMarketplaces: new Set([MARKETPLACE]),
     seam: recordingLedgerSeam(environment.cwd, locations, materialized),
-    tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, []),
+    tagProbe: tagProbeAnswering({ kind: "no-matching-tag" }, []),
   });
 
   // assert: installed, both members, the fallback member carries no pin.
@@ -1738,7 +1732,7 @@ test("TAGS-02 / D-07-07 a path-source member whose local listing THROWS resolves
     installedKeys: new Set(),
     knownMarketplaces: new Set([MARKETPLACE]),
     seam: recordingLedgerSeam(environment.cwd, locations, materialized),
-    tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, []),
+    tagProbe: tagProbeAnswering({ kind: "no-matching-tag" }, []),
     marketplaceTagProbe: () => Promise.resolve({ kind: "tag-listing-failed", cause }),
   });
 
@@ -1821,7 +1815,7 @@ test("TAGS-02 / D-07-07 a path-source member whose marketplace root is not a git
     installedKeys: new Set(),
     knownMarketplaces: new Set([MARKETPLACE]),
     seam: recordingLedgerSeam(environment.cwd, locations, materialized),
-    tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, []),
+    tagProbe: tagProbeAnswering({ kind: "no-matching-tag" }, []),
   });
 
   // assert
@@ -1863,7 +1857,7 @@ test("TAGS-02 a path-source member WITH a satisfying tag is unaffected: no fallb
     installedKeys: new Set(),
     knownMarketplaces: new Set([MARKETPLACE]),
     seam: recordingLedgerSeam(environment.cwd, locations, materialized),
-    tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, []),
+    tagProbe: tagProbeAnswering({ kind: "no-matching-tag" }, []),
   });
 
   // assert
@@ -1911,10 +1905,7 @@ test("RESV-03 a path-source dependency declared with no version makes no local t
     installedKeys: new Set(),
     knownMarketplaces: new Set([MARKETPLACE]),
     seam: recordingLedgerSeam(environment.cwd, locations, []),
-    marketplaceTagProbe: marketplaceTagProbeAnswering(
-      { kind: "no-matching-tag", range: "unreachable" },
-      seen,
-    ),
+    marketplaceTagProbe: marketplaceTagProbeAnswering({ kind: "no-matching-tag" }, seen),
   });
 
   // assert
@@ -2099,7 +2090,7 @@ test("RESV-03 a no-matching-tag answer fails the cascade with the constraint nam
     rootAllowedMarketplaces: new Set<string>(),
     installedKeys: new Set(),
     knownMarketplaces: new Set([MARKETPLACE]),
-    tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: ">=3.0.0 <4.0.0-0" }, []),
+    tagProbe: tagProbeAnswering({ kind: "no-matching-tag" }, []),
   });
 
   // assert
@@ -2196,7 +2187,7 @@ for (const { label, pluginNames, gitSourced, knownMarketplaces, dependencyMarket
       ),
       installedKeys: new Set(),
       knownMarketplaces: new Set(knownMarketplaces),
-      tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, seen),
+      tagProbe: tagProbeAnswering({ kind: "no-matching-tag" }, seen),
     });
 
     // assert: D-03-09 -- one no-match answer, with no branch on how the source
@@ -2237,7 +2228,7 @@ test("TAGS-02 a path source whose marketplace clone carries no matching release 
     installedKeys: new Set(),
     knownMarketplaces: new Set([MARKETPLACE]),
     seam: recordingLedgerSeam(environment.cwd, locations, []),
-    tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, seen),
+    tagProbe: tagProbeAnswering({ kind: "no-matching-tag" }, seen),
   });
 
   // assert
@@ -3671,7 +3662,7 @@ for (const { label, declared, recorded } of [
       knownMarketplaces: new Set([MARKETPLACE]),
       seam: recordingLedgerSeam(environment.cwd, locations, []),
       transaction,
-      tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, seen),
+      tagProbe: tagProbeAnswering({ kind: "no-matching-tag" }, seen),
     });
 
     // assert
@@ -3773,7 +3764,7 @@ for (const { label, declared, recorded, expectedRange } of [
       rootAllowedMarketplaces: new Set<string>(),
       installedKeys: new Set([`bar@${MARKETPLACE}`]),
       knownMarketplaces: new Set([MARKETPLACE]),
-      tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, seen),
+      tagProbe: tagProbeAnswering({ kind: "no-matching-tag" }, seen),
     });
 
     // assert
@@ -3847,7 +3838,7 @@ test("RESV-05 an already-installed dependency's contradictory declarations fail 
     rootAllowedMarketplaces: new Set<string>(),
     installedKeys: new Set([`shared@${MARKETPLACE}`]),
     knownMarketplaces: new Set([MARKETPLACE]),
-    tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: "unreachable" }, seen),
+    tagProbe: tagProbeAnswering({ kind: "no-matching-tag" }, seen),
   });
 
   // assert
@@ -3904,7 +3895,7 @@ test("INR-05 a conflict names each declared range apart, so a range with || keep
 for (const { label, probed, failure } of [
   {
     label: "no matching tag",
-    probed: { kind: "no-matching-tag", range: "unreachable" },
+    probed: { kind: "no-matching-tag" },
     failure: { kind: "no-matching-tag", key: `bar@${MARKETPLACE}`, range: "^1.0.0" },
   },
   {
@@ -4001,7 +3992,7 @@ test("UPD-DEP-D1: a cascade that may plan moves: a fresh member that cannot reso
     rootAllowedMarketplaces: new Set<string>(),
     installedKeys: new Set([`bar@${MARKETPLACE}`]),
     knownMarketplaces: new Set([MARKETPLACE]),
-    tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: ">=1.0.0 <2.0.0-0" }, seen),
+    tagProbe: tagProbeAnswering({ kind: "no-matching-tag" }, seen),
   });
 
   // assert

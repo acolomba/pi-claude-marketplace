@@ -26,7 +26,7 @@ import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
 import { createSetPluginEnabled } from "./enable-disable.ts";
 import { createFetchPlugins } from "./fetch.ts";
-import { makePresenceProbe, probeManifestEntry } from "./git-source-probe.ts";
+import { makePresenceProbe } from "./git-source-probe.ts";
 import { createGetPluginInfo } from "./info.ts";
 import {
   createInstallMissingDependency,
@@ -34,6 +34,7 @@ import {
   createUpdateDependencyResolver,
 } from "./install-flow.ts";
 import { runInstallLedger } from "./install-outcome.ts";
+import { resolveListCandidate } from "./list-candidate-version.ts";
 import { createPrunePlugin } from "./prune.ts";
 import { createReinstallPlugin } from "./reinstall-flow.ts";
 import { loadTargetLayers, writeAdoptingConfigEntries } from "./shared.ts";
@@ -180,12 +181,13 @@ export function createReinstallOperation(
   return createReinstallPlugin(hooksRouting, completionCache);
 }
 
-// The one concrete binding of fetch's status capability. Both members are the
-// fs-only probes `git-source-probe.ts` owns, which is what keeps this
-// composition inside the network-free gate: fetch reaches git only through the
-// clone-cache seam it defaults internally, never through anything named here
-// (NFR-5).
-const NODE_FETCH_STATUS: FetchStatus = { makePresenceProbe, probeManifestEntry };
+// The one concrete binding of fetch's status capability. Both members are
+// fs-only reads -- the presence probe `git-source-probe.ts` owns and the
+// offline version rule `list` uses (`list-candidate-version.ts`) -- which is
+// what keeps this composition inside the network-free gate: fetch reaches git
+// only through the clone-cache seam it defaults internally, never through
+// anything named here (NFR-5).
+const NODE_FETCH_STATUS: FetchStatus = { makePresenceProbe, resolveListCandidate };
 
 /**
  * Fetches plugins through the Node-backed status capability. Reaching the value

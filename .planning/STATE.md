@@ -5,17 +5,17 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 1
 current_phase_name: Staging Warning Channels
 status: verifying
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-10-27T11:42:51.410Z"
-last_activity: 2026-10-26
-last_activity_desc: Phase 1 execution started
-state_head: 9af99507743c49fd53e39d33a907b7319db01502
+stopped_at: Phase 4 complete, ready to verify Phase 1
+last_updated: "2026-10-27T11:04:03.605Z"
+last_activity: 2026-10-27
+last_activity_desc: Phase 4 complete, transitioned to Phase 1
+state_head: edac58eb2fb9fccd7212f72307195efa784d73c4
 progress:
   total_phases: 11
-  completed_phases: 0
-  total_plans: 8
-  completed_plans: 8
-  percent: 0
+  completed_phases: 1
+  total_plans: 6
+  completed_plans: 6
+  percent: 9
 ---
 
 # Project State
@@ -27,14 +27,14 @@ See: `.planning/PROJECT.md` (updated 2026-10-22 at the lifecycle-coverage start)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 1 — Staging Warning Channels
+**Current focus:** Phase 07 — Git Errors and Lock Discipline
 
 ## Current Position
 
-Phase: 1 (Staging Warning Channels) — EXECUTING
-Plan: 8 of 8
+Phase: 1 — Staging Warning Channels
+Plan: 4
 Status: Phase complete — ready for verification
-Last activity: 2026-10-27 - Completed quick task 261027-9ka: Reverse D-PL1-08: cascades render both staging warning halves
+Last activity: 2026-10-27 — Completed quick task 261027-9lp: agent-target refusal redaction and update reason
 
 
 ### mcp-4 closeout
@@ -188,12 +188,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-gvt | GV-01: record plugins at a range-selected release tag as Claude Code does, the tag semver kept as resolvedVersion | 2026-10-26 | 2638b001 | complete | [261026-gvt-record-plugins-at-release-tags-as-claude-code](./quick/261026-gvt-record-plugins-at-release-tags-as-claude-code/) |
 | 261026-glv | GV-01: an update with no tag drops the tag commit from the record; plugin directory plugins pick no release tag and their listed copy answers the range | 2026-10-26 | 33c9ac69 | complete | [261026-glv-match-claude-code-on-untagged-updates-an](./quick/261026-glv-match-claude-code-on-untagged-updates-an/) |
 | 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
-| 261027-9ka | Reverse D-PL1-08: cascades render both staging warning halves | 2026-10-27 | 9af99507 | — | [261027-9ka-reverse-d-pl1-08-cascades-render-both-st](./quick/261027-9ka-reverse-d-pl1-08-cascades-render-both-st/) |
-
-## Session Continuity
-
-**Last session:** 2026-10-27T04:05:22.055Z
-**Stopped at:** Completed 01-01-PLAN.md
+**Stopped at:** Phase 4 complete, ready to verify Phase 1
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -405,7 +400,6 @@ archived milestone artifacts.
 | Phase 29 P12 | 70 min | 3 tasks | 34 files |
 | Phase 29 P13 | 48 min | 3 tasks | 44 files |
 | Phase 29 P14 | 20 min | 2 tasks | 9 files |
-| Phase 01 P01 | 51m | 2 tasks | 36 files |
 
 ## Decisions
 
@@ -605,8 +599,6 @@ archived milestone artifacts.
 - [Phase 29]: The cascade failure classifier reads the errno a BridgeStagingError carries on its cause, so an unreadable plugin source is permission denied (also in the autoupdate cascade)
 - [Phase 29]: apply runs growth-only moves through convergePlugin with rematerialize (skipSameRevision off, overwrite off) and reports them with the plugin-backfilled row; the load-time backfill, its stamp gate and EXTENSION_VERSION are deleted, lastReconciledExtensionVersion stays readable and nothing writes it (D-10, D-13, D-25)
 - [Phase 29]: README.md's dependents sentence says apply reinstalls an uninstalled dependency a dependent still declares and disables the dependents only if that install fails; the APL-D1 and APL-D2 rows record the read-only load and the NFR-2 amendment
-- [Phase 01]: Staging warnings are tagged at each bridge producer and split by partitionStagingWarnings alone; agents D-07 skips are discovery (D-PL1-01..03)
-- [Phase 01]: Staging diagnostic headers read Plugin "<name>" [<scope>] <verb>; the verb is a closed seven-member union (D-PL1-05, D-PL1-06)
 
 ### mcp-4 decisions
 

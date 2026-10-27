@@ -8634,6 +8634,60 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
+  for (const { move, offered, row } of [
+    {
+      move: "growth",
+      offered: undefined,
+      row: "  ● demo v1.0.0 (installed) {components now supported}\n",
+    },
+    {
+      move: "revision",
+      offered: "1.1.0",
+      row: "  ● demo v1.0.0 → v1.1.0 (updated) {components now supported}\n",
+    },
+  ]) {
+    test(`PKD-02: a ${move} move whose package step leaves a note reports it as a staging warning`, async (t) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedConvergenceScope(t, `converge-${move}-packages`, {
+        trees: { demo: { skill: "clean", command: true } },
+        supported: { demo: ["skills"] },
+        ...(offered !== undefined && { offered: { demo: offered } }),
+      });
+      const pluginRoot = path.join(marketplaceRoot, "plugins", "demo");
+      await writeFile(
+        path.join(pluginRoot, "package.json"),
+        JSON.stringify({ name: "demo", dependencies: { "pkd-dep": "1.0.0" } }),
+      );
+      await writeFile(path.join(pluginRoot, "package-lock.json"), '{"lockfileVersion":3}');
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+      const { gitOps } = createOfflineGitOps();
+
+      // act
+      await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            row +
+            "\n" +
+            "Reconcile: 1 success\n" +
+            "\n" +
+            "/reload to pick up changes",
+        },
+        {
+          message:
+            'Plugin "demo" [project] updated; 1 declared component has a note.\n' +
+            "\n" +
+            'Skipped installing this plugin\'s dependencies: its folder in the marketplace "mp" is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder.',
+          severity: "warning",
+        },
+      ]);
+      verifyBoundary();
+    });
+  }
+
   test("D-12 / D-25: a partial record whose supported set grew stays partial and names the kinds it still lacks", async (t) => {
     // arrange
     const { cwd, project } = await seedConvergenceScope(t, "converge-grown-partial", {

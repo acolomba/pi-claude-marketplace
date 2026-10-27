@@ -150,8 +150,8 @@ Feature: Plugin staging warnings
       | cascade    | error    | false        | A plugin operation has failed. |                                                                         |                                                                                                                                            |
       | diagnostic | warning  | false        |                                | Plugin "demo" [project] update failed; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate. |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status | id            | name | status | reasons         | scope   | from  | version | leaks | rollback partial |
-      | fixtures         | project           | updated            | demo@fixtures | demo | failed | not in manifest | project | 1.0.0 | 1.1.0   |       |                  |
+      | marketplace name | marketplace scope | marketplace status | id            | name | status | reasons    | scope   | from  | version | leaks | rollback partial | cause chain                   | cause truncated |
+      | fixtures         | project           | updated            | demo@fixtures | demo | failed | unreadable | project | 1.0.0 | 1.1.0   |       |                  | {mcp-adapter.json read error} | false           |
 
   Scenario: Apply that moves a plugin to its catalog version reports the moved plugin's skip under its header
     Given the user has run "/claude:plugin install demo@fixtures --scope project"

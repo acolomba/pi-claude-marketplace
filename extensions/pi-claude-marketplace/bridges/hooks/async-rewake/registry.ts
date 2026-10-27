@@ -6,13 +6,13 @@
 // (`rewakeMessage` + body) into Pi's model context via pi.sendMessage with
 // `display: false` matching Claude Code's <system-reminder> semantic.
 //
-// This is the THIRD of exactly THREE sanctioned `node:child_process` import
+// This is one of exactly FOUR sanctioned `node:child_process` import
 // sites in the extension tree (closed-set whitelist at
-// test/architecture/no-shell-out.test.ts). Adding a FOURTH site requires
+// test/architecture/no-shell-out.test.ts). Adding a FIFTH site requires
 // amending the whitelist set AND the sibling assertion in the SAME commit
-// (D-58-01 atomic-supersession). The first two sites are
-// platform/git-credential.ts (AUTH-08) and bridges/hooks/dispatch-exec.ts
-// (EXEC-01..04 sync path). This site (HOOK-06 / EXEC-05 / D-62-01) diverges
+// (D-58-01 atomic-supersession). The other sites are
+// platform/git-credential.ts (AUTH-08), bridges/hooks/dispatch-exec.ts
+// (EXEC-01..04 sync path), and platform/package-manager.ts (D-PL9-11). This site (HOOK-06 / EXEC-05 / D-62-01) diverges
 // from the sync site: `detached: false` + the parent does NOT await child
 // exit; a per-child handler watches for code 2 and triggers the HOOK-06
 // injection contract via `pi.sendMessage({ customType: "claude-hook-rewake",

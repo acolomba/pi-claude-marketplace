@@ -3,6 +3,8 @@ import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test } from "node:test";
 
+import lockfile from "proper-lockfile";
+
 import {
   createHooksRouting,
   createHooksRuntime,
@@ -31,6 +33,7 @@ import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type { DependencyCaller } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts";
 import type { CascadeThreePhaseArgs } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
@@ -318,6 +321,13 @@ describe("updateCaller", () => {
   });
 });
 
+function holdStateLock(locations: ScopedLocations): Promise<() => Promise<void>> {
+  return lockfile.lock(locations.extensionRoot, {
+    lockfilePath: locations.stateLockFile,
+    realpath: false,
+  });
+}
+
 describe("planCloneSweep", () => {
   test("UPD-DEP-D1 / IN-N4: removes the clones the operation left unreferenced and keeps the ones unreferenced before it", async (t) => {
     // arrange
@@ -366,6 +376,56 @@ describe("planCloneSweep", () => {
 
     // assert
     assert.deepStrictEqual(await readdir(locations.pluginClonesDir), ["planned"]);
+  });
+
+  test("GLK-03 / D-PL7-13: a scope lock held while the clones are listed makes the sweep remove nothing", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "dependency-bindings-sweep-held-list-");
+    const locations = locationsFor("project", cwd);
+    await saveState(locations.extensionRoot, stateWith({}));
+    await mkdir(path.join(locations.pluginClonesDir, "fetched"), { recursive: true });
+    const release = await holdStateLock(locations);
+    let sweep: () => Promise<void>;
+    try {
+      sweep = await planCloneSweep(locations);
+    } finally {
+      await release();
+    }
+
+    await mkdir(path.join(locations.pluginClonesDir, "planned"), { recursive: true });
+
+    // act
+    await sweep();
+
+    // assert
+    assert.deepStrictEqual((await readdir(locations.pluginClonesDir)).sort(), [
+      "fetched",
+      "planned",
+    ]);
+  });
+
+  test("GLK-03 / D-PL7-05: a scope lock held while the sweep runs leaves every clone and the sweep resolves", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "dependency-bindings-sweep-held-sweep-");
+    const locations = locationsFor("project", cwd);
+    await saveState(locations.extensionRoot, stateWith({}));
+    await mkdir(path.join(locations.pluginClonesDir, "fetched"), { recursive: true });
+    const sweep = await planCloneSweep(locations);
+    await mkdir(path.join(locations.pluginClonesDir, "planned"), { recursive: true });
+    const release = await holdStateLock(locations);
+
+    // act
+    try {
+      await sweep();
+    } finally {
+      await release();
+    }
+
+    // assert
+    assert.deepStrictEqual((await readdir(locations.pluginClonesDir)).sort(), [
+      "fetched",
+      "planned",
+    ]);
   });
 });
 

@@ -311,6 +311,16 @@ installed-copy containment bullets.
     reports a moved plugin that fails in its mcp phase under an update failed
     header" pins today's value. Proposed as a backlog entry: carry typed
     reasons on the runner's `failed` arm, then update that table cell.
+    Resolved by the merge of the git-errors phase: the scenario now shows
+    `unreadable` with its cause.
+12. **The package note is a discovery staging warning (merge with the
+    package-dependencies phase).** Shipped: the packages phase pushes its
+    note as `discoveryWarning(note)`, so `update`, the `marketplace update`
+    and autoupdate cascades and `apply` show it in the D-PL1-05 per-plugin
+    diagnostic, which names the scope, and in no separate block.
+    D-PL9-21 says the WRN-02 shared placement replaces its cascade call;
+    `apply`'s separate package-note block went too, so the note does not
+    print twice.
 
 ## Docs note for CLN-03
 

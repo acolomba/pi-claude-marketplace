@@ -85,7 +85,7 @@ function catalogVersion(entry: ManifestPluginEntry, marketplaceName: string): st
  * version). The resolved verdict travels only when the row is upgradable; a
  * cold candidate or a throw carries none (the CR-01 "could not assert" degrade).
  */
-async function upgradeCandidate(
+export async function upgradeCandidate(
   manifestEntry: ManifestPluginEntry,
   options: ComposeInstalledListRowOptions,
 ): Promise<UpgradeCandidate> {

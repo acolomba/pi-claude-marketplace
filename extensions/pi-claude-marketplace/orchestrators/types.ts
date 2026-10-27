@@ -482,6 +482,13 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
    */
   readonly stagingWarnings?: readonly StagingWarning[];
   /**
+   * PKD-02 / D-PL9-14: the package step's note, which `stagingWarnings` also
+   * holds as a discovery warning. Every verb renders it from there (D-PL1-07,
+   * D-PL1-25); dependency moves render no staging warnings, so they read this
+   * field alone. Omitted when the step had nothing to say (NREG-01).
+   */
+  readonly packageNote?: string;
+  /**
    * D-10-17a: the constraint gate's disclosure, forwarded from the
    * preflight's `PreparedPluginUpdate.constraint` by a plain assignment --
    * `update-swap.ts`'s `updated`-outcome literal is the SINGLE justified

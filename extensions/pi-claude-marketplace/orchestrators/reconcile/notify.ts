@@ -418,7 +418,8 @@ export function blockedMoveOutcomes(convergence: ConvergencePlan): PluginConverg
  *  - `updated`: update's row, without the range disclosure, because the
  *    catalog chose the version (D-23). A record already installed partial that
  *    drops a kind takes the `(partially-installed)` form. Both stay `info`: the
- *    move carried out what the catalog offers.
+ *    move carried out what the catalog offers. A package note rides along as
+ *    a post-install warning (PKD-02).
  *  - `skipped`: a block the runner met that the planner did not, such as a
  *    dependent installed in between; it takes the blocked rows above.
  *  - `failed`: the closed-set reason and the move it attempted, never the raw

@@ -2053,6 +2053,44 @@ describe("convergedMoveOutcomes", () => {
     ]);
   });
 
+  test("PKD-02: an updated move carries its package note as a staging warning", () => {
+    // act
+    const outcomes = convergedMoveOutcomes(DEMO_MOVE, {
+      ...UPDATE_BASE,
+      partition: "updated",
+      resourcesChanged: true,
+      fromVersion: "1.0.0",
+      toVersion: "1.1.0",
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      declaresWorkflows: false,
+      constraint: undefined,
+      stagingWarnings: [discoveryWarning("Plugin dependency install failed (npm): E404")],
+      packageNote: "Plugin dependency install failed (npm): E404",
+    });
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "demo",
+        row: {
+          status: "updated",
+          name: "demo",
+          scope: "project",
+          from: "1.0.0",
+          to: "1.1.0",
+          dependencies: [],
+          severity: "info",
+          needsReload: true,
+        },
+        stagingWarnings: [discoveryWarning("Plugin dependency install failed (npm): E404")],
+      },
+    ]);
+  });
+
   test("D-08: a partial record's move that drops a kind reports the partially-installed row at info", () => {
     // act
     const outcomes = convergedMoveOutcomes(
