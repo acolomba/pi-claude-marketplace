@@ -4,17 +4,17 @@ milestone: plugin-lifecycle
 milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 8
 current_phase_name: Background Autoupdate
-status: executing
-stopped_at: Completed 08-03-PLAN.md
-last_updated: "2026-10-27T04:33:52.681Z"
+status: verifying
+stopped_at: Completed 08-04-PLAN.md
+last_updated: "2026-10-27T04:52:02.416Z"
 last_activity: 2026-10-26
 last_activity_desc: Phase 8 execution started
-state_head: 3525499dca0f2cc0342c0cbe1ce04d6116ff79e7
+state_head: ff1f85ec310a5b3f2ee3985153634b599ef36044
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 4
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 8 (Background Autoupdate) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-26 — Phase 8 execution started
 
 
@@ -191,8 +191,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-27T04:33:52.386Z
-**Stopped at:** Completed 08-03-PLAN.md
+**Last session:** 2026-10-27T04:52:02.280Z
+**Stopped at:** Completed 08-04-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -407,6 +407,7 @@ archived milestone artifacts.
 | Phase 08 P02 | 14 min | 2 tasks | 3 files |
 | Phase 08 P01 | 34min | 2 tasks | 10 files |
 | Phase 08 P03 | 25min | 2 tasks | 21 files |
+| Phase 08 P04 | 9min | 2 tasks | 7 files |
 
 ## Decisions
 
@@ -611,6 +612,8 @@ archived milestone artifacts.
 - [Phase 08]: 08-01: the background pass reports through a print-mode context into hookDebugLog [autoupdate] and a load-origin run with a dropping sink; a plugin update skipped after shutdown returns a failed outcome with an empty reason list (D-PL8-06, D-PL8-15)
 - [Phase 08]: background-update no-credential-leak row plants the userinfo URL in name and toVersion, because the gate requires the *** marker in the text and the text shows only the name
 - [Phase 08]: background-update resolve arm redacts name, marketplace, fromVersion and toVersion (PMOD-04); scope passes through
+- [Phase 08]: The background update scenario starts its own Pi with delay 0 and reads the result that follows a plain message from the session entries, since Pi refuses the message for want of a model after its input handlers ran
+- [Phase 08]: A background-update result's plugins are a cucumber row array: field steps hide them and the result lists these plugins: compares them
 
 ### mcp-4 decisions
 
