@@ -38,6 +38,7 @@
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { stripVTControlCharacters } from "node:util";
 
 import {
   createPackageManagerRunner,
@@ -344,12 +345,29 @@ function runFailed(run: PackageManagerRun): boolean {
   return run.code !== 0 || run.timedOut || run.error !== undefined;
 }
 
+const NPM_WARN_LINE = /^npm warn\b/i;
+const NPM_ERROR_PREFIX = /^npm (?:ERR!|error) ?/;
+
+// The output as one line for a note: escape sequences and control characters
+// gone, npm's own prefixes dropped, and npm's warnings left out when anything
+// else was printed, so the error is what the 500-character cut keeps.
+function compactOutput(output: string): string {
+  const lines = stripVTControlCharacters(output)
+    .split(/[\r\n]+/)
+    .map((line) => line.replaceAll(/\p{Cc}/gu, " ").trim())
+    .filter((line) => line !== "");
+  const errors = lines.filter((line) => !NPM_WARN_LINE.test(line));
+  return (errors.length > 0 ? errors : lines)
+    .map((line) => line.replace(NPM_ERROR_PREFIX, ""))
+    .join("; ");
+}
+
 function failureDetail(run: PackageManagerRun): string {
   if (run.timedOut) {
     return `timed out after ${PACKAGE_INSTALL_TIMEOUT_MS / 1_000} seconds`;
   }
 
-  const detail = run.stderr.trim() || run.stdout.trim() || run.error?.message;
+  const detail = compactOutput(run.stderr) || compactOutput(run.stdout) || run.error?.message;
   return detail === undefined || detail === "" ? "no output" : detail;
 }
 
