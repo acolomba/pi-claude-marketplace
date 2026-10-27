@@ -50,7 +50,8 @@ export interface EdgeDeps {
   readonly applyReconcile: (opts: ApplyReconcileOptions) => Promise<void>;
   /**
    * D-PL2-09: `apply`'s missing-dependency step over one scope, which
-   * `marketplace add` runs after it records a marketplace.
+   * `marketplace add`, `bootstrap` and `marketplace update` run
+   * (`ScopeDependencyInstallFn`).
    */
   readonly installMissingDependencies: ScopeDependencyInstallFn;
   readonly importClaudeSettings?: (

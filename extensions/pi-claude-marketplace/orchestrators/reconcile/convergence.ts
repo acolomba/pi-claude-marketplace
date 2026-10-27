@@ -1020,10 +1020,10 @@ export interface MoveCascadeInput extends Omit<ConvergenceInput, "enable"> {
 }
 
 /**
- * The plan `apply` runs and `pending` lists, the cascade it moves, and the
- * enables of released records held down for a dependency, which `apply` runs
- * in cascade order. `cascade` is absent when no held dependent could be
- * released, so the plan is the caller's own.
+ * The plan `apply` runs its toggle steps from. `preview` is what `pending`
+ * lists. `cascade` is absent when no held dependent could be released, so the
+ * plan is the caller's own. `deferredEnables` are the enables of released
+ * records held down for a dependency, which `apply` runs in cascade order.
  */
 export interface MoveCascade {
   readonly plan: ReconcilePlan;
@@ -1149,7 +1149,7 @@ async function judgePlannedScope(
   const held = new Set(holds.map((entry) => entry.dependent));
   const keyOf = (op: { readonly plugin: string; readonly marketplace: string }): string =>
     `${op.plugin}@${op.marketplace}`;
-  // Review 4 WR-1: every enable the judgement would hold is dropped, a config
+  // WR-1: every enable the judgement would hold is dropped, a config
   // enable as well as a lift; the record stays as it is, so it gets no row.
   const pluginsToEnable = plan.pluginsToEnable.filter((op) => !held.has(keyOf(op)));
   const planned = new Set(

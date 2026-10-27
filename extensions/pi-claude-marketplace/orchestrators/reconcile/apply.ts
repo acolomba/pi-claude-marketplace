@@ -1084,11 +1084,10 @@ const ENABLE_AXES: PluginToggleAxes = {
 
 /**
  * The two `applyPluginToggles` calls and the LOAD-01 dependency-disable step,
- * extracted out of `applyPlan` so it can run this once against round 1's plan
- * (no config install landed) or once against `refreshTogglePlan`'s D-09-07
- * replacement plan (one did). Unchanged otherwise: WR-02-style
- * isolation still wraps the dependency-disable step's own stamp write, whose
- * throw would otherwise discard every outcome accumulated for both scopes.
+ * run against round 1's plan (no config install landed) or against
+ * `refreshTogglePlan`'s D-09-07 replacement plan (one did). WR-02-style
+ * isolation wraps the dependency-disable step's own stamp write, whose throw
+ * would otherwise discard every outcome accumulated for both scopes.
  */
 async function applyToggleSteps(
   opts: ApplyReconcileOptions,
@@ -1743,7 +1742,7 @@ function deferCollection(collect: { requested: boolean }): () => Promise<void> {
 }
 
 /**
- * D-19-01 / Review 4 WR-2: clone cleanup is hygienic, as the runner's own is
+ * D-19-01 / WR-2: clone cleanup is hygienic, as the runner's own is
  * (`update-preflight.ts::refreshDisabledPluginUpdate`): a failure is traced and
  * a later lifecycle operation retries it.
  */

@@ -30,7 +30,7 @@
 //   pluginsToDisable      -> child row { status: "will disable" }
 //   pluginsToEnable       -> child row { status: "will enable" }
 //                            (recorded-but-disabled detection via the
-//                            empty-resources marker)
+//                            record's explicit `enabled: false`, ENBL-05)
 //   pluginsToDependencyDisable
 //                         -> child row { status: "will disable" }, folded into
 //                            the pluginsToDisable loop (LOAD-01). The planner's
@@ -704,7 +704,7 @@ export async function resolvePendingForceInstalls(
  *   - pluginsToDisable      -> child row { status: "will disable" }
  *   - pluginsToEnable       -> child row { status: "will enable" }
  *                              (recorded-but-disabled detection via the
- *                              empty-resources marker)
+ *                              record's explicit `enabled: false`, ENBL-05)
  *   - pluginsToDependencyDisable
  *                           -> child row { status: "will disable" }, folded
  *                              into the pluginsToDisable loop (LOAD-01). The

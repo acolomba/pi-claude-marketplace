@@ -161,9 +161,9 @@ const OWN_MANIFEST_REFUSAL: OwnManifestRefusal = {
 };
 
 /**
- * A locally resolvable source's root, or `undefined` where containment refuses
- * it. The refusal is a read this module may not perform, which is exactly what
- * the entry fallback covers.
+ * A path source's in-place manifest boundary, or `undefined` where containment
+ * refuses it. The refusal is a read this module may not perform, which is
+ * exactly what the entry fallback covers.
  */
 async function derivePathPluginRoot(
   marketplaceRoot: string,

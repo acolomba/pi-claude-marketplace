@@ -649,8 +649,8 @@ export interface ScopeDependencyInstallResult {
  * step over one scope. `marketplace add`, `bootstrap` and the autoupdate
  * cascade receive it as a parameter, because BLOCK C and the
  * add -> operations -> install-outcome -> add cycle forbid them to import
- * `reconcile/apply.ts`, which ships the real operation. The `index.ts`
- * barrel performs the registration-time wiring.
+ * `reconcile/apply.ts`, which ships the real operation. The extension
+ * factory (`index.ts`) wires it through `createScopeDependencyInstall`.
  */
 export type ScopeDependencyInstallFn = (
   request: ScopeDependencyInstallRequest,
