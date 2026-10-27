@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 12
+open_count: 13
 waived_count: 52
 fixed_count: 46
-total_count: 110
-last_updated: 2026-10-23T04:36:21.369Z
+total_count: 111
+last_updated: 2026-10-27T05:29:00.773Z
 ---
 
 # Broken Windows Ledger
@@ -125,6 +125,7 @@ last_updated: 2026-10-23T04:36:21.369Z
 | 108 | 10 | lint-warning | features/plugin/disable.feature | 3 | [marketplace-features] cucumber review: features/plugin/disable.feature:3 the description says disabling keeps the plugin installed, but both scenarios are refusals; no scenario of the file disables a plugin and shows what it keeps | open |  | 2026-10-21T15:24:37.024Z |  |
 | 109 | 10 | lint-warning | features/plugin/enable.feature | 3 | [marketplace-features] cucumber review: features/plugin/enable.feature:3 the description says enabling materializes the plugin again, but both scenarios are refusals; no scenario of the file enables a plugin and shows it materialized | open |  | 2026-10-21T15:24:37.353Z |  |
 | 110 | 1 | deviation | features/step_definitions/config.steps.ts |  | [lifecycle-coverage] No committed seed fails when the marketplaces config writer leaves a run token in a source: pending never reads the source of a marketplace it would add (DIFF-01, NFR-5). Close it in Phase 11 with a reconcile seed whose new session adds a marketplace declared only by this writer. | fixed |  | 2026-10-23T04:22:25.048Z | 2026-10-23T04:36:21.369Z |
+| 111 | 07 | deviation | test/edge/register.test.ts | 1851 | [plugin-lifecycle] registered prune cases pin one lockfile.lock call; the locked clone cleanup makes it two, so test:modules fails | open |  | 2026-10-27T05:29:00.773Z |  |
 
 ````json
 [
@@ -1500,6 +1501,19 @@ last_updated: 2026-10-23T04:36:21.369Z
     "reason": "",
     "recorded_at": "2026-10-23T04:22:25.048Z",
     "resolved_at": "2026-10-23T04:36:21.369Z",
+    "milestone": null
+  },
+  {
+    "id": 111,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "test/edge/register.test.ts",
+    "line": 1851,
+    "description": "[plugin-lifecycle] registered prune cases pin one lockfile.lock call; the locked clone cleanup makes it two, so test:modules fails",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-27T05:29:00.773Z",
+    "resolved_at": null,
     "milestone": null
   }
 ]
