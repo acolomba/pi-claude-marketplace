@@ -95,7 +95,13 @@ function marketplaceSourceFromExtra(entry: unknown): string | undefined {
   return undefined;
 }
 
-function planMarketplaceSourcesForRefs(
+/**
+ * D-PL6-01: plans every marketplace Claude Code registers for the scope -- the
+ * enabled plugins' marketplaces first, in settings order, then every other
+ * `extraKnownMarketplaces` entry in settings order. D-PL6-08: the official
+ * marketplace is planned only when an enabled plugin names it.
+ */
+function planMarketplaceSources(
   scope: Scope,
   refs: readonly EnabledPluginRef[],
   extraKnownMarketplaces: Record<string, unknown>,
@@ -104,26 +110,34 @@ function planMarketplaceSourcesForRefs(
   const diagnostics: ImportDiagnostic[] = [];
   const unmappableMarketplaces: string[] = [];
   const seen = new Set<string>();
+  const planOne = (marketplace: string, source: string | undefined): void => {
+    seen.add(marketplace);
+    if (source === undefined) {
+      unmappableMarketplaces.push(marketplace);
+      diagnostics.push(unmappableMarketplaceDiagnostic(scope, marketplace));
+      return;
+    }
+
+    marketplacesToEnsure.push({ scope, marketplace, source });
+  };
 
   for (const ref of refs) {
     if (seen.has(ref.marketplace)) {
       continue;
     }
 
-    seen.add(ref.marketplace);
-
-    const source =
+    planOne(
+      ref.marketplace,
       ref.marketplace === OFFICIAL_CLAUDE_MARKETPLACE
         ? OFFICIAL_CLAUDE_MARKETPLACE_SOURCE
-        : marketplaceSourceFromExtra(extraKnownMarketplaces[ref.marketplace]);
+        : marketplaceSourceFromExtra(extraKnownMarketplaces[ref.marketplace]),
+    );
+  }
 
-    if (source === undefined) {
-      unmappableMarketplaces.push(ref.marketplace);
-      diagnostics.push(unmappableMarketplaceDiagnostic(scope, ref.marketplace));
-      continue;
+  for (const marketplace of Object.keys(extraKnownMarketplaces)) {
+    if (!seen.has(marketplace) && marketplace !== OFFICIAL_CLAUDE_MARKETPLACE) {
+      planOne(marketplace, marketplaceSourceFromExtra(extraKnownMarketplaces[marketplace]));
     }
-
-    marketplacesToEnsure.push({ scope, marketplace: ref.marketplace, source });
   }
 
   return { marketplacesToEnsure, diagnostics, unmappableMarketplaces };
@@ -131,7 +145,7 @@ function planMarketplaceSourcesForRefs(
 
 function scopedPlan(input: ScopedClaudeImportPlanInput): ScopedClaudeImportPlan {
   const extracted = extractEnabledPluginRefs(input.scope, input.settings);
-  const marketplacePlan = planMarketplaceSourcesForRefs(
+  const marketplacePlan = planMarketplaceSources(
     input.scope,
     extracted.refs,
     input.settings.extraKnownMarketplaces,

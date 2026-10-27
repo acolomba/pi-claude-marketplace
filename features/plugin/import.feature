@@ -626,3 +626,43 @@ Feature: Plugin import
       | app@fixtures | 1.0.0   | true    |
       | fff@fixtures | 1.0.0   | true    |
       | ggg@fixtures | 1.0.0   | true    |
+
+  Scenario: Importing adds an extra known marketplace that no enabled plugin names
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is published as a dir source
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          },
+          "tools": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/tools" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade |
+      | severity            | info    |
+      | needs reload        | true    |
+      | tally label         | Import  |
+      | tally failures      | 0       |
+      | tally warnings      | 0       |
+      | tally success count | 3       |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name | version | status    | reasons | scope |
+      | fixtures         | user              | added              | demo@fixtures | demo | 1.0.0   | installed |         | user  |
+      | tools            | user              | added              |               |      |         |           |         |       |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+      | tools    | {home}/marketplaces/tools    |
+    Then the "claude-plugins.json" file of the user scope declares these plugins:
+      | id            |
+      | demo@fixtures |

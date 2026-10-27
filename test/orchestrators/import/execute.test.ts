@@ -1141,6 +1141,165 @@ test("fails a recorded marketplace whose stored source is unrecognized and rende
   verifyBoundary();
 });
 
+test("MIM-02: adds an extra known marketplace no plugin names after the referenced one and declares both", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "extra-unreferenced");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const calls: string[] = [];
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: (options) => {
+        calls.push(`add ${options.scope} ${options.rawSource}`);
+        return Promise.resolve(addedOutcome(options.rawSource));
+      },
+      installPlugin: (options) => {
+        calls.push(`install ${options.scope} ${options.plugin}@${options.marketplace}`);
+        return Promise.resolve(installedOutcome());
+      },
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: { "plugin@mp": true },
+            extraKnownMarketplaces: {
+              tools: { github: { repo: "owner/tools" } },
+              mp: { directory: "./mp" },
+            },
+          }),
+        ),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(calls, [
+    "add project ./mp",
+    "add project owner/tools",
+    "install project plugin@mp",
+  ]);
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("mp", "project"), added("tools", "project")],
+    changedResources: true,
+    installedPlugins: [installed("plugin", "mp", "project")],
+  });
+  assert.strictEqual(
+    await readFile(project.baseConfigJsonPath, "utf8"),
+    configBytes({
+      marketplaces: { mp: { source: "./mp" }, tools: { source: "owner/tools" } },
+      plugins: { "plugin@mp": {} },
+    }),
+  );
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● mp [project] (added)\n  ● plugin (installed)\n\n" +
+        "● tools [project] (added)\n\n" +
+        "Import: 3 successes\n\n" +
+        "/reload to pick up changes",
+    },
+  ]);
+  verifyBoundary();
+});
+
+test("D-PL6-01: settings that name only an extra known marketplace still read the scope and add it", async (t) => {
+  // arrange
+  const { cwd, user } = await createHermeticScopes(t, "extra-only");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const calls: string[] = [];
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: (options) => {
+        calls.push(`add ${options.scope} ${options.rawSource}`);
+        return Promise.resolve(addedOutcome("tools"));
+      },
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({ extraKnownMarketplaces: { tools: { directory: "./tools" } } }),
+        ),
+      loadState: (scope) => {
+        calls.push(`read ${scope}`);
+        return Promise.resolve(recordedState([]));
+      },
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(calls, ["read user", "add user ./tools"]);
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("tools", "user")],
+  });
+  assert.strictEqual(
+    await readFile(user.baseConfigJsonPath, "utf8"),
+    configBytes({ marketplaces: { tools: { source: "./tools" } }, plugins: {} }),
+  );
+  assert.deepStrictEqual(notifications, [
+    { message: "● tools [user] (added)\n\nImport: 1 success" },
+  ]);
+  verifyBoundary();
+});
+
+test("D-PL6-09: fails an extra known marketplace no plugin names when its recorded source differs", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "extra-mismatch");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const cause = "Existing marketplace source ./old does not match Claude settings source ./tools.";
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({ extraKnownMarketplaces: { tools: { directory: "./tools" } } }),
+        ),
+      loadState: () =>
+        Promise.resolve(
+          recordedState([
+            recordedMarketplace({ name: "tools", scope: "project", source: pathSource("./old") }),
+          ]),
+        ),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    marketplaceFailures: [addFailed("tools", "project", cause)],
+  });
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Some operations have failed.\n\n" +
+        "⊘ tools [project] (failed)\n" +
+        "  ⊘ tools (failed)\n" +
+        `    cause: ${cause}\n\n` +
+        "Import: 2 failures",
+      severity: "error",
+    },
+  ]);
+  await assert.rejects(stat(project.baseConfigJsonPath), { code: "ENOENT" });
+  verifyBoundary();
+});
+
 test("warns about a plugin whose marketplace declares no supported source and renders no row for it", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "unmappable");

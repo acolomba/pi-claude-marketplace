@@ -468,9 +468,11 @@ type ImportBlockStatus = Extract<MarketplaceStatus, "added" | "skipped" | "faile
  * actually rules that out is an invariant spanning four functions, not a type:
  * every `pushMarketplaceRow` call site is reachable only for a plugin in
  * `scopePlan.pluginsToInstall` whose marketplace passed the usable-marketplace gate, and
- * `scopedPlan` (`import/marketplaces.ts`) derives `pluginsToInstall` and
- * `marketplacesToEnsure` from the same `refs` set under one scope, so the key
- * sets always match. A loud check here would be an arm no input can reach.
+ * `scopedPlan` (`import/marketplaces.ts`) plans the marketplace of every plugin
+ * in `pluginsToInstall` under one scope, so every row key has a header.
+ * D-PL6-01: `marketplacesToEnsure` also holds the extra known marketplaces no
+ * plugin names, whose headers have no rows. A loud check here would be an arm
+ * no input can reach.
  */
 interface MarketplaceBlock {
   readonly key: string;
@@ -481,9 +483,9 @@ interface MarketplaceBlock {
    * The cause row for a `status: "failed"` block whose failure came from
    * `result.marketplaceFailures` (a marketplace add attempt, an
    * already-present marketplace whose stored source the planner could not
-   * classify, or a held lock) -- undefined otherwise, e.g. for a
-   * source-mismatch failure, whose per-plugin child rows already carry the
-   * mismatch reason.
+   * classify, a source mismatch no plugin row carries (D-PL6-09), or a held
+   * lock) -- undefined otherwise, e.g. for a source mismatch whose per-plugin
+   * child rows already carry the mismatch reason.
    */
   failure?: MarketplaceBlockFailure;
 }
@@ -866,10 +868,11 @@ interface MarketplaceFailure {
  * WR-07: shared failure bookkeeping for a marketplace that will not be
  * usable this run -- a fresh add that did not record (typed failed outcome OR
  * unexpected throw, from `addOnePlannedMarketplace`), an already-present
- * marketplace whose stored source the planner could not classify, or a scope
- * another process held locked at the read pass (IMP-07): block dependent
- * plugin installs and attribute the cause on both the marketplace row and
- * each dependent plugin's warning row.
+ * marketplace whose stored source the planner could not classify, a source
+ * mismatch no plugin row carries (D-PL6-09), or a scope another process held
+ * locked at the read pass (IMP-07): block dependent plugin installs and
+ * attribute the cause on both the marketplace row and each dependent plugin's
+ * warning row.
  */
 function recordMarketplaceAddFailure(
   result: MutableImportResult,
@@ -951,12 +954,21 @@ function recordPlannedMismatch(
       );
       return;
     case "source-mismatch": {
-      blockedMarketplaces.add(marketplace.marketplace);
       const cause = `Existing marketplace source ${mismatch.recordedSource} does not match Claude settings source ${marketplace.source}.`;
-      for (const plugin of pluginsForMarketplace(
-        scopePlan.pluginsToInstall,
-        marketplace.marketplace,
-      )) {
+      const plugins = pluginsForMarketplace(scopePlan.pluginsToInstall, marketplace.marketplace);
+      if (plugins.length === 0) {
+        // D-PL6-09: no plugin row would carry the mismatch, so the
+        // marketplace takes the `(failed)` block and cause row the
+        // `unknown-stored` arm gives it.
+        recordMarketplaceAddFailure(result, blockedMarketplaces, scopePlan, marketplace, {
+          reason: "add-failed",
+          cause,
+        });
+        return;
+      }
+
+      blockedMarketplaces.add(marketplace.marketplace);
+      for (const plugin of plugins) {
         result.sourceMismatches.push({
           kind: "source-mismatch",
           scope: plugin.scope,

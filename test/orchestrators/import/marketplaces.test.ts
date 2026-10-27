@@ -795,3 +795,159 @@ test("buildClaudeImportPlan maps the official source and skips its duplicate", (
     diagnostics: [],
   });
 });
+
+test("MIM-02 / D-PL6-01: plans the referenced marketplaces first, then every other extra entry in settings order", () => {
+  // arrange
+  const extraKnownMarketplaces = {
+    beta: { directory: "../beta" },
+    alpha: { github: { repo: "acme/alpha" } },
+    gamma: { source: { source: "directory", path: "/opt/gamma" } },
+  };
+
+  // act
+  const plan = buildClaudeImportPlan([
+    {
+      scope: "user",
+      settings: {
+        enabledPlugins: { "tool@gamma": true },
+        extraKnownMarketplaces: extraKnownMarketplaces,
+      },
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    scopes: [
+      {
+        scope: "user",
+        marketplacesToEnsure: [
+          { scope: "user", marketplace: "gamma", source: "/opt/gamma" },
+          { scope: "user", marketplace: "beta", source: "../beta" },
+          { scope: "user", marketplace: "alpha", source: "acme/alpha" },
+        ],
+        pluginsToInstall: [
+          { scope: "user", ref: { marketplace: "gamma", plugin: "tool", raw: "tool@gamma" } },
+        ],
+        skippedPlugins: [],
+        diagnostics: [],
+      },
+    ],
+    diagnostics: [],
+  });
+});
+
+test("MIM-02 / D-PL6-01: diagnoses an extra entry no enabled plugin names when it has no supported source", () => {
+  // arrange
+  const diagnostic = {
+    code: "unmappable-marketplace-source",
+    marketplace: "remote",
+    message:
+      'Skipping Claude marketplace "remote" because it has no supported url, github, or directory source (nested file/remote-marketplace.json sources are not importable).',
+    scope: "project",
+    severity: "warning",
+  } as const;
+
+  // act
+  const plan = buildClaudeImportPlan([
+    {
+      scope: "project",
+      settings: {
+        enabledPlugins: {},
+        extraKnownMarketplaces: {
+          remote: { source: { source: "file", url: "https://example.test/marketplace.json" } },
+        },
+      },
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    scopes: [
+      {
+        scope: "project",
+        marketplacesToEnsure: [],
+        pluginsToInstall: [],
+        skippedPlugins: [],
+        diagnostics: [diagnostic],
+      },
+    ],
+    diagnostics: [diagnostic],
+  });
+});
+
+test("D-PL6-08: plans no official marketplace that only an extra entry names", () => {
+  // arrange
+  const extraKnownMarketplaces = {
+    "claude-plugins-official": { github: { repo: "someone/else" } },
+    team: { github: { repo: "acme/team" } },
+  };
+
+  // act
+  const plan = buildClaudeImportPlan([
+    {
+      scope: "user",
+      settings: { enabledPlugins: {}, extraKnownMarketplaces: extraKnownMarketplaces },
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    scopes: [
+      {
+        scope: "user",
+        marketplacesToEnsure: [{ scope: "user", marketplace: "team", source: "acme/team" }],
+        pluginsToInstall: [],
+        skippedPlugins: [],
+        diagnostics: [],
+      },
+    ],
+    diagnostics: [],
+  });
+});
+
+test("D-PL6-08: plans the official source for an official marketplace an enabled plugin names", () => {
+  // arrange
+  const extraKnownMarketplaces = {
+    "claude-plugins-official": { github: { repo: "someone/else" } },
+  };
+
+  // act
+  const plan = buildClaudeImportPlan([
+    {
+      scope: "user",
+      settings: {
+        enabledPlugins: { "alpha@claude-plugins-official": true },
+        extraKnownMarketplaces: extraKnownMarketplaces,
+      },
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    scopes: [
+      {
+        scope: "user",
+        marketplacesToEnsure: [
+          {
+            scope: "user",
+            marketplace: "claude-plugins-official",
+            source: "anthropics/claude-plugins-official",
+          },
+        ],
+        pluginsToInstall: [
+          {
+            scope: "user",
+            ref: {
+              marketplace: "claude-plugins-official",
+              plugin: "alpha",
+              raw: "alpha@claude-plugins-official",
+            },
+          },
+        ],
+        skippedPlugins: [],
+        diagnostics: [],
+      },
+    ],
+    diagnostics: [],
+  });
+});
