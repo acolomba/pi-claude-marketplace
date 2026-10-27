@@ -36,3 +36,7 @@ Given(
 Then("the npm registry receives these requests:", function (this: ScenarioWorld, table: DataTable) {
   assert.deepStrictEqual(npmRequestTable(this.npmRequestsOfLastCommand()), table.raw());
 });
+
+Then("the npm registry receives no request", function (this: ScenarioWorld) {
+  assert.deepStrictEqual(this.npmRequestsOfLastCommand(), []);
+});

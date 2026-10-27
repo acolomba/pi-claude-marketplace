@@ -59,3 +59,21 @@ Feature: Plugin package dependencies
       | id        | version | enabled |
       | pkp@tools | 1.0.0   | true    |
     Then the plugin "pkp" installed in the project scope has no npm packages
+
+  Scenario: A session start hook of an installed plugin loads the npm package its lockfile lists
+    Given the npm registry serves these packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | pkp  | 1.0.0   |
+    Given the published plugin "pkp" of the marketplace "tools" depends on these npm packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the published plugin "pkp" of the marketplace "tools" has a session start hook that writes what the npm package "pkd-dep" exports to the project file "pkd-proof.txt"
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install pkp@tools --scope project"
+    When the user starts a new pi session
+    Then the project directory holds the file "pkd-proof.txt" with the text "pkd-dep 1.0.0"
+    Then the npm registry receives no request

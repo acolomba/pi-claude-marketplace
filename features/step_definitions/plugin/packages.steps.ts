@@ -20,7 +20,19 @@ import { isPlainObject } from "../../lib/field-rows.ts";
 import { pluginPackageFiles, readNpmPackages } from "../../lib/npm-registry.ts";
 import { writePublishedPluginFiles } from "../../lib/published-marketplace.ts";
 
+import type { PublishedMarketplace } from "../../lib/published-marketplace.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
+
+// The hook script: it requires the package its first argument names, from the
+// plugin's own folder, and writes what the package exports to the project file
+// its second argument names.
+const PACKAGE_PROOF_SCRIPT = [
+  'const fs = require("node:fs");',
+  'const path = require("node:path");',
+  "const [name, file] = process.argv.slice(2);",
+  "fs.writeFileSync(path.join(process.env.CLAUDE_PROJECT_DIR, file), String(require(name)));",
+  "",
+].join("\n");
 
 // The folder the one installation record of `plugin` in the scope runs it from.
 async function installedPluginFolder(
@@ -68,22 +80,58 @@ async function installedPackage(directory: string): Promise<string[]> {
   return [manifest.name, manifest.version];
 }
 
+// Writes `files` into the published plugin's folder and asserts that each reads back.
+async function writePluginFiles(
+  published: PublishedMarketplace,
+  plugin: string,
+  files: Readonly<Record<string, string>>,
+): Promise<void> {
+  await writePublishedPluginFiles(published, plugin, files);
+  const folder = path.join(published.root, "plugins", plugin);
+  const written = await Promise.all(
+    Object.keys(files).map(async (file) => [file, await readFile(path.join(folder, file), "utf8")]),
+  );
+  assert.deepStrictEqual(Object.fromEntries(written), files);
+}
+
 Given(
   "the published plugin {string} of the marketplace {string} depends on these npm packages:",
   async function (this: ScenarioWorld, plugin: string, name: string, table: DataTable) {
     const registry = this.requireNpmRegistry();
     const published = this.requirePublished(name);
     const tarballs = readNpmPackages(table).map((pkg) => registry.served(pkg));
-    const files = pluginPackageFiles(plugin, tarballs);
-    await writePublishedPluginFiles(published, plugin, files);
-    const folder = path.join(published.root, "plugins", plugin);
-    const written = await Promise.all(
-      Object.keys(files).map(async (file) => [
-        file,
-        await readFile(path.join(folder, file), "utf8"),
-      ]),
-    );
-    assert.deepStrictEqual(Object.fromEntries(written), files);
+    await writePluginFiles(published, plugin, pluginPackageFiles(plugin, tarballs));
+  },
+);
+
+Given(
+  "the published plugin {string} of the marketplace {string} has a session start hook that writes what the npm package {string} exports to the project file {string}",
+  async function (this: ScenarioWorld, plugin: string, name: string, pkg: string, file: string) {
+    const hooks = {
+      hooks: {
+        SessionStart: [
+          {
+            hooks: [
+              {
+                type: "command",
+                command: `node "\${CLAUDE_PLUGIN_ROOT}/package-proof.cjs" ${pkg} ${file}`,
+              },
+            ],
+          },
+        ],
+      },
+    };
+    await writePluginFiles(this.requirePublished(name), plugin, {
+      "hooks/hooks.json": `${JSON.stringify(hooks, null, 2)}\n`,
+      "package-proof.cjs": PACKAGE_PROOF_SCRIPT,
+    });
+  },
+);
+
+Then(
+  "the project directory holds the file {string} with the text {string}",
+  async function (this: ScenarioWorld, file: string, text: string) {
+    assert.strictEqual(await readFile(path.join(this.tokens.projectDir, file), "utf8"), text);
   },
 );
 
