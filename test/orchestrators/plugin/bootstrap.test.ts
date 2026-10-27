@@ -14,7 +14,10 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import { bootstrapClaudePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts";
+import {
+  bootstrapClaudePlugin,
+  BootstrapStepError,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -339,7 +342,7 @@ test("D-PL2-09: hands its missing-dependency step to the add, which runs it in t
   verifyBoundary();
 });
 
-test("a missing-dependency step that throws after the add committed still turns on autoupdate and rethrows instead of reporting a failed add", async (t) => {
+test("a missing-dependency step that throws after the add committed still turns on autoupdate and rejects with the step error instead of reporting a failed add", async (t) => {
   // arrange
   const { cwd, locations } = await createHermeticUserScope(t, "dependency-step-throws");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
@@ -357,7 +360,12 @@ test("a missing-dependency step that throws after the add committed still turns 
   });
 
   // assert
-  await assert.rejects(bootstrap, (err: unknown) => err === stepError);
+  await assert.rejects(bootstrap, (err: unknown) => {
+    assert.ok(err instanceof BootstrapStepError);
+    assert.strictEqual(err.name, "BootstrapStepError");
+    assert.strictEqual(err.cause, stepError);
+    return true;
+  });
   assert.deepStrictEqual(notifications, [
     { message: "● claude-plugins-official [user] (added)" },
     { message: "● claude-plugins-official [user] <autoupdate>" },

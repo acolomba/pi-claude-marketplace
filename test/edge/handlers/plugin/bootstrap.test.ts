@@ -426,6 +426,32 @@ test("converts a thrown bootstrap failure into one failed marketplace row carryi
   verifyBoundary();
 });
 
+test("WR-02: lets a missing-dependency step that throws after the add committed fail the command with that error, not a failed row", async (t) => {
+  // arrange
+  const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "step-throws");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2, {
+    value: cwd,
+    reads: 1,
+  });
+  const git = createGitPort(sourceTree);
+  const stepError = Object.assign(new Error("dependency copy vanished"), { code: "ENOENT" });
+  const bootstrapHandler = makeBootstrapHandler(
+    createBootstrapDeps(git.gitOps, () => Promise.reject(stepError)),
+  );
+
+  // act & assert
+  await assert.rejects(
+    () => bootstrapHandler("", ctx, runWithNothingLoaded()),
+    (error: unknown) => error === stepError,
+  );
+  assert.deepStrictEqual(notifications, [
+    { message: `● ${BOOTSTRAP_MARKETPLACE_NAME} [user] (added)` },
+    { message: `● ${BOOTSTRAP_MARKETPLACE_NAME} [user] <autoupdate>` },
+  ]);
+  assert.strictEqual(networkCallCount(), 0);
+  verifyBoundary();
+});
+
 test("GHB-03: fails the command with the typed error naming the variable when the GitHub base is invalid", async (t) => {
   // arrange
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "invalid-base");

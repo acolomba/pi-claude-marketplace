@@ -34,7 +34,8 @@
 //     the same source (reason and cause), and the autoupdate step is skipped.
 //     An error that is not an add precondition propagates. A throw of the
 //     missing-dependency step comes after the add committed, so it is not an
-//     add failure: the autoupdate step runs, then the error propagates.
+//     add failure: the autoupdate step runs, then the error propagates as a
+//     `BootstrapStepError`.
 //   - ATTR-07: bootstrap passes `rethrowPreconditionErrors: true` so a failed
 //     add reaches the catch below, which is how it knows to skip the
 //     autoupdate step.
@@ -66,6 +67,19 @@ const BOOTSTRAP_SOURCE = "anthropics/claude-plugins-official";
  * prevents drift.
  */
 export const BOOTSTRAP_MARKETPLACE_NAME = "claude-plugins-official";
+
+/**
+ * WR-02 / D-PL2-09: a step after the official marketplace's add committed
+ * threw. The add already reported `(added)` and the autoupdate step ran, so
+ * this is not a failed add: the handler lets `cause` reach the command, as
+ * `marketplace add` does for the same step.
+ */
+export class BootstrapStepError extends Error {
+  constructor(cause: unknown) {
+    super("a step after the bootstrap marketplace add failed", { cause });
+    this.name = "BootstrapStepError";
+  }
+}
 
 export interface BootstrapOptions {
   readonly ctx: ExtensionContext;
@@ -135,7 +149,8 @@ export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<voi
 
     // WR-02: the add committed and reported `(added)`, so a throw of its
     // missing-dependency step is not an add failure. The autoupdate step
-    // still runs, and the error then reaches the handler.
+    // still runs, and the error then reaches the handler, wrapped so the
+    // handler can tell it from a failed add.
     stepFailure = { err };
   }
 
@@ -148,6 +163,6 @@ export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<voi
     cwd: opts.cwd,
   });
   if (stepFailure !== undefined) {
-    throw stepFailure.err;
+    throw new BootstrapStepError(stepFailure.err);
   }
 }
