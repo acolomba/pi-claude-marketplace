@@ -5,16 +5,16 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 2
 current_phase_name: Apply Ordering and Installed Declarations
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-10-27T03:43:27.531Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-10-27T04:14:12.700Z"
 last_activity: 2026-10-26
 last_activity_desc: Phase 2 execution started
-state_head: 3684379c77f12fbca52f6412006a17344283968b
+state_head: fd4cf96fc60bb23981f581597d90fd350c730d8f
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 6
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 2 (Apply Ordering and Installed Declarations) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-10-26 — Phase 2 execution started
 
@@ -191,8 +191,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-27T03:43:27.307Z
-**Stopped at:** Completed 02-01-PLAN.md
+**Last session:** 2026-10-27T04:14:12.590Z
+**Stopped at:** Completed 02-02-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -405,6 +405,7 @@ archived milestone artifacts.
 | Phase 29 P13 | 48 min | 3 tasks | 44 files |
 | Phase 29 P14 | 20 min | 2 tasks | 9 files |
 | Phase 02 P01 | 33min | 2 tasks | 8 files |
+| Phase 02 P02 | 29 min | 2 tasks | 9 files |
 
 ## Decisions
 
@@ -607,6 +608,9 @@ archived milestone artifacts.
 - [Phase 02]: D-PL2-02: the shared planner counts every planned install as present; a released dependent keeps its scheduled missing entries so the replan still plans those installs; pending lists moves, then dependency installs
 - [Phase 02]: D-PL2-14: withPlannedInstallsLanded counts a dependency the replan enables as released, to a grow-only fixpoint
 - [Phase 02]: D-PL2-16: enables that wait on a planned install travel as MoveCascade.enablesAfterInstalls and pending lists them after the installs
+- [Phase 02]: D-PL2-06: enable closure and update preflight read a pinned record's declarations from its per-commit clone (catalog fallback when absent, fail closed when unusable)
+- [Phase 02]: D-PL2-05: every declaration walk keeps the whole-scope fail-closed unit, pinned per walk
+- [Phase 02]: D-PL2-07: path-source records keep the catalog read; DECLREC-01 deferred
 
 ### mcp-4 decisions
 
