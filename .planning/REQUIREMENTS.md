@@ -79,7 +79,7 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 
 ### Git errors and lock discipline (GLK)
 
-- [ ] **GLK-01**: Every remote git access classifies a host's HTTP answer through one entry point with an explicit per-operation 404/410 rule, so plugin install, update, fetch, and info report it as marketplace add and update do (GITERR-01)
+- [x] **GLK-01**: Every remote git access classifies a host's HTTP answer through one entry point with an explicit per-operation 404/410 rule, so plugin install, update, fetch, and info report it as marketplace add and update do (GITERR-01)
 - [x] **GLK-02**: The autoupdate cascade classifies an unclassified error as the direct update path does, not as `{not in manifest}` (CASCREASON-01)
 - [x] **GLK-03**: Clone cleanup runs under the state lock at every call site (CLONEGC-01)
 - [x] **GLK-04**: A marketplace-tag-pinned update copies the marketplace git data under a lock (TAGCOPY-01)
@@ -172,7 +172,7 @@ None.
 | MIM-02 | Phase 6 | Pending |
 | MIM-03 | Phase 6 | Pending |
 | MIM-04 | Phase 6 | Pending |
-| GLK-01 | Phase 7 | Pending |
+| GLK-01 | Phase 7 | Complete |
 | GLK-02 | Phase 7 | Complete |
 | GLK-03 | Phase 7 | Complete |
 | GLK-04 | Phase 7 | Complete |
