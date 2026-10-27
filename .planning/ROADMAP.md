@@ -120,6 +120,25 @@ parent session applies them at merge.
 3. An update whose agent target is occupied refuses before any earlier move lands (RSV-04).
 4. The `no-matching-tag` range and the `rollbackPartials` declaration are settled (RSV-05).
 
+**Plans:** 6 plans
+
+Plans:
+**Wave 1**
+- [ ] 04-01-PLAN.md — Tracer: a write-free agents-bridge check refuses an occupied agent target in the move judge, the update's WR-C check and the install preview; the swap stays names-only (RSV-04, D-PL4-04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 04-02-PLAN.md — The no-match tag answer drops its unread range; the failed missing-dependency outcome declares `rollbackPartials` (RSV-05, D-PL4-05, D-PL4-06)
+- [ ] 04-03-PLAN.md — A move refusal shows file names; the apply refusal and the search limit are recorded and pinned (RSV-02, RSV-03, D-PL4-02, D-PL4-03, D-PL4-07)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 04-04-PLAN.md — `previewInstall` answers its commit and the plan carries it on each scheduled member and the root (RSV-01, D-PL4-01)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 04-05-PLAN.md — Both ledger builders pin the previewed commit, so a previewed git plugin resolves once; the apply rule is documented; the WR-C agent refusal is pinned (RSV-01, RSV-02, RSV-04)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 04-06-PLAN.md — Four scenarios (one fetch of a new git dependency; three occupied-agent-target refusals) and the phase gate `npm run check` (RSV-01, RSV-04)
+
 ### Phase 5: Marketplace Command Parity
 
 **Goal:** The marketplace commands match Claude Code on reserved names, hosted manifests, the `market` alias, shorthand parsing, row ids, and remove reporting.
