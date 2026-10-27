@@ -645,8 +645,8 @@ function nextUpdateStamp(previous: string): string {
  * No mutation to `sRecord.version` or `sRecord.resolvedSource` -- those are
  * the finalize step's responsibility. `sRecord.updatedAt` is restamped here,
  * strictly later than the stamp it replaces, so the ST-9 check sees an
- * overlapping run even when the version and the sha stay the same, and `sRecord.resources.workflows` is widened, as CR-02 below
- * says.
+ * overlapping run even when the version and the sha stay the same, and
+ * `sRecord.resources.workflows` is widened, as CR-02 below says.
  */
 async function markUpdateInProgress(
   args: ThreePhaseArgs,

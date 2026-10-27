@@ -155,6 +155,7 @@ type UpdateCascadeComposer = (
   cardinality: "single" | "plural",
   abortedByFailure?: boolean,
 ) => void;
+
 /**
  * UPD-11 / D-PL7-02: the 404 rule of a marketplace refresh. A plugin update
  * refreshes its marketplace as `marketplace update` does, so a 404 or 410

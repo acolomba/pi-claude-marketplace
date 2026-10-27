@@ -868,9 +868,9 @@ Feature: Marketplace update
       | needs reload | true                           |
       | summary      | A plugin operation has failed. |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status  | reasons           | scope   | from  | to     | version | leaks | rollback partial | cause chain                                                                                       | cause truncated |
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status  | reasons           | scope   | from  | to     | version | leaks | rollback partial | cause chain                                                                                     | cause truncated |
       | tools            | <scope>           | updated            | zeta@tools  | zeta  | failed  | permission denied | <scope> | 1.0.0 |        | 1.10.0  |       |                  | command "zeta:notes" of plugin "zeta" could not be staged, {unreadable command file read error} | false           |
-      | tools            | <scope>           | updated            | alpha@tools | alpha | updated |                   | <scope> | 1.0.0 | 1.10.0 |         |       |                  |                                                                                                   |                 |
+      | tools            | <scope>           | updated            | alpha@tools | alpha | updated |                   | <scope> | 1.0.0 | 1.10.0 |         |       |                  |                                                                                                 |                 |
     When the user runs "/claude:plugin list --scope <scope>"
     Then the result has these fields:
       | kind                | cascade     |
