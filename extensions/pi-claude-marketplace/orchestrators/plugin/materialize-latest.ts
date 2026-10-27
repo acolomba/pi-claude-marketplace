@@ -9,9 +9,11 @@
 import { loadState } from "../../persistence/state-io.ts";
 import { composeErrorWithCauseChain, rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
 
+import { DEFAULT_PACKAGE_INSTALL_OPS, installUpdatedPackages } from "./package-install.ts";
 import { isUpdatePreflightOutcome, preparePluginUpdate } from "./update-preflight.ts";
 import { preflightMove, swapPluginUpdate } from "./update-swap.ts";
 
+import type { PackageInstallOps } from "./package-install.ts";
 import type {
   MaterializationPolicy,
   PreparedPluginUpdate,
@@ -59,10 +61,14 @@ export function recordCandidate(
  * UPR-03: once the preflight derived a candidate, and before the swap starts,
  * the runner reports the candidate's revisions through `args.onCandidate`, so
  * a caller can name the move on a failure the swap throws.
+ *
+ * D-PL9-12: `packageInstallOps` drives the updated plugin's package install;
+ * production callers omit it and get the real package manager.
  */
 export async function materializeLatestVersion(
   args: ThreePhaseArgs,
   policy: MaterializationPolicy,
+  packageInstallOps: PackageInstallOps = DEFAULT_PACKAGE_INSTALL_OPS,
 ): Promise<UpdateRunOutcome> {
   const preflight = await preparePluginUpdate({
     ...args,
@@ -97,11 +103,35 @@ export async function materializeLatestVersion(
     };
   }
 
+  // D-PL9-07: an updated plugin gets the packages its new version lists.
+  const packageTarget = {
+    locations: args.locations,
+    marketplace: args.marketplace,
+    pluginRoot: preflight.installable.pluginRoot,
+    force: revisionMoved(move),
+  };
   if (settled === undefined || settled.rows.length === 0) {
-    return swapPluginUpdate(args, preflight, policy);
+    return installUpdatedPackages(
+      packageInstallOps,
+      await swapPluginUpdate(args, preflight, policy),
+      packageTarget,
+    );
   }
 
-  return swapAfterSettle(args, preflight, policy, settled.rows);
+  return installUpdatedPackages(
+    packageInstallOps,
+    await swapAfterSettle(args, preflight, policy, settled.rows),
+    packageTarget,
+  );
+}
+
+/**
+ * D-PL9-06: whether the swap lands another revision than the record holds.
+ * Every verb may move: a reinstall lands the version the marketplace offers
+ * now (REI-04), so the policy's `skipSameRevision` does not tell.
+ */
+function revisionMoved(move: RevisionMove): boolean {
+  return move.toCommit !== move.fromCommit || move.toVersion !== move.fromVersion;
 }
 
 /** The command's context for the preflight's prompts, when it has one. */
