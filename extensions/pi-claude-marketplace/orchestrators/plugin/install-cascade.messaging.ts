@@ -5,6 +5,7 @@ import {
   InstallMarketplaceAddError,
 } from "../../shared/errors.ts";
 import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
+import { printable } from "../../shared/notification-mcp.ts";
 import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
 
 import { INSTALL_CONTEXT } from "./install.messaging.ts";
@@ -285,11 +286,21 @@ export function composeCascadeMemberRows(args: {
   return sortRows(rows, args.scope);
 }
 
+/** D-PL3-14: Claude Code's wording for the half of an id that breaks the token rule. */
+const INVALID_ID_HALVES = {
+  plugin: "the plugin's name does not; the marketplace's maintainer can rename it",
+  marketplace: "the marketplace's name does not; the marketplace's maintainer can rename it",
+  both: "they do not; the marketplace's maintainer can rename both",
+} as const satisfies Record<
+  Extract<DependencyClosureResult, { readonly reason: "invalid-root-id" }>["invalidPart"],
+  string
+>;
+
 /**
  * The subject, brace and cause a closure failure resolves to.
  *
  * The exhaustive `switch` deliberately has no runtime default: under
- * `noImplicitReturns`, a future fifth `DependencyClosureResult` failure reason
+ * `noImplicitReturns`, any future `DependencyClosureResult` failure reason
  * makes this function fail typecheck instead of falling through to a `default`
  * arm no case can ever reach.
  */
@@ -348,6 +359,18 @@ function closureFailureFacts(
         reasons: ["invalid manifest"],
         cause: new DependencyCascadeError(
           `Plugin "${failure.key}" declares an unusable dependency (${failure.detail}).`,
+          failure.key,
+        ),
+      };
+    case "invalid-root-id":
+      // CAS-02 / D-PL3-04: the id is outside the token allowlist by
+      // definition, so it is printed with its control and format characters
+      // escaped (D-PL3-14).
+      return {
+        key: failure.key,
+        reasons: ["invalid manifest"],
+        cause: new DependencyCascadeError(
+          `Plugin "${printable(failure.key)}" cannot be installed, because its id is invalid: Each part of a plugin id (plugin@marketplace) may use only the letters a-z and A-Z, digits, ".", "_" and "-", and must start with a letter or digit. Here ${INVALID_ID_HALVES[failure.invalidPart]}.`,
           failure.key,
         ),
       };

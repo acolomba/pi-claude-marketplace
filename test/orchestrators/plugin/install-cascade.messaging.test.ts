@@ -711,6 +711,69 @@ describe("composeCascadeFailureMessage", () => {
     });
   });
 
+  for (const { label, invalidPart, half } of [
+    {
+      label: "plugin name",
+      invalidPart: "plugin",
+      half: "the plugin's name does not; the marketplace's maintainer can rename it",
+    },
+    {
+      label: "marketplace name",
+      invalidPart: "marketplace",
+      half: "the marketplace's name does not; the marketplace's maintainer can rename it",
+    },
+    {
+      label: "plugin and marketplace names",
+      invalidPart: "both",
+      half: "they do not; the marketplace's maintainer can rename both",
+    },
+  ] as const) {
+    test(`CAS-02 / D-PL3-14 a requesting plugin whose id breaks the token rule in its ${label} renders Claude Code's invalid-id cause`, () => {
+      // arrange
+      const subject: CascadeFailureSubject = {
+        kind: "closure",
+        failure: { ok: false, reason: "invalid-root-id", key: ROOT_KEY, invalidPart },
+      };
+
+      // act
+      const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+      // assert
+      assert.deepStrictEqual(emitted, {
+        severity: "error",
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● official [user]",
+          "  ⊘ helper (failed) {invalid manifest}",
+          `    cause: Plugin "helper@official" cannot be installed, because its id is invalid: Each part of a plugin id (plugin@marketplace) may use only the letters a-z and A-Z, digits, ".", "_" and "-", and must start with a letter or digit. Here ${half}.`,
+        ].join("\n"),
+      });
+    });
+  }
+
+  test("D-PL3-14 the invalid-id cause escapes a format character in the plugin id", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "closure",
+      failure: {
+        ok: false,
+        reason: "invalid-root-id",
+        key: "_hel\u202eper@official",
+        invalidPart: "plugin",
+      },
+    };
+
+    // act
+    const cause = cascadeFailureCause(subject, ROOT_KEY);
+
+    // assert
+    assert.strictEqual(
+      cause.message,
+      String.raw`Plugin "_hel\u202eper@official" cannot be installed, because its id is invalid: Each part of a plugin id (plugin@marketplace) may use only the letters a-z and A-Z, digits, ".", "_" and "-", and must start with a letter or digit. Here the plugin's name does not; the marketplace's maintainer can rename it.`,
+    );
+  });
+
   test("RESV-03 contradictory declarations name the joined declared ranges", () => {
     // arrange
     const subject: CascadeFailureSubject = {

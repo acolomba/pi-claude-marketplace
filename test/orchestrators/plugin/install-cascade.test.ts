@@ -4500,6 +4500,35 @@ test("WR-1: a failed graph walk names the plugins whose declarations the failure
   ]);
 });
 
+test("CAS-02: a graph walk of a listed root whose id breaks the token rule fails with no declarer", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-cascade-walk-invalid-root-");
+  const state = await seedMarketplace(environment.cwd, ["_app"]);
+
+  // act
+  const walked = await walkDependencyGraph({
+    state,
+    locations: locationsFor("project", environment.cwd),
+    rootKey: `_app@${MARKETPLACE}`,
+    lookup: catalog({ [`_app@${MARKETPLACE}`]: [] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    rootAllowedMarketplaces: new Set<string>(),
+    installedKeys: new Set<string>(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert
+  assert.ok(walked.kind === "closure-failed");
+  assert.deepStrictEqual(
+    [walked.kind, walked.declarers, walked.failure],
+    [
+      "closure-failed",
+      [],
+      { ok: false, reason: "invalid-root-id", key: `_app@${MARKETPLACE}`, invalidPart: "plugin" },
+    ],
+  );
+});
+
 test("UPD-DEP-D1: a recorded root's cascade whose member fails reports it failed", async (t) => {
   // arrange: the injected scheduler fails the phase array.
   const environment = await createHermeticEnvironment(t, "install-cascade-root-member-");

@@ -1744,6 +1744,10 @@ function failureDeclarers(failure: CascadeResolutionFailure, declared: DeclaredE
     return [...closure.chain];
   }
 
+  if (closure.reason === "invalid-root-id") {
+    return [];
+  }
+
   return closure.reason === "unusable-declaration"
     ? [closure.key, ...declarersOf(closure.key)]
     : [closure.requiredBy];
