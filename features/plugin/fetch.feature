@@ -149,10 +149,10 @@ Feature: Plugin fetch
       | tally warnings      | 0                              |
       | tally success count | 2                              |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name | status    | reasons        | scope   | version | cause chain                                                        | cause truncated | leaks | rollback partial |
-      | gits             | project           | demo@gits | demo | skipped   | up-to-date     | project | 1.0.0   |                                                                    |                 |       |                  |
-      | gits             | project           | ghp@gits  | ghp  | failed    | source missing | project |         | HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git | false           |       |                  |
-      | gits             | project           | urlp@gits | urlp | available |                |         |         |                                                                    |                 |       |                  |
+      | marketplace name | marketplace scope | id        | name | status    | reasons        | scope   | version | cause chain                                                                                                 | cause truncated | leaks | rollback partial |
+      | gits             | project           | demo@gits | demo | skipped   | up-to-date     | project | 1.0.0   |                                                                                                             |                 |       |                  |
+      | gits             | project           | ghp@gits  | ghp  | failed    | source missing | project |         | 404 on https://{git host}/acme/ghp.git, HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git  | false           |       |                  |
+      | gits             | project           | urlp@gits | urlp | available |                |         |         |                                                                                                             |                 |       |                  |
     Then the git host receives these requests:
       | method | path                                             | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack  | 404    |
@@ -161,6 +161,30 @@ Feature: Plugin fetch
     Then the project scope holds these git clones:
       | clone  | origin                           | revision          |
       | plugin | https://{git host}/acme/urlp.git | {urlp revision 1} |
+
+  Scenario: Fetching a plugin the git host answers with a server error fails as network error and names the status
+    Given the git repository "urlp" holds these plugins:
+      | name | version | path |
+      | urlp | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | urlp | url         | urlp       | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the git host answers 503 for the plugin "urlp"
+    When the user runs "/claude:plugin fetch urlp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status | reasons       | scope   | cause chain                                                                  | cause truncated | leaks | rollback partial |
+      | gits             | project           | urlp@gits | urlp | failed | network error | project | 503 on https://{git host}/acme/urlp.git, HTTP Error: 503 Service Unavailable | false           |       |                  |
+    Then the git host receives these requests:
+      | method | path                                             | status |
+      | GET    | /acme/urlp.git/info/refs?service=git-upload-pack | 503    |
+    Then the project scope holds no git clones
 
   Scenario: A bare fetch fetches the git-source plugins of every marketplace in the scope
     Given the git repository "ghp" holds these plugins:

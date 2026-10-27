@@ -37,7 +37,7 @@ import {
   rethrowInvalidGitHubBaseUrl,
   StateLockHeldError,
 } from "../../shared/errors.ts";
-import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { classifyGitFailure } from "../../shared/git-failure-classifiers.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   notifyWithContext,
@@ -389,7 +389,7 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
     return await freshRow(entry, marketplaceContext, locations, deps.status);
   } catch (err) {
     rethrowInvalidGitHubBaseUrl(err);
-    return failedRow(entry, err);
+    return failedRow(entry, err, networkCloneUrl(gitSource));
   }
 }
 
@@ -545,53 +545,59 @@ async function reasonedRow(
 }
 
 /**
- * Capture a thrown per-plugin fetch into a `(failed)` row. The materialize throw
- * (network / auth / fs) narrows into the EXISTING closed-set REASONS (`network
- * unreachable` / `authentication required` / `source missing` / `permission
- * denied`) so the sweep stays failure-tolerant with no new token; the raw error
- * text rides the `cause` chain. `severity` is REQUIRED on a failed row (GATE-01)
- * -- a fetch that threw did not warm the cache (the desired state was not
- * carried out), so it stamps `error`, at parity with the install / update /
- * reinstall per-plugin failed rows.
+ * Capture a thrown per-plugin fetch into a `(failed)` row. The throw narrows
+ * into the EXISTING closed-set REASONS (`narrowFetchFailure`), so the sweep
+ * stays failure-tolerant with no new token; the raw error rides the `cause`
+ * chain. When the git host answered with an HTTP status, the cause leads with
+ * `{status} on {url}`, the status and the URL the fetch sent (`remoteUrl`, the
+ * source's wire URL), as `marketplace update` frames a refused refresh
+ * (D-PL7-03, D-PL7-14). `severity` is REQUIRED on a failed row (GATE-01) -- a
+ * fetch that threw did not warm the cache (the desired state was not carried
+ * out), so it stamps `error`, at parity with the install / update / reinstall
+ * per-plugin failed rows.
  */
-function failedRow(entry: ManifestEntry, err: unknown): FetchMsg {
-  const cause = err instanceof Error ? err : new Error(errorMessage(err));
+function failedRow(entry: ManifestEntry, err: unknown, remoteUrl: string): FetchMsg {
+  const error = err instanceof Error ? err : new Error(errorMessage(err));
+  const { reason, frame } = narrowFetchFailure(err, remoteUrl);
   return {
     status: "failed",
     severity: "error",
     name: entry.name,
-    reasons: [narrowFetchFailure(err)],
-    cause,
+    reasons: [reason],
+    cause: frame === undefined ? error : new Error(frame, { cause: error }),
     ...(entry.version !== undefined && { version: entry.version }),
   };
 }
 
 /**
- * Narrow a git-materialize throw into an EXISTING closed-set REASON -- no new
- * token. The shared `classifyGitTransportFailure` ladder handles the
- * `StoredCredentialRejectedError` (a stored credential the host refused), the
- * isomorphic-git `HttpError` (401/403 -> auth), `UserCanceledError` (a helper
- * miss, or a device flow that failed or whose credential the host refused), and
- * network-errno arms; fetch adds the fs errno arms of `reasonsFromTypedError`
- * and folds any non-recognized throw to `source missing` (the fail-clean
- * default -- the tree could not be produced).
+ * Narrow a fetch throw into an EXISTING closed-set REASON -- no new token. The
+ * ladder: a held scope lock is `lock held`; then `classifyGitFailure` with the
+ * plugin-clone rule (D-PL7-02), so a host 404/410 is `source missing`, any
+ * other non-auth HTTP status `network error` (with its frame), and the
+ * credential and network-errno arms keep their reasons; then the fs errno arms
+ * of `reasonsFromTypedError` (EACCES/EPERM -> `permission denied`); and any
+ * other throw folds to `source missing` (the fail-clean default -- the tree
+ * could not be produced).
  */
-function narrowFetchFailure(err: unknown): ContentReason {
+function narrowFetchFailure(
+  err: unknown,
+  remoteUrl: string,
+): { readonly reason: ContentReason; readonly frame?: string } {
   if (err instanceof StateLockHeldError) {
-    return "lock held";
+    return { reason: "lock held" };
   }
 
-  const transport = classifyGitTransportFailure(err);
-  if (transport !== undefined) {
-    return transport;
+  const classified = classifyGitFailure(err, { notFound: "source missing" }, remoteUrl);
+  if (classified !== undefined) {
+    return classified;
   }
 
   if (err instanceof Error) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "EACCES" || code === "EPERM") {
-      return "permission denied";
+      return { reason: "permission denied" };
     }
   }
 
-  return "source missing";
+  return { reason: "source missing" };
 }

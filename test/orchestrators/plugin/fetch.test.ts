@@ -2405,3 +2405,88 @@ test("folds a non-Error status read after the locked fetch into a failed row", a
     verifyNotifications(boundary);
   });
 });
+
+for (const { title, statusCode, statusText, expectedRow } of [
+  {
+    title:
+      "GLK-01: a host 503 on a mirror refresh fails the row as network error framed by its status and URL",
+    statusCode: 503,
+    statusText: "Service Unavailable",
+    expectedRow: [
+      "  ⊘ refused (failed) {network error}",
+      "    cause: 503 on https://example.com/refused -> HTTP Error: 503 Service Unavailable",
+    ],
+  },
+  {
+    title:
+      "GLK-01: a host 404 on a mirror refresh fails the row as source missing framed by its status and URL",
+    statusCode: 404,
+    statusText: "Not Found",
+    expectedRow: [
+      "  ⊘ refused (failed) {source missing}",
+      "    cause: 404 on https://example.com/refused -> HTTP Error: 404 Not Found",
+    ],
+  },
+  {
+    title:
+      "GLK-01: a host 401 on a mirror refresh fails the row as authentication required with no frame",
+    statusCode: 401,
+    statusText: "Unauthorized",
+    expectedRow: [
+      "  ⊘ refused (failed) {authentication required}",
+      "    cause: HTTP Error: 401 Unauthorized",
+    ],
+  },
+]) {
+  test(title, async () => {
+    await withWorkspace(async ({ cwd }) => {
+      // arrange
+      const cloneUrl = "https://example.com/refused";
+      const marketplace = await marketplaceRecord({
+        cwd,
+        entries: [{ name: "refused", source: { source: "url", url: cloneUrl } }],
+        name: "marketplace",
+        scope: "project",
+      });
+      await saveMarketplaces(cwd, "project", [marketplace]);
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const boundary = notificationBoundary(`host ${statusCode}`);
+      const seam: FetchCloneCacheSeam = {
+        materializeOrRefreshPluginMirror: () =>
+          Promise.reject(
+            Object.assign(new Error(`HTTP Error: ${statusCode} ${statusText}`), {
+              code: "HttpError",
+              data: { statusCode },
+            }),
+          ),
+        materializePluginClone: () => assert.fail("an unpinned source never clones a pin"),
+        resolvePluginPin: () => assert.fail("an unpinned source never resolves a pin"),
+      };
+
+      // act
+      await fetchPlugins({
+        cloneCacheSeam: seam,
+        credentialOps: credentials.credentialOps,
+        ctx: boundary.ctx,
+        cwd,
+        run: boundary.run,
+        scope: "project",
+        target: { kind: "plugin", marketplace: "marketplace", plugin: "refused" },
+      });
+
+      // assert
+      assert.deepStrictEqual(boundary.notifications, [
+        {
+          message: [
+            "A plugin operation has failed.",
+            "",
+            "● marketplace [project]",
+            ...expectedRow,
+          ].join("\n"),
+          severity: "error",
+        },
+      ]);
+      verifyNotifications(boundary);
+    });
+  });
+}
