@@ -474,14 +474,18 @@ async function resolveUpdateCandidate(
           pathSource: PathSource,
           tagPin: string,
         ): Promise<GitPluginRootResult> => {
-          const result = await (options.pathPinProbe ?? materializeMarketplaceTagClone)({
-            locations: options.locations,
-            marketplaceRoot: marketplace.marketplaceRoot,
-            marketplaceSource: marketplace.source,
-            marketplaceName: marketplace.name,
-            pathSource,
-            tagOid: tagPin,
-          });
+          // GLK-04 / D-PL7-06: the copy reads the marketplace `.git` that
+          // `marketplace update` refreshes under this same scope lock.
+          const result = await withExistingScopeLock(options.locations, () =>
+            (options.pathPinProbe ?? materializeMarketplaceTagClone)({
+              locations: options.locations,
+              marketplaceRoot: marketplace.marketplaceRoot,
+              marketplaceSource: marketplace.source,
+              marketplaceName: marketplace.name,
+              pathSource,
+              tagOid: tagPin,
+            }),
+          );
           if (result.kind === "materialized") {
             pathResolvedSha = result.resolvedSha;
           }

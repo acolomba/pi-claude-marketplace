@@ -1426,6 +1426,69 @@ test("UPDT-01: without an injected pathPinProbe, a path-source pin uses the real
   assert.strictEqual(prepared.toVersion, `1.2.0-${oid.slice(0, 12)}`);
 });
 
+const pathPinGate: PreparePluginUpdateOptions["constraintGate"] = () =>
+  Promise.resolve({
+    kind: "admits",
+    range: "^1.0.0",
+    holders: [],
+    pin: { oid: "path-tag-oid", version: "1.2.0" },
+    fellBackToCurrentCopy: false,
+    disclosure: "already the highest version the combined range admits",
+  });
+
+test("GLK-04: a tag-pinned path update copies the marketplace tag while it holds the scope lock", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0"), version: "1.2.0" });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const lockObservations: boolean[] = [];
+  const pathPinProbe: PreparePluginUpdateOptions["pathPinProbe"] = async () => {
+    lockObservations.push(
+      await lockfile.check(seed.locations.extensionRoot, {
+        lockfilePath: seed.locations.stateLockFile,
+        realpath: false,
+      }),
+    );
+    return { kind: "materialized", pluginRoot: seed.pluginRoot, resolvedSha: "path-tag-oid" };
+  };
+
+  // act
+  const prepared = await prepare(seed, { constraintGate: pathPinGate, pathPinProbe });
+
+  // assert
+  assert.ok(!("partition" in prepared));
+  assert.strictEqual(prepared.resolvedSha, "path-tag-oid");
+  assert.deepStrictEqual(lockObservations, [true]);
+  assert.strictEqual(
+    await lockfile.check(seed.locations.extensionRoot, {
+      lockfilePath: seed.locations.stateLockFile,
+      realpath: false,
+    }),
+    false,
+  );
+});
+
+test("GLK-04: a tag-pinned path update fails as lock held and copies nothing while another holder has the scope lock", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0"), version: "1.2.0" });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const pathPinProbe: PreparePluginUpdateOptions["pathPinProbe"] = () =>
+    assert.fail("the tag copy ran while another holder had the scope lock");
+  const release = await lockfile.lock(seed.locations.extensionRoot, {
+    lockfilePath: seed.locations.stateLockFile,
+    realpath: false,
+  });
+
+  // act & assert
+  try {
+    await assert.rejects(
+      prepare(seed, { constraintGate: pathPinGate, pathPinProbe }),
+      StateLockHeldError,
+    );
+  } finally {
+    await release();
+  }
+});
+
 test("D-10-17: an unconstrained update supplies no path pin to the resolver", async (t) => {
   // arrange -- `resolveStrict` is a hard import with no injection seam of its
   // own (like every other orchestrator that calls it), so the resolver
