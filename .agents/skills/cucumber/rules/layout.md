@@ -17,6 +17,7 @@ Cucumber loads `features/support/**/*.ts` and `features/step_definitions/**/*.st
 | `features/support/world.ts`                     | The world class, its registration, its release hook, and any run-wide timeout. |
 | `features/support/<name>.ts`                    | Hooks and parameter types of one vertical.                                     |
 | `features/lib/<name>.ts`                        | Reusable code that registers nothing: drivers, fakes, and fixtures.            |
+| `features/lib/pi-tui-pty.py`                    | The fixed Python standard-library bridge for the real-terminal TUI driver.     |
 
 Run them with `npm run test:cucumber`. A project with an orders function and a fake of the Acme payments API looks like this:
 
@@ -59,6 +60,7 @@ When behavioral coverage is split into streams of work that run in parallel, eac
 
 - The `.steps.ts` suffix is mandatory for step modules, and only step modules use it: `cucumber.json` loads step modules by that suffix, so it is also how a reader tells which files register steps. A step module lives under `features/step_definitions/` only.
 - Only step modules call `Given`, `When`, or `Then`, and only support modules register anything else. A library module registers nothing and never imports a step module.
+- The one Python library file is `pi-tui-pty.py`. It opens and relays a PTY for `pi-tui.ts`; no other Python file belongs under `features/`.
 - A support module holds no helpers. A small helper private to one step module may stay in it; once a second module needs it, or a hook and a step both need it, it moves to `features/lib/`.
 - Every external service the code talks to has a local stand-in in its own module under `features/lib/`: a loopback-only fake for a networked service, a fixture for local input such as a directory of files.
 - Nothing under `features/` imports from `test/`, except a driver that reuses a process harness.

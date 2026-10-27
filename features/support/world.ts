@@ -28,6 +28,7 @@ import {
 import { npmConfigText, NpmRegistry } from "../lib/npm-registry.ts";
 import { readSession } from "../lib/pi-commands.ts";
 import { PiProcess } from "../lib/pi-process.ts";
+import { PiTuiSession } from "../lib/pi-tui.ts";
 import { rowArrays } from "../lib/result-rows.ts";
 
 import { currentRun } from "./pi-process.ts";
@@ -82,6 +83,7 @@ export class ScenarioWorld extends World {
   // A Pi this scenario started with an environment of its own; while set it
   // takes the place of the run's Pi.
   private scenarioPi: PiProcess | undefined = undefined;
+  private tuiSession: PiTuiSession | undefined = undefined;
 
   /**
    * The Pi the steps talk to: the one this scenario started with
@@ -431,6 +433,29 @@ export class ScenarioWorld extends World {
       ...currentRun().piEnvironment,
       PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS: value,
     });
+  }
+
+  /** Starts one contained production TUI and registers its release before waiting for readiness. */
+  async startTuiSession(): Promise<PiTuiSession> {
+    if (this.tuiSession !== undefined) {
+      throw new Error("a TUI session already started in this scenario");
+    }
+
+    const run = currentRun();
+    const tui = await PiTuiSession.start({ sandbox: run.sandbox, git: run.piEnvironment });
+    this.onRelease(() => tui.stop());
+    this.tuiSession = tui;
+    await tui.waitUntilReady();
+    return tui;
+  }
+
+  /** Returns the contained TUI this scenario started. */
+  requireTuiSession(): PiTuiSession {
+    if (this.tuiSession === undefined) {
+      throw new Error("no TUI session started in this scenario");
+    }
+
+    return this.tuiSession;
   }
 
   /** Registers `release` to run when the scenario ends, before anything registered earlier. */

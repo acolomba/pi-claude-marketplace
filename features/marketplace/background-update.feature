@@ -1,8 +1,12 @@
 Feature: Marketplace background update
 
   Pi updates the plugins of autoupdate marketplaces in the background only in a tui session.
-  The suite drives a headless Pi over RPC that would wait no delay before that update, with a
-  local marketplace in place of a published one, so it proves that an RPC session updates nothing.
+  The suite drives a real pseudoterminal and a headless RPC negative control in one sandbox,
+  with local marketplaces in place of published ones.
+
+  Scenario: A PTY backed TUI session is interactive and ready inside its sandbox
+    When the user starts a tui session
+    Then the tui session has an interactive terminal and is ready
 
   Scenario: A message in an RPC session leaves the plugins of an autoupdate marketplace as they are
     Given pi runs with the background update delay "0"
