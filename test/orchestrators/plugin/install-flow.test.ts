@@ -18525,6 +18525,27 @@ for (const { title, catalog } of FRESH_GIT_DEPENDENCY_CASES) {
   });
 }
 
+test("D-PL4-01: a git plugin installed after a dependency move installs the commit its own preview resolved, resolving it once", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope({ lib: { version: "1.2.0" } });
+    await installed(owner, cwd, "lib");
+    await publishCatalog(marketplaceRoot, { lib: { version: "2.0.0" } });
+    const repository = await offerGitPlugin(marketplaceRoot, "app", ["lib@^2.0.0"]);
+
+    // act
+    const install = await installAppCountingResolves(owner, cwd, repository);
+
+    // assert
+    assert.deepStrictEqual(install, { status: "installed", mirrors: 1, pins: [HOST_HEAD] });
+    assert.deepStrictEqual(await recordedVersions(cwd), {
+      app: ["1.0.0", true],
+      lib: ["2.0.0", true],
+    });
+    assert.strictEqual(await recordedSha(cwd, "app"), HOST_HEAD);
+  });
+});
+
 test("UPD-DEP-D1: installing refuses a plugin whose installed dependency no release moves inside its range", async () => {
   await withHermeticHome(async (owner) => {
     // arrange
@@ -18924,6 +18945,44 @@ describe("createUpdateDependencyResolver", () => {
         other: ["1.0.0", true],
         widget: ["1.0.0", true],
       });
+    });
+  });
+
+  test("D-PL4-04: refuses a version whose agent target a user's file holds before it installs any dependency", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({ widget: { version: "1.0.0" } });
+      await installed(owner, cwd, "widget");
+      await publishCatalog(marketplaceRoot, {
+        widget: { version: "1.1.0", dependencies: ["zcore"] },
+        zcore: { version: "1.0.0" },
+      });
+      await mkdir(path.join(marketplaceRoot, "plugins", "widget", "agents"));
+      await writeFile(
+        path.join(marketplaceRoot, "plugins", "widget", "agents", "helper.md"),
+        "---\nname: helper\ndescription: Helper\ntools: Read, Grep\n---\n\nBody.\n",
+      );
+      const agentsDir = locationsFor("project", cwd).agentsDir;
+      const userFile = path.join(agentsDir, "pi-claude-marketplace-widget-helper.md");
+      await mkdir(agentsDir, { recursive: true });
+      await writeFile(userFile, "The user's own agent.\n");
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+      );
+
+      // act & assert
+      await assert.rejects(
+        settle(updateArgs(owner, cwd, "widget"), await preparedUpdate(cwd, "widget"), {
+          ctx,
+          run,
+        }),
+        new Error(`Cannot replace agent target with non-previous content at ${userFile}`),
+      );
+      assert.deepStrictEqual(await recordedVersions(cwd), { widget: ["1.0.0", true] });
+      assert.strictEqual(await readFile(userFile, "utf8"), "The user's own agent.\n");
     });
   });
 

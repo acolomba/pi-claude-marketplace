@@ -340,6 +340,11 @@ export interface InstallPluginOptions {
    * only what the plugin reaches without passing a move, and its moves list no
    * release tag (D-23), as the caller's plan and `pending` do. Only `apply`
    * sets it; the command and `import` install what each move needs before it.
+   * D-PL4-02: the plan still previews every fresh dependency, also one that
+   * only a moved dependency's new version needs and that the later step
+   * installs. So one that cannot install refuses the plugin before any move
+   * lands, as Claude Code's install of one plugin is all or nothing over its
+   * closure.
    */
   readonly dependencyInstallsFollow?: true;
   /**
@@ -3602,7 +3607,8 @@ async function installAfterMoves(args: {
 
 /**
  * The plan of an install: the plugin the user named first, then the whole
- * graph. CR-N2: anything the plan throws -- an unreadable catalog only a
+ * graph. D-PL4-01: the plugin the user named installs the commit its preview
+ * resolved. CR-N2: anything the plan throws -- an unreadable catalog only a
  * moved dependency's new version reaches, say -- is the install's failure,
  * rendered at the catch site like the first run's.
  */
@@ -3616,7 +3622,7 @@ async function planInstallMoves(args: {
 }): Promise<InstallPlanResult> {
   const { owners, opts, target } = args;
   try {
-    await previewInstall(
+    const rootCommit = await previewInstall(
       await loadState(target.locations.extensionRoot),
       target.locations,
       buildInstallLedgerOptions(opts, owners.env, {
@@ -3630,7 +3636,10 @@ async function planInstallMoves(args: {
       }),
     );
     const ports = await planningPorts({ ...args, caller: opts });
-    const plan = await planDependencyGraph(ports, { deferMoveDependencies: args.defers });
+    const plan = await planDependencyGraph(ports, {
+      deferMoveDependencies: args.defers,
+      ...(rootCommit !== undefined && { rootCommit }),
+    });
     return plan.ok
       ? plan
       : {
