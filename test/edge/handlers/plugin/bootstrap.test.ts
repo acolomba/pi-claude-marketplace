@@ -158,8 +158,15 @@ interface GitPort {
   readonly clones: readonly GitCloneCall[];
 }
 
-function createBootstrapDeps(gitOps: EdgeDeps["gitOps"]) {
-  return { completionCache: createCompletionCache(), gitOps };
+/** The missing-dependency step's answer when the user scope needs no install. */
+const NO_DEPENDENCY_INSTALLS = { rows: [], mcpConfigNotices: [] };
+
+function createBootstrapDeps(
+  gitOps: EdgeDeps["gitOps"],
+  installMissingDependencies: EdgeDeps["installMissingDependencies"] = () =>
+    Promise.resolve(NO_DEPENDENCY_INSTALLS),
+) {
+  return { completionCache: createCompletionCache(), gitOps, installMissingDependencies };
 }
 
 /**
@@ -270,6 +277,27 @@ test("clones through the injected git port into the user scope at the accepted a
   // assert
   assert.deepStrictEqual(describeClones(git.clones, userStagingRoot(cwd)), [BOOTSTRAP_CLONE]);
   assert.strictEqual(networkCallCount(), 0);
+  verifyBoundary();
+});
+
+test("D-PL2-09: forwards the missing-dependency step, which the workflow runs once in the user scope", async (t) => {
+  // arrange
+  const { cwd, sourceTree } = await createHermeticScope(t, "dependency-step");
+  const { ctx, verifyBoundary } = createNotificationBoundary(2, { value: cwd, reads: 1 });
+  const git = createGitPort(sourceTree);
+  const requests: { readonly scope: Scope; readonly cwd: string }[] = [];
+  const bootstrapHandler = makeBootstrapHandler(
+    createBootstrapDeps(git.gitOps, (request) => {
+      requests.push({ scope: request.scope, cwd: request.cwd });
+      return Promise.resolve(NO_DEPENDENCY_INSTALLS);
+    }),
+  );
+
+  // act
+  await bootstrapHandler("", ctx, runWithNothingLoaded());
+
+  // assert
+  assert.deepStrictEqual(requests, [{ scope: "user", cwd }]);
   verifyBoundary();
 });
 

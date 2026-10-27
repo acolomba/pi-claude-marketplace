@@ -45,6 +45,7 @@ import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { AddMarketplaceOptions } from "../marketplace/add.ts";
 import type { GitOps } from "../marketplace/shared.ts";
+import type { ScopeDependencyInstallFn } from "../types.ts";
 
 /**
  * Hard-coded GitHub shorthand for the canonical Anthropic marketplace.
@@ -75,6 +76,12 @@ export interface BootstrapOptions {
   readonly completionCache: CompletionCache;
   /** D-12 injection seam. Always provided by the edge handler via EdgeDeps. */
   readonly gitOps: GitOps;
+  /**
+   * D-PL2-09: bootstrap runs the missing-dependency step through its add, in
+   * the user scope, and the add selects only the official marketplace's
+   * dependencies. Its rows render under the add's `(added)` row.
+   */
+  readonly installMissingDependencies: ScopeDependencyInstallFn;
 }
 
 /**
@@ -103,6 +110,7 @@ export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<voi
     rawSource: BOOTSTRAP_SOURCE,
     completionCache: opts.completionCache,
     gitOps: opts.gitOps,
+    installMissingDependencies: opts.installMissingDependencies,
     // ATTR-07: re-throw the typed precondition instead of emitting a
     // `(failed)` row, so the catch below can skip the autoupdate step.
     rethrowPreconditionErrors: true,

@@ -2,7 +2,8 @@
 //
 // Thin-shim handler factory for `/claude:plugin bootstrap`.
 //
-// Delegates to `bootstrapClaudePlugin`, threading `deps.gitOps` through.
+// Delegates to `bootstrapClaudePlugin`, threading `deps.gitOps` and the
+// missing-dependency step (D-PL2-09) through.
 // Idempotent end-to-end -- both composed orchestrators are idempotent.
 //
 // The bootstrap subcommand takes NO positional arguments and rejects
@@ -35,7 +36,7 @@ import type { EdgeDeps } from "../../types.ts";
 const USAGE = "Usage: /claude:plugin bootstrap";
 
 export function makeBootstrapHandler(
-  deps: Pick<EdgeDeps, "completionCache" | "gitOps">,
+  deps: Pick<EdgeDeps, "completionCache" | "gitOps" | "installMissingDependencies">,
 ): SubcommandHandler {
   // fallow-ignore-next-line code-duplication -- reviewed: bootstrap and import share the same parse-then-reject-positionals prologue on purpose, so each handler reads top to bottom
   return async (args, ctx, run): Promise<void> => {
@@ -72,6 +73,7 @@ export function makeBootstrapHandler(
         cwd: ctx.cwd,
         completionCache: deps.completionCache,
         gitOps: deps.gitOps,
+        installMissingDependencies: deps.installMissingDependencies,
       });
     } catch (err) {
       // GHB-03: an invalid GitHub base override fails the command instead of
