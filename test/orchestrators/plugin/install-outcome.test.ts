@@ -2607,7 +2607,7 @@ test("D-PL4-04: previewInstall refuses an agent target a user's file holds and w
       assert.ok(error instanceof Error);
       assert.strictEqual(
         error.message,
-        `Cannot replace agent target with non-previous content at ${target}`,
+        `Cannot replace agent target with non-previous content at ${path.basename(target)}`,
       );
       return true;
     },

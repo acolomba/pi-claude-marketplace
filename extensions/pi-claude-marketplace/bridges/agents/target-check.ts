@@ -10,6 +10,7 @@
 import path from "node:path";
 
 import { loadAgentsIndex } from "../../persistence/agents-index-io.ts";
+import { AgentTargetOccupiedError } from "../../shared/errors-bridges.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
 
 import { partitionByOwner } from "./index-mutation.ts";
@@ -22,7 +23,8 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
  * replaced index row of `owner` names. The rule is the one the agents commit
  * applies without `force`: a row of the plugin is replaced only while its file
  * is still the plugin's own (AG-5). The check reads the agents index and the
- * disk, and writes nothing. It throws the commit's own message.
+ * disk, and writes nothing. It throws `AgentTargetOccupiedError`, whose
+ * message is the commit's with the file name in place of the full path.
  */
 export async function assertAgentTargetsFree(
   locations: ScopedLocations,
@@ -43,7 +45,7 @@ export async function assertAgentTargetsFree(
     const target = path.join(locations.agentsDir, `${name}.md`);
     // eslint-disable-next-line no-await-in-loop -- the first occupied target throws
     if (!replacedTargets.has(target) && (await pathExists(target))) {
-      throw new Error(`Cannot replace agent target with non-previous content at ${target}`);
+      throw new AgentTargetOccupiedError(target);
     }
   }
 }

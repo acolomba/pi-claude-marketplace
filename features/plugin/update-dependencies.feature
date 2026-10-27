@@ -57,8 +57,8 @@ Feature: Plugin update dependencies
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id           | name   | status | reasons             | scope   | version | from  | cause chain                                                                                                              | cause truncated | leaks | rollback partial |
-      | tools            | project           | widget@tools | widget | failed | unreadable manifest | project | 1.1.0   | 1.0.0 | Cannot replace agent target with non-previous content at {project dir}/.pi/agents/pi-claude-marketplace-widget-helper.md | false           |       |                  |
+      | marketplace name | marketplace scope | id           | name   | status | reasons             | scope   | version | from  | cause chain                                                                                     | cause truncated | leaks | rollback partial |
+      | tools            | project           | widget@tools | widget | failed | unreadable manifest | project | 1.1.0   | 1.0.0 | Cannot replace agent target with non-previous content at pi-claude-marketplace-widget-helper.md | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id           | version | enabled |
       | widget@tools | 1.0.0   | true    |

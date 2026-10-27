@@ -349,8 +349,8 @@ test("D-PL4-04: assertUpdateNamesFree refuses a candidate whose new agent target
       assert.deepStrictEqual(
         { name: error.name, message: error.message, cause: error.cause },
         {
-          name: "Error",
-          message: `Cannot replace agent target with non-previous content at ${newTarget}`,
+          name: "AgentTargetOccupiedError",
+          message: `Cannot replace agent target with non-previous content at ${path.basename(newTarget)}`,
           cause: undefined,
         },
       );

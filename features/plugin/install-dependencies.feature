@@ -965,9 +965,9 @@ Feature: Plugin install dependencies
       | needs reload | false                               |
       | summary      | Some plugin operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name      | status | reasons           | scope   | cause chain                                                                                                           | cause truncated | leaks | rollback partial |
-      | tools            | project           | app@tools | app       | failed | dependency failed | project |                                                                                                                       |                 |       |                  |
-      | tools            | project           | kit@tools | kit@tools | failed |                   | project | Cannot replace agent target with non-previous content at {project dir}/.pi/agents/pi-claude-marketplace-kit-helper.md | false           |       |                  |
+      | marketplace name | marketplace scope | id        | name      | status | reasons           | scope   | cause chain                                                                                  | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | failed | dependency failed | project |                                                                                              |                 |       |                  |
+      | tools            | project           | kit@tools | kit@tools | failed |                   | project | Cannot replace agent target with non-previous content at pi-claude-marketplace-kit-helper.md | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id        | version | enabled |
       | lib@tools | 1.2.0   | true    |

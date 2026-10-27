@@ -6,6 +6,7 @@ import test from "node:test";
 
 import { assertAgentTargetsFree } from "../../../extensions/pi-claude-marketplace/bridges/agents/target-check.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { AgentTargetOccupiedError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -51,10 +52,11 @@ async function seedIndexRow(
 
 function assertOccupiedRefusal(target: string): (error: unknown) => boolean {
   return (error: unknown) => {
-    assert.ok(error instanceof Error);
+    assert.ok(error instanceof AgentTargetOccupiedError);
+    assert.strictEqual(error.targetPath, target);
     assert.strictEqual(
       error.message,
-      `Cannot replace agent target with non-previous content at ${target}`,
+      `Cannot replace agent target with non-previous content at ${path.basename(target)}`,
     );
     return true;
   };
