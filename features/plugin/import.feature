@@ -710,6 +710,45 @@ Feature: Plugin import
       | severity     | info                    |
       | needs reload | false                   |
 
+  Scenario: Importing settings that name a known marketplace the way the config already names it keeps the config's names
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given a config in scope user and layer base, with these marketplaces:
+      | name  | source                       | autoupdate |
+      | other | {home}/marketplaces/fixtures |            |
+    Given a config in scope user and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | other       | demo   |         |
+    Given the user has run "/claude:plugin apply --scope user"
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@other": true },
+        "extraKnownMarketplaces": {
+          "other": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id            | name | status  | reasons           | scope |
+      | fixtures         | user              | skipped            | already added       | demo@fixtures | demo | skipped | already installed | user  |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name  | source                       |
+      | other | {home}/marketplaces/fixtures |
+    Then the "claude-plugins.json" file of the user scope declares these plugins:
+      | id         |
+      | demo@other |
+    When the user runs "/claude:plugin pending --scope user"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+
   Scenario: Importing a plugin whose install rollback cannot finish names the rollback phase
     Given the marketplace "fixtures" offers these plugins:
       | name | version |

@@ -12,6 +12,7 @@ import { buildScopeSatisfactionVerdict } from "../../orchestrators/reconcile/dep
 import { enabledRowFromOutcome } from "../../orchestrators/reconcile/notify.ts";
 import { marketplaceSourceClaims, planReconcile } from "../../orchestrators/reconcile/plan.ts";
 import { loadConfig, type PluginConfigEntry } from "../../persistence/config-io.ts";
+import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import {
   writeBatchedConfigEntries,
   writePluginConfigEntry,
@@ -1438,8 +1439,33 @@ type ImportReadPass =
        * one other name, mapped to that recorded name.
        */
       readonly claims: ReadonlyMap<string, string>;
+      /**
+       * CR-01: each recorded marketplace the scope's config claims, mapped to
+       * the name the config declares it under.
+       */
+      readonly configNames: ReadonlyMap<string, string>;
     }
   | { readonly kind: "lock-held"; readonly error: StateLockHeldError };
+
+/**
+ * CR-01: the name the scope's merged config uses for each recorded
+ * marketplace it claims, by its own name or by a one-to-one source claim, read
+ * with the planner's own claim rule. A claim is one-to-one, so each recorded
+ * name maps to one declared name.
+ */
+function configNamesByRecorded(
+  config: MergedConfig["marketplaces"],
+  recorded: ExtensionState["marketplaces"],
+): ReadonlyMap<string, string> {
+  return new Map(
+    [...marketplaceSourceClaims(config, recorded)].map(([declared, record]) => [record, declared]),
+  );
+}
+
+/** CR-01: the name the post-pass declares a marketplace and its plugins under. */
+function declaredNameFor(configNames: ReadonlyMap<string, string>, marketplace: string): string {
+  return configNames.get(marketplace) ?? marketplace;
+}
 
 /**
  * IMP-05 / IMP-07: reconcile's read pass, with the settings as the desired
@@ -1467,11 +1493,13 @@ async function readPassForImport(
         const desired = desiredConfigFor(scopePlan);
         // D-PL6-10: the planner's own claim rule, read from the same snapshot.
         const claims = marketplaceSourceClaims(desired.marketplaces, tx.state.marketplaces);
+        const config = await loadMergedScopeConfig(locations);
         return {
           kind: "planned",
           state: tx.state,
           plan: planReconcile(desired, tx.state, scope, verdict),
           claims: new Map([...claims].filter(([declared, recorded]) => declared !== recorded)),
+          configNames: configNamesByRecorded(config.merged.marketplaces, tx.state.marketplaces),
         };
       },
       { loadState: async () => loadState(scope, opts.cwd) },
@@ -1695,7 +1723,7 @@ async function executeScopedPlan(
   // marketplace for REMOVAL and its plugins for UNINSTALL. The repair makes
   // a re-run converge CONSTRUCTIVELY (re-declare what import installed)
   // instead of destructively.
-  await writeBatchedConfigForScope(opts, result, aliased);
+  await writeBatchedConfigForScope(opts, result, aliased, read.configNames);
 }
 
 /**
@@ -1724,6 +1752,12 @@ async function executeScopedPlan(
  * Source: verbatim `rawSource` from `scopePlan.marketplacesToEnsure` keyed by
  * marketplace name, preserving the `samePlannedSource` contract.
  *
+ * CR-01: each marketplace and plugin key names the marketplace the way the
+ * scope's config already names it (`configNames`). A config that reaches a
+ * recorded marketplace through another name is the planner's steady state, so
+ * the post-pass keeps that name rather than declaring the recorded name beside
+ * it, which would leave the other name claiming nothing.
+ *
  * CFG-03: invalid claude-plugins.json aborts THIS scope's post-pass but does
  * NOT throw -- other scopes' post-passes still run. State was already saved
  * by per-entry orchestrators; this post-pass writes only the config.
@@ -1735,9 +1769,10 @@ async function writeBatchedConfigForScope(
   opts: ImportClaudeSettingsOptions,
   result: MutableImportResult,
   scopePlan: ScopedImportPlan,
+  configNames: ReadonlyMap<string, string>,
 ): Promise<void> {
   const scope = scopePlan.scope;
-  const { ensure, repair } = buildBatchedPatchForScope(result, scopePlan);
+  const { ensure, repair } = buildBatchedPatchForScope(result, scopePlan, configNames);
   if (isEmptyPatch(ensure) && isEmptyPatch(repair)) {
     return;
   }
@@ -1760,7 +1795,12 @@ async function writeBatchedConfigForScope(
       }
 
       const current = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 as const };
-      const baseEnsure = await stampReenabledWhereLocalDeclares(locations, result, ensure);
+      const baseEnsure = await stampReenabledWhereLocalDeclares(
+        locations,
+        result,
+        ensure,
+        configNames,
+      );
       // WR-01: repairs apply ONLY when the key is absent from the loaded
       // config (already-declared entries are untouched -- byte stability).
       const batch = mergeEnsureAndRepairs(baseEnsure, repair, current);
@@ -1807,6 +1847,7 @@ async function stampReenabledWhereLocalDeclares(
   locations: ScopedLocations,
   result: MutableImportResult,
   ensure: ImportConfigPatch,
+  configNames: ReadonlyMap<string, string>,
 ): Promise<ImportConfigPatch> {
   const plugins = { ...ensure.plugins };
   for (const installed of result.installedPlugins) {
@@ -1814,7 +1855,8 @@ async function stampReenabledWhereLocalDeclares(
       continue;
     }
 
-    const key = `${installed.plugin}@${installed.marketplace}`;
+    const marketplace = declaredNameFor(configNames, installed.marketplace);
+    const key = `${installed.plugin}@${marketplace}`;
     // eslint-disable-next-line no-await-in-loop -- each stamp reads the previous stamp's write
     const localCfg = await loadConfig(locations.localConfigJsonPath);
     if (localCfg.status !== "valid" || ownValue(localCfg.config.plugins, key) === undefined) {
@@ -1827,7 +1869,7 @@ async function stampReenabledWhereLocalDeclares(
       locations.localConfigJsonPath,
       locations.scopeRoot,
       installed.plugin,
-      installed.marketplace,
+      marketplace,
       { enabled: true },
     );
     setOwn(plugins, key, {});
@@ -1839,6 +1881,7 @@ async function stampReenabledWhereLocalDeclares(
 function buildBatchedPatchForScope(
   result: MutableImportResult,
   scopePlan: ScopedImportPlan,
+  configNames: ReadonlyMap<string, string>,
 ): { ensure: ImportConfigPatch; repair: ImportConfigPatch } {
   // Map marketplace name -> verbatim rawSource so the batched patch records
   // `source: rawSource` exactly as the user/Claude settings declared it
@@ -1862,7 +1905,7 @@ function buildBatchedPatchForScope(
       continue;
     }
 
-    setOwn(marketplaces, added.marketplace, { source: rawSource });
+    setOwn(marketplaces, declaredNameFor(configNames, added.marketplace), { source: rawSource });
   }
 
   const plugins: Record<string, Partial<PluginConfigEntry>> = {};
@@ -1871,7 +1914,7 @@ function buildBatchedPatchForScope(
       continue;
     }
 
-    const key = `${installed.plugin}@${installed.marketplace}`;
+    const key = `${installed.plugin}@${declaredNameFor(configNames, installed.marketplace)}`;
     // D-04-07: a promotion that enabled a disabled record declares it the way
     // the enable path does; every other install declares the bare key.
     setOwn(plugins, key, installed.reenabled === true ? { enabled: true } : {});
@@ -1879,7 +1922,7 @@ function buildBatchedPatchForScope(
 
   return {
     ensure: { marketplaces, plugins },
-    repair: buildRepairPatchForScope(result, scopePlan, rawSourceByName),
+    repair: buildRepairPatchForScope(result, scopePlan, rawSourceByName, configNames),
   };
 }
 
@@ -1893,6 +1936,7 @@ function buildRepairPatchForScope(
   result: MutableImportResult,
   scopePlan: ScopedImportPlan,
   rawSourceByName: ReadonlyMap<string, string>,
+  configNames: ReadonlyMap<string, string>,
 ): ImportConfigPatch {
   const marketplaces: ImportConfigPatch["marketplaces"] = {};
   for (const skipped of result.skippedExistingMarketplaces) {
@@ -1905,7 +1949,7 @@ function buildRepairPatchForScope(
       continue;
     }
 
-    setOwn(marketplaces, skipped.marketplace, { source: rawSource });
+    setOwn(marketplaces, declaredNameFor(configNames, skipped.marketplace), { source: rawSource });
   }
 
   const plugins: Record<string, Record<string, never>> = {};
@@ -1914,7 +1958,7 @@ function buildRepairPatchForScope(
       continue;
     }
 
-    setOwn(plugins, `${skipped.plugin}@${skipped.marketplace}`, {});
+    setOwn(plugins, `${skipped.plugin}@${declaredNameFor(configNames, skipped.marketplace)}`, {});
   }
 
   return { marketplaces, plugins };

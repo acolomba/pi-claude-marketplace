@@ -5270,6 +5270,131 @@ test("MIM-01: a settings marketplace the scope records under one other name inst
   verify(installPlugin);
 });
 
+test("CR-01: keeps the settings name a config already declares for the recorded marketplace", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "source-claimed-declared");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  await createScopeRoots(project);
+  const seededBytes = configBytes({
+    marketplaces: { mp: { source: "./mp" } },
+    plugins: { "plugin@mp": {} },
+  });
+  await writeFile(project.baseConfigJsonPath, seededBytes, "utf8");
+  const state = recordedState([
+    recordedMarketplace({
+      name: "recorded-mp",
+      plugins: ["plugin"],
+      scope: "project",
+      source: pathSource("./mp"),
+    }),
+  ]);
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      loadSettings: () => Promise.resolve(settingsForMp("plugin")),
+      loadState: () => Promise.resolve(state),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    skippedExistingMarketplaces: [skipped("recorded-mp", "project")],
+    skippedExistingPlugins: [skippedPlugin("plugin", "recorded-mp", "project")],
+  });
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), seededBytes);
+  assert.deepStrictEqual(
+    planReconcile((await loadMergedScopeConfig(project)).merged, state, "project"),
+    emptyReconcilePlan("project"),
+  );
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● recorded-mp [project] (skipped) {already added}\n" +
+        "  ⊘ plugin (skipped) {already installed}\n\n" +
+        "Import: 2 successes",
+    },
+  ]);
+  verifyBoundary();
+});
+
+test("CR-01: declares an installed plugin under the settings name a config already declares for the recorded marketplace", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "source-claimed-declared-install");
+  const { ctx, verifyBoundary } = createNotificationBoundary(1);
+  const run = runWithNothingLoaded();
+  await createScopeRoots(project);
+  await writeFile(
+    project.baseConfigJsonPath,
+    configBytes({ marketplaces: { mp: { source: "./mp" } }, plugins: {} }),
+    "utf8",
+  );
+  const installPlugin = mock<InstallPlugin>({ exactParams: true, name: "install plugin" });
+  when(() =>
+    installPlugin({
+      ctx,
+      cwd,
+      marketplace: "recorded-mp",
+      notifications: { mode: "orchestrated" },
+      plugin: "plugin",
+      run,
+      scope: "project",
+    }),
+  ).thenResolve(installedOutcome());
+
+  // act
+  await importClaudeSettings({
+    ctx,
+    run,
+    cwd,
+    deps: collaborators({
+      installPlugin,
+      loadSettings: () => Promise.resolve(settingsForMp("plugin")),
+      loadState: () =>
+        Promise.resolve(
+          recordedState([
+            recordedMarketplace({
+              name: "recorded-mp",
+              scope: "project",
+              source: pathSource("./mp"),
+            }),
+          ]),
+        ),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.strictEqual(
+    await readFile(project.baseConfigJsonPath, "utf8"),
+    configBytes({ marketplaces: { mp: { source: "./mp" } }, plugins: { "plugin@mp": {} } }),
+  );
+  assert.deepStrictEqual(
+    planReconcile(
+      (await loadMergedScopeConfig(project)).merged,
+      recordedState([
+        recordedMarketplace({
+          name: "recorded-mp",
+          plugins: ["plugin"],
+          scope: "project",
+          source: pathSource("./mp"),
+        }),
+      ]),
+      "project",
+    ),
+    emptyReconcilePlan("project"),
+  );
+  verifyBoundary();
+  verify(installPlugin);
+});
+
 test("D-PL6-09: a settings marketplace whose source two records hold blocks its plugins before any add", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "source-ambiguous");
