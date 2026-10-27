@@ -63,6 +63,16 @@ Grepped from the installed binary, Claude Code 2.1.310 (`/home/linuxbrew/.linuxb
 
 - **D-PL6-07:** The partial-rollback scenarios use a real undo failure. A plugin ships a skill with a read-only directory inside it, and a directory blocks the scope's `mcp-adapter.json`. The mcp phase fails, and the skills undo cannot delete the copied read-only directory (`fs.cp` keeps the 0555 mode, and `rm` then fails with EACCES for a non-root user; verified with Node on 2026-10-26). The fixture step makes the scenario's release step restore write permission before cleanup. The scenarios cannot run as root, and CI runs as a non-root user.
 
+### Settled after research
+
+- **D-PL6-08:** An unreferenced settings entry named `claude-plugins-official` is not planned: Claude Code declares the official marketplace only through an enabled plugin (E1).
+- **D-PL6-09:** A settings marketplace the planner reports as a source mismatch (including a conflicted claim) is checked before the add, and when no enabled plugin of it would carry the `{source mismatch}` row (an unreferenced entry), it takes a `(failed)` block through `recordMarketplaceAddFailure`, so it is never silent.
+- **D-PL6-10:** The claim map comes from a thin pure export of `orchestrators/reconcile/plan.ts` (the planner's own `buildMarketplaceClaims`), called in `readPassForImport`, so import and reconcile cannot disagree on the rule. Aliasing rewrites each aliased ref's `marketplace` and `raw` to the recorded key.
+- **D-PL6-11:** The enable path's failed outcome (`EnableDisablePluginOutcome` failed arm, `enable-disable.ts::outcomeToTypedResult`) carries `rollbackPartials`, additively.
+- **D-PL6-12:** Each rollback phase's cause is redacted like the row's own cause before it reaches an import or apply row.
+- **D-PL6-13:** A sixth scenario, in `features/plugin/apply.feature`, covers apply's dependency rollback rows.
+- **D-PL6-14:** The cucumber harness projects a non-empty `rollback partial` cell into tokens, and projects path-free error tokens so cause cells match on Node 24 and Node 26 (Node 26 appends the path to fs errno messages).
+
 ### Claude's Discretion
 
 - Helper and type names, and how the alias is threaded through the scope plan in `execute.ts`.
@@ -123,4 +133,6 @@ Scenarios (each fails without the change):
 2. **D-PL6-02, the row names the recorded marketplace.** Chosen: `<recorded> (skipped) {already added}`, with no row under the settings name. Alternative: show the settings name. Why: nothing is, or will be, recorded under the settings name, and Claude Code's add answers with the recorded name (E2).
 3. **D-PL6-05, apply's dependency row placement.** Chosen: the dependency's row goes under its own marketplace, by its bare name, as apply's other dependency rows do. Alternative: under the requested plugin's block by its full key, as `install` and import do. Why: apply's blocks are per marketplace, and its moved and missing-dependency rows already use the dependency's own block.
 4. **D-PL6-05, MISS-01 left out.** Chosen: only `applyPluginInstalls`'s failed-install row. Alternative: also the missing-dependency row, which needs the undeclared `rollbackPartials` field declared in `install-flow.ts` (Phase 4's functions). Why: the triage scoped `apply.ts` to the failed-install row, and Phase 11 owns that type fix.
+6. **D-PL6-09, an unreferenced source mismatch fails.** Chosen: a `(failed)` block. Alternative: follow Claude Code's reconciler, which re-adds a `sourceChanged` entry with the new source. Why: import has always blocked a source mismatch rather than replacing the recorded marketplace; replacing it is a destructive change no phase decided.
+7. **D-PL6-11/D-PL6-05, Phase 1 files.** Chosen: small additive edits to `enable-disable.ts` (failed outcome) and `apply-outcomes.ts` (failed-install outcome), both Phase 1 files. Alternative: leave the enable and apply partials unreported. Why: MIM-03 cannot be met without them.
 5. **D-PL6-01, unreferenced marketplace order.** Chosen: referenced marketplaces first, then unreferenced ones, each in settings order. Alternative: one pass in `extraKnownMarketplaces` order. Why: it keeps today's add order for every existing case; rows are sorted by name anyway.
