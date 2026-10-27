@@ -52,9 +52,11 @@ import type { ReconcileAppliedMsg } from "./reconcile.messaging.ts";
 import type { ReconcilePlan } from "./types.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { DeclarerReadFailure } from "../plugin/dependency-index.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
+import type { StagingDiagnostic } from "../plugin/shared.ts";
 import type { UninstallRefusedError } from "../plugin/uninstall.ts";
 
 export interface OutcomeBase {
@@ -184,6 +186,12 @@ export interface PluginBackfilledOutcome
   extends PluginOutcomeBase, Pick<EnableDegradationSignals, "orphanRewake" | "degradedKinds"> {
   readonly kind: "plugin-backfilled";
   readonly version?: string;
+  /**
+   * D-PL1-09: the staging warnings of the materialization behind this row,
+   * both halves; `apply` renders the discovery half (D-PL1-08). Set only when
+   * non-empty (NREG-01).
+   */
+  readonly stagingWarnings?: readonly StagingWarning[];
   readonly dependencies: readonly Dependency[];
   readonly installable: boolean;
   /**
@@ -285,6 +293,12 @@ export interface PluginUninstallFailedOutcome extends PluginOutcomeBase {
 export interface PluginEnabledOutcome extends PluginOutcomeBase, EnableDegradationSignals {
   readonly kind: "plugin-enabled";
   readonly version?: string;
+  /**
+   * D-PL1-09: the staging warnings of the materialization behind this row,
+   * both halves; `apply` renders the discovery half (D-PL1-08). Set only when
+   * non-empty (NREG-01).
+   */
+  readonly stagingWarnings?: readonly StagingWarning[];
 }
 
 /** Plugin enable failure outcome. */
@@ -534,6 +548,12 @@ export interface PluginDeclarerUnreadableOutcome extends PluginOutcomeBase {
 export interface PluginConvergedOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-converged";
   readonly row: ReconcileAppliedMsg;
+  /**
+   * D-PL1-09: the staging warnings of the materialization behind this row,
+   * both halves; `apply` renders the discovery half (D-PL1-08). Set only when
+   * non-empty (NREG-01).
+   */
+  readonly stagingWarnings?: readonly StagingWarning[];
 }
 
 /**
@@ -853,4 +873,56 @@ export function carriedMcpConfigNotices(carrier: {
   return carrier.mcpConfigNotices === undefined
     ? {}
     : { mcpConfigNotices: carrier.mcpConfigNotices };
+}
+
+/**
+ * D-PL1-09: lift an orchestrated outcome's staging warnings onto the reconcile
+ * outcome built from it, as `carriedMcpConfigNotices` does for the notices.
+ * The orchestrated outcomes set the member only when non-empty, so an absent
+ * member stays absent (NREG-01).
+ */
+export function carriedStagingWarnings(carrier: {
+  readonly stagingWarnings?: readonly StagingWarning[];
+}): Pick<PluginEnabledOutcome, "stagingWarnings"> {
+  return carrier.stagingWarnings === undefined ? {} : { stagingWarnings: carrier.stagingWarnings };
+}
+
+/**
+ * D-PL1-20: the staging diagnostic of every catalog move and enable `apply`
+ * made, in outcome order. A converged move renders under `updated`, or
+ * `update failed` when its row failed; a backfill under `updated`; an enable
+ * under `enabled`. Every other outcome staged nothing of its own here.
+ */
+export function stagingDiagnosticsOf(outcomes: readonly PerEntryOutcome[]): StagingDiagnostic[] {
+  return outcomes.flatMap(stagingDiagnosticOf);
+}
+
+function stagingDiagnosticOf(outcome: PerEntryOutcome): StagingDiagnostic[] {
+  if (outcome.kind === "plugin-converged") {
+    return [
+      stagingDiagnostic(outcome, outcome.row.status === "failed" ? "update failed" : "updated"),
+    ];
+  }
+
+  if (outcome.kind === "plugin-backfilled") {
+    return [stagingDiagnostic(outcome, "updated")];
+  }
+
+  if (outcome.kind === "plugin-enabled") {
+    return [stagingDiagnostic(outcome, "enabled")];
+  }
+
+  return [];
+}
+
+function stagingDiagnostic(
+  outcome: PluginConvergedOutcome | PluginBackfilledOutcome | PluginEnabledOutcome,
+  verb: StagingDiagnostic["verb"],
+): StagingDiagnostic {
+  return {
+    plugin: outcome.plugin,
+    scope: outcome.scope,
+    verb,
+    warnings: outcome.stagingWarnings ?? [],
+  };
 }

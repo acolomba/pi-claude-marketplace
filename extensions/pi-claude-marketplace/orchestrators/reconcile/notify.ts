@@ -89,7 +89,11 @@ import {
   withCommits,
 } from "../plugin/update-row.ts";
 
-import { carriedMcpConfigNotices, sourceMismatchOutcomeSubject } from "./apply-outcomes.ts";
+import {
+  carriedMcpConfigNotices,
+  carriedStagingWarnings,
+  sourceMismatchOutcomeSubject,
+} from "./apply-outcomes.ts";
 import { plannedSourceMismatchSubject } from "./types.ts";
 
 import type {
@@ -441,6 +445,7 @@ export function convergedMoveOutcomes(
             ),
           ),
           ...carriedMcpConfigNotices(outcome),
+          ...carriedStagingWarnings(outcome),
         },
       ];
     case "skipped": {
@@ -467,6 +472,7 @@ export function convergedMoveOutcomes(
             needsReload: false,
           }),
           ...carriedMcpConfigNotices(outcome),
+          ...carriedStagingWarnings(outcome),
         },
       ];
   }

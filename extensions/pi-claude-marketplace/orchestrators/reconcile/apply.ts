@@ -102,16 +102,18 @@ import {
   createInstallOperation,
   createUninstallOperation,
 } from "../plugin/operations.ts";
-import { degradationFromEnable } from "../plugin/shared.ts";
+import { degradationFromEnable, surfaceStagingDiagnostics } from "../plugin/shared.ts";
 import { UninstallRefusedError } from "../plugin/uninstall.ts";
 
 import {
   carriedMcpConfigNotices,
+  carriedStagingWarnings,
   cascadeDisabledOutcome,
   classifyOrchestratorThrow,
   installFailureReasonFields,
   dependencyDisabledOutcome,
   sourceMismatchOutcomes,
+  stagingDiagnosticsOf,
 } from "./apply-outcomes.ts";
 import {
   cascadeDependencies,
@@ -894,6 +896,8 @@ async function applyPluginToggles(
           ...(Object.keys(degradation).length > 0 && { degradation }),
         }),
         ...carriedMcpConfigNotices(result),
+        // D-PL1-09: a disable stages nothing, so only the enable arm carries them.
+        ...(result.status === "enabled" && carriedStagingWarnings(result)),
       });
     } else if (result.status === "failed") {
       outcomes.push({
@@ -1760,6 +1764,7 @@ function grownMoveOutcomes(move: PlannedMove, result: PluginUpdateOutcome): PerE
       unsupported,
       ...installedRowDegradation(result),
       ...carriedMcpConfigNotices(result),
+      ...carriedStagingWarnings(result),
     },
   ];
 }
@@ -1904,6 +1909,10 @@ function reportScopePasses(
   // `install-flow.ts::installPlugin` owns the orchestrated-mode collection
   // path that feeds it.
   surfacePostCommitWarnings(opts, outcomes);
+
+  // D-PL1-07 / D-PL1-09: each catalog move's and enable's discovery warnings,
+  // after the install block and before the MCP config notices.
+  surfaceStagingDiagnostics(opts.ctx, opts.run, stagingDiagnosticsOf(outcomes));
 
   // AFILE-04: the MCP config notices every orchestrated operation returned,
   // shown after the cascade rows they explain. The empty-pass return above
