@@ -24,6 +24,23 @@
 // from a finite catalog, so the search ends. Then each fresh plugin is
 // previewed with the install's own preflight.
 //
+// D-PL4-03: the search is not complete. When a conflict involves several
+// tentative picks, the plan rules out the version of the first involved pick
+// in walk order that still has a version left. It does not try the others
+// first, and a ruled-out version stays ruled out. So a graph that only that
+// version solves is refused: for example, `a@3` with `b@2` when `a@3` and
+// `b@3` conflict. Claude Code's resolver is one greedy pass with no
+// backtracking and refuses these graphs too, while a complete search would
+// multiply judge calls and tag reads.
+//
+// D-PL4-02: the plan previews every fresh plugin of the graph, also under
+// `deferMoveDependencies`. That includes one that only a moved dependency's
+// new version needs and that the caller's later step installs. So one fresh
+// plugin that cannot install refuses the plugin being installed before any
+// move lands. Claude Code's install of one plugin is all or nothing over its
+// closure, and `apply`'s config install is that install's counterpart
+// (D-03-07, NFR-3).
+//
 // The answer is the steps that carry the plan out, in dependency order: each
 // move at exactly the version the plan chose, the fresh installs and
 // re-enables a move needs before it, and the closure the plugin being

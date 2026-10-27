@@ -86,14 +86,14 @@ function request(
   };
 }
 
-/** A walk that failed on `fff@mp`'s contradictory ranges, which `declarers` declare. */
-function contradiction(declarers: readonly string[]): GraphWalkFailure {
+/** A walk that failed on `key`'s contradictory ranges, which `declarers` declare. */
+function contradiction(declarers: readonly string[], key = "fff@mp"): GraphWalkFailure {
   return {
     kind: "constraint-failed",
     failure: {
       kind: "range-conflict",
       why: "contradictory-declarations",
-      key: "fff@mp",
+      key,
       range: "^1.0.0, ^2.0.0",
       detail: "no version satisfies all 2 declared ranges",
     },
@@ -407,6 +407,38 @@ describe("planDependencyGraph", () => {
         alreadyInstalled: [],
       },
     });
+  });
+
+  test("D-PL4-02: a deferring plan refuses a fresh dependency only a move reaches when its preview refuses", async () => {
+    // arrange
+    const error = new Error("fff cannot install");
+    const bound = ports({
+      walks: {
+        "": graph([wall("aaa", "1.0.0", APP_ASKS_2), fresh("ggg")], ["aaa@mp", "ggg@mp"]),
+        "aaa@mp=2.0.0": graph(
+          [
+            wall("kept", "1.0.0", []),
+            fresh("fff", ["kept@mp"]),
+            walked("aaa", APP_ASKS_2, { dependsOn: ["fff@mp"] }),
+            fresh("ggg"),
+          ],
+          ["aaa@mp", "ggg@mp"],
+        ),
+      },
+      versions: () => "2.0.0",
+      preview: (previewed) =>
+        previewed.key === "fff@mp" ? Promise.reject(error) : Promise.resolve(undefined),
+    });
+
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: true });
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      ok: false,
+      subject: { kind: "member", key: "fff@mp", error, rollbackPartials: [] },
+    });
+    assert.deepStrictEqual(bound.calls.previewed, ["fff@mp"]);
   });
 
   test("UPD-DEP-D1: an update's plan lands its final closure without a root", async () => {
@@ -724,6 +756,54 @@ describe("planDependencyGraph", () => {
       links.map((name) => `${name}@mp`),
     );
     assert.strictEqual(bound.calls.walks.length, links.length + 1);
+  });
+
+  test("D-PL4-03: refuses a graph only an untried pair of versions solves, after ruling out the first involved pick's versions first", async () => {
+    // arrange
+    const appAsksAtLeast2: readonly GraphRequester[] = [{ key: "app@mp", ranges: [">=2.0.0"] }];
+    const both = ["aaa@mp", "bbb@mp"];
+    const last = contradiction(both, "ccc@mp");
+    const bound = ports({
+      walks: {
+        "": graph(
+          [wall("aaa", "1.0.0", appAsksAtLeast2), wall("bbb", "1.0.0", appAsksAtLeast2)],
+          both,
+        ),
+        "aaa@mp=3.0.0,bbb@mp=3.0.0": contradiction(both, "eee@mp"),
+        "aaa@mp=2.0.0,bbb@mp=3.0.0": contradiction(both, "ddd@mp"),
+        "aaa@mp=2.0.0,bbb@mp=2.0.0": last,
+        "aaa@mp=3.0.0,bbb@mp=2.0.0": graph(
+          [walked("aaa", appAsksAtLeast2), walked("bbb", appAsksAtLeast2)],
+          both,
+        ),
+      },
+      versions: (judged) =>
+        ["3.0.0", "2.0.0"].find((version) => !(judged.excludedVersions ?? []).includes(version)),
+    });
+
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: false });
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      ok: false,
+      subject: { kind: "constraint", failure: last.failure },
+    });
+    assert.deepStrictEqual(bound.calls.walks, [
+      "",
+      "aaa@mp=3.0.0,bbb@mp=3.0.0",
+      "aaa@mp=2.0.0,bbb@mp=3.0.0",
+      "aaa@mp=2.0.0,bbb@mp=2.0.0",
+    ]);
+    assert.deepStrictEqual(bound.calls.judged, [
+      request("aaa", appAsksAtLeast2),
+      request("bbb", appAsksAtLeast2),
+      request("aaa", appAsksAtLeast2, ["3.0.0"]),
+      request("aaa", appAsksAtLeast2, ["3.0.0", "2.0.0"]),
+      request("bbb", appAsksAtLeast2, ["3.0.0"]),
+      request("bbb", appAsksAtLeast2, ["3.0.0", "2.0.0"]),
+    ]);
+    assert.deepStrictEqual(bound.calls.previewed, []);
   });
 
   test("UPD-DEP-D1: refuses a graph whose choices never settle", async () => {
