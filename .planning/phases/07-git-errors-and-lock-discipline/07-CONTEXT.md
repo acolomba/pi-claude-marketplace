@@ -165,6 +165,41 @@ here.
   A one-millisecond race is not deterministic in cucumber.
 - Hermetic home in every test (`withHermeticEnvironment`).
 
+### Planning-time amendments (after research)
+
+- **D-PL7-11: thin named wrappers for foreign callers (amends D-PL7-01).**
+  Keep `classifyGitHostFailure`, `classifyGitSourceAccessFailure`, and
+  `hostHttpFailureFrame` as one-line exported wrappers over
+  `classifyGitFailure` with their fixed rules, so `marketplace/add.ts`,
+  `import/execute.ts`, `install.messaging.ts`, `install-cascade.messaging.ts`,
+  and `reconcile/apply-outcomes.ts` (owned by Phases 1, 2, 3, 5, 6) need no
+  edit. Production calls keep them live for fallow. Owned callers move to
+  `classifyGitFailure`. `classifyGitTransportFailure` and `hostHttpStatus`
+  become private once no production caller is left;
+  `lacksStoredCredential` checks `classifyGitFailure(...)?.reason ===
+  "authentication required"` inline.
+- **D-PL7-12: the cascade attaches the cause on every arm** that has one
+  (errno, git, fallback), so the autoupdate row matches the direct row's
+  cause line. Existing `EACCES` cascade rows gain a cause line.
+- **D-PL7-13: `planCloneSweep`'s "before" listing also runs under the lock.**
+- **D-PL7-14: the frame on every classified HTTP status on plugin rows**
+  (`fetch`, update preflight, plugin update's marketplace refresh), 404
+  included, as `marketplace update` does today. `marketplace add`'s own frame
+  rule (network error only) is untouched. Update `fetch.feature:154` and
+  `git-source-update.feature:311,313`.
+- **D-PL7-15: completion's not-installed version stays** (never displayed).
+- **D-PL7-16: shared upgrade rule.** Export the existing private
+  `upgradeCandidate` from `list-installed-row.ts` (a one-word edit in a
+  Phase 3 file) and call it from `orchestrators/edge-deps.ts`; do not move it.
+  `git-source-probe.ts::probeUpgradeCandidate` and its test block are then
+  deleted (fallow).
+- **D-PL7-17: `fetch`'s list version rule covers the skipped rows**
+  (`skippedUpToDate`) too, not only `freshRow`.
+- **D-PL7-18: `docs/output-catalog.md` gets prose edits only** (no new
+  states: `catalog-contract.test.ts` pins the count, which Phase 3 changes).
+- "Waits for the lock" in the success criteria means "refuses or skips while
+  another holder has it": the lock uses `retries: 0`.
+
 ### Claude's Discretion
 
 - Exact helper names and module placement within the owned files.
@@ -193,6 +228,16 @@ here.
 5. **Pinned fetch arm stays unlocked (D-PL7-07).** Alternative: lock it too,
    adding a new `lock held` refusal. Why: the pinned copy never changes; only
    GC could remove it, and GC now takes the lock.
+7. **Wrappers kept (D-PL7-11).** Chose thin wrappers so five files owned by
+   other phases need no edit. Alternative: one export only, and edit each
+   foreign caller. Why: avoids merge collisions (Phase 5 rewrites
+   `errorAddReason` in `add.ts`).
+8. **Frame on plugin 404 rows (D-PL7-14).** Chose a frame on every HTTP
+   status, as `marketplace update` does. Alternative: `marketplace add`'s
+   network-error-only frame.
+9. **Upgrade rule export (D-PL7-16).** Chose exporting `upgradeCandidate` from
+   Phase 3's `list-installed-row.ts`. Alternative: a new shared module both
+   delegate to. Why: smallest edit in a file another phase changes.
 6. **Tag resolve injection (D-PL7-10).** Chose a default-injected
    `resolveTagOid` in clone-cache. Alternative: a new `GitOps` member (touches
    the fake, the contract, and about five hand-built GitOps objects).
