@@ -116,6 +116,9 @@ void ("plugins remain" satisfies FailedAddOutcome["reason"]);
 // @ts-expect-error failed add outcomes retain the closed shared reason vocabulary
 void ("unknown add failure" satisfies FailedAddOutcome["reason"]);
 
+// @ts-expect-error D-PL5-19: the orchestrated outcome cannot hold the standalone no-op
+void ({ status: "unchanged", name: "tools" } satisfies AddMarketplaceOutcome);
+
 function fixtureMarketplaceDir(
   name: "valid-marketplace" | "invalid-manifest" | "empty-marketplace",
 ): string {
@@ -3150,9 +3153,10 @@ test("orchestrated mode normalizes a non-Error opaque failure without mutation",
     });
 
     // assert
+    // D-PL5-16: an unforeseen failure reads `unreadable`, not `unparseable`.
     assert.deepStrictEqual(outcome, {
       status: "failed",
-      reason: "unparseable",
+      reason: "unreadable",
       error: new Error("opaque add failure"),
       cause: "opaque add failure",
     });
@@ -3168,6 +3172,84 @@ test("orchestrated mode normalizes a non-Error opaque failure without mutation",
       schemaVersion: 3,
       marketplaces: {},
     });
+  });
+});
+
+for (const { title, failure } of [
+  {
+    title: "an unforeseen ENOENT failure",
+    failure: Object.assign(new Error("opaque ENOENT failure"), { code: "ENOENT" }),
+  },
+  {
+    title: "an ENOENT failure behind two cleanup leaks",
+    failure: new CleanupLeakError(
+      new CleanupLeakError(
+        Object.assign(new Error("opaque ENOENT failure"), { code: "ENOENT" }),
+        "first leak",
+      ),
+      "second leak",
+    ),
+  },
+]) {
+  test(`D-PL5-16: orchestrated mode reads ${title} as source missing`, async (t) => {
+    await withTmpScope(async ({ cwd, locations }) => {
+      // arrange
+      const { ctx, run } = makeCtx(0);
+      const { gitOps } = createGitOps();
+      const originalBasename = path.basename.bind(path);
+      t.mock.method(path, "basename", (value: string, suffix?: string) => {
+        if (value === locations.baseConfigJsonPath) {
+          throw failure;
+        }
+
+        return suffix === undefined ? originalBasename(value) : originalBasename(value, suffix);
+      });
+
+      // act
+      const outcome = await addMarketplace({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        rawSource: "owner/repo",
+        gitOps,
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        status: "failed",
+        reason: "source missing",
+        error: failure,
+        cause: failure.message,
+      });
+    });
+  });
+}
+
+test("D-PL5-16 / MPA-02: orchestrated mode still reads a malformed manifest as unparseable", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run } = makeCtx(0);
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("invalid-manifest"),
+    });
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.strictEqual(outcome.status, "failed");
+    assert.strictEqual(outcome.reason, "unparseable");
+    assert.ok(outcome.error instanceof InvalidMarketplaceManifestError);
   });
 });
 
@@ -3276,7 +3358,7 @@ test("cleans the final clone when state-record construction fails after rename",
     // assert
     assert.deepStrictEqual(outcome, {
       status: "failed",
-      reason: "unparseable",
+      reason: "unreadable",
       error: new Error("[object Object]"),
       cause: "[object Object]",
     });
