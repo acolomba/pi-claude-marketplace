@@ -899,6 +899,151 @@ test("D-PL6-20: a skills undo that cannot remove a skill names its directory as 
   assert.deepStrictEqual(await readdir(locations.skillsTargetDir), ["empty-beta"]);
 });
 
+test("D-PL6-20: a skills undo keeps the removal failure's own cause under the leak list", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-skills-undo-cause-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["alpha", "beta"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const stuckDir = path.join(locations.skillsTargetDir, "empty-beta");
+  const removalDenied = "EACCES: permission denied, rm 'empty-beta'";
+  const rootCause = new Error("root cause");
+  let undoing = false;
+  const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+  t.mock.method(filesystemPromises, "rm", async (...args: Parameters<typeof originalRm>) => {
+    if (undoing && String(args[0]) === stuckDir) {
+      throw Object.assign(new Error(removalDenied, { cause: rootCause }), { code: "EACCES" });
+    }
+
+    return originalRm(...args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  const transaction = commandsFailAfterSkills(() => {
+    undoing = true;
+    return Promise.resolve();
+  });
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    skillsLedgerOptions(environment.cwd),
+    capture,
+    transaction,
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.strictEqual(error.message, "commands phase failed");
+    return true;
+  });
+  const partial = capture.rollbackPartials[0]?.cause;
+  assert.ok(partial instanceof ManualRecoveryError);
+  assert.deepStrictEqual(partial.leaks, [stuckDir]);
+  assert.strictEqual(partial.cause, rootCause);
+});
+
+test("D-PL6-20: a skills undo that fails but leaves no directory passes the failure through", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-skills-undo-clean-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["alpha"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const stagedDir = path.join(locations.skillsTargetDir, "empty-alpha");
+  const removalDenied = "EIO: i/o error, rm 'empty-alpha'";
+  let undoing = false;
+  const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+  t.mock.method(filesystemPromises, "rm", async (...args: Parameters<typeof originalRm>) => {
+    await originalRm(...args);
+
+    if (undoing && String(args[0]) === stagedDir) {
+      throw Object.assign(new Error(removalDenied), { code: "EIO" });
+    }
+  });
+  syncBuiltinESMExports();
+  t.after(() => {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  const transaction = commandsFailAfterSkills(() => {
+    undoing = true;
+    return Promise.resolve();
+  });
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    skillsLedgerOptions(environment.cwd),
+    capture,
+    transaction,
+  );
+
+  // assert
+  await assert.rejects(operation, /commands phase failed/);
+  assert.strictEqual(capture.rollbackPartials.length, 1);
+  const cause = capture.rollbackPartials[0]?.cause;
+  assert.ok(cause instanceof Error);
+  assert.ok(!(cause instanceof ManualRecoveryError));
+  assert.strictEqual(cause.message, removalDenied);
+});
+
+test("D-PL6-20: a skills undo keeps the unstage failure when probing the leftovers fails", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-skills-undo-probe-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["alpha"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const stagedDir = path.join(locations.skillsTargetDir, "empty-alpha");
+  const removalDenied = "EIO: i/o error, rm 'empty-alpha'";
+  let undoing = false;
+  let removalFailed = false;
+  const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+  const originalLstat = filesystemPromises.lstat.bind(filesystemPromises);
+  t.mock.method(filesystemPromises, "rm", async (...args: Parameters<typeof originalRm>) => {
+    if (undoing && String(args[0]) === stagedDir) {
+      removalFailed = true;
+      throw Object.assign(new Error(removalDenied), { code: "EIO" });
+    }
+
+    return originalRm(...args);
+  });
+  t.mock.method(filesystemPromises, "lstat", async (...args: Parameters<typeof originalLstat>) => {
+    if (removalFailed && String(args[0]) === stagedDir) {
+      throw Object.assign(new Error("EACCES: permission denied, lstat"), { code: "EACCES" });
+    }
+
+    return originalLstat(...args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  const transaction = commandsFailAfterSkills(() => {
+    undoing = true;
+    return Promise.resolve();
+  });
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    skillsLedgerOptions(environment.cwd),
+    capture,
+    transaction,
+  );
+
+  // assert
+  await assert.rejects(operation, /commands phase failed/);
+  assert.strictEqual(capture.rollbackPartials[0]?.msg, removalDenied);
+});
+
 test("PI-14: a skills undo that meets a symlink rethrows the containment refusal unwrapped", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-skills-undo-symlink-");
