@@ -74,6 +74,14 @@ Source: the installed binary `/home/linuxbrew/.linuxbrew/Caskroom/claude-code@la
 
 - **D-PL3-12:** Bound at render, not at parse: `describeConstraint` in `constraint-fold.ts` cuts the stage-two `version` with the same helper at 64 code units (upstream's version limit, E4) before interpolating it. `domain/components/plugin.ts` keeps `version: Type.Optional(Type.String())`, because upstream accepts any version string (E6) and a parse-time bound would refuse plugins Claude Code installs. T-29-21 continues to cover the `will update` / `updated` version slots.
 
+### Amendments after research (2026-10-26, from 03-RESEARCH.md)
+
+- **D-PL3-13 (amends D-PL3-08):** a non-root member's refusal names every CASCADE member that declared a range on it. Installed plugins outside the closure are not named: D-03-10 keeps their ranges out of the walk and the check, so naming them would print a requirer whose range is neither shown nor checked. The root keeps `rootRequiredBy` (the MISS-01 path already passes installed declarers there). **Uncertain** (upstream folds and names them).
+- **D-PL3-14 (amends D-PL3-04):** the invalid-id cause uses upstream's text verbatim after the colon (`Each part of a plugin id ...`), and covers upstream's three variants (the plugin's name, the marketplace's name, or both do not). The interpolated name is printed with control/format/line-separator characters escaped, as `shared/notification-mcp.ts::printable` does. The lookup-first order applies only to install walks (`installPolicy` passed); the enable walk keeps today's behavior.
+- **D-PL3-15 (scopes D-PL3-01/03):** rows cover walk failures, constraint failures, and non-root member ledger failures. Two routes keep their current single failure row and are recorded as known gaps: the root's OWN ledger failure (single-row path in `install-flow.ts`, which Phase 11 splits) and UPD-DEP-D1 plan-step failures (Phase 4's paths). A key that already has a `moved` row is not given a second row. **Uncertain.**
+- **D-PL3-16 (extends D-PL3-12):** the raw `toVersion` interpolations in `dependency-move.ts` (`refusalCause`, the ruled-out cause) take the same 64-unit bound.
+- **D-PL3-17 (known limit):** `apply`, a load, and `import` classify every cascade cause as `{dependency failed}` (`apply-outcomes.ts`, Phase 1's file), so a config-declared `_x@mp` reads `{dependency failed}` with the new cause line. CAS-02 is about `install`; recorded, not changed.
+
 ### Claude's Discretion
 
 - How the closure member list reaches the messaging (extend the `CascadeFailureSubject` arms or pass a separate list), and how the walk returns its partial members on failure.
@@ -126,3 +134,5 @@ Source: the installed binary `/home/linuxbrew/.linuxbrew/Caskroom/claude-code@la
 3. **D-PL3-01/02** -- resolved-but-uninstalled members get `(failed) {dependency failed}`. Alternative: a `skipped` row, or a new token, or no row (upstream names only the failing member). Why: reuses the root row's token, no closed-set change; a sibling that does not itself depend on the failing member gets the same token.
 4. **D-PL3-11** -- the `update` hint on an installed-unsatisfied dependency follows upstream's condition (root declares it directly), for every source kind. Alternative: hint only for git dependencies refused offline. Why: parity; no source plumbing.
 5. **D-PL3-10** -- refusals other than the directory pin keep the 200-per-range bound. Alternative: upstream's 64 per range / 200 joined.
+6. **D-PL3-13** -- outside-closure installed declarers are not named on a non-root member's refusal. Alternative: scan installed declarations and name them (upstream), which also means folding their ranges into the check against D-03-10.
+7. **D-PL3-15** -- the root's own ledger failure and plan-step failures keep one row; the rolled-back dependencies behind them get none. Alternative: extend `install-flow.ts`'s single-row path now.
