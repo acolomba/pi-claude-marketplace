@@ -1,239 +1,188 @@
 ---
 phase: 07-git-errors-and-lock-discipline
-reviewed: 2026-10-27T08:18:05Z
+reviewed: 2026-10-27T08:47:22Z
 depth: standard
-files_reviewed: 22
+iteration: 2
+diff_base: 4cd057ce
+files_reviewed: 4
 files_reviewed_list:
-  - extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts
-  - extensions/pi-claude-marketplace/orchestrators/edge-deps.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/list-installed-row.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts
-  - extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts
-  - features/lib/published-marketplace.ts
-  - features/step_definitions/marketplace/update.steps.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts
+  - features/plugin/url-marketplace-update.feature
 findings:
   critical: 0
-  warning: 2
+  warning: 0
   info: 4
-  total: 6
+  total: 4
 status: issues_found
 ---
 
-# Phase 7: Code Review Report
+# Phase 7: Code Review Report (iteration 2)
 
-**Reviewed:** 2026-10-27T08:18:05Z
+**Reviewed:** 2026-10-27T08:47:22Z
 **Depth:** standard
-**Files Reviewed:** 22
-**Status:** issues_found
+**Files Reviewed:** 4
+**Status:** issues_found (Info only)
+
+The iteration-1 report is kept at `07-REVIEW.iter1.md`.
 
 ## Summary
 
-I reviewed the changes in `cc459a82..HEAD` for the 22 listed files. I traced the
-new lock sites and their callers through `install-flow.ts`, `dependency-settle.ts`,
-`materialize-latest.ts`, `prune.ts`, and `with-state-guard.ts`. I also traced the
-redaction path for cause lines through `notification-resolve.ts`, `errors.ts`, and
-`redact-credentials.ts`.
+This pass covers only `git diff 4cd057ce..HEAD` in the four listed files: the
+WR-01 scope lock around the plugin-update marketplace refresh (96103d64), the
+IN-01 stamp fallback (e8ce1713), and the IN-04 (a) fetch lock-lost reason
+(11b2c5fd).
 
-**Lock nesting.** I found no self-deadlock. Every `collectPluginClonesLocked` and
-`listUnreferencedPluginClonesLocked` site runs after its operation's own lock is
-released:
-- uninstall and prune go through `runPostUninstallCleanup`, called after the
-  transaction returns.
-- `runPostRemoveCleanup` runs after `withLockedStateTransaction`.
-- In apply, `collectClones` runs after the step. The converge move defers its GC
-  through `deferCollection`.
-- The update, reinstall, and converge GC runs after the finalize `withStateGuard`.
-- `planCloneSweep` runs in `installAfterMoves` and after `settleDependencies`'
-  `firstRun`. Both are lock-free.
-- Dependency moves bind `leaveClonesToTheSweep`.
+**WR-01 lock nesting: no self-deadlock.** I traced every caller.
+`makeSyncCloneOnce` is built and called only in `updatePluginsWith`
+(`update-flow.ts:388,408`). `updatePluginsWith` is reached only through
+`createPluginUpdateOperations().updatePlugins` (`update-flow.ts:1395`). That is
+wired through `index.ts:220` -> `edge/register.ts:126` ->
+`edge/handlers/plugin/update.ts:57`, and no lock is held on that path. The
+autoupdate cascade (`beginPluginUpdateRun`), apply's converge
+(`convergePlugin`), reinstall, bootstrap, and import never reach
+`syncCloneOnce`. Inside the loop, each sync runs after the previous target's
+`runPluginUpdate` has resolved. Every lock that run takes is awaited before it
+returns: the guards, `cleanupClones: collectPluginClonesLocked`
+(`update-swap.ts:1526`, `update-preflight.ts:835`), and `settleDependencies`.
+So no lock of our own is still held, and no detached GC is still running, when
+the next marketplace's sync takes its lock. The lock is on the target's scope,
+which is the scope `loadState` just read the marketplace record from. So
+`extensionRoot` exists, and `withExistingScopeLock`'s no-mkdir rule cannot
+reject. A held lock reaches `typedUpdateFailReason` unframed, because
+`classifyGitFailure` returns no frame for `StateLockHeldError`. It reads
+`lock held`, as the unit case and the new cucumber scenario both pin. The
+Device Flow can now run under the lock. That matches `marketplace update`, and
+proper-lockfile's 2 s `update` timer keeps the lock fresh while the flow waits.
 
-The tag copy in `resolveUpdateCandidate` is reached only from the unlocked
-preflight and from `judgeDependencyMove`. `judgeDependencyMove` uses the lock-free
-planning ports. `fetch` and `info --fetch` take their lock in one place, and nothing
-inside the locked body takes another one.
+**IN-01 stamp fallback: correct.** `Math.max(now, NaN)` is NaN, and
+`prior + 1 > 8.64e15` gives an invalid Date. Both fall back to `now`, which
+differs from the replaced stamp, so ST-9 still refuses a rival. A valid
+far-future stamp stays monotonic, as before.
 
-**Classification.** Every owned site uses the D-PL7-02 rule:
-- marketplace refresh and autoupdate: refresh rule
-- plugin update's marketplace refresh: refresh rule, plus a frame
-- `fetch`, `info --fetch`, update preflight, and the tag probe: plugin-clone rule
-- the D-PL7-11 wrappers keep their old meaning
+**IN-04 (a) fetch: correct for the code as written.** `rowRead` is set as the
+last statement of `fetchAndRead`. On the locked arm, a throw after that point
+can only come from `releaseStateLock`. The pinned arm takes no lock and returns
+right after the read.
 
-**Cause frames.** A URL with userinfo can reach a frame, but every frame travels as
-an `Error` message through `serializeCauseChain`, which runs `redactCredentials`. I
-found no credential leak.
+**Cucumber scenario: sound.** `the git host receives no request` checks only
+the last command's requests and connections (`git-host.steps.ts:148`). So the
+url clone that the earlier install makes cannot break the check. The lock
+holder is a separate process, which makes the refusal deterministic.
 
-**Lock-held cleanups.** None of them can fail an operation. Every GC site swallows
-and traces the error.
-
-The two warnings are a marketplace-clone write that the new lock discipline does not
-cover, and raw absolute paths that now reach autoupdate cause lines.
+I found no Critical or Warning issues. The four Info items are below. Two are
+edges of the new lock site that the fix left inconsistent with the fetch
+change. Two are comment and record-read nits.
 
 ## Narrative Findings (AI reviewer)
 
-## Warnings
-
-### WR-01: Plugin update refreshes the marketplace clone with no scope lock, so GLK-04's tag-copy lock does not exclude it
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:206-255`
-**Issue:** D-PL7-06 puts `materializeMarketplaceTagClone` under the plugin scope's
-lock because "the plugin-scope lock is the lock `marketplace update` takes on that
-`.git`" (`update-preflight.ts:477-488`). `marketplace update` does refresh under
-`withLockedStateTransaction` (`marketplace/update.ts:538`).
-
-The plugin `update` command's own marketplace refresh does not take that lock.
-`makeSyncCloneOnce` calls `refreshGitHubClone` or `refreshUrlClone`, which run git
-fetch, `forceUpdateRef`, and checkout on `sources/<name>/.git`. This phase touched
-those calls to add `refreshFramed`, but it added no lock. The `loadState` there is
-unlocked too.
-
-So process A's `/claude:plugin update x@mp` can rewrite refs and the working tree of
-the marketplace `.git` while process B's locked tag copy reads that `.git` through
-`checkoutGitDirCopy`. A's refresh can also race B's `marketplace update` refresh, so
-two git writers can run in one repository.
-
-This gap is not in 07-CONTEXT's deferred list. The deferred items name only the
-unlocked deletes of `sources/<name>`, `seedSameRepoPluginMirrors`, and
-`previewInstall`. It also leaves the phase goal ("no clone read, copy, or cleanup
-runs outside the state lock") unmet for the marketplace clone.
-**Fix:** Run the refresh under the scope lock. `syncCloneOnce` runs before any
-per-target lock, so there is no nesting:
-```ts
-// makeSyncCloneOnce, github arm (url arm alike)
-await withExistingScopeLock(locations, () =>
-  refreshFramed(source, () =>
-    refreshGitHubClone(cloneDir, source.ref, gitOps, undefined, auth),
-  ),
-);
-```
-A held lock then surfaces as `StateLockHeldError`, which `typedUpdateFailReason`
-already maps to `lock held`. If the device flow must not run under the lock, follow
-the `marketplace update` structure instead. Otherwise, record the gap explicitly as
-deferred.
-
-### WR-02: Autoupdate cascade rows now print raw absolute local paths, including a random `skills-staging/<uuid>` path
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:795`
-**Issue:** D-PL7-12 attaches `cause: err` on every untyped arm:
-`...(!failure.typed && err instanceof Error && { cause: err })`.
-
-`err` goes unchanged to the cascade row (`update-cascade.ts:144`,
-`marketplace/update.messaging.ts`). `serializeCauseChain` redacts only credentials,
-not paths. So an autoupdate row now shows the raw `cp`/`open` error text. That text
-includes `<home>/.pi/agent/pi-claude-marketplace/skills-staging/<random uuid>/...`
-for a skill copy failure (07-06 SUMMARY, `deferred-items.md` "From 07-06").
-
-The project's rule for nested causes on user-visible rows is to rebuild them through
-`redactCauseChain` (T-53-02-02 / T-55-02-02, as `reconcile/apply.ts`,
-`import/execute.ts`, and `prune.ts` do). The cucumber scenario at
-`features/marketplace/update.feature:863` was switched from an unreadable skill file
-to an unreadable command file so that it would not have to pin this output. The
-defect is real, and the test now avoids it rather than covering it.
-
-`deferred-items.md` tracks this item, but 07-CONTEXT's deferred list does not.
-**Fix:** Either redact on the cascade arm, accepting that the direct row's text will
-differ:
-```ts
-...(!failure.typed && err instanceof Error && { cause: redactCauseChain(err) }),
-```
-or do the targeted fix from `deferred-items.md`: wrap the skills bridge's copy
-failure in `BridgeStagingError` naming the skill and plugin, as
-`bridges/commands` does with `contextualStagingError`. Then restore the skill-file
-scenario so it pins the cause line.
-
 ## Info
 
-### IN-01: `nextUpdateStamp` throws a `RangeError` on a maximum-date stamp
+### IN-01: A lost lock after a successful marketplace sync reads `{unreadable manifest}` in `update`, while `fetch` now reads `{lock held}` for the same event
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:615-619`
-**Issue:** The state schema types `updatedAt` as `Type.String()`, with no format.
-Suppose a stamp parses to the largest time a `Date` can hold, such as a hand-edited
-`"+275760-09-13T00:00:00.000Z"`. Then `prior + 1` is out of range, and
-`new Date(...).toISOString()` throws `Invalid time value`. I checked this in Node.
-The throw happens inside the `withStateGuard` closure, so the update fails with an
-unclassified error and the cause chain is the only clue.
-**Fix:** Clamp the value, or treat a non-finite result like an unparseable one:
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:185,856-860,898-901`
+**Issue:** The sync now runs in `withExistingScopeLock`. Suppose the refresh
+succeeds but the lock was compromised (a stale takeover) or could not be
+released. Then the body's success becomes a `StateLockCompromisedError` or a
+raw release error. `typedUpdateFailReason` names only `StateLockHeldError`, so
+the error falls to `untypedUpdateFailReason`. `classifyGitFailure` returns
+`undefined` and the errno is `undefined`, so the row reads
+`official (failed) {unreadable manifest}`. That blames the manifest for a lock
+event. Iteration 2 fixed exactly this class for `fetch` (`{lock held}`), so
+the two commands now disagree on the same event. Every other lock site in
+`update` has had this mapping already, but this fix adds a new site that
+reaches it.
+**Fix:** Map the compromise in the shared ladder. This one change covers the
+sync and every other update lock site:
 ```ts
-const next = Number.isNaN(prior) ? now : Math.max(now, prior + 1);
-return new Date(next > 8.64e15 ? now : next).toISOString();
+if (primary instanceof StateLockHeldError || primary instanceof StateLockCompromisedError) {
+  return "lock held";
+}
 ```
 
-### IN-02: The D-PL7-08 monotonic-stamp guarantee is local to `update-swap.ts`
+### IN-02: The sync reads the marketplace record before it takes the lock
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:810` (also `enable-disable.ts:1731`, `install-disable-cascade.ts:111`, `reconcile/mcp-migration.ts:553`)
-**Issue:** The mark and the finalize now write `max(now, prior + 1)`. Two of these
-writes in one millisecond can push `updatedAt` 1 to 2 ms ahead of the wall clock.
-Every other writer of the field still writes `new Date().toISOString()`.
-
-Suppose such a writer, a disable for example, runs in that window. It can write a
-stamp exactly equal to one a rival update's preflight already read. ST-9 checks only
-`version`, `resolvedSha`, and `updatedAt`, not `enabled`. So the rival's mark passes,
-and the rival re-materializes a plugin the user just disabled.
-
-This needs sub-millisecond timing, and same-millisecond collisions existed before
-this phase. The rule does not make the field strictly increasing across writers,
-though, and the one other update-family writer, `refreshDisabledRecord`, is in an
-owned file.
-**Fix:** Move `nextUpdateStamp` to a shared spot, for example next to
-`persistence/state-io.ts`'s record helpers, and use it at every `updatedAt` write.
-At minimum, use it in `refreshDisabledRecord`.
-
-### IN-03: Rule constants are duplicated instead of exported with the classifier
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:161,839`; `orchestrators/marketplace/update.ts:494`; `orchestrators/plugin/fetch.ts:590`; `orchestrators/plugin/info.ts:2176`; `orchestrators/plugin/update-preflight.ts:546`; `orchestrators/plugin/dependency-tag-probe.ts:140`; `orchestrators/marketplace/shared.ts:411`
-**Issue:** D-PL7-02 defines one rule per remote operation. The code spreads it as
-two copies of `MARKETPLACE_REFRESH_RULE` and five inline
-`{ notFound: "source missing" }` literals. Each copy is typed through
-`Parameters<typeof classifyGitFailure>[1]`. A later change to one rule, such as
-adding `missingRef` to the plugin-clone rule, can miss some copies and quietly split
-the classification again. That is the drift this module exists to prevent.
-`lacksStoredCredential` also passes an arbitrary rule, which hides intent.
-**Fix:** Export the rule type and the two named rules from
-`shared/git-failure-classifiers.ts`, and import them at each site:
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:228-261`
+**Issue:** `loadState`, the `ownValue(state.marketplaces, mpName)` lookup, and
+`source` are all read before `refreshFramed` takes the lock. The locked refresh
+then acts on a record that it did not read under the lock. Suppose another
+process runs `marketplace remove` and then `marketplace add` for the same name
+with a different source, between that read and the lock. The refresh then
+fetches the old URL into the new `sources/<name>/.git`. `marketplace update`
+reads its record inside `withLockedStateTransaction`, so the two writers of
+that `.git` are not at parity. The window is milliseconds wide, so this is
+Info.
+**Fix:** Take the lock around the read and the refresh together, and keep the
+`MarketplaceNotFoundError` and path-noop arms inside it. The path arm must
+still do no lock work (NFR-5 / WR-02), so check `source.kind` after a
+lock-free read, then re-read the record under the lock before the refresh:
 ```ts
-export type GitFailureRule = { readonly notFound: "source missing" | "network error"; readonly missingRef?: "source missing" };
-export const PLUGIN_CLONE_RULE: GitFailureRule = { notFound: "source missing" };
-export const MARKETPLACE_REFRESH_RULE: GitFailureRule = { notFound: "network error" };
+await withExistingScopeLock(locations, async () => {
+  const fresh = ownValue((await loadState(locations.extensionRoot)).marketplaces, mpName);
+  if (fresh === undefined) throw new MarketplaceNotFoundError(mpName, [scope]);
+  // refresh from fresh.source
+});
 ```
 
-### IN-04: Two fallback paths name the wrong reason for an error outside their ladder
+### IN-03: Two comments no longer match the code
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts:402-405,602`; `orchestrators/marketplace/update.ts:601,719`
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:175-176`; `extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts:558-564`
 **Issue:**
-- (a) In `fetch`, a `StateLockCompromisedError` or a lock-release failure after the
-  locked body succeeded goes to `failedRow`, and `narrowFetchFailure` folds it to
-  `source missing`. That row tells the user the source is gone even though the fetch
-  succeeded. D-PL7-07 keeps the lock for the row read too, so this window is now
-  longer.
-- (b) The `cascadeAutoupdates` catch classifies a plugin-update throw through
-  `reasonsFromCascadeError` and `transportReason`, which use the marketplace-refresh
-  rule. A plugin clone 404 that reached this catch would read `network error`, but
-  D-PL7-02 says such a 404 is `source missing`. `runCascadeTarget` currently catches
-  every throw except an invalid GitHub base URL, so today this path runs only for
-  injected test seams.
+- `refreshFramed` says "The direct update syncs each marketplace before it
+  runs any target". The loop interleaves: it syncs marketplace B only after
+  the targets of marketplace A have run (`update-flow.ts:405-450`). The
+  no-nesting claim still holds, because each run is awaited and releases its
+  locks first. But the stated reason is wrong, and the next editor may rely
+  on it.
+- The `failedRow` doc still says "a fetch that threw did not warm the cache".
+  With `rowRead` true, the fetch did warm the cache, and the row fails only
+  because the lock was lost.
 
-**Fix:**
-- (a) Narrow `StateLockCompromisedError` (or any non-git error) to `unreadable`
-  rather than `source missing`.
-- (b) Classify throws from that catch with the plugin-clone rule, or document that
-  the catch only accepts the cascade-safe `PluginUpdateFn`.
+**Fix:** Change the first comment to say that the sync for a marketplace
+runs after the previous target's run has released every lock it took. Limit
+the second comment to the `rowRead === false` case.
+
+### IN-04: A body failure plus a release failure loses the git classification at both new lock sites
+
+**File:** `extensions/pi-claude-marketplace/transaction/with-state-guard.ts:198-205` (consumed at `update-flow.ts:187` and `fetch.ts:599`)
+**Issue:** When the body throws and the release also fails,
+`releaseStateLock` wraps the body error in a plain
+`new Error("... (lock release also failed: ...)", { cause })`.
+`classifyGitFailure` reads `code` and `data.statusCode` only on the outer
+error and never walks `cause`. So the error loses its classification at both
+sites:
+- A host 404/503 during the update sync loses its `{status} on {url}` frame
+  and reads `{unreadable manifest}`.
+- The same failure in `fetch` reads `{source missing}`, because `rowRead` is
+  false there.
+
+`refreshFramed` now sits outside the lock wrapper, so this wrap happens before
+the framing. Both failures must happen at once, so the risk is low.
+**Fix:** Do the framing and classification inside the lock body, by moving the
+`try/catch` of `refreshFramed` into the callback. Or have the two classifiers
+unwrap an error whose message carries the release suffix. A typed
+`LockReleaseAlsoFailedError { primary }` would let both sites narrow on
+`instanceof`, as `CleanupContextError` already does.
+
+## Carried, accepted (iteration 1, skipped with a recorded reason)
+
+- **WR-02** (autoupdate cascade rows print raw absolute paths): deferred. The
+  direct row prints the same cause, and D-PL7-12 keeps the cascade at parity.
+  It is recorded in 07-CONTEXT's Deferred list (a66a932f) and in
+  `deferred-items.md` ("From 07-06").
+- **IN-02** (the D-PL7-08 monotonic stamp is local to `update-swap.ts`): out
+  of dispatch scope. The fix touches `updatedAt` writers in files that other
+  phases own.
+- **IN-03** (rule constants are duplicated, not exported with the classifier):
+  out of dispatch scope. It is a refactor across several files, with no
+  change in behavior.
+- **IN-04 (b)** (the `cascadeAutoupdates` catch uses the marketplace-refresh
+  rule): unreachable in production, because `runCascadeTarget` catches every
+  throw except an invalid GitHub base URL.
 
 ---
 
-_Reviewed: 2026-10-27T08:18:05Z_
+_Reviewed: 2026-10-27T08:47:22Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
