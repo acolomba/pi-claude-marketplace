@@ -8,7 +8,6 @@ import {
   createEnableOperation,
   createInstallOperation,
 } from "../../orchestrators/plugin/operations.ts";
-import { degradationFromEnable } from "../../orchestrators/plugin/shared.ts";
 import { buildScopeSatisfactionVerdict } from "../../orchestrators/reconcile/dependency-verdict.ts";
 import { enabledRowFromOutcome } from "../../orchestrators/reconcile/notify.ts";
 import { marketplaceSourceClaims, planReconcile } from "../../orchestrators/reconcile/plan.ts";
@@ -145,9 +144,14 @@ export interface PluginInstalledOutcome {
   /**
    * IMP-10: the degradation signals of an enable, present only on the enable
    * path. They select reconcile's enable row, so a re-enabled partial record
-   * reads `(partially-installed)` as it does on a reload.
+   * reads `(partially-installed)` as it does on a reload. LCCODE-01: the
+   * staged-kind facts live only in the required `declares*` members, so the
+   * two cannot disagree.
    */
-  readonly enableSignals?: EnableDegradationSignals;
+  readonly enableSignals?: Omit<
+    EnableDegradationSignals,
+    "stagedAgents" | "stagedMcpServers" | "stagedWorkflows"
+  >;
   readonly declaresWorkflows: boolean;
 }
 
@@ -677,6 +681,9 @@ function installedRow(
       plugin: o.plugin,
       ...(o.version !== undefined && { version: o.version }),
       ...o.enableSignals,
+      ...(o.declaresAgents && { stagedAgents: true }),
+      ...(o.declaresMcp && { stagedMcpServers: true }),
+      ...(o.declaresWorkflows && { stagedWorkflows: true }),
     });
   }
 
@@ -1195,6 +1202,20 @@ function pushDependencyChanges(
 }
 
 /**
+ * LCCODE-01: an enable's degradation facts only. The staged-kind facts go to
+ * the outcome's `declares*` members, and `installedRow` reads them from there.
+ */
+function enableDegradation(
+  signals: EnableDegradationSignals,
+): NonNullable<PluginInstalledOutcome["enableSignals"]> {
+  return {
+    ...(signals.unsupported !== undefined && { unsupported: signals.unsupported }),
+    ...(signals.orphanRewake === true && { orphanRewake: true }),
+    ...(signals.degradedKinds !== undefined && { degradedKinds: signals.degradedKinds }),
+  };
+}
+
+/**
  * IMP-05 / D-06: enable ONE planned plugin the scope records disabled, through
  * the enable operation reconcile drives for its `pluginsToEnable` bucket, and
  * answer with the result bucket it was recorded in.
@@ -1255,7 +1276,7 @@ async function enableOnePlannedPlugin(
         declaresAgents: outcome.stagedAgents === true,
         declaresMcp: outcome.stagedMcpServers === true,
         reenabled: true,
-        enableSignals: degradationFromEnable(outcome),
+        enableSignals: enableDegradation(outcome),
         declaresWorkflows: outcome.stagedWorkflows === true,
       });
       result.changedResources = true;

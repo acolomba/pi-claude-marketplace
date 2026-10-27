@@ -5025,7 +5025,7 @@ test("IMP-05: enables a plugin the scope records disabled and declares it enable
         ...installed("alpha", "mp", "project", { agents: true, mcp: true, workflows: true }),
         version: "1.0.0",
         reenabled: true,
-        enableSignals: { stagedAgents: true, stagedMcpServers: true, stagedWorkflows: true },
+        enableSignals: {},
       },
       { ...installed("beta", "mp", "project"), reenabled: true, enableSignals: {} },
     ],
@@ -5612,6 +5612,48 @@ test("IMP-10: re-enabling a partially installed record shows the row reconcile s
         "  ◉ partial v1.0.0 (partially-installed) {orphan rewake, unsupported component}\n\n" +
         "Import: 2 successes\n\n" +
         "/reload to pick up changes",
+    },
+  ]);
+  verifyBoundary();
+});
+
+test("IMP-10: re-enabling a record with a malformed skill keeps the degraded kind", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "enable-degraded");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      loadSettings: () => Promise.resolve(settingsForMp("degraded")),
+      loadState: () => Promise.resolve(stateWithDisabled("degraded")),
+      setPluginEnabled: () =>
+        Promise.resolve({ status: "enabled", name: "degraded", degradedKinds: ["skill"] }),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult.installedPlugins, [
+    {
+      ...installed("degraded", "mp", "project"),
+      reenabled: true,
+      enableSignals: { degradedKinds: ["skill"] },
+    },
+  ]);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation needs attention.\n\n" +
+        "● mp [project] (skipped) {already added}\n" +
+        "  ● degraded (installed) {malformed skill}\n\n" +
+        "Import: 1 warning, 1 success\n\n" +
+        "/reload to pick up changes",
+      severity: "warning",
     },
   ]);
   verifyBoundary();
