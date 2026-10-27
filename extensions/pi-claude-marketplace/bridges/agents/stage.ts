@@ -12,7 +12,8 @@
 //      D-06 corollary) -- surfaced via result.failed[].
 //      Foreign-preserved index rows survive the commit (kept in agents:[]),
 //      except under `force`, reinstall's repair overwrite (RINST-01), which
-//      removes their files after a containment check and drops the rows.
+//      removes the files of the rows this staging re-produces after a
+//      containment check and drops those rows (D-PL1-15).
 //   3. AG-9 / RN-4 cross-owner conflict (a generated name is already owned
 //      by a DIFFERENT (mp, plugin)) throws -- AgentOwnershipConflictError
 //      carries the full conflict list.
@@ -375,8 +376,10 @@ async function assertForcedTargetsContained(
  * rename staged files into <scopeRoot>/agents/, persist the index, clean up.
  *
  * `options.force` is reinstall's repair overwrite (RINST-01, D-18-15): the
- * plugin's own user-edited previous agent files are replaced and their
- * preserved index rows dropped. `update` and install never pass it. A file at
+ * plugin's own user-edited previous agent files that this staging produces
+ * again are replaced and their preserved index rows dropped; any other
+ * preserved row keeps its file and row (D-PL1-15). `update` and install never
+ * pass it. A file at
  * a new target that no index row names is refused with or without it (PI-6).
  *
  * If deletion, rename or index persistence fails, the index still describes
@@ -407,8 +410,8 @@ export async function commitPreparedAgents(
   // the OLD targetPaths plus step-1 ENOENT tolerance closes the retry loop).
   // The loop stays parallel here because step 1 has no source to roll back
   // to -- this commit keeps no backup of those files, so rollback would have
-  // nothing to restore. The kept rows (foreignPreservedEntries unless
-  // forced) are INTENTIONALLY excluded -- those targets stay untouched on disk
+  // nothing to restore. The kept rows (foreignPreservedEntries, minus the
+  // re-produced ones when forced) are INTENTIONALLY excluded -- those targets stay untouched on disk
   // and their rows stay in the index.
   try {
     // The backstop for a file that appeared after the caller's own probe.
