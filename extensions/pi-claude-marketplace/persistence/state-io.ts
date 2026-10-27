@@ -36,7 +36,12 @@ import { errorMessage } from "../shared/errors.ts";
 
 import { migrateLegacyMarketplaceRecords, persistMigratedState } from "./migrate.ts";
 
-import type { GitHubSource, HostedManifestSource, UrlSource } from "../domain/source.ts";
+import type {
+  GitHubSource,
+  HostedManifestSource,
+  ParsedSource,
+  UrlSource,
+} from "../domain/source.ts";
 
 /**
  * D-100-01 / D-100-02 / ENBL-11: one persisted hook entry -- the event name
@@ -342,12 +347,17 @@ function firstValidationErrorDetail(first: {
 /**
  * MURL-01/MURL-05: revalidate a stored url source through the SAME parser
  * funnel (ST-6) so the .git-canonical url + optional #ref are recomputed.
- * Any other parse, a github shorthand included, is a corrupt record.
+ * Any other parse is a corrupt record.
+ *
+ * The raw text goes through the url object form, which reads only URL
+ * schemes. D-PL5-04 reads a string URL whose path ends in `.json` as a
+ * hosted catalog, and a url record written before that rule must keep
+ * loading as the git source it names.
  */
 function revalidateStoredUrlSource(mpName: string, raw: string): UrlSource | GitHubSource {
-  const parsedSrc = parsePluginSource(raw);
+  const parsedSrc = parsePluginSource({ kind: "url", url: raw });
   // D-76-02: an https github.com url parses as `github`, and the record migrates to that kind.
-  if (parsedSrc.kind === "url" || (parsedSrc.kind === "github" && raw.startsWith("https://"))) {
+  if (parsedSrc.kind === "url" || parsedSrc.kind === "github") {
     return parsedSrc;
   }
 
@@ -368,18 +378,26 @@ function revalidateStoredHostedSource(mpName: string, raw: string): HostedManife
   throw new Error(`state.json marketplace "${mpName}" has an invalid hosted source: ${raw}`);
 }
 
+/**
+ * A legacy string source. It predates the hosted kind, so a URL to a `.json`
+ * file in one is the git source it was when it was recorded.
+ */
+function revalidateStoredStringSource(mpName: string, src: string): ParsedSource {
+  const parsedSrc = parsePluginSource(src);
+  if (parsedSrc.kind === "unknown") {
+    throw new Error(
+      `state.json marketplace "${mpName}" has unclassifiable source: ${parsedSrc.reason}`,
+    );
+  }
+
+  return parsedSrc.kind === "hosted" ? revalidateStoredUrlSource(mpName, src) : parsedSrc;
+}
+
 function normalizeStoredSource(mpName: string, mp: Record<string, unknown>): void {
   const src = mp.source;
 
   if (typeof src === "string") {
-    const parsedSrc = parsePluginSource(src);
-    if (parsedSrc.kind === "unknown") {
-      throw new Error(
-        `state.json marketplace "${mpName}" has unclassifiable source: ${parsedSrc.reason}`,
-      );
-    }
-
-    mp.source = parsedSrc;
+    mp.source = revalidateStoredStringSource(mpName, src);
     return;
   }
 

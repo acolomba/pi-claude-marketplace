@@ -943,6 +943,25 @@ for (const { name, source, expectedSource } of [
     },
   },
   {
+    name: "a stored URL source whose path ends in .json as a URL source",
+    source: { kind: "url", raw: "https://git.example.com/acme/catalog.json" },
+    expectedSource: {
+      kind: "url",
+      raw: "https://git.example.com/acme/catalog.json",
+      url: "https://git.example.com/acme/catalog.json",
+    },
+  },
+  {
+    name: "a legacy string URL whose path ends in .json as a URL source",
+    source: "https://git.example.com/acme/catalog.json#release",
+    expectedSource: {
+      kind: "url",
+      raw: "https://git.example.com/acme/catalog.json#release",
+      url: "https://git.example.com/acme/catalog.json",
+      ref: "release",
+    },
+  },
+  {
     name: "a stored hosted source",
     source: {
       kind: "hosted",
