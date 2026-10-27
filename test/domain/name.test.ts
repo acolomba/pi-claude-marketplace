@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  addedMarketplaceNameRefusal,
   assertSafeName,
   declaredAgentName,
   generatedAgentName,
@@ -221,6 +222,18 @@ const ORGANIZATION_REFUSAL = (name: string): string =>
 const GITHUB_REFUSAL = (name: string): string =>
   `The name '${name}' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/anthropics/' can use this name.`;
 
+const IMPERSONATION_REFUSAL =
+  "Marketplace name impersonates an official Anthropic/Claude marketplace";
+
+const NEW_ADD = { repairedName: undefined, recorded: false } as const;
+
+const anthropicsSource = (repo: string): ParsedSource => ({
+  kind: "github",
+  raw: `anthropics/${repo}`,
+  owner: "anthropics",
+  repo,
+});
+
 describe("reservedMarketplaceNameRefusal", () => {
   for (const name of [
     "claude-code-marketplace",
@@ -316,6 +329,332 @@ describe("reservedMarketplaceNameRefusal", () => {
 
     // assert
     assert.strictEqual(refusal, undefined);
+  });
+});
+
+describe("addedMarketplaceNameRefusal", () => {
+  for (const name of [
+    "official-claude-plugins",
+    "claude-plugins-v2",
+    "unofficial-claude-tools",
+    "claudeplugins",
+    "claude-directory",
+    "anthropic-directories",
+    "claude-market-place",
+    "_claude-plugins",
+    "offi-cial-claude",
+    "café",
+    "acme\ttools",
+  ]) {
+    test(`D-PL5-28: refuses the look-alike ${JSON.stringify(name)} from a path source`, () => {
+      // arrange
+      const declaredName = name;
+
+      // act
+      const refusal = addedMarketplaceNameRefusal(declaredName, pathMarketplaceSource, NEW_ADD);
+
+      // assert
+      assert.strictEqual(refusal, IMPERSONATION_REFUSAL);
+    });
+  }
+
+  for (const name of [
+    "claude-code-plugins-extra",
+    "my-claude-tools",
+    "acme-tools",
+    "claude_code_plugins",
+  ]) {
+    test(`D-PL5-28: accepts ${name}, which is no look-alike`, () => {
+      // arrange
+      const declaredName = name;
+
+      // act
+      const refusal = addedMarketplaceNameRefusal(declaredName, pathMarketplaceSource, NEW_ADD);
+
+      // assert
+      assert.strictEqual(refusal, undefined);
+    });
+  }
+
+  test("D-PL5-28: accepts a soft look-alike that keeps the name of the record it repairs", () => {
+    // arrange
+    const registration = { repairedName: "Claude-Directory", recorded: true };
+
+    // act
+    const refusal = addedMarketplaceNameRefusal(
+      "claude-directory",
+      pathMarketplaceSource,
+      registration,
+    );
+
+    // assert
+    assert.strictEqual(refusal, undefined);
+  });
+
+  test("D-PL5-28: refuses a strong look-alike that keeps the name of the record it repairs", () => {
+    // arrange
+    const registration = { repairedName: "claude-plugins-v2", recorded: true };
+
+    // act
+    const refusal = addedMarketplaceNameRefusal(
+      "claude-plugins-v2",
+      pathMarketplaceSource,
+      registration,
+    );
+
+    // assert
+    assert.strictEqual(refusal, IMPERSONATION_REFUSAL);
+  });
+
+  test("D-PL5-28: refuses a soft look-alike that renames the record it repairs", () => {
+    // arrange
+    const registration = { repairedName: "tools", recorded: false };
+
+    // act
+    const refusal = addedMarketplaceNameRefusal(
+      "claude-directory",
+      pathMarketplaceSource,
+      registration,
+    );
+
+    // assert
+    assert.strictEqual(refusal, IMPERSONATION_REFUSAL);
+  });
+
+  for (const { name, refusal: expectedRefusal } of [
+    {
+      name: "Inline",
+      refusal: 'Marketplace name "inline" is reserved for --plugin-dir session plugins',
+    },
+    { name: "BuiltIn", refusal: 'Marketplace name "builtin" is reserved for built-in plugins' },
+    {
+      name: "Skills-Dir",
+      refusal:
+        'Marketplace name "skills-dir" is reserved for plugins auto-loaded from .claude/skills/',
+    },
+    {
+      name: "SYNCED",
+      refusal:
+        'Marketplace name "synced" is reserved for plugins synced from your claude.ai account',
+    },
+    {
+      name: "Claude-Plugin-Test",
+      refusal:
+        'Marketplace name "claude-plugin-test" is reserved for plugins loaded by claude plugin test',
+    },
+    {
+      name: "NPM",
+      refusal:
+        'Marketplace name "npm" is reserved for plugins installed from an npm registry (`<package>@npm`); remove this marketplace and add it again under another name',
+    },
+    {
+      name: "Pip",
+      refusal:
+        'Marketplace name "pip" is reserved for plugins installed from a Python package index (reserved; not yet available)',
+    },
+    {
+      name: "uV",
+      refusal:
+        'Marketplace name "uv" is reserved for plugins installed from a Python package index through uv (reserved; not yet available)',
+    },
+    {
+      name: "Cargo",
+      refusal:
+        'Marketplace name "cargo" is reserved for plugins installed from a Rust crate registry (reserved; not yet available)',
+    },
+    {
+      name: "GitHub",
+      refusal:
+        'Marketplace name "github" is reserved for plugins installed straight from a GitHub repository (`<owner>/<repo>@github`; reserved; not yet available)',
+    },
+    {
+      name: "GH",
+      refusal:
+        'Marketplace name "gh" is reserved for plugins installed straight from a GitHub repository (reserved; not yet available)',
+    },
+  ]) {
+    test(`D-PL5-28: refuses Claude Code's own name ${name} in any case`, () => {
+      // arrange
+      const declaredName = name;
+
+      // act
+      const refusal = addedMarketplaceNameRefusal(declaredName, pathMarketplaceSource, NEW_ADD);
+
+      // assert
+      assert.strictEqual(refusal, expectedRefusal);
+    });
+  }
+
+  test("D-PL5-28: accepts Constructor, which is neither an own name nor an object member", () => {
+    // arrange
+    const declaredName = "Constructor";
+
+    // act
+    const refusal = addedMarketplaceNameRefusal(declaredName, pathMarketplaceSource, NEW_ADD);
+
+    // assert
+    assert.strictEqual(refusal, undefined);
+  });
+
+  test("MKT-01 / D-PL5-28: refuses a reserved name from a path source with the organization sentence", () => {
+    // arrange
+    const declaredName = "claude-plugins-official";
+
+    // act
+    const refusal = addedMarketplaceNameRefusal(declaredName, pathMarketplaceSource, NEW_ADD);
+
+    // assert
+    assert.strictEqual(refusal, ORGANIZATION_REFUSAL("claude-plugins-official"));
+  });
+
+  test("MKT-01 / D-PL5-28: lets the anthropics organization use a reserved name", () => {
+    // arrange
+    const source = anthropicsSource("claude-plugins-official");
+
+    // act
+    const refusal = addedMarketplaceNameRefusal("claude-plugins-official", source, NEW_ADD);
+
+    // assert
+    assert.strictEqual(refusal, undefined);
+  });
+
+  test("D-PL5-28: refuses a look-alike from the anthropics organization", () => {
+    // arrange
+    const source = anthropicsSource("claude-plugins-v2");
+
+    // act
+    const refusal = addedMarketplaceNameRefusal("claude-plugins-v2", source, NEW_ADD);
+
+    // assert
+    assert.strictEqual(refusal, IMPERSONATION_REFUSAL);
+  });
+
+  for (const name of ["claudeai-tools", "ClaudeAI.tools", "claudeai tools", "claudeai-x."]) {
+    test(`D-PL5-28: refuses ${JSON.stringify(name)}, which starts with claudeai-`, () => {
+      // arrange
+      const declaredName = name;
+
+      // act
+      const refusal = addedMarketplaceNameRefusal(declaredName, pathMarketplaceSource, NEW_ADD);
+
+      // assert
+      assert.strictEqual(
+        refusal,
+        `Cannot add marketplace ${JSON.stringify(name)}: names starting with "claudeai-" are reserved for marketplaces hosted on claude.ai.`,
+      );
+    });
+  }
+
+  for (const name of ["claudeai_tools", "my-claudeai-tools"]) {
+    test(`D-PL5-28: accepts ${name}, which does not start with claudeai-`, () => {
+      // arrange
+      const declaredName = name;
+
+      // act
+      const refusal = addedMarketplaceNameRefusal(declaredName, pathMarketplaceSource, NEW_ADD);
+
+      // assert
+      assert.strictEqual(refusal, undefined);
+    });
+  }
+
+  for (const { name, reserved } of [
+    { name: "claude.code.plugins", reserved: "claude-code-plugins" },
+    { name: "healthcare.", reserved: "healthcare" },
+    { name: "Agent.Skills", reserved: "agent-skills" },
+    { name: "life.sciences", reserved: "life-sciences" },
+  ]) {
+    test(`D-PL5-28: refuses ${name} as another spelling of ${reserved}`, () => {
+      // arrange
+      const declaredName = name;
+
+      // act
+      const refusal = addedMarketplaceNameRefusal(declaredName, pathMarketplaceSource, NEW_ADD);
+
+      // assert
+      assert.strictEqual(
+        refusal,
+        `"${name}" is another spelling of "${reserved}", a reserved marketplace name.`,
+      );
+    });
+  }
+
+  test("D-PL5-28: refuses another spelling that is not a plain word without naming it", () => {
+    // arrange
+    const declaredName = "claude code plugins";
+
+    // act
+    const refusal = addedMarketplaceNameRefusal(declaredName, pathMarketplaceSource, NEW_ADD);
+
+    // assert
+    assert.strictEqual(
+      refusal,
+      `This marketplace's name is another spelling of "claude-code-plugins", a reserved marketplace name. It is not exactly the reserved name it appears to be.`,
+    );
+  });
+
+  for (const name of ["claude.plugin.directory", "anthropic.plugin.directory"]) {
+    test(`D-PL5-28: refuses ${name}, a spelling of a plugin directory name`, () => {
+      // arrange
+      const declaredName = name;
+
+      // act
+      const refusal = addedMarketplaceNameRefusal(declaredName, pathMarketplaceSource, NEW_ADD);
+
+      // assert
+      assert.strictEqual(refusal, `"${name}" is a reserved marketplace name.`);
+    });
+  }
+
+  for (const name of ["anthropic-plugin-directory", "Anthropic-Plugin-Directory"]) {
+    test(`D-PL5-28: lets the anthropics organization add ${name}`, () => {
+      // arrange
+      const source = anthropicsSource("anthropic-plugin-directory");
+
+      // act
+      const refusal = addedMarketplaceNameRefusal(name, source, NEW_ADD);
+
+      // assert
+      assert.strictEqual(refusal, undefined);
+    });
+  }
+
+  for (const name of ["constructor", "toString", "hasOwnProperty", "__defineGetter__"]) {
+    test(`D-PL5-28: refuses the object member ${name}`, () => {
+      // arrange
+      const declaredName = name;
+
+      // act
+      const refusal = addedMarketplaceNameRefusal(declaredName, pathMarketplaceSource, NEW_ADD);
+
+      // assert
+      assert.strictEqual(
+        refusal,
+        `Cannot add marketplace "${name}": Claude Code reserves this name and cannot register a marketplace under it. The name is set by "name" in the marketplace's marketplace.json; ask its maintainer to change it.`,
+      );
+    });
+
+    test(`D-PL5-28: accepts the object member ${name} when the scope already records it`, () => {
+      // arrange
+      const registration = { repairedName: undefined, recorded: true };
+
+      // act
+      const refusal = addedMarketplaceNameRefusal(name, pathMarketplaceSource, registration);
+
+      // assert
+      assert.strictEqual(refusal, undefined);
+    });
+  }
+
+  test("D-PL5-28: refuses a look-alike spelling of a reserved name as a look-alike", () => {
+    // arrange
+    const declaredName = "claude-plugins-official.";
+
+    // act
+    const refusal = addedMarketplaceNameRefusal(declaredName, pathMarketplaceSource, NEW_ADD);
+
+    // assert
+    assert.strictEqual(refusal, IMPERSONATION_REFUSAL);
   });
 });
 

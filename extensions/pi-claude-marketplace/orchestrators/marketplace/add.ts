@@ -61,7 +61,7 @@ import path from "node:path";
 
 import { networkCloneUrl, originMatchesSource } from "../../domain/clone-key.ts";
 import { loadMarketplaceManifestDocument } from "../../domain/manifest.ts";
-import { isReservedRecordKey, reservedMarketplaceNameRefusal } from "../../domain/name.ts";
+import { addedMarketplaceNameRefusal, isReservedRecordKey } from "../../domain/name.ts";
 import { parsePluginSource, samePlannedSource } from "../../domain/source.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeMarketplaceConfigEntry } from "../../persistence/config-write-back.ts";
@@ -447,9 +447,9 @@ class RecordedNameMismatchError extends Error {
 /**
  * Reads the manifest at `manifestPath` and returns the marketplace name it
  * declares. A `__proto__` name fails as `invalid manifest` (D-08-07), a name
- * Claude Code reserves for the anthropics organization fails unless `source`
- * is one of its github repositories (MKT-01), and a name the scope already
- * holds fails as a duplicate (MA-8), all before any state mutation.
+ * Claude Code refuses fails with Claude Code's sentence (MKT-01 / D-PL5-28),
+ * and a name the scope already holds fails as a duplicate (MA-8), all before
+ * any state mutation and on every add caller.
  *
  * D-PL5-17: a repair passes the name of the record it re-materializes. The
  * manifest must declare that name, and the MA-8 check is skipped for it,
@@ -472,7 +472,10 @@ async function newMarketplaceName(
     );
   }
 
-  const refusal = reservedMarketplaceNameRefusal(name, source);
+  const refusal = addedMarketplaceNameRefusal(name, source, {
+    repairedName: expectedName,
+    recorded: ownValue(marketplaces, name) !== undefined,
+  });
   if (refusal !== undefined) {
     throw new ReservedMarketplaceNameError(refusal);
   }

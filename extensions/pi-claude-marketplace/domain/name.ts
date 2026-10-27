@@ -130,6 +130,256 @@ export function reservedMarketplaceNameRefusal(
 }
 
 /**
+ * MKT-01 / D-PL5-28: Claude Code's refusal of the marketplace `name` a
+ * manifest declares to `marketplace add`, or undefined when Claude Code 2.1.310
+ * accepts it. The rules run in Claude Code's add order: a look-alike or one of
+ * Claude Code's own names, the reserved set (D-PL5-01), the `claudeai-` prefix,
+ * another spelling of a reserved name, and an `Object.prototype` member.
+ *
+ * `repairedName` is the record a re-materialized checkout repairs (D-PL5-17),
+ * which grandfathers a soft look-alike that keeps its name. `recorded` says the
+ * scope already records `name`, which Claude Code exempts from the member rule.
+ */
+export function addedMarketplaceNameRefusal(
+  name: string,
+  source: ParsedSource,
+  registration: { readonly repairedName: string | undefined; readonly recorded: boolean },
+): string | undefined {
+  return (
+    catalogMarketplaceNameRefusal(name, registration.repairedName) ??
+    reservedMarketplaceNameRefusal(name, source) ??
+    claudeaiPrefixRefusal(name) ??
+    spellingRefusal(name) ??
+    objectMemberRefusal(name, registration.recorded)
+  );
+}
+
+const IMPERSONATION_REFUSAL =
+  "Marketplace name impersonates an official Anthropic/Claude marketplace";
+
+/**
+ * MKT-01 / D-PL5-28: the refusal of a catalog that declares `declaredName`,
+ * read for the marketplace registered as `registeredName` (undefined for a new
+ * add): a look-alike, then one of Claude Code's own names. Claude Code runs both
+ * rules on every catalog it parses.
+ */
+function catalogMarketplaceNameRefusal(
+  declaredName: string,
+  registeredName: string | undefined,
+): string | undefined {
+  return isRefusedLookalike(declaredName, registeredName)
+    ? IMPERSONATION_REFUSAL
+    : ownNameRefusal(declaredName);
+}
+
+const OFFICIAL_WORDS = ["marketplace", "plugins", "official"];
+
+const LOOKALIKE_WORDS = [...OFFICIAL_WORDS, "directory", "directories"];
+
+const OFFICIAL_PATTERN =
+  "official[^a-z0-9]*(anthropic|claude)|(?:anthropic|claude)[^a-z0-9]*official";
+
+function lookalikePattern(words: readonly string[]): RegExp {
+  return new RegExp(
+    `(?:${OFFICIAL_PATTERN}|^(?:anthropic|claude)[^a-z0-9]*(${words.join("|")}))`,
+    "i",
+  );
+}
+
+const LOOKALIKE = lookalikePattern(LOOKALIKE_WORDS);
+
+const STRONG_LOOKALIKE = lookalikePattern(OFFICIAL_WORDS);
+
+const OUTSIDE_PRINTABLE_ASCII = /[^\u0020-\u007E]/;
+
+const JOINED_LOOKALIKE = new RegExp(
+  `^(?:anthropic|claude)(?:${LOOKALIKE_WORDS.join("|")})s?$`,
+  "i",
+);
+
+// Claude Code stops joining tokens once the joined prefix outgrows the longest
+// name its pattern can match: `anthropic`, the longest word, and an `s`.
+const JOINED_PREFIX_LIMIT = "anthropic".length + "directories".length + 1;
+
+/**
+ * MKT-01 / D-PL5-28: Claude Code's strong look-alike test (2.1.282+), a name
+ * outside printable ASCII or one that matches the official pattern. An exact
+ * reserved name, in any case, is never a look-alike: the reserved set owns it.
+ */
+function isStrongLookalike(name: string): boolean {
+  return (
+    !RESERVED_MARKETPLACE_NAMES.has(name.toLowerCase()) &&
+    (OUTSIDE_PRINTABLE_ASCII.test(name) || STRONG_LOOKALIKE.test(name))
+  );
+}
+
+/**
+ * MKT-01 / D-PL5-28: Claude Code's full look-alike test, the strong test plus
+ * the directory words, a name that matches once its leading symbols go, the
+ * official words run together, and a token-joined prefix such as
+ * `claude-market-place`.
+ */
+function isLookalike(name: string): boolean {
+  if (RESERVED_MARKETPLACE_NAMES.has(name.toLowerCase())) {
+    return false;
+  }
+
+  return (
+    isStrongLookalike(name) ||
+    LOOKALIKE.test(name) ||
+    LOOKALIKE.test(name.replace(/^[^a-z0-9]+/i, "")) ||
+    /official(?:anthropic|claude)|(?:anthropic|claude)official/i.test(
+      name.replaceAll(/[^a-z0-9]+/gi, ""),
+    ) ||
+    joinedPrefixLooksAlike(name)
+  );
+}
+
+function joinedPrefixLooksAlike(name: string): boolean {
+  let joined = "";
+  for (const token of name.split(/[^a-z0-9]+/i).filter((part) => part !== "")) {
+    joined += token;
+    if (JOINED_LOOKALIKE.test(joined)) {
+      return true;
+    }
+
+    if (joined.length > JOINED_PREFIX_LIMIT) {
+      return false;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * MKT-01 / D-PL5-28: Claude Code grandfathers a soft look-alike that a
+ * registered marketplace already holds. A catalog that keeps that name, in any
+ * case, is refused only for a strong look-alike, and any other name is refused
+ * for any look-alike.
+ */
+function isRefusedLookalike(declaredName: string, registeredName: string | undefined): boolean {
+  return declaredName.toLowerCase() === registeredName?.toLowerCase()
+    ? isStrongLookalike(declaredName)
+    : isLookalike(declaredName);
+}
+
+/** MKT-01 / D-PL5-28: the names Claude Code 2.1.310 uses itself, by what each holds. */
+const CLAUDE_CODE_OWN_NAMES: ReadonlyMap<string, string> = new Map([
+  ["inline", "--plugin-dir session plugins"],
+  ["builtin", "built-in plugins"],
+  ["skills-dir", "plugins auto-loaded from .claude/skills/"],
+  ["synced", "plugins synced from your claude.ai account"],
+  ["claude-plugin-test", "plugins loaded by claude plugin test"],
+  [
+    "npm",
+    "plugins installed from an npm registry (`<package>@npm`); remove this marketplace and add it again under another name",
+  ],
+  ["pip", "plugins installed from a Python package index (reserved; not yet available)"],
+  ["uv", "plugins installed from a Python package index through uv (reserved; not yet available)"],
+  ["cargo", "plugins installed from a Rust crate registry (reserved; not yet available)"],
+  [
+    "github",
+    "plugins installed straight from a GitHub repository (`<owner>/<repo>@github`; reserved; not yet available)",
+  ],
+  ["gh", "plugins installed straight from a GitHub repository (reserved; not yet available)"],
+]);
+
+/** MKT-01 / D-PL5-28: one of Claude Code's own names, in any case (2.1.275+). */
+function ownNameRefusal(name: string): string | undefined {
+  const lowered = name.toLowerCase();
+  const holds = CLAUDE_CODE_OWN_NAMES.get(lowered);
+
+  return holds === undefined ? undefined : `Marketplace name "${lowered}" is reserved for ${holds}`;
+}
+
+const CLAUDEAI_PREFIX = "claudeai-";
+
+/**
+ * MKT-01 / D-PL5-28: a name that starts with `claudeai-` once Claude Code folds
+ * it. Pi has no claude.ai-hosted marketplaces, so the sentence drops Claude
+ * Code's `--claudeai` remedy.
+ */
+function claudeaiPrefixRefusal(name: string): string | undefined {
+  const folded = foldedName(name.normalize("NFKC"));
+  if (
+    !folded.startsWith(CLAUDEAI_PREFIX) &&
+    !dashedName(folded).toLowerCase().startsWith(CLAUDEAI_PREFIX)
+  ) {
+    return undefined;
+  }
+
+  return `Cannot add marketplace ${JSON.stringify(name)}: names starting with "claudeai-" are reserved for marketplaces hosted on claude.ai.`;
+}
+
+const INVISIBLE_CHARACTERS = /[\u200C-\u200F\u202A-\u202E\u206A-\u206F\uFEFF]/g;
+
+/** Claude Code's name fold: no invisible characters, case folded, no trailing dots or spaces. */
+function foldedName(name: string): string {
+  let folded = name.replaceAll(INVISIBLE_CHARACTERS, "").toUpperCase().toLowerCase();
+  while (folded.endsWith(".") || folded.endsWith(" ")) {
+    folded = folded.slice(0, -1);
+  }
+
+  return folded;
+}
+
+function dashedName(name: string): string {
+  return name.replaceAll(/[^\w-]/g, "-");
+}
+
+const ANTHROPIC_PLUGIN_DIRECTORY = "anthropic-plugin-directory";
+
+const DIRECTORY_NAMES: ReadonlySet<string> = new Set([
+  ANTHROPIC_PLUGIN_DIRECTORY,
+  "claude-plugin-directory",
+]);
+
+// Claude Code checks the Anthropic Directory first, then the reserved set in order.
+const SPELLING_ORDER = [ANTHROPIC_PLUGIN_DIRECTORY, ...RESERVED_MARKETPLACE_NAMES];
+
+/**
+ * MKT-01 / D-PL5-28: another spelling of a reserved name (2.1.280+), such as
+ * `claude.code.plugins` or `healthcare.`. The exact `anthropic-plugin-directory`
+ * stays open to the anthropics organization, because Pi has no built-in
+ * Anthropic Directory to own the name; its other spellings are refused.
+ */
+function spellingRefusal(name: string): string | undefined {
+  const lowered = name.toLowerCase();
+  const reserved = SPELLING_ORDER.find(
+    (candidate) => candidate !== lowered && spellsReservedName(name, candidate),
+  );
+  if (reserved === undefined) {
+    return undefined;
+  }
+
+  if (DIRECTORY_NAMES.has(reserved)) {
+    return `"${name}" is a reserved marketplace name.`;
+  }
+
+  return /^\w[\w.@-]*$/.test(name)
+    ? `"${name}" is another spelling of "${reserved}", a reserved marketplace name.`
+    : `This marketplace's name is another spelling of "${reserved}", a reserved marketplace name. It is not exactly the reserved name it appears to be.`;
+}
+
+function spellsReservedName(name: string, reserved: string): boolean {
+  const normalized = name.normalize("NFKC");
+
+  return [name, normalized, foldedName(normalized)].some(
+    (form) => dashedName(form).toLowerCase() === reserved,
+  );
+}
+
+/**
+ * MKT-01 / D-PL5-28: an `Object.prototype` member name (2.1.296+), which Claude
+ * Code cannot register. A name the scope already records keeps working.
+ */
+function objectMemberRefusal(name: string, recorded: boolean): string | undefined {
+  return !recorded && Object.hasOwn(Object.prototype, name)
+    ? `Cannot add marketplace "${name}": Claude Code reserves this name and cannot register a marketplace under it. The name is set by "name" in the marketplace's marketplace.json; ask its maintainer to change it.`
+    : undefined;
+}
+
+/**
  * Skill name generator (RN-1 / SK-2).
  *
  * Format: `<plugin>-<skill>` on every platform. Elides a matching plugin

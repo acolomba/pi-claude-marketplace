@@ -1362,39 +1362,82 @@ async function writeNamedPathMarketplace(cwd: string, name: string): Promise<str
   return marketplaceRoot;
 }
 
-test("D-08-07: adds a path marketplace named constructor", async (t) => {
-  await createHermeticEnvironment(t, "mp-add-constructor-home-");
-  await withTmpScope(async ({ cwd, locations }) => {
-    // arrange
-    const marketplaceRoot = await writeNamedPathMarketplace(cwd, "constructor");
-    const { ctx, run, notifications } = makeCtx();
-    const { gitOps } = createGitOps();
+for (const { name, refusal } of [
+  {
+    name: "claude-plugins-v2",
+    refusal: "Marketplace name impersonates an official Anthropic/Claude marketplace",
+  },
+  {
+    name: "NPM",
+    refusal:
+      'Marketplace name "npm" is reserved for plugins installed from an npm registry (`<package>@npm`); remove this marketplace and add it again under another name',
+  },
+  {
+    name: "claudeai-tools",
+    refusal:
+      'Cannot add marketplace "claudeai-tools": names starting with "claudeai-" are reserved for marketplaces hosted on claude.ai.',
+  },
+  {
+    name: "claude.code.plugins",
+    refusal:
+      '"claude.code.plugins" is another spelling of "claude-code-plugins", a reserved marketplace name.',
+  },
+  {
+    name: "constructor",
+    refusal:
+      'Cannot add marketplace "constructor": Claude Code reserves this name and cannot register a marketplace under it. The name is set by "name" in the marketplace\'s marketplace.json; ask its maintainer to change it.',
+  },
+]) {
+  test(`D-PL5-28: refuses a path marketplace whose manifest declares ${name} with Claude Code's sentence`, async (t) => {
+    await createHermeticEnvironment(t, "mp-add-refused-name-home-");
+    await withTmpScope(async ({ cwd, locations }) => {
+      // arrange
+      const marketplaceRoot = await writeNamedPathMarketplace(cwd, name);
+      const { ctx, run, notifications } = makeCtx();
+      const { gitOps } = createGitOps();
 
-    // act
-    await addMarketplace({ ctx, run, scope: "project", cwd, rawSource: marketplaceRoot, gitOps });
+      // act
+      await addMarketplace({ ctx, run, scope: "project", cwd, rawSource: marketplaceRoot, gitOps });
 
-    // assert
-    assert.deepStrictEqual(notifications, [{ message: "● constructor [project] (added)" }]);
-    assert.deepStrictEqual(Object.keys((await loadState(locations.extensionRoot)).marketplaces), [
-      "constructor",
-    ]);
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "Some operations have failed.\n\n" +
+            `⊘ ${marketplaceRoot} [project] (failed)\n` +
+            `  ⊘ ${marketplaceRoot} (failed) {invalid manifest}\n` +
+            `    cause: ${refusal}`,
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces, {});
+    });
   });
-});
+}
 
-test("MPA-01 / D-08-07: skips a second add of a marketplace named constructor", async (t) => {
+test("MPA-01 / D-PL5-28: a constructor marketplace an earlier version recorded is still already added", async (t) => {
   await createHermeticEnvironment(t, "mp-add-constructor-dup-home-");
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const marketplaceRoot = await writeNamedPathMarketplace(cwd, "constructor");
-    const first = makeCtx();
-    await addMarketplace({
-      ctx: first.ctx,
-      run: first.run,
-      scope: "project",
-      cwd,
-      rawSource: marketplaceRoot,
-      gitOps: createGitOps().gitOps,
+    await saveState(locations.extensionRoot, {
+      schemaVersion: 3,
+      marketplaces: {
+        constructor: {
+          name: "constructor",
+          scope: "project" as const,
+          source: { kind: "path", raw: marketplaceRoot, logical: marketplaceRoot },
+          addedFromCwd: cwd,
+          manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+          marketplaceRoot,
+          plugins: {},
+        },
+      },
     });
+    await writeFile(
+      locations.baseConfigJsonPath,
+      declaredMarketplaceBytes("constructor", marketplaceRoot),
+    );
     const { ctx, run, notifications } = makeCtx();
 
     // act
