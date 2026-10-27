@@ -165,7 +165,7 @@ parent session applies them at merge.
 3. Two intent marks in one millisecond are distinguished (GLK-06).
 4. A `fetch` scenario for a plugin whose `plugin.json` and entry disagree shows the `list` version; a warm tag reinstall makes no network call (GLK-07, GLK-08).
 
-**Plans:** 5/10 plans executed in 3 waves
+**Plans:** 9/10 plans executed in 3 waves
 
 Plans:
 - [x] 07-01-PLAN.md — wave 1: `classifyGitFailure` entry point behind the kept wrappers; marketplace update and the stored-credential check moved onto it (GLK-01)
@@ -173,10 +173,10 @@ Plans:
 - [x] 07-03-PLAN.md — wave 1: strictly increasing intent-mark and finalize stamps (GLK-06)
 - [x] 07-04-PLAN.md — wave 1: offline tag resolve for a warm tag-ref reinstall (GLK-08)
 - [x] 07-05-PLAN.md — wave 1: completion's upgradable state from list's rule; browse verified (GLK-07)
-- [ ] 07-06-PLAN.md — wave 2: one update failure ladder for direct and cascade paths; framed marketplace refresh in plugin update (GLK-01, GLK-02)
-- [ ] 07-07-PLAN.md — wave 2: framed update-preflight host failures; tag copy under the plugin scope's lock (GLK-01, GLK-04)
-- [ ] 07-08-PLAN.md — wave 2: fetch host classification with frame, locked fetch-and-read, list version on every row (GLK-01, GLK-05, GLK-07)
-- [ ] 07-09-PLAN.md — wave 2: `info --fetch` host classification and locked fetch-and-read (GLK-01, GLK-05)
+- [x] 07-06-PLAN.md — wave 2: one update failure ladder for direct and cascade paths; framed marketplace refresh in plugin update (GLK-01, GLK-02)
+- [x] 07-07-PLAN.md — wave 2: framed update-preflight host failures; tag copy under the plugin scope's lock (GLK-01, GLK-04)
+- [x] 07-08-PLAN.md — wave 2: fetch host classification with frame, locked fetch-and-read, list version on every row (GLK-01, GLK-05, GLK-07)
+- [x] 07-09-PLAN.md — wave 2: `info --fetch` host classification and locked fetch-and-read (GLK-01, GLK-05)
 - [ ] 07-10-PLAN.md — wave 3: dependency tag-listing classification, transport layer made private, output-catalog prose, phase handoff (GLK-01)
 
 ### Phase 8: Background Autoupdate
