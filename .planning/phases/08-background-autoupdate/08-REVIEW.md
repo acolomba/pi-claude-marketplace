@@ -32,7 +32,11 @@ findings:
   warning: 4
   info: 4
   total: 9
-status: issues_found
+status: fixed
+fixed_at: 2026-10-27T00:00:00Z
+fix_counts:
+  fixed: 8
+  skipped: 1
 ---
 
 # Phase 8: Code Review Report
@@ -172,3 +176,22 @@ The early `return` on a stop would also pass through this `finally`, and the `is
 _Reviewed: 2026-10-27_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+
+## Fix Report
+
+**Fixed:** 2026-10-27, on `features/plugin-lifecycle-p8`, edited and committed in this worktree's checkout (no separate review-fix worktree).
+**Verification:** `npm run check` in this checkout at `5c622269` (Node v26.12.1): exit 0. All static checks passed, 905 cucumber scenarios passed, and direct coverage of every pair is 100%.
+
+| Finding | Status | Commit | What changed |
+| ------- | ------ | ------ | ------------ |
+| CR-01 | fixed | `7c08c375` | The scenario now moves `demo` and `extra` of the project marketplace `tools` and `helper` of the user marketplace `kit`, and expects all three as rows of one `background-update` result. The follow-up `list` covers both scopes. A mutant that notified once per marketplace failed the row step in all four rows. |
+| WR-01 | fixed | `63569129` | `sendMessage` reads on until the payload count has stayed the same for `BACKGROUND_RESULT_QUIET_MS` (1 s, with a why-comment), then returns every payload. A mutant that sent a second notice 300 ms after the first failed `lastResult()`'s exactly-one check with the fix and passed without it. The cucumber rule file states the quiet window. |
+| WR-02 | fixed | `317ba32d` | `sendMessage` asserts that Pi's answer to the message carries no `claude-plugin` payload. A mutant that ran the pass inside the input handler failed with the fix and passed without it. The scenario passed 5 runs in a row with the real code. |
+| WR-03 | fixed | `4a23b8d2` | The scope loop moved to `updateEveryScope`, and the pass raises its notice in a `finally` when at least one plugin moved and the runtime has not stopped. New test: the first marketplace's plugin moves, the second marketplace throws `InvalidGitHubBaseUrlError`, the pass rejects, and one notice lists the moved plugin. The existing base-override test now also asserts that no notice is raised when nothing moved. This refines D-PL8-06: the pass is silent only when nothing moved. The module header says so. |
+| WR-04 | fixed | `c5889491` | After `beginStep()` and the stop check, the plugin yield reads the merged config of `(marketplace, scope)` again (`loadMergedScopeConfig`, the step's `cwd`). When autoupdate is off, it returns a not-run failed outcome (`autoupdate was turned off before this update ran`) instead of updating. New test: a command run during the yield turns autoupdate off, and the second plugin is not updated. `marketplace/update.ts` and `autoupdate.ts` are unchanged. |
+| IN-01 | fixed | `b35fe54a` | `resolveBackgroundUpdate` and its PMOD-04 comment moved above the AMIG JSDoc. Code is unchanged. |
+| IN-02 | fixed | `602d4ff8` | `updateEveryScope` returns before each scope once the runtime has stopped. New test: a stop during the project scope reads nothing of an unreadable user scope (no debug line). |
+| IN-03 | fixed | `5c622269` | The comments in `background-update.steps.ts` and `world.ts`, and the same claim in the cucumber rule file, now say that a Pi's environment is fixed when it starts. |
+| IN-04 | skipped | -- | Out of scope for this fix run. The orchestrator records the reload, new, resume, and fork exposure in CONTEXT. |
+
+Each failure demonstration used a temporary local mutant, which was reverted before the commit. The commits contain only the fixes.
