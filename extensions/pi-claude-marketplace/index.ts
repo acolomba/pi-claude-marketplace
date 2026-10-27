@@ -237,6 +237,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
       completionCache,
       beginPluginUpdateRun: pluginUpdateOperations.beginPluginUpdateRun,
       updateMarketplace,
+      installMissingDependencies,
       runWithAbortSignal: runWithGitAbortSignal,
     }),
     env: process.env,

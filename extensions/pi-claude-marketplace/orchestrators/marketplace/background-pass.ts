@@ -53,6 +53,7 @@ import type {
   PluginUpdateFn,
   PluginUpdateOutcome,
   PluginUpdateSkippedOutcome,
+  ScopeDependencyInstallFn,
 } from "../types.ts";
 
 /** The `input` event's context; Pi's extension context satisfies it. */
@@ -78,6 +79,12 @@ export interface BackgroundPassDeps {
     readonly run: NotificationRun;
   }) => PluginUpdateFn;
   readonly updateMarketplace: (opts: UpdateMarketplaceOptions) => Promise<void>;
+  /**
+   * D-PL2-10: the missing-dependency step each marketplace's autoupdate cascade
+   * runs after its plugin updates, as Claude Code settles missing dependencies
+   * after a background autoupdate.
+   */
+  readonly installMissingDependencies: ScopeDependencyInstallFn;
   /**
    * D-PL8-24: the git abort scope. Every git network call that `step` makes
    * fails with the abort reason once `signal` aborts. The pass names no git
@@ -189,6 +196,7 @@ async function updateOneMarketplace(step: PassStep, name: string, scope: Scope):
         scope,
         cwd: step.cwd,
         pluginUpdate: step.pluginUpdate,
+        installMissingDependencies: deps.installMissingDependencies,
       }),
     );
   } catch (err: unknown) {
