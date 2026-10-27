@@ -542,6 +542,10 @@ function updateFailedDiagnostic(
  *
  * Unlike `surfaceUpdateDiscoveryWarnings`, this also runs on every abort path,
  * because the rewrite has already happened to the user's file.
+ *
+ * D-PL1-23: a `failed` outcome the batch kept carries the notices of the
+ * dependencies its settle installed before it refused (WRN-06). A phase-3a
+ * failure never joins `outcomes`, so its notices render once, from `failed`.
  */
 function surfaceUpdateMcpConfigNotices(
   ctx: NotificationContext,
@@ -550,7 +554,9 @@ function surfaceUpdateMcpConfigNotices(
   failed?: UpdatePhase3FailedOutcome,
 ): void {
   const notices = outcomes.flatMap(({ outcome }) =>
-    outcome.partition === "updated" ? (outcome.mcpConfigNotices ?? []) : [],
+    outcome.partition === "updated" || outcome.partition === "failed"
+      ? (outcome.mcpConfigNotices ?? [])
+      : [],
   );
   notifyMcpConfigNotices(ctx, run, [...notices, ...(failed?.mcpConfigNotices ?? [])]);
 }

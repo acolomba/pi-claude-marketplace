@@ -13086,6 +13086,75 @@ test("AFILE-04: an update that fails after its MCP commit still reports the remo
   });
 });
 
+test("D-PL1-23 / WRN-06: a direct update whose settle refused shows the notices of the dependencies it installed after the cascade", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-refused-settle-notices-");
+    try {
+      // arrange
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const { ctx, run, notifications } = makeCtx();
+      const operations = createPluginUpdateOperations(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+        undefined,
+        {},
+        () =>
+          Promise.resolve({
+            kind: "refused",
+            rows: [
+              {
+                status: "installed",
+                name: "zcore@mp",
+                dependencies: [],
+                version: "1.0.0",
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+            cause: new Error("zzz refused"),
+            mcpConfigNotices: [
+              { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+            ],
+          }),
+      );
+
+      // act
+      await operations.updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "A plugin operation has failed.",
+            "",
+            "● mp [project]",
+            "  ⊘ hello v1.0.0 (failed) {dependency failed}",
+            "  ● zcore@mp v1.0.0 (installed)",
+            "",
+            "/reload to pick up changes",
+          ].join("\n"),
+          severity: "error",
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("AFILE-04: the cascade update entry returns the notice without notifying", async () => {
   await withHermeticHome(async () => {
     // arrange

@@ -149,3 +149,21 @@ Feature: Plugin staging warnings
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+
+  Scenario: Updating a plugin whose new version needs a dependency with an MCP server reports that dependency's MCP config notice
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | demo | 1.1.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the published plugin "lib" of the marketplace "fixtures" declares the mcp server "lib-server"
+    Given the mcp-adapter.json file of the project scope holds a comment
+    When the user runs "/claude:plugin update demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind               | severity | needs reload | summary                             | notices                                                                   |
+      | cascade            | warning  | true         | A plugin operation needs attention. |                                                                           |
+      | mcp-config-notices | warning  | false        |                                     | [{"kind":"comments-dropped","scope":"project","file":"mcp-adapter.json"}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name         | status    | reasons                 | scope   | version | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo         | updated   |                         | project |         | 1.0.0 | 1.1.0 |
+      | fixtures         | project           | lib@fixtures  | lib@fixtures | installed | requires pi-mcp-adapter | project | 1.0.0   |       |       |

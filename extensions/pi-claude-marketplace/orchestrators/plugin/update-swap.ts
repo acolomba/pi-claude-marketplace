@@ -157,13 +157,21 @@ import type {
  * produced. `settled` carries a row for each dependency it installed, enabled
  * or moved; `refused` carries the row of the dependency that cannot be met,
  * after the rows of any change the settle made before a step failed.
+ *
+ * D-PL1-16: both arms carry the MCP config notices of the dependencies the
+ * settle installed, omitted when there are none (NREG-01).
  */
 export type UpdateDependencySettlement =
-  | { readonly kind: "settled"; readonly rows: readonly UpdateDependencyRow[] }
+  | {
+      readonly kind: "settled";
+      readonly rows: readonly UpdateDependencyRow[];
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
+    }
   | {
       readonly kind: "refused";
       readonly rows: readonly UpdateDependencyRow[];
       readonly cause: Error;
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
     };
 
 /**

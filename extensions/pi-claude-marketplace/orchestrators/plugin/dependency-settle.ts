@@ -23,8 +23,13 @@
 //
 // The cascade, the plan and the steps are ports install's flow binds, so
 // this module holds only the order.
+//
+// D-PL1-16: a settle reports the MCP config notices of the dependencies its
+// cascades install, in step order, on both of its arms, so an update can show
+// them ahead of its own. A move reports none: its notices stay with the move.
 
 import { DependencyCascadeError, rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
+import { mcpConfigNoticesMember } from "../marketplace/shared.ts";
 
 import { failedMoveRow, supersedePinRefreshes } from "./dependency-move.ts";
 import { renderRequestedRanges } from "./dependency-plan.ts";
@@ -39,11 +44,20 @@ import type {
 import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
 import type { CascadePlan, PlannedCascadeMember } from "./install-cascade.ts";
 import type { UpdateDependencySettlement } from "./update-swap.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { MovedDependency, UpdateDependencyRow } from "../types.ts";
 
-/** What one locked run of the closure cascade did. */
+/**
+ * What one locked run of the closure cascade did. D-PL1-16: `installed`
+ * carries its members' MCP config notices, omitted when there are none
+ * (NREG-01).
+ */
 export type SettleCascadeRun =
-  | { readonly kind: "installed"; readonly rows: readonly UpdateDependencyRow[] }
+  | {
+      readonly kind: "installed";
+      readonly rows: readonly UpdateDependencyRow[];
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
+    }
   | { readonly kind: "refused"; readonly subject: CascadeFailureSubject };
 
 /** The first run's arms: it may answer that a plan must come first. */
@@ -64,10 +78,23 @@ export interface DependencyStepPorts {
   readonly refusal: DependencyRefusal;
 }
 
-/** Every step landed, or the one that did not; `landed` lists every row reported. */
+/**
+ * Every step landed, or the one that did not; `landed` lists every row
+ * reported. D-PL1-16: `mcpConfigNotices` holds the notices of every closure
+ * slice that landed, omitted when there are none (NREG-01).
+ */
 export type DependencyStepsResult =
-  | { readonly ok: true; readonly landed: readonly MovedDependency[] }
-  | { readonly ok: false; readonly landed: readonly MovedDependency[]; readonly cause: Error };
+  | {
+      readonly ok: true;
+      readonly landed: readonly MovedDependency[];
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
+    }
+  | {
+      readonly ok: false;
+      readonly landed: readonly MovedDependency[];
+      readonly cause: Error;
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
+    };
 
 /** The operations an update's settle composes. */
 export interface DependencySettlePorts {
@@ -102,9 +129,10 @@ export function movedFromRow(row: UpdateDependencyRow): MovedDependency {
   };
 }
 
-/** What one step reported, and why it failed when it did. */
+/** What one step reported, the notices it raised, and why it failed when it did. */
 interface StepRun {
   readonly rows: readonly UpdateDependencyRow[];
+  readonly notices: readonly McpConfigNotice[];
   readonly failure?: Error;
 }
 
@@ -112,17 +140,17 @@ async function runStep(step: DependencyPlanStep, ports: DependencyStepPorts): Pr
   if (step.kind === "move") {
     const moved = await ports.move(step.move);
     return moved.landed
-      ? { rows: moved.rows }
-      : { rows: moved.rows, failure: failedMoveError(step.move.request) };
+      ? { rows: moved.rows, notices: [] }
+      : { rows: moved.rows, notices: [], failure: failedMoveError(step.move.request) };
   }
 
   const run = await ports.materialize(step.members);
   if (run.kind === "installed") {
-    return { rows: run.rows };
+    return { rows: run.rows, notices: run.mcpConfigNotices ?? [] };
   }
 
   const refusal = ports.refusal(run.subject);
-  return { rows: refusal.rows, failure: refusal.cause };
+  return { rows: refusal.rows, notices: [], failure: refusal.cause };
 }
 
 /**
@@ -133,12 +161,14 @@ async function runStep(step: DependencyPlanStep, ports: DependencyStepPorts): Pr
  * GHB-03: an invalid GitHub base override before anything landed fails the
  * command; after a change landed, the failure row reports it with the
  * changes.
+ * D-PL1-16: every arm carries the notices of the slices that landed before it.
  */
 export async function runDependencySteps(
   steps: readonly DependencyPlanStep[],
   ports: DependencyStepPorts,
 ): Promise<DependencyStepsResult> {
   let landed: MovedDependency[] = [];
+  let notices: McpConfigNotice[] = [];
   for (const step of steps) {
     let run: StepRun;
     try {
@@ -150,13 +180,14 @@ export async function runDependencySteps(
       }
 
       if (step.kind === "materialize") {
-        return { ok: false, landed, cause: err as Error };
+        return { ok: false, landed, cause: err as Error, ...mcpConfigNoticesMember(notices) };
       }
 
       return {
         ok: false,
         landed: [...landed, movedFromRow(failedMoveRow(step.move.request, err))],
         cause: failedMoveError(step.move.request),
+        ...mcpConfigNoticesMember(notices),
       };
     }
 
@@ -164,12 +195,13 @@ export async function runDependencySteps(
       ...supersedePinRefreshes(landed, new Set(run.rows.map((row) => row.name))),
       ...run.rows.map(movedFromRow),
     ];
+    notices = [...notices, ...run.notices];
     if (run.failure !== undefined) {
-      return { ok: false, landed, cause: run.failure };
+      return { ok: false, landed, cause: run.failure, ...mcpConfigNoticesMember(notices) };
     }
   }
 
-  return { ok: true, landed };
+  return { ok: true, landed, ...mcpConfigNoticesMember(notices) };
 }
 
 function refused(
@@ -201,7 +233,10 @@ async function settlePlanned(ports: DependencySettlePorts): Promise<UpdateDepend
     plan.final.members.length > 0 ? [{ kind: "materialize", members: plan.final.members }] : [];
   const ran = await runDependencySteps([...plan.steps, ...final], ports.steps);
   const rows = ran.landed.map((entry) => entry.row);
-  return ran.ok ? { kind: "settled", rows } : { kind: "refused", rows, cause: ran.cause };
+  const notices = mcpConfigNoticesMember(ran.mcpConfigNotices ?? []);
+  return ran.ok
+    ? { kind: "settled", rows, ...notices }
+    : { kind: "refused", rows, cause: ran.cause, ...notices };
 }
 
 /** Runs an update's settle in its contracted order. */
@@ -210,7 +245,11 @@ export async function settleDependencies(
 ): Promise<UpdateDependencySettlement> {
   const first = await ports.firstRun();
   if (first.kind === "installed") {
-    return { kind: "settled", rows: first.rows };
+    return {
+      kind: "settled",
+      rows: first.rows,
+      ...mcpConfigNoticesMember(first.mcpConfigNotices ?? []),
+    };
   }
 
   if (first.kind === "refused") {

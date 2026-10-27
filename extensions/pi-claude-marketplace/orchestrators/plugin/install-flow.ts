@@ -3432,7 +3432,8 @@ async function lockedRootCascade<S extends Exclude<InstallCascadeResult, Cascade
 
 /**
  * Saves what a root cascade materialized and reports one row per member,
- * still under its lock.
+ * still under its lock. D-PL1-16: the members' MCP config notices ride the
+ * `installed` arm, so an update can show them ahead of its own.
  */
 async function saveRootClosure(
   args: RootCascade,
@@ -3455,6 +3456,7 @@ async function saveRootClosure(
     rows: settled.members.map((member) =>
       composeCascadeMemberRow(member, args.caller.run.softDeps),
     ),
+    ...mcpConfigNoticesMember(settled.mcpConfigNotices),
   };
 }
 

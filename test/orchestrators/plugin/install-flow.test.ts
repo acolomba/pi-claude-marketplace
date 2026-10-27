@@ -18900,6 +18900,59 @@ describe("createUpdateDependencyResolver", () => {
     });
   });
 
+  test("D-PL1-16: reports the MCP config notices of the dependency it installs", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({
+        widget: { version: "1.0.0" },
+        zcore: { version: "1.0.0" },
+      });
+      await installed(owner, cwd, "widget");
+      await publishCatalog(marketplaceRoot, {
+        widget: { version: "1.1.0", dependencies: ["zcore"] },
+        zcore: { version: "1.0.0" },
+      });
+      await writeFile(
+        path.join(marketplaceRoot, "plugins", "zcore", ".mcp.json"),
+        JSON.stringify({ mcpServers: { "zcore-server": { command: "node" } } }),
+      );
+      const locations = locationsFor("project", cwd);
+      await writeFile(locations.mcpAdapterJsonPath, '// mine\n{"mcpServers":{}}\n');
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+        {},
+      );
+
+      // act
+      const settlement = await settle(
+        updateArgs(owner, cwd, "widget"),
+        await preparedUpdate(cwd, "widget"),
+        { ctx, run },
+      );
+
+      // assert
+      assert.deepStrictEqual(settlement, {
+        kind: "settled",
+        rows: [
+          {
+            status: "installed",
+            name: "zcore@mp",
+            dependencies: ["mcp"],
+            version: "1.0.0",
+            severity: "warning",
+            needsReload: true,
+          },
+        ],
+        mcpConfigNotices: [
+          { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+        ],
+      });
+    });
+  });
+
   test("WR-C: refuses a version whose names another plugin owns before it installs any dependency", async () => {
     await withHermeticHome(async (owner) => {
       // arrange

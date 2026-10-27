@@ -34,6 +34,7 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { McpConfigNotice } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { TestContext } from "node:test";
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
@@ -574,4 +575,113 @@ test("D-PL1-14: a swap that fails after the settle before any prepare carries no
     { stagingWarnings: "stagingWarnings" in outcome, report },
     { stagingWarnings: false, report: { move: { fromVersion: "1.0.0", toVersion: "1.1.0" } } },
   );
+});
+
+const SETTLE_NOTICE = {
+  kind: "comments-dropped",
+  scope: "project",
+  file: "mcp.json",
+} satisfies McpConfigNotice;
+const SWAP_NOTICE = {
+  kind: "comments-dropped",
+  scope: "project",
+  file: "mcp-adapter.json",
+} satisfies McpConfigNotice;
+
+test("D-PL1-16: an updated outcome lists the settle's MCP config notices ahead of the swap's own", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { base, pluginRoot } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  await writeFile(
+    path.join(pluginRoot, ".mcp.json"),
+    JSON.stringify({ mcpServers: { server1: { command: "node" } } }),
+  );
+  await mkdir(path.dirname(base.locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(base.locations.mcpAdapterJsonPath, '// mine\n{"mcpServers":{}}\n');
+
+  // act
+  const outcome = await materializeLatestVersion(
+    {
+      ...base,
+      cascade: true,
+      settleDependencies: () =>
+        Promise.resolve({ kind: "settled", rows: [ZCORE_ROW], mcpConfigNotices: [SETTLE_NOTICE] }),
+    },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    outcome.partition === "updated" && [outcome.dependencyRows, outcome.mcpConfigNotices],
+    [[ZCORE_ROW], [SETTLE_NOTICE, SWAP_NOTICE]],
+  );
+});
+
+test("D-PL1-16: a refused settle's failed outcome carries the notices of the dependencies it installed first", async (t) => {
+  // arrange
+  const { base } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  const cause = new Error("zcore refused");
+
+  // act
+  const outcome = await materializeLatestVersion(
+    {
+      ...base,
+      cascade: true,
+      settleDependencies: () =>
+        Promise.resolve({
+          kind: "refused",
+          rows: [ZCORE_ROW],
+          cause,
+          mcpConfigNotices: [SETTLE_NOTICE],
+        }),
+    },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "failed",
+    name: "hello",
+    fromVersion: "1.0.0",
+    notes: ["zcore refused"],
+    reasons: ["dependency failed"],
+    dependencyRows: [ZCORE_ROW],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    mcpConfigNotices: [SETTLE_NOTICE],
+  });
+});
+
+test("D-PL1-16: a swap that fails after the settle carries the settle's notices", async (t) => {
+  // arrange
+  const { base } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  const diskFull = new Error("disk full");
+
+  // act
+  const outcome = await materializeLatestVersion(
+    {
+      ...base,
+      cascade: true,
+      settleDependencies: () =>
+        Promise.resolve({ kind: "settled", rows: [ZCORE_ROW], mcpConfigNotices: [SETTLE_NOTICE] }),
+      stateTransaction: { saveState: () => Promise.reject(diskFull) },
+    },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "failed",
+    name: "hello",
+    fromVersion: "1.0.0",
+    notes: ["disk full\n\ncause: disk full"],
+    reasons: [],
+    cause: diskFull,
+    dependencyRows: [ZCORE_ROW],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    mcpConfigNotices: [SETTLE_NOTICE],
+  });
 });
