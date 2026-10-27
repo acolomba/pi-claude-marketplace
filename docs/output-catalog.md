@@ -1170,7 +1170,7 @@ Some plugin operations have failed.
   ⊘ helper (failed) {dependency failed}
 ```
 
-A plugin of the `anthropic-plugin-directory` marketplace never installs at a release tag, as in Claude Code: the dependency installs the copy its catalog entry lists, and that copy's `plugin.json` version must satisfy the constraint. It does not here, so the cascade fails and unwinds what it had materialized. The `version conflict` token is the one the other version rows use. The cause is Claude Code's own message, naming the listed version (`no version` when the copy declares none), the declared ranges, and each plugin that asked for the dependency with a range, comma-separated. No reload-hint.
+A plugin of the `anthropic-plugin-directory` marketplace never installs at a release tag, as in Claude Code: the dependency installs the copy its catalog entry lists, and that copy's `plugin.json` version must satisfy the constraint. It does not here, so the cascade fails and unwinds what it had materialized. The `version conflict` token is the one the other version rows use. The cause is Claude Code's own message, naming the listed version (`no version` when the copy declares none), the declared ranges, and each plugin that asked for the dependency with a range, comma-separated. It names every plugin of the install that declared a range on the dependency, nearest the requested plugin first, as Claude Code does. An installed plugin outside the install is not named, although Claude Code names it too, because its range is not checked (D-PL3-13). The plugin name, the listed version, the joined ranges, and each requirer are each cut to 120 characters with `…`, as Claude Code cuts them (D-PL3-09). No reload-hint.
 
 ### Dependency promoted to a direct install (D-04-07)
 

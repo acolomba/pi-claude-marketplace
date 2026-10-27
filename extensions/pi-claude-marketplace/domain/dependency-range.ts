@@ -298,6 +298,13 @@ export function renderConstraintRange(range: string): string {
 export const MAX_REFUSAL_VERSION_CHARS = 64;
 
 /**
+ * D-PL3-09: the UTF-16 code units Claude Code keeps of each field of the
+ * plugin directory pin refusal: the plugin name, the listed version, the
+ * joined declared ranges, and each requirer's name.
+ */
+export const MAX_DIRECTORY_PIN_FIELD_CHARS = 120;
+
+/**
  * Cuts `text` for a refusal as Claude Code cuts it (D-PL3-09, D-PL3-12):
  * at most `limit` UTF-16 code units, never ending on the high half of a
  * surrogate pair, followed by a single `…` when anything was cut.

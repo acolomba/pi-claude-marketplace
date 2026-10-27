@@ -93,8 +93,10 @@ import { resolveDependencyClosure } from "../../domain/dependency-closure.ts";
 import {
   intersectDependencyRanges,
   isUnconstrainedRange,
+  MAX_DIRECTORY_PIN_FIELD_CHARS,
   recordedVersionSatisfies,
   renderDeclaredRanges,
+  truncateForRefusal,
 } from "../../domain/dependency-range.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
@@ -1007,7 +1009,7 @@ async function resolveOneMember(
         ...member,
         directoryPin: {
           range: intersected.range,
-          declared: renderDeclaredRanges(ranges),
+          declared: truncateForRefusal(ranges.join(", "), MAX_DIRECTORY_PIN_FIELD_CHARS),
           requiredBy: rangeRequirers(options, member),
         },
       },

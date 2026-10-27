@@ -496,6 +496,33 @@ Feature: Plugin install dependencies
       | anthropic-plugin-directory | project           | mid@anthropic-plugin-directory  | mid@anthropic-plugin-directory  | failed | dependency failed | project |                                                                                                                                                      |                 |       |                  |
     Then the project scope has no installed plugins
 
+  Scenario: Installing a plugin whose anthropic-plugin-directory dependency lists a very long version shows the version cut to 120 characters in the version conflict
+    Given the git repository "dirp" holds these plugins:
+      | name | version                                                                                                                            | path |
+      | dirp | 1.0.0-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz |      |
+    Given the git repository "dirp" has a revision only the tag "dirp--v2.0.0" reaches, holding these plugins:
+      | name | version | path |
+      | dirp | 2.0.0   |      |
+    Given the marketplace "anthropic-plugin-directory" is published as a dir source
+    Given the marketplace "anthropic-plugin-directory" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | dirp@^2.0.0  |
+    Given the marketplace "anthropic-plugin-directory" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | dirp | url         | dirp       | false  |
+    Given the marketplace "anthropic-plugin-directory" is added to the project scope
+    When the user runs "/claude:plugin install app@anthropic-plugin-directory --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | Some plugin operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name           | marketplace scope | id                              | name                            | status | reasons           | scope   | cause chain                                                                                                                                                                                                                                              | cause truncated | leaks | rollback partial |
+      | anthropic-plugin-directory | project           | app@anthropic-plugin-directory  | app                             | failed | dependency failed | project |                                                                                                                                                                                                                                                          |                 |       |                  |
+      | anthropic-plugin-directory | project           | dirp@anthropic-plugin-directory | dirp@anthropic-plugin-directory | failed | version conflict  | project | "dirp" from the Anthropic Directory is pinned to its listed commit (version 1.0.0-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz…), which does not satisfy ^2.0.0 required by "app". | false           |       |                  |
+    Then the project scope has no installed plugins
+
   Scenario: Installing a plugin that asks for an installed pinned anthropic-plugin-directory plugin's range leaves that plugin in place
     Given the git repository "dirp" holds these plugins:
       | name | version | path |

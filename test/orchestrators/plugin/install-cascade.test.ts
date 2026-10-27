@@ -1639,6 +1639,48 @@ for (const { label, graph, materializedPins } of [
   });
 }
 
+test("GV-01 / D-PL3-09: a plugin directory member's joined ranges are cut once at 120 characters", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-cascade-directory-cut-");
+  const state = await seedMarketplace(environment.cwd, []);
+  const locations = locationsFor("project", environment.cwd);
+  const materialized: InstallLedgerOptions[] = [];
+  const baseOptions = ledgerOptionsFor(environment.cwd);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `dirp@${PLUGIN_DIRECTORY}`,
+    rootRanges: Array.from({ length: 20 }, () => ">=2.0.0"),
+    lookup: catalog({ [`dirp@${PLUGIN_DIRECTORY}`]: [] }),
+    ledgerOptionsFor: (member) => ({
+      ...baseOptions(member),
+      ...(member.directoryPin !== undefined && { directoryPin: member.directoryPin }),
+    }),
+    rootAllowedMarketplaces: new Set<string>(),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([PLUGIN_DIRECTORY]),
+    seam: recordingLedgerSeam(environment.cwd, locations, materialized),
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(
+    materialized.map((options) => [options.plugin, options.directoryPin]),
+    [
+      [
+        "dirp",
+        {
+          range: Array.from({ length: 20 }, () => ">=2.0.0").join(" "),
+          declared: `${">=2.0.0, ".repeat(13)}>=2…`,
+          requiredBy: [],
+        },
+      ],
+    ],
+  );
+});
+
 for (const { label, rootRequiredBy, requiredBy } of [
   { label: "names no requirer", rootRequiredBy: undefined, requiredBy: [] },
   {

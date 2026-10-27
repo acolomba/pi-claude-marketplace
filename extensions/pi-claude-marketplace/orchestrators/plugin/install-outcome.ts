@@ -102,7 +102,11 @@ import {
   unstagePluginWorkflows,
 } from "../../bridges/workflows/index.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
-import { recordedVersionSatisfies } from "../../domain/dependency-range.ts";
+import {
+  MAX_DIRECTORY_PIN_FIELD_CHARS,
+  recordedVersionSatisfies,
+  truncateForRefusal,
+} from "../../domain/dependency-range.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import {
   requirePartialInstallable,
@@ -816,6 +820,10 @@ async function preflightInstallResolve(
  * GV-01: Claude Code checks the `plugin.json` version of a plugin directory
  * copy against its dependents' range after the fetch, and refuses the install
  * when it falls outside or declares none.
+ *
+ * D-PL3-09: the refusal's fields arrive cut as Claude Code cuts them, because
+ * `shared/` cannot import the cut from `domain/`. The cascade already cut the
+ * joined ranges, and the requirer count has no cap.
  */
 async function assertDirectoryPinSatisfied(
   plugin: string,
@@ -827,11 +835,12 @@ async function assertDirectoryPinSatisfied(
     return;
   }
 
+  const cut = (text: string): string => truncateForRefusal(text, MAX_DIRECTORY_PIN_FIELD_CHARS);
   throw new DirectoryPinUnsatisfiedError({
-    plugin,
-    manifestVersion,
+    plugin: cut(plugin),
+    manifestVersion: manifestVersion === undefined ? undefined : cut(manifestVersion),
     ranges: pin.declared,
-    requiredBy: pin.requiredBy.map((key) => key.replace(/@[^@]*$/u, "")),
+    requiredBy: pin.requiredBy.map((key) => cut(key.replace(/@[^@]*$/u, ""))),
   });
 }
 
