@@ -322,6 +322,26 @@ const bucketizerCases = [
     rows: [{ name: "plug", status: "installed", version: "1.0.0" }],
   },
   {
+    title: "GLK-07: marks a record upgradable to a newer plugin.json version the entry omits",
+    marketplace: "plugin-json-newer-mp",
+    plugins: () => [{ name: "plug", pluginJsonVersion: "2.0.0", installed: { version: "1.0.0" } }],
+    rows: [{ name: "plug", status: "upgradable", version: "1.0.0" }],
+  },
+  {
+    title: "GLK-07: marks a git record with no mirror upgradable to a newer entry version",
+    marketplace: "cold-git-upgrade-mp",
+    plugins: () => [
+      {
+        name: "plug",
+        source: "https://example.com/plugin.git",
+        manifestVersion: "2.0.0",
+        pluginTree: false,
+        installed: { version: "1.0.0" },
+      },
+    ],
+    rows: [{ name: "plug", status: "upgradable", version: "1.0.0" }],
+  },
+  {
     title: "marks an installed record whose newer candidate is degraded partially upgradable",
     marketplace: "partial-upgrade-mp",
     plugins: () => [
