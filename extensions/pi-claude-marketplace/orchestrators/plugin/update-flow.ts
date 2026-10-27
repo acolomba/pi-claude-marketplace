@@ -79,6 +79,7 @@ import {
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
   rethrowInvalidGitHubBaseUrl,
+  StateLockCompromisedError,
   StateLockHeldError,
 } from "../../shared/errors.ts";
 import { classifyGitFailure } from "../../shared/git-failure-classifiers.ts";
@@ -805,10 +806,11 @@ function cascadeFailureOutcome(
       cause: err as Error,
       cleanupFailures,
     }),
-    // FLR-02: a held state lock renders its cause chain, as on the direct
-    // path; D-18-17: so does an unreadable dependency walk, whose message
-    // names the record it could not read.
+    // FLR-02: a held or lost state lock renders its cause chain, as on the
+    // direct path; D-18-17: so does an unreadable dependency walk, whose
+    // message names the record it could not read.
     ...((err instanceof StateLockHeldError ||
+      err instanceof StateLockCompromisedError ||
       err instanceof DependencyDeclarationsUnreadableError) && { cause: err }),
     // CMC-13: required booleans on every
     // PluginUpdateOutcome partition. `(failed)` rows do NOT render
@@ -893,10 +895,11 @@ function errnoFailReason(code: string | undefined): ContentReason {
 /**
  * The reason a typed failure names, or `undefined` for an error no typed
  * identity matches. FLR-01: a held state lock is `"lock held"`, as the other
- * plugin commands report it.
+ * plugin commands report it. A lock lost while the update held it reads the
+ * same, as `fetch` reports it.
  */
 function typedUpdateFailReason(primary: unknown): ContentReason | undefined {
-  if (primary instanceof StateLockHeldError) {
+  if (primary instanceof StateLockHeldError || primary instanceof StateLockCompromisedError) {
     return "lock held";
   }
 

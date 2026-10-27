@@ -61,6 +61,7 @@ import {
   MarketplaceNotFoundError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
+  StateLockCompromisedError,
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
@@ -1735,6 +1736,43 @@ test("GLK-04: a held scope lock refuses the marketplace sync as lock held before
   });
 });
 
+test("GLK-04: a scope lock lost during the marketplace sync fails the sync as lock held", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-lock-lost-");
+    try {
+      // arrange
+      await seedGithubMarketplaceForSync(cwd);
+      const locations = locationsFor("project", cwd);
+      const lost = new StateLockCompromisedError("project", locations.stateLockFile, {
+        cause: new Error("Unable to update lock within the stale threshold"),
+      });
+      const { gitOps } = createGitOps({ fetchThrows: lost });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "official" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: `A plugin operation has failed.\n\n● official [project]\n  ⊘ official (failed) {lock held}\n    cause: The project scope state lock (${locations.stateLockFile}) was lost before the operation finished. Run the command again. -> Unable to update lock within the stale threshold\n\nPlugin update: 1 failure`,
+          severity: "error",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 for (const { title, seed, marketplace, status, statusMessage, message } of [
   {
     title:
@@ -2560,6 +2598,61 @@ test("FLR-02: updateSinglePlugin under a held state lock fails as lock held with
         [lockMessage, "project", locations.stateLockFile],
       );
       assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    } finally {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FLR-02: an autoupdate cascade fails a plugin whose state lock was lost as lock held with the lock cause", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-cascade-lock-lost-");
+    const previousCwd = process.cwd();
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      process.chdir(cwd);
+      const lost = new StateLockCompromisedError("project", locations.stateLockFile, {
+        cause: new Error("Unable to update lock within the stale threshold"),
+      });
+      const { ctx, run } = makeCtx();
+      const operations = createPluginUpdateOperations(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+        undefined,
+        {},
+        () => Promise.reject(lost),
+      );
+
+      // act
+      const outcome = await operations.beginPluginUpdateRun({ ctx, run })("hello", "mp", "project");
+
+      // assert
+      assert.ok(outcome.partition === "failed");
+      const { cause, ...failure } = outcome;
+      const lostMessage = `The project scope state lock (${locations.stateLockFile}) was lost before the operation finished. Run the command again.`;
+      assert.deepStrictEqual(failure, {
+        partition: "failed",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.0.1",
+        notes: [
+          `${lostMessage}\n\ncause: ${lostMessage} -> Unable to update lock within the stale threshold`,
+        ],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        reasons: ["lock held"],
+      });
+      assert.strictEqual(cause, lost);
     } finally {
       process.chdir(previousCwd);
       await rm(cwd, { recursive: true, force: true });
