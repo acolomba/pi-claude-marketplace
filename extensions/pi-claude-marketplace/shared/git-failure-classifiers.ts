@@ -3,9 +3,11 @@
 // Closed-set classifier for git host failures (D-PL7-01). Every clone,
 // mirror, and marketplace surface catches materialize/probe throws from the
 // git seam and must map the SAME underlying failure onto the SAME closed-set
-// REASON, so the ladder lives here once in `classifyGitFailure`. Each
-// operation passes its own not-found rule (D-PL7-02). The named fixed-rule
-// wrappers serve callers whose modules other work owns (D-PL7-11).
+// REASON, so the ladder lives here once in `classifyGitFailure`, the
+// module's one entry point. Each operation passes its own not-found rule
+// (D-PL7-02). Three fixed-rule wrappers serve callers whose modules other work
+// owns (D-PL7-11): `classifyGitHostFailure`, `classifyGitSourceAccessFailure`,
+// and `hostHttpFailureFrame`.
 //
 // Duck-typed on the isomorphic-git error shapes (D-13: no isomorphic-git
 // import outside the platform tier); the project's own
@@ -38,8 +40,8 @@ function classifyNetworkErrno(code: string | undefined): GitTransportReason | un
 }
 
 /**
- * Classify a git clone/fetch/materialize throw into the EXISTING closed-set
- * `network unreachable` / `authentication required` REASONS -- no new token.
+ * The transport rung of `classifyGitFailure`'s ladder: the closed-set
+ * `network unreachable` / `authentication required` REASONS.
  *
  *   - `CrossOriginChallengeError` -> `authentication required`: a hop reached
  *     after a redirect to another origin asked for credentials (Q-02).
@@ -57,18 +59,10 @@ function classifyNetworkErrno(code: string | undefined): GitTransportReason | un
  *     an HttpError 401/403.
  *   - network errno ladder -> `network unreachable`.
  *
- * Returns undefined for any other throw so each caller keeps its own
- * fallthrough (e.g. info's `narrowProbeError` ladder). The error behind a
- * cleanup leak is the one classified (INR-02).
+ * Returns undefined for any other error, so the ladder moves on to the HTTP
+ * status. `classifyGitFailure` has already removed any cleanup leak (INR-02).
  */
-export function classifyGitTransportFailure(
-  thrown: unknown,
-): "network unreachable" | "authentication required" | undefined {
-  const error = withoutCleanupLeaks(thrown);
-  if (!(error instanceof Error)) {
-    return undefined;
-  }
-
+function classifyGitTransportFailure(error: Error): GitTransportReason | undefined {
   if (
     error instanceof CrossOriginChallengeError ||
     error instanceof StoredCredentialRejectedError

@@ -33,7 +33,7 @@ import { canonicalCloneUrl, networkCloneUrl } from "../../domain/clone-key.ts";
 import { RELEASE_TAG_SEPARATOR, selectHighestSatisfyingTag } from "../../domain/release-tag.ts";
 import { listRemoteTags } from "../../platform/git.ts";
 import { rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
-import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { classifyGitFailure } from "../../shared/git-failure-classifiers.ts";
 import { buildCloneAuth } from "../auth-host.ts";
 
 import type { GitBackedSource } from "../../domain/source.ts";
@@ -47,8 +47,9 @@ export interface DependencyTagListingSeam {
   readonly listRemoteTags: typeof listRemoteTags;
 }
 
-/** The transport reason a failed listing classified to, where it classified. */
-export type DependencyTagListingFailureReason = ReturnType<typeof classifyGitTransportFailure>;
+/** The host reason a failed listing classified to, where it classified. */
+export type DependencyTagListingFailureReason =
+  NonNullable<ReturnType<typeof classifyGitFailure>>["reason"] | undefined;
 
 /**
  * What a constrained dependency's tag query came to.
@@ -134,7 +135,9 @@ async function listCandidateTags(request: TagListingRequest): Promise<TagListing
     return {
       kind: "tag-listing-failed",
       cause: err instanceof Error ? err : new Error(String(err)),
-      classification: classifyGitTransportFailure(err),
+      // D-PL7-02: the listing reads the dependency's own source repository,
+      // so the plugin-clone rule applies and a 404 or 410 is `source missing`.
+      classification: classifyGitFailure(err, { notFound: "source missing" })?.reason,
     };
   }
 }
