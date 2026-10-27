@@ -8,6 +8,7 @@ import {
   recordedVersionSatisfies,
   renderConstraintRange,
   renderDeclaredRanges,
+  truncateForRefusal,
   type DependencyRangeIntersection,
 } from "../../extensions/pi-claude-marketplace/domain/dependency-range.ts";
 
@@ -378,5 +379,51 @@ describe("renderDeclaredRanges", () => {
 
     // assert
     assert.equal(rendered, `${ranges.join(", ").slice(0, 200)}... (+54 chars)`);
+  });
+});
+
+describe("truncateForRefusal", () => {
+  test("D-PL3-12 a version at the limit is kept whole", () => {
+    // arrange
+    const version = "abc";
+
+    // act
+    const cut = truncateForRefusal(version, 3);
+
+    // assert
+    assert.equal(cut, "abc");
+  });
+
+  test("D-PL3-12 a version past the limit keeps its first code units and ends in an ellipsis", () => {
+    // arrange
+    const version = `2.0.0-${"z".repeat(70)}`;
+
+    // act
+    const cut = truncateForRefusal(version, 64);
+
+    // assert
+    assert.equal(cut, `2.0.0-${"z".repeat(58)}\u2026`);
+  });
+
+  test("D-PL3-12 a cut that would end on a high surrogate drops it", () => {
+    // arrange: the 64th code unit is the high half of U+1F600.
+    const version = `${"a".repeat(63)}\u{1F600}b`;
+
+    // act
+    const cut = truncateForRefusal(version, 64);
+
+    // assert
+    assert.equal(cut, `${"a".repeat(63)}\u2026`);
+  });
+
+  test("D-PL3-12 a cut that ends after a whole surrogate pair keeps the pair", () => {
+    // arrange: the 64th code unit is the low half of U+1F600.
+    const version = `${"a".repeat(62)}\u{1F600}b`;
+
+    // act
+    const cut = truncateForRefusal(version, 64);
+
+    // assert
+    assert.equal(cut, `${"a".repeat(62)}\u{1F600}\u2026`);
   });
 });

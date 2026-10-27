@@ -497,6 +497,23 @@ describe("admitResolvedVersion", () => {
     });
   });
 
+  test("D-PL3-12: the out-of-range hold cuts a long offered version to 64 code units", () => {
+    // arrange
+    const holders: readonly ConstraintHolder[] = [
+      { key: "app@tools", range: "^1.0.0", disabled: false },
+    ];
+    const verdict = admits("^1.0.0", holders);
+
+    // act
+    const admission = admitResolvedVersion(verdict, `2.0.0-${"z".repeat(70)}`);
+
+    // assert
+    assert.deepStrictEqual(admission, {
+      kind: "held",
+      cause: `version 2.0.0-${"z".repeat(58)}\u2026 falls outside what the combined range admits (^1.0.0) -- required by "app@tools"`,
+    });
+  });
+
   test("UPDT-02: an inclusive upper bound admits the boundary version", () => {
     // arrange
     const holders: readonly ConstraintHolder[] = [

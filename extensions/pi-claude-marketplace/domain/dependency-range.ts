@@ -292,6 +292,27 @@ export function renderConstraintRange(range: string): string {
 }
 
 /**
+ * D-PL3-12: the UTF-16 code units Claude Code keeps of a version it quotes in
+ * a refusal.
+ */
+export const MAX_REFUSAL_VERSION_CHARS = 64;
+
+/**
+ * Cuts `text` for a refusal as Claude Code cuts it (D-PL3-09, D-PL3-12):
+ * at most `limit` UTF-16 code units, never ending on the high half of a
+ * surrogate pair, followed by a single `…` when anything was cut.
+ */
+export function truncateForRefusal(text: string, limit: number): string {
+  if (text.length <= limit) {
+    return text;
+  }
+
+  const last = text.charCodeAt(limit - 1);
+  const kept = last >= 0xd800 && last <= 0xdbff ? text.slice(0, limit - 1) : text.slice(0, limit);
+  return `${kept}…`;
+}
+
+/**
  * INR-05: a dependency's declared ranges as a cause line shows them, joined
  * with `, ` as Claude Code joins them, so a `||` range keeps its meaning, and
  * bounded once like any other rendered range.
