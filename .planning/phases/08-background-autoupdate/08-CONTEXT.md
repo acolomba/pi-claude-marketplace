@@ -185,3 +185,19 @@ The Files line names `index.ts`, the new background module(s), `marketplace/auto
 8. **D-PL8-09, a Pi-only delay variable.** `PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS` has no Claude Code counterpart. Alternative: no knob, and a behavioral test that cannot wait ten minutes, so the user-visible notice would rest on unit tests only.
 9. **D-PL8-10, notice text after Claude Code.** Chose Claude Code's one-line wording with `/reload`. Alternative: the house row grammar (`● alpha [user] (updated)` rows plus the `/reload to pick up changes` trailer), as `mcp-migration` does.
 10. **Known limit, no gate timeout.** A stalled background fetch holds a waiting command. Alternative: a wait cap after which the command runs anyway and may meet `{lock held}`.
+
+## Follow-up decisions (2026-10-27)
+
+Quick task 261027-9nh carried out five user decisions after this phase closed. The decisions below reverse or extend the ones above.
+
+- **D-PL8-07 (reversed).** With no value in either config layer, a marketplace's autoupdate is Claude Code's default: on when its lowercased name is one of the 14 official names other than `knowledge-work-plugins` and `first-party-plugins`, off otherwise. Every reader applies it (`domain/official-marketplaces.ts::effectiveMarketplaceAutoupdate`). Claude Code's `claudeai` and `pluginDirectory` default-on sources stay a Pi capability gap.
+- **D-PL8-02, mode half (reversed).** Only `tui` arms the background update; `rpc`, `json`, and `print` never arm it. Per-runtime re-arming is unchanged.
+- **D-PL8-19.** `bootstrap` writes no autoupdate value; its autoupdate step reports `(skipped) {already autoupdate}` unless a config layer set the value off.
+- **D-PL8-20.** The cucumber suite drives Pi over RPC only, so `background-update.feature` proves the RPC negative. The pass, the notice dedupe, and the wait cap are proven by unit tests. The `background-update` wire kind stays in the schema, although no json or rpc session emits it.
+- **D-PL8-21 (amends D-PL8-10).** The notice dedupes by the bare plugin name in first-seen order; the JSON payload keeps one row per updated install.
+- **D-PL8-22.** A plugin update the pass did not run (runtime stopped, or pass halted after an abort) is a skipped outcome with a note and an empty reason list. D-PL8-18's autoupdate-off outcome stays failed.
+- **D-PL8-23.** `runForeground` and a reload, new, resume, or fork shutdown wait at most 30 000 ms for the step in flight. At the cap the gate aborts the step's signal, logs one debug line, and waits for the step to end. `quit` is unchanged. There is no environment knob.
+- **D-PL8-24.** The abort reaches git through an `AsyncLocalStorage` scope in `platform/git.ts` (`runWithGitAbortSignal`). It stops HTTP hops and response bodies, and it fails a network call that the scope aborted while it ran, so an aborted step fails like a network drop mid-request.
+- **D-PL8-25.** After an aborted step the pass runs no further step in that runtime. An unfinished aborted plugin update is skipped; a finished one keeps its outcome. The plugins that moved before the abort are still named while the runtime is alive.
+
+D-PL8-23 closes the "no gate timeout" known limit and review IN-04. These decisions settle 08-04 uncertain choices 1 (D-PL8-02), 6 (D-PL8-07), 10 (D-PL8-23), 13 (D-PL8-22), and 17 (D-PL8-21).
