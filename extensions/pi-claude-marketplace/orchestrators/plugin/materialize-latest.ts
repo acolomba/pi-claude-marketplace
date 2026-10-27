@@ -125,11 +125,20 @@ export async function materializeLatestVersion(
     };
   }
 
-  if (settled === undefined || settled.rows.length === 0) {
+  if (settled === undefined || !reportsChanges(settled)) {
     return swapPluginUpdate(args, preflight, policy);
   }
 
   return swapAfterSettle(args, preflight, policy, settled);
+}
+
+/**
+ * D-PL1-16: a settle that installed a dependency reports a row for it, and
+ * one that rewrote the MCP file reports a notice. Either one routes the swap
+ * through `swapAfterSettle`, so no notice is dropped for want of a row.
+ */
+function reportsChanges(settled: UpdateDependencySettlement): boolean {
+  return settled.rows.length > 0 || (settled.mcpConfigNotices ?? []).length > 0;
 }
 
 /**
@@ -182,7 +191,7 @@ async function swapAfterSettle(
     );
     return {
       ...outcome,
-      dependencyRows: settled.rows,
+      ...dependencyRowsMember(settled),
       ...settleNoticesFirst(settled, ownNotices(outcome)),
     };
   } catch (err) {
@@ -194,7 +203,7 @@ async function swapAfterSettle(
       notes: [composeErrorWithCauseChain(err)],
       reasons: [],
       cause: err as Error,
-      dependencyRows: settled.rows,
+      ...dependencyRowsMember(settled),
       declaresAgents: false,
       declaresMcp: false,
       declaresWorkflows: false,
@@ -203,6 +212,13 @@ async function swapAfterSettle(
       ...settleNoticesFirst(settled, undefined),
     };
   }
+}
+
+/** The settle's dependency rows, as an outcome member omitted when empty (NREG-01). */
+function dependencyRowsMember(settled: UpdateDependencySettlement): {
+  readonly dependencyRows?: UpdateDependencySettlement["rows"];
+} {
+  return settled.rows.length > 0 ? { dependencyRows: settled.rows } : {};
 }
 
 /** The swap outcome's own MCP config notices; only its updated and failed arms carry any. */

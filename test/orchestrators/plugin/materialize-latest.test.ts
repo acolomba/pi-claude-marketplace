@@ -617,6 +617,33 @@ test("D-PL1-16: an updated outcome lists the settle's MCP config notices ahead o
   );
 });
 
+test("D-PL1-16: a settle that reports notices and no rows keeps its notices and adds no dependency rows", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { base } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+
+  // act
+  const outcome = await materializeLatestVersion(
+    {
+      ...base,
+      cascade: true,
+      settleDependencies: () =>
+        Promise.resolve({ kind: "settled", rows: [], mcpConfigNotices: [SETTLE_NOTICE] }),
+    },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      partition: outcome.partition,
+      dependencyRows: Object.hasOwn(outcome, "dependencyRows"),
+      mcpConfigNotices: "mcpConfigNotices" in outcome ? outcome.mcpConfigNotices : undefined,
+    },
+    { partition: "updated", dependencyRows: false, mcpConfigNotices: [SETTLE_NOTICE] },
+  );
+});
+
 test("D-PL1-16: a refused settle's failed outcome carries the notices of the dependencies it installed first", async (t) => {
   // arrange
   const { base } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
