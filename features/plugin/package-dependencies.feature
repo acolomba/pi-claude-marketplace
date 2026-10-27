@@ -220,3 +220,43 @@ Feature: Plugin package dependencies
     Then the plugin "pkp" installed in the project scope has these npm packages:
       | name    | version |
       | pkd-dep | 2.0.0   |
+
+  Scenario: Apply that moves a plugin whose package install fails reports the warning
+    Given the npm registry serves these packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+      | pkd-dep | 2.0.0   |
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | pkp  | 1.0.0   |
+    Given the published plugin "pkp" of the marketplace "tools" depends on these npm packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install pkp@tools --scope project"
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | pkp  | 2.0.0   |
+    Given the published plugin "pkp" of the marketplace "tools" depends on these npm packages:
+      | name    | version |
+      | pkd-dep | 2.0.0   |
+    Given the user has run "/claude:plugin marketplace update tools --scope project"
+    Given the npm registry answers 404 for the package "pkd-dep"
+    When the user runs "/claude:plugin apply --scope project"
+    Then the command reports these results:
+      | kind                      | severity | needs reload | header                                                   | lines                                             | tally label | tally failures | tally warnings | tally success count |
+      | reconcile-applied-cascade | info     | true         |                                                          |                                                   | Reconcile   | 0              | 0              | 1                   |
+      | diagnostic                | warning  | false        | 1 post-install warning surfaced from reconcile installs. | Plugin dependency install failed (npm): no output |             |                |                |                     |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id        | name | status  | reasons | scope   | from  | to    |
+      | tools            | project           | pkp@tools | pkp  | updated |         | project | 1.0.0 | 2.0.0 |
+    Then the npm registry receives these requests:
+      | method | path                         | status |
+      | GET    | /pkd-dep/-/pkd-dep-2.0.0.tgz | 404    |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | pkp@tools | 2.0.0   | true    |
+    Then the plugin "pkp" installed in the project scope has these npm packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |

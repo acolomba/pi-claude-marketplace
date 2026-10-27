@@ -1102,6 +1102,7 @@ describe("installUpdatedPackages", () => {
     assert.deepStrictEqual(hookedOutcome, {
       ...updatedOutcome(),
       notes: ["first", "Plugin dependency install failed (npm): boom"],
+      packageNote: "Plugin dependency install failed (npm): boom",
     });
   });
 
@@ -1123,6 +1124,7 @@ describe("installUpdatedPackages", () => {
     assert.deepStrictEqual(hookedOutcome, {
       ...updatedOutcome(),
       notes: ["Plugin dependency install failed (npm): boom"],
+      packageNote: "Plugin dependency install failed (npm): boom",
     });
   });
 
@@ -1182,6 +1184,7 @@ describe("installUpdatedPackages", () => {
     assert.deepStrictEqual(hookedOutcome, {
       ...updatedOutcome(),
       notes: [`Plugin dependency install failed (npm): ${moveError.message}`],
+      packageNote: `Plugin dependency install failed (npm): ${moveError.message}`,
     });
     assert.strictEqual(
       await readFile(path.join(seeded.pluginRoot, "node_modules", "old-dep", "index.js"), "utf8"),

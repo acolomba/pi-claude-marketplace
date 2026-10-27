@@ -512,6 +512,7 @@ test("D-PL9-07: an update whose new version ships a lockfile carries the package
     constraint: undefined,
     declaresWorkflows: false,
     notes: [PACKAGE_NOTE],
+    packageNote: PACKAGE_NOTE,
   });
 });
 
@@ -543,6 +544,7 @@ test("D-PL9-07: an update that settled its dependencies carries the package note
     declaresWorkflows: false,
     dependencyRows: [ZCORE_ROW],
     notes: [PACKAGE_NOTE],
+    packageNote: PACKAGE_NOTE,
   });
 });
 

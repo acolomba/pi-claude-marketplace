@@ -528,5 +528,7 @@ export async function installUpdatedPackages(
   }
 
   const { note } = await installPluginPackages(target, ops);
-  return note === undefined ? outcome : { ...outcome, notes: [...(outcome.notes ?? []), note] };
+  return note === undefined
+    ? outcome
+    : { ...outcome, notes: [...(outcome.notes ?? []), note], packageNote: note };
 }
