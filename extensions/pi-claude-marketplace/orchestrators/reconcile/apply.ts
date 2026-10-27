@@ -132,7 +132,9 @@ import {
   dependenciesFirst,
   installedCopyReader,
   isPinnedCopy,
+  movesAfterInstalls,
   planConvergenceCascade,
+  stepsAfterInstalls,
 } from "./convergence.ts";
 import { buildScopeSatisfactionVerdict, judgeFinalScope } from "./dependency-verdict.ts";
 import {
@@ -156,7 +158,7 @@ import type {
   PluginDependencyDisabledOutcome,
   PluginEnableFailedOutcome,
 } from "./apply-outcomes.ts";
-import type { ConvergenceCascade, PlannedMove } from "./convergence.ts";
+import type { CascadeStep, ConvergenceCascade, PlannedMove } from "./convergence.ts";
 import type { ScopeSatisfactionVerdict, UnsatisfiedDeclaration } from "./dependency-verdict.ts";
 import type { ReconcileStateReader, ScopePassAccumulators } from "./read-pass.ts";
 import type {
@@ -1193,7 +1195,7 @@ async function applyPlan(
  * D-PL2-16: the cascade is planned with the enables that wait on the install
  * too, so a waiting record's own move is planned; only the deferred enables
  * run as cascade steps. WR-06: a step that declares a waiting record's move
- * waits with it (`stepsAfterInstalls`), so the steps after the install keep
+ * waits with it (`movesAfterInstalls`), so the steps after the install keep
  * the dependencies-first order (D-26).
  */
 async function convergeScope(
@@ -1233,7 +1235,7 @@ async function convergeScope(
       scope,
       deferred,
       waiting,
-      afterInstalls: stepsAfterInstalls(cascade, waiting),
+      afterInstalls: movesAfterInstalls(cascade, waiting),
       before: before.state,
       failed,
       reports,
@@ -1331,7 +1333,7 @@ async function installAfterMoves(
   const enables = (fresh.plan?.pluginsToEnable ?? []).filter((op) =>
     run.waiting.has(pluginKey(op)),
   );
-  const steps = afterInstallSteps(run, enables);
+  const steps = stepsAfterInstalls(run.cascade, run, enables);
   after.landed ||= steps.length > 0;
   const reports: StepReport[] = [];
   await runAfterInstallSteps(opts, steps, { ...run, reports });
@@ -1339,10 +1341,11 @@ async function installAfterMoves(
 }
 
 /**
- * Runs the steps after the missing-dependency install, dependencies first.
- * WR-06: a step that declares a waiting record whose enable did not come, or
- * a step that did not land, does not run, as in the cascade; the judgement's
- * `(disabled)` row reports an enabled record it held.
+ * Runs the steps after the missing-dependency install, in the order
+ * `stepsAfterInstalls` gives them. WR-06: a step that declares a waiting
+ * record whose enable did not come, or a step that did not land, does not
+ * run, as in the cascade; the judgement's `(disabled)` row reports an enabled
+ * record it held.
  */
 async function runAfterInstallSteps(
   opts: ApplyReconcileOptions,
@@ -1354,7 +1357,7 @@ async function runAfterInstallSteps(
     [...run.afterInstalls].filter((key) => run.waiting.has(key) && !planned.has(key)),
   );
   const convergePlugin = createConvergeOperation(opts.hooksRouting, opts.completionCache);
-  for (const step of dependenciesFirst(steps, (item) => item.key, run.cascade.declarations)) {
+  for (const step of steps) {
     const blocked = cascadeDependencies(run.cascade, step.key).some(
       (dep) => notLanded.has(dep) || run.failed.all.has(dep),
     );
@@ -1454,11 +1457,6 @@ interface StepReport {
   readonly replaceable?: true;
 }
 
-/** One cascade step: a catalog move, a deferred enable, or both. */
-type CascadeStep =
-  | { readonly key: string; readonly move: PlannedMove; readonly enable?: PlannedPluginEnable }
-  | { readonly key: string; readonly move?: undefined; readonly enable: PlannedPluginEnable };
-
 /**
  * IN-C: whether a move landed. A deferred record's move only refreshes its pin
  * and answers `{already disabled}`; its enable decides. A move that landed on
@@ -1479,7 +1477,7 @@ function moveLanded(result: PluginUpdateOutcome, deferred: boolean): boolean {
  * its own, the steps it waits on. D-PL2-16: the move of a record whose enable
  * waits on the missing-dependency install runs with that enable, after it.
  * WR-06: so does each move that declares such a move, with its own deferred
- * enable (`stepsAfterInstalls`).
+ * enable (`movesAfterInstalls`).
  */
 function cascadeSteps(
   cascade: ConvergenceCascade,
@@ -1499,66 +1497,13 @@ function cascadeSteps(
   return dependenciesFirst([...moved, ...alone], (step) => step.key, cascade.declarations);
 }
 
-/**
- * WR-06 / D-26: the moves that run after the missing-dependency install: the
- * move of each record whose enable waits on it (D-PL2-16), and, to a fixed
- * point, each move that declares one of them. A deferred enable goes with its
- * record's move. The set only grows and is bounded by the cascade's moves.
- */
-function stepsAfterInstalls(
-  cascade: ConvergenceCascade,
-  waiting: ReadonlySet<string>,
-): ReadonlySet<string> {
-  const moveKeys = cascade.plan.moves.map(pluginKey);
-  const after = new Set(moveKeys.filter((key) => waiting.has(key)));
-  let size: number;
-  do {
-    size = after.size;
-    for (const key of moveKeys) {
-      if (cascadeDependencies(cascade, key).some((dep) => after.has(dep))) {
-        after.add(key);
-      }
-    }
-  } while (after.size > size);
-
-  return after;
-}
-
-/**
- * D-PL2-16 / WR-06: the steps after the missing-dependency install. A waiting
- * record's own move runs with its enable, as a deferred record's does in the
- * cascade: one net row, and its pin back when the enable fails. Each other
- * move that waited runs with its record's deferred enable, if it has one.
- */
-function afterInstallSteps(
-  run: AfterMovesRun,
-  enables: readonly PlannedPluginEnable[],
-): CascadeStep[] {
-  const moves = new Map(run.cascade.plan.moves.map((move) => [pluginKey(move), move]));
-  const deferred = new Map(run.deferred.map((op) => [pluginKey(op), op]));
-  const waited = run.cascade.plan.moves
-    .filter((move) => run.afterInstalls.has(pluginKey(move)) && !run.waiting.has(pluginKey(move)))
-    .map((move): CascadeStep => {
-      const enable = deferred.get(pluginKey(move));
-      return { key: pluginKey(move), move, ...(enable !== undefined && { enable }) };
-    });
-  return [
-    ...enables.map((enable): CascadeStep => {
-      const key = pluginKey(enable);
-      const move = moves.get(key);
-      return move === undefined ? { key, enable } : { key, move, enable };
-    }),
-    ...waited,
-  ];
-}
-
 /** What one cascade run needs besides the cascade. */
 interface CascadeRun {
   readonly scope: Scope;
   readonly deferred: readonly PlannedPluginEnable[];
   /** D-PL2-16: the records whose enable waits on the missing-dependency install. */
   readonly waiting: ReadonlySet<string>;
-  /** WR-06: the moves that run after that install (`stepsAfterInstalls`). */
+  /** WR-06: the moves that run after that install (`movesAfterInstalls`). */
   readonly afterInstalls: ReadonlySet<string>;
   /** The scope before the cascade, whose pins a failed deferred enable restores. */
   readonly before: ExtensionState;

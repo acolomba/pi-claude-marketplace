@@ -72,7 +72,13 @@ import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { scanRetainedWorkflowsStaging } from "../plugin/workflows-staging-gc.ts";
 
-import { planConvergence, settleMoveCascade, withPlannedInstallsLanded } from "./convergence.ts";
+import {
+  movesAfterInstalls,
+  planConvergenceCascade,
+  settleMoveCascade,
+  stepsAfterInstalls,
+  withPlannedInstallsLanded,
+} from "./convergence.ts";
 import { buildScopeSatisfactionVerdict, verdictAfterToggles } from "./dependency-verdict.ts";
 import {
   buildReconcilePendingNotification,
@@ -89,9 +95,9 @@ import {
   type PendingMsg,
 } from "./reconcile.messaging.ts";
 
-import type { PlannedDecline, PlannedHold, PlannedMove } from "./convergence.ts";
+import type { CascadeStep, PlannedDecline, PlannedHold, PlannedMove } from "./convergence.ts";
 import type { ScopeSatisfactionVerdict } from "./dependency-verdict.ts";
-import type { PlannedPluginEnable, PlannedPluginInstall, ReconcilePlan } from "./types.ts";
+import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -333,7 +339,7 @@ export async function composePendingReport(opts: {
     { readonly marketplaceRoot: string; readonly manifestPath: string }
   >();
   const recordedVersions: (readonly [string, string])[] = [];
-  const enablesAfterInstalls: PlannedPluginEnable[] = [];
+  const afterInstalls: CascadeStep[] = [];
   const convergence: {
     readonly moves: PlannedMove[];
     readonly holds: PlannedHold[];
@@ -444,16 +450,32 @@ export async function composePendingReport(opts: {
     });
     // APL-02 / D-10 / D-14: the catalog moves `apply` would make once the plan
     // has run, offline (NFR-5).
-    const scoped =
-      settled.cascade?.plan ??
+    const cascade =
+      settled.cascade ??
       // eslint-disable-next-line no-await-in-loop -- at most two scopes, one convergence plan each
-      (await planConvergence({ scope, state, locations: loc, plan: settled.plan }));
+      (await planConvergenceCascade({ scope, state, locations: loc, plan: settled.plan }));
     // WR-02: a held-down record `apply` moves and then enables lists one row.
     const scopePlan = settled.preview;
     plans.push(scopePlan);
-    // D-PL2-16: the enables `apply` runs after its missing-dependency install.
-    enablesAfterInstalls.push(...settled.enablesAfterInstalls);
-    convergence.moves.push(...scoped.moves);
+    // WR-07 / D-PL2-02: the moves `apply` defers to after its
+    // missing-dependency install are listed there, with the enables that wait
+    // on it, in the order `apply` runs them. A waiting record that moves lists
+    // one row, as `apply` reports one.
+    const waiting = new Set(
+      settled.enablesAfterInstalls.map((op) => `${op.plugin}@${op.marketplace}`),
+    );
+    const movedAfter = movesAfterInstalls(cascade, waiting);
+    afterInstalls.push(
+      ...stepsAfterInstalls(
+        cascade,
+        { waiting, afterInstalls: movedAfter, deferred: settled.deferredEnables },
+        settled.enablesAfterInstalls,
+      ),
+    );
+    const scoped = cascade.plan;
+    convergence.moves.push(
+      ...scoped.moves.filter((move) => !movedAfter.has(`${move.plugin}@${move.marketplace}`)),
+    );
     convergence.holds.push(...scoped.holds);
     convergence.declines.push(...scoped.declines);
   }
@@ -475,7 +497,7 @@ export async function composePendingReport(opts: {
   if (
     invalidBlocks.length === 0 &&
     isReconcilePlanListEmpty(plans) &&
-    moves.length + holds.length + declines.length + enablesAfterInstalls.length === 0
+    moves.length + holds.length + declines.length + afterInstalls.length === 0
   ) {
     return { marketplaces: [], retained, needsApply: false };
   }
@@ -519,7 +541,7 @@ export async function composePendingReport(opts: {
     forceInstallKeys,
     new Map(recordedVersions),
     convergence,
-    enablesAfterInstalls,
+    afterInstalls,
   );
   // D-12 / OUT-07: the pending diff is bulk (it spans both scopes and many
   // marketplaces) -> Plural row cardinality. D-02: thread PENDING_CONTEXT so the
@@ -539,7 +561,7 @@ export async function composePendingReport(opts: {
   return {
     marketplaces,
     retained,
-    needsApply: planListNeedsApply(plans) || moves.length + enablesAfterInstalls.length > 0,
+    needsApply: planListNeedsApply(plans) || moves.length + afterInstalls.length > 0,
   };
 }
 

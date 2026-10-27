@@ -100,9 +100,9 @@ import type {
   PluginEnabledOutcome,
   PluginInstalledOutcome,
 } from "./apply-outcomes.ts";
-import type { ConvergencePlan, PlannedMove } from "./convergence.ts";
+import type { CascadeStep, ConvergencePlan, PlannedMove } from "./convergence.ts";
 import type { PendingMsg, ReconcileAppliedMsg } from "./reconcile.messaging.ts";
-import type { PlannedPluginEnable, PlannedPluginInstall, ReconcilePlan } from "./types.ts";
+import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { MarketplaceRows } from "../../shared/notify-context.ts";
@@ -312,16 +312,38 @@ function pushConvergenceMoves(
   convergence: ConvergencePlan,
 ): void {
   for (const move of convergence.moves) {
-    const commits = revisionCommits(move);
-    ensureMarketplaceBlock(byMp, move.scope, move.marketplace).plugins.push({
-      status: "will update",
-      name: move.plugin,
-      from: move.fromVersion,
-      to: move.toVersion,
-      ...(commits !== undefined && { commits }),
-      ...(move.grew && { reasons: ["components now supported"] }),
-    });
+    ensureMarketplaceBlock(byMp, move.scope, move.marketplace).plugins.push(willUpdateRow(move));
   }
+}
+
+/**
+ * D-PL2-16 / WR-07: one row per step `apply` runs after its missing-dependency
+ * installs, in its order: a step with a move is its `will update` row, which
+ * covers the record's enable too, and an enable alone is `will enable`.
+ */
+function pushStepsAfterInstalls(
+  byMp: Map<string, MarketplaceBlock<PendingMsg>>,
+  steps: readonly CascadeStep[],
+): void {
+  for (const step of steps) {
+    const { scope, marketplace, plugin } = step.move ?? step.enable;
+    ensureMarketplaceBlock(byMp, scope, marketplace).plugins.push(
+      step.move === undefined ? { status: "will enable", name: plugin } : willUpdateRow(step.move),
+    );
+  }
+}
+
+/** D-14: the `will update` row of one catalog move. */
+function willUpdateRow(move: PlannedMove): PendingMsg {
+  const commits = revisionCommits(move);
+  return {
+    status: "will update",
+    name: move.plugin,
+    from: move.fromVersion,
+    to: move.toVersion,
+    ...(commits !== undefined && { commits }),
+    ...(move.grew && { reasons: ["components now supported"] }),
+  };
 }
 
 /**
@@ -693,22 +715,25 @@ export async function resolvePendingForceInstalls(
  *                              move rows (MISS-01, D-09-12). It never carries
  *                              the partial modifier, so its row is the bare
  *                              token. It fills from the same verdict (D-21).
- *   - `enablesAfterInstalls`-> child row { status: "will enable" } after the
- *                              dependency installs (D-PL2-16).
+ *   - `afterInstalls`       -> after the dependency installs, one child row
+ *                              per step `apply` runs after them, in its
+ *                              order: { status: "will update" } for a step
+ *                              with a move (WR-07), else { status:
+ *                              "will enable" } (D-PL2-16).
  *
  * Ordering: blocks are sorted by `compareByNameThenScope` (name primary
  * case-insensitive, project-before-user secondary). D-PL2-02: plugin rows
  * within a block follow the order `apply` makes the changes in: marketplace
  * actions and mismatches, config installs, uninstalls, disables, enables,
- * catalog moves, missing-dependency installs, the enables that wait on them,
- * then the blocked moves.
+ * catalog moves, missing-dependency installs, the enables and moves that wait
+ * on them, then the blocked moves.
  */
 export function buildReconcilePendingNotification(
   plans: readonly ReconcilePlan[],
   forceInstallKeys: ReadonlySet<string> = new Set<string>(),
   recordedVersions: ReadonlyMap<string, string> = new Map<string, string>(),
   convergence: ConvergencePlan = NO_CONVERGENCE,
-  enablesAfterInstalls: readonly PlannedPluginEnable[] = [],
+  afterInstalls: readonly CascadeStep[] = [],
 ): {
   readonly marketplaces: readonly MarketplaceRows<PendingMsg>[];
 } {
@@ -785,13 +810,8 @@ export function buildReconcilePendingNotification(
     });
   }
 
-  // D-PL2-16: an enable that waits on a planned install runs after it.
-  for (const o of enablesAfterInstalls) {
-    ensureMarketplaceBlock(byMp, o.scope, o.marketplace).plugins.push({
-      status: "will enable",
-      name: o.plugin,
-    });
-  }
+  // D-PL2-16 / WR-07: the steps that wait on a planned install run after it.
+  pushStepsAfterInstalls(byMp, afterInstalls);
 
   pushBlockedMoves(byMp, convergence);
 

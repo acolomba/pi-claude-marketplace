@@ -1272,6 +1272,82 @@ test("D-PL2-16: composePendingReport lists an enable that waits on a planned ins
   });
 });
 
+test("WR-07: composePendingReport lists a move that declares a record waiting on a planned install after that install", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "compose-after-install-moves");
+  const offered = {
+    alib: { version: "2.0.0", dependencies: ["cdep"] },
+    bapp: { version: "2.0.0", dependencies: ["alib@^2.0.0"] },
+    cdep: { version: "1.0.0" },
+  };
+  await stageDependencyScope(cwd, project, {
+    offered,
+    recorded: {
+      alib: { version: "1.0.0", enabled: false, dependencyDisabled: true },
+      bapp: { version: "1.0.0" },
+    },
+    declared: [
+      { key: "alib@tools", enabled: true },
+      { key: "bapp@tools", enabled: true },
+    ],
+  });
+  await stageOfferedPlugins(project, offered);
+
+  // act
+  const report = await composePendingReport({ cwd, scopes: ["project"] });
+
+  // assert
+  assert.deepStrictEqual(report, {
+    marketplaces: [
+      {
+        name: "tools",
+        scope: "project",
+        plugins: [
+          { status: "will install", name: "cdep" },
+          { status: "will update", name: "alib", from: "1.0.0", to: "2.0.0" },
+          { status: "will update", name: "bapp", from: "1.0.0", to: "2.0.0" },
+        ],
+      },
+    ],
+    retained: {},
+    needsApply: true,
+  });
+});
+
+test("WR-07: composePendingReport lists the move of a record a config enables after the install it waits on", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "compose-after-install-enable");
+  const offered = {
+    app: { version: "1.1.0", dependencies: ["vault"] },
+    vault: { version: "1.0.0" },
+  };
+  await stageDependencyScope(cwd, project, {
+    offered,
+    recorded: { app: { version: "1.0.0", enabled: false } },
+    declared: [{ key: "app@tools", enabled: true }],
+  });
+  await stageOfferedPlugins(project, offered);
+
+  // act
+  const report = await composePendingReport({ cwd, scopes: ["project"] });
+
+  // assert
+  assert.deepStrictEqual(report, {
+    marketplaces: [
+      {
+        name: "tools",
+        scope: "project",
+        plugins: [
+          { status: "will install", name: "vault" },
+          { status: "will update", name: "app", from: "1.0.0", to: "1.1.0" },
+        ],
+      },
+    ],
+    retained: {},
+    needsApply: true,
+  });
+});
+
 // ---------------------------------------------------------------------------
 // D-12 / D-23: a move a dependent's range does not admit is listed with the
 // row `apply` reports for it, and asks for no apply.

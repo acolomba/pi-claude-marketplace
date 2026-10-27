@@ -1320,7 +1320,7 @@ Feature: Plugin apply
       | severity     | info                    |
       | needs reload | false                   |
 
-  Scenario: Apply moves a plugin after the held-down dependency it needs, once that dependency's missing dependency is installed
+  Scenario: Apply moves a plugin after the held-down dependency it needs, once that dependency's missing dependency is installed, as pending lists it
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name | version | dependencies |
@@ -1339,6 +1339,21 @@ Feature: Plugin apply
       | alib | 2.0.0   | cdep         |
       | bapp | 2.0.0   | alib@^2.0.0  |
       | cdep | 1.0.0   |              |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind                | cascade           |
+      | severity            | info              |
+      | needs reload        | false             |
+      | needs apply         | true              |
+      | tally label         | Reconcile pending |
+      | tally failures      | 0                 |
+      | tally warnings      | 0                 |
+      | tally success count | 3                 |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name | status       | reasons | scope   | from  | to    |
+      | tools            | project           | cdep@tools | cdep | will install |         | project |       |       |
+      | tools            | project           | alib@tools | alib | will update  |         | project | 1.0.0 | 2.0.0 |
+      | tools            | project           | bapp@tools | bapp | will update  |         | project | 1.0.0 | 2.0.0 |
     When the user runs "/claude:plugin apply --scope project"
     Then the result has these fields:
       | kind                | reconcile-applied-cascade |

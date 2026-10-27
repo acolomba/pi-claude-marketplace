@@ -3123,7 +3123,7 @@ describe("buildReconcilePendingNotification", () => {
 
     // act
     const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), convergence, [
-      { scope: "project", plugin: "app", marketplace: "mp" },
+      { key: "app@mp", enable: { scope: "project", plugin: "app", marketplace: "mp" } },
     ]);
 
     // assert
@@ -3145,6 +3145,62 @@ describe("buildReconcilePendingNotification", () => {
               severity: "warning",
               needsReload: false,
             },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("WR-07: lists a move that waits on a dependency install after it, as one row with its enable", () => {
+    // arrange
+    const plans = [
+      reconcilePlan("project", {
+        pluginsToDependencyInstall: [
+          {
+            scope: "project",
+            plugin: "cdep",
+            marketplace: "mp",
+            ranges: [],
+            requiredBy: "alib@mp",
+            declarers: ["alib@mp"],
+          },
+        ],
+      }),
+    ];
+    const move = (plugin: string) =>
+      ({
+        scope: "project",
+        marketplace: "mp",
+        plugin,
+        fromVersion: "1.0.0",
+        toVersion: "2.0.0",
+        revisionChanged: true,
+        grew: false,
+        partial: false,
+      }) as const;
+    const convergence = { moves: [move("ready")], holds: [], declines: [] } as const;
+
+    // act
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), convergence, [
+      {
+        key: "alib@mp",
+        move: move("alib"),
+        enable: { scope: "project", plugin: "alib", marketplace: "mp" },
+      },
+      { key: "bapp@mp", move: move("bapp") },
+    ]);
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            { status: "will update", name: "ready", from: "1.0.0", to: "2.0.0" },
+            { status: "will install", name: "cdep" },
+            { status: "will update", name: "alib", from: "1.0.0", to: "2.0.0" },
+            { status: "will update", name: "bapp", from: "1.0.0", to: "2.0.0" },
           ],
         },
       ],

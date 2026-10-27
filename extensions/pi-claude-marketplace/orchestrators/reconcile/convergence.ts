@@ -733,9 +733,77 @@ export async function planConvergenceCascade(input: ConvergenceInput): Promise<C
   };
 }
 
-/** D-10 / D-06: every catalog move in one scope, offline (`planConvergenceCascade`). */
-export async function planConvergence(input: ConvergenceInput): Promise<ConvergencePlan> {
-  return (await planConvergenceCascade(input)).plan;
+/** One step of a scope's cascade: a catalog move, a deferred enable, or both. */
+export type CascadeStep =
+  | { readonly key: string; readonly move: PlannedMove; readonly enable?: PlannedPluginEnable }
+  | { readonly key: string; readonly move?: undefined; readonly enable: PlannedPluginEnable };
+
+/** What decides the steps after the missing-dependency install. */
+export interface AfterInstallsInput {
+  /** D-PL2-16: the records whose enable waits on the missing-dependency install. */
+  readonly waiting: ReadonlySet<string>;
+  /** WR-06: the moves that run after that install (`movesAfterInstalls`). */
+  readonly afterInstalls: ReadonlySet<string>;
+  /** The enables that wait for the cascade (`MoveCascade.deferredEnables`). */
+  readonly deferred: readonly PlannedPluginEnable[];
+}
+
+/**
+ * WR-06 / D-26: the moves that run after the missing-dependency install: the
+ * move of each record whose enable waits on it (D-PL2-16), and, to a fixed
+ * point, each move that declares one of them. The set only grows and is
+ * bounded by the cascade's moves. `apply` runs these moves after the install,
+ * and `pending` lists them there (D-PL2-02).
+ */
+export function movesAfterInstalls(
+  cascade: ConvergenceCascade,
+  waiting: ReadonlySet<string>,
+): ReadonlySet<string> {
+  const moveKeys = cascade.plan.moves.map(moveKey);
+  const after = new Set(moveKeys.filter((key) => waiting.has(key)));
+  let size: number;
+  do {
+    size = after.size;
+    for (const key of moveKeys) {
+      if (cascadeDependencies(cascade, key).some((dep) => after.has(dep))) {
+        after.add(key);
+      }
+    }
+  } while (after.size > size);
+
+  return after;
+}
+
+/**
+ * D-PL2-16 / WR-06: the steps after the missing-dependency install,
+ * dependencies first. A waiting record's own move runs with its enable, as a
+ * deferred record's does in the cascade: one net row. Each other move that
+ * waited runs with its record's deferred enable, if it has one. `apply` runs
+ * these steps in this order, and `pending` lists them in it (D-PL2-02).
+ */
+export function stepsAfterInstalls(
+  cascade: ConvergenceCascade,
+  input: AfterInstallsInput,
+  enables: readonly PlannedPluginEnable[],
+): readonly CascadeStep[] {
+  const { afterInstalls, waiting } = input;
+  const moves = new Map(cascade.plan.moves.map((move) => [moveKey(move), move]));
+  const deferred = new Map(input.deferred.map((op) => [`${op.plugin}@${op.marketplace}`, op]));
+  const waited = cascade.plan.moves
+    .filter((move) => afterInstalls.has(moveKey(move)) && !waiting.has(moveKey(move)))
+    .map((move): CascadeStep => {
+      const enable = deferred.get(moveKey(move));
+      return { key: moveKey(move), move, ...(enable !== undefined && { enable }) };
+    });
+  const steps = [
+    ...enables.map((enable): CascadeStep => {
+      const key = `${enable.plugin}@${enable.marketplace}`;
+      const move = moves.get(key);
+      return move === undefined ? { key, enable } : { key, move, enable };
+    }),
+    ...waited,
+  ];
+  return dependenciesFirst(steps, (step) => step.key, cascade.declarations);
 }
 
 /** Every recorded `name@marketplace` key disabled by something other than the check. */
