@@ -1180,7 +1180,7 @@ Feature: Plugin apply
     Given the git repository "dirp" holds these plugins:
       | name | version | path |
       | dirp | 1.0.0   |      |
-    Given the marketplace "anthropic-plugin-directory" is published as a dir source
+    Given the marketplace "anthropic-plugin-directory" is published by the anthropics organization
     Given the marketplace "anthropic-plugin-directory" offers these plugins with dependencies:
       | name | version | dependencies |
       | app  | 1.0.0   |              |
@@ -1195,6 +1195,7 @@ Feature: Plugin apply
     Given the marketplace "anthropic-plugin-directory" offers these plugins from git repositories:
       | name | source kind | repository | pinned |
       | dirp | url         | dirp       | true   |
+    Given the user has run "/claude:plugin marketplace update anthropic-plugin-directory --scope project"
     When the user runs "/claude:plugin apply --scope project"
     Then the result has these fields:
       | kind           | reconcile-applied-cascade      |

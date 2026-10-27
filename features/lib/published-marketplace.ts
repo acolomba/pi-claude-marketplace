@@ -222,18 +222,45 @@ export async function publishMarketplaceIn(
   }
 }
 
-// Claude Code's official marketplace: the GitHub repository `bootstrap` adds,
-// and the name its manifest declares.
-const OFFICIAL_OWNER = "anthropics";
-const OFFICIAL_REPOSITORY = "claude-plugins-official";
+// The GitHub organization Claude Code reserves its official marketplace names
+// for, and the official marketplace `bootstrap` adds from it.
+const ANTHROPICS_OWNER = "anthropics";
 const OFFICIAL_NAME = "claude-plugins-official";
 
 /**
- * Publishes the official marketplace `name` at `sites` as a github source
- * that offers no plugin, served by the git host as
- * `anthropics/claude-plugins-official`. It refuses any name other than the
- * one the official manifest declares, and fails when its work tree or its
- * repository exists already.
+ * Publishes the marketplace `name` at `sites` as a github source that offers
+ * no plugin, served by the git host as `anthropics/<name>`, so it may declare
+ * a name Claude Code reserves for that organization. It fails when its work
+ * tree or its repository exists already.
+ */
+export async function publishAnthropicsMarketplace(
+  sites: PublicationSites,
+  name: string,
+): Promise<GitPublication> {
+  const { gitHost } = sites;
+  const root = path.join(sites.marketplacesRoot, name);
+  const manifestPath = path.join(root, ".claude-plugin", "marketplace.json");
+  const bareRepository = gitHost.repositoryPath(name, ANTHROPICS_OWNER);
+  await requireAbsent(root, name);
+  await requireAbsent(bareRepository, `${ANTHROPICS_OWNER}/${name}`);
+  await writeMarketplace(root, name, [], manifestPath);
+  await publishGitRepository(root, bareRepository, gitHost.gitHome);
+  return {
+    kind: "github",
+    root,
+    source: gitHost.repositoryShorthand(name, ANTHROPICS_OWNER),
+    manifestPath,
+    owner: ANTHROPICS_OWNER,
+    repository: name,
+    bareRepository,
+    gitHome: gitHost.gitHome,
+  };
+}
+
+/**
+ * Publishes the official marketplace `name` as `publishAnthropicsMarketplace`
+ * does, served as `anthropics/claude-plugins-official`. It refuses any name
+ * other than the one the official manifest declares.
  */
 export async function publishOfficialMarketplace(
   sites: PublicationSites,
@@ -243,24 +270,7 @@ export async function publishOfficialMarketplace(
     throw new Error(`the official marketplace is named ${OFFICIAL_NAME}, not ${name}`);
   }
 
-  const { gitHost } = sites;
-  const root = path.join(sites.marketplacesRoot, name);
-  const manifestPath = path.join(root, ".claude-plugin", "marketplace.json");
-  const bareRepository = gitHost.repositoryPath(OFFICIAL_REPOSITORY, OFFICIAL_OWNER);
-  await requireAbsent(root, name);
-  await requireAbsent(bareRepository, `${OFFICIAL_OWNER}/${OFFICIAL_REPOSITORY}`);
-  await writeMarketplace(root, name, [], manifestPath);
-  await publishGitRepository(root, bareRepository, gitHost.gitHome);
-  return {
-    kind: "github",
-    root,
-    source: gitHost.repositoryShorthand(OFFICIAL_REPOSITORY, OFFICIAL_OWNER),
-    manifestPath,
-    owner: OFFICIAL_OWNER,
-    repository: OFFICIAL_REPOSITORY,
-    bareRepository,
-    gitHome: gitHost.gitHome,
-  };
+  return publishAnthropicsMarketplace(sites, name);
 }
 
 /** Publishes a file source outside the conventional manifest directory. */

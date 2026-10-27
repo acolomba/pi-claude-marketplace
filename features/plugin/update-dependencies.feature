@@ -321,7 +321,7 @@ Feature: Plugin update dependencies
     Given the git repository "dirp" holds these plugins:
       | name | version | path |
       | dirp | 1.0.0   |      |
-    Given the marketplace "anthropic-plugin-directory" is published as a dir source
+    Given the marketplace "anthropic-plugin-directory" is published by the anthropics organization
     Given the marketplace "anthropic-plugin-directory" offers these plugins with dependencies:
       | name | version | dependencies |
       | app  | 1.0.0   | dirp@^1.0.0  |
@@ -351,7 +351,7 @@ Feature: Plugin update dependencies
     Given the git repository "dirp" holds these plugins:
       | name | version | path |
       | dirp | 1.0.0   |      |
-    Given the marketplace "anthropic-plugin-directory" is published as a dir source
+    Given the marketplace "anthropic-plugin-directory" is published by the anthropics organization
     Given the marketplace "anthropic-plugin-directory" offers these plugins with dependencies:
       | name | version | dependencies |
       | app  | 1.0.0   | dirp@^1.0.0  |

@@ -26,6 +26,7 @@ import {
   describeMarketplace,
   describeMarketplaceBranch,
   invalidateManifest,
+  publishAnthropicsMarketplace,
   publishExternalMarketplace,
   publishMarketplace,
   publishOfficialMarketplace,
@@ -61,19 +62,38 @@ Given(
   },
 );
 
+/**
+ * Publishes the marketplace `name` with `publish`, as a github source of the
+ * anthropics organization on the git host, and records it for the scenario.
+ */
+async function publishAnthropicsRepository(
+  world: ScenarioWorld,
+  name: string,
+  publish: typeof publishAnthropicsMarketplace,
+): Promise<void> {
+  if (world.publishedMarketplace(name) !== undefined) {
+    assert.fail(`the marketplace ${name} is already published in this scenario`);
+  }
+
+  world.onRelease(() =>
+    rm(path.join(world.marketplacesRoot, name), { recursive: true, force: true }),
+  );
+  const published = await publish(world.publicationSites, name);
+  world.recordPublished(name, published);
+  assert.strictEqual((await stat(published.bareRepository)).isDirectory(), true);
+}
+
 Given(
   "the marketplace {string} is published as the official marketplace",
   async function (this: ScenarioWorld, name: string) {
-    if (this.publishedMarketplace(name) !== undefined) {
-      assert.fail(`the marketplace ${name} is already published in this scenario`);
-    }
+    await publishAnthropicsRepository(this, name, publishOfficialMarketplace);
+  },
+);
 
-    this.onRelease(() =>
-      rm(path.join(this.marketplacesRoot, name), { recursive: true, force: true }),
-    );
-    const published = await publishOfficialMarketplace(this.publicationSites, name);
-    this.recordPublished(name, published);
-    assert.strictEqual((await stat(published.bareRepository)).isDirectory(), true);
+Given(
+  "the marketplace {string} is published by the anthropics organization",
+  async function (this: ScenarioWorld, name: string) {
+    await publishAnthropicsRepository(this, name, publishAnthropicsMarketplace);
   },
 );
 
