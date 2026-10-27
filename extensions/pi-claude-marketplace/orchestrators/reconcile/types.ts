@@ -330,6 +330,16 @@ export type DependencyDisableStamp = (
 ) => Promise<void>;
 
 /**
+ * WR-C: puts a deferred record's pin back to what `before` recorded, in the
+ * scope its failed enable left it, for the plugin named `key`.
+ */
+export type DeferredPinRestore = (
+  scope: Scope,
+  key: string,
+  before: ExtensionState,
+) => Promise<void>;
+
+/**
  * RECON-01..05 options bundle. When `scope` is omitted, applyReconcile fans
  * out across BOTH scopes project-first (mirrors
  * `pending.ts::pendingReconcile`'s scope fan-out).
@@ -383,6 +393,14 @@ export interface ApplyReconcileOptions {
    * hold fails the disable instead of the stamp.
    */
   readonly stampDependencyDisabled?: DependencyDisableStamp;
+  /**
+   * Injection seam for the pin restore after a deferred record's enable fails.
+   * Production callers (index.ts) omit it and `apply.ts::restorePin` applies.
+   * The restore takes the state lock after the enable released it, so only a
+   * seam can make that second acquisition fail on cue; the contract it pins is
+   * that the failure becomes a reported row and ends nothing else.
+   */
+  readonly restoreDeferredPin?: DeferredPinRestore;
   /**
    * AMIG-01 injection seam for the load-time MCP move. Production callers
    * (index.ts) omit it and `mcp-migration.ts::migrateLegacyMcpEntries`

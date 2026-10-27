@@ -1241,6 +1241,7 @@ async function convergeScope(
       before: before.state,
       failed,
       reports,
+      sink: outcomes,
     };
     await runCascade(opts, cascade, run);
     await installAfterMoves(reader, opts, toggles, { ...run, cascade, after });
@@ -1540,6 +1541,8 @@ interface CascadeRun {
   readonly before: ExtensionState;
   readonly failed: FailedSteps;
   readonly reports: StepReport[];
+  /** Where a fault in a step's restore or collection tail is reported (`runScopeIsolated`). */
+  readonly sink: PerEntryOutcome[];
 }
 
 /**
@@ -1676,27 +1679,34 @@ async function runStep(
 
   const enabled: PerEntryOutcome[] = [];
   const landed = await enableStep(opts, enable, enabled);
-  if (!landed) {
-    await restorePin(opts, run.scope, move, run.before);
-  }
-
-  if (collect.requested) {
-    await collectClones(locationsFor(run.scope, opts.cwd));
-  }
-
+  // The step's rows are recorded before the tail that can throw, so a fault in
+  // the restore or the collection cannot lose them or the failed key.
   if (landed) {
     run.reports.push({ key: step.key, rows: landedStepRows(step, move, enabled) });
-    return;
+  } else {
+    const reasons = enabled
+      .filter(
+        (outcome): outcome is PluginEnableFailedOutcome => outcome.kind === "plugin-enable-failed",
+      )
+      .map((outcome) => outcome.reason)
+      .filter(isContentReason);
+    run.failed.all.add(step.key);
+    run.reports.push({ key: step.key, rows: failedMoveRows(move, reasons) });
   }
 
-  const reasons = enabled
-    .filter(
-      (outcome): outcome is PluginEnableFailedOutcome => outcome.kind === "plugin-enable-failed",
-    )
-    .map((outcome) => outcome.reason)
-    .filter(isContentReason);
-  run.failed.all.add(step.key);
-  run.reports.push({ key: step.key, rows: failedMoveRows(move, reasons) });
+  await runScopeIsolated(run.scope, run.sink, async () => {
+    if (!landed) {
+      await (opts.restoreDeferredPin ?? restorePin.bind(undefined, opts))(
+        run.scope,
+        pluginKey(move),
+        run.before,
+      );
+    }
+
+    if (collect.requested) {
+      await collectClones(locationsFor(run.scope, opts.cwd));
+    }
+  });
 }
 
 /**
@@ -1782,10 +1792,9 @@ const PIN_FIELDS: ReadonlySet<string> = new Set([
 async function restorePin(
   opts: ApplyReconcileOptions,
   scope: Scope,
-  move: PlannedMove,
+  key: string,
   before: ExtensionState,
 ): Promise<void> {
-  const key = pluginKey(move);
   const pins = new Map(
     Object.values(before.marketplaces).flatMap((mp) =>
       Object.entries(mp.plugins).map(([plugin, record]) => [

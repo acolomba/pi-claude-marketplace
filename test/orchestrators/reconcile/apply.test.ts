@@ -8940,6 +8940,113 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
+  test("D-PL2-18 / WR-02: a held-down record whose supported set grew is re-materialized and enabled after the move it waits on", async (t) => {
+    // arrange -- `widget` keeps its catalog version but its tree gained a command
+    const { cwd, project } = await seedConvergenceScope(t, "cascade-deferred-grown", {
+      ...coShippedSeed({ enabled: false, dependencyDisabled: true }),
+      trees: { widget: { skill: "clean", command: true }, zcore: { skill: "clean" } },
+      offered: { zcore: "2.0.0" },
+    });
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n  ● zcore v1.0.0 → v2.0.0 (updated)\n  ● widget v1.0.0 (installed)\n\nReconcile: 2 successes\n\n/reload to pick up changes",
+      },
+    ]);
+    const widget = await recordFor(project, "mp", "widget");
+    assert.deepStrictEqual([widget?.version, widget?.enabled], ["1.0.0", true]);
+    assert.ok(widget?.compatibility.supported.includes("commands"));
+    verifyBoundary();
+  });
+
+  test("D-PL2-18 / WR-C: a held-down record whose growth-only enable fails keeps its version and commit", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "cascade-deferred-grown-fails",
+      {
+        ...coShippedSeed({ enabled: false, dependencyDisabled: true }),
+        trees: { widget: { skill: "clean", command: true }, zcore: { skill: "clean" } },
+        offered: { zcore: "2.0.0" },
+      },
+    );
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    await unreadableSkill(marketplaceRoot, "widget");
+    const before = await recordFor(project, "mp", "widget");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● mp [project]\n  ● zcore v1.0.0 → v2.0.0 (updated)\n  ⊘ widget v1.0.0 (failed) {unreadable}\n\nReconcile: 1 failure, 1 success\n\n/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    const widget = await recordFor(project, "mp", "widget");
+    assert.deepStrictEqual(
+      [widget?.version, widget?.resolvedSha, widget?.enabled],
+      [before?.version, before?.resolvedSha, false],
+    );
+    verifyBoundary();
+  });
+
+  test("APPLY1-01 / WR-C: a pin restore that cannot take the state lock is reported and later steps still run", async (t) => {
+    // arrange -- `widget`'s enable fails, and the restore after it is refused
+    const seed = coShippedSeed({ enabled: false, dependencyDisabled: true });
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "cascade-restore-lock-held",
+      {
+        ...seed,
+        trees: { ...seed.trees, yonder: { skill: "clean" } },
+        supported: { ...seed.supported, yonder: ["skills"] },
+        offered: { ...seed.offered, yonder: "1.1.0" },
+        records: { ...seed.records, yonder: { enabled: false, dependencyDisabled: true } },
+      },
+    );
+    await declareEnabled(project, cwd, ["widget", "yonder", "zcore"]);
+    await unreadableSkill(marketplaceRoot, "widget");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+    const restoreDeferredPin = (): Promise<void> => {
+      throw new StateLockHeldError("project", ".state-lock");
+    };
+
+    // act
+    await applyReconcile({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+      restoreDeferredPin,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n● mp [project]\n  ● zcore v1.0.0 → v2.0.0 (updated)\n  ⊘ widget v1.0.0 → v1.1.0 (failed) {unreadable}\n  ● yonder v1.0.0 → v1.1.0 (updated)\n\n⊘ state.json [project] (failed) {lock held}\n  ⊘ state.json (failed) {lock held}\n    cause: Another pi-claude-marketplace operation is in progress for project scope (.state-lock). Retry after it completes.\n\nReconcile: 3 failures, 2 successes\n\n/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.equal((await recordFor(project, "mp", "yonder"))?.enabled, true);
+    verifyBoundary();
+  });
+
   test("APPLY1-01 / CR-01: a dependent whose own move is held is disabled with its dependents when the dependency fails", async (t) => {
     // arrange -- `host` holds `widget` at ^1.0.0; `widget` 2.0.0 needs zcore ^2.0.0.
     const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
