@@ -7,8 +7,8 @@
  * The first statement of a git repository's plugins publishes it, and each
  * later one publishes a new revision. A marketplace offers git plugins after
  * the repositories hold them. A step that changes a plugin the marketplace
- * already offers, such as giving it a component Pi does not support, follows
- * the plugins the marketplace offers.
+ * already offers, such as giving it a component Pi does not support or an
+ * agent, follows the plugins the marketplace offers.
  */
 
 import assert from "node:assert/strict";
@@ -27,6 +27,7 @@ import {
 } from "../../lib/git-plugin.ts";
 import { runGit } from "../../lib/hermetic-git.ts";
 import {
+  publishAgent,
   publishOutputStyle,
   removePublishedOutputStyle,
   rewritePublishedManifest,
@@ -103,5 +104,13 @@ Given(
   async function (this: ScenarioWorld, plugin: string, name: string) {
     const directory = await removePublishedOutputStyle(this.requirePublished(name), plugin);
     await assert.rejects(stat(directory), { code: "ENOENT" }, `${directory} still exists`);
+  },
+);
+
+Given(
+  "the published plugin {string} of the marketplace {string} has the agent {string}",
+  async function (this: ScenarioWorld, plugin: string, name: string, agent: string) {
+    const file = await publishAgent(this.requirePublished(name), plugin, agent);
+    assert.strictEqual((await stat(file)).isFile(), true, `${file} is not a file`);
   },
 );

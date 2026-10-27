@@ -36,6 +36,36 @@ Feature: Plugin update dependencies
       | /skill:widget-skill | A skill of widget 1.1.0. |
       | /skill:zcore-skill  | A skill of zcore 1.0.0.  |
 
+  Scenario: Updating a plugin whose new version would overwrite a user's agent file fails before it installs the dependency that version needs
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   |              |
+      | zcore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore        |
+      | zcore  | 1.0.0   |              |
+    Given the published plugin "widget" of the marketplace "tools" has the agent "helper"
+    Given the agents directory of the project scope holds the file "pi-claude-marketplace-widget-helper.md" with the text "My own helper agent."
+    When the user runs "/claude:plugin update widget@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name   | status | reasons             | scope   | version | from  | cause chain                                                                                                              | cause truncated | leaks | rollback partial |
+      | tools            | project           | widget@tools | widget | failed | unreadable manifest | project | 1.1.0   | 1.0.0 | Cannot replace agent target with non-previous content at {project dir}/.pi/agents/pi-claude-marketplace-widget-helper.md | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | widget@tools | 1.0.0   | true    |
+    Then the agents directory of the project scope holds these files:
+      | file                                   | text                 |
+      | pi-claude-marketplace-widget-helper.md | My own helper agent. |
+
   Scenario: Updating a plugin whose new version needs a disabled dependency enables the dependency
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
