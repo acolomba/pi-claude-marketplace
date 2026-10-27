@@ -303,7 +303,7 @@ Remove a marketplace and uninstall its plugins. A dependency that another plugin
 /claude:plugin marketplace rm context7-marketplace
 ```
 
-Toggle marketplace plugin auto-updates. When you update the marketplace manually, this extension also updates the installed plugins. When autoupdate is on, a background update runs after the first message of a session, with a random delay of up to ten minutes. Official Claude marketplaces have autoupdate on by default, except `knowledge-work-plugins` and `first-party-plugins`.
+Toggle marketplace plugin auto-updates. When you update the marketplace manually, this extension also updates the installed plugins. When autoupdate is on, a background update runs after the first message of a tui session, with a random delay of up to ten minutes. Official Claude marketplaces have autoupdate on by default, except `knowledge-work-plugins` and `first-party-plugins`.
 
 ```text
 /claude:plugin marketplace autoupdate context7-marketplace

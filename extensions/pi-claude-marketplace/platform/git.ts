@@ -336,17 +336,8 @@ function raceAbort<T>(signal: AbortSignal, pending: Promise<T>, onAbort: () => v
       signal.removeEventListener("abort", abort);
     };
 
-    pending.then(
-      (value) => {
-        removeAbortListener();
-        resolve(value);
-      },
-      (error: unknown) => {
-        removeAbortListener();
-        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- passes on the rejection of `pending` unchanged.
-        reject(error);
-      },
-    );
+    pending.then(removeAbortListener, removeAbortListener);
+    pending.then(resolve, reject);
     if (signal.aborted) {
       abort();
       return;
