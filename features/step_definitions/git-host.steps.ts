@@ -1,11 +1,13 @@
 /**
  * @fileoverview Steps about the https git host that serves the repositories
- * of git marketplaces and git plugins: arming one repository to fail or to
- * require a credential, letting it serve again, the GitHub base address pi
- * runs with, the credential a user stores for the host, and the requests the
- * host receives. A step names a repository through the `git repository`
- * parameter type, by the marketplace or the plugin it serves. Every arm is
- * released with its scenario (HOST-03).
+ * of git marketplaces and git plugins, and the catalog files of hosted
+ * marketplaces: arming one repository or catalog to fail or to require a
+ * credential, letting it serve again, the GitHub base address pi runs with,
+ * the credential a user stores for the host, and the requests the host
+ * receives. A step names a repository through the `git repository` parameter
+ * type, by the marketplace or the plugin it serves; a hosted marketplace names
+ * the directory its catalog is served under. Every arm is released with its
+ * scenario (HOST-03).
  */
 
 import assert from "node:assert/strict";
@@ -40,7 +42,11 @@ function servedRepository(
     return { owner: published.owner, directory: published.repository };
   }
 
-  assert.fail(`the marketplace ${reference.name} is not published as a git source`);
+  if (published.kind === "hosted") {
+    return { owner: published.owner, directory: published.directory };
+  }
+
+  assert.fail(`the marketplace ${reference.name} is not published on the git host`);
 }
 
 /**

@@ -8,10 +8,13 @@
  * pushes a new commit, so Pi sees it through a clone or fetch (HOST-01). The
  * github kind publishes the same way; its source is the `owner/repo`
  * shorthand, which the GitHub base override sends to the git host (GHB-01).
+ * The hosted kind writes the same files in a work tree there and has the git
+ * host serve its manifest as one catalog file at an https URL; every later
+ * change to it serves the manifest's new bytes again (D-PL5-06).
  */
 
 import assert from "node:assert/strict";
-import { chmod, cp, mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { publishGitRepository, pushGitBranch, pushGitRepository } from "./git-marketplace.ts";
@@ -27,9 +30,12 @@ import {
 import type { OfferedPlugin } from "./path-marketplace.ts";
 
 /** A kind of source a marketplace is published as. */
-export type SourceKind = "dir" | "file" | "url" | "github";
+export type SourceKind = "dir" | "file" | "url" | "github" | "hosted";
 
-const SOURCE_KINDS: readonly SourceKind[] = ["dir", "file", "url", "github"];
+const SOURCE_KINDS: readonly SourceKind[] = ["dir", "file", "url", "github", "hosted"];
+
+// The file a hosted marketplace's manifest is served as.
+const HOSTED_MANIFEST = "marketplace.json";
 
 /**
  * A way a manifest is broken: JSON that does not parse, or JSON that breaks
@@ -46,8 +52,8 @@ const MANIFEST_WRITERS: Readonly<
 
 /**
  * The git host as the publishing code needs it: where it keeps and serves
- * repositories. A repository belongs to an owner, the host's default owner
- * when a caller names none.
+ * repositories, and the catalog files it serves. A repository or a file
+ * belongs to an owner, the host's default owner when a caller names none.
  */
 export interface GitRepositoryHost {
   /** Returns the bare repository the host serves for `directory` of `owner`. */
@@ -56,6 +62,10 @@ export interface GitRepositoryHost {
   repositoryUrl(directory: string, owner?: string): string;
   /** Returns the `owner/repo` shorthand a user types for the repository `directory` of `owner`. */
   repositoryShorthand(directory: string, owner?: string): string;
+  /** Serves `bytes` as the file `file` of `directory` of `owner`, replacing any bytes served there. */
+  serveFile(directory: string, file: string, bytes: Buffer, owner?: string): void;
+  /** Returns the URL a user types to read the file `file` of `directory` of `owner`. */
+  fileUrl(directory: string, file: string, owner?: string): string;
   /** The owner a repository is served under when a caller names none. */
   readonly defaultOwner: string;
   /** The scratch HOME of every git that writes the host's repositories. */
@@ -96,8 +106,30 @@ export interface GitPublication {
   readonly gitHome: string;
 }
 
+/**
+ * A marketplace published as one catalog file the git host serves: `root` is
+ * the work tree that holds its files, and `owner` and `directory` are where
+ * the host serves its manifest as `marketplace.json`. `host` serves the
+ * manifest again after every change.
+ */
+export interface HostedPublication {
+  readonly kind: "hosted";
+  readonly root: string;
+  readonly source: string;
+  readonly manifestPath: string;
+  readonly owner: string;
+  readonly directory: string;
+  readonly host: Pick<GitRepositoryHost, "serveFile">;
+}
+
 /** A published marketplace of any source kind. */
-export type PublishedMarketplace = PathPublication | GitPublication;
+export type PublishedMarketplace = PathPublication | GitPublication | HostedPublication;
+
+/** Has the git host serve the manifest of `published` as it is in the work tree now. */
+async function serveHostedManifest(published: HostedPublication): Promise<void> {
+  const bytes = await readFile(published.manifestPath);
+  published.host.serveFile(published.directory, HOSTED_MANIFEST, bytes, published.owner);
+}
 
 /** Returns the source kind `text` names, throwing on any other text. */
 export function parseSourceKind(text: string): SourceKind {
@@ -112,7 +144,8 @@ export function parseSourceKind(text: string): SourceKind {
 /**
  * Runs `write`, which changes the files of `published`. For a git
  * publication, it then commits the change and pushes it to the bare
- * repository the git host serves.
+ * repository the git host serves. For a hosted publication, it serves the
+ * manifest's new bytes.
  */
 async function changePublication(
   published: PublishedMarketplace,
@@ -127,6 +160,10 @@ async function changePublication(
     case "github":
       await write();
       await pushGitRepository(published.root, published.gitHome);
+      return;
+    case "hosted":
+      await write();
+      await serveHostedManifest(published);
       return;
   }
 }
@@ -143,7 +180,8 @@ async function requireAbsent(location: string, directory: string): Promise<void>
  * Returns the directory that a `kind` marketplace published in `directory`
  * lives in, failing when a marketplace is published there already. A git
  * marketplace lives in a work tree under the marketplaces root and is served
- * as a commit in a bare repository on the git host, so neither may exist.
+ * as a commit in a bare repository on the git host, so neither may exist. A
+ * hosted marketplace lives in a work tree under the marketplaces root.
  */
 export async function requireFreeRoot(
   sites: PublicationSites,
@@ -154,6 +192,7 @@ export async function requireFreeRoot(
   switch (kind) {
     case "dir":
     case "file":
+    case "hosted":
       await requireAbsent(root, directory);
       return root;
     case "url":
@@ -181,7 +220,9 @@ export function publishMarketplace(
 /**
  * Publishes a marketplace whose manifest declares `name` in the directory
  * `directory` at `sites`, as a `kind` source offering `plugins`. For a git
- * kind, `directory` is the repository the git host serves (ADD-04).
+ * kind, `directory` is the repository the git host serves (ADD-04). For the
+ * hosted kind, the git host serves the manifest as
+ * `<directory>/marketplace.json` under its default owner.
  */
 export async function publishMarketplaceIn(
   sites: PublicationSites,
@@ -218,6 +259,22 @@ export async function publishMarketplaceIn(
         bareRepository,
         gitHome: gitHost.gitHome,
       };
+    }
+
+    case "hosted": {
+      const { gitHost } = sites;
+      await writeMarketplace(root, name, plugins, manifestPath);
+      const published: HostedPublication = {
+        kind,
+        root,
+        source: gitHost.fileUrl(directory, HOSTED_MANIFEST),
+        manifestPath,
+        owner: gitHost.defaultOwner,
+        directory,
+        host: gitHost,
+      };
+      await serveHostedManifest(published);
+      return published;
     }
   }
 }
@@ -322,7 +379,7 @@ function ownedTarget(published: PublishedMarketplace, target: string): string {
 /**
  * Removes only the directory, exact manifest, or bare repository recorded for
  * this publication. Once a git publication's bare repository is gone, the git
- * host answers a clone or fetch of it with 404.
+ * host answers a clone or fetch of it with 404. A hosted publication refuses.
  */
 export async function removePublishedSource(published: PublishedMarketplace): Promise<void> {
   switch (published.kind) {
@@ -336,6 +393,10 @@ export async function removePublishedSource(published: PublishedMarketplace): Pr
     case "github":
       await rm(published.bareRepository, { recursive: true });
       return;
+    case "hosted":
+      throw new Error(
+        "a served catalog has no source directory to remove; arm the git host instead",
+      );
   }
 }
 
@@ -375,11 +436,16 @@ export async function invalidateManifest(
 /**
  * Takes away every permission on the manifest of a local publication, so
  * reading it fails with EACCES. Git stores no file mode that denies reading,
- * so a git publication refuses.
+ * so a git publication refuses, and so does a hosted one, whose manifest the
+ * git host serves from memory.
  */
 export async function makeManifestUnreadable(published: PublishedMarketplace): Promise<void> {
   if (published.kind === "url" || published.kind === "github") {
     throw new Error("a git repository cannot hold a file nobody may read");
+  }
+
+  if (published.kind === "hosted") {
+    throw new Error("a served catalog cannot hold a file nobody may read");
   }
 
   await chmod(published.manifestPath, 0o000);
@@ -456,6 +522,8 @@ function unreadableSkillFile(published: PublishedMarketplace, plugin: string): s
     case "url":
     case "github":
       throw new Error("a git repository cannot hold a file nobody may read");
+    case "hosted":
+      throw new Error("a served catalog cannot hold a file nobody may read");
   }
 }
 
@@ -562,8 +630,8 @@ export async function describeMarketplace(
 
 /**
  * Sets the description of the manifest on the branch `branch` of the git
- * marketplace `published` records, leaving `main` as it is (D-02). A local
- * publication has no branch.
+ * marketplace `published` records, leaving `main` as it is (D-02). A local or
+ * hosted publication has no branch.
  */
 export async function describeMarketplaceBranch(
   published: PublishedMarketplace,
@@ -573,6 +641,7 @@ export async function describeMarketplaceBranch(
   switch (published.kind) {
     case "dir":
     case "file":
+    case "hosted":
       throw new Error(`a ${published.kind} publication has no branch`);
     case "url":
     case "github":
