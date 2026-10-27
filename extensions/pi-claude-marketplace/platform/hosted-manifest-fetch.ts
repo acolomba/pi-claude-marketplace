@@ -146,6 +146,18 @@ function redirectTarget(response: Response, base: URL): URL | undefined {
   return URL.canParse(location, base) ? new URL(location, base) : undefined;
 }
 
+function hasUserinfo(url: URL): boolean {
+  return url.username !== "" || url.password !== "";
+}
+
+/** The href of `url` with its user name and password masked. */
+function maskedHref(url: URL): string {
+  const masked = new URL(url.href);
+  masked.username = "***";
+  masked.password = "";
+  return masked.href;
+}
+
 interface RedirectChain {
   readonly start: URL;
   readonly redirects: number;
@@ -155,7 +167,9 @@ interface RedirectChain {
 /**
  * Sends one GET and follows its redirect. A hop that stays on the start URL's
  * origin is always followed. A cross-origin hop must use https and must not
- * name a host `isDisallowedHost` refuses. The sixth redirect is refused.
+ * name a host `isDisallowedHost` refuses. The sixth redirect is refused, and
+ * so is a hop to a URL with a user name or password, which `fetch` cannot
+ * request.
  */
 async function sendHop(target: URL, chain: RedirectChain): Promise<Response> {
   const response = await fetch(target.href, { redirect: "manual", signal: chain.signal });
@@ -169,6 +183,13 @@ async function sendHop(target: URL, chain: RedirectChain): Promise<Response> {
     throw new HostedManifestFetchError(
       "unreadable",
       `Too many redirects while downloading marketplace from ${chain.start.href}`,
+    );
+  }
+
+  if (hasUserinfo(next)) {
+    throw new HostedManifestFetchError(
+      "unreadable",
+      `Marketplace catalog redirected to a URL with a user name or password and was refused: ${maskedHref(next)}`,
     );
   }
 
@@ -247,13 +268,10 @@ export async function fetchHostedManifest(url: string): Promise<Uint8Array> {
   }
 
   const start = new URL(url);
-  if (start.username !== "" || start.password !== "") {
-    const masked = new URL(start.href);
-    masked.username = "***";
-    masked.password = "";
+  if (hasUserinfo(start)) {
     throw new HostedManifestFetchError(
       "unreadable",
-      `Marketplace URL must not contain a user name or password: ${masked.href}`,
+      `Marketplace URL must not contain a user name or password: ${maskedHref(start)}`,
     );
   }
 

@@ -200,6 +200,25 @@ for (const target of [
   });
 }
 
+for (const target of [
+  "https://user:secret@catalog.example/acme/v2/marketplace.json",
+  "https://user:secret@cdn.example/tools.json",
+]) {
+  test(`refuses a redirect to ${target} and masks its user name and password`, async (t) => {
+    // arrange
+    const requests = serveAnswers(t, [redirect(target)]);
+
+    // act & assert
+    await assert.rejects(
+      fetchHostedManifest(CATALOG_URL),
+      assertRefused(
+        `Marketplace catalog redirected to a URL with a user name or password and was refused: ${target.replace("user:secret", "***")}`,
+      ),
+    );
+    assert.deepStrictEqual(urls(requests), [CATALOG_URL]);
+  });
+}
+
 test("follows a same-origin redirect on a loopback start URL", async (t) => {
   // arrange
   const start = "https://127.0.0.1:8443/acme/marketplace.json";
