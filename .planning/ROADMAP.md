@@ -210,26 +210,29 @@ Plans:
 **Success Criteria** (what must be TRUE):
 
 1. Installing a plugin with `package.json` and `package-lock.json` runs `npm ci --ignore-scripts` (or the bun equivalent) in the staged copy, and its hook or MCP server finds its modules (PKD-01).
-2. A failing, timed-out, or lockfile-less package install leaves the plugin installed with a warning (PKD-02).
+2. A failing or timed-out package install, or one with a lockfile Claude Code refuses (`bun.lockb`, `yarn.lock`, `pnpm-lock.yaml`), leaves the plugin installed with a warning; a `package.json` with no lockfile stays silent, as Claude Code does (PKD-02, D-PL9-02).
 3. The NFR-5 amendment and the spawn rule carry a decision ID, and `npm run check` is green (PKD-03).
 
 ### Phase 10: Lifecycle Test and Harness Gaps
 
 **Goal:** Every behavior lifecycle-coverage left without a scenario or unit case has one, and the harness items are fixed.
 **Depends on:** Phases 1-9 merged
-**Requirements:** TST-01, TST-02, TST-03
+**Requirements:** TST-01, TST-02, TST-03, CAS-08, MIM-05, XPH-01
 **Backlog:** LCTEST-01, LCHARN-01, TEST-PHANTOMMP-01
-**Files:** `features/**`, `test/e2e/_rpc.ts`, `test/edge/handlers/plugin/browse.test.ts`, `test/orchestrators/plugin/install-flow.test.ts`, `.agents/skills/cucumber/rules/*`.
+**Files:** `features/**`, `test/e2e/_rpc.ts`, `test/edge/handlers/plugin/browse.test.ts`, `test/orchestrators/plugin/install-flow.test.ts`, `.agents/skills/cucumber/rules/*`; for CAS-08, the failure-row paths in `orchestrators/plugin/install-flow.ts`, `install-cascade.ts`, `install-cascade.messaging.ts`, and `update-cascade.ts`; for MIM-05, `orchestrators/reconcile/apply.ts` and `apply-outcomes.ts`; both landing before Phase 11 splits `install-flow.ts`.
 **Success Criteria** (what must be TRUE):
 
 1. Each LCTEST-01 item has a scenario or unit case, or a recorded unit-only reason (TST-01).
 2. Each LCHARN-01 item is fixed or recorded as declined (TST-02).
 3. No fixture builds a marketplace record without its manifest (TST-03).
+4. A failed closure on the root-ledger, plan-step, and mid-walk lookup routes shows a row for each member that resolved but did not install, pinned by a cucumber scenario per route (CAS-08).
+5. A partial rollback of `apply`'s missing-dependency install shows install's per-phase detail, pinned by a cucumber scenario (MIM-05).
+6. Each XPH-01 residue item is fixed or pinned by a scenario (XPH-01).
 
 ### Phase 11: Cleanup, Split, and Docs
 
 **Goal:** The milestone ends with no lifecycle dead code, a split install flow, docs that match behavior, and a backlog with every settled entry closed.
-**Depends on:** Phases 1-9 merged
+**Depends on:** Phases 1-9 merged; the CLN-02 split of `install-flow.ts` waits for Phase 10's CAS-08 change to land
 **Requirements:** CLN-01, CLN-02, CLN-03, CLN-04
 **Backlog:** LCCODE-01 b1 b4 b5 b8-b11, UPDDEP-01 b7, LCDOC-01, all entries settled by Phases 1-9
 **Files:** `orchestrators/plugin/install-flow.ts` and new sibling modules, the LCCODE-01 sites, test lock helpers, `docs/**`, `CHANGELOG.md`, `.planning/PROJECT.md`, `.planning/BACKLOG.md`.
