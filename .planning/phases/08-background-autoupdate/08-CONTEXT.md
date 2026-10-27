@@ -106,6 +106,14 @@ Upstream contract checked against the Claude Code **2.1.310** binary (`/home/lin
 - **D-PL8-11: no in-session reload.** Claude Code reloads command-sourced plugins in the running session; this project has no command source kind, so the notice always asks for `/reload`.
 - **D-PL8-12: stored credentials only.** The pass's load-origin run makes `buildAuthForHost` return a stored-credential bundle with no Device Flow (existing AAP-02 / D-13 behavior), matching Claude Code's "never prompts".
 
+### Research follow-ups (settled after RESEARCH.md)
+
+- **D-PL8-13: arm on any `input` source.** `interactive`, `rpc`, and `extension` inputs all arm the pass (in RPC the source is `rpc`); the mode gate of D-PL8-02 decides interactivity. A UserPromptSubmit hook that blocks the prompt before this handler runs leaves the pass unarmed for that message; the next message arms it.
+- **D-PL8-14: the delay knob rejects values Node cannot schedule.** `PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS` above 2147483647 (Node clamps it to 1 ms) is invalid and falls back to the 10-minute maximum.
+- **D-PL8-15: a stopped runtime never notifies.** After `session_shutdown` the pass sets a stopped flag; the notice and every later step check it, and a stale-context throw is caught and debug-logged.
+- **D-PL8-16: `fromVersion` stays optional on the wire** (D-PL8-10); the pass fills it from the outcome, where it is always present today.
+- **Known limit:** the gate has no timeout. A background git fetch that stalls holds a waiting `/claude:plugin` command for as long as it stalls (`platform/git.ts` sets no timeout); the same fetch run by `marketplace update` in the foreground would stall that command the same way.
+
 ### Claude's Discretion
 
 - Module split, names, and test layout, inside the Files line: the gate, the scheduler, the pass, and the env policy live in new `orchestrators/marketplace/` modules (the gate may be its own module).
@@ -172,3 +180,4 @@ The Files line names `index.ts`, the new background module(s), `marketplace/auto
 7. **D-PL8-08, reading Claude Code's variables in Pi.** Chose to honor `DISABLE_UPDATES`, `DISABLE_AUTOUPDATER`, `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, and `FORCE_AUTOUPDATE_PLUGINS` with Claude Code's names and rule. Alternative: `PI_CLAUDE_MARKETPLACE_*` names of our own, which a user migrating from Claude Code would not know. Also unsettled: whether Claude Code's `D.bool()` accepts exactly `1`/`true`/`yes`/`on`.
 8. **D-PL8-09, a Pi-only delay variable.** `PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS` has no Claude Code counterpart. Alternative: no knob, and a behavioral test that cannot wait ten minutes, so the user-visible notice would rest on unit tests only.
 9. **D-PL8-10, notice text after Claude Code.** Chose Claude Code's one-line wording with `/reload`. Alternative: the house row grammar (`● alpha [user] (updated)` rows plus the `/reload to pick up changes` trailer), as `mcp-migration` does.
+10. **Known limit, no gate timeout.** A stalled background fetch holds a waiting command. Alternative: a wait cap after which the command runs anyway and may meet `{lock held}`.
