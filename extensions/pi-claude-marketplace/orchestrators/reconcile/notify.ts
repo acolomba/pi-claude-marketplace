@@ -1178,15 +1178,7 @@ function applyMarketplaceOutcomeToBlock(
       // trailer below the row. Path tokens were already stripped at the apply
       // boundary via redactAbsolutePaths (T-53-02-02 / T-55-02-01).
       if (outcome.cause !== undefined) {
-        block.plugins.push({
-          status: "failed",
-          name: outcome.basename,
-          reasons: [outcome.reason],
-          cause: outcome.cause,
-          // D-03/D-06: a synthetic invalid-config child -> error, no reload.
-          severity: "error",
-          needsReload: false,
-        });
+        block.plugins.push(invalidBlockRow(outcome));
       }
 
       return block;
@@ -1205,6 +1197,26 @@ function applyMarketplaceOutcomeToBlock(
       });
       return block;
   }
+}
+
+/**
+ * The synthetic `(failed)` child of an invalid file block, named by the file's
+ * basename and carrying the diagnostic cause when there is one. `apply` pushes
+ * it under the block header, and the missing-dependency step reports it for a
+ * scope read that threw (D-PL2-20).
+ */
+function invalidBlockRow(
+  outcome: Extract<PerEntryOutcome, { kind: "invalid-block" }>,
+): PluginFailedMessage {
+  return {
+    status: "failed",
+    name: outcome.basename,
+    reasons: [outcome.reason],
+    ...(outcome.cause !== undefined && { cause: outcome.cause }),
+    // D-03/D-06: a synthetic invalid-config child -> error, no reload.
+    severity: "error",
+    needsReload: false,
+  };
 }
 
 /**
@@ -1264,11 +1276,12 @@ function failedRowFromOutcome(
 }
 
 /**
- * D-PL2-09 / D-PL2-11: the rows of the missing-dependency step a marketplace
- * add runs, built as `apply` builds them and named by their full
- * `plugin@marketplace` keys, because they render under the added
- * marketplace's block rather than under their own. The step produces only
- * installs and install refusals, so every other kind maps to no row.
+ * D-PL2-09 / D-PL2-11 / D-PL2-20: the rows of the missing-dependency step a
+ * marketplace add runs, built as `apply` builds them. An install or an install
+ * refusal is named by its full `plugin@marketplace` key, because it renders
+ * under the added marketplace's block rather than under its own. A scope read
+ * that threw becomes `apply`'s `state.json` `(failed)` row. The step produces
+ * nothing else, so every other kind maps to no row.
  */
 export function dependencyInstallRows(
   outcomes: readonly PerEntryOutcome[],
@@ -1282,6 +1295,10 @@ export function dependencyInstallRows(
     if (outcome.kind === "plugin-install-failed") {
       const name = `${outcome.plugin}@${outcome.marketplace}`;
       return [{ ...failedRowFromOutcome(outcome), name }];
+    }
+
+    if (outcome.kind === "invalid-block") {
+      return [invalidBlockRow(outcome)];
     }
 
     return [];

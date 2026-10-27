@@ -9739,23 +9739,46 @@ describe("createScopeDependencyInstall", () => {
     assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
   });
 
-  test("NFR-3: a read that fails reports nothing and installs nothing", async (t) => {
-    // arrange
-    const { cwd, project } = await seedDeployKitScope(t, "scope-step-read-fails", {
-      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
-      "secrets-vault": { skill: "clean" },
-    });
-    const step = scopeDependencyInstall({
-      loadState: () => Promise.reject(new Error("state.json is mid-write")),
-    });
+  for (const { thrown, failure, reason } of [
+    {
+      thrown: "a plain error",
+      failure: new Error("state.json is mid-write"),
+      reason: "unreadable",
+    },
+    {
+      thrown: "a held state lock",
+      failure: new StateLockHeldError("project", ".state-lock"),
+      reason: "lock held",
+    },
+  ] as const) {
+    test(`D-PL2-20: a read that throws ${thrown} reports apply's state.json row as ${reason} and installs nothing`, async (t) => {
+      // arrange
+      const { cwd, project } = await seedDeployKitScope(t, "scope-step-read-fails", {
+        "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+        "secrets-vault": { skill: "clean" },
+      });
+      const step = scopeDependencyInstall({ loadState: () => Promise.reject(failure) });
 
-    // act
-    const result = await runStep(step, cwd, () => true);
+      // act
+      const result = await runStep(step, cwd, () => true);
 
-    // assert
-    assert.deepStrictEqual(result, { rows: [], mcpConfigNotices: [] });
-    assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
-  });
+      // assert
+      const [row, ...rest] = result.rows;
+      assert.deepStrictEqual(rest, []);
+      assert.equal(row?.status, "failed");
+      const { cause, ...fields } = row;
+      assert.deepStrictEqual(fields, {
+        status: "failed",
+        name: "state.json",
+        reasons: [reason],
+        severity: "error",
+        needsReload: false,
+      });
+      assert.equal(cause?.message, failure.message);
+      assert.deepStrictEqual(result.mcpConfigNotices, []);
+      assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
+    });
+  }
 
   test("AFILE-04: returns the MCP config notices its installs produced", async (t) => {
     // arrange

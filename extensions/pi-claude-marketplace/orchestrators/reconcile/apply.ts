@@ -2285,28 +2285,23 @@ export function createApplyReconcile(
  * `apply` enables it.
  *
  * The caller's state commit already happened, so a read that throws answers
- * no rows and leaves a debug line; the next `apply` installs the dependency
- * (NFR-3). The single production composition lives in the extension entry
- * point, beside `createApplyReconcile`.
+ * the `state.json` `(failed)` row `apply` reports for the same throw
+ * (`runScopeIsolated`, D-PL2-20) and installs nothing; the next `apply`
+ * installs the dependency (NFR-3). Only the read is isolated, so a throw out
+ * of an install still reaches the caller. The single production composition
+ * lives in the extension entry point, beside `createApplyReconcile`.
  */
 export function createScopeDependencyInstall(
   reader: ReconcileStateReader,
   lifecycle: Pick<ApplyReconcileOptions, "hooksRouting" | "completionCache">,
 ): ScopeDependencyInstallFn {
   return async function installMissingDependencies(request) {
-    let installs: readonly PlannedDependencyInstall[];
-    try {
-      const read = await readPlainPlanForScope(reader, request.scope, request.cwd);
-      installs = (read.plan?.pluginsToDependencyInstall ?? []).filter(request.select);
-    } catch (err) {
-      hookDebugLog(
-        `installMissingDependencies: cannot read the ${request.scope} scope: ${errorMessage(err)}`,
-        "reconcile",
-      );
-      return { rows: [], mcpConfigNotices: [] };
-    }
-
     const outcomes: PerEntryOutcome[] = [];
+    let read: ScopeReadResult = { plan: undefined, invalidOutcomes: [] };
+    await runScopeIsolated(request.scope, outcomes, async () => {
+      read = await readPlainPlanForScope(reader, request.scope, request.cwd);
+    });
+    const installs = (read.plan?.pluginsToDependencyInstall ?? []).filter(request.select);
     await applyDependencyInstalls(
       { ctx: request.ctx, run: request.run, cwd: request.cwd, ...lifecycle },
       installs,

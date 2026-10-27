@@ -3753,6 +3753,35 @@ describe("dependencyInstallRows", () => {
     ]);
   });
 
+  test("D-PL2-20: a scope read that threw becomes apply's failed state.json row with its cause", () => {
+    // arrange
+    const cause = new Error("state lock held");
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "invalid-block",
+        scope: "project",
+        basename: "state.json",
+        reason: "lock held",
+        cause,
+      },
+    ];
+
+    // act
+    const rows = dependencyInstallRows(outcomes);
+
+    // assert
+    assert.deepStrictEqual(rows, [
+      {
+        status: "failed",
+        name: "state.json",
+        reasons: ["lock held"],
+        cause,
+        severity: "error",
+        needsReload: false,
+      },
+    ]);
+  });
+
   test("maps an outcome the step does not produce to no row", () => {
     // arrange
     const outcomes: readonly PerEntryOutcome[] = [

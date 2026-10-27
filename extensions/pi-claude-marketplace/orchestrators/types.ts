@@ -615,7 +615,8 @@ export type PluginUpdateFn = (
 /**
  * D-PL2-09: a row the missing-dependency step reports after a marketplace
  * add: one `(installed) {dependency installed}` row per materialized member,
- * or the `(failed)` row of a refused install (D-PL2-11).
+ * the `(failed)` row of a refused install (D-PL2-11), or the `state.json`
+ * `(failed)` row of a scope read that threw (D-PL2-20).
  */
 export type ScopeDependencyInstallRow = PluginInstalledMessage | PluginFailedMessage;
 
@@ -634,7 +635,10 @@ export interface ScopeDependencyInstallRequest {
   }) => boolean;
 }
 
-/** D-PL2-09: the rows of the installs the step ran and the MCP config notices they produced. */
+/**
+ * D-PL2-09: the rows of the installs the step ran, or of its read that threw
+ * (D-PL2-20), and the MCP config notices its installs produced.
+ */
 export interface ScopeDependencyInstallResult {
   readonly rows: readonly ScopeDependencyInstallRow[];
   readonly mcpConfigNotices: readonly McpConfigNotice[];
