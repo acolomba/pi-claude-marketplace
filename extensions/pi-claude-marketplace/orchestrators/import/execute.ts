@@ -245,6 +245,18 @@ export interface UnexpectedPluginFailureOutcome {
    * redacted (D-PL6-12). Omitted when every undo finished.
    */
   readonly rollbackPartial?: PluginFailedMessage["rollbackPartial"];
+  /**
+   * MIM-03 / D-PL6-04: the dependency of a `"dependency-failed"` outcome whose
+   * rollback could not finish, by its `plugin@marketplace` key, with its
+   * redacted rollback phases. Its cause is the outcome's own `cause` and
+   * `causeChain`. The cascade then shows the dependency's row as install does,
+   * beside the plugin's bare `{dependency failed}` row. Omitted when the
+   * dependency's undo finished.
+   */
+  readonly failedDependency?: {
+    readonly key: string;
+    readonly rollbackPartial: NonNullable<PluginFailedMessage["rollbackPartial"]>;
+  };
 }
 
 /**
@@ -603,10 +615,38 @@ function unexpectedFailureReasons(
 }
 
 /**
- * The row of a plugin that failed for a reason no other bucket classifies.
+ * The rows of a plugin that failed for a reason no other bucket classifies.
  * MIM-03 / D-PL6-03: a rollback that could not finish lists its phases, as
- * install's row does.
+ * install's row does. D-PL6-04: a dependency whose rollback could not finish
+ * gets its own row, with the cause and the phases, beside the plugin's bare
+ * `{dependency failed}` row, the two ordered by name as install orders them.
  */
+function unexpectedFailureRows(o: UnexpectedPluginFailureOutcome): readonly PluginFailedMessage[] {
+  if (o.failedDependency === undefined) {
+    return [unexpectedFailureRow(o)];
+  }
+
+  const dependency: PluginFailedMessage = {
+    status: "failed",
+    name: o.failedDependency.key,
+    reasons: ["rollback partial"],
+    cause: failureCause(o),
+    rollbackPartial: o.failedDependency.rollbackPartial,
+    severity: "error",
+    needsReload: false,
+  };
+  const requested: PluginFailedMessage = {
+    status: "failed",
+    name: o.plugin,
+    reasons: ["dependency failed"],
+    severity: "error",
+    needsReload: false,
+  };
+  return [dependency, requested].sort((a, b) =>
+    compareByNameThenScope({ name: a.name, scope: o.scope }, { name: b.name, scope: o.scope }),
+  );
+}
+
 function unexpectedFailureRow(o: UnexpectedPluginFailureOutcome): PluginFailedMessage {
   return {
     status: "failed",
@@ -751,7 +791,9 @@ function buildImportNotificationMarketplaces(
   }
 
   for (const o of result.unexpectedPluginFailures) {
-    pushMarketplaceRow(rowsByMp, o.scope, o.marketplace, unexpectedFailureRow(o));
+    for (const row of unexpectedFailureRows(o)) {
+      pushMarketplaceRow(rowsByMp, o.scope, o.marketplace, row);
+    }
   }
 
   // UPD-DEP-D1 / WR-N5: the dependencies each install changed, after the
@@ -1953,10 +1995,22 @@ function pushUnexpectedFailure(
     ...(runtimeReason !== undefined && { runtimeReason }),
     cause: redactAbsolutePaths(errorMessage(error)),
     ...(causeChain !== undefined && { causeChain }),
-    ...(rollbackPartials.length > 0 && {
-      rollbackPartial: redactedRollbackPartials(rollbackPartials),
-    }),
+    ...(rollbackPartials.length > 0 && partialMember(error, rollbackPartials)),
   });
+}
+
+/**
+ * MIM-03: where the redacted rollback phases ride. A dependency's partial
+ * names the dependency (D-PL6-04); any other names the plugin (D-PL6-03).
+ */
+function partialMember(
+  error: Error,
+  rollbackPartials: readonly RollbackPartial[],
+): Pick<UnexpectedPluginFailureOutcome, "rollbackPartial" | "failedDependency"> {
+  const rollbackPartial = redactedRollbackPartials(rollbackPartials);
+  return error instanceof DependencyCascadeError
+    ? { failedDependency: { key: error.key, rollbackPartial } }
+    : { rollbackPartial };
 }
 
 /**
@@ -2016,7 +2070,7 @@ function dispatchFailedOutcome(
   options: { readonly rollbackPartials: readonly RollbackPartial[] },
 ): void {
   if (error instanceof DependencyCascadeError) {
-    pushUnexpectedFailure(result, plugin, "dependency-failed", error);
+    pushUnexpectedFailure(result, plugin, "dependency-failed", error, options.rollbackPartials);
     return;
   }
 

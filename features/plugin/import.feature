@@ -782,3 +782,38 @@ Feature: Plugin import
     Then the installation record of the user scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | false   |
+
+  Scenario: Importing a plugin whose dependency rollback cannot finish names the dependency and its rollback phase
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the published plugin "lib" of the marketplace "fixtures" has a read-only skill directory
+    Given a directory blocks the mcp-adapter.json file of the user scope
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "app@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade                             |
+      | severity            | error                               |
+      | needs reload        | false                               |
+      | summary             | Some plugin operations have failed. |
+      | tally label         | Import                              |
+      | tally failures      | 2                                   |
+      | tally warnings      | 0                                   |
+      | tally success count | 1                                   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id           | name         | status | reasons           | scope | cause chain                                                  | cause truncated | leaks | rollback partial                                                                                         |
+      | fixtures         | user              | added              | app@fixtures | app          | failed | dependency failed | user  |                                                              |                 |       |                                                                                                          |
+      | fixtures         | user              | added              | lib@fixtures | lib@fixtures | failed | rollback partial  | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           |       | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
+    Then the installation record of the user scope holds these plugins:
+      | id | version | enabled |

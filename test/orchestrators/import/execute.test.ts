@@ -2184,6 +2184,76 @@ test("records a dependency-cascade failure whose ledger error carries a nested c
   verifyBoundary();
 });
 
+// D-PL6-04: a dependency whose rollback could not finish gets its own row, as
+// install shows it, and the requested plugin's row stays a bare
+// `{dependency failed}`. The two rows are ordered by name.
+test("D-PL6-04: names a dependency whose rollback could not finish on its own row", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "install-dependency-rollback-partial");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const headCause = "failed to stage the MCP servers of lib";
+  const nestedCause = new Error(
+    "EISDIR: illegal operation on a directory, read '/home/user/.pi/agent/mcp-adapter.json'",
+  );
+  const redactedNestedMessage = "EISDIR: illegal operation on a directory, read 'mcp-adapter.json'";
+  const undoFailure = new Error(
+    "EACCES: permission denied, unlink '/home/user/.pi/agent/pi-claude-marketplace/resources/skills/lib-skill/data.txt'",
+  );
+  const redactedUndoMessage = "EACCES: permission denied, unlink 'data.txt'";
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: () =>
+        Promise.resolve({
+          ...failedInstallOutcome(
+            new DependencyCascadeError(headCause, "lib@mp", { cause: nestedCause }),
+            headCause,
+          ),
+          rollbackPartials: [{ phase: "skills", msg: undoFailure.message, cause: undoFailure }],
+        }),
+      loadSettings: () => Promise.resolve(settingsForMp("app")),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    run: runWithNothingLoaded(),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("mp", "user")],
+    unexpectedPluginFailures: [
+      {
+        ...failedDependency("app", "mp", "user", headCause, new Error(redactedNestedMessage)),
+        failedDependency: {
+          key: "lib@mp",
+          rollbackPartial: [{ phase: "skills", cause: new Error(redactedUndoMessage) }],
+        },
+      },
+    ],
+  });
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Some plugin operations have failed.\n\n" +
+        "● mp [user] (added)\n" +
+        "  ⊘ app (failed) {dependency failed}\n" +
+        "  ⊘ lib@mp (failed) {rollback partial}\n" +
+        `    cause: ${headCause} -> ${redactedNestedMessage}\n` +
+        "    [skills] (rollback failed)\n" +
+        `      cause: ${redactedUndoMessage}\n\n` +
+        "Import: 2 failures, 1 success",
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+});
+
 // The generic `unexpected-failure` fallthrough shares the same defect surface
 // as the dependency-cascade arm: any orchestrated error with a nested cause
 // (e.g. a bridge-staging error wrapping an errno) must render its chain
