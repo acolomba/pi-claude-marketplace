@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -1515,6 +1515,49 @@ test("CR-05 / MU-5: pre-fetch failure (gitOps.fetch throws) does NOT append 'Ret
     assert.match(first.message, /^⊘ offline \[project\] \(failed\)$/m);
     assert.match(first.message, /cause:.*ENETUNREACH/);
     assert.doesNotMatch(first.message, /Retry the command\./);
+  });
+});
+
+/** Every file under `dir` with its bytes, keyed by its path relative to `dir`. */
+async function directoryBytes(dir: string): Promise<Map<string, Buffer>> {
+  const entries = await readdir(dir, { recursive: true, withFileTypes: true });
+  const files = entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => path.join(entry.parentPath, entry.name));
+  return new Map(
+    await Promise.all(
+      files.map(async (file) => [path.relative(dir, file), await readFile(file)] as const),
+    ),
+  );
+}
+
+test("D-PL8-24: a refresh whose fetch is aborted leaves state.json, the clone, and the state lock as they were", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const { cloneDir } = await seedGithubMarketplace({ cwd, name: "offline", ref: "main" });
+    const locations = locationsFor("project", cwd);
+    const stateBefore = await readFile(locations.stateJsonPath);
+    const cloneBefore = await directoryBytes(cloneDir);
+    const { ctx, run } = makeCtx();
+    const { gitOps } = createGitOps({
+      fetchThrows: new DOMException("This operation was aborted", "AbortError"),
+    });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "offline",
+      scope: "project",
+      cwd,
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
+    assert.deepStrictEqual(await directoryBytes(cloneDir), cloneBefore);
+    assert.strictEqual(await pathExists(locations.stateLockFile), false);
   });
 });
 

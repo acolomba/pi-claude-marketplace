@@ -9,7 +9,8 @@
 //
 // D-PL8-03 / D-PL8-15: `session_shutdown` stops the runtime and cancels a
 // pending timer. Unless Pi quits, it also waits for the step in flight, so the
-// next runtime's load never meets this runtime's state lock. No throw leaves
+// next runtime's load never meets this runtime's state lock. D-PL8-23: it waits
+// at most the gate's wait cap, which stops the step. No throw leaves
 // the input handler, the shutdown handler, or the timer callback (NFR-2).
 //
 // The timer uses Node's global `setTimeout`. `random` and `env` are injected:
@@ -121,7 +122,7 @@ export function createBackgroundUpdate(deps: BackgroundUpdateDeps): BackgroundUp
         return;
       }
 
-      await deps.gate.stepSettled();
+      await deps.gate.waitForStep();
     } catch (err: unknown) {
       hookDebugLog(`background update shutdown failed: ${errorMessage(err)}`, DEBUG_TAG);
     }

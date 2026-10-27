@@ -2,18 +2,27 @@
 // background autoupdate pass. A command waits for at most one background step:
 // the one in flight when it starts. No background step begins while a command
 // runs. The wait is silent, and commands still run together.
+//
+// D-PL8-23: a wait lasts at most the wait cap. At the cap the gate aborts the
+// step's signal, which stops the step's network transfer (D-PL8-24), and then
+// waits for the step to end.
+
+import { hookDebugLog } from "../../shared/debug-log.ts";
 
 /** The two sides of the gate, declared as properties so callers can pass them by reference. */
 export interface BackgroundGate {
   /** Runs one command after the background step in flight, if any, has ended. */
   readonly runForeground: (command: () => Promise<void>) => Promise<void>;
-  /** Resolves when no command runs, and marks a background step as in flight. */
-  readonly beginStep: () => Promise<void>;
+  /** Resolves when no command runs, marks a background step as in flight, and gives its abort signal. */
+  readonly beginStep: () => Promise<AbortSignal>;
   /** Ends the background step in flight and wakes everything that waits for it. */
   readonly endStep: () => void;
-  /** Resolves when no background step is in flight. */
-  readonly stepSettled: () => Promise<void>;
+  /** Resolves when no background step is in flight; at the wait cap it aborts the step first. */
+  readonly waitForStep: () => Promise<void>;
 }
+
+/** D-PL8-23: the longest a command or a shutdown waits before it stops the step. */
+const BACKGROUND_WAIT_CAP_MS = 30_000;
 
 function wake(waiters: (() => void)[]): void {
   for (const resolve of waiters.splice(0)) {
@@ -22,26 +31,40 @@ function wake(waiters: (() => void)[]): void {
 }
 
 /** Creates one gate; constructing it starts nothing. */
-export function createBackgroundGate(): BackgroundGate {
+export function createBackgroundGate(waitCapMs: number = BACKGROUND_WAIT_CAP_MS): BackgroundGate {
   let runningCommands = 0;
-  let stepInFlight = false;
+  let stepInFlight: AbortController | undefined;
   const idleWaiters: (() => void)[] = [];
   const stepWaiters: (() => void)[] = [];
 
-  function stepSettled(): Promise<void> {
-    if (!stepInFlight) {
+  function waitForStep(): Promise<void> {
+    const step = stepInFlight;
+    if (step === undefined) {
       return Promise.resolve();
     }
 
     return new Promise((resolve) => {
-      stepWaiters.push(resolve);
+      const timer = setTimeout(() => {
+        if (!step.signal.aborted) {
+          hookDebugLog(
+            `a background step ran past the ${waitCapMs} ms wait cap and was stopped`,
+            "autoupdate",
+          );
+          step.abort();
+        }
+      }, waitCapMs);
+      timer.unref();
+      stepWaiters.push(() => {
+        clearTimeout(timer);
+        resolve();
+      });
     });
   }
 
   async function runForeground(command: () => Promise<void>): Promise<void> {
     runningCommands += 1;
     try {
-      await stepSettled();
+      await waitForStep();
       await command();
     } finally {
       runningCommands -= 1;
@@ -51,7 +74,7 @@ export function createBackgroundGate(): BackgroundGate {
     }
   }
 
-  async function beginStep(): Promise<void> {
+  async function beginStep(): Promise<AbortSignal> {
     while (runningCommands > 0) {
       // eslint-disable-next-line no-await-in-loop -- a command can start between the wake and the resume, so each wake re-checks the count.
       await new Promise<void>((resolve) => {
@@ -59,13 +82,15 @@ export function createBackgroundGate(): BackgroundGate {
       });
     }
 
-    stepInFlight = true;
+    const step = new AbortController();
+    stepInFlight = step;
+    return step.signal;
   }
 
   function endStep(): void {
-    stepInFlight = false;
+    stepInFlight = undefined;
     wake(stepWaiters);
   }
 
-  return { runForeground, beginStep, endStep, stepSettled };
+  return { runForeground, beginStep, endStep, waitForStep };
 }

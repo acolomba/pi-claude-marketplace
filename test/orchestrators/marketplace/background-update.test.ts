@@ -64,9 +64,10 @@ function createSchedulerUnderTest(
     readonly env?: Environment;
     readonly random?: () => number;
     readonly pass?: (run: BackgroundPassRun) => Promise<void>;
+    readonly waitCapMs?: number;
   } = {},
 ): SchedulerUnderTest {
-  const gate = createBackgroundGate();
+  const gate = createBackgroundGate(options.waitCapMs);
   const runs: BackgroundPassRun[] = [];
   const backgroundUpdate = createBackgroundUpdate({
     gate,
@@ -364,6 +365,27 @@ for (const reason of ["reload", "new", "resume", "fork"] satisfies ShutdownReaso
     assert.deepStrictEqual(log, ["step end", "shutdown"]);
   });
 }
+
+test("D-PL8-23: a reload shutdown aborts the step in flight at the wait cap and returns once it ends", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { backgroundUpdate, gate } = createSchedulerUnderTest({ waitCapMs: 1_000 });
+  const log: string[] = [];
+  const signal = await gate.beginStep();
+  const shutdown = backgroundUpdate.onShutdown({ reason: "reload" }).then(() => {
+    log.push("shutdown");
+  });
+
+  // act
+  t.mock.timers.tick(1_000);
+  await drain();
+  log.push(`aborted: ${signal.aborted}`);
+  gate.endStep();
+  await shutdown;
+
+  // assert
+  assert.deepStrictEqual(log, ["aborted: true", "shutdown"]);
+});
 
 test("a quit shutdown returns without waiting for the step in flight", async () => {
   // arrange

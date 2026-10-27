@@ -12,7 +12,7 @@ import { aggregateDiscoveredResources } from "./orchestrators/discover.ts";
 import { createBackgroundGate } from "./orchestrators/marketplace/background-gate.ts";
 import { createBackgroundPass } from "./orchestrators/marketplace/background-pass.ts";
 import { createBackgroundUpdate } from "./orchestrators/marketplace/background-update.ts";
-import { DEFAULT_GIT_OPS } from "./orchestrators/marketplace/shared.ts";
+import { DEFAULT_GIT_OPS, runWithGitAbortSignal } from "./orchestrators/marketplace/shared.ts";
 import { updateMarketplace } from "./orchestrators/marketplace/update.ts";
 import { createUpdateOperations } from "./orchestrators/plugin/operations.ts";
 import { recomputePluginPath } from "./orchestrators/plugin-path.ts";
@@ -79,7 +79,8 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   const hooksRouting = createHooksRouting(hooksRuntime, { readHooksJson });
   const completionCache = createCompletionCache();
   // D-PL8-04: one gate per extension runtime. Every `/claude:plugin` command
-  // runs through it, so it waits for the background autoupdate step in flight.
+  // runs through it, so it waits for the background autoupdate step in flight,
+  // for at most the gate's default wait cap (D-PL8-23).
   const backgroundGate = createBackgroundGate();
   // ASTAT-01: one status tracker per extension load. Pi drops its subscription
   // when it invalidates this runtime, and the next load starts empty.
@@ -227,6 +228,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
       completionCache,
       beginPluginUpdateRun: pluginUpdateOperations.beginPluginUpdateRun,
       updateMarketplace,
+      runWithAbortSignal: runWithGitAbortSignal,
     }),
     env: process.env,
     random: Math.random,

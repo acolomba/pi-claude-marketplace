@@ -1,10 +1,11 @@
 // Owner suite for `orchestrators/marketplace/background-gate.ts`: the D-PL8-04
-// ordering between `/claude:plugin` commands and background steps. Each case
-// holds its commands on deferred promises and drains pending callbacks with
-// `setImmediate`, so the order in the shared log is the gate's order.
+// ordering between `/claude:plugin` commands and background steps, and the
+// D-PL8-23 wait cap. Each case holds its commands on deferred promises and
+// drains pending callbacks with `setImmediate`, so the order in the shared log
+// is the gate's order. Node's mock timers drive the cap.
 
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 
 import { createBackgroundGate } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/background-gate.ts";
 
@@ -28,6 +29,24 @@ async function drain(): Promise<void> {
   await new Promise((resolve) => {
     setImmediate(resolve);
   });
+}
+
+/** Turns on the debug log and collects its lines, restoring the flag after the case. */
+function observeDebugLog(t: TestContext): string[] {
+  const previous = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (previous === undefined) {
+      Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_DEBUG");
+    } else {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previous;
+    }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  const lines: string[] = [];
+  t.mock.method(console, "error", (line: unknown) => {
+    lines.push(String(line));
+  });
+  return lines;
 }
 
 test("a command runs at once when no background step is in flight", async () => {
@@ -145,16 +164,17 @@ test("a rejected command rejects its caller with the same error and frees the ga
   assert.deepStrictEqual(log, ["step began"]);
 });
 
-test("stepSettled resolves at once with no step in flight, and only after endStep with one", async () => {
+test("waitForStep resolves at once with no step in flight, and only after endStep with one", async (t) => {
   // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   const gate = createBackgroundGate();
   const log: string[] = [];
-  await gate.stepSettled();
+  await gate.waitForStep();
   log.push("idle settled");
   await gate.beginStep();
 
   // act
-  const settled = gate.stepSettled().then(() => {
+  const settled = gate.waitForStep().then(() => {
     log.push("step settled");
   });
   await drain();
@@ -165,6 +185,129 @@ test("stepSettled resolves at once with no step in flight, and only after endSte
   // assert
   assert.deepStrictEqual(log, ["idle settled", "step end", "step settled"]);
 });
+
+test("waitForStep with no step in flight starts no timer", async (t) => {
+  // arrange
+  const delays: number[] = [];
+  t.mock.method(globalThis, "setTimeout", (_callback: () => void, delay: number) => {
+    delays.push(delay);
+    throw new Error("the gate must not start a timer with no step in flight");
+  });
+  const gate = createBackgroundGate();
+
+  // act
+  await gate.waitForStep();
+
+  // assert
+  assert.deepStrictEqual(delays, []);
+});
+
+test("D-PL8-23: beginStep gives each step a fresh signal that is not aborted", async () => {
+  // arrange
+  const gate = createBackgroundGate();
+  const first = await gate.beginStep();
+  gate.endStep();
+
+  // act
+  const second = await gate.beginStep();
+
+  // assert
+  assert.notStrictEqual(second, first);
+  assert.deepStrictEqual([first.aborted, second.aborted], [false, false]);
+});
+
+test("D-PL8-23: a step that ends before the cap is not aborted, and its cap timer is cleared", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const debugLines = observeDebugLog(t);
+  const gate = createBackgroundGate(1_000);
+  const signal = await gate.beginStep();
+  const log: string[] = [];
+  const command = gate.runForeground(() => {
+    log.push("command");
+    return Promise.resolve();
+  });
+  t.mock.timers.tick(999);
+  await drain();
+  log.push("step end");
+
+  // act
+  gate.endStep();
+  await command;
+  t.mock.timers.tick(1_000);
+
+  // assert
+  assert.deepStrictEqual(log, ["step end", "command"]);
+  assert.strictEqual(signal.aborted, false);
+  assert.deepStrictEqual(debugLines, []);
+});
+
+test("D-PL8-23: at the cap a waiting command aborts the step and runs once the step ends", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const debugLines = observeDebugLog(t);
+  const gate = createBackgroundGate(1_000);
+  const signal = await gate.beginStep();
+  const log: string[] = [];
+  const command = gate.runForeground(() => {
+    log.push("command");
+    return Promise.resolve();
+  });
+
+  // act
+  t.mock.timers.tick(1_000);
+  await drain();
+  log.push(`aborted: ${signal.aborted}`);
+  gate.endStep();
+  await command;
+
+  // assert
+  assert.deepStrictEqual(log, ["aborted: true", "command"]);
+  assert.deepStrictEqual(debugLines, [
+    "[autoupdate] a background step ran past the 1000 ms wait cap and was stopped",
+  ]);
+});
+
+test("D-PL8-23: two waiters at the cap abort the step once and write one debug line", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const debugLines = observeDebugLog(t);
+  const gate = createBackgroundGate(1_000);
+  const signal = await gate.beginStep();
+  const command = gate.runForeground(() => Promise.resolve());
+  const shutdown = gate.waitForStep();
+
+  // act
+  t.mock.timers.tick(1_000);
+  gate.endStep();
+  await Promise.all([command, shutdown]);
+
+  // assert
+  assert.strictEqual(signal.aborted, true);
+  assert.deepStrictEqual(debugLines, [
+    "[autoupdate] a background step ran past the 1000 ms wait cap and was stopped",
+  ]);
+});
+
+for (const { elapsedMs, aborted } of [
+  { elapsedMs: 29_999, aborted: false },
+  { elapsedMs: 30_000, aborted: true },
+]) {
+  test(`D-PL8-23: the default cap leaves the step ${aborted ? "aborted" : "running"} after ${elapsedMs} ms`, async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    observeDebugLog(t);
+    const gate = createBackgroundGate();
+    const signal = await gate.beginStep();
+    void gate.waitForStep();
+
+    // act
+    t.mock.timers.tick(elapsedMs);
+
+    // assert
+    assert.strictEqual(signal.aborted, aborted);
+  });
+}
 
 test("endStep with no step in flight leaves a later command running at once", async () => {
   // arrange
