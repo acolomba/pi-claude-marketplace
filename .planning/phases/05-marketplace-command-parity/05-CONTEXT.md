@@ -108,6 +108,16 @@ Binary: Claude Code **2.1.310** (`/home/linuxbrew/.linuxbrew/Caskroom/claude-cod
 - **D-PL5-18 (EISDIR):** The add's errno mapping matches `list` and `info`: `EISDIR`, `EIO`, and `EBADF` read `unreadable` (one shared mapping with `narrowCascadeFailure`, not a third copy), so a manifest path that is a directory renders a failed row instead of a raw exception.
 - **D-PL5-19 (no-op status):** The `already added` arm stops returning `status: "added"`. It returns a distinct no-op status. That arm is standalone-only (WR-09), so the orchestrated overload's return type excludes it and `apply`/`import` need no change.
 
+### Post-research amendments (2026-10-26)
+
+- **D-PL5-20:** D-PL5-08 also covers the D-MF-04 path: a project-scope install that adds a marketplace only the user scope records downloads a hosted catalog once, as it clones a git one.
+- **D-PL5-21:** D-PL5-10 applies to `marketplace add`. `marketplace update` and autoupdate keep their existing per-verb rule (UPD-11: a 404 on refresh reads `network error`), so each verb classifies a hosted failure the way it classifies a git one.
+- **D-PL5-22:** `plugin update`'s marketplace sync does not refresh a hosted catalog (that code is Phase 7's file); recorded as a known gap for the deferred list, not changed here.
+- **D-PL5-23:** Test fixtures that add a reserved name from a non-`anthropics` source are fixed test-side: scenarios publish them under the git host's `anthropics` owner; the e2e helper renames the manifest name in its temp checkout (keeps the pinned SHA).
+- **D-PL5-24:** `help market` shows the marketplace help, as `help marketplace` does.
+- **D-PL5-25:** `docs/json-output.md` is edited here. The AGENTS.md / PROJECT.md NFR-5 wording, the CHANGELOG line, and the decision rows go to the SUMMARY for the parent. Import's own `<mp>@<mp>` failure row (Phase 6's file) is left to Phase 6 and reported.
+- **D-PL5-26:** If a marketplace-level row type lacks the `marketplaceSubject` marker (e.g. `marketplace info`'s rows), add the minimal field to `shared/notification-types.ts` / `shared/notification-json.ts`; record the touch as outside the Files line.
+
 ### Claude's Discretion
 
 - Exact module and type names (`HostedManifestSource`, the fetch module, the marker file), the hosted marker's location inside `sources/<name>/`, and how the redirect host-class check is written.
