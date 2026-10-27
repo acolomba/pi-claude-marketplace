@@ -5,16 +5,16 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 09
 current_phase_name: Plugin Package Dependencies
 status: executing
-stopped_at: Completed 09-01-PLAN.md
-last_updated: "2026-10-27T03:44:03.462Z"
+stopped_at: Completed 09-02-PLAN.md
+last_updated: "2026-10-27T04:10:44.914Z"
 last_activity: 2026-10-26
 last_activity_desc: Phase 09 execution started
-state_head: 424457cb3370023afd442d864931d8edb9c56f2d
+state_head: 50b6ce6adee1021f1d807b53f984e03bb3d925d3
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 5
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 09 (Plugin Package Dependencies) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-10-26 — Phase 09 execution started
 
@@ -191,8 +191,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-27T03:44:03.196Z
-**Stopped at:** Completed 09-01-PLAN.md
+**Last session:** 2026-10-27T04:10:44.711Z
+**Stopped at:** Completed 09-02-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -405,6 +405,7 @@ archived milestone artifacts.
 | Phase 29 P13 | 48 min | 3 tasks | 44 files |
 | Phase 29 P14 | 20 min | 2 tasks | 9 files |
 | Phase 09 P01 | 39min | 2 tasks | 11 files |
+| Phase 09 P02 | 22min | 3 tasks | 7 files |
 
 ## Decisions
 
@@ -607,6 +608,8 @@ archived milestone artifacts.
 - [Phase 09]: The packages phase reads only locations, resolved.pluginRoot and discoveryWarnings; InstallLedgerContext is unchanged
 - [Phase 09]: A plugin root that does not exist is a quiet skip; one that cannot be listed is a skip note
 - [Phase 09]: A failed work-dir removal is ignored; the install's own note stands
+- [Phase 09]: D-PL9-17 settled by a real hook run: a session start hook of the installed plugin loads the npm package from the plugin root
+- [Phase 09]: The cucumber npm registry stand-in starts per scenario from the first serving step, which writes the sandbox .npmrc before any plugin ships package files
 
 ### mcp-4 decisions
 
