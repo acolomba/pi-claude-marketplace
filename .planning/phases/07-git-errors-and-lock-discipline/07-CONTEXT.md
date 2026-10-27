@@ -324,6 +324,11 @@ here.
 - Mirror refresh fetches no tags, so a mirror first cloned for another
   plugin's branch ref holds no `refs/tags/<ref>`; `tags: true` would fix it.
 - Apply's converge row drops `outcome.cause` (`reconcile/notify.ts:458-471`).
+- Raw absolute paths in update cause lines (such as a skill copy's
+  `skills-staging/<uuid>` path): the direct `plugin update` row prints the
+  same unredacted cause, so the autoupdate cascade keeps parity (D-PL7-12).
+  Fix both together, for example with a skills-bridge `BridgeStagingError`
+  wrapper like the commands bridge's (`deferred-items.md`, "From 07-06").
 - `shared/notification-types.ts` comment limiting `network error` to
   marketplace refresh and add needs widening (Phase 3 owns that file).
 
