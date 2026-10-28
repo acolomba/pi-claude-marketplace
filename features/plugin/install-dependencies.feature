@@ -26,6 +26,24 @@ Feature: Plugin install dependencies
       | /skill:app-skill | A skill of app 1.0.0. |
       | /skill:lib-skill | A skill of lib 1.2.0. |
 
+  Scenario: Installing a fresh dependency partially reports its own partial status
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the published plugin "lib" of the marketplace "tools" has an output style
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install app@tools --scope project --partial"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status              | reasons               | scope   | version |
+      | tools            | project           | app@tools | app       | installed           |                       | project | 1.0.0   |
+      | tools            | project           | lib@tools | lib@tools | partially-installed | unsupported component | project | 1.0.0   |
+
   Scenario: A partially installed dependency leaves its dependent installed on install, list, and info
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:

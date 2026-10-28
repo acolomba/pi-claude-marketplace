@@ -436,6 +436,8 @@ export interface CascadeMemberOutcome {
   readonly marketplace: string;
   readonly requiredBy: string | undefined;
   readonly version: string;
+  /** Unsupported kinds omitted by this member's partial installation. */
+  readonly unsupported?: readonly string[];
   /**
    * What the member staged, as the three soft-dependency kinds the renderer
    * probes for. Carried as booleans rather than as the staged name lists so a
@@ -1254,6 +1256,9 @@ function recordMaterializedMember(
     marketplace: member.marketplace,
     requiredBy: member.requiredBy,
     version: summary.version,
+    ...(summary.resolved.state === "partially-available" && {
+      unsupported: [...summary.resolved.unsupported],
+    }),
     declaresAgents: summary.stagedAgentNames.length > 0,
     declaresMcp: summary.stagedMcpServerNames.length > 0,
     declaresWorkflows: summary.stagedWorkflowNames.length > 0,

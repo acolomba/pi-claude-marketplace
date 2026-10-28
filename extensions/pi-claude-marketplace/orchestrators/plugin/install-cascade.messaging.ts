@@ -8,6 +8,7 @@ import {
 import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import { printable } from "../../shared/notification-mcp.ts";
 import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
+import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import {
   redactAbsolutePaths,
   redactCauseChain,
@@ -29,6 +30,7 @@ import type {
   ContentReason,
   PluginFailedMessage,
   PluginInstalledMessage,
+  PluginPartiallyInstalledMessage,
   PluginSkippedMessage,
   PluginUpdatedMessage,
 } from "../../shared/notification-types.ts";
@@ -126,6 +128,8 @@ export const CASCADE_CONTEXT = {
 export interface CascadeInstalledRow {
   readonly key: string;
   readonly version: string;
+  /** Unsupported kinds omitted by this member's partial installation. */
+  readonly unsupported?: readonly string[];
   readonly declaresAgents: boolean;
   readonly declaresMcp: boolean;
   readonly declaresWorkflows: boolean;
@@ -222,8 +226,8 @@ function stagedDependencies(member: CascadeInstalledRow): readonly Dependency[] 
 export function composeCascadeMemberRow(
   member: CascadeInstalledRow,
   probe: SoftDepStatus,
-): PluginInstalledMessage {
-  return {
+): PluginInstalledMessage | PluginPartiallyInstalledMessage {
+  const row: PluginInstalledMessage = {
     status: "installed",
     name: member.key,
     dependencies: stagedDependencies(member),
@@ -253,6 +257,13 @@ export function composeCascadeMemberRow(
     ),
     needsReload: true,
   };
+  return member.unsupported === undefined
+    ? row
+    : {
+        ...row,
+        status: "partially-installed",
+        reasons: [...(row.reasons ?? []), ...narrowUnsupportedKinds(member.unsupported)],
+      };
 }
 
 /**

@@ -151,6 +151,42 @@ describe("CASCADE_CONTEXT", () => {
 });
 
 describe("composeCascadeMemberRows", () => {
+  test("a partial dependency reports its unsupported kinds while its dependent stays installed", () => {
+    // arrange
+    const installed = [member({ unsupported: ["outputStyles", "themes", "lspServers"] })];
+
+    // act
+    const rows = composeCascadeMemberRows({
+      scope: "user",
+      rootKey: ROOT_KEY,
+      rootRow: ROOT_ROW,
+      installed,
+      alreadyInstalled: [],
+      probe: PROBE_BOTH_LOADED,
+    });
+
+    // assert
+    assert.deepStrictEqual(rows, [
+      {
+        status: "partially-installed",
+        name: "formatter@tools",
+        dependencies: [],
+        version: "2.1.0",
+        reasons: ["unsupported component", "lsp"],
+        severity: "info",
+        needsReload: true,
+      },
+      {
+        status: "installed",
+        name: "helper",
+        dependencies: [],
+        version: "1.0.0",
+        severity: "info",
+        needsReload: true,
+      },
+    ]);
+  });
+
   test("a plugin that declares nothing renders the single row it always did", () => {
     // arrange
     const rows = composeCascadeMemberRows({
@@ -494,6 +530,38 @@ describe("composeCascadeMemberRows", () => {
 });
 
 describe("composeCascadeMemberRow", () => {
+  for (const { title, origin, reasons } of [
+    {
+      title: "a partial dependency preserves its current-copy reason and companion warning",
+      origin: { fellBackToCurrentCopy: true },
+      reasons: ["dependency current copy", "unsupported component"],
+    },
+    {
+      title: "a partial dependency preserves its re-enable reasons and companion warning",
+      origin: { reEnabledFromRecord: true },
+      reasons: ["already installed", "dependency enabled", "unsupported component"],
+    },
+  ]) {
+    test(title, () => {
+      // arrange
+      const installed = member({ ...origin, declaresAgents: true, unsupported: ["outputStyles"] });
+
+      // act
+      const row = composeCascadeMemberRow(installed, PROBE_NO_AGENTS);
+
+      // assert
+      assert.deepStrictEqual(row, {
+        status: "partially-installed",
+        name: "formatter@tools",
+        dependencies: ["agents"],
+        version: "2.1.0",
+        reasons,
+        severity: "warning",
+        needsReload: true,
+      });
+    });
+  }
+
   test("UPD-DEP-D1 a member installed from its marketplace's current copy names the fallback", () => {
     // act
     const row = composeCascadeMemberRow(

@@ -415,6 +415,8 @@ test("a materialized member's outcome carries what its own ledger summary report
     ],
     resolved: {
       ...barBase.resolved,
+      state: "partially-available",
+      unsupported: ["outputStyles"],
       pluginRoot: path.join(environment.cwd, "bar-root"),
       hooksConfigPath: "hooks/hooks.json",
     },
@@ -455,6 +457,7 @@ test("a materialized member's outcome carries what its own ledger summary report
       marketplace: MARKETPLACE,
       requiredBy: `foo@${MARKETPLACE}`,
       version: "1.2.3",
+      unsupported: ["outputStyles"],
       declaresAgents: true,
       declaresMcp: false,
       declaresWorkflows: false,
