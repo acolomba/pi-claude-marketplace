@@ -31,8 +31,18 @@ import {
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { WORKFLOW_SCRIPT_MAX_BYTES } from "../../../extensions/pi-claude-marketplace/domain/workflow-script.ts";
+import {
+  projectCaughtInstallDependencyPlanFailure,
+  projectFailedInstallDependencyPlanMoves,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts";
+import { createUpdateDependencyResolver } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
+import {
+  isUpdatePreflightOutcome,
+  preparePluginUpdate,
+  UPDATE_MATERIALIZATION,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -101,6 +111,8 @@ import type {
   InstallLedgerOptions,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import type { MarketplaceTagProbeOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
+import type { PreparedPluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
+import type { CascadeThreePhaseArgs } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
@@ -18515,6 +18527,283 @@ test("WGATE-01 / D-115-05: a standalone install renders every workflow discovery
 // gets its closure the way an install does.
 // ─────────────────────────────────────────────────────────────────────────────
 
+async function preparedPlanningUpdate(cwd: string, plugin: string): Promise<PreparedPluginUpdate> {
+  const prepared = await preparePluginUpdate({
+    plugin,
+    marketplace: "mp",
+    scope: "project",
+    locations: locationsFor("project", cwd),
+    policy: UPDATE_MATERIALIZATION,
+    cleanupClones: () => Promise.resolve(),
+  });
+  assert.ok(!isUpdatePreflightOutcome(prepared));
+  return prepared;
+}
+
+function planningUpdateArgs(
+  owner: InstallTestOwner,
+  cwd: string,
+  plugin: string,
+): CascadeThreePhaseArgs {
+  return {
+    plugin,
+    marketplace: "mp",
+    scope: "project",
+    cwd,
+    locations: locationsFor("project", cwd),
+    hooksRouting: owner.hooksRouting,
+    completionCache: owner.completionCache,
+    env: {},
+    cascade: true,
+    cleanupClones: () => Promise.resolve(),
+  };
+}
+
+test("the planning ledger saves an update dependency closure", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope({ widget: { version: "1.0.0" } });
+    const installed = makeCtx();
+    assert.strictEqual(
+      (
+        await owner.installPlugin({
+          ctx: installed.ctx,
+          run: installed.run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "widget",
+        })
+      ).status,
+      "installed",
+    );
+    await publishCatalog(marketplaceRoot, {
+      widget: { version: "1.1.0", dependencies: ["zcore"] },
+      zcore: { version: "1.0.0" },
+    });
+    const { ctx, run } = makeCtx();
+    const settle = createUpdateDependencyResolver(
+      owner.transaction,
+      owner.hooksRouting,
+      owner.completionCache,
+      {},
+    );
+
+    // act
+    const settlement = await settle(
+      planningUpdateArgs(owner, cwd, "widget"),
+      await preparedPlanningUpdate(cwd, "widget"),
+      { ctx, run },
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      settlement.rows.map((row) => [row.status, row.name]),
+      [["installed", "zcore@mp"]],
+    );
+  });
+});
+
+test("an update plan materializes a moved dependency's fresh dependency", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope({
+      widget: { version: "1.0.0" },
+      zcore: { version: "1.0.0" },
+    });
+    for (const plugin of ["widget", "zcore"]) {
+      const installed = makeCtx();
+      assert.strictEqual(
+        (
+          await owner.installPlugin({
+            ctx: installed.ctx,
+            run: installed.run,
+            scope: "project",
+            cwd,
+            marketplace: "mp",
+            plugin,
+          })
+        ).status,
+        "installed",
+      );
+    }
+
+    await publishCatalog(marketplaceRoot, {
+      widget: { version: "1.1.0", dependencies: ["zcore@^2.0.0"] },
+      zcore: { version: "2.0.0", dependencies: ["zfresh"] },
+      zfresh: { version: "1.0.0" },
+    });
+    const { ctx, run } = makeCtx();
+    const settle = createUpdateDependencyResolver(
+      owner.transaction,
+      owner.hooksRouting,
+      owner.completionCache,
+      {},
+    );
+
+    // act
+    const settlement = await settle(
+      planningUpdateArgs(owner, cwd, "widget"),
+      await preparedPlanningUpdate(cwd, "widget"),
+      { ctx, run },
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      settlement.rows.map((row) => [row.status, row.name]),
+      [
+        ["installed", "zfresh@mp"],
+        ["updated", "zcore@mp"],
+      ],
+    );
+  });
+});
+
+test("an update closure refusal returns the missing dependency", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope({ widget: { version: "1.0.0" } });
+    const installed = makeCtx();
+    assert.strictEqual(
+      (
+        await owner.installPlugin({
+          ctx: installed.ctx,
+          run: installed.run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "widget",
+        })
+      ).status,
+      "installed",
+    );
+    await publishCatalog(marketplaceRoot, {
+      widget: { version: "1.1.0", dependencies: ["absent"] },
+    });
+    const { ctx, run } = makeCtx();
+    const settle = createUpdateDependencyResolver(
+      owner.transaction,
+      owner.hooksRouting,
+      owner.completionCache,
+      {},
+    );
+
+    // act
+    const settlement = await settle(
+      planningUpdateArgs(owner, cwd, "widget"),
+      await preparedPlanningUpdate(cwd, "widget"),
+      { ctx, run },
+    );
+
+    // assert
+    assert.strictEqual(settlement.kind, "refused");
+    assert.deepStrictEqual(
+      settlement.rows.map((row) => row.name),
+      ["absent@mp"],
+    );
+  });
+});
+
+test("an update rethrows a marketplace absence raised inside a member ledger", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope({ widget: { version: "1.0.0" } });
+    const installed = makeCtx();
+    assert.strictEqual(
+      (
+        await owner.installPlugin({
+          ctx: installed.ctx,
+          run: installed.run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "widget",
+        })
+      ).status,
+      "installed",
+    );
+    await publishCatalog(marketplaceRoot, {
+      widget: { version: "1.1.0", dependencies: ["zcore"] },
+      zcore: { version: "1.0.0" },
+    });
+    owner.transactionControl.runPhases = (phases, context) => {
+      Object.assign(context as object, { marketplaceAbsent: true });
+      return Promise.resolve({ ok: phases.length === 0, rollbackPartials: [], leaks: [] });
+    };
+
+    const { ctx, run } = makeCtx();
+    const settle = createUpdateDependencyResolver(
+      owner.transaction,
+      owner.hooksRouting,
+      owner.completionCache,
+      {},
+    );
+
+    // act & assert
+    await assert.rejects(
+      settle(
+        planningUpdateArgs(owner, cwd, "widget"),
+        await preparedPlanningUpdate(cwd, "widget"),
+        { ctx, run },
+      ),
+      /names a marketplace that is not added/u,
+    );
+  });
+});
+
+test("the planning ledger projects caught and landed-move failures", () => {
+  const caught = makeCtx();
+  const caughtOutcome = projectCaughtInstallDependencyPlanFailure({
+    err: new Error("planning failed"),
+    ctx: caught.ctx,
+    run: caught.run,
+    marketplace: "mp",
+    scope: "project",
+    plugin: "app",
+    rootKey: "app@mp",
+    capture: { rollbackPartials: [], version: undefined },
+    cascadeFailure: { mcpConfigNotices: [] },
+    orchestrated: true,
+  });
+  assert.strictEqual(caughtOutcome.status, "failed");
+
+  for (const orchestrated of [false, true]) {
+    const projected = makeCtx();
+    const moved = [
+      {
+        key: "lib@mp",
+        name: "lib",
+        marketplace: "mp",
+        row: {
+          status: "updated" as const,
+          name: "lib@mp",
+          dependencies: [],
+          from: "1.0.0",
+          to: "2.0.0",
+          severity: "info" as const,
+          needsReload: true,
+        },
+      },
+    ];
+    const outcome = projectFailedInstallDependencyPlanMoves({
+      opts: {
+        ctx: projected.ctx,
+        run: projected.run,
+        scope: "project",
+        cwd: "/project",
+        marketplace: "mp",
+        plugin: "app",
+      },
+      moved,
+      cause: new Error("move failed"),
+      orchestrated,
+      unmaterialized: ["lib@mp"],
+    });
+    assert.strictEqual(outcome.status, "failed");
+    assert.strictEqual(projected.notifications.length, orchestrated ? 0 : 1);
+  }
+});
+
 test("UPD-DEP-D1: the ledger reports a dependency moved before installation", async () => {
   await withHermeticHome(async (owner) => {
     // arrange
@@ -18543,6 +18832,7 @@ test("UPD-DEP-D1: the ledger reports a dependency moved before installation", as
       cwd,
       marketplace: "mp",
       plugin: "app",
+      pinVersionOverride: "1.0.0",
     });
 
     // assert

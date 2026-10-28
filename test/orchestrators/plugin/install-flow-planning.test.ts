@@ -41,12 +41,14 @@ import {
 } from "./install-flow-fixture.ts";
 
 import type { CatalogPlugin, InstallTestOwner } from "./install-flow-fixture.ts";
-import type { InstallPlanningComposition } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts";
+import type { createInstallPlanning } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts";
 import type { PreparedPluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import type { CascadeThreePhaseArgs } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 
-const createUpdateDependencyResolver: InstallPlanningComposition["createUpdateDependencyResolver"] =
-  createPublicUpdateDependencyResolver;
+type InstallPlanningComposition = ReturnType<typeof createInstallPlanning>;
+
+const createUpdateDependencyResolver =
+  createPublicUpdateDependencyResolver satisfies InstallPlanningComposition["createUpdateDependencyResolver"];
 
 test("returns a failure without retaining an absent marketplace", async () => {
   await withHermeticHome(async ({ installPlugin }) => {

@@ -5,7 +5,11 @@
 import {
   createInstallLedgerPlugin,
   createInstallMissingDependencyLedger,
-  createInstallPlanningLedgerPorts,
+  prepareInstallDependencyPlan,
+  previewInstallDependencyPlanRoot,
+  projectCaughtInstallDependencyPlanFailure,
+  projectFailedInstallDependencyPlanMoves,
+  runInstallDependencyPlanCascade,
 } from "./install-flow-ledger.ts";
 import { createInstallPlanning } from "./install-flow-planning.ts";
 
@@ -28,7 +32,13 @@ export type {
   InstallTransaction,
 } from "./install-flow-ledger.ts";
 
-const INSTALL_PLANNING = createInstallPlanning(createInstallPlanningLedgerPorts());
+const INSTALL_PLANNING = createInstallPlanning({
+  preparePlan: prepareInstallDependencyPlan,
+  previewRoot: previewInstallDependencyPlanRoot,
+  runCascade: runInstallDependencyPlanCascade,
+  projectCaughtFailure: projectCaughtInstallDependencyPlanFailure,
+  projectFailedMoves: projectFailedInstallDependencyPlanMoves,
+});
 
 /** Binds install orchestration to one required semantic transaction owner. */
 export function createInstallPlugin(
