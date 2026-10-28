@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
 
 import lockfile from "proper-lockfile";
 
-import {
-  createUpdateDependencyResolverPlanning as createUpdateDependencyResolver,
-  routeInstallCascade,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts";
+import { createUpdateDependencyResolver as createPublicUpdateDependencyResolver } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
 import {
   isUpdatePreflightOutcome,
   preparePluginUpdate,
@@ -43,21 +41,42 @@ import {
 } from "./install-flow-fixture.ts";
 
 import type { CatalogPlugin, InstallTestOwner } from "./install-flow-fixture.ts";
+import type { InstallPlanningComposition } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts";
 import type { PreparedPluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import type { CascadeThreePhaseArgs } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 
-test("returns marketplace-absent without carrying marketplace additions", () => {
-  // arrange
-  let carried = false;
+const createUpdateDependencyResolver: InstallPlanningComposition["createUpdateDependencyResolver"] =
+  createPublicUpdateDependencyResolver;
 
-  // act
-  const outcome = routeInstallCascade(undefined, () => {
-    carried = true;
+test("returns a failure without retaining an absent marketplace", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-plan-absent-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "missing",
+        plugin: "app",
+      });
+
+      // assert
+      assert.strictEqual(outcome.status, "failed");
+      assert.strictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.missing,
+        undefined,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
   });
-
-  // assert
-  assert.deepStrictEqual(outcome, { kind: "marketplace-absent" });
-  assert.strictEqual(carried, false);
 });
 
 async function installed(owner: InstallTestOwner, cwd: string, plugin: string): Promise<void> {
