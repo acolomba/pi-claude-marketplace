@@ -69,6 +69,16 @@ None planned. Any unreachable behavior must carry a concrete harness-limit reaso
 
 | Metric | Count |
 |---|---|
-| Gaps found | 0 |
-| Resolved | 0 |
+| Gaps found | 1 |
+| Resolved | 1 |
 | Escalated | 0 |
+
+The integrated Phase 11 tree had renamed the owner case cited by
+`LCTEST-SKIP-CACHE`. The case still asserted both no completion-cache
+invalidation and no clone, but the exact-title coverage checker could no longer
+find it. The title now retains the Phase 10 evidence phrase and describes the
+orchestrated `unchanged` result added in Phase 11.
+
+The audit passed `node scripts/check-phase10-coverage.mjs` (56/56 rows), the
+focused marketplace-add and real-child process-tree owner cases (1/1 each), and
+10 representative Cucumber scenarios (116/116 steps) on the integrated tree.

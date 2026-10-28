@@ -1287,7 +1287,7 @@ test("MA-14: orchestrated mode joins both cleanup failures behind one Error.caus
   });
 });
 
-test("marketplace add returns unchanged for an identical recorded source", async () => {
+test("MPA-01: a same-source add into the declaring layer is skipped as already added before any clone and returns unchanged when orchestrated", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const { ctx, run } = makeCtx(0);
