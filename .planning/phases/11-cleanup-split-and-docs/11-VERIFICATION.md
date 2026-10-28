@@ -1,8 +1,8 @@
 ---
 phase: 11-cleanup-split-and-docs
-verified: 2026-10-28T09:50:24Z
-status: gaps_found
-score: 29/30 must-haves verified
+verified: 2026-10-28T12:44:38Z
+status: passed
+score: 30/30 must-haves verified
 covered_files:
   - .planning/BACKLOG.md
   - .planning/PROJECT.md
@@ -32,6 +32,8 @@ covered_files:
   - .planning/phases/11-cleanup-split-and-docs/11-11-SUMMARY.md
   - .planning/phases/11-cleanup-split-and-docs/11-12-PLAN.md
   - .planning/phases/11-cleanup-split-and-docs/11-12-SUMMARY.md
+  - .planning/phases/11-cleanup-split-and-docs/11-13-PLAN.md
+  - .planning/phases/11-cleanup-split-and-docs/11-13-SUMMARY.md
   - .pre-commit-config.yaml
   - CHANGELOG.md
   - docs/output-catalog.md
@@ -48,8 +50,11 @@ covered_files:
   - extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-cascade-context.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-dependency-ledger.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-results.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/prune.ts
@@ -82,9 +87,12 @@ covered_files:
   - test/orchestrators/plugin/dependency-bindings.test.ts
   - test/orchestrators/plugin/fetch.test.ts
   - test/orchestrators/plugin/info.test.ts
+  - test/orchestrators/plugin/install-flow-cascade-context.test.ts
+  - test/orchestrators/plugin/install-flow-dependency-ledger.test.ts
   - test/orchestrators/plugin/install-flow-fixture.ts
   - test/orchestrators/plugin/install-flow-ledger.test.ts
   - test/orchestrators/plugin/install-flow-planning.test.ts
+  - test/orchestrators/plugin/install-flow-results.test.ts
   - test/orchestrators/plugin/install-flow.test.ts
   - test/orchestrators/plugin/reinstall-flow.test.ts
   - test/orchestrators/plugin/update-flow.test.ts
@@ -96,33 +104,28 @@ covered_files:
   - test/orchestrators/types.test.ts
   - test/platform/git.test.ts
   - test/platform/removal-ops-fake.ts
-covered_digest: "v4:sha256:30fe8aee83ea9f8d08f84e6bade8585da01495542024c028a018c543a66cfc0f"
+covered_digest: "v4:sha256:b364ce2b23ae0bbdc67f2a24e7d6b0f6596078b607b57fa67be19e98a6444082"
 behavior_unverified: 0
 overrides_applied: 0
-gaps:
-  - truth: "CLN-02: the install flow is split so no resulting module exceeds the size kept by the project's other split verbs"
-    status: failed
-    reason: "The public root is small, but the new ledger leaf is 3,601 lines and 146,586 bytes; it retains 92.7% of the former 3,886-line module's line count, exceeds the other split verb modules, and has a new 64-KiB hook exception."
-    artifacts:
-      - path: extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts
-        issue: "A 3,601-line ledger remains an oversized orchestration module."
-      - path: .pre-commit-config.yaml
-        issue: "The maxkb=64 check excludes the new ledger and its paired test by exact path."
-    missing:
-      - "Extract cohesive transaction sequencing, failure projection, or dependency ledger concerns until the ledger meets the stated module-size contract."
-      - "Remove the ledger-specific 64-KiB hook exception and keep paired direct coverage green."
+re_verification:
+  previous_status: gaps_found
+  previous_score: 29/30
+  gaps_closed:
+    - "CLN-02: every install-flow production module now meets the 1,959-line and 64-KiB ceilings, with no install-flow large-file hook exception."
+  gaps_remaining: []
+  regressions: []
 ---
 
 # Phase 11: Cleanup, Split, and Docs Verification Report
 
 **Phase goal:** The milestone ends with no lifecycle dead code, a split install flow, docs that match behavior, and a backlog with every settled entry closed.
-**Verified tree:** `c61f5953def8277a6c16768dc549a71d708bef75` on `features/plugin-lifecycle-p11`.
-**Status:** gaps_found — CLN-02's structural size condition is unmet.
-**Re-verification:** No.
+**Verified tree:** `1ad31bd6451879ad5fa0df6e8becbfe5c05ac86d` on `features/plugin-lifecycle-p11`.
+**Status:** passed.
+**Re-verification:** Yes — after the single CLN-02 structural gap was closed.
 
 ## Goal Achievement
 
-The roadmap's four success criteria and all twelve plans' frontmatter truths were checked against source, tests, and records. The roadmap's CLN-01, CLN-03, and CLN-04 criteria are represented by the detailed plan truths below. Its additional CLN-02 module-size condition is truth 30. This avoids counting restatements twice.
+The roadmap's four success criteria and all thirteen plans' frontmatter truths were checked against source, tests, and records. Re-verification fully rechecked the failed CLN-02 size/split truth and performed quick regression checks on the 29 previously verified truths. The roadmap's CLN-01, CLN-03, and CLN-04 criteria are represented by the detailed truths below; CLN-02's measurable closure is truth 30.
 
 ### Observable Truths
 
@@ -142,9 +145,9 @@ The roadmap's four success criteria and all twelve plans' frontmatter truths wer
 | 12 | 11-05 | Recorded decisions match the shipped chokepoints | VERIFIED | D-PL5-07/08, D-PL8-01, D-PL9-10/11 in PROJECT match `platform/hosted-manifest-fetch.ts`, package-manager and rule pack. |
 | 13 | 11-06 | Phase 10's verified CAS-08/XPH-02 tree precedes split | VERIFIED | Phase 10 verification is `passed` 28/28, security `threats_open: 0`; its verification commit is ancestor of HEAD. |
 | 14 | 11-06 | Public install root composes paired planning and ledger modules | VERIFIED | `install-flow.ts:29-82` binds five typed operations through `createInstallPlanning` and retains public factories; both leaves have paired owner tests. |
-| 15 | 11-06 | Install, dependency, update, apply, import behavior remains covered after move | VERIFIED | Full `npm run check` at `f880a4f3` passed 1,120 scenarios, 11,411 steps, 306 direct LCOV pairs; only two planning review files differ at HEAD. Named previewed-commit and rollback tests passed on HEAD. |
+| 15 | 11-06 | Install, dependency, update, apply, import behavior remains covered after move | VERIFIED | Full `npm run check` at `a93b3699` passed 1,120 scenarios, 11,411 steps, 309 direct LCOV pairs; `a93b3699..HEAD` changes only planning records. All six install-flow owner suites and direct pairs passed again on HEAD. |
 | 16 | 11-07 | Identical marketplace redeclaration returns unchanged | VERIFIED | `marketplace/add.ts:641` returns `status: "unchanged"`; named add test passed. |
-| 17 | 11-07 | Apply and import consume the unchanged arm without a row | VERIFIED | `reconcile/apply.ts:351`, `import/execute.ts:1404` branch explicitly; both named no-row tests passed. |
+| 17 | 11-07 | Apply and import consume the unchanged arm without a row | VERIFIED | `reconcile/apply.ts:351` and `import/execute.ts:1404` branch explicitly; both named no-row tests passed. |
 | 18 | 11-07 | Hostile thrown values have behavioral, count-free tests | VERIFIED | Marketplace add owner test uses hostile proxy outcomes; no `prototypeReads` pin remains. |
 | 19 | 11-08 | IMP-09 comment labels its owning test | VERIFIED | Comment directly precedes the unclassified install-failure test in `import/execute.test.ts`. |
 | 20 | 11-08 | Two update-preflight literals are wrapped without output change | VERIFIED | Source is wrapped; owner assertions and unchanged-input full gate cover rendered bytes. |
@@ -157,65 +160,82 @@ The roadmap's four success criteria and all twelve plans' frontmatter truths wer
 | 27 | 11-11 | Distinct lock semantics remain local | VERIFIED | Specialized lost-lock and observation cases retain direct lock handling; ordinary cases use the shared helper. |
 | 28 | 11-12 | Six feature descriptions meet the project rule | VERIFIED | Six identified feature headers use two short description lines; `check:features` passed in the unchanged-input full gate. |
 | 29 | 11-12 | Executable Gherkin remains unchanged | VERIFIED | The description-only edits preserve scenarios, tags, examples, and steps; 1,120 scenarios passed on the final build-input tree. |
-| 30 | Roadmap CLN-02 and REQUIREMENTS.md | No resulting install-flow module exceeds other split verbs' size | FAILED — BLOCKER | New ledger is 3,601 lines / 146,586 bytes; former monolith was 3,886 lines. `update-flow.ts` is 1,541 lines, `reinstall-flow.ts` 756; even install-cascade/outcome are 1,959/1,742. Hook's 64-KiB cap excludes ledger and paired test. |
+| 30 | Roadmap CLN-02, 11-13, REQUIREMENTS.md | No resulting install-flow module exceeds the 1,959-line / 64-KiB contract | VERIFIED | Deterministic audit: root 100/3,293; planning 411/14,984; ledger 1,318/58,884; cascade-context 757/28,965; results 1,032/40,180; dependency-ledger 728/27,177 (lines/bytes). All are within limits; three new owner tests are below 64 KiB with no cross-test imports; the hook contains no install-flow exclusion. |
 
-**Score:** 29/30 truths verified; 0 present-but-behavior-unverified. The structural failure blocks the phase goal even though its public wiring and current behavior pass.
+**Score:** 30/30 truths verified; 0 present-but-behavior-unverified.
 
-### Required Artifacts and Key Links
+### Required Artifacts
 
-| Artifact or link | Levels 1–3 and wiring evidence | Status |
-|---|---|---|
-| Install root → planning → ledger | Three substantive modules; root composes five typed callbacks and public factories; planning calls ledger port; ledger runs transaction, rollback, state and package phases | WIRED; ledger size FAILED |
-| Three install-flow owner pairs | Root, planning, ledger each have non-empty paired tests; 306 direct LCOV records passed at unchanged build inputs | VERIFIED |
-| Deferred-pin factory → production restore | `createApplyReconcile` closes over `restorePin(opts,...)` by default; test injects at composition only | VERIFIED |
-| Disabled-holder walk → filter → enable/uninstall/remove | Same `result.candidates` and indexed keys feed all three consumers | VERIFIED |
-| Marketplace message builder → three read surfaces | All three import and call `marketplaceNotAddedMessage` | VERIFIED |
-| State-lock test helper → owner tests | `test/orchestrators/state-lock.ts` is a substantive concern-local replacement for the planned `test/helpers` path; lifecycle owner tests import it | VERIFIED, planned path changed |
-| Pending version source → notification | `pending.ts` collects recorded entries from state and passes `new Map(recordedVersions)`; projection reads it for uninstall rows | VERIFIED |
-| Marketplace add outcome → apply/import | `unchanged` producer and both exhaustive consumers are present; named no-row tests passed | VERIFIED |
-| Docs → actual configuration and code | PROJECT/ARCHITECTURE NFR-5, process/fetch chokepoints and PRD quality/API versions match package/config/source | VERIFIED |
-| Backlog → requirements → roadmap | Three Phase 11 closures dated and cited; CLN-01..04 appear complete in REQUIREMENTS traceability, though CLN-02 must be reopened after this finding | PARTIAL |
+The artifact query does not interpret Plan 11-13's path-only YAML entries, so each declared artifact was checked directly at all three levels.
 
-### Data Flow
+| Artifact | Exists / substantive | Wiring and owner evidence | Status |
+|---|---|---|---|
+| `install-flow-ledger.ts` | 1,318 lines / 58,884 bytes | Imported by dependency-ledger; owns lock/save/phase ledger/config/hydration/notification order; direct owner pair passes | VERIFIED |
+| `install-flow-cascade-context.ts` | 757 lines / 28,965 bytes | Imported by ledger and dependency-ledger; narrow cascade/add-cleanup/pin inputs; paired owner test passes | VERIFIED |
+| `install-flow-results.ts` | 1,032 lines / 40,180 bytes | Imported by ledger and dependency-ledger; projects typed results without raw filesystem/network authority; paired owner test passes | VERIFIED |
+| `install-flow-dependency-ledger.ts` | 728 lines / 27,177 bytes | Imported by public root; supplies missing-dependency transaction and five planning operations; paired owner test passes | VERIFIED |
+| Three new owner tests | 707/22,391; 1,042/32,801; 550/17,029 (lines/bytes) | Each imports its paired production owner and no test module; each direct pair passes at 100% | VERIFIED |
+| `ApplyReconcileOptions` / factory composition | Request interface has no `restoreDeferredPin`; negative type fixture rejects it | `createApplyReconcile` alone accepts the optional collaborator and defaults to real `restorePin` | VERIFIED |
+| Docs and closure records | CHANGELOG, PRD, output catalog, PROJECT, ARCHITECTURE, BACKLOG, REQUIREMENTS are substantive | Claims match current NFR-5, hosted-fetch, child-process, package, containment, and closure code paths | VERIFIED |
 
-No Phase 11 artifact renders dynamic UI data. The relevant paths were traced instead: persisted marketplace plugin records produce declaration-index candidates and disabled keys; persisted installed versions feed pending uninstall rows; install planning's previewed commit flows through the typed ledger port into state records. No static/mock-only production endpoint was found in these paths.
+### Key Link Verification
 
-### Behavioral Spot Checks and Gates
+| From | To | Via | Status | Evidence |
+|---|---|---|---|---|
+| Public install root | Planning and transaction owners | `createInstallPlanning` plus factory composition | WIRED | Root binds exactly `preparePlan`, `previewRoot`, `runCascade`, `projectCaughtFailure`, and `projectFailedMoves`; public surface remains four contract types and three factories. |
+| Ledger | Cascade and result owners | Narrow typed calls inside ordered transaction phases | WIRED | Source retains visible lock, save, package, config, hook hydration, notification, retry, and rollback ordering; owner suites pass. |
+| Dependency-ledger | Ledger, cascade-context, results | One-way imports | WIRED | Fallow: dependency-ledger → ledger is one hop; ledger → dependency-ledger is unreachable. No runtime or type-only cycle. |
+| Split owners | Filesystem/network/process authority | Typed capabilities rooted in public/ledger composition | WIRED | Raw-authority scan finds no direct git, fetch, child-process, or unconstrained filesystem seam in extracted owners; architecture tests pass. |
+| Deferred-pin factory | Production restore | Factory-local optional collaborator | WIRED | Default closes over `restorePin(opts, scope, key, before)`; lock-failure owner behavior remains tested. |
+| Backlog | Requirements and summaries | Dated evidence-linked dispositions | WIRED | LCCODE-01, LCDOC-01, and UPDDEP-01 are closed with decision, summary, test, and verification evidence; carried items remain open. |
 
-| Check | Result |
-|---|---|
-| `npm run fallow` on HEAD | PASS, exit 0; no issues. |
-| Four named disabled-holder / unchanged-add / apply-no-row / import-no-row tests | PASS, exit 0. |
-| Named held-lock fetch test | PASS, exit 0. |
-| Named previewed-commit and rollback ledger tests | PASS, exit 0. |
-| Named deferred-pin restore failure test | PASS, exit 0. |
-| `npm run check` at `f880a4f3` | PASS: 1,120 scenarios, 11,411 steps, 306 direct LCOV pairs. `git diff --name-only f880a4f3..c61f5953` lists only `11-REVIEW-FIX.md` and `11-REVIEW.md`; no build input changed. |
-| Phase 11 Nyquist/security/review records | 4/4 gaps 0; 24/24 threats closed; final review 0 critical, 0 warning, 0 info. These records corroborate the gates but do not override the structural code evidence. |
-| Probe execution | Not applicable: Phase 11 declares no probe script or PASS-marker probe contract. |
+### Data-Flow Trace (Level 4)
+
+No Phase 11 artifact renders dynamic UI data. Persisted marketplace records flow through the declaration index to disabled-holder consumers; previewed commits flow through the five-operation planning port into ledger state writes; transaction facts flow through result projection into rows, notices, rollback partials, and deferred pins. The production chain ends in typed state and notification owners, not mocks or static fallbacks.
+
+### Behavioral Spot-Checks
+
+| Behavior | Command | Result | Status |
+|---|---|---|---|
+| Split owner behavior and ordering | `node --test` over all six install-flow owner suites | Exit 0 | PASS |
+| Each split source is fully exercised by its owner | Six `npm run test:coverage:direct -- <source>` invocations | All exit 0 (the runner fails below 100%) | PASS |
+| Architecture chokepoints and test-only surface | Six focused architecture owner tests | Exit 0 | PASS |
+| Source/test pairing | `npm run test:corresponding` | Exit 0 | PASS |
+| Dead code, cycles, complexity, duplication | `npm run fallow` | Exit 0, no issues | PASS |
+| Full combined-tree gate | Reused exact build-input result at `a93b3699` per local-verification policy | 1,120 scenarios; 11,411 steps; 309 LCOV records | PASS |
+| Unchanged build inputs | `git diff --quiet a93b3699..HEAD -- . ':(exclude,glob).planning/**/*.md'` | Exit 0 | PASS |
+
+### Probe Execution
+
+Not applicable. Phase 11 declares no probe script or PASS-marker probe contract.
 
 ### Requirements Coverage
 
-| ID | Status | Evidence |
-|---|---|---|
-| CLN-01 | SATISFIED | Dead seams absent; required version data and typed outcomes; shared builders/filter/lock helper; composition-time restore; `npm run fallow` clean. |
-| CLN-02 | BLOCKED | Root and paired leaves exist and behavior tests pass, but the 3,601-line / 146-KiB ledger violates the explicit resulting-module size condition. |
-| CLN-03 | SATISFIED | CHANGELOG, PRD, output catalog, PROJECT and ARCHITECTURE match the checked network, process, package and Phase 10 behavior paths. |
-| CLN-04 | SATISFIED | Dated evidence-linked closures and carried-open entries verified in BACKLOG. |
-| Orphaned IDs | None | All CLN-01..04 appear in Phase 11 plans and REQUIREMENTS traceability. |
+| Requirement | Source plans | Status | Evidence |
+|---|---|---|---|
+| CLN-01 | 11-01..04, 11-07..11 | SATISFIED | Dead seams removed; required version data and typed outcomes remain; shared builders/filter/lock helper present; deferred-pin injection is factory-local; Fallow is clean. |
+| CLN-02 | 11-06, 11-13 | SATISFIED | Six production sources meet both caps; six paired owner suites/direct coverage pass; root API/port stable; no install-flow hook exception. |
+| CLN-03 | 11-05, 11-09, 11-13 | SATISFIED | CHANGELOG, PRD, output catalog, PROJECT, and ARCHITECTURE match the checked network/process/package/containment paths and current split ownership. |
+| CLN-04 | 11-09, 11-13 | SATISFIED | Settled entries have dated evidence-linked closures; REQUIREMENTS marks CLN-01..04 complete. |
+| Orphaned IDs | All plans | None | All CLN-01..04 are claimed by plans and traced in REQUIREMENTS. |
 
-### Anti-Patterns and Disconfirmation
+### Anti-Patterns Found
 
-No unreferenced `TBD`, `FIXME`, or `XXX` marker was found in the checked Phase 11 source/doc files. The exact-path hook exception is a **BLOCKER** because it lets the new ledger exceed the project's size check. An existence-only inspection of the root or a passing test would miss this structural requirement. The passing tests show current behavior but do not prove a 146-KiB ledger meets the split-size goal; that distinction is the decisive disconfirmation.
+No unreferenced `TBD`, `FIXME`, or `XXX`, skipped/todo owner test, cross-test import, install-flow hook exclusion, direct raw authority, test-only request option, or new Fallow issue was found. The previous oversized-ledger blocker is absent.
+
+### Advisory (New Scope, Unevidenced)
+
+None.
 
 ### Human Verification Required
 
-None for this phase's documented criteria. The blocker is deterministically measurable. No later phase in this milestone is scheduled to take the ledger-size work.
+None. Every state-transition, rollback, containment, ordering, package, and deferred-pin truth relied on by this phase has passing behavioral owner coverage; the remaining criteria are deterministic structure or documentation checks.
 
 ### Gaps Summary
 
-CLN-02 needs another cohesive split of `install-flow-ledger.ts` and removal of its file-size exception. Keep the existing public root, typed planning port, transaction order, and direct-coverage pairs while doing so. The phase should not advance until the size criterion and full combined-tree gate both pass.
+None. The single carried-forward CLN-02 gap is closed and no regression was found in the previously verified truths.
 
 ---
 
-_Verified: 2026-10-28T09:50:24Z_
+_Verified: 2026-10-28T12:44:38Z_
 _Verifier: gsd-verifier_
