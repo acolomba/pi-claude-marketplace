@@ -1,184 +1,179 @@
 ---
 phase: 06-import-marketplace-planning
-reviewed: 2026-10-27T00:00:00Z
+reviewed: 2026-10-28T23:45:06Z
+reviewed_commit: bd310b53dba3085115f68c77f028a05762a43608
 depth: standard
-files_reviewed: 22
+review_scope_complete: true
+files_reviewed: 38
 files_reviewed_list:
+  - .agents/skills/cucumber/rules/features.md
   - extensions/pi-claude-marketplace/orchestrators/import/execute.ts
   - extensions/pi-claude-marketplace/orchestrators/import/marketplaces.ts
+  - extensions/pi-claude-marketplace/orchestrators/import/types.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-cascade-context.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-dependency-ledger.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-results.ts
   - extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts
   - extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts
   - extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts
   - extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts
+  - extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts
   - features/lib/field-rows.ts
   - features/lib/published-marketplace.ts
   - features/lib/run-tokens.ts
-  - features/step_definitions/plugin/publishing.steps.ts
-  - features/plugin/import.feature
   - features/plugin/apply.feature
+  - features/plugin/import.feature
   - features/plugin/install-rollback.feature
+  - features/step_definitions/plugin/publishing.steps.ts
   - test/orchestrators/import/execute.test.ts
   - test/orchestrators/import/marketplaces.test.ts
+  - test/orchestrators/import/types.test.ts
   - test/orchestrators/plugin/enable-disable.test.ts
   - test/orchestrators/plugin/install-flow.test.ts
+  - test/orchestrators/plugin/install-flow-cascade-context.test.ts
+  - test/orchestrators/plugin/install-flow-dependency-ledger.test.ts
+  - test/orchestrators/plugin/install-flow-ledger.test.ts
+  - test/orchestrators/plugin/install-flow-planning.test.ts
+  - test/orchestrators/plugin/install-flow-results.test.ts
   - test/orchestrators/reconcile/apply-outcomes.test.ts
   - test/orchestrators/reconcile/apply.test.ts
   - test/orchestrators/reconcile/notify.test.ts
   - test/orchestrators/reconcile/plan.test.ts
+  - test/shared/redact-absolute-paths.test.ts
 findings:
-  critical: 1
-  warning: 2
-  info: 5
-  total: 8
+  critical: 3
+  warning: 0
+  info: 0
+  total: 3
 status: issues_found
 ---
 
 # Phase 6: Code Review Report
 
-**Reviewed:** 2026-10-27
+**Reviewed:** 2026-10-28T23:45:06Z
+
+**Commit:** `bd310b53dba3085115f68c77f028a05762a43608`
+
 **Depth:** standard
-**Files Reviewed:** 22 (the config lists 23 paths; `test/orchestrators/reconcile/{apply-outcomes,apply,notify,plan}.test.ts` was expanded)
+
+**Files reviewed:** 38, complete
+
 **Status:** issues_found
 
 ## Summary
 
-I reviewed the diff `f6df1885^..HEAD` against D-PL6-01..14 and the project conventions. Most of the work is correct:
+The current implementation has three actionable defects: import can silently omit a failed plugin when two settings entries encounter the same newly added source; apply drops recovery details after an enable leaves a partial rollback; and the shared redactor exposes absolute paths containing spaces or ordinary UNC prefixes.
 
-- The rollback-row plumbing (D-PL6-03/04/05/11/12) redacts every phase cause in both import and apply.
-- The cascade member's partials reach the orchestrated outcome. The GHB-03 rethrow gate already counts them through `capture`, so they are not lost.
-- `aliasedScopePlan` rewrites both `marketplace` and `raw`.
-- The planner's enable bucket names the recorded marketplace, so `enableKeys` matches the aliased refs.
-- `marketplaceSourceClaims` is the planner's own rule.
-- The feature fixture restores write permission before every removal. All three sandbox roots and the published marketplace root (under HOME) are covered.
-
-The main defect is in the D-PL6-02 alias: the claim map is computed only from the import settings. It ignores the scope's existing `claude-plugins.json`. So it rewrites a config that is already a reconcile steady state into one that no longer converges. Two smaller decision gaps follow: the "settings do not declare that name" test reads only the planned subset of the settings, and a conflicted claim's cause line is wrong.
+This is a fresh review of current file contents. The minimum scope is the union of the previous report's actual 23 paths and the stale verification's source coverage, yielding 26 files. The review follows the extracted install-flow implementation into five modules and their five paired tests, and follows the extracted redaction functions into their owner and paired test, yielding 38 files. Every listed file was read completely. The original 14 paired orchestrator suites total 57,561 lines; their full reads were divided into non-overlapping slices with a test-only reviewer. The additional redactor suite was also read completely. CodeGraph was used first to locate implementation and call paths, followed by current file reads and targeted caller tracing. No listed file is git-ignored.
 
 ## Narrative Findings (AI reviewer)
 
 ## Critical Issues
 
-### CR-01: Alias post-pass breaks a config that already declares the settings name
+### CR-01: An unchanged marketplace add can make an import failure disappear
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/import/execute.ts:1469` (claims), `:1521-1543` (`aliasedScopePlan`), `:1892-1924` (`buildRepairPatchForScope`), `:1954-1981` (`mergeEnsureAndRepairs`)
+**Classification:** BLOCKER
 
-**Issue:** `readPassForImport` builds the claim map from `desiredConfigFor(scopePlan)`, which holds only the Claude settings. It never consults the scope's own `claude-plugins.json`. The project's Key Decision ("Reconcile aliases through one-to-one source claims while preserving the manifest-derived canonical state name") makes this state a normal steady state:
+**File:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-c-369/extensions/pi-claude-marketplace/orchestrators/import/execute.ts:1404-1405`
 
-- the config declares `X` (source `S`) and `p@X`;
-- the state records the marketplace under its manifest name `Y` (source `S`).
+**Related flow:** `execute.ts:761-797` (`marketplaceBlocks`), `execute.ts:1630` (`recordReusedMarketplace`), and `ensurePlannedMarketplaces`.
 
-`apply` reaches it every time a user hand-writes the settings' marketplace name into `claude-plugins.json`. Now run `import` with Claude settings that name `X`/`S` and `p@X`:
+**Issue:** The unchanged add arm returns without recording a marketplace outcome, checking the returned canonical name, or blocking the requested name. The ensure loop continues using its original state snapshot. If an earlier entry in the same import just added that source, the later add returns `unchanged` with the earlier canonical name, although that name was absent from the read-pass snapshot.
 
-1. The settings claim `X -> Y`, and the plan is aliased to `Y` and `p@Y`.
-2. `Y` is reported `(skipped)`. `buildRepairPatchForScope` adds `Y: {source: S}`, and `mergeEnsureAndRepairs` writes it because the config lacks the key `Y`. The same happens for `p@Y`.
-3. The config now declares both `X` and `Y` with source `S`, plus `p@X` and `p@Y`. In the planner, `recordedSourceCandidates` skips every declared name, so `Y` is no longer a candidate for `X`. `diffMarketplaces` then plans **add X**, and the plugin diff plans **install p@X** under a marketplace that is not recorded.
+Its plugin is then attempted under the later settings name and fails because that marketplace is not recorded. That failure is classified `unexpected-failure`. The notification builder creates missing headers only for `marketplace-not-added`, so the failed row has no header and is discarded. The displayed severity and tally report only successes.
 
-The next load shows pending changes. `apply` re-clones `S`, whose manifest name collides with the recorded `Y`, and fails on every run until the user edits the config by hand. Before this phase, D-07 attempted the add, failed it as a duplicate, and wrote nothing. This change turns a failed row into a persisted config divergence. `stampReenabledWhereLocalDeclares` has the same blind spot: it looks for a local `p@Y` key, so a local `p@X: {enabled: false}` stays in place while the base config gets `p@Y: {enabled: true}`.
+**Confirmed reproduction:** Start with empty project state. Publish one local marketplace whose manifest name is `alpha` and which offers `p`. Put both `alpha` and `beta` in the settings, pointing to that same directory in that order, and enable `p@alpha` and `p@beta`. Run the real import, marketplace add, and install operations; only settings loading is supplied as a test seam. The returned result contains an unexpected failure for `p@beta`, while the complete notification contains only:
 
-No unit test or scenario seeds a config that declares the settings name. The MIM-01 tests all start from an empty `claude-plugins.json`.
+```text
+● alpha [project] (added)
+  ● p v#… (installed)
 
-**Fix:** Before the repair, skip the alias when the loaded config already declares the settings name and that declaration claims the same record. Keep the plan's names in that case. In the post-pass, under the lock, read the merged config and drop each aliased repair whose recorded name the config already reaches through a claim:
+Import: 2 successes
 
-```ts
-// in writeBatchedConfigForScope, after loading `current`:
-const configClaims = marketplaceSourceClaims(
-  mergedMarketplacesOf(current),          // the scope's merged base+local view
-  stateMarketplacesSnapshot,              // the read pass's tx.state.marketplaces
-);
-const claimedByConfig = new Set(configClaims.values());
-// drop repair.marketplaces[Y] and repair.plugins[`*@${Y}`] when claimedByConfig.has(Y)
-// and the config declares the settings name itself; declare plugins under the
-// config's own name instead (p@X), which the planner already aliases.
+/reload to pick up changes
 ```
 
-A simpler fix that fails closed: in `readPassForImport`, also load the scope's merged config. When it declares a name that maps (by name or by claim) to the same recorded marketplace as a settings claim, drop that claim from `read.claims`. Then add a unit test that seeds `claude-plugins.json` with `{X: S, p@X}` and state with `Y: S`, runs import, and asserts that `planReconcile` on the resulting merged config is still empty.
+There is no beta row or failure count. This is a same-command case and requires no concurrent process.
 
-## Warnings
+**Fix:** Settle the `unchanged` result using its returned canonical name. When it differs from the planned name, use the existing reuse disposition: block installation under the missing name and record each plugin as `marketplace-not-added`. When it matches, preserve a suitable marketplace header for any plugin outcomes. Refreshing the relevant state between ensures is another option, but every reachable plugin outcome must have a rendered header. Add a regression beginning with empty state and two settings names for one source, asserting the failure row, severity, tally, and declarations.
 
-### WR-01: "Settings do not declare that name" is checked against the planned subset, not the settings
+### CR-02: Apply hides rollback phases and leaked artifacts after a failed enable
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/import/execute.ts:1467-1469`, `extensions/pi-claude-marketplace/orchestrators/import/marketplaces.ts:137-141`
+**Classification:** BLOCKER
 
-**Issue:** D-PL6-02 allows the alias only "when the settings do not declare that name themselves". `marketplaceSourceClaims` excludes candidates by `desired.marketplaces`, which `desiredConfigFor` builds from `marketplacesToEnsure`. Two kinds of settings entry are not in that list:
+**File:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-c-369/extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:1067-1078`
 
-- an unmappable `extraKnownMarketplaces` entry (for example a nested `file` source), which goes to `unmappableMarketplaces`;
-- an unreferenced `claude-plugins-official` entry (D-PL6-08).
+**Related files:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-c-369/extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts:318-322`; `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-c-369/extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts:1239-1260`.
 
-If the settings declare `Y` in one of those forms, and another settings entry `X` has the source the scope records under `Y`, then `X` still claims `Y`. Import then reports `Y (skipped) {already added}`, installs `p@X` as `p@Y`, and declares `Y` with `X`'s source. Meanwhile the settings' own `p@Y` refs get an `unmappable-marketplace-source` warning. The comment on `aliasedScopePlan` ("a recorded name is never a settings name") is false in this case.
+**Issue:** The enable operation already returns its error and `rollbackPartials` at `enable-disable.ts:2993-3009`. The apply toggle loop retains only `reason` and MCP notices. Its `PluginEnableFailedOutcome` has no fields for the error or partials, and the row projection accepts recovery details only for install failures. Therefore apply reports `{rollback partial}` without the failed phase, cause, or leaked-resource names. The user cannot determine what needs repair from the result, contrary to MIM-03.
 
-**Fix:** Pass the full settings key set into the claim exclusion. For example, filter out any claim whose recorded name is a key of `scopePlan`'s raw `extraKnownMarketplaces`, or one any enabled ref names:
+**Confirmed reproduction:** Install and disable a local plugin with a skill, change its config to enabled, add a read-only subdirectory containing a file to its source skill, and place a directory at the project `mcp-adapter.json` path. Run the real apply operation as a non-root user. Skills staging succeeds; the MCP phase fails; the skills undo cannot remove the copied file. The complete notification is:
 
-```ts
-const settingsNames = new Set([
-  ...Object.keys(settings.extraKnownMarketplaces),
-  ...refs.map((ref) => ref.marketplace),
-]);
-claims: new Map(
-  [...claims].filter(([declared, recorded]) => declared !== recorded && !settingsNames.has(recorded)),
-),
+```text
+A plugin operation has failed.
+
+● fixtures [project]
+  ⊘ demo (failed) {rollback partial}
+
+Reconcile: 1 failure
 ```
 
-To make this possible, thread the settings names onto `ScopedImportPlan`.
+A direct read confirms `resources/skills/demo-skill/read-only/data.txt` remains on disk while the saved record remains disabled. Import's equivalent scenario already expects the skills phase, cause chain, and `demo-skill` leak.
 
-### WR-02: A conflicted claim's cause says the source does not match when it matches two records
+**Fix:** Carry redacted error/cause and rollback partials through the failed-enable outcome and its row projection, preserving manual-recovery leak information as the install path does. Apply the same projection to other apply paths that consume failed enables. Add an apply-enable scenario with this real failure sequence and assert the complete recovery detail and retained disabled state.
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/import/execute.ts:1022`
+### CR-03: Path redaction misses whitespace-containing paths and standard UNC paths
 
-**Issue:** D-PL6-09 now sends conflicted claims through `recordPlannedMismatch`, whose `source-mismatch` arm builds `Existing marketplace source ${mismatch.recordedSource} does not match Claude settings source ${marketplace.source}.` For a conflict, `recordedSource` is planner prose (`ambiguous recorded marketplaces: first-mp, second-mp` or `recorded marketplace claimed by multiple declarations: actual`). The user sees `Existing marketplace source ambiguous recorded marketplaces: first-mp, second-mp does not match Claude settings source ./mp.` That sentence is ungrammatical, and it is also false: the source matches, and the fault is that it matches more than one record. The unit tests at `test/orchestrators/import/execute.test.ts:5278` and `:5328` lock this wording in. For an unreferenced entry this cause is the only explanation the user gets (D-PL6-09).
+**Classification:** BLOCKER
 
-**Fix:** Tell a conflict apart from a real mismatch. The planner's conflict entries can be recognized because `marketplace` is not recorded. Better, expose a typed conflict kind from `buildMarketplaceClaims`. Then word the cause for what happened:
+**File:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-c-369/extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts:22-28`
 
-```ts
-const cause = ownValue(read.state.marketplaces, marketplace.marketplace) === undefined
-  ? `Claude settings source ${marketplace.source} matches more than one recorded marketplace (${mismatch.recordedSource}).`
-  : `Existing marketplace source ${mismatch.recordedSource} does not match Claude settings source ${marketplace.source}.`;
-```
+**Consumers:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-c-369/extensions/pi-claude-marketplace/orchestrators/import/execute.ts:2244-2257`; `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-c-369/extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:501-506` and `installFailedOutcomes`.
 
-## Info
+**Issue:** The matcher permits only word characters and a small punctuation set inside paths, and recognizes extended UNC prefixes but not ordinary UNC prefixes. Valid filesystem paths containing spaces can be left fully absolute or only partially shortened. Ordinary UNC paths remain unchanged. These strings enter the user-visible error and rollback chains through the Phase 6 consumers, defeating D-PL6-12's basename-only redaction and the T-06-10/T-06-11 mitigation.
 
-### IN-01: An unreferenced source mismatch has no `{source mismatch}` brace and counts as two failures
+**Confirmed reproduction:** Direct calls to the real redactor and cause-chain formatter produce:
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/import/execute.ts:1024-1032`
+| Input path | Redacted result |
+|---|---|
+| `/private dir/secret.json` | `/private dir/secret.json` |
+| `/Users/Jane Doe/private/plugin/secret.json` | `Jane Doe/private/plugin/secret.json` |
+| `\\server\private\secret.json` | `\\server\private\secret.json` |
 
-**Issue:** The D-PL6-09 arm records the mismatch as `reason: "add-failed"`, and `marketplaceFailureReasons` maps that to `[]`. So the block reads `tools (failed)` with a bare child row and `Import: 2 failures` for one marketplace. A referenced mismatch reads `{source mismatch}`. No add was attempted, so the internal `add-failed` kind mislabels the outcome. This follows the decision text and reuses the WR-06 shape, but the two mismatch rows disagree on their reason.
+For the first input, `causeChainTrailer(redactCauseChain(new Error("unlink '/private dir/secret.json'")))` returns `cause: unlink '/private dir/secret.json'`. The cause formatter therefore exposes the full absolute path.
 
-**Fix:** Consider adding a `"source-mismatch"` member to `MarketplaceFailureOutcome["reason"]` that maps to `["source mismatch"]`.
+**Fix:** Recognize complete quoted filesystem paths, including spaces, Unicode characters, and ordinary UNC prefixes, before replacing them with their basename; retain the existing URL and JSON-pointer exclusions. Where the producer knows the path, prefer structured path replacement over guessing from arbitrary prose. Add helper and composed import/apply regressions using paths with spaces and standard UNC text, checking every cause link and leaked-resource entry.
 
-### IN-02: A shared failing dependency can produce two rows with the same name in one block
+## Previous review disposition
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/import/execute.ts:628-652`, `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:550-556`
+The IDs in this table refer to the superseded 2026-10-27 report, not the new findings above.
 
-**Issue:** When two requested plugins in the same marketplace depend on the same dependency, and that dependency's undo fails, each install retries it. Each failure then adds its own `lib@mp (failed) {rollback partial}` row (import) or `lib (failed)` row (apply). Nothing dedupes or tells the rows apart. `install` never shows this, because it runs one request per command.
+| Previous ID | Current disposition |
+|---|---|
+| CR-01 | The config-name preservation fix remains effective for imports naming the recorded marketplace: `configNamesByRecorded` uses the planner's claims and the post-pass keeps the config's existing name. Current unit and feature cases cover a config alias and its recorded name. The original settings-alias behavior was subsequently replaced by D-PL6-17. |
+| WR-01 | Deliberately superseded by D-PL6-18: declaring the recorded name elsewhere in settings no longer prevents silent source reuse. The old `settingsMarketplaces` exclusion was removed from the implementation and types. Reinstating it would contradict the current decision. |
+| WR-02 | The old import claim-conflict prose path is superseded by D-PL6-17/18's reuse behavior and D-PL6-19's source replacement. The obsolete mismatch sentence is not a current finding. Planner ambiguity still prevents unsafe config claims. |
+| IN-02 | Dedupe remains wired in import and apply. Apply suppresses a repeated dependency row only when a prior failure already carries rollback phases, so a prior bare failure cannot suppress the first detailed row. Current unit tests and scenarios cover shared failing dependencies. |
+| IN-05 | Runtime error tokens remain in the rollback scenarios. D-PL6-16 restricts arbitrary-directory matching to the read-only skill removal token; other tokens retain exact or basename matching. The installed rollback scenario also checks that output contains no absolute sandbox path. |
+| IN-01 (previously skipped) | The old synthetic unreferenced source-mismatch arm is superseded by D-PL6-19's actual re-add path. Current add failures use the existing marketplace failure grammar. No actionable instance of the old issue remains. |
+| IN-03 (previously skipped) | Subsequently resolved by D-PL6-15: the requested/dependency failure pair is sorted by name, with exact current scenario assertions. |
+| IN-04 (previously skipped) | The narrow enable-degradation projection still repeats three optional fields, but staged-kind facts are carried once through required `declares*` members and reconstructed at the row boundary. No current incorrect mapping was found; a speculative future-maintenance preference is not reported as a warning. |
 
-**Fix:** Accept this as two real attempts, or dedupe by key and keep the first row.
+## Verification evidence and limitations
 
-### IN-03: Apply puts the dependency's rollback row after the requested row, unlike its moved-dependency rows
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:552-556`
-
-**Issue:** `applyPluginInstalls` pushes `movedDependencyOutcomes` before the requested plugin's row, and `buildReconcileAppliedCascade` keeps insertion order within a block. `installFailedOutcomes` returns `[requested, dependency]`, so the test at `test/orchestrators/reconcile/apply.test.ts:2540` renders `hello` before `bar`. Install and import sort these two rows by name.
-
-**Fix:** Return `[dependencyRollbackOutcome(...), requested]` so dependency rows come first, as the moved rows do.
-
-### IN-04: `enableDegradation` restates part of `degradationFromEnable`
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/import/execute.ts:1208-1216`
-
-**Issue:** These are the first three spreads of `orchestrators/plugin/shared.ts::degradationFromEnable`, which `reconcile/apply.ts:975` still uses. If a degradation fact is added to one, the other can silently miss it.
-
-**Fix:** Derive the narrowed value from the shared helper, for example by destructuring away `stagedAgents`, `stagedMcpServers`, and `stagedWorkflows` from `degradationFromEnable(outcome)`.
-
-### IN-05: The install-rollback scenario uses a literal errno message, while the other new scenarios use the error token
-
-**File:** `features/plugin/install-rollback.feature:76`
-
-**Issue:** The import and apply scenarios match the undo cause through `{read-only skill directory removal error}`, which the step reads back from the running Node (D-PL6-14). The install scenario spells out `EACCES: permission denied, unlink '{project dir}/.../data.txt'`. The summaries show this was checked only on local Node 26, and CI runs Node 24. libuv's unlink message most likely carries the path on both versions, so this is probably fine. Still, the scenario depends on wording that no step measures.
-
-**Fix:** Record the uncut message as a second token in the fixture step and use it here.
+- Reused the supplied passing combined-tree `npm run check` gate at code commit `4e3e7d1fb97804723a128f8cc142ccb8fdd44321`, Node v26.12.1: static checks passed, 1,123/1,123 Cucumber scenarios, 11,442/11,442 steps, 309 direct-coverage records, exit 0.
+- Verified that the diff from that code commit to the reviewed HEAD contains only five planning/report files. No build inputs changed, so the repository's gate-reuse rule applies. The full gate was not rerun.
+- Ran narrow reproductions for the same-import duplicate source, actual failed-enable rollback, and path redaction. Temporary fixture trees were removed after each composed reproduction. No source or test file was edited.
+- The passing existing gate does not exercise the two composed failure cases above or the missing path forms. No additional actionable test-reliability finding was established after reading the full paired suites.
+- This standard-depth review includes targeted caller/data-flow tracing. It is not an exhaustive concurrency or platform audit. The UNC defect is demonstrated through the platform-independent string/cause formatter, not a Windows filesystem run.
+- The earlier security report is historical evidence, not a current clearance of CR-03. This review modifies only this report and does not update that separately owned artifact.
 
 ---
 
-_Reviewed: 2026-10-27_
-_Reviewer: Claude (gsd-code-reviewer)_
+_Reviewer: gsd-code-reviewer_
+
 _Depth: standard_
