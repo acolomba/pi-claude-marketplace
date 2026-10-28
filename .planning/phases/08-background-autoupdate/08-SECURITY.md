@@ -1,29 +1,30 @@
 ---
 phase: 08-background-autoupdate
 audited: "2026-10-28"
-status: open_threats
-verdict: OPEN_THREATS
+status: verified
+verdict: SECURED
 asvs_level: 1
 block_on: high
 threats_total: 21
-threats_closed: 20
+threats_closed: 21
 threats_open: 0
-threats_open_nonblocking: 1
+threats_open_nonblocking: 0
 ---
 
 # Phase 08 Security Audit
 
 ## Scope and verdict
 
-OPEN_THREATS: every declared runtime mitigation is present. T-08-17 remains open because the current TUI behavioral oracle cannot distinguish repeated identical notifications.
+SECURED: all 15 declared mitigations are verified, and all six accepted dispositions have distinct recorded entries. SEC-08-01 / T-08-17 is closed by the distinct-name behavioral scenario, its recorded mutant failure, and the existing exact-entry owner assertion.
 
-Audited planning HEAD: `0b5d3d5bb4c46408c2e3410fdeee492d80218dca`.
-Implementation/test HEAD: `3a8c7e1c6b9af4e0f7c1646e67da622829eb525e`.
-The intervening diff contains only planning Markdown.
+Audited planning HEAD: `c571a4cb69ca63e82134fc78b407e2810ccf3e08`.
+Current combined implementation/test HEAD: `7a436b05daff149cacb110258051d65675b1e8b2`.
+Production implementation remains unchanged from `3a8c7e1c6b9af4e0f7c1646e67da622829eb525e`.
+The diff after 7a436b05 contains only planning Markdown.
 
 The four PLAN threat registers contain 21 authored rows: 15 mitigate and six accept dispositions, with 18 distinct threat IDs. Repeated T-08-SC rows retain their plan qualification. Severity totals are one high, 11 medium, and nine low. There are no critical threats or transfer dispositions.
 
-After recording the six accepted risks below, 20 rows are closed and one medium row is open. At block_on high, threats_open is zero. This does not mean every declared mitigation is closed.
+All 21 authored rows are closed: 15 verified mitigations and six documented accepted dispositions. Open blocking and nonblocking counts are both zero. At block_on high, threats_open is zero.
 
 Paths below are repository-relative. Implementation evidence was read directly; passing documentation or test counts were not used as substitutes for code inspection.
 
@@ -54,7 +55,7 @@ The follow-up decisions in 08-CONTEXT.md supersede historical PLAN and initial v
 | 08-01 / T-08-08 | Denial of service | low | accept | CLOSED — historical accepted risk superseded | AR-08-01 records the original acceptance and its later closure by D-PL8-23 through D-PL8-25. The current gate aborts after 30000 ms and waits for settlement: `orchestrators/marketplace/background-gate.ts:25`, `:40`. `platform/git.ts:302`, `:316`, `:359`, `:372`, `:507` propagate abort through requests, response bodies, and operation results. Gate tests at `background-gate.test.ts:300`, `:326`, `:351` and scheduler test `background-update.test.ts:369` cover the cap. |
 | 08-01 / T-08-09 | Tampering | low | accept | CLOSED — accepted risk | AR-08-02; D-PL8-05 and D-06. `transaction/with-state-guard.ts:208` acquires the scope lock with retries zero and maps contention to StateLockHeldError. `orchestrators/marketplace/update.ts:684` refreshes and saves under that transaction; `:879` classifies lock refusal. `test/orchestrators/marketplace/update.test.ts:4493` verifies refusal while held and success after release. Background output remains silent and the runtime performs no retry loop. |
 | 08-01 / T-08-SC | Tampering | low | accept | CLOSED — accepted risk | AR-08-03; 08-01 PLAN disposition and 08-RESEARCH.md Package Legitimacy Audit. The plan introduces no package dependency. |
-| 08-02 / T-08-10 | Tampering | medium | mitigate | CLOSED | `test/e2e/_rpc.ts:190` constructs the child environment from an allowlist and copies the delay only from the explicit run environment at `:205`. `test/architecture/hermetic-git-environment.test.ts:18` plants inherited git and all five background variables; cases at `:79` compare complete expected environments. The TUI driver uses the same function at `features/lib/pi-tui.ts:159`. |
+| 08-02 / T-08-10 | Tampering | medium | mitigate | CLOSED | `test/e2e/_rpc.ts:190` constructs the child environment from an allowlist and copies the delay only from the explicit run environment at `:205`. `test/architecture/hermetic-git-environment.test.ts:18` plants inherited git and all five background variables; cases at `:79` compare complete expected environments. The TUI driver uses the same function at `features/lib/pi-tui.ts:167`. |
 | 08-02 / T-08-11 | Repudiation | low | mitigate | CLOSED | `docs/env-vars.md:189` documents TUI-only scheduling, stored credentials, the wait behavior, precedence, official-name defaults, and unsupported upstream settings. Its opt-out table at `:209` agrees with `orchestrators/marketplace/background-update.ts:49` and `:68` and the corresponding scheduler cases. |
 | 08-02 / T-08-SC | Tampering | low | accept | CLOSED — accepted risk | AR-08-04; 08-02 PLAN disposition and 08-RESEARCH.md Package Legitimacy Audit. The plan changes the existing harness and documentation without adding a package. |
 | 08-03 / T-08-12 | Information disclosure | medium | mitigate | CLOSED | `shared/notification-resolve.ts:974` redacts name, marketplace, optional fromVersion, and toVersion before presentation. `test/shared/notification-resolve.test.ts:1759` plants credentials in all four fields; `test/architecture/no-credential-leak.test.ts:903` exercises the real raw-surface presentation path with credential-bearing name/version text. |
@@ -62,8 +63,8 @@ The follow-up decisions in 08-CONTEXT.md supersede historical PLAN and initial v
 | 08-03 / T-08-14 | Tampering | low | mitigate | CLOSED | `shared/notification-dispatch.ts:273` suppresses empty lists. `shared/notification-wire.ts:854` closes plugin rows; `:870` requires needsReload true and at least one row, with additionalProperties false. `shared/notification-json.ts:245` maps each installation field explicitly. `test/shared/notification-wire.test.ts:542`, the wire-schema architecture gate, and `schema/claude-plugin.schema.json:2702` cover the wire contract. |
 | 08-03 / T-08-15 | Denial of service | medium | mitigate | CLOSED | `orchestrators/marketplace/background-pass.ts:378` checks stopped before opening the real notice run. Its error path catches a secondary notice failure at `:390`; a normal-path notice rejection reaches the scheduler catch at `background-update.ts:87`. Owner cases at `test/orchestrators/marketplace/background-pass.test.ts:1183`, `:1211`, `:1332` cover silence and stale-context failures. |
 | 08-03 / T-08-SC | Tampering | low | accept | CLOSED — accepted risk | AR-08-05; 08-03 PLAN disposition and 08-RESEARCH.md Package Legitimacy Audit. Notification support uses existing dependencies. |
-| 08-04 / T-08-16 | Information disclosure | medium | mitigate | CLOSED | `features/lib/pi-tui.ts:154` validates the sandbox before starting the PTY process, sets its sandbox cwd, and uses the shared environment allowlist. `test/e2e/_rpc.ts:190` supplies sandbox HOME, PI_CODING_AGENT_DIR, and PI_OFFLINE; `:214` supplies --offline to both modes. `features/support/world.ts:449` registers TUI cleanup before readiness; the PTY driver terminates the process group. The feature uses local path fixtures and the run's loopback host. |
-| 08-04 / T-08-17 | Repudiation | medium | mitigate | OPEN — nonblocking | The positive TUI feature has bounded waits and verifies resulting installed versions, but `features/lib/pi-tui.ts:245` collapses repeated identical notices through Set. The cross-scope feature updates the same bare name in both marketplaces, and `features/step_definitions/marketplace/background-update.steps.ts:101` compares the collapsed array. A wrong implementation emitting one identical notice per marketplace can pass. See finding SEC-08-01. |
+| 08-04 / T-08-16 | Information disclosure | medium | mitigate | CLOSED | `features/lib/pi-tui.ts:160` validates the sandbox before starting the PTY process, sets its sandbox cwd, and uses the shared environment allowlist. `test/e2e/_rpc.ts:190` supplies sandbox HOME, PI_CODING_AGENT_DIR, and PI_OFFLINE; `:214` supplies --offline to both modes. `features/support/world.ts:449` registers TUI cleanup before readiness; the PTY driver terminates the process group. The feature uses local path fixtures and the run's loopback host. |
+| 08-04 / T-08-17 | Repudiation | medium | mitigate | CLOSED | `features/marketplace/background-update.feature:60` updates distinct alpha/beta plugins across marketplaces and scopes, requires their combined notice, and verifies both installed versions. The original same-name scenario at `:30` retains D-PL8-21 deduplication coverage. `features/step_definitions/marketplace/background-update.steps.ts:90` waits for the combined text and `:92` compares all distinct visible notice texts. `features/lib/pi-tui.ts:105` explicitly exposes that text-only boundary; four cases in `test/architecture/pi-tui-notices.test.ts` pin it. `test/orchestrators/marketplace/background-pass.test.ts:1128` separately asserts exactly one notification entry. `08-REVIEW-FIX.md` records that a temporary per-plugin/per-marketplace production mutant passed the old scenario and failed the new one; the mutant is absent from the audited tree. |
 | 08-04 / T-08-SC | Tampering | low | accept | CLOSED — accepted risk | AR-08-06; 08-04 PLAN disposition and 08-RESEARCH.md Package Legitimacy Audit. The scenario and harness require no new package. |
 
 ## Accepted risks
@@ -81,27 +82,19 @@ The original acceptance date is retained from the authored phase decisions. This
 
 ## Open findings
 
-### SEC-08-01 — T-08-17: duplicate notices are erased by the behavioral oracle
+None.
 
-Severity: medium. Nonblocking at block_on high.
+## Closed finding: SEC-08-01 / T-08-17
 
-The current aggregate scenario updates demo in the project marketplace tools and the user marketplace extras. Under the current bare-name notice rule, a faulty implementation notifying separately for each marketplace produces the same notice twice.
+Closed at `c571a4cb` after harness/test commit `7a436b05`.
 
-`PiTuiSession.backgroundUpdateNotices()` returns `[...new Set(notices)]`. Consequently, the step's exact-array assertion observes one notice even when two separate identical notices were emitted.
+The original same-name scenario could pass when an incorrect implementation emitted one identical notice per marketplace. The new alpha/beta scenario requires a combined notice and verifies both installed results. The recorded temporary production mutant passed the old scenario and failed the new one. Production code was restored before commit and matches the previously audited baseline.
 
-A read-only probe imported the actual driver, supplied two identical notice lines to its terminal-output buffer, called backgroundUpdateNotices(), and confirmed that the result contained one element. No implementation or test file was modified.
+The oracle is now explicitly named `backgroundUpdateNoticeTexts`. Four focused tests document its boundary: PTY screen redraws and separate identical emissions cannot be distinguished reliably from these bytes. The driver reports distinct visible texts; it does not count notification events.
 
-This maps to the authored T-08-17 behavioral-proof threat and historical review CR-01/WR-01. It is not an unregistered threat or evidence of a current production duplicate.
+The initial audit's requested identical-emission-count assertion was therefore not an appropriate PTY requirement. Aggregate visible behavior is now covered by the distinct-name scenario and its mutant result. Exact notification-entry cardinality remains covered by `test/orchestrators/marketplace/background-pass.test.ts:1128`. The original bare-name deduplication scenario remains intact.
 
-Required correction:
-
-- Preserve legitimate TUI redraw handling while distinguishing separate notification emissions.
-- Add behavioral coverage with distinct plugin names across marketplaces, so notifying once per marketplace fails the expected aggregate result.
-- Add a regression proving that an extra identical notification cannot disappear from the oracle.
-- Preserve the existing bare-name deduplication and both-scope installation assertions.
-- Recheck T-08-17 after the fix and run the required combined-tree gate for changed build inputs.
-
-No blocking findings.
+This correction introduces no additional accepted-risk disposition.
 
 ## Unregistered flags
 
@@ -109,9 +102,11 @@ None. All four SUMMARY Threat Flags sections report none. The current runtime, a
 
 ## Validation evidence
 
-08-VALIDATION.md records 618/618 focused owner and architecture tests and five real-Pi feature scenarios with 64 steps.
+The initial validation recorded 618/618 focused tests and five real-Pi scenarios with 64 steps. The SEC-08-01 fix then passed 119 focused tests, including four oracle cases, and six real-PTY/RPC feature scenarios with 83 steps, as recorded in 08-REVIEW-FIX.md.
 
-The orchestrator reported a fresh full `npm run check` at implementation/test HEAD `3a8c7e1c6b9af4e0f7c1646e67da622829eb525e`: 1124 scenarios, 11462 steps, and 309 merged LCOV records. No later build input changed, so the combined-tree result is reusable under local-verification policy. The security auditor did not rerun that full gate.
+The orchestrator reported a fresh full `npm run check` at `7a436b05daff149cacb110258051d65675b1e8b2`: 1125 scenarios, 11481 steps, and 309 merged LCOV records. No subsequent build input changed. The security auditor reused that combined-tree result, inspected the current LCOV artifact, ran the focused oracle test module successfully, and obtained a clean Fallow review against 0b5d3d5b.
+
+The security auditor did not rerun the full gate or the temporary production mutant. The mutant result is recorded execution evidence from 08-REVIEW-FIX.md; its removal was independently confirmed by the production diff.
 
 The current LCOV artifact was inspected:
 
@@ -121,18 +116,17 @@ The current LCOV artifact was inspected:
 | background-pass.ts | 399/399 | 20/20 | 64/64 |
 | background-update.ts | 132/132 | 10/10 | 32/32 |
 
-Passing tests and complete direct coverage do not close SEC-08-01: its issue is the observable assertion's ability to distinguish a plausible wrong implementation.
-
 ## Audit trail and sign-off
 
 | Audit | Authored rows | Mitigations verified | Accepted rows recorded | Open blocking | Open nonblocking |
 | --- | --- | --- | --- | --- | --- |
 | 2026-10-28 at 0b5d3d5b, including this accepted-risk log | 21 | 14/15 | 6 | 0 | 1 |
+| 2026-10-28 final recheck at c571a4cb | 21 | 15/15 | 6 | 0 | 0 |
 
 - [x] All 21 authored rows retained, including four plan-qualified supply-chain sentinels.
 - [x] Every accepted disposition has a distinct recorded entry.
 - [x] Superseding runtime decisions applied to the evidence.
 - [x] Implementation files remained read-only during the audit.
-- [ ] T-08-17 behavioral-proof gap resolved and reverified.
+- [x] T-08-17 behavioral-proof gap resolved and reverified.
 
-Approval: OPEN_THREATS. No severity-high-or-critical threat is open; threats_open is zero. One medium declared mitigation remains incomplete.
+Approval: SECURED at `c571a4cb69ca63e82134fc78b407e2810ccf3e08`, with combined implementation/test inputs at `7a436b05daff149cacb110258051d65675b1e8b2`. All 21 authored rows are closed; threats_open is zero.
