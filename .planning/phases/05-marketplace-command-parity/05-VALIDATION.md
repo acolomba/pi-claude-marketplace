@@ -1,67 +1,47 @@
 ---
 phase: "5"
 slug: "marketplace-command-parity"
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-10-26"
+updated: "2026-10-28"
 ---
 
-# Phase 5 — Validation Strategy
+# Phase 5 — Validation
 
-> Per-phase validation contract for feedback sampling during execution. Source: `05-RESEARCH.md` § Validation Architecture.
+All nine plans and summaries are complete. MKT-01 through MKT-08 have behavioral automated evidence, except MKT-06, whose explicit acceptance route is the recorded D-PL5-14 decision. No new test is needed.
 
-## Test Infrastructure
+## Requirement map
 
-| Property | Value |
-|----------|-------|
-| **Framework** | `node:test` (unit, architecture, integration) + `@cucumber/cucumber` (behavior) |
-| **Config file** | `package.json` scripts; `cucumber.json` |
-| **Quick run command** | `node --test <owner test>`; `npm run test:coverage:direct -- <source path>`; `npx cucumber-js features/marketplace/<file>.feature` |
-| **Full suite command** | `npm run check` |
-| **Estimated runtime** | ~75 seconds (full); seconds per owner test |
+| Requirement | Behavioral evidence | Automated command | Status |
+| --- | --- | --- | --- |
+| MKT-01 | Reserved names refused for untrusted sources; Anthropic GitHub source and bootstrap accepted; refresh refusal preserves state. | `node --test test/domain/name.test.ts test/orchestrators/marketplace/add.test.ts test/orchestrators/marketplace/update.test.ts`; `npx cucumber-js features/marketplace/reserved-name.feature features/plugin/bootstrap.feature` | Green |
+| MKT-02 | Hosted URL classification, bounded HTTPS fetch, add, refresh, autoupdate, stored catalog, and read-only operations without a request. | `node --test test/domain/source.test.ts test/platform/hosted-manifest-fetch.test.ts test/orchestrators/marketplace/add.test.ts test/orchestrators/marketplace/update.test.ts`; `npx cucumber-js features/marketplace/hosted-source.feature features/marketplace/hosted-source-update.feature features/marketplace/autoupdate.feature` | Green |
+| MKT-03 | Market alias dispatch, help, usage errors, and completions. | `node --test test/edge/router.test.ts test/edge/completions/provider.test.ts`; `npx cucumber-js features/marketplace/market-alias.feature` | Green |
+| MKT-04 | Marketplace-level failure rows render a bare marketplace JSON id for add, update, remove, and info. | `node --test test/orchestrators/marketplace/shared.test.ts test/orchestrators/marketplace/update.test.ts test/shared/notification-json.test.ts`; `npm run test:cucumber` | Green |
+| MKT-05 | The first @ or # separates owner/repo from ref; later @ remains in the ref and appears in info. | `node --test test/domain/source.test.ts`; `npx cucumber-js features/marketplace/github-source.feature` | Green |
+| MKT-06 | D-PL5-14 records upstream parity: remove reports its own uninstalls; unmet dependents are reported at later load, pending, or apply. The requirement expressly permits a recorded choice. | Decision in `05-CONTEXT.md` and `05-09-SUMMARY.md`; `node --test test/orchestrators/marketplace/remove.test.ts`; `npx cucumber-js features/marketplace/remove.feature` | Decision satisfied; tests green |
+| MKT-07 | Malformed manifest versus crash, missing recorded clone repair, missing path source refusal, EISDIR classification, and unchanged no-op outcome. | `node --test test/orchestrators/marketplace/add.test.ts`; `npx cucumber-js features/marketplace/failed-add.feature` | Green |
+| MKT-08 | Partial remove subtracts all dropped axes, including hooks; the shared fold maps every dropped key with a compile-checked record. | `node --test test/orchestrators/plugin/shared.test.ts test/orchestrators/marketplace/remove.test.ts`; `npm run typecheck` | Green |
 
-## Sampling Rate
+## Verification result
 
-- **After every task commit:** owner tests + direct coverage of the changed pair (the hook runs `check:commit`)
-- **After every plan wave:** `npm run check` on the combined tree
-- **Before `/gsd-verify-work`:** `npm run check` green
-- **Max feedback latency:** 120 seconds
+The focused owner command covering eleven test modules passed ten modules in the sandbox. The only failed module was `add.test.ts`: its unrelated Unix-domain-socket fixture could not bind (`EPERM`). Running that owner module with socket permission passed 198/198 tests. The other ten modules passed. No product assertion failed.
 
-## Per-Requirement Verification Map
+The parent's `npm run check` at commit `9692623d` exited 0: 1,122 Cucumber scenarios, 11,447 steps, and 309 merged LCOV records. Since that commit, only planning Markdown changed through `ef15a4e6`; no build input changed. The local-verification gate rule permits reuse of the passing combined-tree result for this documentation-only update.
 
-| Requirement | Test Type | Automated Command | File Exists | Status |
-|-------------|-----------|-------------------|-------------|--------|
-| MKT-01 | unit | `node --test test/domain/name.test.ts test/orchestrators/marketplace/add.test.ts` | ✅ | ⬜ pending |
-| MKT-01 | scenario | `npx cucumber-js features/marketplace/reserved-name.feature features/plugin/bootstrap.feature` | ❌ W0 | ⬜ pending |
-| MKT-02 | unit | `node --test test/domain/source.test.ts test/persistence/state-io.test.ts test/platform/<hosted-module>.test.ts test/orchestrators/marketplace/{add,update,remove,info}.test.ts` | ❌ W0 (platform pair) | ⬜ pending |
-| MKT-02 | scenario | `npx cucumber-js features/marketplace/hosted-source.feature` | ❌ W0 | ⬜ pending |
-| MKT-03 | unit | `node --test test/edge/router.test.ts test/edge/completions/provider.test.ts test/architecture/flag-catalog-drift.test.ts` | ✅ | ⬜ pending |
-| MKT-03 | scenario | `npx cucumber-js features/marketplace/market-alias.feature` | ❌ W0 | ⬜ pending |
-| MKT-04 | unit + scenario | `node --test test/orchestrators/marketplace/shared.test.ts test/shared/notification-json.test.ts`; affected marketplace features | ✅ | ⬜ pending |
-| MKT-05 | unit + scenario | `node --test test/domain/source.test.ts`; `npx cucumber-js features/marketplace/github-source.feature` | ✅ | ⬜ pending |
-| MKT-06 | decision only | none (D-PL5-14) | — | ⬜ pending |
-| MKT-07 | unit + scenario | `node --test test/orchestrators/marketplace/add.test.ts`; `npx cucumber-js features/marketplace/failed-add.feature` | ✅ | ⬜ pending |
-| MKT-08 | unit | `node --test test/orchestrators/plugin/shared.test.ts test/orchestrators/marketplace/remove.test.ts` | ✅ | ⬜ pending |
+## Decision boundaries
 
-## Wave 0 Requirements
+- D-PL5-14 is the MKT-06 disposition; it does not require a new removal notification.
+- D-PL5-04 keeps suffix-less HTTPS inputs on the existing git-source path. D-PL5-21 retains the update verb's 404 classification. Both are recorded MKT-02 choices.
+- D-PL5-22's plugin-update sync path, import's own row ID, and MKTNAME-01 were assigned to later phases or backlog. The recorded review dispositions do not contradict a current Phase 5 requirement.
 
-- [ ] `test/platform/<hosted-module>.test.ts` — pair for the new fetch module
-- [ ] `features/lib/https-git-host` static-catalog route + hosted / anthropics-owner publication steps
-- [ ] `features/marketplace/{hosted-source,reserved-name,market-alias}.feature`
-- [ ] Migrate the 8 `anthropic-plugin-directory` dir-source scenarios and `test/e2e/_helpers.ts`
+## Sign-off
 
-## Manual-Only Verifications
+- [x] All eight requirements map to executable tests or the expressly permitted recorded decision.
+- [x] Every implemented user-visible requirement has a Cucumber scenario.
+- [x] No missing Wave 0 fixture or test reference remains.
+- [x] The unchanged build inputs have a reusable passing full gate.
 
-All phase behaviors have automated verification. The e2e helper change is proven only by the CI e2e job.
-
-## Validation Sign-Off
-
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 120s
-- [ ] `nyquist_compliant: true` set in frontmatter
-
-**Approval:** pending
+**Approval:** validated; Nyquist compliant.
