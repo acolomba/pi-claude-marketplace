@@ -841,7 +841,8 @@ async function refreshDisabledPluginUpdate(
     } catch (err) {
       // Clone cleanup is hygienic and retries on a later lifecycle operation.
       hookDebugLog(
-        `refreshDisabledPluginUpdate: clone cleanup failed for ${options.plugin}: ${errorMessage(err)}`,
+        `refreshDisabledPluginUpdate: clone cleanup failed for ${options.plugin}: ` +
+          errorMessage(err),
       );
     }
   }
@@ -939,7 +940,8 @@ function postFetchGuard(
   // UPD-DEP-D1: a dependency plan judged this move at `expectVersion`; any
   // other candidate is a version the plan never judged, so the move fails.
   if (expectVersion !== undefined && toVersion !== expectVersion) {
-    const note = `version ${toVersion} is not version ${expectVersion}, which the dependency plan chose`;
+    const mismatch = `version ${toVersion} is not version ${expectVersion}`;
+    const note = `${mismatch}, which the dependency plan chose`;
     return failedCandidate(base, [note], [], new Error(note));
   }
 
