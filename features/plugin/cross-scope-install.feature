@@ -1,9 +1,7 @@
 Feature: Plugin cross-scope install
 
-  Installing into the project scope a plugin whose marketplace only the user scope
-  added gives the project its own copy of that marketplace and declares it in the
-  project's base config. The scenarios run the real extension in a headless Pi and
-  use local marketplaces and a loopback https git host in place of published ones.
+  A project install copies a user-scope marketplace into the project scope and
+  declares it in the project's base config. Local stand-ins keep each run isolated.
 
   Scenario: Installing a plugin into the project scope declares the user-scope marketplace of its dependency in the project's base config
     Given the marketplace "tools" is published as a dir source

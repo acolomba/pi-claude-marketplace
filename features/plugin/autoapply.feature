@@ -1,9 +1,7 @@
 Feature: Plugin autoapply
 
-  A config that turns autoapply on makes a new session apply the configs and
-  marketplaces itself, and /claude:plugin autoapply shows and sets it. The
-  scenarios run the real extension in a headless Pi with local marketplaces
-  and a loopback https git host.
+  When autoapply is on, a new session applies its configs and marketplaces.
+  /claude:plugin autoapply shows or changes that setting.
 
   Scenario: A new session installs the plugins a project config declares when the config turns autoapply on
     Given the marketplace "fixtures" is published as a dir source

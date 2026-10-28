@@ -1,9 +1,7 @@
 Feature: Plugin git source update
 
-  Updating a plugin whose source is a git repository fetches the repository's
-  new revision and installs it. A loopback https git host serves the
-  marketplace and plugin repositories and logs the requests Pi makes.
-  A reinstall installs the revision the cached repository already holds, without a request.
+  An update fetches and installs a git-source plugin's new revision.
+  A reinstall uses the cached revision without another request.
 
   Scenario: Updating a git-source plugin fetches its new revision
     Given the git repository "ghp" holds these plugins:
