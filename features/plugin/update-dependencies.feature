@@ -1,9 +1,7 @@
 Feature: Plugin update dependencies
 
-  Updating a plugin installs, enables or moves the dependencies its new version
-  needs, dependencies first, or keeps the installed version when they cannot be
-  met. The scenarios run the real extension in a headless Pi and use a local
-  marketplace in place of a published one.
+  An update installs, enables, or moves the dependencies its new version needs.
+  If it cannot meet those dependencies, it keeps the installed version.
 
   Scenario: Updating a plugin whose new version needs a dependency that is not installed installs the dependency too
     Given the marketplace "tools" is published as a dir source

@@ -1,9 +1,7 @@
 Feature: Plugin update rollback
 
-  An update that fails before it replaces the installed version keeps that
-  version, its skills, and its record, and a retry succeeds once the cause is
-  gone. A directory in place of a file the update writes stops it, even for
-  root, and a local marketplace stands in for a published one.
+  An update failure keeps the installed version, skills, and record.
+  A retry succeeds after the cause is removed.
 
   Background:
     Given the marketplace "fixtures" is published as a dir source
