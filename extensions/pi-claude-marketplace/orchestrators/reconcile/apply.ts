@@ -174,6 +174,7 @@ import type { ScopeSatisfactionVerdict, UnsatisfiedDeclaration } from "./depende
 import type { ReconcileStateReader, ScopePassAccumulators } from "./read-pass.ts";
 import type {
   ApplyReconcileOptions,
+  DeferredPinRestore,
   PlannedDependencyDisable,
   PlannedDependencyInstall,
   PlannedPluginEnable,
@@ -748,7 +749,7 @@ async function applyPluginInstalls(
         // the remedy. The toggle arm below stamps neither field.
         enableHint: true,
         // The version slot every other reconcile `(disabled)` row fills.
-        ...(result.version !== undefined && { version: result.version }),
+        version: result.version,
         // S2 / PR #51: the post-commit warnings are collected on this path
         // exactly as on the install path -- none of the collection sites are
         // gated on the disabled verdict -- so drop them here and a permission
@@ -768,7 +769,7 @@ async function applyPluginInstalls(
         scope: op.scope,
         marketplace: op.marketplace,
         plugin: op.plugin,
-        ...(result.version !== undefined && { version: result.version }),
+        version: result.version,
         dependencies: declaredDependencies(result),
         // S2 / PR #51: propagate post-commit warnings so the cascade
         // caller can surface them to the operator (mirrors the
@@ -1334,6 +1335,7 @@ async function applyPlan(
  */
 async function convergeScope(
   reader: ReconcileStateReader,
+  restoreDeferredPin: DeferredPinRestore,
   opts: ApplyReconcileOptions,
   scope: Scope,
   toggles: TogglePlan,
@@ -1371,6 +1373,7 @@ async function convergeScope(
       waiting,
       afterInstalls: movesAfterInstalls(cascade, waiting),
       before: before.state,
+      restoreDeferredPin,
       failed,
       reports,
       sink: outcomes,
@@ -1671,6 +1674,8 @@ interface CascadeRun {
   readonly afterInstalls: ReadonlySet<string>;
   /** The scope before the cascade, whose pins a failed deferred enable restores. */
   readonly before: ExtensionState;
+  /** The composition-owned operation that restores that pin. */
+  readonly restoreDeferredPin: DeferredPinRestore;
   readonly failed: FailedSteps;
   readonly reports: StepReport[];
   /** Where a fault in a step's restore or collection tail is reported (`runScopeIsolated`). */
@@ -1828,9 +1833,7 @@ async function runStep(
 
   await runScopeIsolated(run.scope, run.sink, async () => {
     if (!landed) {
-      await (
-        opts.restoreDeferredPin ?? ((scope, key, before) => restorePin(opts, scope, key, before))
-      )(run.scope, pluginKey(move), run.before);
+      await run.restoreDeferredPin(run.scope, pluginKey(move), run.before);
     }
 
     if (collect.requested) {
@@ -2261,6 +2264,7 @@ function grownMoveOutcomes(move: PlannedMove, result: PluginUpdateOutcome): PerE
  */
 async function applyReconcileWithReader(
   reader: ReconcileStateReader,
+  restoreDeferredPin: DeferredPinRestore,
   opts: ApplyReconcileOptions,
 ): Promise<void> {
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
@@ -2274,7 +2278,7 @@ async function applyReconcileWithReader(
   };
 
   try {
-    await applyScopes(reader, opts, scopes, accumulators);
+    await applyScopes(reader, restoreDeferredPin, opts, scopes, accumulators);
   } catch (err) {
     // APPLYTHROW-01: a GHB-03 throw ends the pass after earlier steps have
     // committed, so their rows, the migration notice, and the `/reload` hint
@@ -2301,6 +2305,7 @@ async function applyReconcileWithReader(
  */
 async function applyScopes(
   reader: ReconcileStateReader,
+  restoreDeferredPin: DeferredPinRestore,
   opts: ApplyReconcileOptions,
   scopes: readonly Scope[],
   accumulators: ScopePassAccumulators,
@@ -2325,7 +2330,10 @@ async function applyScopes(
     const convergeFailures: PerEntryOutcome[] = [];
     try {
       // eslint-disable-next-line no-await-in-loop -- each scope's apply edits shared hooks routing
-      await applyAndConverge(reader, opts, scope, readResult, { outcomes, convergeFailures });
+      await applyAndConverge(reader, restoreDeferredPin, opts, scope, readResult, {
+        outcomes,
+        convergeFailures,
+      });
     } finally {
       // REC-05 / DLS-01 / DISP-02: after the convergence, so a failed move for
       // the same plugin suppresses the unreadable-declarer row as an apply-pass
@@ -2341,6 +2349,7 @@ async function applyScopes(
 /** One scope's plan, then its catalog convergence (APL-02 / D-08). */
 async function applyAndConverge(
   reader: ReconcileStateReader,
+  restoreDeferredPin: DeferredPinRestore,
   opts: ApplyReconcileOptions,
   scope: Scope,
   readResult: ScopeReadResult,
@@ -2360,7 +2369,15 @@ async function applyAndConverge(
     },
     sinks.outcomes,
   );
-  await convergeScope(reader, opts, scope, toggles, sinks.outcomes, sinks.convergeFailures);
+  await convergeScope(
+    reader,
+    restoreDeferredPin,
+    opts,
+    scope,
+    toggles,
+    sinks.outcomes,
+    sinks.convergeFailures,
+  );
 }
 
 /**
@@ -2412,10 +2429,13 @@ function reportScopePasses(
  * the `apply` command (APL-01).
  */
 export function createApplyReconcile(
-  reader: ReconcileStateReader,
+  composition: ReconcileStateReader & { readonly restoreDeferredPin?: DeferredPinRestore },
 ): (opts: ApplyReconcileOptions) => Promise<void> {
   return async function applyReconcile(opts: ApplyReconcileOptions): Promise<void> {
-    await applyReconcileWithReader(reader, opts);
+    const restoreDeferredPin =
+      composition.restoreDeferredPin ??
+      ((scope: Scope, key: string, before: ExtensionState) => restorePin(opts, scope, key, before));
+    await applyReconcileWithReader(composition, restoreDeferredPin, opts);
   };
 }
 

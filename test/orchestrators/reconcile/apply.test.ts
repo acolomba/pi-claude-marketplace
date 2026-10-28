@@ -9461,14 +9461,20 @@ describe("applyReconcile catalog convergence", () => {
       throw new StateLockHeldError("project", ".state-lock");
     };
 
+    const applyReconcileWithRestoreFailure = createApplyReconcile({
+      loadState,
+      restoreDeferredPin,
+    });
+
     // act
-    await applyReconcile({
+    await applyReconcileWithRestoreFailure({
       ctx,
       run: runWithNothingLoaded(),
       cwd,
       scope: "project",
       gitOps,
-      restoreDeferredPin,
+      completionCache: createCompletionCache(),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     });
 
     // assert

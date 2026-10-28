@@ -184,6 +184,7 @@ void ({
   cwd: "/work/project",
   completionCache,
   hooksRouting,
+  // @ts-expect-error deferred-pin restoration belongs to reconcile composition
   restoreDeferredPin: deferredPinRestore,
 } satisfies ApplyReconcileOptions);
 void ({

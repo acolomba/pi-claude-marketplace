@@ -394,14 +394,6 @@ export interface ApplyReconcileOptions {
    */
   readonly stampDependencyDisabled?: DependencyDisableStamp;
   /**
-   * Injection seam for the pin restore after a deferred record's enable fails.
-   * Production callers (index.ts) omit it and `apply.ts::restorePin` applies.
-   * The restore takes the state lock after the enable released it, so only a
-   * seam can make that second acquisition fail on cue; the contract it pins is
-   * that the failure becomes a reported row and ends nothing else.
-   */
-  readonly restoreDeferredPin?: DeferredPinRestore;
-  /**
    * AMIG-01 injection seam for the load-time MCP move. Production callers
    * (index.ts) omit it and `mcp-migration.ts::migrateLegacyMcpEntries`
    * applies. The seam exists because the step's call position is a contract
