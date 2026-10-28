@@ -124,6 +124,7 @@ for (const row of rows) {
     fail(`${row.id} has no source bullet description`);
   }
 
+  let commitExists = false;
   if (typeof row.commit !== "string" || !/^[0-9a-f]{8}$/u.test(row.commit)) {
     fail(`${row.id} has no exact eight-hex evidence commit`);
   } else {
@@ -132,6 +133,7 @@ for (const row of rows) {
         cwd: projectRoot,
         stdio: "ignore",
       });
+      commitExists = true;
     } catch {
       fail(`${row.id} cites missing commit ${row.commit}`);
     }
@@ -156,6 +158,24 @@ for (const row of rows) {
 
     if (!readFileSync(absolute, "utf8").includes(evidence.title)) {
       fail(`${row.id} title is absent from ${evidence.path}: ${evidence.title}`);
+    }
+
+    if (commitExists) {
+      let committedEvidence;
+      try {
+        committedEvidence = execFileSync("git", ["show", `${row.commit}:${evidence.path}`], {
+          cwd: projectRoot,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+        });
+      } catch {
+        fail(`${row.id} path is absent at ${row.commit}: ${evidence.path}`);
+        continue;
+      }
+
+      if (!committedEvidence.includes(evidence.title)) {
+        fail(`${row.id} title is absent from ${evidence.path} at ${row.commit}: ${evidence.title}`);
+      }
     }
   }
 
