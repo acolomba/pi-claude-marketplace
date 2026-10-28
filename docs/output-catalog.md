@@ -228,6 +228,12 @@ Plugin list: 2 successes
 
 Two marketplace blocks; one per scope. Joined by one blank line (D-16-07). Plugin rows omit the scope bracket because `p.scope === mp.scope`.
 
+With `--scope user` or `--scope project`, the command keeps only that scope. Each installation appears under that scope's own marketplace block. It is not folded under a block from the other scope (LST-05).
+
+### Named marketplace that no consulted scope records
+
+`list nosuch` consults both scopes. Its complete body is `A marketplace operation has failed.\n\n⊘ nosuch (failed) {marketplace not added}`. `list official --scope user` includes `[user]`. If only the project scope holds `official`, its reason is `{marketplace not added to user scope}`. These are the same `marketplace-not-added` bytes used by the other named plugin and marketplace commands.
+
 ### Project-scope plugins folded under user-scope marketplace (orphan-fold)
 
 <!-- catalog-state: project-orphan-folded -->
@@ -2591,7 +2597,7 @@ Import: 1 failure, 2 successes
 /reload to pick up changes
 ```
 
-`hello@mp` declares a dependency the marketplace does not declare, so its install cascade fails before `hello`'s own ledger runs. `installOnePlannedPlugin` drives exactly one orchestrated outcome per planned plugin (it does not install the dependency separately), so the two-row standalone cascade form -- a dependency row plus a `{dependency failed}` root row -- collapses onto the ONE row import can render: `hello`'s own row carries `{dependency failed}` and the failing dependency's cause line, exactly as the "Load-time install failed by a dependency" state under [`## reconcile-applied-cascade`](#reconcile-applied-cascade) renders it. `dispatchFailedOutcome` narrows on `instanceof DependencyCascadeError` before its generic fallthrough, so a cascade failure names its dependency instead of the bare `(failed)` row the fallthrough renders for an unclassified throw (IMP-09). Every other plugin in the batch is unaffected and keeps installing (D-115-08 continuation); the trailing tally counts the marketplace add and `before`'s install as successes and `hello`'s row as the one failure. Severity: `error`; reload-hint fires (`before` materialized).
+`hello@mp` declares a dependency the marketplace does not declare, so its install cascade fails before `hello`'s own ledger runs. `installOnePlannedPlugin` drives exactly one orchestrated outcome per planned plugin (it does not install the dependency separately), so the two-row standalone cascade form -- a dependency row plus a `{dependency failed}` root row -- collapses onto the ONE row import can render: `hello`'s own row carries `{dependency failed}` and the failing dependency's cause line, exactly as the "Apply install failed by a dependency" state under [`## reconcile-applied-cascade`](#reconcile-applied-cascade) renders it. `dispatchFailedOutcome` narrows on `instanceof DependencyCascadeError` before its generic fallthrough, so a cascade failure names its dependency instead of the bare `(failed)` row the fallthrough renders for an unclassified throw (IMP-09). Every other plugin in the batch is unaffected and keeps installing (D-115-08 continuation); the trailing tally counts the marketplace add and `before`'s install as successes and `hello`'s row as the one failure. Severity: `error`; reload-hint fires (`before` materialized).
 
 ### An import whose install moves a dependency first (UPD-DEP-D1)
 
@@ -4116,7 +4122,7 @@ Reconcile: 1 warning
 
 ### Apply install failed by a dependency (RESV-06)
 
-The load-time counterpart of the standalone dependency-cascade `{dependency failed}` row. The user declared `hello@mp` in `claude-plugins.json` and reloaded; `hello` declares a dependency the marketplace does not declare, so the cascade fails before `hello`'s own ledger runs. Reconcile drives exactly one orchestrated outcome for `hello@mp` (it does not install the dependency separately), so the two-row standalone form -- a dependency row plus a `{dependency failed}` root row -- collapses onto the ONE row reconcile can render: the requesting plugin's own row carries `{dependency failed}` and the failing dependency's own cause line, sourced from the SAME `DependencyCascadeError` the standalone cascade's dependency row carries (`orchestrators/plugin/install-cascade.messaging.ts::cascadeFailureCause`). Every reason the closed-set dependency-cascade vocabulary can classify a cascade failure with (`{dependency cycle}`, `{dependency marketplace not added}`, `{no matching version}`, `{version conflict}`, ...) reaches this surface the same way; only `{dependency failed}` is shown here. A plugin's own (non-dependency) failure is unaffected and keeps its ordinary reason (e.g. `{not in manifest}`, `{source missing}`) with no cause line. The trailing tally counts the row as one failure. Severity: `error`; no reload-hint.
+The `apply` counterpart of the standalone dependency-cascade `{dependency failed}` row. The user declared `hello@mp` in `claude-plugins.json` and ran `/claude:plugin apply`; `hello` declares a dependency the marketplace does not declare, so the cascade fails before `hello`'s own ledger runs. A normal load only reports the pending install. A load with `autoapply` on runs this `apply` path. Reconcile drives exactly one orchestrated outcome for `hello@mp` (it does not install the dependency separately), so the two-row standalone form -- a dependency row plus a `{dependency failed}` root row -- collapses onto the ONE row reconcile can render: the requesting plugin's own row carries `{dependency failed}` and the failing dependency's own cause line, sourced from the SAME `DependencyCascadeError` the standalone cascade's dependency row carries (`orchestrators/plugin/install-cascade.messaging.ts::cascadeFailureCause`). Every reason the closed-set dependency-cascade vocabulary can classify a cascade failure with (`{dependency cycle}`, `{dependency marketplace not added}`, `{no matching version}`, `{version conflict}`, ...) reaches this surface the same way; only `{dependency failed}` is shown here. A plugin's own (non-dependency) failure is unaffected and keeps its ordinary reason (e.g. `{not in manifest}`, `{source missing}`) with no cause line. The trailing tally counts the row as one failure. Severity: `error`; no reload-hint.
 
 <!-- catalog-state: reconcile-install-dependency-failed -->
 
@@ -5108,7 +5114,25 @@ Usage: /claude:plugin <subcommand> [args]
 Subcommands: install, uninstall, update, reinstall, list, bootstrap, import, marketplace
 ```
 
-The exact wording is renderer-/orchestrator-specific; the contract is that `notifyUsageError` is called with a structured `UsageErrorMessage` and the renderer emits the two-section body separated by one blank line. The catalog's expected output mirrors the structural shape (`message` block, blank line, `usage` block).
+The exact usage line is command-specific. An unknown flag and an extra positional argument use these exact message blocks:
+
+```text
+Unknown flag: "--bogus".
+
+Usage: /claude:plugin list [<marketplace>] [--installed] [--available] [--unavailable] [--partial] [--remote] [--scope user|project]
+```
+
+```text
+Too many arguments.
+
+Usage: /claude:plugin help [marketplace]
+```
+
+The shared argument parser applies these messages to `list`/`ls`, `pending`, `import`, `bootstrap`, `browse`, and `help`. The renderer emits the message and usage blocks with one blank line between them.
+
+## State lock failures
+
+`install`, `enable`, `disable`, `update`, `reinstall`, `marketplace add`, and `marketplace remove` report a held scope lock as `{lock held}`. The cause names the scope and lock path, then asks the user to retry after the other operation completes. The command changes nothing. The prune and import sections above show the same byte shape.
 
 ______________________________________________________________________
 

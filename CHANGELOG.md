@@ -22,6 +22,10 @@
   - Installing a plugin whose name breaks the plugin id rule now gets Claude Code's invalid-id refusal.
   - An install fetches each new git dependency once and installs the commit it checked. An install or update fails and changes nothing when your own file in `agents/` has the name of a new agent.
   - `update`, `fetch`, `info --fetch`, and dependency range checks report a git host 404 or 5xx as `install` does. `fetch` and completion show `list`'s version.
+  - `install`, `enable`, `disable`, `update`, `reinstall`, `marketplace add`, and `marketplace remove` now report a held state lock as `{lock held}` with its cause.
+  - Extra arguments now read `Too many arguments.` Unknown flags read `Unknown flag: "<flag>".` This applies to `list`, `ls`, `pending`, `import`, `bootstrap`, `browse`, and `help`. A failed `bootstrap` now shows the `marketplace add` failure row.
+  - `list <marketplace>` now fails as not added when the marketplace is unknown. A scope filter shows each installation under that scope's own marketplace block.
+  - Local file failures during `update` now read `{unreadable}`. `info --fetch` fetches once and shows a warm commit version when none is declared. `import` now shows installed versions and continues after `{not in manifest}`.
 
 - A new session now lists pending plugin changes, the new `/claude:plugin apply` makes them, and several plugin commands behave more like Claude Code. (#274)
 
