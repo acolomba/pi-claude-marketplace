@@ -146,6 +146,7 @@ export function buildInstallLedgerOptions(
      */
     marketplaceAdd: MarketplaceAddSeam;
     addedMarketplaces: AddedMarketplaces;
+    cloneCandidates?: Set<string>;
   },
   removalOps: RemovalOps,
 ): InstallLedgerOptions {
@@ -164,6 +165,7 @@ export function buildInstallLedgerOptions(
     ...(opts.partial !== undefined && { partial: opts.partial }),
     ...(core.pinVersion !== undefined && { pinVersionOverride: core.pinVersion }),
     ...(opts.cloneCacheSeam !== undefined && { cloneCacheSeam: opts.cloneCacheSeam }),
+    ...(core.cloneCandidates !== undefined && { cloneCandidates: core.cloneCandidates }),
     cloneProbe: probeInstallClone,
     // D-08-12: the install path's composition root. The ledger options carry the
     // port as a required member, so this assembly point is the one place the real
@@ -616,6 +618,7 @@ export function dependencyLedgerOptions(
     readonly cwd: string;
     readonly adds: InstallAdds;
     readonly removalOps: RemovalOps;
+    readonly cloneCandidates?: Set<string>;
   },
 ): (member: ResolvedCascadeMember) => InstallLedgerOptions {
   return (member) =>
@@ -632,6 +635,7 @@ export function dependencyLedgerOptions(
         provenance: "dependency",
         marketplaceAdd: core.adds.marketplaceAdd,
         addedMarketplaces: core.adds.addedMarketplaces,
+        ...(core.cloneCandidates !== undefined && { cloneCandidates: core.cloneCandidates }),
       },
       core.removalOps,
     );

@@ -14,7 +14,6 @@ import { collectPluginCloneCandidatesLocked } from "./clone-gc.ts";
 import { cascadeFailureCause, composeCascadeFailureMessage } from "./install-cascade.messaging.ts";
 
 import type { DependencyMoveContext, DependencyMoveMemos } from "./dependency-move.ts";
-import type { DependencyPlanStep } from "./dependency-plan.ts";
 import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
 import type { UpdateHooksRouting } from "./update-cascade.ts";
 import type { MaterializationPolicy } from "./update-preflight.ts";
@@ -106,6 +105,7 @@ export function dependencyMoveContext(args: {
   readonly caller: DependencyCaller;
   readonly policy: MaterializationPolicy;
   readonly memos: DependencyMoveMemos;
+  readonly cloneCandidates: Set<string>;
 }): DependencyMoveContext {
   const { owners, caller } = args;
   return {
@@ -116,6 +116,7 @@ export function dependencyMoveContext(args: {
     policy: args.policy,
     softDeps: caller.run.softDeps,
     cleanupClones: leaveClonesToTheSweep,
+    cloneCandidates: args.cloneCandidates,
     ...callerFields(caller),
     ...args.memos,
   };
@@ -151,22 +152,16 @@ export function updateCaller(
 }
 
 /**
- * UPD-DEP-D1 / WR-A / IN-N4: returns a sweep for the exact cache entries the
- * accepted dependency moves materialized or may replace. D-PL7-05 /
- * D-PL7-13: the sweep takes a fresh scope lock and rechecks state before each
- * candidate is deleted. An unrelated mirror warmed after planning is not a
- * candidate and stays. The caller must hold no lock. The sweep never throws
- * (D-19-01): a failure, a held lock included, is traced, and a later lifecycle
- * operation retries it.
+ * Returns a sweep over the exact cache entries one planning attempt created or
+ * can leave unreferenced. The caller adds candidates while it plans and runs
+ * the sweep after it releases every scope lock. The sweep takes a fresh lock,
+ * rechecks current references, and never throws. An unrelated cache entry is
+ * not a candidate and stays.
  */
 export function planCloneSweep(
   locations: ScopedLocations,
-  steps: readonly DependencyPlanStep[],
+  candidates: ReadonlySet<string>,
 ): Promise<() => Promise<void>> {
-  const candidates = new Set(
-    steps.flatMap((step) => (step.kind === "move" ? (step.move.cleanupCloneKeys ?? []) : [])),
-  );
-
   return Promise.resolve(async () => {
     try {
       await collectPluginCloneCandidatesLocked(locations, candidates);

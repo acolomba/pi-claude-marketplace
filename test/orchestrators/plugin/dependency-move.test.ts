@@ -120,6 +120,7 @@ async function seedDependency(
       softDeps: runWithNothingLoaded().softDeps,
       policy: UPDATE_POLICY,
       cleanupClones: () => Promise.resolve(),
+      cloneCandidates: new Set(),
       ...freshDependencyMoveMemos(),
     },
   };
@@ -201,6 +202,7 @@ describe("judgeDependencyMove", () => {
 
     // assert
     assert.deepStrictEqual(judgement.ok && judgement.prepared.cleanupCloneKeys, [oldKey]);
+    assert.deepStrictEqual(context.cloneCandidates, new Set([oldKey]));
   });
 
   test("refuses a move whose catalog version falls outside the requester's range", async (t) => {

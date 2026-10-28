@@ -76,8 +76,10 @@ function planning(owner: InstallTestOwner, cwd: string) {
   };
   const root = { key: "app@mp", marketplace: "mp", plugin: "app" };
   const memos = freshDependencyMoveMemos();
+  const cloneCandidates = new Set<string>();
   return {
     caller,
+    cloneCandidates,
     memos,
     owners,
     root,
@@ -88,6 +90,7 @@ function planning(owner: InstallTestOwner, cwd: string) {
       caller,
       policy: INSTALL_MOVE_MATERIALIZATION,
       memos,
+      cloneCandidates,
     }),
   };
 }
@@ -289,6 +292,7 @@ describe("dependency planning operations", () => {
           pinVersionOverride: "1.0.0",
         },
         target: args.target,
+        cloneCandidates: args.cloneCandidates,
       });
 
       // assert

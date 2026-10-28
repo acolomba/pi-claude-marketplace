@@ -95,6 +95,7 @@ test("builds member ledger options from shared and member inputs", () => {
     materializeOrRefreshPluginMirror,
     materializePluginCommitCopy,
   };
+  const cloneCandidates = new Set<string>();
 
   // act
   const options = buildInstallLedgerOptions(
@@ -121,6 +122,7 @@ test("builds member ledger options from shared and member inputs", () => {
       pinVersion: "1.2.3",
       marketplaceAdd: DEFAULT_MARKETPLACE_ADD,
       addedMarketplaces: [],
+      cloneCandidates,
     },
     REMOVAL_OPS,
   );
@@ -137,6 +139,7 @@ test("builds member ledger options from shared and member inputs", () => {
   assert.strictEqual(options.deviceFlowHttp, deviceFlowHttp);
   assert.strictEqual(options.authMemo, authMemo);
   assert.strictEqual(options.cloneCacheSeam, cloneCacheSeam);
+  assert.strictEqual(options.cloneCandidates, cloneCandidates);
   assert.strictEqual(options.removalOps, REMOVAL_OPS);
 });
 
@@ -524,10 +527,17 @@ test("projects member pins and dependency ledger options", () => {
   const plain = member();
   const { ctx, run } = makeCtx();
   const adds = trackInstallAdds(transaction, DEFAULT_MARKETPLACE_ADD);
+  const cloneCandidates = new Set<string>();
   const optionsFor = dependencyLedgerOptions(
     { ctx, run },
     {},
-    { scope: "project", cwd: "/project", adds, removalOps: REMOVAL_OPS },
+    {
+      scope: "project",
+      cwd: "/project",
+      adds,
+      removalOps: REMOVAL_OPS,
+      cloneCandidates,
+    },
   );
 
   // act
@@ -543,6 +553,7 @@ test("projects member pins and dependency ledger options", () => {
   assert.strictEqual(pinnedOptions.sourcePinOverride, "abc123");
   assert.strictEqual(pinnedOptions.resolvedVersion, "1.2.3");
   assert.strictEqual(pinnedOptions.provenance, "dependency");
+  assert.strictEqual(pinnedOptions.cloneCandidates, cloneCandidates);
   assert.deepStrictEqual(pinnedOptions.directoryPin, {
     range: "^1",
     declared: "^1",

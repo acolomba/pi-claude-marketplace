@@ -108,11 +108,8 @@ export interface DependencySettlePorts {
   /** The write-free plan of the whole graph. */
   readonly plan: () => Promise<DependencyPlan>;
   readonly steps: DependencyStepPorts;
-  /**
-   * Returns the sweep for the exact clone keys owned by the accepted plan's
-   * moves. Never throws.
-   */
-  readonly planSweep: (steps: readonly DependencyPlanStep[]) => Promise<() => Promise<void>>;
+  /** Sweeps the exact clone keys collected during this planning attempt. */
+  readonly sweepPlanClones: () => Promise<void>;
 }
 
 /** The error a dependency move that did not land reports. */
@@ -258,20 +255,19 @@ function refused(
  * update's refusal; GHB-03's invalid base override still fails the command.
  */
 async function settlePlanned(ports: DependencySettlePorts): Promise<UpdateDependencySettlement> {
-  let plan: DependencyPlan;
   try {
-    plan = await ports.plan();
-  } catch (err) {
-    rethrowInvalidGitHubBaseUrl(err);
-    return { kind: "refused", rows: [], cause: err as Error };
-  }
+    let plan: DependencyPlan;
+    try {
+      plan = await ports.plan();
+    } catch (err) {
+      rethrowInvalidGitHubBaseUrl(err);
+      return { kind: "refused", rows: [], cause: err as Error };
+    }
 
-  if (!plan.ok) {
-    return refused(ports.steps.refusal, plan.subject);
-  }
+    if (!plan.ok) {
+      return refused(ports.steps.refusal, plan.subject);
+    }
 
-  const sweep = await ports.planSweep(plan.steps);
-  try {
     const final: DependencyPlanStep[] =
       plan.final.members.length > 0 ? [{ kind: "materialize", members: plan.final.members }] : [];
     const ran = await runDependencySteps([...plan.steps, ...final], ports.steps);
@@ -282,7 +278,7 @@ async function settlePlanned(ports: DependencySettlePorts): Promise<UpdateDepend
       ? { kind: "settled", rows, ...notices, ...warnings }
       : { kind: "refused", rows, cause: ran.cause, ...notices, ...warnings };
   } finally {
-    await sweep();
+    await ports.sweepPlanClones();
   }
 }
 

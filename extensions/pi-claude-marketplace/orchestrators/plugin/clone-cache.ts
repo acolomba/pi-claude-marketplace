@@ -219,6 +219,7 @@ export async function materializePluginClone(args: {
   ref?: string;
   gitOps?: GitOps;
   resolveAuth: () => GitAuthBundle;
+  onCloneCreated?: (key: string) => void;
 }): Promise<string> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
   // D-08-12: this verb owns a staging lifecycle, so it is the composition root
@@ -252,7 +253,16 @@ export async function materializePluginClone(args: {
 
   // A `raced` promotion means a concurrent install of the same url+sha won;
   // its tree is byte-equivalent, so the existing root is a warm cache win.
-  await promoteStagingToClone(removalOps, stagingDir, cloneRoot, "plugin clone staging");
+  const promotion = await promoteStagingToClone(
+    removalOps,
+    stagingDir,
+    cloneRoot,
+    "plugin clone staging",
+  );
+  if (promotion === "renamed") {
+    args.onCloneCreated?.(key);
+  }
+
   return cloneRoot;
 }
 
@@ -296,10 +306,10 @@ async function copyMirrorAtCommit(
     readonly gitOps: GitOps;
   },
   dest: string,
-): Promise<boolean> {
+): Promise<"renamed" | "raced" | undefined> {
   const mirrorRoot = await args.locations.pluginCloneDir(pluginMirrorKey(args.cloneUrl));
   if (!(await pathExists(mirrorRoot))) {
-    return false;
+    return undefined;
   }
 
   const staging = await args.locations.sourcesStagingDir(randomUUID());
@@ -308,14 +318,13 @@ async function copyMirrorAtCommit(
   } catch (err) {
     const leak = await cleanupStaging(ops, staging, "plugin commit copy staging");
     if (isGitCommitNotFetchedError(err) || isGitNotFoundError(err)) {
-      return false;
+      return undefined;
     }
 
     throw appendLeakToError(err, leak);
   }
 
-  await promoteStagingToClone(ops, staging, dest, "plugin commit copy staging");
-  return true;
+  return promoteStagingToClone(ops, staging, dest, "plugin commit copy staging");
 }
 
 /**
@@ -335,14 +344,21 @@ export async function materializePluginCommitCopy(args: {
   sha: string;
   gitOps?: GitOps;
   resolveAuth: () => GitAuthBundle;
+  onCloneCreated?: (key: string) => void;
 }): Promise<string> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
-  const dest = await args.locations.pluginCloneDir(pluginCloneKey(args.cloneUrl, args.sha));
+  const key = pluginCloneKey(args.cloneUrl, args.sha);
+  const dest = await args.locations.pluginCloneDir(key);
   if (await pathExists(dest)) {
     return dest;
   }
 
-  if (await copyMirrorAtCommit(createRemovalOps(), { ...args, gitOps }, dest)) {
+  const promotion = await copyMirrorAtCommit(createRemovalOps(), { ...args, gitOps }, dest);
+  if (promotion !== undefined) {
+    if (promotion === "renamed") {
+      args.onCloneCreated?.(key);
+    }
+
     return dest;
   }
 
@@ -372,6 +388,7 @@ export async function materializeUnpinnedSource(
     readonly source: GitBackedSource;
     readonly auth: GitAuthBundle;
     readonly refresh?: boolean;
+    readonly onCloneCreated?: (key: string) => void;
   },
 ): Promise<GitPluginRootResult> {
   const { locations, source, auth } = args;
@@ -384,6 +401,7 @@ export async function materializeUnpinnedSource(
     ...(source.ref !== undefined && { ref: source.ref }),
     auth,
     ...(args.refresh !== undefined && { refresh: args.refresh }),
+    ...(args.onCloneCreated !== undefined && { onCloneCreated: args.onCloneCreated }),
   });
   const copyRoot = await steps.materializePluginCommitCopy({
     locations,
@@ -391,6 +409,7 @@ export async function materializeUnpinnedSource(
     networkUrl,
     sha: mirror.resolvedSha,
     resolveAuth: () => auth,
+    ...(args.onCloneCreated !== undefined && { onCloneCreated: args.onCloneCreated }),
   });
   return resolveGitPluginRootWithSubdir(source, copyRoot, mirror.resolvedSha);
 }
@@ -454,6 +473,7 @@ export async function materializeOrRefreshPluginMirror(args: {
   resolveTagOid?: typeof resolveTagOid;
   auth: GitAuthBundle;
   refresh?: boolean;
+  onCloneCreated?: (key: string) => void;
 }): Promise<{ pluginRoot: string; resolvedSha: string }> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
   // D-08-12: this verb owns a staging lifecycle, so it is the composition root
@@ -461,7 +481,8 @@ export async function materializeOrRefreshPluginMirror(args: {
   // through. The port is required with no default, so a new cleanup site here
   // cannot go uninjected.
   const removalOps = createRemovalOps();
-  const mirrorRoot = await args.locations.pluginCloneDir(pluginMirrorKey(args.cloneUrl));
+  const key = pluginMirrorKey(args.cloneUrl);
+  const mirrorRoot = await args.locations.pluginCloneDir(key);
   // D-2-03: same split as `materializePluginClone` -- the mirror key hashes the
   // canonical identity url, and the caller-supplied wire url is what a COLD
   // clone sends. The refresh below fetches the `origin` remote isomorphic-git
@@ -491,6 +512,9 @@ export async function materializeOrRefreshPluginMirror(args: {
       mirrorRoot,
       "plugin mirror staging",
     );
+    if (promotion === "renamed") {
+      args.onCloneCreated?.(key);
+    }
   }
 
   // MIRR-02 / D-79.1-02: refresh a warm mirror in place (marketplace parity).
@@ -925,6 +949,7 @@ export async function materializeMarketplaceTagClone(args: {
   pathSource: PathSource;
   tagOid: string;
   gitOps?: GitOps;
+  onCloneCreated?: (key: string) => void;
 }): Promise<GitPluginRootResult> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
   // D-08-12: this verb owns a staging lifecycle, so it is the composition root
@@ -957,7 +982,15 @@ export async function materializeMarketplaceTagClone(args: {
       throw appendLeakToError(err, leak);
     }
 
-    await promoteStagingToClone(removalOps, staging, dest, "marketplace tag clone staging");
+    const promotion = await promoteStagingToClone(
+      removalOps,
+      staging,
+      dest,
+      "marketplace tag clone staging",
+    );
+    if (promotion === "renamed") {
+      args.onCloneCreated?.(key);
+    }
   }
 
   // WR-07: label the failure with the source kind the user actually used --

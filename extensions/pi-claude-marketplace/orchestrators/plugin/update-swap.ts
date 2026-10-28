@@ -213,6 +213,7 @@ export interface ThreePhaseArgsBase {
   readonly local?: boolean;
   readonly partial?: boolean;
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
+  readonly cloneCandidates?: Set<string>;
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;

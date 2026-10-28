@@ -169,6 +169,7 @@ async function prepare(
     readonly partial?: boolean;
     readonly policy?: MaterializationPolicy;
     readonly cloneCacheSeam?: UpdateCloneCacheSeam;
+    readonly cloneCandidates?: Set<string>;
     readonly constraintGate?: PreparePluginUpdateOptions["constraintGate"];
     readonly pathPinProbe?: PreparePluginUpdateOptions["pathPinProbe"];
     readonly constraintTagMemo?: PreparePluginUpdateOptions["constraintTagMemo"];
@@ -192,6 +193,7 @@ async function prepare(
     ...(options.partial === true && { partial: true }),
     policy: options.policy ?? UPDATE_POLICY,
     ...(options.cloneCacheSeam !== undefined && { cloneCacheSeam: options.cloneCacheSeam }),
+    ...(options.cloneCandidates !== undefined && { cloneCandidates: options.cloneCandidates }),
     ...(options.constraintGate !== undefined && { constraintGate: options.constraintGate }),
     ...(options.pathPinProbe !== undefined && { pathPinProbe: options.pathPinProbe }),
     ...(options.constraintTagMemo !== undefined && {
@@ -619,7 +621,6 @@ test("keeps an unsupported candidate skipped with and without partial permission
       ),
     ),
   );
-
   // act
   const strictOutcome = await prepare(strictSeed);
   const partialOutcome = await prepare(partialSeed, { partial: true });
@@ -935,30 +936,42 @@ test("prepares pinned and unpinned URL clones with their exact resolved sha", as
   t.after(() =>
     Promise.all([pinned.cwd, unpinned.cwd].map((cwd) => rm(cwd, { force: true, recursive: true }))),
   );
+  const cloneCandidates = new Set<string>();
   const pinnedSeam: UpdateCloneCacheSeam = {
     resolvePluginPin: () =>
       Promise.resolve({
         cloneUrl: "https://example.com/pinned",
         pin: pinnedSha,
       }),
-    materializePluginClone: () => Promise.resolve(pinned.pluginRoot),
+    materializePluginClone: (options) => {
+      options.onCloneCreated?.("pinned-clone");
+      return Promise.resolve(pinned.pluginRoot);
+    },
     materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
     materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
   };
   const unpinnedSeam: UpdateCloneCacheSeam = {
     resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
     materializePluginClone: () => Promise.reject(new Error("unexpected immutable clone")),
-    materializeOrRefreshPluginMirror: () =>
-      Promise.resolve({
+    materializeOrRefreshPluginMirror: (options) => {
+      options.onCloneCreated?.("mirror-clone");
+      return Promise.resolve({
         pluginRoot: unpinned.pluginRoot,
         resolvedSha: unpinnedSha,
-      }),
-    materializePluginCommitCopy: () => Promise.resolve(unpinned.pluginRoot),
+      });
+    },
+    materializePluginCommitCopy: (options) => {
+      options.onCloneCreated?.("commit-clone");
+      return Promise.resolve(unpinned.pluginRoot);
+    },
   };
 
   // act
-  const pinnedPrepared = await prepare(pinned, { cloneCacheSeam: pinnedSeam });
-  const unpinnedPrepared = await prepare(unpinned, { cloneCacheSeam: unpinnedSeam });
+  const pinnedPrepared = await prepare(pinned, { cloneCacheSeam: pinnedSeam, cloneCandidates });
+  const unpinnedPrepared = await prepare(unpinned, {
+    cloneCacheSeam: unpinnedSeam,
+    cloneCandidates,
+  });
 
   // assert
   assert.ok(!("partition" in pinnedPrepared));
@@ -968,6 +981,10 @@ test("prepares pinned and unpinned URL clones with their exact resolved sha", as
   assert.ok(!("partition" in unpinnedPrepared));
   assert.strictEqual(unpinnedPrepared.resolvedSha, unpinnedSha);
   assert.strictEqual(unpinnedPrepared.toVersion, "2.0.0");
+  assert.deepStrictEqual(
+    cloneCandidates,
+    new Set(["pinned-clone", "mirror-clone", "commit-clone"]),
+  );
 });
 
 test("UPDT-01 / GV-01: a tag-pinned update records the declared version with the tag's commit, and the tag's semver apart", async (t) => {
@@ -1389,8 +1406,10 @@ test("UPDT-01: a path-source pin materializes through the marketplace's own tag 
   const seed = await seedUpdate({ installed: pluginRecord("1.0.0"), version: "1.2.0" });
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
   const pinOid = "path-tag-oid";
+  const cloneCandidates = new Set<string>();
   const calls: Parameters<NonNullable<PreparePluginUpdateOptions["pathPinProbe"]>>[0][] = [];
   const pathPinProbe: PreparePluginUpdateOptions["pathPinProbe"] = (args) => {
+    args.onCloneCreated?.("path-clone");
     calls.push(args);
     return Promise.resolve({
       kind: "materialized",
@@ -1410,7 +1429,7 @@ test("UPDT-01: a path-source pin materializes through the marketplace's own tag 
     });
 
   // act
-  const prepared = await prepare(seed, { constraintGate, pathPinProbe });
+  const prepared = await prepare(seed, { constraintGate, pathPinProbe, cloneCandidates });
 
   // assert -- the SAME facts the marketplace record already carries, and the
   // pin's own oid as `tagOid`; never a re-derived marketplace URL.
@@ -1422,6 +1441,7 @@ test("UPDT-01: a path-source pin materializes through the marketplace's own tag 
   assert.strictEqual(calls[0]?.marketplaceRoot, path.join(seed.cwd, "marketplace"));
   assert.strictEqual(calls[0]?.marketplaceName, "mp");
   assert.deepStrictEqual(calls[0]?.marketplaceSource, pathSource("./marketplace"));
+  assert.deepStrictEqual(cloneCandidates, new Set(["path-clone"]));
 });
 
 test("UPDT-01: without an injected pathPinProbe, a path-source pin uses the real marketplace-tag clone", async (t) => {

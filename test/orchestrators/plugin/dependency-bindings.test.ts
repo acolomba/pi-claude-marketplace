@@ -32,7 +32,6 @@ import { holdStateLock } from "../state-lock.ts";
 
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type { DependencyCaller } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts";
-import type { DependencyPlanStep } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts";
 import type { CascadeThreePhaseArgs } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -94,24 +93,6 @@ function stateWith(plugins: Record<string, PluginRecord>): ExtensionState {
   };
 }
 
-/** One planned move that owns `cleanupCloneKeys`. */
-function moveStep(cleanupCloneKeys?: readonly string[]): DependencyPlanStep {
-  return {
-    kind: "move",
-    move: {
-      request: {
-        key: "lib@mp",
-        name: "lib",
-        marketplace: "mp",
-        recordedVersion: "1.0.0",
-        requesters: [],
-      },
-      version: "2.0.0",
-      ...(cleanupCloneKeys !== undefined && { cleanupCloneKeys }),
-    },
-  };
-}
-
 /** The update arguments a move runs with; only what the bindings read matters. */
 function updateArgs(overrides: Partial<CascadeThreePhaseArgs> = {}): CascadeThreePhaseArgs {
   return {
@@ -144,6 +125,7 @@ describe("dependencyMoveContext", () => {
     };
     const run = runWithNothingLoaded();
     const memos = freshDependencyMoveMemos();
+    const cloneCandidates = new Set<string>();
     const authMemo = new Map<string, AuthAttemptResult>();
     const commandAuth = auth();
     const caller: DependencyCaller = {
@@ -162,6 +144,7 @@ describe("dependencyMoveContext", () => {
       caller,
       policy: INSTALL_MOVE_MATERIALIZATION,
       memos,
+      cloneCandidates,
     });
 
     // assert
@@ -177,6 +160,7 @@ describe("dependencyMoveContext", () => {
       authMemo,
       ...commandAuth,
       ...memos,
+      cloneCandidates,
     });
     assert.strictEqual(typeof cleanupClones, "function");
   });
@@ -195,6 +179,7 @@ describe("dependencyMoveContext", () => {
     };
     const run = runWithNothingLoaded();
     const memos = freshDependencyMoveMemos();
+    const cloneCandidates = new Set<string>();
 
     // act
     const context = dependencyMoveContext({
@@ -203,6 +188,7 @@ describe("dependencyMoveContext", () => {
       caller: { ctx: CTX, run },
       policy: RECONCILE_MOVE_MATERIALIZATION,
       memos,
+      cloneCandidates,
     });
 
     // assert
@@ -214,6 +200,7 @@ describe("dependencyMoveContext", () => {
       softDeps: run.softDeps,
       notification: { ctx: CTX, run },
       ...memos,
+      cloneCandidates,
     });
   });
 
@@ -233,6 +220,7 @@ describe("dependencyMoveContext", () => {
       caller: { ctx: CTX, run: runWithNothingLoaded() },
       policy: INSTALL_MOVE_MATERIALIZATION,
       memos: freshDependencyMoveMemos(),
+      cloneCandidates: new Set(),
     });
 
     // act
@@ -348,7 +336,7 @@ describe("planCloneSweep", () => {
     const live = path.join(locations.pluginClonesDir, replacedKey);
     await mkdir(live, { recursive: true });
     await saveState(locations.extensionRoot, stateWith({ lib: gitRecord(live) }));
-    const sweep = await planCloneSweep(locations, [moveStep([replacedKey])]);
+    const sweep = await planCloneSweep(locations, new Set([replacedKey]));
     await saveState(locations.extensionRoot, stateWith({}));
     await withExistingScopeLock(locations, () =>
       mkdir(path.join(locations.pluginClonesDir, "fetched"), { recursive: true }),
@@ -366,10 +354,7 @@ describe("planCloneSweep", () => {
     const { cwd } = await createHermeticEnvironment(t, "dependency-bindings-sweep-fail-");
     const locations = locationsFor("project", cwd);
     await saveState(locations.extensionRoot, { schemaVersion: 2, marketplaces: {} });
-    const sweep = await planCloneSweep(locations, [
-      { kind: "materialize", members: [] },
-      moveStep(),
-    ]);
+    const sweep = await planCloneSweep(locations, new Set());
     await rm(locations.pluginClonesDir, { recursive: true, force: true });
     await writeFile(locations.pluginClonesDir, "not a directory");
 
@@ -383,10 +368,7 @@ describe("planCloneSweep", () => {
     const locations = locationsFor("project", cwd);
     await saveState(locations.extensionRoot, stateWith({}));
     await mkdir(path.join(locations.pluginClonesDir, "fetched"), { recursive: true });
-    const sweep = await planCloneSweep(locations, [
-      { kind: "materialize", members: [] },
-      moveStep(),
-    ]);
+    const sweep = await planCloneSweep(locations, new Set());
 
     // act
     await sweep();
@@ -403,7 +385,7 @@ describe("planCloneSweep", () => {
     const live = path.join(locations.pluginClonesDir, liveKey);
     await mkdir(live, { recursive: true });
     await saveState(locations.extensionRoot, stateWith({ lib: gitRecord(live) }));
-    const sweep = await planCloneSweep(locations, [moveStep([liveKey])]);
+    const sweep = await planCloneSweep(locations, new Set([liveKey]));
 
     // act
     await sweep();
@@ -418,7 +400,7 @@ describe("planCloneSweep", () => {
     const locations = locationsFor("project", cwd);
     await saveState(locations.extensionRoot, stateWith({}));
     await mkdir(path.join(locations.pluginClonesDir, "fetched"), { recursive: true });
-    const sweep = await planCloneSweep(locations, [moveStep(["planned"])]);
+    const sweep = await planCloneSweep(locations, new Set(["planned"]));
     await mkdir(path.join(locations.pluginClonesDir, "planned"), { recursive: true });
     const release = await holdStateLock(locations);
 

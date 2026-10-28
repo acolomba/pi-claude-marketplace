@@ -254,6 +254,8 @@ export interface InstallLedgerOptions {
   readonly provenance?: PluginInstallRecord["provenance"];
   readonly allowExistingRecord?: boolean;
   readonly cloneCacheSeam?: InstallCloneCacheSeam;
+  /** Exact clone-cache keys created by the current dependency-planning attempt. */
+  readonly cloneCandidates?: Set<string>;
   readonly cloneProbe?: typeof probeInstallClone;
   /**
    * D-07-06: materializes a `path` source at `sourcePinOverride`'s tag oid.
@@ -795,6 +797,7 @@ async function preflightInstallResolve(
           ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
           ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
         },
+        ...(opts.cloneCandidates !== undefined && { cloneCandidates: opts.cloneCandidates }),
       });
       resolvedSha = clone.resolvedSha;
       return clone.result;
@@ -814,6 +817,9 @@ async function preflightInstallResolve(
           marketplaceName: targetMp.name,
           pathSource,
           tagOid: pin,
+          ...(opts.cloneCandidates !== undefined && {
+            onCloneCreated: (key: string) => opts.cloneCandidates?.add(key),
+          }),
         });
         if (result.kind === "materialized") {
           resolvedSha = result.resolvedSha;

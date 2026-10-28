@@ -466,6 +466,7 @@ export async function prepareInstallDependencyPlan(args: {
   readonly context: DependencyMoveContext;
   // fallow-ignore-next-line private-type-leak -- The root adapts this operation structurally; its root stays private.
   readonly root: InstallDependencyPlanRoot;
+  readonly cloneCandidates: Set<string>;
 }): Promise<DependencyPlanPorts> {
   const { owners, target, caller, context, root } = args;
   const state = await loadState(target.locations.extensionRoot);
@@ -484,6 +485,7 @@ export async function prepareInstallDependencyPlan(args: {
     cwd: target.cwd,
     adds: trackInstallAdds(owners.transaction, undefined),
     removalOps: owners.fileCapabilities.removalOps,
+    cloneCandidates: args.cloneCandidates,
   });
   const rootAllowedMarketplaces = await loadInstallRootAllowlist(
     recordFor,
@@ -526,6 +528,7 @@ export async function previewInstallDependencyPlanRoot(args: {
   readonly owners: InstallPlanningOwners;
   readonly opts: InstallPluginOptions;
   readonly target: DependencyTarget;
+  readonly cloneCandidates: Set<string>;
 }): Promise<Awaited<ReturnType<typeof previewInstall>>> {
   const { owners, opts, target } = args;
   return previewInstall(
@@ -542,6 +545,7 @@ export async function previewInstallDependencyPlanRoot(args: {
         ...(opts.pinVersionOverride !== undefined && { pinVersion: opts.pinVersionOverride }),
         marketplaceAdd: DEFAULT_MARKETPLACE_ADD,
         addedMarketplaces: [],
+        cloneCandidates: args.cloneCandidates,
       },
       owners.fileCapabilities.removalOps,
     ),

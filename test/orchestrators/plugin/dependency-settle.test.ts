@@ -493,12 +493,9 @@ function settlePorts(doubles: {
       return doubles.plan?.() ?? Promise.reject(new Error("no plan scripted"));
     },
     steps,
-    planSweep: () => {
-      calls.push("list clones");
-      return Promise.resolve(() => {
-        calls.push("sweep");
-        return Promise.resolve();
-      });
+    sweepPlanClones: () => {
+      calls.push("sweep");
+      return Promise.resolve();
     },
   };
 }
@@ -633,7 +630,6 @@ describe("settleDependencies", () => {
     assert.deepStrictEqual(ports.calls, [
       "first run",
       "plan",
-      "list clones",
       "move lib@mp 2.0.0",
       "materialize helper@mp",
       "sweep",
@@ -652,13 +648,7 @@ describe("settleDependencies", () => {
 
     // assert
     assert.deepStrictEqual(settled, { kind: "settled", rows: [updatedRow("lib@mp")] });
-    assert.deepStrictEqual(ports.calls, [
-      "first run",
-      "plan",
-      "list clones",
-      "move lib@mp 2.0.0",
-      "sweep",
-    ]);
+    assert.deepStrictEqual(ports.calls, ["first run", "plan", "move lib@mp 2.0.0", "sweep"]);
   });
 
   test("UPD-DEP-D1: a refused plan changes nothing and refuses with the failing row", async () => {
@@ -677,7 +667,7 @@ describe("settleDependencies", () => {
       rows: [failedRow("helper@mp", REFUSAL_CAUSE)],
       cause: REFUSAL_CAUSE,
     });
-    assert.deepStrictEqual(ports.calls, ["first run", "plan", "refusal member"]);
+    assert.deepStrictEqual(ports.calls, ["first run", "plan", "refusal member", "sweep"]);
   });
 
   test("UPD-DEP-D1: a step that fails refuses the settle with every change that landed, and sweeps", async () => {
@@ -694,13 +684,7 @@ describe("settleDependencies", () => {
 
     // assert
     assert.deepStrictEqual(settled, { kind: "refused", rows: [kept], cause: LIB_DID_NOT_MOVE });
-    assert.deepStrictEqual(ports.calls, [
-      "first run",
-      "plan",
-      "list clones",
-      "move lib@mp 2.0.0",
-      "sweep",
-    ]);
+    assert.deepStrictEqual(ports.calls, ["first run", "plan", "move lib@mp 2.0.0", "sweep"]);
   });
 
   test("UPD-DEP-D1 / CR-N2: a plan that throws refuses the settle with what it threw", async () => {
@@ -716,7 +700,7 @@ describe("settleDependencies", () => {
 
     // assert
     assert.deepStrictEqual(settled, { kind: "refused", rows: [], cause: thrown });
-    assert.deepStrictEqual(ports.calls, ["first run", "plan"]);
+    assert.deepStrictEqual(ports.calls, ["first run", "plan", "sweep"]);
   });
 
   test("GHB-03: a plan that meets an invalid GitHub base override fails the command", async () => {
@@ -729,6 +713,6 @@ describe("settleDependencies", () => {
 
     // act & assert
     await assert.rejects(settleDependencies(ports), invalid);
-    assert.deepStrictEqual(ports.calls, ["first run", "plan"]);
+    assert.deepStrictEqual(ports.calls, ["first run", "plan", "sweep"]);
   });
 });

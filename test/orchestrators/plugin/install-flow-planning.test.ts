@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import fs from "node:fs";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
 
+import git from "isomorphic-git";
 import lockfile from "proper-lockfile";
 
+import {
+  pluginCloneKey,
+  pluginMirrorKey,
+} from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { createUpdateDependencyResolver as createPublicUpdateDependencyResolver } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
 import {
   isUpdatePreflightOutcome,
@@ -24,18 +30,21 @@ import {
   DependencyCascadeError,
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { withExistingScopeLock } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 
 import {
   INSTALL_DEVICE_CODE,
   INSTALL_HOST_HEAD,
+  createGitOps,
   installAppCountingResolves,
   installGitAppAfterDependencyMove,
   makeCtx,
   offerGitPlugin,
   publishCatalog,
   recordedSha,
+  seamWith,
   seedCatalogScope,
   withHermeticHome,
 } from "./install-flow-fixture.ts";
@@ -248,6 +257,135 @@ test("UPD-DEP-D1: installing refuses a plugin whose installed dependency no rele
       },
     ]);
     assert.deepStrictEqual(await recordedVersions(cwd), { lib: ["1.2.0", true] });
+  });
+});
+
+test("removes clones from a refused git preview without touching other cache entries", async (t) => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope({ lib: { version: "1.2.0" } });
+    t.after(async () => {
+      await rm(cwd, { recursive: true, force: true });
+    });
+    await installed(owner, cwd, "lib");
+    await publishCatalog(marketplaceRoot, { lib: { version: "1.5.0" } });
+    const repository = await offerGitPlugin(marketplaceRoot, "app", ["lib@^2.0.0"]);
+    const locations = locationsFor("project", cwd);
+    const warmKey = pluginCloneKey("https://example.com/org/warm", "1".repeat(40));
+    const concurrentKey = pluginMirrorKey("https://example.com/org/concurrent");
+    await mkdir(await locations.pluginCloneDir(warmKey), { recursive: true });
+    const inner = seamWith(
+      createGitOps({
+        fixtureSourceDir: repository,
+        head: INSTALL_HOST_HEAD,
+        localRefs: { "refs/heads/main": INSTALL_HOST_HEAD },
+        remoteRefs: { "refs/remotes/origin/main": INSTALL_HOST_HEAD },
+      }).gitOps,
+    );
+    const { ctx, run } = makeCtx();
+
+    // act
+    const outcome = await owner.installPlugin({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      marketplace: "mp",
+      plugin: "app",
+      cloneCacheSeam: {
+        ...inner,
+        async materializePluginCommitCopy(args) {
+          const cloneRoot = await inner.materializePluginCommitCopy(args);
+          await withExistingScopeLock(locations, () =>
+            mkdir(path.join(locations.pluginClonesDir, concurrentKey), { recursive: true }),
+          );
+          return cloneRoot;
+        },
+      },
+    });
+
+    // assert
+    assert.strictEqual(outcome.status, "failed");
+    assert.deepStrictEqual(
+      (await readdir(locations.pluginClonesDir)).sort(),
+      [concurrentKey, warmKey].sort(),
+    );
+  });
+});
+
+test("removes a ruled-out clone after resolver backtracking", async (t) => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope({
+      fff: { version: "2.0.0" },
+      yyy: { version: "1.0.0" },
+    });
+    t.after(async () => {
+      await rm(cwd, { recursive: true, force: true });
+    });
+    await installed(owner, cwd, "fff");
+    await installed(owner, cwd, "yyy");
+    await git.init({ fs, dir: marketplaceRoot, defaultBranch: "main" });
+    await git.add({ fs, dir: marketplaceRoot, filepath: "." });
+    await git.commit({
+      fs,
+      dir: marketplaceRoot,
+      message: "seed catalog",
+      author: { name: "test", email: "test@example.com" },
+    });
+    await publishCatalog(marketplaceRoot, {
+      fff: { version: "2.0.0" },
+      yyy: { version: "2.0.0", dependencies: ["fff@^2.0.0"] },
+    });
+    await git.add({ fs, dir: marketplaceRoot, filepath: "." });
+    const landedOid = await git.commit({
+      fs,
+      dir: marketplaceRoot,
+      message: "publish yyy 2",
+      author: { name: "test", email: "test@example.com" },
+    });
+    await git.tag({ fs, dir: marketplaceRoot, ref: "yyy--v2.0.0", object: landedOid });
+    await publishCatalog(marketplaceRoot, {
+      fff: { version: "2.0.0" },
+      yyy: { version: "2.1.0", dependencies: ["fff@^3.0.0"] },
+    });
+    await git.add({ fs, dir: marketplaceRoot, filepath: "." });
+    const ruledOutOid = await git.commit({
+      fs,
+      dir: marketplaceRoot,
+      message: "publish yyy 2.1",
+      author: { name: "test", email: "test@example.com" },
+    });
+    await git.tag({ fs, dir: marketplaceRoot, ref: "yyy--v2.1.0", object: ruledOutOid });
+    await publishCatalog(marketplaceRoot, {
+      app: { version: "1.0.0", dependencies: ["yyy@^2.0.0", "fff@^2.0.0"] },
+      fff: { version: "2.0.0" },
+      yyy: { version: "2.1.0", dependencies: ["fff@^3.0.0"] },
+    });
+    const { ctx, run } = makeCtx();
+    const locations = locationsFor("project", cwd);
+    const landedKey = pluginCloneKey("marketplace-name:mp", landedOid);
+    const ruledOutKey = pluginCloneKey("marketplace-name:mp", ruledOutOid);
+
+    // act
+    const outcome = await owner.installPlugin({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      marketplace: "mp",
+      plugin: "app",
+    });
+
+    // assert
+    assert.strictEqual(outcome.status, "installed");
+    assert.deepStrictEqual(await recordedVersions(cwd), {
+      app: ["1.0.0", true],
+      fff: ["2.0.0", true],
+      yyy: [`2.0.0-${landedOid.slice(0, 12)}`, true],
+    });
+    assert.deepStrictEqual((await readdir(locations.pluginClonesDir)).sort(), [landedKey]);
+    assert.notStrictEqual(landedKey, ruledOutKey);
   });
 });
 

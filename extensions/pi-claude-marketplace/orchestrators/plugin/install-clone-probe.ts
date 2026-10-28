@@ -30,6 +30,7 @@ export interface InstallCloneProbeOptions {
   readonly source: GitBackedSource;
   readonly locations: ScopedLocations;
   readonly seam?: InstallCloneCacheSeam;
+  readonly cloneCandidates?: Set<string>;
   readonly auth: {
     readonly ctx: NotificationContext;
     readonly run: NotificationRun;
@@ -60,6 +61,9 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
   const seam = options.seam ?? REAL_INSTALL_CLONE_CACHE_SEAM;
   const { source, locations } = options;
   const cloneUrl = canonicalCloneUrl(source);
+  const onCloneCreated = (key: string): void => {
+    options.cloneCandidates?.add(key);
+  };
 
   if (source.sha === undefined) {
     // GIT-01 / GIT-04: install already holds the scope's state lock, so the
@@ -68,6 +72,7 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
       locations,
       source,
       auth: buildCloneAuth(cloneUrl, source.kind, options.auth),
+      onCloneCreated,
     });
     return {
       result,
@@ -83,6 +88,7 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
     pin: pin.pin,
     ...(pin.ref !== undefined && { ref: pin.ref }),
     resolveAuth: () => buildCloneAuth(cloneUrl, source.kind, options.auth),
+    onCloneCreated,
   });
   const result = await resolveGitPluginRootWithSubdir(source, cloneRoot, pin.pin);
   return { result, resolvedSha: result.kind === "materialized" ? pin.pin : undefined };

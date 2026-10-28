@@ -2771,6 +2771,7 @@ test("TAGS-01/03 (D-07-06/07) / GV-01: a pinned path-source install records the 
   const marketplaceRoot = seeded.state.marketplaces.marketplace?.marketplaceRoot;
   assert.ok(marketplaceRoot !== undefined, "the fixture records the marketplace it seeds");
   const probed: unknown[] = [];
+  const cloneCandidates = new Set<string>();
 
   // act
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
@@ -2784,7 +2785,9 @@ test("TAGS-01/03 (D-07-06/07) / GV-01: a pinned path-source install records the 
     env: {},
     sourcePinOverride: RESOLVED_SHA,
     resolvedVersion: "2.1.0",
-    pathPinProbe: (options) => {
+    cloneCandidates,
+    pathPinProbe: ({ onCloneCreated, ...options }) => {
+      onCloneCreated?.("path-clone");
       probed.push(options);
       return Promise.resolve({
         kind: "materialized",
@@ -2815,6 +2818,7 @@ test("TAGS-01/03 (D-07-06/07) / GV-01: a pinned path-source install records the 
       tagOid: RESOLVED_SHA,
     },
   ]);
+  assert.deepStrictEqual(cloneCandidates, new Set(["path-clone"]));
 });
 
 test("an unpinned path-source install threads neither pathPluginPin nor resolvePathPluginRoot", async (t) => {
@@ -3092,15 +3096,19 @@ test("D-PL4-01: previewInstall answers the commit a git source's preflight resol
     components: { skills: ["alpha"] },
   });
   const locations = locationsFor("project", environment.cwd);
+  const cloneCandidates = new Set<string>();
 
   // act
   const commit = await previewInstall(seeded.state, locations, {
     ...projectInstallOptions(environment.cwd),
-    cloneProbe: () =>
-      Promise.resolve({
+    cloneCandidates,
+    cloneProbe: (options) => {
+      assert.strictEqual(options.cloneCandidates, cloneCandidates);
+      return Promise.resolve({
         result: { kind: "materialized", pluginRoot: seeded.pluginRoot, resolvedSha: RESOLVED_SHA },
         resolvedSha: RESOLVED_SHA,
-      }),
+      });
+    },
   });
 
   // assert

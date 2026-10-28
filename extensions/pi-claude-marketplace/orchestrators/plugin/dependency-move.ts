@@ -86,10 +86,11 @@ export interface DependencyMoveContext {
   readonly stateTransaction?: LockedStateTransactionDeps;
   /**
    * IN-N4: what a move that changed a git revision collects. The operation's
-   * own sweep runs after its last step, knowing which clones were there
-   * before it started.
+   * own sweep runs after its last step over clones reported during planning.
    */
   readonly cleanupClones: CascadeThreePhaseArgs["cleanupClones"];
+  /** Exact clone keys this planning attempt can collect after its last step. */
+  readonly cloneCandidates: Set<string>;
   /** The soft-dependency snapshot the moved rows stamp severity from. */
   readonly softDeps: SoftDepStatus;
 }
@@ -168,6 +169,7 @@ function moveArgs(
     env: context.env,
     cascade: true,
     cleanupClones: context.cleanupClones,
+    cloneCandidates: context.cloneCandidates,
     constraintTagMemo: context.constraintTagMemo,
     constraintMarketplaceTagMemo: context.constraintMarketplaceTagMemo,
     requesters: request.requesters,
@@ -234,6 +236,11 @@ export async function judgeDependencyMove(
       return { ok: false, cause: refusalCause(prepared) };
     }
 
+    const candidateKeys = cleanupCloneKeys(prepared, context.locations);
+    for (const key of candidateKeys) {
+      context.cloneCandidates.add(key);
+    }
+
     // WR-1: a version with no semver form escapes the range that rules the
     // others out, so the plan's own list decides.
     if (request.excludedVersions?.includes(plannedRangeVersion(prepared)) === true) {
@@ -248,7 +255,7 @@ export async function judgeDependencyMove(
 
     return {
       ok: true,
-      prepared: { ...prepared, cleanupCloneKeys: cleanupCloneKeys(prepared, context.locations) },
+      prepared: { ...prepared, cleanupCloneKeys: candidateKeys },
     };
   } catch (err) {
     rethrowInvalidGitHubBaseUrl(err);
