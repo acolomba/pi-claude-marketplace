@@ -56,6 +56,7 @@ import type { InstallFailureCapture } from "../../../extensions/pi-claude-market
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 const transaction = { runPhases, withLockedStateTransaction };
+const REMOVAL_OPS = { rm: () => Promise.resolve() };
 
 function member(overrides: Partial<ResolvedCascadeMember> = {}): ResolvedCascadeMember {
   return {
@@ -121,6 +122,7 @@ test("builds member ledger options from shared and member inputs", () => {
       marketplaceAdd: DEFAULT_MARKETPLACE_ADD,
       addedMarketplaces: [],
     },
+    REMOVAL_OPS,
   );
 
   // assert
@@ -135,6 +137,7 @@ test("builds member ledger options from shared and member inputs", () => {
   assert.strictEqual(options.deviceFlowHttp, deviceFlowHttp);
   assert.strictEqual(options.authMemo, authMemo);
   assert.strictEqual(options.cloneCacheSeam, cloneCacheSeam);
+  assert.strictEqual(options.removalOps, REMOVAL_OPS);
 });
 
 test("tracks saved, unsaved, thrown, and leaked marketplace additions", async (t) => {
@@ -497,6 +500,7 @@ test("builds shared cascade options with both tag probes", async () => {
       sink: { mcpConfigNotices: [] },
       capture: { rollbackPartials: [], version: undefined },
       transaction,
+      removalOps: REMOVAL_OPS,
     });
 
     // assert
@@ -523,7 +527,7 @@ test("projects member pins and dependency ledger options", () => {
   const optionsFor = dependencyLedgerOptions(
     { ctx, run },
     {},
-    { scope: "project", cwd: "/project", adds },
+    { scope: "project", cwd: "/project", adds, removalOps: REMOVAL_OPS },
   );
 
   // act

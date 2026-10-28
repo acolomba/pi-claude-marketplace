@@ -34,6 +34,8 @@ import {
 
 import type { InstallTestOwner } from "./install-flow-fixture.ts";
 
+const FILE_CAPABILITIES = { removalOps: { rm: () => Promise.resolve() } };
+
 async function catalog(
   t: TestContext,
   plugins: Parameters<typeof seedCatalogScope>[0],
@@ -70,6 +72,7 @@ function planning(owner: InstallTestOwner, cwd: string) {
     hooksRouting: owner.hooksRouting,
     completionCache: owner.completionCache,
     env: {},
+    fileCapabilities: FILE_CAPABILITIES,
   };
   const root = { key: "app@mp", marketplace: "mp", plugin: "app" };
   const memos = freshDependencyMoveMemos();
@@ -101,6 +104,7 @@ describe("missing dependency transaction", () => {
         owner.transaction,
         owner.hooksRouting,
         owner.completionCache,
+        FILE_CAPABILITIES,
         {},
       );
 
@@ -130,6 +134,7 @@ describe("missing dependency transaction", () => {
         owner.transaction,
         owner.hooksRouting,
         owner.completionCache,
+        FILE_CAPABILITIES,
         {},
       );
 
@@ -150,6 +155,7 @@ describe("missing dependency transaction", () => {
         owner.transaction,
         owner.hooksRouting,
         owner.completionCache,
+        FILE_CAPABILITIES,
         {},
       );
 
@@ -182,6 +188,7 @@ describe("missing dependency transaction", () => {
         owner.transaction,
         owner.hooksRouting,
         owner.completionCache,
+        FILE_CAPABILITIES,
         {},
       );
 
@@ -205,6 +212,7 @@ describe("missing dependency transaction", () => {
         owner.transaction,
         owner.hooksRouting,
         owner.completionCache,
+        FILE_CAPABILITIES,
         {},
       );
 
@@ -230,6 +238,7 @@ describe("missing dependency transaction", () => {
         owner.transaction,
         owner.hooksRouting,
         owner.completionCache,
+        FILE_CAPABILITIES,
         {},
       );
 

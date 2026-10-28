@@ -60,6 +60,7 @@ const EMPTY_RESOURCES: PluginInstallRecord["resources"] = {
   skills: [],
   workflows: [],
 };
+const REMOVAL_OPS = { rm: () => Promise.resolve() };
 
 function pluginRecord(overrides: Partial<PluginInstallRecord> = {}): PluginInstallRecord {
   return {
@@ -245,6 +246,7 @@ describe("collectPostCommitWarnings", () => {
       createCompletionCache(),
       "project",
       false,
+      () => Promise.resolve(),
     );
 
     // assert
@@ -254,12 +256,10 @@ describe("collectPostCommitWarnings", () => {
   test("collects every orchestrated maintenance warning in order", async (t) => {
     // arrange
     const { cwd, locations } = await tempLocations(t, "install-results-warning-failed-");
-    const blockedParent = path.join(cwd, "not-a-directory");
-    await writeFile(blockedParent, "blocked");
     const summary = installSummary({
       cwd,
       locations,
-      pluginDataDir: path.join(blockedParent, "app"),
+      pluginDataDir: path.join(cwd, "plugin-data", "app"),
       discoveryWarnings: [{ kind: "discovery", message: "discovery first" }],
       agentForeignFailures: [{ generatedName: "agent-a", reason: "foreign bytes" }],
       frontmatterDegradations: [
@@ -274,12 +274,18 @@ describe("collectPostCommitWarnings", () => {
     const logged = captureDebugLog(t);
 
     // act
-    const warnings = await collectPostCommitWarnings(summary, completionCache, "project", true);
+    const warnings = await collectPostCommitWarnings(
+      summary,
+      completionCache,
+      "project",
+      true,
+      () => Promise.reject(new Error("mkdir denied")),
+    );
 
     // assert
     assert.deepStrictEqual(warnings, [
       "discovery first",
-      `Plugin "app" installed; data dir creation deferred at ${summary.pluginDataDir}: ENOTDIR: not a directory, mkdir '${summary.pluginDataDir}'`,
+      `Plugin "app" installed; data dir creation deferred at ${summary.pluginDataDir}: mkdir denied`,
       'Plugin "app" installed; completion cache refresh deferred: cache locked',
       'Plugin "app" installed; 1 pre-existing agent file(s) preserved on disk: agent-a: foreign bytes',
       "app/skill-a: bad frontmatter",
@@ -444,6 +450,7 @@ describe("promotion", () => {
       transaction: { runPhases, withLockedStateTransaction },
       sink,
       env: {},
+      removalOps: REMOVAL_OPS,
     } satisfies Omit<Parameters<typeof promoteDependencyRecord>[0], "state">;
     const records = [
       undefined,
@@ -503,6 +510,7 @@ describe("promotion", () => {
       transaction: { runPhases, withLockedStateTransaction },
       sink: { mcpConfigNotices: [] },
       env: {},
+      removalOps: REMOVAL_OPS,
     });
 
     // assert
@@ -539,6 +547,7 @@ describe("promotion", () => {
       transaction: { runPhases, withLockedStateTransaction },
       sink: { mcpConfigNotices: [] },
       env: {},
+      removalOps: REMOVAL_OPS,
     });
 
     // assert
@@ -591,6 +600,7 @@ describe("promotion", () => {
       transaction: { runPhases, withLockedStateTransaction },
       sink,
       env: {},
+      removalOps: REMOVAL_OPS,
     });
 
     // assert

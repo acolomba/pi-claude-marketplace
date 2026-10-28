@@ -5,6 +5,7 @@
 // clone probing, declared enablement, disable cascade, outcome projection,
 // locking, and exact notification behavior.
 
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
@@ -77,6 +78,7 @@ import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { RemovalOps } from "../../shared/fs-utils.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -270,6 +272,11 @@ export interface InstallTransaction {
   readonly withLockedStateTransaction: typeof withLockedStateTransaction;
 }
 
+/** Filesystem capability acquired by the public install composition root. */
+export interface InstallFileCapabilities {
+  readonly removalOps: RemovalOps;
+}
+
 /**
  * What hydrating a materialized member's hooks needs to know about it: where
  * it landed and the hooks config it declared there. Every cascade member
@@ -414,6 +421,19 @@ export interface InstallAfterPlan {
 export interface InstallPlanningOwners extends DependencyMoveOwners {
   readonly transaction: InstallTransaction;
   readonly hooksRouting: InstallHooksRouting;
+  readonly fileCapabilities: InstallFileCapabilities;
+}
+
+/** Run post-commit maintenance with mkdir bound to this install's contained data directory. */
+export function collectInstallPostCommitWarnings(
+  installCtx: InstallLedgerSummary,
+  completionCache: CompletionCache,
+  scope: Scope,
+  orchestrated: boolean,
+): Promise<string[]> {
+  return collectPostCommitWarnings(installCtx, completionCache, scope, orchestrated, async () => {
+    await mkdir(installCtx.pluginDataDir, { recursive: true });
+  });
 }
 
 /** The dependency-planning leaf operations used by the install ledger root. */
@@ -434,6 +454,11 @@ export interface InstallPlanning {
       afterPlan: InstallAfterPlan,
     ) => Promise<InstallPluginOutcome>;
   }) => Promise<InstallPluginOutcome>;
+}
+
+interface InstallLedgerComposition {
+  readonly planning: InstallPlanning;
+  readonly fileCapabilities: InstallFileCapabilities;
 }
 
 /**
@@ -498,10 +523,11 @@ async function installPluginWithTransaction(
   hooksRouting: InstallHooksRouting,
   completionCache: CompletionCache,
   env: ClaudeEnv,
-  planning: InstallPlanning,
+  composition: InstallLedgerComposition,
   opts: InstallPluginOptions,
   afterPlan?: InstallAfterPlan,
 ): Promise<InstallPluginOutcome> {
+  const { planning, fileCapabilities } = composition;
   const { ctx, run, scope, cwd, marketplace, plugin } = opts;
   const { moved, carried, runCascade } = installRun(afterPlan);
   const locations = locationsFor(scope, cwd);
@@ -637,6 +663,7 @@ async function installPluginWithTransaction(
           transaction,
           sink: cascadeFailure,
           env,
+          removalOps: fileCapabilities.removalOps,
         });
         if (promotion !== undefined) {
           await tx.save();
@@ -672,6 +699,7 @@ async function installPluginWithTransaction(
             sink: cascadeFailure,
             capture,
             transaction,
+            removalOps: fileCapabilities.removalOps,
           })),
           // RESV-03: a member whose constraint selected a release tag carries the
           // commit that tag resolves to AND the semver that tag names, and this
@@ -697,21 +725,26 @@ async function installPluginWithTransaction(
             const isRoot = member.key === rootKey;
             const pinVersion =
               member.pin === undefined && isRoot ? opts.pinVersionOverride : undefined;
-            return buildInstallLedgerOptions(opts, env, {
-              scope,
-              cwd,
-              marketplace: member.marketplace,
-              plugin: member.name,
-              ...memberLedgerPin(member),
-              ...(member.directoryPin !== undefined && { directoryPin: member.directoryPin }),
-              ...(pinVersion !== undefined && { pinVersion }),
-              // D-04-01: the root is the one member the closure walk never
-              // skips, so the key comparison alone decides provenance -- per
-              // member, independent of install order.
-              provenance: isRoot ? "explicit" : "dependency",
-              marketplaceAdd: adds.marketplaceAdd,
-              addedMarketplaces: adds.addedMarketplaces,
-            });
+            return buildInstallLedgerOptions(
+              opts,
+              env,
+              {
+                scope,
+                cwd,
+                marketplace: member.marketplace,
+                plugin: member.name,
+                ...memberLedgerPin(member),
+                ...(member.directoryPin !== undefined && { directoryPin: member.directoryPin }),
+                ...(pinVersion !== undefined && { pinVersion }),
+                // D-04-01: the root is the one member the closure walk never
+                // skips, so the key comparison alone decides provenance -- per
+                // member, independent of install order.
+                provenance: isRoot ? "explicit" : "dependency",
+                marketplaceAdd: adds.marketplaceAdd,
+                addedMarketplaces: adds.addedMarketplaces,
+              },
+              fileCapabilities.removalOps,
+            );
           },
         };
         // UPD-DEP-D1: the first run may answer that a dependency plan must
@@ -1016,7 +1049,7 @@ async function installPluginWithTransaction(
     // the install again with the dependencies in range.
     case "dependency-moves":
       return planning.installAfterMoves({
-        owners: { transaction, hooksRouting, completionCache, env },
+        owners: { transaction, hooksRouting, completionCache, env, fileCapabilities },
         opts,
         carried,
         installAgain: (nextOpts, nextPlan) =>
@@ -1025,7 +1058,7 @@ async function installPluginWithTransaction(
             hooksRouting,
             completionCache,
             env,
-            planning,
+            composition,
             nextOpts,
             nextPlan,
           ),
@@ -1161,7 +1194,7 @@ async function installPluginWithTransaction(
     case "installed": {
       const { installCtx, landedDisabled } = outcome;
       const landed = landedMoves(moved, outcome.members);
-      const postCommitWarnings = await collectPostCommitWarnings(
+      const postCommitWarnings = await collectInstallPostCommitWarnings(
         installCtx,
         completionCache,
         scope,
@@ -1270,8 +1303,17 @@ export function createInstallLedgerPlugin(
   hooksRouting: InstallHooksRouting,
   completionCache: CompletionCache,
   planning: InstallPlanning,
+  fileCapabilities: InstallFileCapabilities,
   env: ClaudeEnv = process.env,
 ): (opts: InstallPluginOptions) => Promise<InstallPluginOutcome> {
+  const composition: InstallLedgerComposition = { planning, fileCapabilities };
   return (opts) =>
-    installPluginWithTransaction(transaction, hooksRouting, completionCache, env, planning, opts);
+    installPluginWithTransaction(
+      transaction,
+      hooksRouting,
+      completionCache,
+      env,
+      composition,
+      opts,
+    );
 }

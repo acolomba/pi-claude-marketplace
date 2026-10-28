@@ -6,7 +6,6 @@ import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { appendLeaks } from "../../shared/errors.ts";
-import { createRemovalOps } from "../../shared/fs-utils.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 
 import { removeAddedClones, reusingCarriedAdds } from "./carried-marketplace-adds.ts";
@@ -46,6 +45,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { RemovalOps } from "../../shared/fs-utils.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -147,6 +147,7 @@ export function buildInstallLedgerOptions(
     marketplaceAdd: MarketplaceAddSeam;
     addedMarketplaces: AddedMarketplaces;
   },
+  removalOps: RemovalOps,
 ): InstallLedgerOptions {
   return {
     ctx: opts.ctx,
@@ -167,7 +168,7 @@ export function buildInstallLedgerOptions(
     // D-08-12: the install path's composition root. The ledger options carry the
     // port as a required member, so this assembly point is the one place the real
     // operations enter the install path.
-    removalOps: createRemovalOps(),
+    removalOps,
     env,
     ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
     ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
@@ -531,19 +532,25 @@ export async function sharedCascadeOptions(args: {
   readonly sink: CascadeFailureSink;
   readonly capture: InstallFailureCapture;
   readonly transaction: CascadeTransaction;
+  readonly removalOps: RemovalOps;
 }): Promise<SharedCascadeOptions> {
   const { opts, state, locations, root, adds } = args;
   const catalog = installCatalog({
     state,
     locations,
-    addOptions: buildInstallLedgerOptions(opts, args.env, {
-      scope: root.scope,
-      cwd: root.cwd,
-      marketplace: root.marketplace,
-      plugin: root.plugin,
-      marketplaceAdd: adds.marketplaceAdd,
-      addedMarketplaces: adds.addedMarketplaces,
-    }),
+    addOptions: buildInstallLedgerOptions(
+      opts,
+      args.env,
+      {
+        scope: root.scope,
+        cwd: root.cwd,
+        marketplace: root.marketplace,
+        plugin: root.plugin,
+        marketplaceAdd: adds.marketplaceAdd,
+        addedMarketplaces: adds.addedMarketplaces,
+      },
+      args.removalOps,
+    ),
     sink: args.sink,
   });
   return {
@@ -604,20 +611,30 @@ export function memberLedgerPin(member: ResolvedCascadeMember): {
 export function dependencyLedgerOptions(
   opts: InstallLedgerCallerOptions,
   env: ClaudeEnv,
-  core: { readonly scope: Scope; readonly cwd: string; readonly adds: InstallAdds },
+  core: {
+    readonly scope: Scope;
+    readonly cwd: string;
+    readonly adds: InstallAdds;
+    readonly removalOps: RemovalOps;
+  },
 ): (member: ResolvedCascadeMember) => InstallLedgerOptions {
   return (member) =>
-    buildInstallLedgerOptions(opts, env, {
-      scope: core.scope,
-      cwd: core.cwd,
-      marketplace: member.marketplace,
-      plugin: member.name,
-      ...memberLedgerPin(member),
-      ...(member.directoryPin !== undefined && { directoryPin: member.directoryPin }),
-      provenance: "dependency",
-      marketplaceAdd: core.adds.marketplaceAdd,
-      addedMarketplaces: core.adds.addedMarketplaces,
-    });
+    buildInstallLedgerOptions(
+      opts,
+      env,
+      {
+        scope: core.scope,
+        cwd: core.cwd,
+        marketplace: member.marketplace,
+        plugin: member.name,
+        ...memberLedgerPin(member),
+        ...(member.directoryPin !== undefined && { directoryPin: member.directoryPin }),
+        provenance: "dependency",
+        marketplaceAdd: core.adds.marketplaceAdd,
+        addedMarketplaces: core.adds.addedMarketplaces,
+      },
+      core.removalOps,
+    );
 }
 
 /**

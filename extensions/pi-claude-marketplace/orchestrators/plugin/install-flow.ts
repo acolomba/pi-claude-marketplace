@@ -2,6 +2,8 @@
 //
 // Public composition root for install transaction sequencing.
 
+import { createRemovalOps } from "../../shared/fs-utils.ts";
+
 import {
   createInstallMissingDependencyLedger,
   prepareInstallDependencyPlan,
@@ -18,7 +20,11 @@ import type {
   InstallMissingDependencyOptions,
   InstallMissingDependencyOutcome,
 } from "./install-flow-dependency-ledger.ts";
-import type { InstallPluginOptions, InstallTransaction } from "./install-flow-ledger.ts";
+import type {
+  InstallFileCapabilities,
+  InstallPluginOptions,
+  InstallTransaction,
+} from "./install-flow-ledger.ts";
 import type { UpdateDependencyResolver } from "./update-swap.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -30,13 +36,20 @@ export type {
 } from "./install-flow-dependency-ledger.ts";
 export type { InstallPluginOptions, InstallTransaction } from "./install-flow-ledger.ts";
 
-const INSTALL_PLANNING = createInstallPlanning({
-  preparePlan: prepareInstallDependencyPlan,
-  previewRoot: previewInstallDependencyPlanRoot,
-  runCascade: runInstallDependencyPlanCascade,
-  projectCaughtFailure: projectCaughtInstallDependencyPlanFailure,
-  projectFailedMoves: projectFailedInstallDependencyPlanMoves,
-});
+const INSTALL_FILE_CAPABILITIES: InstallFileCapabilities = {
+  removalOps: createRemovalOps(),
+};
+
+const INSTALL_PLANNING = createInstallPlanning(
+  {
+    preparePlan: prepareInstallDependencyPlan,
+    previewRoot: previewInstallDependencyPlanRoot,
+    runCascade: runInstallDependencyPlanCascade,
+    projectCaughtFailure: projectCaughtInstallDependencyPlanFailure,
+    projectFailedMoves: projectFailedInstallDependencyPlanMoves,
+  },
+  INSTALL_FILE_CAPABILITIES,
+);
 
 /** Binds install orchestration to one required semantic transaction owner. */
 export function createInstallPlugin(
@@ -50,6 +63,7 @@ export function createInstallPlugin(
     hooksRouting,
     completionCache,
     INSTALL_PLANNING,
+    INSTALL_FILE_CAPABILITIES,
     env,
   );
 }
@@ -61,7 +75,13 @@ export function createInstallMissingDependency(
   completionCache: CompletionCache,
   env: ClaudeEnv = process.env,
 ): (opts: InstallMissingDependencyOptions) => Promise<InstallMissingDependencyOutcome> {
-  return createInstallMissingDependencyLedger(transaction, hooksRouting, completionCache, env);
+  return createInstallMissingDependencyLedger(
+    transaction,
+    hooksRouting,
+    completionCache,
+    INSTALL_FILE_CAPABILITIES,
+    env,
+  );
 }
 
 /** Binds update dependency settlement to the install transaction owner. */

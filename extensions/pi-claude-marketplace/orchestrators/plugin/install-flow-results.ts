@@ -1,8 +1,6 @@
 // orchestrators/plugin/install-flow-results.ts
 //
 // Typed install outcome, promotion, declaration, and warning projection.
-import { mkdir } from "node:fs/promises";
-
 import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -12,7 +10,6 @@ import {
   type MarketplaceInLocalLayerOnlyError,
   type MarketplaceSourceUndeclarableError,
 } from "../../shared/errors.ts";
-import { createRemovalOps } from "../../shared/fs-utils.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
 import { ownValue } from "../../shared/own-key.ts";
@@ -60,6 +57,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { RemovalOps } from "../../shared/fs-utils.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { ContentReason, McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -163,6 +161,7 @@ export async function collectPostCommitWarnings(
   completionCache: CompletionCache,
   scope: Scope,
   orchestrated: boolean,
+  ensurePluginDataDir: () => Promise<void>,
 ): Promise<string[]> {
   const { locations, marketplace, plugin } = installCtx;
   const warnings: string[] = [];
@@ -183,7 +182,7 @@ export async function collectPostCommitWarnings(
 
   // AS-6 / D-08: eager per-plugin data dir mkdir.
   try {
-    await mkdir(installCtx.pluginDataDir, { recursive: true });
+    await ensurePluginDataDir();
   } catch (mkdirErr) {
     push(
       `Plugin "${plugin}" installed; data dir creation deferred at ${installCtx.pluginDataDir}: ${errorMessage(mkdirErr)}`,
@@ -332,6 +331,8 @@ export interface PromotionArgs {
   readonly sink: CascadeFailureSink;
   /** D-08-06: the environment the re-materialization stages MCP servers with. */
   readonly env: ClaudeEnv;
+  /** D-08-12: the composition-owned removal port for re-materialization. */
+  readonly removalOps: RemovalOps;
 }
 
 /**
@@ -518,7 +519,7 @@ async function materializePromotedRecord(
       ...(record.resolvedVersion !== undefined && { resolvedVersion: record.resolvedVersion }),
       allowExistingRecord: true,
       partial: !record.compatibility.installable,
-      removalOps: createRemovalOps(),
+      removalOps: args.removalOps,
       env: args.env,
     },
     args.capture,

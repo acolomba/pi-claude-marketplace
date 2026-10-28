@@ -31,6 +31,7 @@ import type { CascadePlan, PlannedCascadeMember, RootCascadeResult } from "./ins
 import type { InstallHooksRouting } from "./install-disable-cascade.ts";
 import type {
   InstallAfterPlan,
+  InstallFileCapabilities,
   InstallPlanning,
   InstallPlanningOwners,
   InstallPluginOptions,
@@ -386,6 +387,7 @@ interface InstallPlanningComposition extends InstallPlanning {
 export function createInstallPlanning(
   // fallow-ignore-next-line private-type-leak -- The root supplies this file's consumer-owned structural port.
   ledger: InstallPlanningLedgerPort,
+  fileCapabilities: InstallFileCapabilities,
   // fallow-ignore-next-line private-type-leak -- Callers infer this private composition instead of exporting a test-only type.
 ): InstallPlanningComposition {
   return {
@@ -400,7 +402,7 @@ export function createInstallPlanning(
       ): UpdateDependencyResolver =>
       (args, prepared, notification) =>
         settleUpdateDependencies(ledger, {
-          owners: { transaction, hooksRouting, completionCache, env },
+          owners: { transaction, hooksRouting, completionCache, env, fileCapabilities },
           args,
           prepared,
           notification,

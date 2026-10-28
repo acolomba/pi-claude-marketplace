@@ -36,9 +36,8 @@ import {
   trackInstallAdds,
   unwrapCascade,
 } from "./install-flow-cascade-context.ts";
-import { hydrateInstalledHooks } from "./install-flow-ledger.ts";
+import { collectInstallPostCommitWarnings, hydrateInstalledHooks } from "./install-flow-ledger.ts";
 import {
-  collectPostCommitWarnings,
   handleCaughtInstallFailure,
   movedMember,
   movedRows,
@@ -74,6 +73,7 @@ import type { InstallCloneCacheSeam } from "./install-clone-probe.ts";
 import type { InstallHooksRouting } from "./install-disable-cascade.ts";
 import type { CascadeFailureSink, TargetRecordFor } from "./install-flow-cascade-context.ts";
 import type {
+  InstallFileCapabilities,
   InstallPlanningOwners,
   InstallPluginOptions,
   InstallTransaction,
@@ -226,6 +226,7 @@ async function installMissingDependencyWithTransaction(
   hooksRouting: InstallHooksRouting,
   completionCache: CompletionCache,
   env: ClaudeEnv,
+  fileCapabilities: InstallFileCapabilities,
   opts: InstallMissingDependencyOptions,
 ): Promise<InstallMissingDependencyOutcome> {
   const { ctx, run, scope, cwd, marketplace, plugin } = opts;
@@ -306,6 +307,7 @@ async function installMissingDependencyWithTransaction(
             sink: cascadeFailure,
             capture,
             transaction,
+            removalOps: fileCapabilities.removalOps,
           })),
           // D-09-05: the declarers' folded ranges pin the root exactly as a
           // constrained member is pinned.
@@ -316,7 +318,12 @@ async function installMissingDependencyWithTransaction(
           treatDisabledAsWall: true,
           // D-04-01: every member of this cascade, root included, exists to
           // satisfy a declaration.
-          ledgerOptionsFor: dependencyLedgerOptions(opts, env, { scope, cwd, adds }),
+          ledgerOptionsFor: dependencyLedgerOptions(opts, env, {
+            scope,
+            cwd,
+            adds,
+            removalOps: fileCapabilities.removalOps,
+          }),
         });
         const installed = unwrapCascade(cascade, capture, rootKey, cascadeFailure);
         if (installed === undefined) {
@@ -385,7 +392,12 @@ async function installMissingDependencyWithTransaction(
   }
 
   // D-03-INV: drops the root marketplace's completion cache, same as install.
-  const warnings = await collectPostCommitWarnings(outcome.root, completionCache, scope, true);
+  const warnings = await collectInstallPostCommitWarnings(
+    outcome.root,
+    completionCache,
+    scope,
+    true,
+  );
   const discoveryMessages = new Map(
     outcome.root.discoveryWarnings.map((warning) => [warning.message, warning]),
   );
@@ -411,10 +423,18 @@ export function createInstallMissingDependencyLedger(
   transaction: InstallTransaction,
   hooksRouting: InstallHooksRouting,
   completionCache: CompletionCache,
+  fileCapabilities: InstallFileCapabilities,
   env: ClaudeEnv = process.env,
 ): (opts: InstallMissingDependencyOptions) => Promise<InstallMissingDependencyOutcome> {
   return (opts) =>
-    installMissingDependencyWithTransaction(transaction, hooksRouting, completionCache, env, opts);
+    installMissingDependencyWithTransaction(
+      transaction,
+      hooksRouting,
+      completionCache,
+      env,
+      fileCapabilities,
+      opts,
+    );
 }
 
 /** The plugin at the root of dependency planning. */
@@ -463,6 +483,7 @@ export async function prepareInstallDependencyPlan(args: {
     scope: target.scope,
     cwd: target.cwd,
     adds: trackInstallAdds(owners.transaction, undefined),
+    removalOps: owners.fileCapabilities.removalOps,
   });
   const rootAllowedMarketplaces = await loadInstallRootAllowlist(
     recordFor,
@@ -510,15 +531,20 @@ export async function previewInstallDependencyPlanRoot(args: {
   return previewInstall(
     await loadState(target.locations.extensionRoot),
     target.locations,
-    buildInstallLedgerOptions(opts, owners.env, {
-      scope: target.scope,
-      cwd: target.cwd,
-      marketplace: opts.marketplace,
-      plugin: opts.plugin,
-      ...(opts.pinVersionOverride !== undefined && { pinVersion: opts.pinVersionOverride }),
-      marketplaceAdd: DEFAULT_MARKETPLACE_ADD,
-      addedMarketplaces: [],
-    }),
+    buildInstallLedgerOptions(
+      opts,
+      owners.env,
+      {
+        scope: target.scope,
+        cwd: target.cwd,
+        marketplace: opts.marketplace,
+        plugin: opts.plugin,
+        ...(opts.pinVersionOverride !== undefined && { pinVersion: opts.pinVersionOverride }),
+        marketplaceAdd: DEFAULT_MARKETPLACE_ADD,
+        addedMarketplaces: [],
+      },
+      owners.fileCapabilities.removalOps,
+    ),
   );
 }
 
@@ -596,6 +622,7 @@ export async function runInstallDependencyPlanCascade(
         sink,
         capture,
         transaction: owners.transaction,
+        removalOps: owners.fileCapabilities.removalOps,
       });
       const options: InstallCascadeOptions = {
         ...shared,
@@ -605,7 +632,11 @@ export async function runInstallDependencyPlanCascade(
             : shared.lookup(subject),
         tagMemo: args.memos.constraintTagMemo,
         marketplaceTagMemo: args.memos.constraintMarketplaceTagMemo,
-        ledgerOptionsFor: dependencyLedgerOptions(caller, owners.env, { ...target, adds }),
+        ledgerOptionsFor: dependencyLedgerOptions(caller, owners.env, {
+          ...target,
+          adds,
+          removalOps: owners.fileCapabilities.removalOps,
+        }),
       };
       const cascade =
         args.kind === "initial"
