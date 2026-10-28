@@ -4,6 +4,7 @@ slug: "apply-ordering-and-installed-declarations"
 status: verified
 threats_open: 0
 asvs_level: 1
+audited_commit: "9692623df10a567019acdb7a24e5e3229a72cc80"
 created: "2026-10-28"
 ---
 
@@ -31,7 +32,7 @@ created: "2026-10-28"
 | 02-01 / T-02-01 | Tampering | planned-install release | medium | mitigate | Scheduled keys come only from the two planned install buckets; unreadable declarations fail the walk closed. | closed |
 | 02-01 / T-02-02 | Denial of service | reconcile fixpoints | low | mitigate | Both loops grow bounded sets and stop when a pass adds nothing; cycle coverage passes. | closed |
 | 02-01 / T-02-SC | Tampering | package installs | high | accept | Plan 02-01 adds no package-manager operation. | closed |
-| 02-02 / T-02-03 | Tampering | installed-copy reader | high | mitigate | The owning root is contained before parsing; unusable manifests fail the declaration walk closed. | closed |
+| 02-02 / T-02-03 | Tampering | installed-copy reader | high | mitigate | The owning root is contained before parsing; unusable manifests fail the declaration walk closed. A distinct installed holder forces this walk under the existing scope lock; the no-holder fast path excludes only the target and requester records that cannot be holders. | closed |
 | 02-02 / T-02-04 | Information disclosure | unreadable-declarer diagnostics | medium | mitigate | Fixed phrases omit manifest text, absolute paths, and chained causes. | closed |
 | 02-02 / T-02-SC | Tampering | package installs | high | accept | Plan 02-02 adds no package-manager operation. | closed |
 | 02-03 / T-02-05 | Elevation of privilege | post-install enables | high | mitigate | Only the fresh post-install plan can enable a waiting record, and final strict judgment disables unsatisfied plugins. | closed |
@@ -83,6 +84,8 @@ None. All six plan summaries report no security surface outside their registered
 | 2026-10-28 | 19 | 19 | 0 | GSD security auditor, ASVS L1 |
 
 The audit verified 12 mitigation rows and recorded the seven PLAN-authorized accepted risks. Counts preserve all six plan-qualified `T-02-SC` occurrences; the deduplicated register contains 14 IDs.
+
+The recheck at `9692623d` verified the installed-declaration lock boundary and the no-potential-holder fast path. Lock acquisition, compromise, and release failures reject the operation; the lock is released before tag probes and candidate resolution. Regression coverage proves held-lock refusal followed by retry, requester and excluded-version folding, and missing-dependency retry after lock release. The full gate passed with 1,122 scenarios, 11,447 steps, and 309 LCOV records.
 
 ---
 
