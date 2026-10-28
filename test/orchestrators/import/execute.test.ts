@@ -563,6 +563,32 @@ test("declares plural cardinality when import produces zero rows", async (t) => 
   verifyBoundary();
 });
 
+test("import execute consumes unchanged marketplace add without a row", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "unchanged-marketplace-add");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve({ status: "unchanged", name: "mp" }),
+      loadSettings: () =>
+        Promise.resolve(claudeSettings({ extraKnownMarketplaces: { mp: { directory: "./mp" } } })),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, emptyImportResult());
+  assert.deepStrictEqual(notifications, [{ message: "(no marketplaces)" }]);
+  verifyBoundary();
+});
+
 test("records a marketplace the state does not carry and installs its declared plugin", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "add-and-install");

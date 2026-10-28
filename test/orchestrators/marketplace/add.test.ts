@@ -129,7 +129,6 @@ void ("plugins remain" satisfies FailedAddOutcome["reason"]);
 // @ts-expect-error failed add outcomes retain the closed shared reason vocabulary
 void ("unknown add failure" satisfies FailedAddOutcome["reason"]);
 
-// @ts-expect-error D-PL5-19: the orchestrated outcome cannot hold the standalone no-op
 void ({ status: "unchanged", name: "tools" } satisfies AddMarketplaceOutcome);
 
 function fixtureMarketplaceDir(
@@ -1288,33 +1287,52 @@ test("MA-14: orchestrated mode joins both cleanup failures behind one Error.caus
   });
 });
 
-test("MPA-01: a same-source add into the declaring layer is skipped as already added before any clone", async () => {
+test("marketplace add returns unchanged for an identical recorded source", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
-    const { ctx, run } = makeCtx();
+    const { ctx, run } = makeCtx(0);
     const { gitOps: gitOps1 } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
-    // First add succeeds.
+    const { ctx: ctx2, run: run2, notifications: n2 } = makeCtx(0);
+    const { gitOps: gitOps2, state: gitState2 } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+    const declaration = makeCtx();
+    const standalone = makeCtx();
+
     // act
-    await addMarketplace({
+    const added = await addMarketplace({
       ctx,
       run,
       scope: "project",
       cwd,
       rawSource: "anthropics/claude-plugins-official",
       gitOps: gitOps1,
+      notifications: { mode: "orchestrated" },
     });
-
     const stateBefore = await readFile(locations.stateJsonPath, "utf8");
-    const configBefore = await readFile(locations.baseConfigJsonPath, "utf8");
-    const { ctx: ctx2, run: run2, notifications: n2 } = makeCtx();
-    const { gitOps: gitOps2, state: gitState2 } = createGitOps({
-      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
-    });
-    await addMarketplace({
+    const unchanged = await addMarketplace({
       ctx: ctx2,
       run: run2,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps: gitOps2,
+      notifications: { mode: "orchestrated" },
+    });
+    const configAfterOrchestrated = await pathExists(locations.baseConfigJsonPath);
+    await addMarketplace({
+      ctx: declaration.ctx,
+      run: declaration.run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps: gitOps2,
+    });
+    await addMarketplace({
+      ctx: standalone.ctx,
+      run: standalone.run,
       scope: "project",
       cwd,
       rawSource: "anthropics/claude-plugins-official",
@@ -1322,12 +1340,18 @@ test("MPA-01: a same-source add into the declaring layer is skipped as already a
     });
 
     // assert
-    assert.deepStrictEqual(n2, [
+    assert.deepStrictEqual(added, { status: "added", name: "valid-marketplace" });
+    assert.deepStrictEqual(unchanged, { status: "unchanged", name: "valid-marketplace" });
+    assert.deepStrictEqual(n2, []);
+    assert.deepStrictEqual(declaration.notifications, [
+      { message: "● valid-marketplace [project] (added)" },
+    ]);
+    assert.deepStrictEqual(standalone.notifications, [
       { message: "● valid-marketplace [project] (skipped) {already added}" },
     ]);
     assert.deepStrictEqual(gitState2.cloneCalls, []);
     assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
-    assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), configBefore);
+    assert.strictEqual(configAfterOrchestrated, false);
   });
 });
 
@@ -2311,7 +2335,7 @@ test("invalidates names before the plugin index only after the add is durable", 
   });
 });
 
-test("does not invalidate a duplicate no-effect add through the same cache owner", async () => {
+test("does not invalidate an unchanged add through the same cache owner", async () => {
   const localMarketplace = await mkdtemp(path.join(tmpdir(), "mp-add-duplicate-"));
   try {
     await cp(fixtureMarketplaceDir("valid-marketplace"), localMarketplace, { recursive: true });
@@ -2350,10 +2374,10 @@ test("does not invalidate a duplicate no-effect add through the same cache owner
 
       // assert
       assert.deepStrictEqual(firstOutcome, { status: "added", name: "valid-marketplace" });
-      assert.strictEqual(duplicateOutcome.status, "failed");
-      if (duplicateOutcome.status === "failed") {
-        assert.strictEqual(duplicateOutcome.reason, "duplicate name");
-      }
+      assert.deepStrictEqual(duplicateOutcome, {
+        status: "unchanged",
+        name: "valid-marketplace",
+      });
 
       assert.deepStrictEqual(recorder.calls, []);
       assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBeforeDuplicate);
@@ -3292,139 +3316,144 @@ test("D-PL5-16 / MPA-02: orchestrated mode still reads a malformed manifest as u
   });
 });
 
-test("normalizes a structurally classified exotic throw in orchestrated mode", async (t) => {
-  await withTmpScope(async ({ cwd, locations }) => {
-    // arrange
-    let prototypeReads = 0;
-    const exoticDuplicate = new Proxy(
-      {},
-      {
-        getPrototypeOf: () => {
-          prototypeReads += 1;
-          return prototypeReads <= 3 ? MarketplaceDuplicateNameError.prototype : null;
+test(
+  "normalizes a structurally classified exotic throw in orchestrated mode",
+  { timeout: 1_000 },
+  async (t) => {
+    await withTmpScope(async ({ cwd, locations }) => {
+      // arrange
+      const duplicate = new MarketplaceDuplicateNameError("valid-marketplace", "project");
+      const exoticDuplicate = new Proxy(duplicate, {
+        getPrototypeOf: () => MarketplaceDuplicateNameError.prototype,
+      });
+      const { ctx, run, notifications } = makeCtx(0);
+      const { gitOps, state } = createGitOps();
+      const originalBasename = path.basename.bind(path);
+      t.mock.method(path, "basename", (value: string, suffix?: string) => {
+        if (value === locations.baseConfigJsonPath) {
+          throw exoticDuplicate;
+        }
+
+        return suffix === undefined ? originalBasename(value) : originalBasename(value, suffix);
+      });
+
+      // act
+      const outcome = await addMarketplace({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        rawSource: "owner/repo",
+        gitOps,
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        status: "failed",
+        reason: "duplicate name",
+        error: exoticDuplicate,
+        cause: duplicate.message,
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(state, {
+        checkoutCalls: [],
+        cloneCalls: [],
+        fetchCalls: [],
+        forceUpdateRefCalls: [],
+        resolveRefCalls: [],
+      });
+      assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+        schemaVersion: 3,
+        marketplaces: {},
+      });
+    });
+  },
+);
+
+test(
+  "cleans the final clone when state-record construction fails after rename",
+  { timeout: 1_000 },
+  async (t) => {
+    await withTmpScope(async ({ cwd, locations }) => {
+      // arrange
+      const { ctx, run, notifications } = makeCtx(0);
+      const { gitOps, state } = createGitOps({
+        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      });
+      let presentsAsError = true;
+      const stateMutationFailure = new Proxy(
+        {},
+        {
+          getPrototypeOf: () => {
+            if (presentsAsError) {
+              presentsAsError = false;
+              return Error.prototype;
+            }
+
+            return null;
+          },
         },
-      },
-    );
-    const { ctx, run, notifications } = makeCtx(0);
-    const { gitOps, state } = createGitOps();
-    const originalBasename = path.basename.bind(path);
-    t.mock.method(path, "basename", (value: string, suffix?: string) => {
-      if (value === locations.baseConfigJsonPath) {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error -- an exotic thenable-free value exercises unknown-throw normalization.
-        throw exoticDuplicate;
-      }
+      );
+      const originalJoin = path.join.bind(path);
+      t.mock.method(path, "join", (...segments: string[]) => {
+        if (
+          segments.length === 3 &&
+          segments[0]?.endsWith(`${path.sep}sources${path.sep}valid-marketplace`) === true &&
+          segments[1] === ".claude-plugin" &&
+          segments[2] === "marketplace.json"
+        ) {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error -- this failure proves the inner unknown-throw normalizer after rename.
+          throw stateMutationFailure;
+        }
 
-      return suffix === undefined ? originalBasename(value) : originalBasename(value, suffix);
-    });
+        return originalJoin(...segments);
+      });
 
-    // act
-    const outcome = await addMarketplace({
-      ctx,
-      run,
-      scope: "project",
-      cwd,
-      rawSource: "owner/repo",
-      gitOps,
-      notifications: { mode: "orchestrated" },
-    });
+      // act
+      const outcome = await addMarketplace({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        rawSource: "anthropics/claude-plugins-official",
+        gitOps,
+        notifications: { mode: "orchestrated" },
+      });
 
-    // assert
-    assert.deepStrictEqual(outcome, {
-      status: "failed",
-      reason: "duplicate name",
-      error: new Error("[object Object]"),
-      cause: "[object Object]",
+      // assert
+      assert.deepStrictEqual(outcome, {
+        status: "failed",
+        reason: "unreadable",
+        error: new Error("[object Object]"),
+        cause: "[object Object]",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(
+        state.cloneCalls.map(({ url }) => url),
+        ["https://github.com/anthropics/claude-plugins-official.git"],
+      );
+      assert.strictEqual(
+        await pathExists(await locations.sourceCloneDir("valid-marketplace")),
+        false,
+      );
+      assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+        schemaVersion: 3,
+        marketplaces: {},
+      });
     });
-    assert.strictEqual(prototypeReads, 6);
-    assert.deepStrictEqual(notifications, []);
-    assert.deepStrictEqual(state, {
-      checkoutCalls: [],
-      cloneCalls: [],
-      fetchCalls: [],
-      forceUpdateRefCalls: [],
-      resolveRefCalls: [],
-    });
-    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 3,
-      marketplaces: {},
-    });
-  });
-});
-
-test("cleans the final clone when state-record construction fails after rename", async (t) => {
-  await withTmpScope(async ({ cwd, locations }) => {
-    // arrange
-    const { ctx, run, notifications } = makeCtx(0);
-    const { gitOps, state } = createGitOps({
-      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
-    });
-    let prototypeReads = 0;
-    const stateMutationFailure = new Proxy(
-      {},
-      {
-        getPrototypeOf: () => {
-          prototypeReads += 1;
-          return prototypeReads === 1 ? Error.prototype : null;
-        },
-      },
-    );
-    const originalJoin = path.join.bind(path);
-    t.mock.method(path, "join", (...segments: string[]) => {
-      if (
-        segments.length === 3 &&
-        segments[0]?.endsWith(`${path.sep}sources${path.sep}valid-marketplace`) === true &&
-        segments[1] === ".claude-plugin" &&
-        segments[2] === "marketplace.json"
-      ) {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error -- this failure proves the inner unknown-throw normalizer after rename.
-        throw stateMutationFailure;
-      }
-
-      return originalJoin(...segments);
-    });
-
-    // act
-    const outcome = await addMarketplace({
-      ctx,
-      run,
-      scope: "project",
-      cwd,
-      rawSource: "anthropics/claude-plugins-official",
-      gitOps,
-      notifications: { mode: "orchestrated" },
-    });
-
-    // assert
-    assert.deepStrictEqual(outcome, {
-      status: "failed",
-      reason: "unreadable",
-      error: new Error("[object Object]"),
-      cause: "[object Object]",
-    });
-    assert.strictEqual(prototypeReads, 3);
-    assert.deepStrictEqual(notifications, []);
-    assert.deepStrictEqual(
-      state.cloneCalls.map(({ url }) => url),
-      ["https://github.com/anthropics/claude-plugins-official.git"],
-    );
-    assert.strictEqual(
-      await pathExists(await locations.sourceCloneDir("valid-marketplace")),
-      false,
-    );
-    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 3,
-      marketplaces: {},
-    });
-  });
-});
+  },
+);
 
 test("RECON-03 orchestrated mode -- duplicate-name (path source) returns typed MarketplaceDuplicateNameError, no notifications", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx: ctx1, run: run1 } = makeCtx();
     const localMpDir = await mkdtemp(path.join(tmpdir(), "mp-orch-dup-"));
+    const conflictingMpDir = await mkdtemp(path.join(tmpdir(), "mp-orch-conflict-"));
     try {
       await cp(fixtureMarketplaceDir("valid-marketplace"), localMpDir, { recursive: true });
+      await cp(fixtureMarketplaceDir("valid-marketplace"), conflictingMpDir, { recursive: true });
 
       const { gitOps: gitOps1 } = createGitOps();
       // Seed the duplicate via a standalone add.
@@ -3434,7 +3463,7 @@ test("RECON-03 orchestrated mode -- duplicate-name (path source) returns typed M
         run: run1,
         scope: "project",
         cwd,
-        rawSource: localMpDir,
+        rawSource: conflictingMpDir,
         gitOps: gitOps1,
       });
 
@@ -3460,6 +3489,7 @@ test("RECON-03 orchestrated mode -- duplicate-name (path source) returns typed M
       }
     } finally {
       await rm(localMpDir, { recursive: true, force: true });
+      await rm(conflictingMpDir, { recursive: true, force: true });
     }
   });
 });
@@ -3469,8 +3499,10 @@ test("RECON-03 orchestrated mode -- rethrowPreconditionErrors still rethrows typ
     // arrange
     const { ctx: ctx1, run: run1 } = makeCtx();
     const localMpDir = await mkdtemp(path.join(tmpdir(), "mp-orch-rethrow-"));
+    const conflictingMpDir = await mkdtemp(path.join(tmpdir(), "mp-orch-rethrow-conflict-"));
     try {
       await cp(fixtureMarketplaceDir("valid-marketplace"), localMpDir, { recursive: true });
+      await cp(fixtureMarketplaceDir("valid-marketplace"), conflictingMpDir, { recursive: true });
 
       const { gitOps: gitOps1 } = createGitOps();
       // act
@@ -3493,7 +3525,7 @@ test("RECON-03 orchestrated mode -- rethrowPreconditionErrors still rethrows typ
           run: run2,
           scope: "project",
           cwd,
-          rawSource: localMpDir,
+          rawSource: conflictingMpDir,
           gitOps: gitOps2,
           rethrowPreconditionErrors: true,
           notifications: { mode: "orchestrated" },
@@ -3504,6 +3536,7 @@ test("RECON-03 orchestrated mode -- rethrowPreconditionErrors still rethrows typ
       assert.equal(n2.length, 0, "orchestrated mode must not fire notifications");
     } finally {
       await rm(localMpDir, { recursive: true, force: true });
+      await rm(conflictingMpDir, { recursive: true, force: true });
     }
   });
 });

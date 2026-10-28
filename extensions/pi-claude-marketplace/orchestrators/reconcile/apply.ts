@@ -340,14 +340,19 @@ async function applyMarketplaceAdds(
       // source-based matching (plan.ts::buildMarketplaceClaims) makes the
       // next reconcile converge on that recorded name.
       outcomes.push({ kind: "mp-added", scope: op.scope, marketplace: result.name });
-    } else {
-      outcomes.push({
-        kind: "mp-add-failed",
-        scope: op.scope,
-        marketplace: op.marketplace,
-        reason: result.reason,
-      });
+      continue;
     }
+
+    if (result.status === "unchanged") {
+      continue;
+    }
+
+    outcomes.push({
+      kind: "mp-add-failed",
+      scope: op.scope,
+      marketplace: op.marketplace,
+      reason: result.reason,
+    });
   }
 }
 

@@ -206,6 +206,7 @@ export type AddMarketplaceNotifications =
  */
 export type AddMarketplaceOutcome =
   | { readonly status: "added"; readonly name: string }
+  | { readonly status: "unchanged"; readonly name: string }
   | {
       readonly status: "failed";
       readonly reason: Reason;
@@ -595,6 +596,21 @@ function resolvesToRecord(
 async function redeclareRecordedSource(
   args: RecordedSourceArgs,
 ): Promise<RecordedSourceAction<UnchangedAdd> | undefined> {
+  return recordedSourceAction(args, true);
+}
+
+/** Match an orchestrated add to an intact record without writing its source config. */
+async function reuseRecordedSource(
+  args: RecordedSourceArgs,
+): Promise<RecordedSourceAction<UnchangedAdd> | undefined> {
+  return recordedSourceAction(args, false);
+}
+
+/** Resolve an add against the one record that already owns its typed source. */
+async function recordedSourceAction(
+  args: RecordedSourceArgs,
+  declareMissing: boolean,
+): Promise<RecordedSourceAction<UnchangedAdd> | undefined> {
   const { current, locations, rawSource } = args;
   const [match, ...others] = Object.entries(args.marketplaces).filter(
     ([, record]) =>
@@ -613,10 +629,14 @@ async function redeclareRecordedSource(
 
   const source = await repairableSource(record);
   if (source !== undefined) {
+    if (!declareMissing) {
+      return undefined;
+    }
+
     return { kind: "repair", record, source, declare: declared === undefined };
   }
 
-  if (declared !== undefined) {
+  if (declared !== undefined || !declareMissing) {
     return { kind: "reuse", added: { status: "unchanged", name } };
   }
 
@@ -694,16 +714,8 @@ async function repairableSource(
 /** The marketplace an add recorded, or declared in the target layer. */
 type AddedMarketplace = Extract<AddMarketplaceOutcome, { readonly status: "added" }>;
 
-/**
- * D-PL5-19 / MPA-01: a standalone add of a marketplace the scope already holds
- * with the typed source, declared in the target layer: nothing changed.
- * `AddMarketplaceOutcome` cannot hold it, so `apply` and `import` never see
- * it.
- */
-interface UnchangedAdd {
-  readonly status: "unchanged";
-  readonly name: string;
-}
+/** A marketplace add whose typed source already belongs to an intact record. */
+type UnchangedAdd = Extract<AddMarketplaceOutcome, { readonly status: "unchanged" }>;
 
 /**
  * WB-01 mitigation: a CFG-03 invalid-config arm aborts the
@@ -1080,13 +1092,12 @@ async function runAddInGuard<U>(args: {
         : await replaceMarketplaceInState(addArgs, opts.replaceRecorded);
 
     // WB-01 / WR-09: write-back the marketplace entry to the user-authored
-    // config. SKIPPED in orchestrated mode, the mode without the recorded
-    // source step (reconcile derives desired state FROM the config; writing
-    // back would clobber a per-machine override), and for a repair whose
-    // target layer already declares it.
+    // config. SKIPPED in orchestrated mode (reconcile derives desired state
+    // FROM the config; writing back would clobber a per-machine override), and
+    // for a repair whose target layer already declares it.
     await saveAddedMarketplace({
       save: () => tx.save(),
-      declare: action?.declare ?? recordedSource !== undefined,
+      declare: action?.declare ?? opts.notifications?.mode !== "orchestrated",
       current,
       targetConfigPath,
       locations,
@@ -1466,29 +1477,18 @@ export function notifyAddFailure(opts: AddMarketplaceOptions, err: unknown): voi
 
 /**
  * RECON-03: returns `AddMarketplaceOutcome` in orchestrated mode and
- * `undefined` in standalone mode (after firing the standalone notify()).
- * Callers in orchestrated mode know the outcome is defined; standalone
- * callers ignore the return.
+ * `undefined` in standalone mode after firing the standalone notification.
  *
  * D-115-10: the overload pair narrows the orchestrated-mode return to
- * `Promise<AddMarketplaceOutcome>` (no `| undefined`), mirroring
- * `setPluginEnabled`. A reconcile cascade that dropped the row on an absent
- * outcome is now a compile error rather than a silent `continue`, so every
- * driven add always materialises a row. The wide overload stays last so a
- * caller holding the entrypoint in a single-signature variable -- the import
- * cascade's collaborator resolver -- keeps its `undefined` arm.
+ * `Promise<AddMarketplaceOutcome>`, mirroring `setPluginEnabled`. A reconcile
+ * cascade that dropped the row on an absent outcome is now a compile error.
  *
  * WR-01: the overload is backed by a compile-time check, not by an assertion.
  * The orchestrated body is `runOrchestratedAdd`, whose DECLARED return type is
  * `Promise<AddMarketplaceOutcome>`, so TypeScript checks every return statement
  * and the fall-off-the-end path in it: an arm that yielded `undefined`, or the
- * standalone no-op status (D-PL5-19), is a compile error there. A narrower
- * overload return alone would not give that -- TypeScript checks an overload
- * signature against the implementation only loosely, and accepts a narrowed
- * return with no diagnostic even when the implementation demonstrably returns
- * the excluded value. This entrypoint is the thin mode switch that
- * reintroduces `undefined` for the standalone arm and for that arm only, so
- * the narrow overload can never outrun the body.
+ * narrower overload return alone would not give that -- TypeScript checks an
+ * overload signature against the implementation only loosely.
  */
 export function addMarketplace(
   opts: AddMarketplaceOptions & { notifications: { mode: "orchestrated" } },
@@ -1510,26 +1510,25 @@ export async function addMarketplace(
 }
 
 /**
- * The orchestrated add: the add body without the recorded-source step, so it
- * can neither declare a config nor report the standalone no-op (WR-09,
- * D-PL5-19). The declared return type is the WR-01 proof.
+ * The orchestrated add: the add body with a read-only recorded-source step, so
+ * a concurrent identical add is an explicit no-op without config write-back.
+ * The declared return type is the WR-01 proof.
  */
 function runOrchestratedAdd(opts: AddMarketplaceOptions): Promise<AddMarketplaceOutcome> {
-  return runAddOutcome<never>(opts, undefined);
+  return runAddOutcome(opts, reuseRecordedSource);
 }
 
 /**
  * The whole add body. Standalone mode passes the recorded-source step and
  * emits its notify() rows on the way through; the entrypoint above discards
- * its result. Without the step the add is orchestrated: it notifies nothing
- * and its result is the typed outcome, which `U` (`never` there) cannot
- * widen.
+ * its result. The orchestrated step can reuse an intact existing record but
+ * never writes the source config or repairs a missing clone.
  */
 async function runAddOutcome<U extends UnchangedAdd>(
   opts: AddMarketplaceOptions,
   recordedSource: RecordedSourceStep<U> | undefined,
 ): Promise<AddMarketplaceOutcome | U> {
-  const orchestrated = recordedSource === undefined;
+  const orchestrated = opts.notifications?.mode === "orchestrated";
   // D-08-12: this verb owns a staging lifecycle, so it is the composition root
   // that constructs the removal operations its in-guard helpers perform their
   // cleanup through. The port is required with no default, so there is nothing
@@ -1563,20 +1562,22 @@ async function runAddOutcome<U extends UnchangedAdd>(
 
   const recordedName = recorded.name;
   if (recorded.status === "unchanged") {
-    // MPA-01 / D-PL5-19: only the standalone step reports a no-op (WR-09), so
-    // this arm always notifies and the entrypoint discards the result. Nothing
-    // changed, so there is nothing to settle. The header carries no severity
-    // stamp, so the result is `info`.
-    const skippedRows: Single<MarketplaceRows<never>> = [
-      {
-        name: recordedName,
-        scope: opts.scope,
-        status: "skipped",
-        reasons: ["already added"],
-        plugins: [],
-      },
-    ];
-    notifyWithContext(opts.ctx, opts.run, ADD_CONTEXT, skippedRows, undefined, "single");
+    // MPA-01 / D-PL5-19: standalone reports the no-op exactly as before;
+    // orchestrated callers consume the typed arm. Nothing changed, so there is
+    // nothing to settle.
+    if (!orchestrated) {
+      const skippedRows: Single<MarketplaceRows<never>> = [
+        {
+          name: recordedName,
+          scope: opts.scope,
+          status: "skipped",
+          reasons: ["already added"],
+          plugins: [],
+        },
+      ];
+      notifyWithContext(opts.ctx, opts.run, ADD_CONTEXT, skippedRows, undefined, "single");
+    }
+
     return recorded;
   }
 

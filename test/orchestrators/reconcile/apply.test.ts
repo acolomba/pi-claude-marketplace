@@ -1085,6 +1085,42 @@ describe("applyReconcile", () => {
     });
   }
 
+  test("reconcile apply consumes unchanged marketplace add without a row", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "unchanged-marketplace-add");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {});
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({ marketplaces: { mp: { source: marketplaceRoot } } }),
+    );
+    await seedState(project, { schemaVersion: 3, marketplaces: {} });
+    const competingState: ExtensionState = {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+        }),
+      },
+    };
+    const applyWithRace = applyAfterSelectedStateRace(project, competingState);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyWithRace({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
+    assert.deepStrictEqual(await loadState(project.extensionRoot), competingState);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
   test("RECON-03: a marketplace whose clone cannot reach the remote reports network unreachable while its sibling is still added", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "add-remote");

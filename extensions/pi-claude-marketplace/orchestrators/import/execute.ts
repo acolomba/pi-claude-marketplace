@@ -1206,7 +1206,7 @@ async function installOnePlannedPlugin(
         ref: refLabel(plugin),
         reason: "installed",
         resourcesChanged: outcome.resourcesChanged,
-        ...(outcome.version !== undefined && { version: outcome.version }),
+        version: outcome.version,
         declaresAgents: outcome.declaresAgents,
         declaresMcp: outcome.declaresMcp,
         ...(outcome.promoted === true && { promoted: true }),
@@ -1396,6 +1396,10 @@ async function addOnePlannedMarketplace(
       return;
     }
 
+    if (outcome?.status === "unchanged") {
+      return;
+    }
+
     recordMarketplaceAddFailure(
       result,
       blockedMarketplaces,
@@ -1421,7 +1425,7 @@ async function addOnePlannedMarketplace(
  * process's lock stopped carries `lock held` and the lock error's chain.
  */
 function addFailure(
-  outcome: Exclude<AddMarketplaceOutcome, { status: "added" }> | undefined,
+  outcome: Extract<AddMarketplaceOutcome, { status: "failed" }> | undefined,
 ): MarketplaceFailure {
   if (outcome === undefined) {
     return {
