@@ -686,6 +686,18 @@ export async function resolvePendingForceInstalls(
   return keys;
 }
 
+function pendingSourceMismatches(plan: ReconcilePlan): ReconcilePlan["sourceMismatches"] {
+  return plan.sourceMismatches.filter(
+    (mismatch) =>
+      !(
+        mismatch.cause === "source-mismatch" &&
+        plan.marketplacesToAdd.some(
+          (add) => add.scope === mismatch.scope && add.marketplace === mismatch.marketplace,
+        )
+      ),
+  );
+}
+
 /**
  * Pure projection: ReconcilePlan[] -> pending marketplace rows. The rows are
  * typed `MarketplaceRows<PendingMsg>` so the projection's plugin children are
@@ -704,7 +716,8 @@ export async function resolvePendingForceInstalls(
  *                              `plugins` field, NOT pluginsToUninstall (which
  *                              deliberately omits removed-marketplace plugins
  *                              to avoid double-billing the apply cascade).
- *   - sourceMismatches      -> block.status = "failed", reasons:
+ *   - sourceMismatches      -> replacements keep their will-add header;
+ *                              other mismatches set block.status = "failed", reasons:
  *                              ["dangling reference"] for the dangling-reference
  *                              cause (PURL-06), ["source mismatch"] for the
  *                              other three causes
@@ -766,7 +779,7 @@ export function buildReconcilePendingNotification(
   for (const plan of plans) {
     pushMarketplaceActions(byMp, plan, recordedVersions);
 
-    for (const o of plan.sourceMismatches) {
+    for (const o of pendingSourceMismatches(plan)) {
       applySourceMismatch(
         ensureMarketplaceBlock(byMp, o.scope, plannedSourceMismatchSubject(o)),
         o,

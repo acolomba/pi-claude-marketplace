@@ -2510,12 +2510,21 @@ describe("buildReconcilePendingNotification", () => {
     assert.deepStrictEqual(pending, { marketplaces: [] });
   });
 
-  test("D-20: previews a marketplace add with no child work as a bare will-add header", () => {
+  test("previews a marketplace replacement as an add instead of a source failure", () => {
     // arrange
     const plans = [
       reconcilePlan("project", {
         marketplacesToAdd: [
           { scope: "project", marketplace: "mp", source: "acme/tools", configSource: "base" },
+        ],
+        sourceMismatches: [
+          {
+            scope: "project",
+            cause: "source-mismatch",
+            marketplace: "mp",
+            declaredSource: "acme/tools",
+            recordedSource: "acme/old",
+          },
         ],
       }),
     ];
