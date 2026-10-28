@@ -4350,7 +4350,7 @@ moves. Related: APPLY1-01 (two `apply` runs for a co-released dependency).
 
 ## ~~UPDDEP-01: leftovers from the UPD-DEP-D1 dependency resolver reviews~~ -- CLOSED
 
-**CLOSED 2026-10-28** by the plugin-lifecycle milestone, Phases 2-4 and 11. Disposition: b1-b3 and b6 fixed; b4-b5 closed by recorded upstream decisions; b7 fixed by the install-flow split. Evidence: D-PL4-01, D-PL3-11, D-PL2-06, D-PL4-02, D-PL4-03, D-PL4-04, D-PL4-08, and `11-06-SUMMARY.md`. The split's public-root, planning, and ledger owner suites are `test/orchestrators/plugin/install-flow.test.ts`, `test/orchestrators/plugin/install-flow-planning.test.ts`, and `test/orchestrators/plugin/install-flow-ledger.test.ts`.
+**CLOSED 2026-10-28** by the plugin-lifecycle milestone, Phases 2-4 and 11. Disposition: b1-b3 and b6 fixed; b4-b5 closed by recorded upstream decisions; b7 fixed by the install-flow split. Evidence: D-PL4-01, D-PL3-11, D-PL2-06, D-PL4-02, D-PL4-03, D-PL4-04, D-PL4-08, and `11-13-SUMMARY.md`. The six owner suites are `test/orchestrators/plugin/install-flow.test.ts`, `test/orchestrators/plugin/install-flow-planning.test.ts`, `test/orchestrators/plugin/install-flow-ledger.test.ts`, `test/orchestrators/plugin/install-flow-cascade-context.test.ts`, `test/orchestrators/plugin/install-flow-results.test.ts`, and `test/orchestrators/plugin/install-flow-dependency-ledger.test.ts`.
 
 The four reviews of the update-dependency work (1daa12d0..fdb584a6) left these
 open. None changes a result a user relies on.
