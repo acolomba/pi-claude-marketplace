@@ -5,16 +5,16 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 11
 current_phase_name: Cleanup, Split, and Docs
 status: executing
-stopped_at: Completed 11-06-PLAN.md; next 11-09
-last_updated: "2026-10-28T05:42:48.413Z"
+stopped_at: Completed 11-09-PLAN.md; phase gates pending
+last_updated: "2026-10-28T08:36:16.150Z"
 last_activity: 2026-10-28
-last_activity_desc: Install-flow split verified; Phase 11 is 11/12 plans complete
-state_head: 20d969824d32fd494e7d269b0b220a1d4793efa3
+last_activity_desc: Final docs and closures complete; Phase 11 is 12/12 plans complete
+state_head: 4a1c5b07da7677e6a48a0d5b1f1a575a34719fad
 progress:
   total_phases: 11
   completed_phases: 10
   total_plans: 79
-  completed_plans: 78
+  completed_plans: 79
   percent: 91
 ---
 
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 11 — Cleanup, Split, and Docs
-Plan: 11 of 12 complete; next 11-09
-Status: Executing final documentation and closure plan
-Last activity: 2026-10-28 — install-flow split verified on the combined tree
+Plan: 12 of 12 complete; phase verification pending
+Status: Phase execution complete; verification pending
+Last activity: 2026-10-28 — final docs, backlog closures, and CLN requirements verified
 
 
 ### mcp-4 closeout
@@ -188,7 +188,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-gvt | GV-01: record plugins at a range-selected release tag as Claude Code does, the tag semver kept as resolvedVersion | 2026-10-26 | 2638b001 | complete | [261026-gvt-record-plugins-at-release-tags-as-claude-code](./quick/261026-gvt-record-plugins-at-release-tags-as-claude-code/) |
 | 261026-glv | GV-01: an update with no tag drops the tag commit from the record; plugin directory plugins pick no release tag and their listed copy answers the range | 2026-10-26 | 33c9ac69 | complete | [261026-glv-match-claude-code-on-untagged-updates-an](./quick/261026-glv-match-claude-code-on-untagged-updates-an/) |
 | 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
-**Stopped at:** Completed 11-06-PLAN.md; next 11-09
+**Stopped at:** Completed 11-09-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -404,6 +404,7 @@ archived milestone artifacts.
 | Phase 10 P06 | 28min | 3 tasks | 14 files |
 | Phase 10 P07 | 15min | 3 tasks | 4 files |
 | Phase 11 P06 | 42min | 3 tasks | 13 files |
+| Phase 11 P09 | 15min | 3 tasks | 7 files |
 
 ## Decisions
 
@@ -612,6 +613,9 @@ archived milestone artifacts.
 - [Phase 10]: The Node-only network preload is declined because it cannot govern git or credential-helper subprocesses.
 - [Phase 11]: Install flow now composes a planning leaf and a ledger leaf through typed callbacks, keeping the runtime graph acyclic.
 - [Phase 11]: Shared install-flow test support is fixture-only; assertions stay in each paired owner suite.
+- [Phase 11]: Phase 10 closure extends D-PL3-03, D-PL6-03, and D-PL6-19 instead of duplicating their product decisions.
+- [Phase 11]: Pending keeps its source-mismatch bytes while apply and autoapply use the locked replacement path.
+- [Phase 11]: Only LCCODE-01, LCDOC-01, and UPDDEP-01 close; all carried-forward lifecycle entries stay open.
 
 ### mcp-4 decisions
 
@@ -821,6 +825,6 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ## Session Continuity
 
-Last session: 2026-10-28T05:42:45.964Z
-Stopped at: Completed 11-06-PLAN.md; next 11-09
+Last session: 2026-10-28T08:36:14.020Z
+Stopped at: Completed 11-09-PLAN.md; phase gates pending
 Resume file: None
