@@ -489,7 +489,7 @@ test("MSG-GR-3: a failed configuration block sorts among the plan blocks by name
   verifyBoundary();
 });
 
-test("APL-04 / D-14: a list whose only row is a source mismatch carries no apply trailer", async (t) => {
+test("previews a changed marketplace source as a replacement that needs apply", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "mismatch-only");
   await writeUnder(
@@ -509,13 +509,30 @@ test("APL-04 / D-14: a list whose only row is a source mismatch carries no apply
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "A marketplace operation has failed.\n\n" +
-        "⊘ mp [project] (failed) {source mismatch}\n\n" +
-        "Reconcile pending: 1 failure",
-      severity: "error",
+        "● mp [project] (will add)\n\n" +
+        "Reconcile pending: 1 success\n\n/claude:plugin apply to make these changes",
     },
   ]);
   verifyBoundary();
+});
+
+test("treats the official fallback as current when another source is recorded", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "official-fallback");
+  await writeUnder(
+    project.baseConfigJsonPath,
+    configBytes("claude-plugins-official", "anthropics/claude-plugins-official", []),
+  );
+  await writeUnder(
+    project.stateJsonPath,
+    stateBytes("claude-plugins-official", "acme/tools", path.join(cwd, "mp-root"), []),
+  );
+
+  // act
+  const report = await composePendingReport({ cwd, scopes: ["project"] });
+
+  // assert
+  assert.deepStrictEqual(report, { marketplaces: [], retained: {}, needsApply: false });
 });
 
 test("MIG-01: an absent base config plans against the state projection instead of an empty desired state", async (t) => {

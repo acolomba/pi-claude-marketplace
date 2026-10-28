@@ -198,7 +198,7 @@ After the first message, the extension waits a random delay of up to ten minutes
 
 The background update runs once in each extension runtime. `/reload` and a new, resumed, or forked session start a new runtime, and the new runtime arms again on its own first message. Claude Code runs the update once in each process. Pi gives an extension no hook for the lifetime of the process, so this extension cannot do the same.
 
-A `/claude:plugin` command, `/reload`, and a new, resumed, or forked session wait for the background step in flight, such as one marketplace refresh or one plugin update, for at most 30 seconds. At that point the extension stops the step's network transfer. The step then changes nothing, the waiting command or session goes on, and the background update stops for the rest of the runtime. Quitting Pi does not wait.
+A `/claude:plugin` command, `/reload`, or a new, resumed, or forked session waits for the active background step. This can be a marketplace refresh or a plugin update. After 30 seconds, the extension starts to cancel that step's network transfer and keeps the command or session waiting until the step finishes. The canceled step fails cleanly, while changes completed earlier in the pass remain. The background update then stops for the rest of the runtime. Quitting Pi does not wait.
 
 ### Opt-out variables
 

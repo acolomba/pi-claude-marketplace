@@ -8,8 +8,8 @@
 // drops entries. Nothing reaches the session, and a load origin gives git
 // access stored credentials only, with no Device Flow.
 //
-// D-PL8-04: each marketplace refresh and each plugin update is one gate step,
-// so a `/claude:plugin` command waits for at most one of them. A command can
+// D-PL8-04: each marketplace refresh, plugin update, and dependency settlement
+// is one gate step, so a `/claude:plugin` command waits for at most one of them. A command can
 // run between two plugin updates, so each plugin update first reads the merged
 // config again and skips the plugin once autoupdate is off (D-PL8-01).
 //
@@ -196,7 +196,7 @@ async function updateOneMarketplace(step: PassStep, name: string, scope: Scope):
         scope,
         cwd: step.cwd,
         pluginUpdate: step.pluginUpdate,
-        installMissingDependencies: deps.installMissingDependencies,
+        installMissingDependencies: yieldingDependencyInstall(step, name),
       }),
     );
   } catch (err: unknown) {
@@ -213,6 +213,30 @@ async function updateOneMarketplace(step: PassStep, name: string, scope: Scope):
   }
 
   return true;
+}
+
+/** Keeps dependency settlement inside the current pass's gate and abort scope. */
+function yieldingDependencyInstall(step: PassStep, marketplace: string): ScopeDependencyInstallFn {
+  return async (request) => {
+    const { deps, halt } = step;
+    if (halt.isHalted()) {
+      return { rows: [], mcpConfigNotices: [] };
+    }
+
+    deps.gate.endStep();
+    const signal = await deps.gate.beginStep();
+    try {
+      const config = await loadMergedScopeConfig(locationsFor(request.scope, step.cwd));
+      if (halt.isHalted() || signal.aborted || !isAutoupdateOn(config, marketplace)) {
+        return { rows: [], mcpConfigNotices: [] };
+      }
+
+      return await deps.runWithAbortSignal(signal, () => deps.installMissingDependencies(request));
+    } finally {
+      halt.noteStepEnded(signal);
+      // The marketplace still owns the step until its cascade and reporting settle.
+    }
+  };
 }
 
 interface YieldingPluginUpdateArgs {

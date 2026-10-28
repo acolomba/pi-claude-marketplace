@@ -4,8 +4,11 @@
  */
 
 import assert from "node:assert/strict";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { Given, Then, When } from "@cucumber/cucumber";
+
+import { backgroundUpdateNoticeTexts } from "../../lib/pi-tui.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -34,6 +37,7 @@ When(
 
 When(
   "the user runs a foreground plugin list while the tui background request is in flight",
+  { timeout: 45_000 },
   async function (this: ScenarioWorld): Promise<void> {
     const tui = await this.startTuiSession();
     this.expectTuiNotices();
@@ -44,7 +48,16 @@ When(
     const outputMark = tui.markOutput();
     const startedAt = Date.now();
     tui.sendLine("/claude:plugin list");
-    await tui.waitForTextAfter("Plugin list", outputMark, 35_000);
+    const output = tui.waitForTextAfter("Plugin list", outputMark, 35_000);
+    const completedBeforeCap = await Promise.race([
+      output.then(() => true),
+      delay(1_000, false, { ref: false }),
+    ]);
+    assert.strictEqual(completedBeforeCap, false, "foreground bypassed the active background step");
+    assert.deepStrictEqual(this.gitHost.requestsSince(requestWindow).requests, [
+      { method: "GET", path: "/acme/ghp.git/info/refs?service=git-upload-pack", status: "pending" },
+    ]);
+    await output;
     this.backgroundForegroundWaitMs = Date.now() - startedAt;
   },
 );
@@ -57,11 +70,11 @@ Then(
 );
 
 Then(
-  "the foreground plugin list stops the background request within the wait cap",
+  "the foreground plugin list waits for the background git request to stop at the wait cap",
   async function (this: ScenarioWorld): Promise<void> {
     const waitMs = this.backgroundForegroundWaitMs;
     assert.ok(waitMs !== undefined);
-    assert.ok(waitMs > 0 && waitMs <= 30_000, `foreground wait was ${waitMs} ms`);
+    assert.ok(waitMs >= 30_000 && waitMs <= 35_000, `foreground wait was ${waitMs} ms`);
     const requestWindow = this.backgroundRequestWindow;
     assert.ok(requestWindow !== undefined);
     await this.gitHost.waitForRequestsSettledAfter(requestWindow);
@@ -69,14 +82,14 @@ Then(
       requests: [
         {
           method: "GET",
-          path: "/acme/tools/marketplace.json",
+          path: "/acme/ghp.git/info/refs?service=git-upload-pack",
           status: "dropped",
         },
       ],
-      connections: 2,
+      connections: 1,
     });
     await this.requireTuiSession().waitForQuiet(250, 5_000);
-    assert.deepStrictEqual(this.requireTuiSession().backgroundUpdateNotices(), []);
+    assert.deepStrictEqual(backgroundUpdateNoticeTexts(this.requireTuiSession().text), []);
     this.markTuiNoticesCompared();
   },
 );
@@ -87,7 +100,7 @@ Then(
     const tui = this.requireTuiSession();
     await tui.waitForText(notice, 30_000);
     await tui.waitForQuiet(250, 5_000);
-    assert.deepStrictEqual(tui.backgroundUpdateNotices(), [notice]);
+    assert.deepStrictEqual(backgroundUpdateNoticeTexts(tui.text), [notice]);
     this.markTuiNoticesCompared();
   },
 );

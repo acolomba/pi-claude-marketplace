@@ -175,6 +175,25 @@ for (const target of [
   });
 }
 
+for (const host of [
+  { dotted: "100.100.100.200", hex: "6464:64c8" },
+  { dotted: "168.63.129.16", hex: "a83f:8110" },
+  { dotted: "192.0.0.192", hex: "c000:c0" },
+].flatMap(({ dotted, hex }) => [
+  dotted,
+  ...["::", "::ffff:", "::ffff:0:", "64:ff9b::"].map((prefix) => `[${prefix}${hex}]`),
+])) {
+  test(`refuses the metadata address ${host} before following its redirect`, async (t) => {
+    // arrange
+    const target = `https://${host}/latest`;
+    const requests = serveAnswers(t, [redirect(target), ok()]);
+
+    // act & assert
+    await assert.rejects(fetchHostedManifest(CATALOG_URL), assertRefused(refusedRedirect(target)));
+    assert.deepStrictEqual(urls(requests), [CATALOG_URL]);
+  });
+}
+
 for (const target of [
   "https://93.184.216.34/tools.json",
   "https://172.32.0.1/tools.json",
@@ -182,6 +201,7 @@ for (const target of [
   "https://192.169.0.1/tools.json",
   "https://[2001:db8::1]/tools.json",
   "https://[::ffff:5db8:d822]/tools.json",
+  "https://[::ffff:0:5db8:d822]/tools.json",
   "https://[::5db8:d822]/tools.json",
   "https://[64:ff9b::5db8:d822]/tools.json",
   "https://[2001:db8:1:2:3:4:5:6]/tools.json",

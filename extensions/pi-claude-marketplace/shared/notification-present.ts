@@ -41,7 +41,7 @@ import type { Scope } from "./types.ts";
  *
  * PMOD-04 / D-07: the free-text fields resolve does not reach are redacted
  * here, so neither strategy reads a credential: a url-source marketplace
- * `url`, advisory lines, plugin-info `notes`, and the marketplace-not-added
+ * `url`, advisory lines, plugin-info names and `notes`, and the marketplace-not-added
  * `name`, the marketplace name the user typed.
  */
 
@@ -197,30 +197,47 @@ export function presentNotification(
 }
 
 /**
- * PMOD-04: a url source can hold the userinfo the user typed, so its `url` is
- * redacted. A github or path source carries no credential, and the message
- * comes back as the same object.
+ * PMOD-04: redact stored names and URL userinfo before either renderer reads
+ * them. Keep the original message when neither field changes.
  */
 function redactMarketplaceInfo(message: MarketplaceInfoMessage): MarketplaceInfoMessage {
+  const name = redactCredentials(message.name);
   if (message.source.sourceKind !== "url") {
+    return name === message.name ? message : { ...message, name };
+  }
+
+  const url = redactCredentials(message.source.url);
+  if (name === message.name && url === message.source.url) {
     return message;
   }
 
-  return { ...message, source: { ...message.source, url: redactCredentials(message.source.url) } };
+  return { ...message, name, source: { ...message.source, url } };
 }
 
 /**
- * PMOD-04: a plugin row's `notes` can quote a thrown message, so a row that
- * carries them is copied with each note redacted. A row without notes comes
- * back as the same object, and its fields are not read again.
+ * PMOD-04: names can carry stored credentials, and notes can quote a thrown
+ * message. Redact both before either renderer reads them. Keep the original
+ * message when no field changes.
  */
 function redactPluginInfo(message: PluginInfoMessage): PluginInfoMessage {
   const { plugin } = message;
-  if (plugin.notes === undefined) {
+  const marketplaceName = redactCredentials(message.marketplaceName);
+  const name = redactCredentials(plugin.name);
+  const notesUnchanged =
+    plugin.notes === undefined || plugin.notes.every((note) => redactCredentials(note) === note);
+  if (marketplaceName === message.marketplaceName && name === plugin.name && notesUnchanged) {
     return message;
   }
 
-  return { ...message, plugin: { ...plugin, notes: redactLines(plugin.notes) } };
+  return {
+    ...message,
+    marketplaceName,
+    plugin: {
+      ...plugin,
+      name,
+      ...(plugin.notes === undefined ? {} : { notes: redactLines(plugin.notes) }),
+    },
+  };
 }
 
 /** Redacts each block of a non-empty info fan-out and keeps the order. */

@@ -69,6 +69,28 @@ Feature: Plugin apply
     Given a config in scope project and layer local, with these marketplaces:
       | name  | source                           | autoupdate |
       | tools | {home}/marketplaces/replacement |            |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind                | cascade           |
+      | severity            | info              |
+      | needs reload        | false             |
+      | needs apply         | true              |
+      | tally label         | Reconcile pending |
+      | tally failures      | 0                 |
+      | tally warnings      | 0                 |
+      | tally success count | 1                 |
+    Then the result lists these marketplaces:
+      | name  | scope   | status   |
+      | tools | project | will add |
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status |
+      | tools            | project           | will add           |
+      | tools            | project           | will add           |
     When the user runs "/claude:plugin apply --scope project"
     Then the result has these fields:
       | kind                | reconcile-applied-cascade |
@@ -116,12 +138,48 @@ Feature: Plugin apply
       | method | path                         | status |
       | GET    | /acme/tools/marketplace.json | 200    |
 
+  Scenario: Apply replaces an existing hosted marketplace from a changed URL
+    Given the marketplace "tools" is published as a hosted source
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "replacement" is published as a hosted source
+    Given the marketplace "replacement" publishes this manifest:
+      """
+      { "name": "tools", "plugins": [] }
+      """
+    Given a config in scope project and layer local, with these marketplaces:
+      | name  | source                                             | autoupdate |
+      | tools | https://{git host}/acme/replacement/marketplace.json |            |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | false                     |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 1                         |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+
   Scenario: The official fallback source is already up to date
     Given the marketplace "claude-plugins-official" is published as a dir source
     Given an earlier version recorded the marketplace "claude-plugins-official" in the project scope
     Given a config in scope project and layer base, with these marketplaces:
       | name                    | source                               | autoupdate |
       | claude-plugins-official | anthropics/claude-plugins-official |            |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+    When the user starts a new pi session
+    Then the session reports no results
     When the user runs "/claude:plugin apply --scope project"
     Then the result has these fields:
       | kind         | reconcile-pending-empty |

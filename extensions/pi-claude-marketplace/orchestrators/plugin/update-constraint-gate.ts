@@ -22,6 +22,7 @@
 
 import { parsePluginSource } from "../../domain/source.ts";
 import { isPluginDirectoryMarketplace } from "../../domain/version.ts";
+import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
 
 import { admitsRange, evaluateCatalogConstraint, transportHeld } from "./constraint-fold.ts";
 import { buildInstalledScopeDeclarationDetail } from "./dependency-index.ts";
@@ -29,10 +30,12 @@ import { probeDependencyTags } from "./dependency-tag-probe.ts";
 import { probeMarketplaceTags } from "./marketplace-tag-probe.ts";
 
 import type {
+  CatalogConstraintSeam,
   ConstraintHolder,
   ConstraintRequester,
   UpdateConstraintVerdict,
 } from "./constraint-fold.ts";
+import type { AddressedDependency, ScopeDeclarationDetailOptions } from "./dependency-index.ts";
 import type { DependencyTagListingFailureReason } from "./dependency-tag-probe.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
@@ -86,10 +89,25 @@ export interface UpdateConstraintOptions {
 // `evaluateCatalogConstraint` with the catalog-first walk, so the two can judge
 // a holder whose installed copy and catalog disagree differently.
 const REAL_UPDATE_CONSTRAINT_SEAM: UpdateConstraintSeam = Object.freeze({
-  buildScopeDeclarationDetail: buildInstalledScopeDeclarationDetail,
+  // RCN-05: uninstall and clone GC use this lock. Release it before tag probes
+  // and candidate resolution, which can take their own scope locks.
+  buildScopeDeclarationDetail: (options: ScopeDeclarationDetailOptions) =>
+    withExistingScopeLock(options.locations, () => buildInstalledScopeDeclarationDetail(options)),
   probeDependencyTags,
   probeMarketplaceTags,
 });
+
+function hasPotentialHolder(options: UpdateConstraintOptions): boolean {
+  // Match collectHolders: the target cannot hold itself, and requester ranges
+  // replace their installed declarations. Every other record needs the walk.
+  const replaced = new Set([
+    `${options.plugin}@${options.marketplace}`,
+    ...(options.requesters ?? []).map((requester) => requester.key),
+  ]);
+  return Object.values(options.state.marketplaces).some((marketplace) =>
+    Object.keys(marketplace.plugins).some((name) => !replaced.has(`${name}@${marketplace.name}`)),
+  );
+}
 
 /** Whether the target's own entry source has a tag listing either probe can read. */
 type ConstraintTagSource =
@@ -241,10 +259,20 @@ export async function evaluateUpdateConstraint(
   options: UpdateConstraintOptions,
 ): Promise<UpdateConstraintVerdict> {
   const seam = options.seam ?? REAL_UPDATE_CONSTRAINT_SEAM;
+  const declarationSeam: CatalogConstraintSeam =
+    options.seam === undefined && !hasPotentialHolder(options)
+      ? {
+          buildScopeDeclarationDetail: () =>
+            Promise.resolve({
+              ok: true,
+              declarations: new Map<string, readonly AddressedDependency[]>(),
+            }),
+        }
+      : seam;
 
   // D-10-05 / D-18-17: the walk and the fold are the tag-free gate's, so a
   // walk that cannot read a record fails the operation closed here too.
-  const verdict = await evaluateCatalogConstraint({ ...options, seam });
+  const verdict = await evaluateCatalogConstraint({ ...options, seam: declarationSeam });
   // GV-01: Claude Code never picks a release tag for a plugin of its plugin
   // directory; the range judges the copy the catalog lists instead.
   if (verdict.kind !== "admits" || isPluginDirectoryMarketplace(options.marketplace)) {

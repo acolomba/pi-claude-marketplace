@@ -7,6 +7,40 @@ Feature: Plugin import
   Background:
     Given the marketplace "fixtures" is published as a dir source
 
+  Scenario: Import replaces an existing hosted marketplace from a changed URL
+    Given the marketplace "tools" is published as a hosted source
+    Given the marketplace "tools" is added to the user scope
+    Given the marketplace "replacement" is published as a hosted source
+    Given the marketplace "replacement" publishes this manifest:
+      """
+      { "name": "tools", "plugins": [] }
+      """
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "extraKnownMarketplaces": {
+          "tools": {
+            "source": { "source": "url", "url": "https://{git host}/acme/replacement/marketplace.json" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade |
+      | severity            | info    |
+      | needs reload        | false   |
+      | tally label         | Import  |
+      | tally failures      | 0       |
+      | tally warnings      | 0       |
+      | tally success count | 1       |
+    Then the result lists these marketplaces:
+      | name  | scope | status |
+      | tools | user  | added  |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name  | source                                             |
+      | tools | https://{git host}/acme/replacement/marketplace.json |
+
   Scenario: Importing the user's claude code settings adds their marketplace and installs their enabled plugin
     Given the marketplace "fixtures" offers these plugins:
       | name | version |

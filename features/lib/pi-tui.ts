@@ -97,6 +97,19 @@ function removeTerminalControls(text: string): string {
   return plain;
 }
 
+/**
+ * Returns distinct notice texts from terminal output, not emission counts.
+ * Redraws and separate identical emissions can write the same text. Aggregate
+ * scenarios must use distinct plugin names to detect separate notices.
+ */
+export function backgroundUpdateNoticeTexts(terminalOutput: string): readonly string[] {
+  const notices =
+    removeTerminalControls(terminalOutput).match(
+      /Plugins? updated: .*? · Run \/reload to apply/g,
+    ) ?? [];
+  return [...new Set(notices)];
+}
+
 /** One Pi TUI whose stdio is a real pseudoterminal. */
 export class PiTuiSession {
   private readonly child: TuiChild;
@@ -239,12 +252,6 @@ export class PiTuiSession {
 
       this.changes.add(waiter.changed);
     });
-  }
-
-  /** Returns the complete normalized set of background-update notices on the terminal. */
-  backgroundUpdateNotices(): readonly string[] {
-    const notices = this.text.match(/Plugins? updated: .*? · Run \/reload to apply/g) ?? [];
-    return [...new Set(notices)];
   }
 
   /** Releases the TUI, escalating from its quit key to a process-group kill. */
