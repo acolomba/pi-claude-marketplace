@@ -26,6 +26,43 @@ Feature: Plugin install dependencies
       | /skill:app-skill | A skill of app 1.0.0. |
       | /skill:lib-skill | A skill of lib 1.2.0. |
 
+  Scenario: A partially installed dependency leaves its dependent installed on install, list, and info
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the published plugin "lib" of the marketplace "tools" has an output style
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install lib@tools --scope project --partial"
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status    | reasons           | scope   | version |
+      | tools            | project           | app@tools | app       | installed |                   | project | 1.0.0   |
+      | tools            | project           | lib@tools | lib@tools | skipped   | already installed | project | 1.0.0   |
+    When the user runs "/claude:plugin list --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status              | reasons               | scope   | version |
+      | tools            | project           | app@tools | app  | installed           |                       | project | 1.0.0   |
+      | tools            | project           | lib@tools | lib  | partially-installed | unsupported component | project | 1.0.0   |
+    When the user runs "/claude:plugin info app@tools"
+    Then the result has these fields:
+      | kind                           | plugin-info   |
+      | marketplace details autoupdate | false         |
+      | marketplace name               | tools         |
+      | marketplace scope              | project       |
+      | needs reload                   | false         |
+      | plugin components resolved     | true          |
+      | plugin components skills       | app-skill     |
+      | plugin dependencies            | lib@tools     |
+      | plugin id                      | app@tools     |
+      | plugin name                    | app           |
+      | plugin reasons                 |               |
+      | plugin scope                   | project       |
+      | plugin status                  | installed     |
+      | plugin version                 | 1.0.0         |
+      | severity                       | info          |
+
   Scenario: Installing a plugin installs every plugin of its dependency chain
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
