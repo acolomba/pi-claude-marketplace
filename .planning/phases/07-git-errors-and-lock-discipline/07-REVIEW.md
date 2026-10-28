@@ -1,43 +1,21 @@
 ---
 phase: 07-git-errors-and-lock-discipline
-reviewed: 2026-10-28T18:33:55Z
-reviewed_commit: e65cb5d705bc2019107ec31b6727d042d39dfdcb
+reviewed: 2026-10-28T19:11:29Z
+reviewed_commit: d2d93c0f0351b1b5c8f9e757c0975d4a46595d48
 depth: standard
-scope_resolution: degraded-phase-range-reconstructed-from-phase-contract
-files_reviewed: 32
+files_reviewed: 11
 files_reviewed_list:
-  - extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts
-  - extensions/pi-claude-marketplace/shared/errors.ts
-  - extensions/pi-claude-marketplace/platform/git.ts
-  - extensions/pi-claude-marketplace/transaction/with-state-guard.ts
-  - extensions/pi-claude-marketplace/orchestrators/edge-deps.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/list-installed-row.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts
-  - extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts
   - test/orchestrators/plugin/clone-gc.test.ts
   - test/orchestrators/plugin/dependency-bindings.test.ts
-  - test/orchestrators/plugin/fetch.test.ts
-  - test/orchestrators/plugin/info.test.ts
-  - test/orchestrators/plugin/update-flow.test.ts
-  - test/orchestrators/plugin/update-preflight.test.ts
-  - test/shared/git-failure-classifiers.test.ts
+  - test/orchestrators/plugin/dependency-move.test.ts
+  - test/orchestrators/plugin/dependency-plan.test.ts
+  - test/orchestrators/plugin/dependency-settle.test.ts
 findings:
   critical: 1
   warning: 0
@@ -48,114 +26,120 @@ status: issues_found
 
 # Phase 7: Code Review Report
 
-**Reviewed:** 2026-10-28T18:33:55Z
-**Reviewed commit:** `e65cb5d705bc2019107ec31b6727d042d39dfdcb`
+**Reviewed:** 2026-10-28T19:11:29Z
+**Reviewed commit:** `d2d93c0f0351b1b5c8f9e757c0975d4a46595d48`
 **Depth:** standard
-**Files Reviewed:** 32
+**Files Reviewed:** 11
 **Status:** issues_found
 
 ## Summary
 
-This is a fresh integrated review of all ten Phase 7 plans against the active
-implementation after Phases 8-11. It covers GLK-01 through GLK-08, the four
-ROADMAP success criteria, D-PL7-01 through D-PL7-18, and the current classifier,
-lock, network, containment, cleanup, version-flow, and offline-tag call chains.
+The original CR-01 concurrent-fetch race is closed for the interleaving that
+reported it. Cleanup now takes one fresh scope lock, re-derives live keys, and
+targets only the supplied candidate set. A distinct mirror warmed by a
+concurrent locked fetch is not a candidate, so the sweep cannot delete it.
+The collector still routes deletion through `pluginCloneDir`, keeps live and
+shared keys, swallows cleanup failure, and does not nest the non-reentrant
+scope lock.
 
-The evaluation-scope resolver returned a degraded phase-range spanning later
-phases, so the review scope above was reconstructed from the Phase 7 plans,
-summaries, prior verification scope, active imports/callers, and paired tests.
-The classifier convergence, operation-specific 404/410 rules, cause framing and
-credential-safe URL rendering, direct/cascade parity, all active clone-GC
-callers, update tag-copy lock, fetch/info row locks, intent stamps, offline tag
-resolution, and fetch/list/completion version flow were re-evaluated in current
-code. One correctness defect remains in the dependency sweep's concurrency
-protocol.
+The replacement protocol nevertheless regresses the other half of the
+dependency-plan cleanup contract. It derives candidates only from the final
+accepted move steps, even though planning itself can materialize several
+discarded move candidates plus root and fresh-plugin previews. No sweep is
+created when the plan refuses or throws. Those operation-created clones are
+therefore leaked, contrary to the established fail-clean behavior and the
+module's own promise to collect the clones the plan created.
 
-Fresh gate evidence remains usable because this review changed no build input:
-`07-VALIDATION.md` is COMPLIANT (92 scenarios / 1086 steps and 15 direct
-pairs), `07-SECURITY.md` is SECURED (31/31, `threats_open: 0`), and the combined
-tree gate at build-input commit `c9dbf878` is green (1126 scenarios / 11509
-steps, 309 direct LCOV records). A local focused-test attempt could not start
-because this isolated worktree has no `tsx` package resolution; it does not
-supersede the reusable full gate or the deterministic code-path evidence below.
+The supplied combined-tree gate remains green at the reviewed inputs (1126
+scenarios / 11509 steps and 309 direct LCOV records). A focused read-only run
+of the five changed owner test modules also passed. Those tests validate the
+new distinct-mirror negative control, but they do not exercise a real git
+preview or a ruled-out candidate that materializes a clone before the plan
+refuses.
 
 ## Narrative Findings (AI reviewer)
 
 ## Critical Issues
 
-### CR-01: A dependency sweep can delete a clone that a concurrent fetch just completed
+### CR-01: Refused and backtracked dependency plans leak the clones they materialized
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts:163-178`
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts:162-168`
 
-**Issue:** `planCloneSweep` takes one fresh lock to snapshot the unreferenced
-clone keys into `before`, releases it, runs an arbitrarily long dependency plan,
-then takes a second fresh lock for `collectPluginClonesLocked(locations,
-before)`. The second lock prevents deletion while another operation is actively
-using the clone, but it does not make the two endpoints atomic.
+**Issue:** `planCloneSweep` builds its entire ownership set from
+`cleanupCloneKeys` on the final accepted plan's `move` steps. This omits three
+real write paths:
 
-A deterministic interleaving is:
+1. A plan search can successfully judge and materialize multiple versions of
+   one move before `ruleOut` discards earlier choices
+   (`dependency-plan.ts:324-346`). Only the last choice is copied into a step
+   at `dependency-plan.ts:572-590`, so every earlier candidate key is lost.
+2. Root and fresh-member previews call the install preflight. That preflight
+   explicitly clones a git source on cache miss
+   (`install-outcome.ts:897-928`), but materialize steps carry no cleanup keys
+   and `planCloneSweep` ignores them.
+3. `installAfterMoves` keeps a no-op sweep until the plan succeeds
+   (`install-flow-planning.ts:243-250`). `settlePlanned` likewise returns on a
+   thrown or refused plan before calling `planSweep`
+   (`dependency-settle.ts:260-273`). A refusal after any of the writes above
+   therefore performs no cleanup at all.
 
-1. `planCloneSweep` snapshots an empty `before` set and releases the lock.
-2. A concurrent unpinned `fetch` takes the same lock, materializes
-   `fetched-mirror`, reads its row, and successfully releases the lock.
-3. The dependency operation finishes and invokes its sweep.
-4. `garbageCollectPluginClones` sees `fetched-mirror` as unreferenced in state
-   and absent from `before`, so `clone-gc.ts:123-145` deletes it.
+This is not only a theoretical omission. `previewInstall` documents and
+implements the cache-miss clone before later name and agent-target checks can
+throw. The planner also has tested backtracking paths that judge 3.0.0, rule
+it out, and then judge 2.0.0. On either a later refusal or an execution failure
+before the previewed member lands, the corresponding mirror/per-commit
+directories remain unreferenced on disk. The previous sweep removed all
+clones created after its initial snapshot; the new tests changed the refusal
+expectations to assert that no sweep runs, without replacing that cleanup
+coverage with explicit ownership for these materializations.
 
-The public fetch has therefore reported a refreshed cache that another
-operation immediately removes. A subsequent warm/offline install or reinstall
-can no longer use that fetched mirror. The current unit case at
-`test/orchestrators/plugin/dependency-bindings.test.ts:323-340` only proves that
-a mirror present *before* the snapshot is retained; it does not exercise a
-mirror created between the snapshot and sweep. This is the exact interleaving
-the D-PL7-13 comments at `clone-gc.ts:168-172` claim to prevent, but separately
-locking the two endpoints does not prevent it.
+The result violates NFR-3 fail-clean semantics and the Phase 4/7 dependency
+contract recorded in `dependency-settle.ts:16-23`: clones the plan created
+must be removed while clones that predated it stay. Repeated refused installs
+or resolver backtracking can accumulate unreachable cache directories
+indefinitely.
 
-**Fix:** Make the sweep ownership-based instead of treating every clone absent
-from the initial snapshot as created by this operation. Track the clone keys
-materialized/replaced by the dependency plan and pass only those exact keys to
-a locked collector, deleting a key only if it is still unreferenced. Add a
-test that pauses after `planCloneSweep`, creates a distinct fetched mirror under
-`withExistingScopeLock`, then runs the sweep and asserts that the concurrent
-mirror remains while the dependency plan's own abandoned clone is removed.
+**Fix:** Track clone ownership for the whole planning attempt, not only the
+accepted step list. The materialization boundary should report the exact
+mirror/per-commit keys it actually created (distinguishing new entries from
+pre-existing cache hits), and move judgment should add every successfully
+materialized candidate, including candidates later ruled out. Root and fresh
+previews must add their created keys to the same attempt-owned set. Construct
+the candidate sweep before planning starts and invoke it from an outer
+`finally` on success, refusal, and throw; the current locked live-state recheck
+can then safely retain landed/shared keys. Add filesystem tests for both a
+refused git preview and a backtracked move: each must remove its own newly
+created keys, preserve a pre-existing warm key, and preserve a distinct mirror
+created by a concurrent locked fetch.
 
 ## Prior Finding Disposition
 
-The earlier review disposition remains respected and was not automatically
-reopened:
-
-- Fixed findings remain fixed: the plugin-update refresh lock, maximum-Date
-  stamp fallback, fetch lost-lock row, update compromised-lock reason, and stale
-  comments.
-- D-PL7-12 continues to govern the accepted/deferred raw-cause parity item.
-- The accepted millisecond stale-record window, duplicated rule constants,
-  other `updatedAt` writers, unreachable cascade catch, and simultaneous
-  body-plus-release failure remain outside this finding.
-- CR-01 is new. It concerns the interval between two individually locked
-  dependency-sweep endpoints, not any prior disposition.
+- The prior concurrent-fetch CR-01 is closed for a distinct fetched mirror;
+  this finding concerns clone ownership that the replacement protocol omits.
+- Previously fixed classifier, lock, stamp, and comment findings remain fixed.
+- Previously accepted or deferred Phase 7 dispositions remain unchanged and
+  were not reopened.
 
 ## Review Evidence
 
-- All production GC references resolve to `collectPluginClonesLocked` or
-  `listUnreferencedPluginClonesLocked`; no active caller invokes the private
-  unlocked helpers.
-- Cleanup callers do not nest the non-reentrant lock. Uninstall, marketplace
-  remove, apply, update, reinstall, converge, and dependency cleanup invoke GC
-  after their own guarded state mutation returns.
-- Unpinned fetch and `info --fetch` keep refresh plus row read in one lock body;
-  pinned immutable and bare-info arms intentionally remain unlocked under
-  D-PL7-07.
-- The shared classifier still supplies one ladder with operation-specific
-  not-found policies, strips cleanup wrappers, and frames HTTP failures with the
-  credential-safe wire URL. Direct and cascade update paths consume that ladder.
-- `nextUpdateStamp` changes both the pre-commit mark and finalize stamp within
-  one millisecond, while its invalid/maximum-date fallback still changes the
-  compared value.
-- Warm tag reinstall resolves the local tag first and fetch/list/completion
-  continue to share the current candidate-version flow.
+- `collectPluginCloneCandidatesLocked` takes one fresh lock and rechecks the
+  current state before deleting an exact candidate; no nested-lock path was
+  found.
+- Candidate deletion still passes through `locations.pluginCloneDir`, so the
+  existing safe-name, containment, and symlink checks remain in force.
+- The new concurrency test is a valid negative control for the old race: its
+  fetched mirror is created under the real scope lock after sweep creation and
+  remains after the owned replaced clone is removed.
+- Focused owner tests: five modules passed (`clone-gc`,
+  `dependency-bindings`, `dependency-move`, `dependency-plan`, and
+  `dependency-settle`).
+- `fallow review --base d4436bd3^ --brief` could not create its temporary
+  comparison worktree in this isolated checkout; this orientation-only command
+  is not a gate and does not supersede the supplied green Fallow/full-gate
+  evidence.
 
 ---
 
-_Reviewed: 2026-10-28T18:33:55Z_
+_Reviewed: 2026-10-28T19:11:29Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
