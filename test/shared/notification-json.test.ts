@@ -10,6 +10,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/shared/notification-json.ts";
 import {
   presentCascade,
+  presentNotification,
   presentUpdateNoOp,
 } from "../../extensions/pi-claude-marketplace/shared/notification-present.ts";
 import { NOTIFICATION_PAYLOAD_SCHEMA } from "../../extensions/pi-claude-marketplace/shared/notification-wire.ts";
@@ -2017,6 +2018,59 @@ for (const { title, marker, expectedId } of [
         componentsResolved: false,
       },
     });
+  });
+}
+
+for (const { marketplaceSubject, expectedId } of [
+  { marketplaceSubject: true, expectedId: "***" },
+  { marketplaceSubject: undefined, expectedId: "***@***" },
+] as const) {
+  test(`redacts stored info names before producing the ${expectedId} id`, () => {
+    // arrange
+    const name = "ghp_0123456789abcdefghijklmnopqrstuvwxyz";
+    const message: PluginInfoMessage = {
+      kind: "plugin-info",
+      marketplaceName: name,
+      marketplaceScope: "project",
+      marketplaceDetails: { autoupdate: false },
+      plugin: {
+        status: "failed",
+        name,
+        scope: "project",
+        reasons: ["invalid manifest"],
+        componentsResolved: false,
+        ...(marketplaceSubject === undefined ? {} : { marketplaceSubject }),
+      },
+    };
+
+    // act
+    const payload = toWirePayload(presentNotification(runWithNothingLoaded(), message), {
+      kind: "command",
+      commandId: "plugin",
+      invocationId: "test-run",
+    });
+
+    // assert
+    assert.deepStrictEqual(payload, {
+      schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+      kind: "plugin-info",
+      severity: "error",
+      summary: "A plugin operation has failed.",
+      needsReload: false,
+      marketplaceName: "***",
+      marketplaceScope: "project",
+      marketplaceDetails: { autoupdate: false },
+      plugin: {
+        status: "failed",
+        name: "***",
+        id: expectedId,
+        reasons: ["invalid manifest"],
+        scope: "project",
+        componentsResolved: false,
+      },
+    });
+    assert.strictEqual(JSON.stringify(payload).includes(name), false);
   });
 }
 

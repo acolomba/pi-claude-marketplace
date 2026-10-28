@@ -144,6 +144,27 @@ Feature: Marketplace info
       | marketplace-info | info     | false        |                                | tools | project | false              | {scenario time}         | path        | {home}/marketplaces/tools-project |                  |                   |                                |               |             |           |                  |              |                            |
       | plugin-info      | error    | false        | A plugin operation has failed. |       |         |                    |                         |             |                                   | tools            | user              | false                          | failed        | tools       | tools     | invalid manifest | user         | false                      |
 
+  Scenario: Info hides credentials in a stored marketplace name when its manifest is invalid
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" info record in the project scope has the stored name "ghp_0123456789abcdefghijklmnopqrstuvwxyz"
+    Given the manifest of the marketplace "tools" has become invalid
+    When the user runs "/claude:plugin marketplace info tools --scope project"
+    Then the result has these fields:
+      | kind                           | plugin-info                    |
+      | severity                       | error                          |
+      | needs reload                   | false                          |
+      | summary                        | A plugin operation has failed. |
+      | marketplace name               | ***                            |
+      | marketplace scope              | project                        |
+      | marketplace details autoupdate | false                          |
+      | plugin status                  | failed                         |
+      | plugin name                    | ***                            |
+      | plugin id                      | ***                            |
+      | plugin reasons                 | invalid manifest               |
+      | plugin scope                   | project                        |
+      | plugin components resolved     | false                          |
+
   Scenario: Info on a marketplace whose manifest became invalid reports a failed invalid manifest row
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
