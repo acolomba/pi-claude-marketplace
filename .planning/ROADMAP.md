@@ -46,7 +46,7 @@ parent session applies them at merge.
 
 - [ ] **Phase 1: Staging Warning Channels** - every staging verb reports its warnings, on success, on failure, and inside cascades
 - [x] **Phase 2: Apply Ordering and Installed Declarations** - `pending` and `apply` agree, and dependency reads come from the installed copy (completed 2026-10-27)
-- [ ] **Phase 3: Dependency Cascade Rows and Status** - cascade rows name every member, declarer, and degraded dependency
+- [x] **Phase 3: Dependency Cascade Rows and Status** - cascade rows name every member, declarer, and degraded dependency (completed 2026-10-28)
 - [x] **Phase 4: Dependency Resolver Residue** - the resolver installs what it previewed and refuses before it moves (completed 2026-10-27)
 - [x] **Phase 5: Marketplace Command Parity** - reserved names, hosted manifests, `market` alias, row ids, shorthand, remove reporting (completed 2026-10-27)
 - [x] **Phase 6: Import Marketplace Planning** - import plans marketplaces the way Claude Code registers them
@@ -105,7 +105,7 @@ parent session applies them at merge.
 4. Git-source `list` rows, `required by` lists, and truncation match Claude Code or carry a recorded ID (CAS-04, CAS-05).
 5. The offline git-move refusal names a next step, and no hold cause carries an unbounded `version` string (CAS-06, CAS-07).
 
-**Plans:** 6/6 plans executed
+**Plans:** 6/6 plans complete
 
 Plans:
 **Wave 1**

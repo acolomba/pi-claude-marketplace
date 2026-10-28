@@ -43,13 +43,13 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 
 ### Dependency cascade rows and status (CAS)
 
-- [ ] **CAS-01**: A failed install closure gives a row to each member that resolved but did not install (CLOSUREROW-01)
-- [ ] **CAS-02**: `install` of a root name outside the token alphabet gets a verdict that names the real cause, not a dependency cause (ROOTKEY-01)
-- [ ] **CAS-03**: A plugin whose dependency is partially available shows that on `list`, `info`, and install rows, with a reason naming the dependency, or the choice not to is recorded with an ID (DEPS-STATUS-01)
-- [ ] **CAS-04**: `list` shows upgrade state for git-source plugins as Claude Code does (PARITYGV-01 b1)
-- [ ] **CAS-05**: A refusal for a non-root cascade member names every declarer that required it, and names and ranges in those refusals are truncated as Claude Code truncates them (PARITYGV-01 b2, b3)
-- [ ] **CAS-06**: The offline refusal of an install that would move a git dependency names the next step (UPDDEP-01 b2)
-- [ ] **CAS-07**: A hold row's cause never interpolates an unbounded catalog `version` string (VERSTR-01)
+- [x] **CAS-01**: A failed install closure gives a row to each member that resolved but did not install (CLOSUREROW-01)
+- [x] **CAS-02**: `install` of a root name outside the token alphabet gets a verdict that names the real cause, not a dependency cause (ROOTKEY-01)
+- [x] **CAS-03**: A plugin whose dependency is partially available shows that on `list`, `info`, and install rows, with a reason naming the dependency, or the choice not to is recorded with an ID (DEPS-STATUS-01)
+- [x] **CAS-04**: `list` shows upgrade state for git-source plugins as Claude Code does (PARITYGV-01 b1)
+- [x] **CAS-05**: A refusal for a non-root cascade member names every declarer that required it, and names and ranges in those refusals are truncated as Claude Code truncates them (PARITYGV-01 b2, b3)
+- [x] **CAS-06**: The offline refusal of an install that would move a git dependency names the next step (UPDDEP-01 b2)
+- [x] **CAS-07**: A hold row's cause never interpolates an unbounded catalog `version` string (VERSTR-01)
 - [x] **CAS-08**: The routes D-PL3-15 left with one failed row (the root's own ledger failure, UPD-DEP-D1 plan-step failures, a catalog lookup that throws mid-walk) also give a row to each member that resolved but did not install (CLOSUREROW-01 residue)
 - [x] **MIM-05**: A partial rollback of `apply`'s missing-dependency (MISS-01) install shows the per-phase detail `install` shows, like the other import and apply rows MIM-03 covers (D-PL6-05 residue; needs Phase 4's outcome type)
 - [x] **XPH-01**: Wave-1 cross-phase residue is closed after the merge: the add-time MISS-01 step routes its post-commit hygiene warnings through the tagged warning channel (2.30); `import`'s own `<mp>@<mp>` row and the retired D-76-04 citation in `orchestrators/import/marketplaces.ts` are fixed (5.27, 5.28); and scenarios pin the git-revision post-move read (2.19), the reinstall `{status} on {url}` frame (7.16), and completion after `market` (7.15, with the completion harness it needs); `apply` and the load re-add a marketplace in place on a declared source change, as `import` does under D-PL6-19, the official marketplace's fallback source reads as up to date as upstream's `sourceIsFallback` does, and a local-layer declaration of an old source no longer outlives an import re-add; a pty-backed `tui` cucumber driver gives the background autoupdate pass, its wait cap, and its notice dedupe scenarios (D-PL8 follow-ups); and the package-install tree kill gets a scenario
@@ -152,13 +152,13 @@ None.
 | RCN-06 | Phase 2 | Complete |
 | RCN-07 | Phase 2 | Complete |
 | RCN-08 | Phase 2 | Complete |
-| CAS-01 | Phase 3 | Pending |
-| CAS-02 | Phase 3 | Pending |
-| CAS-03 | Phase 3 | Pending |
-| CAS-04 | Phase 3 | Pending |
-| CAS-05 | Phase 3 | Pending |
-| CAS-06 | Phase 3 | Pending |
-| CAS-07 | Phase 3 | Pending |
+| CAS-01 | Phase 3 | Complete |
+| CAS-02 | Phase 3 | Complete |
+| CAS-03 | Phase 3 | Complete |
+| CAS-04 | Phase 3 | Complete |
+| CAS-05 | Phase 3 | Complete |
+| CAS-06 | Phase 3 | Complete |
+| CAS-07 | Phase 3 | Complete |
 | CAS-08 | Phase 10 | Complete |
 | MIM-05 | Phase 10 | Complete |
 | XPH-01 | Phase 10 | Complete |
