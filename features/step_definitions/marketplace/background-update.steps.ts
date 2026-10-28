@@ -7,6 +7,8 @@ import assert from "node:assert/strict";
 
 import { Given, Then, When } from "@cucumber/cucumber";
 
+import { backgroundUpdateNoticeTexts } from "../../lib/pi-tui.ts";
+
 import type { ScenarioWorld } from "../../support/world.ts";
 
 // A Pi's environment, PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS included, is
@@ -76,7 +78,7 @@ Then(
       connections: 2,
     });
     await this.requireTuiSession().waitForQuiet(250, 5_000);
-    assert.deepStrictEqual(this.requireTuiSession().backgroundUpdateNotices(), []);
+    assert.deepStrictEqual(backgroundUpdateNoticeTexts(this.requireTuiSession().text), []);
     this.markTuiNoticesCompared();
   },
 );
@@ -87,7 +89,7 @@ Then(
     const tui = this.requireTuiSession();
     await tui.waitForText(notice, 30_000);
     await tui.waitForQuiet(250, 5_000);
-    assert.deepStrictEqual(tui.backgroundUpdateNotices(), [notice]);
+    assert.deepStrictEqual(backgroundUpdateNoticeTexts(tui.text), [notice]);
     this.markTuiNoticesCompared();
   },
 );

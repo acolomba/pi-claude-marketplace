@@ -57,6 +57,36 @@ Feature: Marketplace background update
       | extras           | user              | true                           | demo@extras | demo | installed |         | user    | 1.10.0  |
       | tools            | project           | true                           | demo@tools  | demo | installed |         | project | 1.10.0  |
 
+  Scenario: The TUI combines distinct plugin updates across marketplaces in one notice
+    Given pi runs with the background update delay "0"
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | alpha | 1.0.0   |
+    Given the marketplace "extras" is published as a dir source
+    Given the marketplace "extras" offers these plugins:
+      | name | version |
+      | beta | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "extras" is added to the user scope
+    Given the user has run "/claude:plugin install alpha@tools --scope project"
+    Given the user has run "/claude:plugin install beta@extras --scope user"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate extras --scope user"
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | alpha | 1.10.0  |
+    Given the marketplace "extras" offers these plugins:
+      | name | version |
+      | beta | 1.10.0  |
+    When the user sends the message "hello" in the tui session
+    Then the tui session reports the notice "Plugins updated: alpha and beta · Run /reload to apply"
+    When the user runs "/claude:plugin list"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace details autoupdate | id          | name  | status    | reasons | scope   | version |
+      | extras           | user              | true                           | beta@extras | beta  | installed |         | user    | 1.10.0  |
+      | tools            | project           | true                           | alpha@tools | alpha | installed |         | project | 1.10.0  |
+
   Scenario: A foreground command stops an in-flight background request within the wait cap
     Given pi runs with the background update delay "0"
     Given the git repository "ghp" holds these plugins:
