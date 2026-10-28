@@ -1,67 +1,61 @@
 ---
 phase: 01-staging-warning-channels
-fixed_at: 2026-10-28T15:05:48Z
+fixed_at: 2026-10-28T15:50:28Z
 review_path: .planning/phases/01-staging-warning-channels/01-REVIEW.md
-iteration: 1
-findings_in_scope: 2
-fixed: 2
+iteration: 2
+findings_in_scope: 1
+fixed: 1
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 01: Code Review Fix Report
 
-**Fixed at:** 2026-10-28T15:05:48Z
-**Source review:** .planning/phases/01-staging-warning-channels/01-REVIEW.md
-**Iteration:** 1
+**Fixed at:** 2026-10-28T15:50:28Z
+**Source review:** .planning/phases/01-staging-warning-channels/01-REVIEW.md at `d9851f43`
+**Iteration:** 2
 
 **Summary:**
 
-- Findings in scope: 2 (CR-01 and CR-02)
-- Fixed: 2
+- Findings in scope: 1 (remaining CR-01)
+- Fixed: 1
 - Skipped: 0
 
 ## Fixed Issues
 
-### CR-01: Install drops MCP notices from dependency steps that already changed the file
+### CR-01: Final-root validation abort still drops committed dependency MCP notices
 
-**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-dependency-ledger.ts`, `test/orchestrators/plugin/install-flow-planning.test.ts`, `test/orchestrators/plugin/install-flow-dependency-ledger.test.ts`, `features/plugin/staging-warnings.feature`
-**Commit:** `15e12fdf`
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts`, `test/orchestrators/plugin/install-flow-ledger.test.ts`, `features/plugin/staging-warnings.feature`, `features/lib/npm-registry.ts`, `features/step_definitions/config.steps.ts`
+**Commit:** `4bcdf9697b87ea97d21face0154933e6c7f625a5`
 **Status:** fixed: requires human verification
 
-**Applied fix:** Dependency-step notices now reach both the failed-moves projection and the final install through `InstallAfterPlan`. The final install prepends prior notices to its own notices before the existing mode-selected emission, including its caught-failure path. Failed dependency moves use that same emission helper. Orchestrated installs return the notices without sending a notification; standalone installs emit them once after their rows and diagnostics.
+**Applied fix:** Every non-throwing final transaction outcome now reaches one `withMcpConfigNotices` boundary after its rows and diagnostics. Invalid config, absent marketplace, refusal, and declaration outcomes retain prior dependency notices. Promotion, installed, and disable-failure outcomes add their own notices to that list. The dependency-planning arm delegates to the next install, whose finalizer owns emission, without emitting a second copy. The caught-failure path retains its existing finalizer. Empty notice lists still leave the outcome property absent. Orchestrated installs return notices without sending notifications.
 
-Four new unit cases cover successful installs and a later dependency move failing, each in standalone and orchestrated modes. They assert the exact `comments-dropped` notice; the successful standalone case also compares the complete notification sequence. Two new Cucumber scenarios compare the complete results and rows for the success and later-move-failure cases. No new step definition was needed.
+Two new unit cases call the real `createInstallPlugin` entry point, one per notification mode. Their transaction wrapper edits the config only after the dependency update has committed. They assert the exact `comments-dropped` payload, the entire standalone notification sequence (failed rows followed by one notice), zero orchestrated notifications, and the durable dependency versions and MCP configuration.
 
-**Regression proof:** Removing only this finding's source diff made all four new unit cases fail because the notice was absent. The source diff was restored in a `finally` block. All three modified source modules passed their own direct-coverage checks.
+The new Cucumber scenario drives the real `/claude:plugin install` command through Pi. The local npm stand-in runs a one-shot callback before answering the moved dependency's package request. The callback writes a malformed local config through the existing layer-config writer. Dependency work commits, then the final root transaction rejects the edited config. The scenario compares every result and row, the exact notice payload, the edited config text, and the registry's complete request list. No production test seam or timing delay was added.
 
-### CR-02: Install member diagnostics no longer follow their row order
+**Regression proof:** Temporarily removed only this finding's source diff. Both new unit cases failed because `mcpConfigNotices` was absent, and the new Cucumber scenario failed because the notice result was absent. Both commands exited 1. Restored the exact source diff with `git apply` in a `finally` block. With the fix, all three cases pass.
 
-**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-results.ts`, `test/orchestrators/plugin/install-flow-ledger.test.ts`, `test/orchestrators/plugin/install-flow-results.test.ts`, `features/plugin/staging-warnings.feature`
-**Commit:** `da9756bd`
-**Status:** fixed: requires human verification
-
-**Applied fix:** The root and dependency diagnostics are composed together and sorted with `compareByNameThenScope`, using the root's displayed name and each dependency's qualified row key. The root's member entry is excluded so it cannot emit twice. Diagnostic headers retain the root's display name and each member's plugin name. The ordered entries still pass through the discovery-only renderer, after the cascade and before MCP notices.
-
-A new install-owner case compares the complete notification sequence when `zroot` depends on `aaa` and both produce notes. The projection case now checks member ordering, distinct row and header names, the root's displayed name, and exclusion of its duplicate member entry. A new Cucumber scenario compares every notification and row for the same root-after-dependency ordering.
-
-**Regression proof:** Removing only this finding's source diff made the Cucumber scenario fail on the reversed `zroot` and `aaa` diagnostics. The source diff was restored in a `finally` block. Both modified source modules passed their own direct-coverage checks.
+The prior iteration's commits `15e12fdf` and `da9756bd` remain intact. CR-02 was already closed in the source review and is not counted in this iteration.
 
 ## Verification
 
 All checks ran in the existing isolated checkout `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710`, on `agent-reverify-a`, using Node `v26.12.1`. The owner temporarily set `workflow.use_worktrees=false`; no nested worktree or recovery sentinel was created. The fixer neither changed nor staged `.planning/config.json`.
 
-- Re-read all changed source sections and checked their callers.
-- `npm run test:coverage:direct -- <source paths>` passed for the three CR-01 modules and the two CR-02 modules. Each pair met the required 100% line, function, and branch coverage.
-- `SKIP=npm-check pre-commit run --files <changed paths>` passed before each successful commit, after applying formatting fixes.
-- `fallow audit --base HEAD` passed before each successful commit.
-- Both successful commits passed the mandatory `npm run check:commit` hook, including typecheck, lint, Fallow, feature validation, unpaired tests, and staged-pair direct coverage. CR-02 hook failures were corrected before its successful commit; no hook was bypassed.
-- At final commit `da9756bd`, `npx cucumber-js features/plugin/staging-warnings.feature` exited 0: 19 scenarios and 227 steps passed.
-- `git diff --check` passed. No uncommitted build-input changes remain from this fixer.
+- Re-read modified source and fixture sections and traced their callers.
+- `node --test --test-name-pattern 'keeps dependency MCP notices when the final config' test/orchestrators/plugin/install-flow-ledger.test.ts` passed both new cases.
+- `node --test --test-name-pattern 'keeps dependency-step MCP notices' test/orchestrators/plugin/install-flow-planning.test.ts` passed all four existing successful-install and later-move-failure cases.
+- `npm run test:coverage:direct -- extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts` exited 0. The full owner suite met 100% line, function, and branch coverage.
+- `npx cucumber-js features/plugin/staging-warnings.feature` exited 0: 20 scenarios and 248 steps passed.
+- `SKIP=npm-check pre-commit run --files <five changed paths>` passed after formatting.
+- `fallow audit --base HEAD --format json --quiet` passed before the commit, reporting no introduced dead-code, complexity, or duplication findings.
+- The successful commit passed `npm run check:commit`, including typecheck, lint, Fallow, feature validation, unpaired tests, and staged-pair direct coverage. The first attempt found four missing blank lines; these were corrected before the successful retry. No hook was bypassed.
+- `git diff --check` passed. No uncommitted build inputs remain.
 
 The combined-tree `npm run check` gate remains the coordinating workflow's responsibility. Focused checks and commit hooks do not substitute for that gate. This report is intentionally uncommitted for the coordinator.
 
 ---
 
 _Fixer: gsd-code-fixer_
-_Iteration: 1_
+_Iteration: 2_
