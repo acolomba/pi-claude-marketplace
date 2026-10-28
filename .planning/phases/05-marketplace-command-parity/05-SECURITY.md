@@ -1,7 +1,7 @@
 ---
 phase: "5"
 slug: "marketplace-command-parity"
-status: draft
+status: verified
 threats_open: 0
 asvs_level: 1
 created: "2026-10-28"
@@ -9,7 +9,7 @@ created: "2026-10-28"
 
 # Phase 5 — Security
 
-Audit scope: the nine PLAN-authored threat models, current decisions, SUMMARY Threat Flags, and integrated implementation at `9db3d4965054b72b76fa2ba916f9612d9595edbe`.
+Audit scope: the nine PLAN-authored threat models, current decisions, SUMMARY Threat Flags, and integrated implementation at `c99c6832175c1dbe877566357fba4cb67545b4ad`.
 
 Configuration: ASVS L1; block_on high.
 
@@ -55,7 +55,7 @@ Paths beginning with `domain/`, `edge/`, `orchestrators/`, `persistence/`, `plat
 | 05-07 / T-05-15 | Elevation of privilege | medium | mitigate | closed | `rule-packs/architecture.json:165` permits fetch only in the two sanctioned modules. `eslint.config.js:95,98,549` restricts hosted port identifiers plus static, dynamic, and type imports outside NETWORK_SEAMS, including the WR-04 correction. |
 | 05-07 / T-05-16 | Spoofing | high | mitigate | closed | Shared add validation at `orchestrators/marketplace/add.ts:505,1760` applies to hosted catalogs; `domain/name.ts:106` exempts only github/anthropics. `test/orchestrators/marketplace/add.test.ts:6767` proves hosted refusal and cleanup. |
 | 05-07 / T-05-SC | Tampering | low | accept | closed | AR-05-08. |
-| 05-08 / T-05-17 | Information disclosure | low | mitigate | open — below high threshold (non-blocking) | Cascade rows are redacted at `shared/notification-resolve.ts:388` before `notification-json.ts:477`. Marketplace-info failures instead use `orchestrators/marketplace/info.ts:168`, `notification-present.ts:142,217`, and `notification-json.ts:546`; that path redacts notes only and copies the raw name into the ID. An in-memory sentinel reproduction confirmed the gap. Marker omission is verified by explicit wire fields and `test/shared/notification-json.test.ts:1955`. |
+| 05-08 / T-05-17 | Information disclosure | low | mitigate | closed | `shared/notification-present.ts:217` redacts marketplaceName, plugin.name, and notes before individual or cascade info output, preserves marketplaceSubject, and retains object identity only when nothing changes. `test/shared/notification-present.test.ts:644,699,723,743` verifies presentation behavior; `test/shared/notification-json.test.ts:2028` verifies the real presentation-to-wire path, bare/qualified IDs, and marker omission. `features/marketplace/info.feature:147` verifies the marketplace-info command with a credential-bearing stored name. |
 | 05-08 / T-05-SC | Tampering | low | accept | closed | AR-05-09. |
 | 05-09 / T-05-18 | Tampering | medium | mitigate | closed | `orchestrators/marketplace/hosted-catalog.ts:85` checks destination containment before fetching, validates staged bytes and reserved names, then renames. `test/orchestrators/marketplace/hosted-catalog.test.ts:355,380,401,431,488` covers preservation and containment; `test/orchestrators/marketplace/update.test.ts:6104,6254` verifies stored catalog/state preservation. |
 | 05-09 / T-05-19 | Tampering | low | mitigate | closed | `orchestrators/marketplace/remove.ts:1159` removes only marketplaceDataDir and the managed sourceCloneDir. `persistence/locations.ts:324,333` applies safe-name and containment checks. Partial removal keeps the footprint; source-kind selection includes hosted. |
@@ -84,19 +84,7 @@ AR-05-11 documents a residual within T-05-10. It is not an additional authored t
 
 ## Open Findings
 
-### T-05-17 — non-blocking, low
-
-The marketplace-info failure path does not redact credential-bearing names before constructing its bare JSON ID. The cascade path does.
-
-Expected correction: redact the names used by plugin-info presentation and its JSON ID, preserving the established qualified-ID and marketplace-subject behavior. Add a regression covering the real presentation-to-wire path, including marketplace-info failures.
-
-Read-only reproduction at the audited HEAD returned:
-
-```json
-{"sentinelInBareId":true,"markerSerialized":false,"idMatchesRawName":true}
-```
-
-No implementation change was made by the auditor. This finding is not accepted.
+None. T-05-17 was fixed in `c99c6832175c1dbe877566357fba4cb67545b4ad` and independently rechecked. Names and notes are redacted before output; bare and qualified IDs retain their semantics. The finding was mitigated, not accepted.
 
 ## Unregistered Flags
 
@@ -109,20 +97,21 @@ None. All nine SUMMARY Threat Flags map to the authored register. WR-03's residu
 - Removal performs the resource fold inside its locked transaction at `orchestrators/marketplace/remove.ts:1333`.
 - Replacement validates the new marketplace name before setting the previous clone aside; failed placement or persistence restores the prior clone through the existing unwind path.
 - D-PL5-27 and D-PL5-28 name refusals remain active on refresh. Hosted refusal occurs before the catalog rename.
-- The supplied full `npm run check` at integrated source/test HEAD `9692623d` passed 1,122 scenarios, 11,447 steps, and 309 LCOV records. No non-planning input changed through the audited HEAD. The auditor did not rerun that gate.
+- The supplied fresh `npm run check` at `c99c6832175c1dbe877566357fba4cb67545b4ad` passed 1,123 scenarios, 11,455 steps, and 309 LCOV records. The auditor inspected the coverage artifact: notification-present.ts has 303/303 lines, 11/11 functions, and 40/40 branches covered; notification-json.ts has 759/759 lines, 54/54 functions, and 236/236 branches covered. The auditor did not rerun the full gate.
 - No source or test file was changed by the auditor.
 
 ## Security Audit Trail
 
 The initial read-only audit found 18 verified mitigation rows, one low implementation gap, and ten accept dispositions awaiting this log: 18 closed and 11 non-blocking open.
 
-After this artifact is persisted, its disposition totals are 28 closed and one non-blocking open. Request an auditor recheck to confirm persistence and finalize sign-off.
+The accepted-risk log was persisted in `d079eab7`, closing all ten acceptance-documentation gaps. T-05-17 was fixed in `c99c6832` and rechecked against the implementation, real presentation-to-wire tests, command-level scenario, and direct coverage. Final verdict: SECURED — 29/29 authored rows closed, comprising 19 verified mitigations and ten documented accepted dispositions.
 
 | Audit Date | Authored Rows | Verified Mitigations | Authored Accepted Dispositions | Blocking Open | Non-blocking Implementation Open |
 |------------|---------------|----------------------|-------------------------------|---------------|---------------------------------|
 | 2026-10-28 | 29 | 18 of 19 | 10, mapped above | 0 | 1 |
+| 2026-10-28, final recheck at c99c6832 | 29 | 19 of 19 | 10, verified in persisted log | 0 | 0 |
 
-`threats_open` counts only open threats at or above high. T-05-17 is low, so `threats_open: 0` is correct despite the OPEN_THREATS verdict.
+No blocking or non-blocking threat remains. `threats_open: 0` is confirmed at block_on high. The additional accepted DNS residual does not increase the authored-row count.
 
 ## Sign-Off
 
@@ -130,7 +119,7 @@ After this artifact is persisted, its disposition totals are 28 closed and one n
 - [x] Every authored accepted disposition has a distinct log entry.
 - [x] The accepted DNS residual is distinguished from an implementation gap.
 - [x] No blocking threat remains at block_on high.
-- [ ] T-05-17 mitigation verified.
-- [ ] Persisted artifact rechecked and final status recorded.
+- [x] T-05-17 mitigation verified.
+- [x] Persisted artifact rechecked and final status recorded.
 
-**Approval:** pending persistence recheck and disposition of T-05-17.
+**Approval:** verified 2026-10-28; SECURED at `c99c6832175c1dbe877566357fba4cb67545b4ad`.
