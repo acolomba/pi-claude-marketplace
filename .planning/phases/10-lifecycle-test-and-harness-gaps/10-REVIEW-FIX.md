@@ -1,82 +1,101 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-fixed_at: 2026-10-28T07:59:02Z
+fixed_at: 2026-10-28T22:43:54Z
 review_path: .planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md
-iteration: 3
-findings_in_scope: 1
-fixed: 1
+iteration: 4
+findings_in_scope: 3
+fixed: 3
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 10: Code Review Fix Report
 
-**Fixed at:** 2026-10-28T07:59:02Z
+**Fixed at:** 2026-10-28T22:43:54Z
 **Source review:** `.planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md`
-**Iteration:** 3
+**Iteration:** 4
 
-The current review's only warning was fixed. No finding was skipped.
+All three integrated findings are closed. The two shared PTY blockers were
+fixed on the Phase 8 branch and consumed through the normal Session B merge.
+The remaining Phase 10 checker warning was fixed on the integrated tree.
 
 ## Fixed Issues
 
-### WR-02: The replacement ledger port is still a 15-method catch-all
+### CR-01: The wait-cap scenario exercises the hosted-download timeout, not the background gate
 
-**Status:** fixed
-**Commit:** `8184f337` — `refactor(plugin): narrow install planning boundary`
+**Status:** fixed by integrated Phase 8 convergence
+**Commit:** `4412c2cb` — `fix: gate background dependency settlement and verify cancellation`
 **Files modified:**
 
-- `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts`
-- `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts`
-- `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts`
-- `test/orchestrators/plugin/install-flow-ledger.test.ts`
-- `test/orchestrators/plugin/install-flow-planning.test.ts`
+- `features/lib/https-git-host/server.ts`
+- `features/marketplace/background-update.feature`
+- `features/step_definitions/marketplace/background-update.steps.ts`
+- `test/orchestrators/marketplace/background-pass.test.ts`
 
-Planning now owns a five-operation contract. The public root maps these ledger
-operations into it:
+The scenario now holds a streaming git smart-HTTP transfer that does not end at
+the hosted-manifest fetcher's independent timeout. It proves the foreground
+gate aborts the transfer before dependency settlement, with bounded elapsed
+time and explicit cancellation evidence.
 
-- `preparePlan`
-- `previewRoot`
-- `runCascade`
-- `projectCaughtFailure`
-- `projectFailedMoves`
+### CR-02: Set-normalized terminal output hides duplicate background notices
 
-The ledger operations hide catalog snapshot setup, transaction and marketplace
-add settlement, cascade unwrapping, state save, config and hook updates, MCP
-notice projection, and failure-row projection. Planning no longer imports the
-15 raw ledger helpers or a provider-owned catch-all factory.
+**Status:** fixed by integrated Phase 8 convergence
+**Commit:** `7a436b05` — `test: distinguish aggregate background update notices`
+**Files modified:**
 
-`InstallPlanningComposition` is private. Its test infers the factory return
-type and exercises the public resolver. No production type is exported only
-for the test.
+- `features/lib/pi-tui.ts`
+- `features/marketplace/background-update.feature`
+- `features/step_definitions/marketplace/background-update.steps.ts`
+- `test/architecture/pi-tui-notices.test.ts`
 
-The owner tests cover initial settlement, planned materialization, refusal,
-marketplace-absence rethrow, caught-failure projection, landed-move projection,
-and the preview pin branch. The existing CAS/XPH rollback, deferred-pin,
-package and ledger ordering, containment, and redaction cases remain green.
+The final-screen same-name case remains, while a distinct `alpha`/`beta`
+scenario requires one combined notice. The direct oracle tests reject separate
+notices for distinct plugins without claiming that identical terminal redraws
+are independent emission events.
+
+### WR-01: The coverage checker does not bind evidence paths and titles to their cited commit
+
+**Status:** fixed
+**Commit:** `d4c3220b` — `fix(coverage): bind evidence to commits`
+**Files modified:**
+
+- `scripts/check-phase10-coverage.mjs`
+- `.planning/phases/10-lifecycle-test-and-harness-gaps/10-COVERAGE.md`
+
+The checker now reads every evidence path from its row's exact commit with an
+argument-array `git show` call and requires the title in that committed
+content. It retains the current-checkout containment, existence, and title
+checks. Five rows now cite the exact integrated evidence commits: the network
+guard decision, the split install fixture and root-commit owners, the git
+cancellation scenario, and the distinct aggregate-notice scenario.
 
 ## Verification
 
-All checks ran in the isolated review-fix worktree at
-`/home/acolomba/pi-claude-marketplace/.claude/worktrees/rf-10-wr02-1793170887`,
-on `gsd-reviewfix/10-wr02-1793170887`, with Node `v26.12.1`.
+Checks ran in the existing isolated Session A worktree at
+`/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710`
+with Node `v26.12.1`.
 
 | Check | Result |
 | --- | --- |
-| Project typecheck | Passed |
-| Root, planning, and ledger owner suites | Passed |
-| Direct coverage for all three source-test pairs | Passed, 100% line, branch, and function coverage |
-| Architecture tests | Passed |
-| Full-tree ESLint with `--no-cache` | Passed |
-| `fallow guard` on the five changed source and test files | Passed |
-| `fallow dupes` | Passed, no code duplication found |
-| `fallow audit --base HEAD` | Passed, no issues in five changed files |
+| Integrated `npm run check` before the checker-only fix | Passed at `28915add`: 1,131 scenarios, 11,584 steps, 309 direct LCOV records |
+| Wait-cap git cancellation scenario | Passed: 1 scenario, 19 steps |
+| Aggregate-notice oracle owner tests | Passed: 4/4 |
+| Distinct `alpha`/`beta` PTY scenario | Passed: 1 scenario, 19 steps |
+| Phase 10 coverage ledger | Passed: 56/56 rows |
+| Negative commit-binding mutation | Rejected the context path absent from commit `7e2a3ca7`; mutation restored exactly |
+| `node --check` | Passed for `scripts/check-phase10-coverage.mjs` |
+| Prettier and ESLint | Passed for the checker |
+| Fallow guard and audit | Passed; no introduced findings |
 | Required pre-commit fixers | Passed |
 | Commit hook, including `npm run check:commit` | Passed |
-| Full unpiped `npm run check` on `8184f337` | Passed: 1,120 scenarios, 11,411 steps, 306 direct LCOV records |
 | `git diff --check` | Passed |
+
+The checker and ledger change does not alter production, unit-test, or
+behavioral-test inputs. The orchestrator owns the final combined-tree gate and
+clean re-review.
 
 ---
 
-_Fixed: 2026-10-28T07:59:02Z_
-_Fixer: gsd-code-fixer_
-_Iteration: 3_
+_Fixed: 2026-10-28T22:43:54Z_
+_Fixer: the agent (gsd-code-fixer)_
+_Iteration: 4_
