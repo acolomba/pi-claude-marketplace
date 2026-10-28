@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
@@ -396,6 +396,97 @@ test("UPD-DEP-D1: installing moves a dependency whose new version installs a dep
     });
   });
 });
+
+for (const orchestrated of [false, true]) {
+  test(`keeps dependency-step MCP notices after a successful ${orchestrated ? "orchestrated" : "standalone"} install`, async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({ aaa: { version: "1.0.0" } });
+      await installed(owner, cwd, "aaa");
+      await publishCatalog(marketplaceRoot, {
+        app: { version: "1.0.0", dependencies: ["aaa@^2.0.0"] },
+        aaa: { version: "2.0.0", dependencies: ["zzz"] },
+        zzz: { version: "1.0.0", mcp: true },
+      });
+      await writeFile(
+        locationsFor("project", cwd).mcpAdapterJsonPath,
+        '// mine\n{"mcpServers":{}}\n',
+      );
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await owner.installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "app",
+        ...(orchestrated && { notifications: { mode: "orchestrated" } }),
+      });
+
+      // assert
+      assert.strictEqual(outcome.status, "installed");
+      assert.deepStrictEqual(outcome.mcpConfigNotices, [
+        { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+      ]);
+      assert.deepStrictEqual(
+        notifications.map((notice) => notice.message),
+        orchestrated
+          ? []
+          : [
+              'A plugin operation needs attention.\n\n● mp [project]\n  ● aaa@mp v1.0.0 → v2.0.0 (updated) {dependency current copy}\n    cause: constrained to the combined range (^2.0.0) -- required by "app@mp"\n  ● app v1.0.0 (installed)\n  ● zzz@mp v1.0.0 (installed) {requires pi-mcp-adapter}\n\n/reload to pick up changes',
+              "MCP config comments removed.\n\nThe project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+            ],
+      );
+    });
+  });
+
+  test(`keeps dependency-step MCP notices when a later move fails in a ${orchestrated ? "orchestrated" : "standalone"} install`, async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({ aaa: { version: "1.0.0" } });
+      await installed(owner, cwd, "aaa");
+      await publishCatalog(marketplaceRoot, {
+        app: { version: "1.0.0", dependencies: ["aaa@^2.0.0"] },
+        aaa: { version: "2.0.0", dependencies: ["zzz"] },
+        zzz: { version: "1.0.0", mcp: true },
+      });
+      const skill = path.join(marketplaceRoot, "plugins", "aaa", "skills", "tool", "SKILL.md");
+      await chmod(skill, 0);
+      await writeFile(
+        locationsFor("project", cwd).mcpAdapterJsonPath,
+        '// mine\n{"mcpServers":{}}\n',
+      );
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await owner.installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "app",
+        ...(orchestrated && { notifications: { mode: "orchestrated" } }),
+      });
+
+      // assert
+      assert.strictEqual(outcome.status, "failed");
+      assert.deepStrictEqual(outcome.mcpConfigNotices, [
+        { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+      ]);
+      assert.deepStrictEqual(
+        notifications.map((notice) => notice.message.split("\n\n")[0]),
+        orchestrated ? [] : ["Some plugin operations have failed.", "MCP config comments removed."],
+      );
+      assert.deepStrictEqual(await recordedVersions(cwd), {
+        aaa: ["1.0.0", true],
+        zzz: ["1.0.0", true],
+      });
+    });
+  });
+}
 
 test("UPD-DEP-D1 / MISS-01: an install whose later step installs missing dependencies moves a dependency without installing what its new version needs", async () => {
   await withHermeticHome(async (owner) => {

@@ -35,6 +35,7 @@ import {
   sharedCascadeOptions,
   trackInstallAdds,
   unwrapCascade,
+  withMcpConfigNotices,
 } from "./install-flow-cascade-context.ts";
 import { collectInstallPostCommitWarnings, hydrateInstalledHooks } from "./install-flow-ledger.ts";
 import {
@@ -684,6 +685,7 @@ export function projectCaughtInstallDependencyPlanFailure(
 /** Reports the plan steps that landed before one dependency move failed. */
 export function projectFailedInstallDependencyPlanMoves(args: {
   readonly opts: InstallPluginOptions;
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
   readonly moved: readonly MovedDependency[];
   readonly cause: Error;
   readonly orchestrated: boolean;
@@ -719,10 +721,16 @@ export function projectFailedInstallDependencyPlanMoves(args: {
     );
   }
 
-  return {
-    status: "failed",
-    error: args.cause,
-    cause: formatOrchestratedCause(args.cause),
-    ...movedMember(args.moved),
-  };
+  return withMcpConfigNotices(
+    opts.ctx,
+    opts.run,
+    args.orchestrated,
+    {
+      status: "failed",
+      error: args.cause,
+      cause: formatOrchestratedCause(args.cause),
+      ...movedMember(args.moved),
+    },
+    args.mcpConfigNotices,
+  );
 }

@@ -147,6 +147,7 @@ interface InstallPlanningLedgerPort {
   }) => InstallPluginOutcome;
   readonly projectFailedMoves: (args: {
     readonly opts: InstallPluginOptions;
+    readonly mcpConfigNotices: readonly McpConfigNotice[];
     readonly moved: readonly MovedDependency[];
     readonly cause: Error;
     readonly orchestrated: boolean;
@@ -252,6 +253,7 @@ async function installAfterMoves(
       const reported = new Set([root.key, ...ran.landed.map((entry) => entry.key)]);
       return ledger.projectFailedMoves({
         opts,
+        mcpConfigNotices: ran.mcpConfigNotices ?? [],
         moved: ran.landed,
         cause: ran.cause,
         orchestrated,
@@ -259,7 +261,12 @@ async function installAfterMoves(
       });
     }
 
-    return await args.installAgain(opts, { moved: ran.landed, carried, planned: plan.final });
+    return await args.installAgain(opts, {
+      moved: ran.landed,
+      carried,
+      planned: plan.final,
+      mcpConfigNotices: ran.mcpConfigNotices ?? [],
+    });
   } finally {
     await sweep();
     await discardCarriedAdds(carried, target.locations);

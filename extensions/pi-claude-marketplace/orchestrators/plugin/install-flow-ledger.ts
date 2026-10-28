@@ -80,7 +80,7 @@ import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { ContentReason } from "../../shared/notification-types.ts";
+import type { ContentReason, McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { runPhases } from "../../transaction/phase-ledger.ts";
 import type { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
@@ -415,6 +415,7 @@ export interface InstallAfterPlan {
   readonly moved: readonly MovedDependency[];
   readonly carried: CarriedAdd[];
   readonly planned: PlannedClosure;
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
 }
 
 /** The collaborators dependency planning binds for one install transaction. */
@@ -529,6 +530,7 @@ async function installPluginWithTransaction(
   const { planning, fileCapabilities } = composition;
   const { ctx, run, scope, cwd, marketplace, plugin } = opts;
   const { moved, carried, runCascade } = installRun(afterPlan);
+  const priorNotices = afterPlan?.mcpConfigNotices ?? [];
   const locations = locationsFor(scope, cwd);
   const disableCascade = composeInstallDisableCascade({
     hooksRouting,
@@ -996,6 +998,7 @@ async function installPluginWithTransaction(
       },
     );
   } catch (err) {
+    cascadeFailure.mcpConfigNotices = [...priorNotices, ...cascadeFailure.mcpConfigNotices];
     // Pattern S-1 single chokepoint for user-visible errors: one
     // notify(ctx, run, ...) call carrying a per-variant
     // PluginFailedMessage / PluginUnavailableMessage. Severity derives to
@@ -1140,7 +1143,7 @@ async function installPluginWithTransaction(
           promotion: outcome.promotion,
           orchestrated,
         }),
-        outcome.promotion.mcpConfigNotices,
+        [...priorNotices, ...outcome.promotion.mcpConfigNotices],
       );
 
     // D-102-02: the ledger succeeded and the disable cascade then failed. The
@@ -1186,7 +1189,7 @@ async function installPluginWithTransaction(
         run,
         orchestrated,
         { status: "failed", error: outcome.cause, cause, ...movedMember(moved) },
-        outcome.mcpConfigNotices,
+        [...priorNotices, ...outcome.mcpConfigNotices],
       );
     }
 
@@ -1284,7 +1287,7 @@ async function installPluginWithTransaction(
           ...movedMember(landed),
           ...dependencyInstallsMember(moved, outcome.members, rootKey, run.softDeps),
         },
-        outcome.mcpConfigNotices,
+        [...priorNotices, ...outcome.mcpConfigNotices],
       );
     }
   }

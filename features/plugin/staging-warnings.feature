@@ -244,6 +244,47 @@ Feature: Plugin staging warnings
       | fixtures         | project           | lib@fixtures  | lib@fixtures  | installed | requires pi-mcp-adapter | project | 1.0.0   |                                    |                 |       |                  |
       | fixtures         | project           | zbad@fixtures | zbad@fixtures | failed    |                         | project | 1.0.0   | {unreadable skill file copy error} | false           |       |                  |
 
+  Scenario: Installing a plugin reports the MCP notice from a moved dependency's new dependency
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | demo@^2.0.0  |
+      | demo | 2.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the published plugin "lib" of the marketplace "fixtures" declares the mcp server "lib-server"
+    Given the mcp-adapter.json file of the project scope holds a comment
+    When the user runs "/claude:plugin install app@fixtures --scope project"
+    Then the command reports these results:
+      | kind               | severity | needs reload | summary                             | notices                                                               |
+      | cascade            | warning  | true         | A plugin operation needs attention. |                                                                       |
+      | mcp-config-notices | warning  | false        |                                     | [{"kind":"comments-dropped","scope":"project","file":"mcp-adapter.json"}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name          | status    | reasons                 | scope   | version | from  | to    | cause chain                                                                  | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | app@fixtures  | app           | installed |                         | project | 1.0.0   |       |       |                                                                              |                 |       |                  |
+      | fixtures         | project           | demo@fixtures | demo@fixtures | updated   | dependency current copy | project |         | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@fixtures" | false           |       |                  |
+      | fixtures         | project           | lib@fixtures  | lib@fixtures  | installed | requires pi-mcp-adapter  | project | 1.0.0   |       |       |                                                                              |                 |       |                  |
+
+  Scenario: Installing a plugin reports an earlier dependency's MCP notice when a later move fails
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | demo@^2.0.0  |
+      | demo | 2.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the published plugin "lib" of the marketplace "fixtures" declares the mcp server "lib-server"
+    Given the published plugin "demo" of the marketplace "fixtures" has an unreadable skill file
+    Given the mcp-adapter.json file of the project scope holds a comment
+    When the user runs "/claude:plugin install app@fixtures --scope project"
+    Then the command reports these results:
+      | kind               | severity | needs reload | summary                             | notices                                                               |
+      | cascade            | error    | true         | Some plugin operations have failed. |                                                                       |
+      | mcp-config-notices | warning  | false        |                                     | [{"kind":"comments-dropped","scope":"project","file":"mcp-adapter.json"}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name          | status    | reasons                 | scope   | version | cause chain                       | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | app@fixtures  | app           | failed    | dependency failed       | project |         |                                   |                 |       |                  |
+      | fixtures         | project           | lib@fixtures  | lib@fixtures  | installed | requires pi-mcp-adapter  | project | 1.0.0   |                                   |                 |       |                  |
+      | fixtures         | project           | demo@fixtures | demo@fixtures | failed    |                         | project | 1.0.0   | {unreadable skill file copy error} | false           |       |                  |
+
   Scenario: A bare update over two marketplaces reports the skips in the order of the rows
     Given the marketplace "addons" is published as a dir source
     Given the marketplace "addons" offers these plugins:

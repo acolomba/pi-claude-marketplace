@@ -535,6 +535,7 @@ describe("dependency planning operations", () => {
           plugin: "app",
         },
         moved,
+        mcpConfigNotices: [],
         cause: new Error("move stopped"),
         orchestrated,
         unmaterialized: ["fresh@mp"],
