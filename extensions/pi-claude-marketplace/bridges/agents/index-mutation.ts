@@ -8,7 +8,10 @@
 // AG-9/RN-4 (cross-owner conflict) invariants live behind a tested seam,
 // separately from the IO-laden 10-step prepare.
 
+import { AgentOwnershipConflictError } from "../../shared/errors-bridges.ts";
+
 import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
+import type { PluginCoordinate } from "../../shared/errors-bridges.ts";
 
 /**
  * AG-3 partition result. `previous` are entries owned by the
@@ -58,7 +61,7 @@ export function partitionByOwner(
  * Result preserves input order of `nextNames` so the user-visible message
  * lists conflicts in the order the new plugin would have produced them.
  */
-export function findOwnershipConflicts(
+function findOwnershipConflicts(
   otherEntries: readonly AgentsIndexEntry[],
   nextNames: readonly string[],
 ): { generatedName: string; owner: AgentsIndexEntry }[] {
@@ -72,4 +75,25 @@ export function findOwnershipConflicts(
   }
 
   return conflicts;
+}
+
+/**
+ * Refuses every foreign index claim in incoming-name order (AG-9 / RN-4).
+ * Preview and staging share this rule even when the claimed file is absent.
+ */
+export function assertAgentNamesUnclaimed(
+  owner: PluginCoordinate,
+  otherEntries: readonly AgentsIndexEntry[],
+  nextNames: readonly string[],
+): void {
+  const conflicts = findOwnershipConflicts(otherEntries, nextNames);
+  if (conflicts.length > 0) {
+    throw new AgentOwnershipConflictError(
+      owner,
+      conflicts.map((conflict) => ({
+        generatedName: conflict.generatedName,
+        owner: { marketplace: conflict.owner.marketplace, plugin: conflict.owner.plugin },
+      })),
+    );
+  }
 }

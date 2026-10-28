@@ -240,6 +240,16 @@ Given(
 );
 
 Given(
+  "the user has deleted the agent file {string} in the {word} scope",
+  async function (this: ScenarioWorld, fileName: string, scope: string) {
+    assert.ok(isEntryName(fileName), `${fileName} is not a file name`);
+    const targetPath = path.join(agentsDirectory(this, scope), fileName);
+    await rm(targetPath);
+    await assert.rejects(stat(targetPath), { code: "ENOENT" });
+  },
+);
+
+Given(
   "the cached clones of git plugins in the {word} scope are deleted",
   async function (this: ScenarioWorld, scope: string) {
     await rm(path.join(extensionRoot(this, scope), "plugin-clones"), {
@@ -341,9 +351,24 @@ Then(
 );
 
 Then(
+  "the staged skills directory of the {word} scope holds these files:",
+  async function (this: ScenarioWorld, scope: string, table: DataTable) {
+    const directory = path.join(extensionRoot(this, scope), "resources", "skills");
+    assert.deepStrictEqual(await fileRows(directory), table.raw());
+  },
+);
+
+Then(
   "the agents directory of the {word} scope holds these files:",
   async function (this: ScenarioWorld, scope: string, table: DataTable) {
     assert.deepStrictEqual(await fileRows(agentsDirectory(this, scope)), table.raw());
+  },
+);
+
+Then(
+  "the agents directory of the {word} scope holds no files",
+  async function (this: ScenarioWorld, scope: string) {
+    assert.deepStrictEqual(await readdir(agentsDirectory(this, scope)), []);
   },
 );
 

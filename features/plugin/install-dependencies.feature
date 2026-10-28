@@ -1157,6 +1157,50 @@ Feature: Plugin install dependencies
       | file                                | text                 |
       | pi-claude-marketplace-zzz-helper.md | My own helper agent. |
 
+  Scenario: Installing a plugin whose second dependency has a foreign agent claim with a missing file fails before either dependency moves
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | aaa  | 1.0.0   |              |
+      | zzz  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install aaa@tools --scope project"
+    Given the user has run "/claude:plugin install zzz@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies          |
+      | app  | 1.0.0   | aaa@^2.0.0,zzz@^2.0.0 |
+      | aaa  | 2.0.0   |                       |
+      | zzz  | 2.0.0   |                       |
+    Given the published plugin "zzz" of the marketplace "tools" has the agent "helper"
+    Given the agents index of the project scope records generated name "pi-claude-marketplace-zzz-helper" for "zzz@old-catalog" at "pi-claude-marketplace-zzz-helper.md"
+    Given the user has deleted the agent file "pi-claude-marketplace-zzz-helper.md" in the project scope
+    Given the config and installation record bytes of the project scope are remembered
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | Some plugin operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status | reasons                             | scope   | version | cause chain                                                                                                                                                                                                        | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | failed | dependency failed                   | project |         |                                                                                                                                                                                                                    |                 |       |                  |
+      | tools            | project           | zzz@tools | zzz@tools | failed | already installed, version conflict | project | 1.0.0   | Dependency "zzz@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: Refusing to stage agents for tools/zzz: "pi-claude-marketplace-zzz-helper" already owned by old-catalog/zzz. | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | aaa@tools | 1.0.0   | true    |
+      | zzz@tools | 1.0.0   | true    |
+    Then the config and installation record bytes of the project scope are unchanged
+    Then the agents directory of the project scope holds no files
+    Then the agents index of the project scope holds these rows:
+      | generated name                   | target file                         |
+      | pi-claude-marketplace-zzz-helper | pi-claude-marketplace-zzz-helper.md |
+    Then the staged skills directory of the project scope holds these files:
+      | file               | text                                                                              |
+      | aaa-skill/         |                                                                                   |
+      | aaa-skill/SKILL.md | ---\nname: aaa-skill\ndescription: A skill of aaa 1.0.0.\n---\n\nVersion 1.0.0.\n |
+      | zzz-skill/         |                                                                                   |
+      | zzz-skill/SKILL.md | ---\nname: zzz-skill\ndescription: A skill of zzz 1.0.0.\n---\n\nVersion 1.0.0.\n |
+
   Scenario: Installing a plugin whose new dependency would overwrite a user's agent file fails before its installed dependency moves
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:

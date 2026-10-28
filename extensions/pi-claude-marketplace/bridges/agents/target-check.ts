@@ -13,18 +13,19 @@ import { loadAgentsIndex } from "../../persistence/agents-index-io.ts";
 import { AgentTargetOccupiedError } from "../../shared/errors-bridges.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
 
-import { partitionByOwner } from "./index-mutation.ts";
+import { assertAgentNamesUnclaimed, partitionByOwner } from "./index-mutation.ts";
 import { isOwnedAgentFile } from "./marker.ts";
 
 import type { ScopedLocations } from "../../persistence/locations.ts";
 
 /**
- * D-PL4-04: refuses when a generated agent name's target holds a file that no
- * replaced index row of `owner` names. The rule is the one the agents commit
- * applies without `force`: a row of the plugin is replaced only while its file
- * is still the plugin's own (AG-5). The check reads the agents index and the
- * disk, and writes nothing. It throws `AgentTargetOccupiedError`, whose
- * message is the commit's with the file name in place of the full path.
+ * D-PL4-04: refuses foreign index claims with `AgentOwnershipConflictError`,
+ * even when their target files are absent (AG-9). It also refuses a target
+ * holding a file that no replaced index row of `owner` names. The agents
+ * commit applies this rule without `force`: it replaces a row only while
+ * the file still belongs to the plugin (AG-5). An occupied target throws
+ * `AgentTargetOccupiedError`, with the file name in place of the full path.
+ * The check reads the agents index and disk, and writes nothing.
  */
 export async function assertAgentTargetsFree(
   locations: ScopedLocations,
@@ -32,7 +33,8 @@ export async function assertAgentTargetsFree(
   generatedNames: readonly string[],
 ): Promise<void> {
   const loaded = await loadAgentsIndex(locations);
-  const { previous } = partitionByOwner(loaded.agents, owner.marketplace, owner.plugin);
+  const { previous, other } = partitionByOwner(loaded.agents, owner.marketplace, owner.plugin);
+  assertAgentNamesUnclaimed(owner, other, generatedNames);
   const replacedTargets = new Set<string>();
   for (const entry of previous) {
     // eslint-disable-next-line no-await-in-loop -- bounded by this plugin's prior agents, one ownership read each

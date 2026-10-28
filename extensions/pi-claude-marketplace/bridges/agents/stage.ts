@@ -28,10 +28,7 @@ import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { loadAgentsIndex, saveAgentsIndex } from "../../persistence/agents-index-io.ts";
-import {
-  AgentOwnershipConflictError,
-  AgentTargetOccupiedError,
-} from "../../shared/errors-bridges.ts";
+import { AgentTargetOccupiedError } from "../../shared/errors-bridges.ts";
 import { appendLeakToError, appendLeaks, errorMessage } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
@@ -39,7 +36,7 @@ import { discoveryWarning, hygieneWarning } from "../../shared/staging-warnings.
 
 import { convertAgent, GUIDED_DROPPED_FIELDS } from "./convert.ts";
 import { discoverPluginAgents } from "./discover.ts";
-import { findOwnershipConflicts, partitionByOwner } from "./index-mutation.ts";
+import { assertAgentNamesUnclaimed, partitionByOwner } from "./index-mutation.ts";
 import { isOwnedAgentFile } from "./marker.ts";
 
 import type {
@@ -132,19 +129,11 @@ export async function prepareStagePluginAgents(
 
   // Step 4: AG-9 cross-owner guard. THROWS -- a generated name owned by a
   // different (mp, plugin) cannot be silently overwritten.
-  const conflicts = findOwnershipConflicts(
+  assertAgentNamesUnclaimed(
+    { marketplace: marketplaceName, plugin: pluginName },
     otherEntries,
     converted.map((c) => c.generatedName),
   );
-  if (conflicts.length > 0) {
-    throw new AgentOwnershipConflictError(
-      { marketplace: marketplaceName, plugin: pluginName },
-      conflicts.map((c) => ({
-        generatedName: c.generatedName,
-        owner: { marketplace: c.owner.marketplace, plugin: c.owner.plugin },
-      })),
-    );
-  }
 
   // Aggregate warnings for both the noop and staged paths (D-PL1-02): index
   // corruptions and per-agent conversion notes are hygiene, and the D-07
