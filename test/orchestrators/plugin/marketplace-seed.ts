@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { assertPathInside } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
@@ -17,6 +18,7 @@ export async function seedMarketplaceRecord(opts: {
 }): Promise<MarketplaceRecord> {
   assert.match(opts.marketplace, /^[a-z0-9][a-z0-9._-]*$/iu);
   const marketplaceRoot = path.join(opts.cwd, opts.marketplace);
+  await assertPathInside(opts.cwd, marketplaceRoot, `marketplace "${opts.marketplace}" root`);
   const entries = await Promise.all(
     Object.entries(opts.plugins).map(async ([name, record]) => {
       assert.match(name, /^[a-z0-9][a-z0-9._-]*$/iu);

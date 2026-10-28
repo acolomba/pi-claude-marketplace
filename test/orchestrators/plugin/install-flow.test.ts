@@ -890,6 +890,32 @@ async function seedPathMarketplaceWithPlugin(opts: {
   return { pluginRoot, marketplaceRoot, manifestPath };
 }
 
+test("the marketplace record seeder refuses a symlinked marketplace root", async (t) => {
+  // arrange
+  const cwd = await mkdtemp(path.join(tmpdir(), "marketplace-seed-root-"));
+  const outside = await mkdtemp(path.join(tmpdir(), "marketplace-seed-outside-"));
+  t.after(async () => {
+    await Promise.all([
+      rm(cwd, { recursive: true, force: true }),
+      rm(outside, { recursive: true, force: true }),
+    ]);
+  });
+  await symlink(outside, path.join(cwd, "escape"));
+
+  // act & assert
+  await assert.rejects(
+    () =>
+      seedMarketplaceRecord({
+        cwd,
+        marketplace: "escape",
+        plugins: {},
+        scope: "project",
+      }),
+    SymlinkRefusedError,
+  );
+  assert.deepStrictEqual(await readdir(outside), []);
+});
+
 // ───────────────────────────────────────────────────────────────────────────
 // PI-3 -- plugin not in marketplace manifest
 // ───────────────────────────────────────────────────────────────────────────
