@@ -232,8 +232,8 @@ Feature: Plugin state lock
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id            | name | status | reasons   | scope   | from  | version | cause chain                                                                                                                                                                                | cause truncated | leaks | rollback partial |
-      | fixtures         | project           | demo@fixtures | demo | failed | lock held | project | 1.0.0 | 1.1.0   | Another pi-claude-marketplace operation is in progress for project scope ({project dir}/.pi/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
+      | marketplace name | marketplace scope | id            | name | status | reasons   | scope   | version | cause chain                                                                                                                                                                                | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | lock held | project | 1.0.0   | Another pi-claude-marketplace operation is in progress for project scope ({project dir}/.pi/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
@@ -262,8 +262,8 @@ Feature: Plugin state lock
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id            | name | status | reasons   | scope | from  | version | cause chain                                                                                                                                                                       | cause truncated | leaks | rollback partial |
-      | fixtures         | user              | demo@fixtures | demo | failed | lock held | user  | 1.0.0 | 1.1.0   | Another pi-claude-marketplace operation is in progress for user scope ({agent dir}/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
+      | marketplace name | marketplace scope | id            | name | status | reasons   | scope | version | cause chain                                                                                                                                                                       | cause truncated | leaks | rollback partial |
+      | fixtures         | user              | demo@fixtures | demo | failed | lock held | user  | 1.0.0   | Another pi-claude-marketplace operation is in progress for user scope ({agent dir}/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
     Then the installation record of the user scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
