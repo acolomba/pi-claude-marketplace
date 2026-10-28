@@ -925,11 +925,11 @@ interface AddedToState {
 }
 
 /**
- * D-PL6-19: move the github or url clone of the replaced marketplace into
- * `sources-staging/`, the same filesystem (D-09), so the new clone can take
- * its place. Both getters enforce containment (NFR-10). A path source's
- * directory is the user's own and is never moved. Returns where the clone
- * went, or `undefined` when nothing was moved.
+ * D-PL6-19: move the managed directory of the replaced github, url or hosted
+ * marketplace into `sources-staging/`, the same filesystem (D-09), so the new
+ * source can take its place. Both getters enforce containment (NFR-10). A
+ * path source's directory is the user's own and is never moved. Returns where
+ * the directory went, or `undefined` when nothing was moved.
  */
 async function setAsideReplacedClone(
   locations: ScopedLocations,
@@ -938,7 +938,7 @@ async function setAsideReplacedClone(
 ): Promise<string | undefined> {
   const kind = parsePluginSource(source).kind;
   const cloneDir = await locations.sourceCloneDir(name);
-  if ((kind !== "github" && kind !== "url") || !(await pathExists(cloneDir))) {
+  if ((kind !== "github" && kind !== "url" && kind !== "hosted") || !(await pathExists(cloneDir))) {
     return undefined;
   }
 

@@ -6267,6 +6267,143 @@ test("MKT-02: a hosted add downloads the catalog once and records it like a clon
   });
 });
 
+async function seedHostedRecord(
+  cwd: string,
+  locations: ScopedLocations,
+): Promise<{ state: ExtensionState; record: ReplacedRecord }> {
+  const { ctx, run } = makeCtx(0);
+  await addMarketplace({
+    ctx,
+    run,
+    scope: "project",
+    cwd,
+    rawSource: HOSTED_URL,
+    hostedManifestFetch: createHostedManifestFetch().hostedManifestFetch,
+    notifications: { mode: "orchestrated" },
+  });
+  const state = await loadState(locations.extensionRoot);
+  const record = state.marketplaces["valid-marketplace"];
+  assert.ok(record);
+  record.plugins = replacedPlugins();
+  await saveState(locations.extensionRoot, state);
+  return { state, record };
+}
+
+for (const { kind, rawSource, source, marker, markerBytes } of [
+  {
+    kind: "hosted",
+    rawSource: "https://catalog.example/new/marketplace.json",
+    source: {
+      kind: "hosted",
+      raw: "https://catalog.example/new/marketplace.json",
+      url: "https://catalog.example/new/marketplace.json",
+    },
+    marker: HOSTED_MARKER,
+    markerBytes: hostedMarkerBytes("https://catalog.example/new/marketplace.json"),
+  },
+  {
+    kind: "github",
+    rawSource: "owner/repo",
+    source: {
+      kind: "github",
+      raw: "owner/repo",
+      owner: "owner",
+      repo: "repo",
+    },
+    marker: OWNERSHIP_MARKER,
+    markerBytes: OWNERSHIP_MARKER_BYTES,
+  },
+]) {
+  test(`replaces a hosted marketplace with a ${kind} source and keeps installed records`, async (t) => {
+    // arrange
+    await createHermeticEnvironment(t, "mp-add-replace-hosted-");
+    await withTmpScope(async ({ cwd, locations }) => {
+      const { record } = await seedHostedRecord(cwd, locations);
+      const { ctx, run, notifications } = makeCtx(0);
+      const catalog = await readFile(
+        path.join(fixtureMarketplaceDir("valid-marketplace"), ".claude-plugin", "marketplace.json"),
+        "utf8",
+      );
+      const { gitOps } = createGitOps({
+        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      });
+
+      // act
+      const outcome = await addMarketplace({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        rawSource,
+        gitOps,
+        hostedManifestFetch: createHostedManifestFetch(catalog).hostedManifestFetch,
+        notifications: { mode: "orchestrated" },
+        replaceRecorded: "valid-marketplace",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, { status: "added", name: "valid-marketplace" });
+      const replaced = (await loadState(locations.extensionRoot)).marketplaces["valid-marketplace"];
+      assert.ok(replaced);
+      assert.deepStrictEqual(replaced, {
+        ...record,
+        source,
+        lastUpdatedAt: replaced.lastUpdatedAt,
+      });
+      assert.strictEqual(await readFile(record.manifestPath, "utf8"), catalog);
+      assert.strictEqual(
+        await readFile(path.join(record.marketplaceRoot, marker), "utf8"),
+        markerBytes,
+      );
+      assert.deepStrictEqual(await stagingEntries(locations), []);
+      assert.deepStrictEqual(notifications, []);
+    });
+  });
+}
+
+test("restores the hosted catalog, marker and installed records when replacement cannot save", async (t) => {
+  // arrange
+  await createHermeticEnvironment(t, "mp-add-replace-hosted-save-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    const { state, record } = await seedHostedRecord(cwd, locations);
+    const { ctx, run, notifications } = makeCtx(0);
+    const saveFault = failSaveAfterClone(locations);
+    const hostedManifestFetch: HostedManifestFetch = async () => {
+      await saveFault.onClone();
+      return Buffer.from(JSON.stringify({ name: "valid-marketplace", plugins: [] }));
+    };
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "https://catalog.example/new/marketplace.json",
+      hostedManifestFetch,
+      notifications: { mode: "orchestrated" },
+      replaceRecorded: "valid-marketplace",
+    });
+    await saveFault.restore();
+
+    // assert
+    assert.ok(outcome.status === "failed");
+    assert.ok(outcome.error instanceof Error && "code" in outcome.error);
+    assert.deepStrictEqual(
+      { reason: outcome.reason, code: outcome.error.code, cause: outcome.cause },
+      { reason: "unreadable", code: "EISDIR", cause: outcome.error.message },
+    );
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), state);
+    assert.strictEqual(await readFile(record.manifestPath, "utf8"), VALID_MANIFEST_JSON);
+    assert.strictEqual(
+      await readFile(path.join(record.marketplaceRoot, HOSTED_MARKER), "utf8"),
+      hostedMarkerBytes(HOSTED_URL),
+    );
+    assert.deepStrictEqual(await stagingEntries(locations), []);
+    assert.deepStrictEqual(notifications, []);
+  });
+});
+
 test("MA-12 / D-PL5-06: a hosted leftover marked with the same URL is replaced", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
