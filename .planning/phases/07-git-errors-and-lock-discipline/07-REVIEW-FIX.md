@@ -1,8 +1,8 @@
 ---
 phase: 07-git-errors-and-lock-discipline
-fixed_at: 2026-10-28T15:55:51-04:00
+fixed_at: 2026-10-28T16:27:02-04:00
 review_path: .planning/phases/07-git-errors-and-lock-discipline/07-REVIEW.md
-iteration: 4
+iteration: 5
 findings_in_scope: 1
 fixed: 1
 skipped: 0
@@ -518,3 +518,83 @@ ______________________________________________________________________
 _Fixed: 2026-10-28_
 _Fixer: the agent (gsd-code-fixer)_
 _Iteration: 4_
+
+______________________________________________________________________
+
+## Iteration 5
+
+**Fixed at:** 2026-10-28T16:27:02-04:00
+**Source review:** .planning/phases/07-git-errors-and-lock-discipline/07-REVIEW.md
+**Iteration:** 5
+
+**Summary:**
+
+- Findings in scope: 1
+- Fixed: 1
+- Skipped: 0
+
+### Fixed Issues
+
+#### CR-01: Move judgment reclaims warm and race-lost candidate clones
+
+**Files modified:**
+`extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts`,
+`test/orchestrators/plugin/dependency-move.test.ts`
+
+**Commit:** 64fb10b1
+**Status:** fixed: requires human verification
+
+**Applied fix:** Move judgment now derives cleanup ownership only from the
+current record's old clone root. A prepared candidate enters the operation's
+candidate set only when a clone-cache writer reports a successful `renamed`
+promotion through `onCloneCreated`. Warm hits and exact-key promotions lost to
+another process no longer become cleanup targets. The existing live-state
+recheck still preserves an old key while its record remains and removes it
+after a successful replacement makes it unreferenced.
+
+The dependency-move context also forwards the existing clone-cache and
+constraint-gate ports. The regression cases use those production ports to run
+the real pinned materializer and isolate the ownership rule without network
+access.
+
+**RED/GREEN evidence:**
+
+- The warm case pre-creates the exact pinned candidate, passes the creation
+  callback through the real materializer, rules the prepared version out, and
+  runs the real locked candidate collector. Before the fix, the collector
+  removed the warm key and the case failed with `ENOENT`.
+- The race case creates the winner's exact key between checkout and atomic
+  promotion. The real materializer returns the race winner without calling the
+  callback. After the same ruled-out verdict and locked sweep, the winner must
+  remain. Before the fix, the case failed with `ENOENT`.
+- After the fix, both focused cases pass. The existing old-key ownership case
+  still proves that a recorded clone remains eligible for cleanup.
+
+### Verification
+
+All checks ran in the isolated owner worktree
+`/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710`.
+`workflow.use_worktrees=false`, so the fixer created no nested worktree.
+
+- Focused RED: 0/2 passed. Both cases failed because the collector deleted the
+  unowned candidate.
+- Focused GREEN: 2/2 passed.
+- Complete owner module: 29/29 tests passed.
+- Direct coverage: the changed source/test pair passed at 100% line, function,
+  and branch coverage.
+- TypeScript: `npx tsc --noEmit --incremental false` passed, exit 0.
+- Fallow audit: PASS, exit 0, with no dead-code, complexity, duplication, or
+  diff-risk finding.
+- Required pre-commit fixers passed. The first normal commit attempt found one
+  import-order error. After that import was reordered, the second normal commit
+  passed every hook, including `npm run check:commit` and gitlint.
+- Cucumber: not added. This is an internal clone-ownership interleaving with a
+  deterministic unit seam and no new user-visible command behavior.
+- Full combined `npm run check`: not run here. The phase orchestrator must run
+  it on the combined tree before the final re-review and verifier.
+
+______________________________________________________________________
+
+_Fixed: 2026-10-28_
+_Fixer: the agent (gsd-code-fixer)_
+_Iteration: 5_
