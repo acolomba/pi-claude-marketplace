@@ -44,7 +44,7 @@ Shared files that no wave-1 phase edits: `CHANGELOG.md`, `.planning/PROJECT.md`
 its decision rows, and its backlog dispositions into its own SUMMARY.md; the
 parent session applies them at merge.
 
-- [ ] **Phase 1: Staging Warning Channels** - every staging verb reports its warnings, on success, on failure, and inside cascades
+- [x] **Phase 1: Staging Warning Channels** - every staging verb reports its warnings, on success, on failure, and inside cascades (completed 2026-10-28)
 - [x] **Phase 2: Apply Ordering and Installed Declarations** - `pending` and `apply` agree, and dependency reads come from the installed copy (completed 2026-10-27)
 - [ ] **Phase 3: Dependency Cascade Rows and Status** - cascade rows name every member, declarer, and degraded dependency
 - [x] **Phase 4: Dependency Resolver Residue** - the resolver installs what it previewed and refuses before it moves (completed 2026-10-27)
