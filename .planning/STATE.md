@@ -5,17 +5,17 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 10
 current_phase_name: Lifecycle Test and Harness Gaps
 status: executing
-stopped_at: Phase 10 planned, ready to execute Plan 10-01
-last_updated: "2026-10-27T22:20:34.639Z"
+stopped_at: Completed 10-05-PLAN.md
+last_updated: "2026-10-28T02:10:13.568Z"
 last_activity: 2026-10-27
-last_activity_desc: Wave 1 merged; Phase 10 planned in 7 plans
-state_head: 4ce415254e89c39c0257c78977f1c047838c0d8c
+last_activity_desc: Phase 10 Plan 10-05 complete; ready to execute Plan 10-06
+state_head: a3dff8d130fb720e06837d2ae38bcc6786cbd4fc
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 67
-  completed_plans: 60
-  percent: 81
+  completed_plans: 65
+  percent: 82
 ---
 
 # Project State
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 10 (Lifecycle Test and Harness Gaps) — READY TO EXECUTE
-Plan: 1 of 7
+Plan: 6 of 7
 Status: Ready to execute
-Last activity: 2026-10-27 — Wave 1 merged; Phase 10 planned in 7 plans
+Last activity: 2026-10-27 — Phase 10 Plan 10-05 complete; ready to execute Plan 10-06
 
 
 ### mcp-4 closeout
@@ -400,6 +400,7 @@ archived milestone artifacts.
 | Phase 29 P12 | 70 min | 3 tasks | 34 files |
 | Phase 29 P13 | 48 min | 3 tasks | 44 files |
 | Phase 29 P14 | 20 min | 2 tasks | 9 files |
+| Phase 10 P05 | 59min | 3 tasks | 37 files |
 
 ## Decisions
 
@@ -599,6 +600,9 @@ archived milestone artifacts.
 - [Phase 29]: The cascade failure classifier reads the errno a BridgeStagingError carries on its cause, so an unreadable plugin source is permission denied (also in the autoupdate cascade)
 - [Phase 29]: apply runs growth-only moves through convergePlugin with rematerialize (skipSameRevision off, overwrite off) and reports them with the plugin-backfilled row; the load-time backfill, its stamp gate and EXTENSION_VERSION are deleted, lastReconciledExtensionVersion stays readable and nothing writes it (D-10, D-13, D-25)
 - [Phase 29]: README.md's dependents sentence says apply reinstalls an uninstalled dependency a dependent still declares and disables the dependents only if that install fails; the APL-D1 and APL-D2 rows record the read-only load and the NFR-2 amendment
+- [Phase 10]: Typed lifecycle diagnostics remain structured until outcome rendering.
+- [Phase 10]: Malformed cloned manifests use content-failure framing without transport retry guidance.
+- [Phase 10]: Yarn and pnpm refusal notes require packages listed in package.json.
 
 ### mcp-4 decisions
 
@@ -808,6 +812,6 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ## Session Continuity
 
-Last session: 2026-10-27
-Stopped at: Phase 10 planned in seven dependency-ordered plans, ready to execute 10-01
+Last session: 2026-10-28T02:10:11.340Z
+Stopped at: Completed 10-05-PLAN.md
 Resume file: None
