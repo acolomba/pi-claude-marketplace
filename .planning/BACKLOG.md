@@ -4279,9 +4279,9 @@ Unit tests:
 - The import re-enable arm with `{rollback partial}` (`orchestrators/import/execute.ts:1197`) has no case. Only the root-install case exists (`test/orchestrators/import/execute.test.ts:1555`; phase 27 WR-02, notes line 56).
 - Phase 21 WR-06 (notes line 69): the MPA-01 standalone skip test (`test/orchestrators/marketplace/add.test.ts:1274`) does not check the completion cache, and the project-scope tokens and the update raw-error cascade arm have no case.
 
-## LCCODE-01: dead, duplicated, and loosely typed code left by lifecycle-coverage
+## ~~LCCODE-01: dead, duplicated, and loosely typed code left by lifecycle-coverage~~ -- CLOSED
 
-**Status 2026-10-27** (plugin-lifecycle): b2 fixed (D-PL4-05), b3 fixed (D-PL4-06), b6 fixed (D-PL5-19), b7 fixed (D-PL6-06). The other bullets stay open for Phase 11 (CLN-01).
+**CLOSED 2026-10-28** by the plugin-lifecycle milestone, Phases 4-6 and 11. Disposition: fixed. D-PL4-05, D-PL4-06, D-PL5-19, and D-PL6-06 close b2, b3, b6, and b7. `11-01-SUMMARY.md` closes the dead seams and optional outcome fields. `11-02-SUMMARY.md` shares the message builder and declarer filter. `11-03-SUMMARY.md` and `11-11-SUMMARY.md` consolidate ordinary held-lock fixtures. `11-04-SUMMARY.md`, `11-07-SUMMARY.md`, `11-08-SUMMARY.md`, and `11-10-SUMMARY.md` close the misplaced helper, prototype-read pin, stale comment, long literals, and test-only deferred-pin option.
 
 Cleanups with no user-visible effect.
 
@@ -4311,7 +4311,9 @@ Each item changes what a user sees or what a command does in an edge case. None 
 - Reinstall of a tag ref refreshes over the network even with a warm mirror, because `resolveFetchedRefOffline` (`orchestrators/plugin/clone-cache.ts:519-535`) resolves only `refs/remotes/origin/<ref>` (phase 18 CR-02). NFR-5 allows it, since the plugin is not sha-pinned. It needs an offline tag-resolve helper.
 - Installed-copy containment for a delisted plugin accepts the marketplace clone or `plugin-clones/` whatever the source kind, and follows symlinks (`orchestrators/plugin/dependency-declaration-read.ts:346-358`, phase 28 IN-03). An NFR-10 hardening.
 
-## LCDOC-01: docs and CHANGELOG gaps left by lifecycle-coverage
+## ~~LCDOC-01: docs and CHANGELOG gaps left by lifecycle-coverage~~ -- CLOSED
+
+**CLOSED 2026-10-28** by the plugin-lifecycle milestone, Phase 11. Disposition: fixed and reconciled against the passing Phase 10 tree. `11-05-SUMMARY.md` records the Phase 1-9 reader docs, NFR-5 policy, architecture chokepoints, and D-PL11-01 through D-PL11-03. `11-12-SUMMARY.md` closes the six feature descriptions. Phase 10's CAS-08, MIM-05, and source-replacement corrections are recorded in CHANGELOG, the PRD, the output catalog, D-PL3-03, D-PL6-03, and D-PL6-19. `features/plugin/apply.feature` and `10-VERIFICATION.md` provide the tracked behavioral and final-gate evidence.
 
 - `CHANGELOG.md` `[Unreleased]` (combined in `f6e1f13f`) does not tell users about these behavior changes (notes lines 320, 330, 338, 420):
   - install, enable, disable, update, reinstall, `marketplace add`, and `marketplace remove` now fail as `lock held` with the lock's cause (phase 15);
@@ -4346,9 +4348,9 @@ disabled with "Install …" until the next `apply`.
 Needs a decision: run the moves before MISS-01, or repeat MISS-01 after the
 moves. Related: APPLY1-01 (two `apply` runs for a co-released dependency).
 
-## UPDDEP-01: leftovers from the UPD-DEP-D1 dependency resolver reviews
+## ~~UPDDEP-01: leftovers from the UPD-DEP-D1 dependency resolver reviews~~ -- CLOSED
 
-**Status 2026-10-27** (plugin-lifecycle): b1 fixed (D-PL4-01), b2 fixed (D-PL3-11), b3 fixed (D-PL2-06, `fd4cf96f`), b4 decided (D-PL4-02), b5 decided (D-PL4-03), b6 fixed (D-PL4-04, D-PL4-07, D-PL4-08). Open: b7, the `install-flow.ts` size (Phase 11, CLN-02).
+**CLOSED 2026-10-28** by the plugin-lifecycle milestone, Phases 2-4 and 11. Disposition: b1-b3 and b6 fixed; b4-b5 closed by recorded upstream decisions; b7 fixed by the install-flow split. Evidence: D-PL4-01, D-PL3-11, D-PL2-06, D-PL4-02, D-PL4-03, D-PL4-04, D-PL4-08, and `11-06-SUMMARY.md`. The split's public-root, planning, and ledger owner suites are `test/orchestrators/plugin/install-flow.test.ts`, `test/orchestrators/plugin/install-flow-planning.test.ts`, and `test/orchestrators/plugin/install-flow-ledger.test.ts`.
 
 The four reviews of the update-dependency work (1daa12d0..fdb584a6) left these
 open. None changes a result a user relies on.
