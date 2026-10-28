@@ -1,6 +1,6 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-verified: 2026-10-28T04:20:41Z
+verified: 2026-10-28T04:56:57Z
 status: passed
 score: 28/28 must-haves verified
 covered_files:
@@ -20,6 +20,11 @@ covered_files:
   - .planning/phases/10-lifecycle-test-and-harness-gaps/10-06-SUMMARY.md
   - .planning/phases/10-lifecycle-test-and-harness-gaps/10-07-PLAN.md
   - .planning/phases/10-lifecycle-test-and-harness-gaps/10-07-SUMMARY.md
+  - .planning/phases/10-lifecycle-test-and-harness-gaps/10-CONTEXT.md
+  - .planning/phases/10-lifecycle-test-and-harness-gaps/10-COVERAGE.md
+  - .planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md
+  - .planning/phases/10-lifecycle-test-and-harness-gaps/10-SECURITY.md
+  - .planning/phases/10-lifecycle-test-and-harness-gaps/10-VALIDATION.md
   - extensions/pi-claude-marketplace/bridges/agents/stage.ts
   - extensions/pi-claude-marketplace/orchestrators/import/execute.ts
   - extensions/pi-claude-marketplace/orchestrators/import/marketplaces.ts
@@ -84,8 +89,10 @@ covered_files:
   - scripts/check-phase10-coverage.mjs
   - test/architecture/https-git-host-server.test.ts
   - test/bridges/agents/stage.test.ts
+  - test/bridges/agents/target-check.test.ts
   - test/e2e/_rpc.ts
   - test/edge/handlers/plugin/browse.test.ts
+  - test/orchestrators/auth-host.test.ts
   - test/orchestrators/import/execute.test.ts
   - test/orchestrators/marketplace/add.test.ts
   - test/orchestrators/marketplace/update.test.ts
@@ -105,30 +112,27 @@ covered_files:
   - test/orchestrators/plugin/update-swap.test.ts
   - test/orchestrators/reconcile/apply-outcomes.test.ts
   - test/orchestrators/reconcile/apply.test.ts
+  - test/orchestrators/reconcile/pending.test.ts
   - test/orchestrators/reconcile/read-pass.test.ts
+  - test/platform/package-manager.test.ts
   - test/shared/git-failure-classifiers.test.ts
-covered_digest: "v4:sha256:266eec79f3f4a72d04be1259f211ed987f7e4acff90604f5bf423fe7b72a9099"
+covered_digest: "v4:sha256:264c0be1977a82184910f8bbc9782ba6e1479753eabf3015f24760d40ca702a3"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
-  previous_status: gaps_found
-  previous_score: 26/28
-  gaps_closed:
-    - No fixture builds a marketplace record without its manifest.
+  previous_status: passed
+  previous_score: 28/28
+  gaps_closed: []
   gaps_remaining: []
   regressions: []
-decision_coverage:
-  honored: 3
-  total: 33
-  not_honored_count: 30
 ---
 
 # Phase 10: Lifecycle Test and Harness Gaps Verification Report
 
 **Phase goal:** Every behavior lifecycle-coverage left without a scenario or unit case has one, and the harness items are fixed.
 **Status:** passed. **Score:** 28/28 truths (seven roadmap criteria and 21 plan-specific truths).
-**Re-verification:** Yes, after closure of the fixture gap in commit 688f4916.
-**Evidence tree:** 688f4916a7dbb0063fb3613a800a4c83d087a7e4, Node v26.12.1.
+**Re-verification:** Yes, after Phase 11 integration on the same branch. The earlier fixture gap remains closed.
+**Evidence tree:** 8028fa73c2c61094cdb1feb7efe6d4f7f08698bb, Node v26.12.1. The orchestrator ran `npm run check` on this exact HEAD: static checks green, 1120/1120 Cucumber scenarios, 11411/11411 steps, and 304 direct LCOV records.
 
 ## Goal Achievement
 
@@ -150,7 +154,7 @@ decision_coverage:
 | - | - | - | - |
 | 01 | Clone/data projections are complete and unknown tokens fail closed | VERIFIED | readGitClones traverses staging, plugin clones and marketplace sources; installation steps include file, directory and symlink entries; expandTokens throws. |
 | 01 | Browse synchronization uses events | VERIFIED | pluginRenderBarrier resolves on requestRender; no fixed 50 ms wait remains in the two owner cases. |
-| 01 | Marketplace test records have manifests | VERIFIED | The browse seeder writes marketplace.json before state persistence at all five current call sites; the install/reinstall seeder remains manifest-first. |
+| 01 | Marketplace test records have manifests | VERIFIED | The browse seeder writes marketplace.json before persistence at all five call sites; its named owner test passed on HEAD. The install/reinstall seeder remains manifest-first. |
 | 02 | Real PTY TUI proves autoupdate, dedupe and bounded shutdown | VERIFIED | Python openpty/isatty bridge and contained Pi TUI driver; four named PTY scenarios passed. |
 | 02 | RPC remains a negative control | VERIFIED | background-update.feature has an RPC unchanged-state scenario; the focused run passed. |
 | 02 | Scenarios compare complete completions | VERIFIED | completion.steps.ts deep-compares label, JSON-quoted value and description tables; two named scenarios passed. |
@@ -163,19 +167,23 @@ decision_coverage:
 | 05 | Update/reinstall retain warnings, notices, foreign index and source frames | VERIFIED | update-swap/reinstall-flow typed outcomes; focused foreign-index scenario passed; exact update and reinstall feature cases are active. |
 | 05 | Root/member errors redact and classify consistently | VERIFIED | shared git-failure-classifiers and redact-absolute-paths feed install/update/fetch; exact redaction/network cases are active in combined gate. |
 | 05 | Lockfile-only and post-clone failure decisions hold | VERIFIED | package-install.ts and git-failure-classifiers.ts implement the recorded decisions; yarn, pnpm and invalid-manifest scenarios are active. |
-| 06 | Every reachable LCTEST-01 behavior has a discriminating case | VERIFIED | Coverage checker matches all IDs to paths/titles; all 35 scenario blocks have Then checks; combined Cucumber gate passed 1120/1120. |
+| 06 | Every reachable LCTEST-01 behavior has a discriminating case | VERIFIED | Coverage checker matches all 56 IDs to paths and titles; an independent scan found a Then step in all 35 cited scenario blocks; the combined Cucumber gate passed 1120/1120. |
 | 06 | Unit-only items have a harness reason and owner case | VERIFIED | 14 ledger unit-with-reason rows have named owner tests and reasons; real-child process-tree case independently passed. |
 | 06 | No-op apply preserves config and state bytes | VERIFIED | apply.feature remembers both raw files and compares after apply; focused scenario passed. |
 | 07 | Process-tree kill has real-child proof and precise unit-only disposition | VERIFIED | package-manager.test.ts D-PL9-19 independently passed; 10-COVERAGE.md explains the 60-second public timeout boundary. |
 | 07 | Every backlog bullet maps to evidence or declined network guard | VERIFIED | check-phase10-coverage.mjs enforces exact 56-ID inventory, valid dispositions, commit existence and title/path presence; independent run exit 0. |
-| 07 | Combined tree passes npm run check | VERIFIED | Parent-observed gate on unchanged build inputs: exit 0, static checks green, 1120/1120 Cucumber scenarios, 11411/11411 steps, 304 direct LCOV records. Current implementation files match the observed tree. |
+| 07 | Combined tree passes npm run check | VERIFIED | Orchestrator-run `npm run check` on exact HEAD 8028fa73: exit 0, static checks green, 1120/1120 Cucumber scenarios, 11411/11411 steps, 304 direct LCOV records. |
+
+## Integrated Audit Gates
+
+The refreshed Nyquist validation is 56/56; the security audit is SECURED with 19/19 mitigations and zero open threats; the integrated code review is CLEAN with 0 critical, 0 warning, and 0 info findings. These records support the code-level checks below and do not substitute for them.
 
 ## Required Artifacts and Key Links
 
 | Artifact or link | Status | Evidence |
 | - | - | - |
 | features/plugin/list-filters.feature; marketplace-seed.ts | VERIFIED | Full Background and exact filter rows; manifest-before-record seeder is called by install/reinstall owner tests. |
-| features/lib/pi-tui.ts; pi-tui-pty.py; background-update.feature | VERIFIED | Explicit tui Pi args, shared RPC sandbox resolver, PTY byte relay, bounded release and five active scenarios. |
+| features/lib/pi-tui.ts; pi-tui-pty.py; background-update.feature | VERIFIED | PTY-selected Pi TUI, shared RPC sandbox resolver, PTY byte relay, bounded release and five active scenarios. |
 | install-flow.ts; install-cascade.ts; install-cascade.messaging.ts; install-dependencies.feature | VERIFIED | Typed failure carrier and three exact-row scenarios connect walk/plan to message. |
 | reconcile/apply.ts; apply-outcomes.ts; apply.feature; import.feature | VERIFIED | Rollback phase data reaches result rows and source re-add reaches marketplace add. |
 | update.feature; reinstall.feature; install.feature; update-dependencies.feature; failed-add.feature | VERIFIED | Active exact-result scenarios for XPH and LCTEST residue. |
@@ -199,12 +207,13 @@ decision_coverage:
 | Check | Result |
 | - | - |
 | Coverage ledger command | PASS: 56/56 rows, exit 0. |
-| Three named CAS-08 routes plus MIM-05 rollback | PASS: 4 scenarios, 53 steps, exit 0. |
-| PTY autoupdate/notice/cap, TUI readiness and completion | PASS: 6 scenarios, 74 steps, exit 0. |
+| Three named CAS-08 routes plus MIM-05 rollback | Independently PASS on HEAD: 4 scenarios, 53 steps, exit 0. |
+| PTY autoupdate and two completion cases | Independently PASS on HEAD: 3 scenarios, 37 steps, exit 0; the combined gate covers the remaining PTY cases. |
 | RPC negative control, no-op apply, add warning, foreign index and package note | PASS: 5 scenarios, 64 steps, exit 0. |
-| D-PL9-19 real-child process tree owner case | PASS: one named test, exit 0. |
-| Browse manifest-first owner regression | PASS: browse.test.ts owner command exit 0; the parent combined run reports 20/20 browse cases. The new case reads and compares the exact nonempty manifest before persistence. |
-| Initial restricted-sandbox runs | BLOCKED BEFORE SCENARIOS by loopback EPERM; all relevant checks passed with normal test permissions. |
+| D-PL9-19 real-child process tree owner case | Independently PASS outside the restricted sandbox: one named test, exit 0. |
+| MPA-01 same-source cache and unchanged outcome owner case | Independently PASS on HEAD: one named test, exit 0; checks no clone, no completion-cache invalidation, unchanged state bytes and the orchestrated `unchanged` result. |
+| Browse manifest-first owner regression | Independently PASS on HEAD: one named test, exit 0. The case reads and compares the exact nonempty manifest before persistence. |
+| Restricted sandbox process check | Node child stdout was suppressed, causing the real-child test to fail there; the same named test passed with normal process permissions. |
 
 ## Requirements Coverage
 
@@ -220,7 +229,7 @@ decision_coverage:
 
 ## Test Quality and Anti-Patterns
 
-Across the requirement-linked changed files, no skipped/todo/only tests, unreferenced TBD/FIXME/XXX markers, or placeholder implementations were found. The ledger's title/path checker is an inventory gate, not an assertion-strength oracle. An independent scan found a Then step in all 35 scenario evidence blocks and an assertion near each of the 14 unit evidence titles. Focused Cucumber cases compare complete rows, notices, persisted files or exact completion sets. No circular expected-value generator was found in these paths.
+Across the requirement-linked changed files, no skipped/todo/only tests, unreferenced TBD/FIXME/XXX markers, or placeholder implementations were found. The ledger's title/path checker is an inventory gate, not an assertion-strength oracle. On HEAD, an independent scan found a Then step in all 35 scenario evidence blocks; the 14 unit-only rows retain their named owner cases and harness-limit reasons. Focused Cucumber cases compare complete rows, notices, persisted files or exact completion sets. No circular expected-value generator was found in these paths.
 
 ## Decision Coverage
 
@@ -228,7 +237,7 @@ The GSD substring gate reported 3/33 CONTEXT decisions honored and 30 not_honore
 
 ## Advisory (New Scope, Unevidenced)
 
-None. The only implementation change since the first verification is browse.test.ts; it closes the carried-forward gap. No new blocker or regression was found.
+None. Phase 11 changed some Phase 10-adjacent source and tests; the integrated code review found no regression, and the named spot-checks plus the exact-HEAD combined gate pass.
 
 ## Human Verification
 
@@ -236,9 +245,9 @@ N/A. This phase delivers automated lifecycle coverage and harness fixes; the sta
 
 ## Gaps Summary
 
-The prior browse-fixture gap is closed. The helper writes marketplace.json before it calls mergeMarketplaceIntoState at each of its five current call sites, and a fail-first owner case checks the exact nonempty manifest at that boundary. Quick regression checks found no change to the previously passing implementation paths; the parent-observed combined gate on the clean implementation tree remains green. No gap, deferred item, or behavior-unverified truth remains.
+The prior browse-fixture gap remains closed. The helper writes marketplace.json before persistence at each of its five call sites, and the owner case checks the exact manifest at that boundary. The integrated tree at 8028fa73 passes the combined gate and independent focused checks. No gap, deferred item, or behavior-unverified truth remains.
 
 ---
 
-_Verified: 2026-10-28T04:20:41Z_
+_Verified: 2026-10-28T04:56:57Z_
 _Verifier: gsd-verifier_
