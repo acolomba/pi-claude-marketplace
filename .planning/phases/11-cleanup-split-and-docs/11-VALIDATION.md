@@ -5,8 +5,8 @@ status: validated
 nyquist_compliant: true
 score: "4/4"
 created: "2026-10-28"
-validated_head: "52506a6c"
-full_gate_commit: "91f46fe7"
+validated_head: "011bc384"
+full_gate_commit: "a93b3699"
 ---
 
 # Phase 11 — Validation Audit
@@ -29,7 +29,7 @@ assertions after the filesystem-capability remediation.
 | Requirement | Observable contract | Test type | Automated evidence | Status |
 |---|---|---|---|---|
 | CLN-01 | Dead and test-only seams are gone; required result data, shared helpers, no-op outcomes, lock fixtures, and deferred-pin composition retain their behavior. | Unit, type, static | `npm run check:static`; focused git, handler, marketplace-add, import, apply, reconcile, and held-lock owner tests | green |
-| CLN-02 | Every install-flow source stays within the 1,959-line and sub-64-KiB ceilings; the public root preserves the five-operation planning port, contained filesystem capabilities, and lifecycle ordering without a hook exception. | Unit, integration, architecture, direct coverage | Six install-flow direct pairs; deterministic size/import/hook/raw-authority audit; install-flow architecture owners; exact-tree full `npm run check` evidence from `91f46fe7` | green |
+| CLN-02 | Every install-flow source stays within the 1,959-line and sub-64-KiB ceilings; the public root preserves the five-operation planning port, contained filesystem capabilities, and lifecycle ordering without a hook exception. | Unit, integration, architecture, direct coverage | Six install-flow direct pairs; deterministic size/import/hook/raw-authority audit; install-flow architecture owners; exact-tree full `npm run check` evidence from `a93b3699` | green |
 | CLN-03 | Reader docs, decision records, architecture chokepoints, comments, and feature descriptions match the shipped tree. | Architecture, static, content audit | `npm run check:static`; `npm run test:architecture`; citation and description-only diff audits | green |
 | CLN-04 | Settled lifecycle sections have dated, evidence-linked dispositions; carried-forward work remains open. | Content audit | Backlog, requirement, summary, threat-flag, and planning-consistency audits | green |
 
@@ -55,7 +55,7 @@ assertions after the filesystem-capability remediation.
 
 | Command | Result |
 |---|---|
-| Exact-tree `npm run check` at `91f46fe7` | passed: static, architecture, unit, integration, Cucumber, and all-pair direct coverage |
+| Exact-tree `npm run check` at `a93b3699` | passed: static, architecture, unit, integration, Cucumber, and all-pair direct coverage |
 | Focused hooks-lifecycle, no-credential-leak, no-shell-out, and workflow-marker architecture files | 4/4 passed on the refreshed tree |
 | Six `npm run test:coverage:direct -- <install-flow source>` commands for root, planning, ledger, cascade context, results, and dependency ledger | passed at 100% lines, functions, and branches |
 | Deterministic install-flow line, byte, test-import, large-file-hook, and raw-authority assertion | passed: six sources and three new tests within their ceilings; no exception or cascade/result raw filesystem construction found |
@@ -72,7 +72,7 @@ assertions after the filesystem-capability remediation.
 
 An earlier sandboxed aggregate architecture run failed only three file-level
 tests because the sandbox denied subprocess, loopback HTTPS child, and FIFO
-operations. The remediated exact-tree full gate at `91f46fe7` passed the
+operations. The final exact-tree full gate at `a93b3699` passed the
 aggregate, and this refresh reran the four security-focused architecture owners
 successfully. The earlier result is an environment limit, not a product or test
 warning.
@@ -90,14 +90,24 @@ identity and success/failure behavior; all six install-flow pairs remain at
 
 ## Reused Full-Gate Evidence
 
-The complete unpiped `npm run check` at `91f46fe7` passed all static, unit,
+The complete unpiped `npm run check` at `a93b3699` passed all static, unit,
 integration, behavioral, and direct-coverage gates: 1,120 Cucumber scenarios,
-11,411 steps, and 309 LCOV records on Node 26.12.1. Between `91f46fe7` and
-validated head `52506a6c`, only the planning-only security-fix report changed.
-No source, test, feature, dependency, configuration, runtime, or tool input
-changed. This audit also reran all six install-flow owner suites and direct
-pairs plus the deterministic split and authority assertions, so the full-gate
-evidence remains reusable under the local-verification policy.
+11,411 steps, and 309 LCOV records on Node 26.12.1. That tree includes the
+filesystem-capability remediation at `4cceceb2` and the comment correction at
+`a93b3699`. Between `a93b3699` and validated head `011bc384`, only planning
+review records changed. No source, test, feature, dependency, configuration,
+runtime, or tool input changed. The full-gate evidence remains reusable under
+the local-verification policy.
+
+## Final Freshness Pass
+
+Commit `a93b3699` corrected stale comments in the ledger and result owners; it
+did not change executable statements, types, imports, or tests. Its exact tree
+passed the complete repository gate with 1,120 Cucumber scenarios, 11,411
+steps, and 309 LCOV records. The range from `a93b3699` through validated head
+`011bc384` contains only `.planning/**/*.md` review records. The four cleanup
+requirements therefore retain their existing behavioral evidence with no new
+validation gap.
 
 ## Validation Sign-Off
 
