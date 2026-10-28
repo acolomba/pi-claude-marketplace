@@ -238,15 +238,6 @@ export async function collectPostCommitWarnings(
 }
 
 /**
- * WARN-01 / D-86-03: one `{malformed skill}` / `{malformed command}` token per
- * plugin regardless of how many components of that kind degraded. Hoisted out
- * of the row composers so the success row and the DFEN-04 disabled row read
- * the SAME list -- a malformed component is a durable fact about what the
- * plugin will materialize, so both rows owe it to the user; only the row's own
- * status decides which of them is rendered. The free-text parse-error detail
- * rides `postCommitWarnings` (orchestrated only).
- */
-/**
  * Emit a single-plugin `(failed)` row and return the matching outcome.
  * Shared by the CFG-03 invalid-config abort and the defensive
  * internal-error arm, which differ only in their reason token.

@@ -1,4 +1,4 @@
-// orchestrators/plugin/install-flow.ts
+// orchestrators/plugin/install-flow-ledger.ts
 //
 // Public composition root for install transaction sequencing. The guard-free
 // phase ledger lives in install-outcome.ts; this owner binds that ledger to
@@ -513,11 +513,10 @@ function installRun(afterPlan: InstallAfterPlan | undefined): {
  *      Orchestrated-mode collects them in
  *      `InstallOutcome.postCommitWarnings` for the cascade caller.
  */
-// Install sequencing walks the PI-1..15 flow: the state guard, the ledger
-// call, failure routing, and post-commit/notification composition. The
-// order of those steps stays visible here; the step bodies themselves are
-// extracted above (`buildInstallLedgerOptions`, `collectPostCommitWarnings`,
-// `composeInstalledRow`, `buildInstalledOutcome`, `handleInstallThrow`).
+// The PI-1..15 sequence stays visible here: state guard, ledger call, failure
+// routing, and post-commit notification composition. Cascade context lives in
+// `install-flow-cascade-context.ts`. Result projection and post-commit warnings
+// live in `install-flow-results.ts`.
 async function installPluginWithTransaction(
   transaction: InstallTransaction,
   hooksRouting: InstallHooksRouting,
