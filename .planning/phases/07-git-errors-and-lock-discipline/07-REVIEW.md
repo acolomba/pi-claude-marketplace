@@ -1,21 +1,32 @@
 ---
 phase: 07-git-errors-and-lock-discipline
-reviewed: 2026-10-28T19:11:29Z
-reviewed_commit: d2d93c0f0351b1b5c8f9e757c0975d4a46595d48
+reviewed: 2026-10-28T20:04:26Z
+reviewed_commit: 967fdb8a
 depth: standard
-files_reviewed: 11
+files_reviewed: 22
 files_reviewed_list:
+  - extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-cascade-context.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-dependency-ledger.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts
-  - test/orchestrators/plugin/clone-gc.test.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts
+  - test/orchestrators/plugin/clone-cache.test.ts
   - test/orchestrators/plugin/dependency-bindings.test.ts
   - test/orchestrators/plugin/dependency-move.test.ts
-  - test/orchestrators/plugin/dependency-plan.test.ts
   - test/orchestrators/plugin/dependency-settle.test.ts
+  - test/orchestrators/plugin/install-clone-probe.test.ts
+  - test/orchestrators/plugin/install-flow-cascade-context.test.ts
+  - test/orchestrators/plugin/install-flow-dependency-ledger.test.ts
+  - test/orchestrators/plugin/install-flow-planning.test.ts
+  - test/orchestrators/plugin/install-outcome.test.ts
+  - test/orchestrators/plugin/update-preflight.test.ts
 findings:
   critical: 1
   warning: 0
@@ -26,120 +37,116 @@ status: issues_found
 
 # Phase 7: Code Review Report
 
-**Reviewed:** 2026-10-28T19:11:29Z
-**Reviewed commit:** `d2d93c0f0351b1b5c8f9e757c0975d4a46595d48`
+**Reviewed:** 2026-10-28T20:04:26Z
+**Reviewed commit:** `967fdb8a`
 **Depth:** standard
-**Files Reviewed:** 11
+**Files Reviewed:** 22
 **Status:** issues_found
 
 ## Summary
 
-The original CR-01 concurrent-fetch race is closed for the interleaving that
-reported it. Cleanup now takes one fresh scope lock, re-derives live keys, and
-targets only the supplied candidate set. A distinct mirror warmed by a
-concurrent locked fetch is not a candidate, so the sweep cannot delete it.
-The collector still routes deletion through `pluginCloneDir`, keeps live and
-shared keys, swallows cleanup failure, and does not nest the non-reentrant
-scope lock.
+The iteration-4 repair closes the previously reported leak for cache entries
+that the current attempt actually creates. The four materialization variants
+report ownership only after an atomic promotion returns `renamed`; root,
+fresh-member, and move previews thread the same attempt set; install and update
+run the locked, live-rechecking sweep from `finally` on success, refusal, and
+throw. The successful install sweep runs after `installAgain`, so landed keys
+are live before collection. Cleanup still uses the location chokepoint, takes
+one fresh non-nested scope lock, and cannot mask a primary result or error.
 
-The replacement protocol nevertheless regresses the other half of the
-dependency-plan cleanup contract. It derives candidates only from the final
-accepted move steps, even though planning itself can materialize several
-discarded move candidates plus root and fresh-plugin previews. No sweep is
-created when the plan refuses or throws. Those operation-created clones are
-therefore leaked, contrary to the established fail-clean behavior and the
-module's own promise to collect the clones the plan created.
+One ownership defect remains. After the materializer deliberately declines to
+report a warm or race-lost key, move judgment derives that same key from the
+prepared plugin root and adds it to the candidate set anyway. A refused or
+backtracked plan can consequently delete a cache entry that this attempt did
+not create. The supplied concurrency test uses a different mirror key and does
+not exercise this same-key race.
 
-The supplied combined-tree gate remains green at the reviewed inputs (1126
-scenarios / 11509 steps and 309 direct LCOV records). A focused read-only run
-of the five changed owner test modules also passed. Those tests validate the
-new distinct-mirror negative control, but they do not exercise a real git
-preview or a ruled-out candidate that materializes a clone before the plan
-refuses.
+The combined-tree gate is green at the reviewed implementation: all static
+checks passed, 1126 Cucumber scenarios / 11509 steps passed, and the merged
+direct run produced 309 LCOV records. The gate does not expose the ownership
+error because the relevant same-key negative control is absent.
 
 ## Narrative Findings (AI reviewer)
 
 ## Critical Issues
 
-### CR-01: Refused and backtracked dependency plans leak the clones they materialized
+### CR-01: Move judgment reclaims warm and race-lost candidate clones
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts:162-168`
+**Classification:** BLOCKER
 
-**Issue:** `planCloneSweep` builds its entire ownership set from
-`cleanupCloneKeys` on the final accepted plan's `move` steps. This omits three
-real write paths:
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts:135-146,239-242`
 
-1. A plan search can successfully judge and materialize multiple versions of
-   one move before `ruleOut` discards earlier choices
-   (`dependency-plan.ts:324-346`). Only the last choice is copied into a step
-   at `dependency-plan.ts:572-590`, so every earlier candidate key is lost.
-2. Root and fresh-member previews call the install preflight. That preflight
-   explicitly clones a git source on cache miss
-   (`install-outcome.ts:897-928`), but materialize steps carry no cleanup keys
-   and `planCloneSweep` ignores them.
-3. `installAfterMoves` keeps a no-op sweep until the plan succeeds
-   (`install-flow-planning.ts:243-250`). `settlePlanned` likewise returns on a
-   thrown or refused plan before calling `planSweep`
-   (`dependency-settle.ts:260-273`). A refusal after any of the writes above
-   therefore performs no cleanup at all.
+**Issue:** The clone-cache writers correctly call `onCloneCreated` only when
+their atomic promotion returns `renamed`. A warm hit returns before the
+callback, and a promotion that returns `raced` also skips it. That distinction
+is the ownership boundary: in either case the current attempt did not create
+the final key.
 
-This is not only a theoretical omission. `previewInstall` documents and
-implements the cache-miss clone before later name and agent-target checks can
-throw. The planner also has tested backtracking paths that judge 3.0.0, rule
-it out, and then judge 2.0.0. On either a later refusal or an execution failure
-before the previewed member lands, the corresponding mirror/per-commit
-directories remain unreferenced on disk. The previous sweep removed all
-clones created after its initial snapshot; the new tests changed the refusal
-expectations to assert that no sweep runs, without replacing that cleanup
-coverage with explicit ownership for these materializations.
+`judgeDependencyMove` immediately defeats that boundary. Its
+`cleanupCloneKeys` function derives both the old record key and the candidate
+key from `prepared.installable.pluginRoot`, then unconditionally inserts both
+into the attempt's `cloneCandidates` set before exclusions and name checks.
+Therefore:
 
-The result violates NFR-3 fail-clean semantics and the Phase 4/7 dependency
-contract recorded in `dependency-settle.ts:16-23`: clones the plan created
-must be removed while clones that predated it stay. Repeated refused installs
-or resolver backtracking can accumulate unreachable cache directories
-indefinitely.
+1. A pre-existing warm candidate is added even though no writer reported it.
+2. If another process wins promotion of the exact same key, the losing process
+   adds the winner's key even though the `raced` result deliberately did not
+   report ownership.
+3. If that candidate is later ruled out, the plan refuses, or a later step
+   fails before the candidate lands, the final candidate-only sweep sees no
+   live record for it and deletes it.
 
-**Fix:** Track clone ownership for the whole planning attempt, not only the
-accepted step list. The materialization boundary should report the exact
-mirror/per-commit keys it actually created (distinguishing new entries from
-pre-existing cache hits), and move judgment should add every successfully
-materialized candidate, including candidates later ruled out. Root and fresh
-previews must add their created keys to the same attempt-owned set. Construct
-the candidate sweep before planning starts and invoke it from an outer
-`finally` on success, refusal, and throw; the current locked live-state recheck
-can then safely retain landed/shared keys. Add filesystem tests for both a
-refused git preview and a backtracked move: each must remove its own newly
-created keys, preserve a pre-existing warm key, and preserve a distinct mirror
-created by a concurrent locked fetch.
+The fresh lock and live-state recheck do not repair this case: the key is an
+explicit candidate, and a preview owned by another attempt need not yet have a
+persisted record. This reintroduces the concurrent cache deletion class for an
+exact-key race and violates the operation-owned candidate contract. The
+high-level negative test at
+`test/orchestrators/plugin/install-flow-planning.test.ts:263-313` preserves a
+distinct concurrent mirror key, so it still passes when the exact raced or
+warm candidate key is wrongly claimed.
+
+**Fix:** Keep writer-reported creation separate from replacement cleanup. Add
+only the current record's old clone key as a possible superseded key during
+move judgment; rely exclusively on `onCloneCreated` to add the prepared
+candidate key. The live-state recheck will retain the old key while the move is
+refused and remove it only after a successful move makes it unreferenced. Add
+negative tests that pass a callback through a warm hit and an exact-key
+`raced` promotion, then refuse or backtrack the candidate and prove the key
+survives. Keep the existing tests proving a genuinely `renamed` rejected key
+is removed and a landed key remains live.
 
 ## Prior Finding Disposition
 
-- The prior concurrent-fetch CR-01 is closed for a distinct fetched mirror;
-  this finding concerns clone ownership that the replacement protocol omits.
-- Previously fixed classifier, lock, stamp, and comment findings remain fixed.
-- Previously accepted or deferred Phase 7 dispositions remain unchanged and
-  were not reopened.
+- The prior distinct concurrent-fetch deletion is closed: entries outside the
+  candidate set cannot be deleted, and the sweep rechecks live state under a
+  fresh scope lock.
+- The prior refused/backtracked leak is closed for keys the attempt actually
+  creates: all four promotion variants report `renamed` keys, and the outer
+  finalizers sweep on every terminal path.
+- This report's CR-01 is a separate over-claim in move judgment that bypasses
+  the new atomic ownership signal for warm and same-key raced candidates.
 
 ## Review Evidence
 
-- `collectPluginCloneCandidatesLocked` takes one fresh lock and rechecks the
-  current state before deleting an exact candidate; no nested-lock path was
-  found.
-- Candidate deletion still passes through `locations.pluginCloneDir`, so the
-  existing safe-name, containment, and symlink checks remain in force.
-- The new concurrency test is a valid negative control for the old race: its
-  fetched mirror is created under the real scope lock after sweep creation and
-  remains after the owned replaced clone is removed.
-- Focused owner tests: five modules passed (`clone-gc`,
-  `dependency-bindings`, `dependency-move`, `dependency-plan`, and
-  `dependency-settle`).
-- `fallow review --base d4436bd3^ --brief` could not create its temporary
-  comparison worktree in this isolated checkout; this orientation-only command
-  is not a gate and does not supersede the supplied green Fallow/full-gate
-  evidence.
+- `materializePluginClone`, `materializePluginCommitCopy`,
+  `materializeOrRefreshPluginMirror`, and `materializeMarketplaceTagClone`
+  report only `renamed` promotions; warm and `raced` paths do not report.
+- Pinned, unpinned mirror/per-commit, and marketplace-tag probes thread the
+  callback through install and update preflights.
+- Install planning creates its candidate set before root preview and sweeps
+  after the second install attempt. Update planning creates it before graph
+  planning and sweeps from `settlePlanned`'s `finally`.
+- `collectPluginCloneCandidatesLocked` routes every target through
+  `pluginCloneDir`, re-derives live and shared keys from state under one fresh
+  lock, and receives cleanup failures through a swallowing wrapper.
+- The full `npm run check` result at the reviewed inputs is green: static
+  checks, 1126 scenarios / 11509 steps, and 309 merged LCOV records.
+- `fallow review --base 967fdb8a^ --brief` could not create its temporary
+  comparison worktree in this isolated checkout. It is orientation-only and
+  does not supersede the green project Fallow/full-gate evidence.
 
 ---
 
-_Reviewed: 2026-10-28T19:11:29Z_
+_Reviewed: 2026-10-28T20:04:26Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
