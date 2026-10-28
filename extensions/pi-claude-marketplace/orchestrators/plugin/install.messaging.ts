@@ -23,7 +23,7 @@ import {
   narrowUnsupportedKinds,
   SOURCE_DIR_MISSING_NOTE,
 } from "../../shared/probe-classifiers.ts";
-import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
+import { redactCauseChain, redactedRollbackPartials } from "../../shared/redact-absolute-paths.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -218,10 +218,7 @@ export function composeInstallFailureMessage(args: {
       // D-03/D-06: a failed install -> error, no reload (nothing landed).
       severity: "error",
       needsReload: false,
-      rollbackPartial: rollbackPartials.map((p) => ({
-        phase: p.phase,
-        ...(p.cause !== undefined && { cause: p.cause }),
-      })),
+      rollbackPartial: redactedRollbackPartials(rollbackPartials),
     };
     return failed;
   }

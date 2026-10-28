@@ -8,7 +8,11 @@ import {
 import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import { printable } from "../../shared/notification-mcp.ts";
 import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
-import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
+import {
+  redactAbsolutePaths,
+  redactCauseChain,
+  redactedRollbackPartials,
+} from "../../shared/redact-absolute-paths.ts";
 
 import { INSTALL_CONTEXT } from "./install.messaging.ts";
 
@@ -678,10 +682,7 @@ export function composeCascadeFailureMessage(args: {
     reasons: facts.reasons,
     ...(facts.version !== undefined && { version: facts.version }),
     ...(facts.rollbackPartials !== undefined && {
-      rollbackPartial: facts.rollbackPartials.map((partial) => ({
-        phase: partial.phase,
-        ...(partial.cause !== undefined && { cause: partial.cause }),
-      })),
+      rollbackPartial: redactedRollbackPartials(facts.rollbackPartials),
     }),
     cause: redactedCause,
     severity: "error",

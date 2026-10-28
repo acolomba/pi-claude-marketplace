@@ -73,7 +73,8 @@ Feature: Plugin install rollback
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status | reasons          | scope   | version | cause chain                                                  | cause truncated | leaks                                                               | rollback partial                                                                                            |
-      | fixtures         | project           | demo@fixtures | demo | failed | rollback partial | project | 1.0.0   | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
+      | fixtures         | project           | demo@fixtures | demo | failed | rollback partial | project | 1.0.0   | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | demo-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
+    Then the command result contains no absolute sandbox path
     Then the installation record of the project scope holds no plugins
     Then the project scope stages these skills and prompts:
       | kind  | name       |

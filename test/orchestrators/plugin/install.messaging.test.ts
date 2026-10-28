@@ -210,10 +210,12 @@ describe("composeInstallFailureMessage", () => {
     });
   });
 
-  test("maps rollback-partial children in causal order with true cause omission", () => {
+  test("redacts rollback-partial child causes and preserves causal order", () => {
     // arrange
     const failure = new Error("install failed");
-    const rollbackCause = new Error("remove failed");
+    const rollbackCause = new Error("remove failed at /private/scope/skill.md", {
+      cause: new Error("unlink failed at /private/scope/state.json"),
+    });
     const entityErrorRow = {
       kind: "entity-error",
       name: "ignored",
@@ -245,7 +247,15 @@ describe("composeInstallFailureMessage", () => {
       cause: failure,
       severity: "error",
       needsReload: false,
-      rollbackPartial: [{ phase: "phase3a", cause: rollbackCause }, { phase: "phase3b" }],
+      rollbackPartial: [
+        {
+          phase: "phase3a",
+          cause: new Error("remove failed at skill.md", {
+            cause: new Error("unlink failed at state.json"),
+          }),
+        },
+        { phase: "phase3b" },
+      ],
     });
   });
 

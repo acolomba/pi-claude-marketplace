@@ -1342,7 +1342,7 @@ describe("composeCascadeFailureMessage", () => {
     });
   });
 
-  test("RESV-06 a member whose rollback could not finish names the phases it left behind", () => {
+  test("RESV-06 a rollback failure redacts paths and names the phases it left behind", () => {
     // arrange
     const subject: CascadeFailureSubject = {
       kind: "member",
@@ -1352,7 +1352,9 @@ describe("composeCascadeFailureMessage", () => {
         {
           phase: "skills",
           msg: "EACCES removing a-fmt",
-          cause: new Error("EACCES removing a-fmt"),
+          cause: new Error("EACCES removing /private/scope/a-fmt", {
+            cause: new Error("unlink /private/scope/state.json"),
+          }),
         },
         { phase: "agents", msg: "removal reported no error" },
       ],
@@ -1371,7 +1373,7 @@ describe("composeCascadeFailureMessage", () => {
         "  ⊘ formatter@tools (failed) {rollback partial}",
         "    cause: failed to stage skill a-fmt: EACCES",
         "    [skills] (rollback failed)",
-        "      cause: EACCES removing a-fmt",
+        "      cause: EACCES removing a-fmt -> unlink state.json",
         "    [agents] (rollback failed)",
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
