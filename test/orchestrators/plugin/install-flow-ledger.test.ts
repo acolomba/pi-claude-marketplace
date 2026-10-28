@@ -105,6 +105,111 @@ import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 import type { TestContext } from "node:test";
 
+for (const orchestrated of [false, true]) {
+  test(`keeps dependency MCP notices when the final config is invalid in ${orchestrated ? "an orchestrated" : "a standalone"} install`, async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({ aaa: { version: "1.0.0" } });
+      try {
+        const initial = makeCtx();
+        const installed = await owner.installPlugin({
+          ctx: initial.ctx,
+          run: initial.run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "aaa",
+        });
+        assert.strictEqual(installed.status, "installed");
+        await publishCatalog(marketplaceRoot, {
+          app: { version: "1.0.0", dependencies: ["aaa@^2.0.0"] },
+          aaa: { version: "2.0.0", dependencies: ["zzz"] },
+          zzz: { version: "1.0.0", mcp: true },
+        });
+        const locations = locationsFor("project", cwd);
+        await writeFile(locations.mcpAdapterJsonPath, '// mine\n{"mcpServers":{}}\n');
+        const installPlugin = createInstallPlugin(
+          {
+            ...owner.transaction,
+            async withLockedStateTransaction(target, fn) {
+              const state = await loadState(target.extensionRoot);
+              if (state.marketplaces.mp?.plugins.aaa?.version === "2.0.0") {
+                await writeFile(locations.baseConfigJsonPath, "{invalid");
+              }
+
+              return owner.transaction.withLockedStateTransaction(target, fn);
+            },
+          },
+          owner.hooksRouting,
+          owner.completionCache,
+        );
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        const outcome = await installPlugin({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "app",
+          ...(orchestrated && { notifications: { mode: "orchestrated" } }),
+        });
+
+        // assert
+        assert.strictEqual(outcome.status, "failed");
+        assert.deepStrictEqual(outcome.mcpConfigNotices, [
+          { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+        ]);
+        assert.deepStrictEqual(
+          notifications,
+          orchestrated
+            ? []
+            : [
+                {
+                  message:
+                    'A plugin operation has failed.\n\n● mp [project]\n  ⊘ app (failed) {invalid manifest}\n    cause: Config file "claude-plugins.json" failed schema validation.\n  ● zzz@mp v1.0.0 (installed) {requires pi-mcp-adapter}\n  ● aaa@mp v1.0.0 → v2.0.0 (updated) {dependency current copy}\n    cause: constrained to the combined range (^2.0.0) -- required by "app@mp"\n\n/reload to pick up changes',
+                  severity: "error",
+                },
+                {
+                  message:
+                    "MCP config comments removed.\n\nThe project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+                  severity: "warning",
+                },
+              ],
+        );
+        const state = await loadState(locations.extensionRoot);
+        assert.deepStrictEqual(
+          Object.entries(state.marketplaces.mp?.plugins ?? {}).map(([name, record]) => [
+            name,
+            record.version,
+          ]),
+          [
+            ["aaa", "2.0.0"],
+            ["zzz", "1.0.0"],
+          ],
+        );
+        assert.deepStrictEqual(JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")), {
+          mcpServers: {
+            "plugin_zzz_zzz-server_": {
+              command: "node",
+              directTools: "search",
+              toolPrefix: "mcp",
+              env: {
+                CLAUDE_PLUGIN_DATA: path.join(locations.extensionRoot, "data", "mp", "zzz"),
+                CLAUDE_PLUGIN_ROOT: path.join(marketplaceRoot, "plugins", "zzz"),
+              },
+              _piClaudeMarketplace: { marketplace: "mp", plugin: "zzz" },
+            },
+          },
+        });
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 const filesystemPromises = createRequire(import.meta.url)(
   "node:fs/promises",
 ) as typeof import("node:fs/promises");

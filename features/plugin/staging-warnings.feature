@@ -264,6 +264,49 @@ Feature: Plugin staging warnings
       | fixtures         | project           | demo@fixtures | demo@fixtures | updated   | dependency current copy | project |         | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@fixtures" | false           |       |                  |
       | fixtures         | project           | lib@fixtures  | lib@fixtures  | installed | requires pi-mcp-adapter  | project | 1.0.0   |       |       |                                                                              |                 |       |                  |
 
+  Scenario: Installing a plugin reports an earlier MCP notice when its final config becomes invalid
+    Given the npm registry serves these packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | aaa  | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install aaa@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | aaa@^2.0.0   |
+      | aaa  | 2.0.0   | zzz          |
+      | zzz  | 1.0.0   |              |
+    Given the published plugin "zzz" of the marketplace "tools" declares the mcp server "zzz-server"
+    Given the published plugin "aaa" of the marketplace "tools" depends on these npm packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the user has run "/claude:plugin marketplace update tools --scope project"
+    Given the mcp-adapter.json file of the project scope holds a comment
+    Given the local config of the project scope changes to this text while the npm registry serves "pkd-dep":
+      """
+      {invalid
+      """
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the command reports these results:
+      | kind               | severity | needs reload | summary                        | notices                                                                   |
+      | cascade            | error    | true         | A plugin operation has failed. |                                                                           |
+      | mcp-config-notices | warning  | false        |                                | [{"kind":"comments-dropped","scope":"project","file":"mcp-adapter.json"}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id        | name      | status    | reasons                 | scope   | version | from  | to    | cause chain                                                           | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | failed    | invalid manifest        | project |         |       |       | Config file "claude-plugins.local.json" failed schema validation.     | false           |       |                  |
+      | tools            | project           | zzz@tools | zzz@tools | installed | requires pi-mcp-adapter | project | 1.0.0   |       |       |                                                                       |                 |       |                  |
+      | tools            | project           | aaa@tools | aaa@tools | updated   | dependency current copy | project |         | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@tools" | false           |       |                  |
+    Then the "claude-plugins.local.json" file of the project scope holds this text:
+      """
+      {invalid
+      """
+    Then the npm registry receives these requests:
+      | method | path                         | status |
+      | GET    | /pkd-dep/-/pkd-dep-1.0.0.tgz | 200    |
+
   Scenario: Installing a plugin reports an earlier dependency's MCP notice when a later move fails
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the marketplace "fixtures" offers these plugins with dependencies:

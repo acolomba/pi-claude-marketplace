@@ -2,11 +2,13 @@
  * @fileoverview Steps about the configs a user owns in a scope: the base config
  * `claude-plugins.json` and the local config `claude-plugins.local.json`.
  *
- * Three setup steps each write one layer config, to model a hand edit or a
+ * Setup steps each write one layer config, to model a hand edit or a
  * version-control update. One writes the `plugins` member and one the
  * `marketplaces` member, each keeping the config's other members; the
  * marketplaces step expands the run tokens in each source. The third writes
- * the whole text, which can leave the file broken. Every other step only
+ * the whole text, which can leave the file broken. A fourth delays that edit
+ * until an npm response, so an install sees a config edit between dependency
+ * transactions. Every other step only
  * reads, so this module writes nothing else and deletes nothing. `holds this
  * text` compares the raw text of a config, while the byte snapshot steps prove
  * a no-op leaves both the base config and installation record untouched.
@@ -202,6 +204,17 @@ Given(
     const file = layerConfigPath(this, scope, layer);
     await writeLayerText(file, text);
     assert.strictEqual(await readFile(file, "utf8"), text, `${file} does not hold the text`);
+  },
+);
+
+Given(
+  "the local config of the project scope changes to this text while the npm registry serves {string}:",
+  function (this: ScenarioWorld, name: string, text: string) {
+    const file = layerConfigPath(this, "project", "local");
+    this.requireNpmRegistry().beforeNextResponse(name, async () => {
+      await writeLayerText(file, text);
+      assert.strictEqual(await readFile(file, "utf8"), text);
+    });
   },
 );
 
