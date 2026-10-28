@@ -589,6 +589,115 @@ test("import execute consumes unchanged marketplace add without a row", async (t
   verifyBoundary();
 });
 
+test("reports a missing settings name when its source was added earlier in the import", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "source-added-twice");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const marketplaceRoot = path.join(cwd, "alpha");
+  await writeUnder(
+    path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: "alpha",
+      owner: { name: "import owner suite" },
+      plugins: [{ name: "p", source: "./plugins/p", version: "1.0.0" }],
+    }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "p", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "p", version: "1.0.0" }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "p", "skills", "tool", "SKILL.md"),
+    "---\nname: tool\n---\n\nBody.\n",
+  );
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    gitOps: createOfflineGitOps(),
+    deps: {
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: { "p@alpha": true, "p@beta": true },
+            extraKnownMarketplaces: {
+              alpha: { directory: marketplaceRoot },
+              beta: { directory: marketplaceRoot },
+            },
+          }),
+        ),
+    },
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("alpha", "project")],
+    installedPlugins: [installed("p", "alpha", "project")],
+    changedResources: true,
+    unexpectedPluginFailures: [notAdded("p", "beta", "project")],
+  });
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Some operations have failed.\n\n" +
+        "● alpha [project] (added)\n  ● p v1.0.0 (installed)\n\n" +
+        "⊘ beta [project] (failed)\n  ⊘ p (failed)\n" +
+        '    cause: Marketplace "beta" is not added in the project scope.\n\n' +
+        "Import: 2 failures, 2 successes\n\n/reload to pick up changes",
+      severity: "error",
+    },
+  ]);
+  assert.strictEqual(
+    await readFile(project.baseConfigJsonPath, "utf8"),
+    configBytes({
+      marketplaces: { alpha: { source: marketplaceRoot } },
+      plugins: { "p@alpha": {} },
+    }),
+  );
+  verifyBoundary();
+});
+
+test("keeps a header for a failed plugin after an unchanged add of the same name", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "unchanged-marketplace-plugin");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve({ status: "unchanged", name: "mp" }),
+      loadSettings: () => Promise.resolve(settingsForMp("plugin")),
+      loadState: () => Promise.resolve(recordedState([])),
+      installPlugin: () =>
+        Promise.resolve(failedInstallOutcome(new Error("staging failed"), "staging failed")),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult.skippedExistingMarketplaces, [skipped("mp", "project")]);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation has failed.\n\n" +
+        "● mp [project] (skipped) {already added}\n" +
+        "  ⊘ plugin (failed)\n    cause: staging failed\n\n" +
+        "Import: 1 failure, 1 success",
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+});
+
 test("records a marketplace the state does not carry and installs its declared plugin", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "add-and-install");
