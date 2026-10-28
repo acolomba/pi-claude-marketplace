@@ -62,6 +62,10 @@ import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
+import {
+  stateLockHeldCause as lockHeldCause,
+  whileStateLockHeld as whileLockHeld,
+} from "../state-lock.ts";
 
 import type {
   DeviceCodeResponse,
@@ -3011,23 +3015,6 @@ test("RECON-03 orchestrated mode -- unsupported source returns { status: 'failed
     }
   });
 });
-
-/** Runs `act` while this process holds the scope's real state lock. */
-async function whileLockHeld<T>(locations: ScopedLocations, act: () => Promise<T>): Promise<T> {
-  const release = await lockfile.lock(locations.extensionRoot, {
-    lockfilePath: locations.stateLockFile,
-    realpath: false,
-  });
-  try {
-    return await act();
-  } finally {
-    await release();
-  }
-}
-
-function lockHeldCause(locations: ScopedLocations): string {
-  return `Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes.`;
-}
 
 const NO_GIT_CALLS = {
   checkoutCalls: [],

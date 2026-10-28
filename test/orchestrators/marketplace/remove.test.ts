@@ -51,6 +51,10 @@ import {
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
+import {
+  stateLockHeldCause as lockHeldCause,
+  whileStateLockHeld as whileLockHeld,
+} from "../state-lock.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -2747,23 +2751,6 @@ for (const { mode, orchestrated, expectedCalls } of [
     assert.deepStrictEqual(await bytesOnDisk(), expectedBytes);
     notification.verifyInteractions();
   });
-}
-
-/** Runs `act` while this process holds the scope's real state lock. */
-async function whileLockHeld<T>(locations: ScopedLocations, act: () => Promise<T>): Promise<T> {
-  const release = await lockfile.lock(locations.extensionRoot, {
-    lockfilePath: locations.stateLockFile,
-    realpath: false,
-  });
-  try {
-    return await act();
-  } finally {
-    await release();
-  }
-}
-
-function lockHeldCause(locations: ScopedLocations): string {
-  return `Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes.`;
 }
 
 test("FLR-02: a standalone remove under a held state lock reports lock held and changes nothing", async (testContext) => {
