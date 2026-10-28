@@ -1,6 +1,6 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-reviewed: 2026-10-28T06:58:36Z
+reviewed: 2026-10-28T08:05:02Z
 depth: standard
 files_reviewed: 100
 files_reviewed_list:
@@ -106,24 +106,24 @@ files_reviewed_list:
   - test/shared/git-failure-classifiers.test.ts
 findings:
   critical: 0
-  warning: 1
+  warning: 0
   info: 0
-  total: 1
-status: issues_found
+  total: 0
+status: clean
 ---
 
 # Phase 10: Code Review Report
 
-**Reviewed:** 2026-10-28T06:58:36Z
+**Reviewed:** 2026-10-28T08:05:02Z
 **Depth:** standard
 **Files Reviewed:** 100 (the retained 89-file Phase 10 scope plus 11 new post-split files)
-**Status:** issues_found
-**Observed HEAD:** `41ad4a3c`
+**Status:** clean
+**Observed HEAD:** `67804335`
 **Runtime:** Node `v26.12.1`
 
 ## Structural Findings (fallow)
 
-The prior exact fix-branch `fallow audit` passed. A repeat audit on the merged worktree could not create its temporary worktree because of the review sandbox, so that result was not treated as fresh structural evidence. `fallow guard` accepted the root, planning, ledger, test-support, and architecture-inventory files. `fallow security` returned broad inherited path-sink candidates but did not establish a new containment, redaction, child-process, or network-boundary defect. `fallow trace` confirmed that the planning-to-ledger dependency is type-only and therefore does not create a runtime cycle.
+`fallow review --base 09f7f113 --brief` passed with no dead-code, complexity, or duplication findings. `fallow guard` accepted the root, planning, ledger, and owner-test files. `fallow trace` found one planning-to-ledger type-only hop and no reverse path, so the split has no runtime cycle. `fallow security` surfaced four reachability-based path candidates in unchanged containment-aware callees; direct review found that the path-source read calls `assertPathInside`, manifest candidates are fixed literals and read through a bounded manifest boundary, and hook paths come from resolver-produced installable metadata. No new vulnerability was established.
 
 CodeGraph was attempted first as required, but its local database could not be opened. Current sources, import paths, and consumers were therefore traced with Fallow, Git diffs, repository search, and direct source review.
 
@@ -131,36 +131,29 @@ CodeGraph was attempted first as required, but its local database could not be o
 
 ### Summary
 
-The review-fix commits close WR-01 and WR-03. The ordinary install-owner fixture now calls the public composition-root factories, and a public-root behavioral case proves planning reaches ledger persistence. The large-file exclusions are exact, end-anchored paths. The two-line prune cleanup removes only redundant assertions and preserves the `Error` type. No CAS-08/XPH-02 runtime semantic regression was found.
+The final WR-02 refactor closes the remaining ownership defect. Planning privately owns a five-operation contract: prepare the plan, preview the root, run a cascade, project a caught failure, and project failed moves. The public root explicitly adapts five ledger operations into that contract. The ledger operations now contain the prior catalog, transaction, save, hook/config, marketplace-settlement, cascade-unwrapping, and failure-projection helpers instead of forwarding those helpers across the leaf boundary.
 
-One ownership defect remains. The replacement ledger port is still a catch-all wrapper around the same 15 ledger-private helpers, so WR-02 is only partially fixed. The merged tree's build inputs are byte-identical to the fix branch that passed `npm run check`: 1120 scenarios, 11411 steps, and 306 direct-LCOV pairs.
+`InstallPlanningComposition` is private. Its test infers the factory return type; the factory itself is a real production composition seam used by the public root, so there is no test-only production export. The owner tests cover initial settlement, planned materialization, refusal, missing-marketplace propagation, failure projection, move-failure projection, preview pins, and public-root persistence. No behavior regression was found.
 
-## Warnings
+Previously closed findings remain closed. WR-01 still routes the fixture and the behavioral proof through public composition-root factories. WR-03 still uses exact, end-anchored large-file exceptions. The prune change still removes only redundant assertions while preserving the `Error`-typed values.
 
-### WR-02: The replacement ledger port is still a 15-method catch-all
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts:3305-3320`
-**Issue:** `InstallPlanningLedgerPorts` exposes all 15 former cross-leaf helpers in one provider-owned object. `createInstallPlanningLedgerPorts()` then returns those helpers one-for-one (`install-flow-ledger.ts:3324-3341`), and planning imports that ledger-owned contract (`install-flow-planning.ts:59-69`). The root now performs the value composition and the runtime graph is acyclic, but the contract is not narrow: planning still depends on ledger construction, failure projection, hook hydration, config mutation, marketplace settlement, and outcome-shaping internals as a single catch-all dependency. A ledger refactor therefore continues to ripple into planning instead of being absorbed by a cohesive boundary. The split also exports `InstallPlanningComposition` only so its test can type a public resolver (`install-flow-planning.ts:668-680`; `test/orchestrators/plugin/install-flow-planning.test.ts:44-49`), contrary to the repository test rule against test-only production exports.
-**Fix:** Declare consumer-owned, purpose-specific planning ports and have the root adapt ledger behavior to them. Prefer a few cohesive higher-level operations over forwarding the 15 private helpers unchanged. Keep `InstallPlanningComposition` private (or infer the factory return type) and exercise the public resolver without adding a production export solely for the test.
+All reviewed files meet quality standards. No issues found.
 
 ### Verification record
 
-- CodeGraph query attempted first; local database open failed.
-- `fallow review` and fix-commit diffs: reviewed the split and all four fix commits.
-- `fallow guard` on split sources/tests: no policy violation.
-- `fallow security --format json --quiet`: no proven new security defect.
-- `fallow trace --path install-flow-planning.ts install-flow-ledger.ts`: one type-only hop; no runtime cycle.
-- `fallow dead-code --type-aware --symbol-impact`: `InstallPlanningLedgerPorts` has one direct type consumer (planning), its factory has one direct value consumer (the root), and `InstallPlanningComposition` has only a test consumer.
-- Focused Node tests for the root, planning, and prune modules: passed.
-- Fix-branch `npm run check`: green, 1120 scenarios, 11411 steps, 306 direct-LCOV pairs. `git diff` confirmed that merged build inputs are unchanged.
-- WR-01: closed by public-root fixture routing and behavioral root proof.
-- WR-03: closed by exact end anchors on both large-file exceptions.
-- Prune cleanup: correct; only redundant double assertions were removed.
+- CodeGraph was attempted first; its local database could not be opened.
+- `fallow review --base 09f7f113 --brief --format json`: passed; zero dead-code issues, complexity findings, and duplication clone groups.
+- `fallow guard` on the root, planning, ledger, and owner tests: passed.
+- `fallow security --changed-since 09f7f113`: reviewed all four candidates; no proven vulnerability.
+- Bidirectional `fallow trace --path`: planning reaches ledger through one type-only hop; ledger has no path back to planning.
+- Focused Node suites for the root, planning, ledger, and prune modules: passed.
+- `test/architecture/no-test-only-production-surface.test.ts`: passed.
+- Exact build inputs passed the full fix-branch `npm run check`: 1120 scenarios, 11411 steps, and 306 direct-LCOV pairs. The merged build inputs are unchanged.
 
 Only this report was changed. No implementation or test source was modified, and no commit was created.
 
 ---
 
-_Reviewed: 2026-10-28T06:58:36Z_
+_Reviewed: 2026-10-28T08:05:02Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
