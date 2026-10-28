@@ -1,6 +1,6 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-reviewed: 2026-10-28T04:04:16Z
+reviewed: 2026-10-28T04:49:36Z
 depth: standard
 files_reviewed: 89
 files_reviewed_list:
@@ -103,12 +103,12 @@ status: clean
 
 # Phase 10: Code Review Report
 
-**Reviewed:** 2026-10-28T04:04:16Z
+**Reviewed:** 2026-10-28T04:49:36Z
 **Depth:** standard
-**Files Reviewed:** 89 (original review scope retained; seven changed files re-reviewed)
+**Files Reviewed:** 89 (original review scope retained; 14 in-scope files changed on the integrated tree were re-reviewed)
 **Status:** clean
 **Re-review commits:** `5dd94d67`, `2150ca02`
-**Observed HEAD:** `727d32f5`
+**Observed HEAD:** `e9db3b68`
 **Runtime:** Node `v26.12.1`
 
 ## Structural Findings (fallow)
@@ -117,13 +117,17 @@ The original review/audit against `4ce415254e89c39c0257c78977f1c047838c0d8c` rep
 
 Re-review ran `fallow audit --base 5dd94d67^ --max-crap 30 --format json --quiet`: exit 0, verdict pass. No introduced or worsened complexity findings, dead-code issues, or duplicate groups were reported. Three inherited complexity findings were reported with estimated coverage; these are retained as structural orientation, not new behavior or test-reliability findings. The earlier audit had not explicitly applied the max-CRAP-30 override.
 
+The integrated-tree review ran `fallow review --base 727d32f5 --brief`, `fallow guard` for the changed marketplace-add, import, reconcile, install-flow, and outcome-contract modules, and `fallow security`. The guard reported no architecture-policy violations in the reviewed modules. The security candidate list did not establish a correctness or security defect in the Phase 10 scope. CodeGraph was attempted first, but its local database could not be opened, so current source and call paths were verified with the evaluation-scope resolver, Git diffs, repository search, Fallow, and direct test execution.
+
 ## Narrative Findings (AI reviewer)
 
 ### Summary
 
-No unresolved findings remain. The two prior blockers are fixed, and review of both complete fix diffs found no new issues. The original 89-file scope includes the phase task-commit union, all six requested outside-union files, and security fixes `d6c98433` and `689b4499`. This re-review inspected all seven source/test files changed by the two fixes, their surrounding contracts, and targeted runtime evidence; it did not repeat the original full-scope review.
+No unresolved findings remain. The two prior blockers are fixed, and review of both complete fix diffs found no new issues. The original 89-file scope includes the phase task-commit union, all six requested outside-union files, and security fixes `d6c98433` and `689b4499`.
 
-CodeGraph was consulted for the reconcile call paths; current source was read where its index had drifted. Source repair now expands once at each initial-plan or replan boundary. Completion assertions compare the full ordered result, including labels, insertion values with trailing spaces, and descriptions, against explicit nonempty tables.
+The stale-verification review retained that exact scope and re-reviewed the 14 Phase 10 in-scope files changed between `727d32f5` and the integrated Phase 11 head `e9db3b68`. It traced the marketplace-add `unchanged` outcome through apply and import consumers; verified the merge-resolved cache, config-byte, and standalone-notification assertions; traced deferred-pin restoration from the reconcile factory through convergence after a failed deferred enable; checked the required successful-install version contract at its producers; and reviewed the shared state-lock test-helper conversions for assertion loss or fixture drift. Phase 10's CAS/XPH install-flow implementation has no content diff from the previously reviewed tree, so the prior call-chain review and the combined regression gate remain applicable. No changed assertion was weakened and no containment, process-spawn, or network chokepoint was bypassed.
+
+The original review consulted CodeGraph for the reconcile call paths; current source was read where that earlier index had drifted. Source repair now expands once at each initial-plan or replan boundary. Completion assertions compare the full ordered result, including labels, insertion values with trailing spaces, and descriptions, against explicit nonempty tables.
 
 ### Prior-findings disposition
 
@@ -147,12 +151,15 @@ Repeated the original empty-provider mutation with a Node `registerHooks` loader
 - Replan trace run using an in-memory loader and `--test-name-pattern 'APPLY1-01: a dependent held down'`: exit 0; callback observed; 1/1 test.
 - Cucumber selection of both completion scenarios and the replacement-download scenario: exit 0; 3/3 scenarios, 36/36 steps (seed 215663).
 - Empty-provider mutation against both completion scenarios: expected exit 1; 2/2 scenarios rejected.
-- The parent supplied the combined gate result after both fixes: `npm run check` exit 0, static checks green, 1120/1120 scenarios, 11411/11411 steps, 304 direct LCOV; coverage ledger 56/56. This re-review did not rerun that full gate. `git diff 2150ca02 -- . ':(exclude,glob).planning/**/*.md'` was empty, and the worktree was clean before updating this report.
+- Integrated-tree focused run: `node --test --test-reporter=spec --test-name-pattern 'MPA-01: a same-source add into the declaring layer|reconcile apply consumes unchanged marketplace add|import execute consumes unchanged marketplace add|a pin restore that cannot take the state lock' test/orchestrators/marketplace/add.test.ts test/orchestrators/reconcile/apply.test.ts test/orchestrators/import/execute.test.ts`: exit 0; 3/3 selected tests.
+- `git diff --check 727d32f5..e9db3b68`: exit 0.
+- Integrated Nyquist evidence: 56/56 requirements covered. Integrated security evidence: 19/19 mitigations verified, zero open threats.
+- The parent supplied the combined integrated-tree gate result: `npm run check` exit 0, static checks green, 1120/1120 scenarios, 11411/11411 steps, 304 direct LCOV. Commit `e9db3b68` changes only an evidence-bearing test title after that gate; its focused owner/process checks and commit hook passed. This review did not rerun the full combined gate.
 
 Only this report was changed. No implementation/test edits or commits were made.
 
 ---
 
-_Reviewed: 2026-10-28T04:04:16Z_
+_Reviewed: 2026-10-28T04:49:36Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
