@@ -77,6 +77,7 @@ import {
   pathExists,
 } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { redactAbsolutePaths } from "../../../extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts";
 import {
   runPhases,
   type Phase,
@@ -247,11 +248,12 @@ function assertRetryFailure(
   outcome: Awaited<ReturnType<InstallOperation>>,
   expectedMessage: string,
 ): void {
+  const redactedMessage = redactAbsolutePaths(expectedMessage);
   assert.deepStrictEqual(Object.keys(outcome).sort(), ["cause", "error", "status"]);
   assert.strictEqual(outcome.status, "failed");
   assert.ok(outcome.error instanceof Error);
   assert.strictEqual(outcome.error.message, expectedMessage);
-  assert.strictEqual(outcome.cause, retryCauseChain(expectedMessage));
+  assert.strictEqual(outcome.cause, retryCauseChain(redactedMessage));
 }
 
 /**
@@ -260,8 +262,8 @@ function assertRetryFailure(
  * text. `expectedPrefix` is a case-authored literal covering every byte the
  * module under test is responsible for, and `expectedTail` pins the shape of
  * the remainder. Returns the two halves rejoined so a case that renders the
- * cause into a notification asserts against that rather than against the raw
- * actual message.
+ * Returns the raw halves rejoined so a caller can inspect the typed cause or
+ * redact it before comparing a notification.
  */
 function assertRetryPartialFailure(
   outcome: Awaited<ReturnType<InstallOperation>>,
@@ -276,9 +278,10 @@ function assertRetryPartialFailure(
   const tail = outcome.error.message.slice(expectedPrefix.length);
   assert.match(tail, expectedTail);
   const expectedMessage = `${expectedPrefix}${tail}`;
+  const redactedMessage = redactAbsolutePaths(expectedMessage);
   const expectedCause = wrapped
-    ? `${expectedMessage}\n\ncause: ${expectedMessage} -> ${expectedMessage}`
-    : retryCauseChain(expectedMessage);
+    ? `${redactedMessage}\n\ncause: ${redactedMessage} -> ${redactedMessage}`
+    : retryCauseChain(redactedMessage);
   assert.strictEqual(outcome.cause, expectedCause);
   return expectedMessage;
 }
@@ -1527,7 +1530,7 @@ test("D-PL1-13: a standalone install that fails in its mcp phase reports the age
             "",
             "● mp [project]",
             "  ⊘ hello v0.0.1 (failed)",
-            `    cause: ${readFailure}`,
+            `    cause: ${redactAbsolutePaths(readFailure)}`,
           ].join("\n"),
           severity: "error",
         },
@@ -3784,7 +3787,7 @@ test("AFILE-02: an MCP install over an unparseable mcp-adapter.json fails and ke
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ hello v0.0.1 (failed)\n" +
-            `    cause: MCP config ${adapterPath} is not valid JSONC; it was left unchanged.`,
+            "    cause: MCP config mcp-adapter.json is not valid JSONC; it was left unchanged.",
         },
       ]);
       assert.equal(notifications[0]?.message.includes("sk-secret-abc"), false);
@@ -4787,7 +4790,7 @@ test("AFILE-05: install refuses a server ~/.agents/mcp.json already defines and 
         pluginName: "hello",
         mcpServers: { server1: { command: "node", args: ["server.js"] } },
       });
-      const agentsPath = await seedForeignServer1();
+      await seedForeignServer1();
       const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
       const { ctx, run, notifications } = makeCtx();
 
@@ -4800,7 +4803,7 @@ test("AFILE-05: install refuses a server ~/.agents/mcp.json already defines and 
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ hello v0.0.1 (failed)\n" +
-            `    cause: Refusing to stage MCP server "plugin_hello_server1_": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
+            '    cause: Refusing to stage MCP server "plugin_hello_server1_": mcp.json already defines it, and pi-mcp-adapter would load the definition in mcp-adapter.json.',
         },
       ]);
       assert.equal(await pathExists(adapterPath), false);
@@ -15233,7 +15236,7 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
       });
 
       // assert
-      const expectedCause = assertRetryPartialFailure(
+      const rawCause = assertRetryPartialFailure(
         first,
         retryStagingMkdirPrefix(locations.commandsStagingDir),
         RETRY_STAGING_UUID,
@@ -15241,7 +15244,8 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
       );
       const rollbackError = (first as { readonly error: Error }).error;
       assert.ok(rollbackError.cause instanceof Error);
-      assert.strictEqual(rollbackError.cause.message, expectedCause);
+      assert.strictEqual(rollbackError.cause.message, rawCause);
+      const expectedCause = redactAbsolutePaths(rawCause);
       assert.deepStrictEqual(second, {
         declaresAgents: false,
         declaresMcp: false,
@@ -15332,6 +15336,7 @@ test("retry proof: install: containment failure preserves the refused residue an
       const expectedRefusal =
         `skill target destination contains symlink ${skillTarget} -> ` +
         `/tmp/retry-proof-decoy (parent: ${locations.skillsTargetDir}, target: ${skillTarget}).`;
+      const redactedRefusal = redactAbsolutePaths(expectedRefusal);
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
@@ -15383,7 +15388,7 @@ test("retry proof: install: containment failure preserves the refused residue an
       assert.strictEqual(first.error.linkTarget, "/tmp/retry-proof-decoy");
       assert.strictEqual(first.error.message, expectedRefusal);
       assert.strictEqual(first.error.cause, undefined);
-      assert.strictEqual(first.cause, `${expectedRefusal}\n\ncause: ${expectedRefusal}`);
+      assert.strictEqual(first.cause, `${redactedRefusal}\n\ncause: ${redactedRefusal}`);
       assert.deepStrictEqual(second, {
         declaresAgents: false,
         declaresMcp: false,
@@ -15398,7 +15403,7 @@ test("retry proof: install: containment failure preserves the refused residue an
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ retryable v0.0.1 (failed)\n" +
-            `    cause: ${expectedRefusal}`,
+            `    cause: ${redactedRefusal}`,
           severity: "error",
         },
         {
@@ -15636,6 +15641,60 @@ test("RESV-01 / RESV-06: a successful cascade renders one row per member", async
             "",
             "/reload to pick up changes",
           ].join("\n"),
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-PL10-16: a cascade dependency reports its discovery note under its own header", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-cascade-member-note-"));
+    try {
+      // arrange
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot,
+        marketplaceName: "mp",
+        pluginName: "hello",
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const duplicate = path.join(
+        marketplaceRoot,
+        "plugins",
+        "some-other-plugin",
+        "skills",
+        "some-other-plugin-tool",
+      );
+      await mkdir(duplicate, { recursive: true });
+      await writeFile(
+        path.join(duplicate, "SKILL.md"),
+        "---\nname: some-other-plugin-tool\n---\n\nBody.\n",
+      );
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "● mp [project]",
+            "  ● hello v0.0.1 (installed)",
+            "  ● some-other-plugin@mp v0.0.1 (installed)",
+            "",
+            "/reload to pick up changes",
+          ].join("\n"),
+        },
+        {
+          message:
+            'Plugin "some-other-plugin" [project] installed; 1 declared component has a note.\n\nskill source "tool" in "skills" elides to generated name "some-other-plugin-tool", already produced by skill source "some-other-plugin-tool"; ignoring duplicate.',
+          severity: "warning",
         },
       ]);
     } finally {

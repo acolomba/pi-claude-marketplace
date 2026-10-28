@@ -21,6 +21,49 @@ Feature: Plugin install
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
 
+  Scenario: A plugin with only a yarn lockfile stays installed with the recorded note
+    Given the published plugin "demo" of the marketplace "fixtures" ships a package.json and the lockfile "yarn.lock"
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                              | lines                                                                                                                        |
+      | cascade    | info     | true         |                                                                     |                                                                                                                              |
+      | diagnostic | warning  | false        | Plugin "demo" [project] installed; 1 declared component has a note. | The packages it lists were not installed, because it uses a yarn or pnpm lockfile, which plugin installs do not support.      |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the plugin "demo" installed in the project scope has no npm packages
+
+  Scenario: A plugin with only a pnpm lockfile stays installed with the recorded note
+    Given the published plugin "demo" of the marketplace "fixtures" ships a package.json and the lockfile "pnpm-lock.yaml"
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                              | lines                                                                                                                        |
+      | cascade    | info     | true         |                                                                     |                                                                                                                              |
+      | diagnostic | warning  | false        | Plugin "demo" [project] installed; 1 declared component has a note. | The packages it lists were not installed, because it uses a yarn or pnpm lockfile, which plugin installs do not support.      |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the plugin "demo" installed in the project scope has no npm packages
+
+  Scenario: A dependency keeps its package note under its own install diagnostic
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the published plugin "lib" of the marketplace "tools" ships a package.json and the lockfile "yarn.lock"
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                             | lines                                                                                                                        |
+      | cascade    | info     | true         |                                                                    |                                                                                                                              |
+      | diagnostic | warning  | false        | Plugin "lib" [project] installed; 1 declared component has a note. | The packages it lists were not installed, because it uses a yarn or pnpm lockfile, which plugin installs do not support.      |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id        | name      | status    | reasons | scope   | version |
+      | tools            | project           | app@tools | app       | installed |         | project | 1.0.0   |
+      | tools            | project           | lib@tools | lib@tools | installed |         | project | 1.0.0   |
+    Then the plugin "lib" installed in the project scope has no npm packages
+
   Scenario: An install failure redacts its root path
     Given the published plugin "demo" of the marketplace "fixtures" has an unreadable skill file
     When the user runs "/claude:plugin install demo@fixtures --scope project"

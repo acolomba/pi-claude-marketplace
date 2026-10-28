@@ -1922,6 +1922,22 @@ function dependencyInstallsMember(
   return installs.length === 0 ? {} : { dependencyInstalls: installs };
 }
 
+/** D-PL10-16: one per-plugin diagnostic for every member that raised a note. */
+function cascadeStagingDiagnostics(members: readonly CascadeMemberOutcome[], scope: Scope) {
+  return members.flatMap((member) =>
+    member.discoveryWarnings === undefined
+      ? []
+      : [
+          {
+            plugin: member.name,
+            scope,
+            verb: "installed" as const,
+            warnings: member.discoveryWarnings,
+          },
+        ],
+  );
+}
+
 /** UPD-DEP-D1: the outcome member naming the moves, present only when one landed (NREG-01). */
 function movedMember(moved: readonly MovedDependency[] | undefined): {
   readonly movedDependencies?: readonly MovedDependency[];
@@ -2925,6 +2941,14 @@ async function installPluginWithTransaction(
           verb: "installed",
           warnings: installCtx.discoveryWarnings,
         });
+        surfaceStagingDiagnostics(
+          ctx,
+          run,
+          cascadeStagingDiagnostics(
+            outcome.members.filter((member) => member.key !== rootKey),
+            scope,
+          ),
+        );
       }
 
       // AFILE-04: every cascade member's notices, after the block's own rows.
