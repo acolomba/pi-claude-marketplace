@@ -5,16 +5,16 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 10
 current_phase_name: Lifecycle Test and Harness Gaps
 status: executing
-stopped_at: Completed 10-05-PLAN.md
-last_updated: "2026-10-28T02:10:13.568Z"
+stopped_at: Completed 10-06-PLAN.md
+last_updated: "2026-10-28T02:43:33.806Z"
 last_activity: 2026-10-27
-last_activity_desc: Phase 10 Plan 10-05 complete; ready to execute Plan 10-06
-state_head: a3dff8d130fb720e06837d2ae38bcc6786cbd4fc
+last_activity_desc: Phase 10 Plan 10-06 complete; ready to execute Plan 10-07
+state_head: 07a8b54a00c7e9de717e546b7c96b2382eaa88f5
 progress:
   total_phases: 11
   completed_phases: 9
   total_plans: 67
-  completed_plans: 65
+  completed_plans: 66
   percent: 82
 ---
 
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 10 (Lifecycle Test and Harness Gaps) — READY TO EXECUTE
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
-Last activity: 2026-10-27 — Phase 10 Plan 10-05 complete; ready to execute Plan 10-06
+Last activity: 2026-10-27 — Phase 10 Plan 10-06 complete; ready to execute Plan 10-07
 
 
 ### mcp-4 closeout
@@ -401,6 +401,7 @@ archived milestone artifacts.
 | Phase 29 P13 | 48 min | 3 tasks | 44 files |
 | Phase 29 P14 | 20 min | 2 tasks | 9 files |
 | Phase 10 P05 | 59min | 3 tasks | 37 files |
+| Phase 10 P06 | 28min | 3 tasks | 14 files |
 
 ## Decisions
 
@@ -603,6 +604,8 @@ archived milestone artifacts.
 - [Phase 10]: Typed lifecycle diagnostics remain structured until outcome rendering.
 - [Phase 10]: Malformed cloned manifests use content-failure framing without transport retry guidance.
 - [Phase 10]: Yarn and pnpm refusal notes require packages listed in package.json.
+- [Phase 10]: A no-op apply is write-free only when the raw config and state bytes both remain identical.
+- [Phase 10]: Unit-only lifecycle rows require a concrete public-harness limitation and an exact owner test.
 
 ### mcp-4 decisions
 
@@ -812,6 +815,6 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ## Session Continuity
 
-Last session: 2026-10-28T02:10:11.340Z
-Stopped at: Completed 10-05-PLAN.md
+Last session: 2026-10-28T02:43:31.649Z
+Stopped at: Completed 10-06-PLAN.md
 Resume file: None

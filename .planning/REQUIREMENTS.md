@@ -106,7 +106,7 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 
 ### Tests and harness (TST)
 
-- [ ] **TST-01**: Every open LCTEST-01 scenario and unit gap has a scenario or unit case, or is recorded as unit-only by a harness limit (LCTEST-01)
+- [x] **TST-01**: Every open LCTEST-01 scenario and unit gap has a scenario or unit case, or is recorded as unit-only by a harness limit (LCTEST-01)
 - [ ] **TST-02**: The LCHARN-01 harness items are fixed: clone listing, data-directory listing, unknown run tokens, the rules-doc conflict, the unpinned-mirror revision, the `list` filter fixture, and the `browse` fixed waits; the network guard is built or recorded as declined (LCHARN-01)
 - [ ] **TST-03**: `install-flow.test.ts`'s `conflictingMarketplaceRecord` fixture has a loadable manifest, through a seeding helper that writes a record and its manifest together (TEST-PHANTOMMP-01)
 
@@ -194,7 +194,7 @@ None.
 | PKD-01 | Phase 9 | Complete |
 | PKD-02 | Phase 9 | Complete |
 | PKD-03 | Phase 9 | Complete |
-| TST-01 | Phase 10 | Pending |
+| TST-01 | Phase 10 | Complete |
 | TST-02 | Phase 10 | Pending |
 | TST-03 | Phase 10 | Pending |
 | CLN-01 | Phase 11 | Pending |
