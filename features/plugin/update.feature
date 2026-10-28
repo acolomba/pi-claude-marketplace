@@ -25,6 +25,32 @@ Feature: Plugin update
       | marketplace name | marketplace scope | id            | name | status  | reasons | scope   | from  | to    |
       | fixtures         | project           | demo@fixtures | demo | updated |         | project | 1.0.0 | 1.1.0 |
 
+  Scenario: Update preserves dependency move warnings and MCP notices
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.1.0   | lib@^2.0.0   |
+      | lib  | 2.0.0   |              |
+    Given the published plugin "lib" of the marketplace "tools" has a second skill whose name collides with its first
+    Given the published plugin "lib" of the marketplace "tools" declares the mcp server "lib-server"
+    Given the mcp-adapter.json file of the project scope holds a comment
+    When the user runs "/claude:plugin update app@tools --scope project"
+    Then the command reports these results:
+      | kind               | severity | needs reload | summary                             | header                                                           | lines                                                                                                                                  | notices                                                                   |
+      | cascade            | warning  | true         | A plugin operation needs attention. |                                                                  |                                                                                                                                        |                                                                           |
+      | diagnostic         | warning  | false        |                                     | Plugin "app" [project] updated; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "lib-skill", already produced by skill source "lib-skill"; ignoring duplicate. |                                                                           |
+      | mcp-config-notices | warning  | false        |                                     |                                                                  |                                                                                                                                        | [{"kind":"comments-dropped","scope":"project","file":"mcp-adapter.json"}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id        | name      | status  | reasons                                         | scope   | from  | to    | cause chain                                                            | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | updated |                                                 | project | 1.0.0 | 1.1.0 |                                                                        |                 |       |                  |
+      | tools            | project           | lib@tools | lib@tools | updated | dependency current copy, requires pi-mcp-adapter | project | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@tools" | false           |       |                  |
+
   Scenario: A new session offers the skills of the updated version
     Given the marketplace "fixtures" offers these plugins:
       | name | version |

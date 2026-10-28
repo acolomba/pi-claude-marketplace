@@ -9,6 +9,7 @@ import {
   DependencyCascadeError,
   InvalidGitHubBaseUrlError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { discoveryWarning } from "../../../extensions/pi-claude-marketplace/shared/staging-warnings.ts";
 
 import type {
   DependencyMoveRequest,
@@ -376,6 +377,31 @@ describe("runDependencySteps", () => {
         moved(installedRow("zcore@mp")),
       ],
       mcpConfigNotices: [ADAPTER_NOTICE, LEGACY_NOTICE],
+    });
+  });
+
+  test("D-PL10-12: a moved dependency carries its warnings and MCP notices through the step result", async () => {
+    // arrange
+    const warning = discoveryWarning("dependency skill collision");
+    const ports = stepPorts({
+      move: () =>
+        Promise.resolve({
+          landed: true,
+          rows: [updatedRow("lib@mp")],
+          stagingWarnings: [warning],
+          mcpConfigNotices: [ADAPTER_NOTICE],
+        }),
+    });
+
+    // act
+    const ran = await runDependencySteps([{ kind: "move", move: LIB_MOVE }], ports);
+
+    // assert
+    assert.deepStrictEqual(ran, {
+      ok: true,
+      landed: [moved(updatedRow("lib@mp"))],
+      mcpConfigNotices: [ADAPTER_NOTICE],
+      stagingWarnings: [warning],
     });
   });
 

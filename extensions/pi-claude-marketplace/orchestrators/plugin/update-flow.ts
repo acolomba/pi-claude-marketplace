@@ -897,7 +897,11 @@ function cascadeFailureOutcome(
     declaresMcp: false,
     declaresWorkflows: false,
   };
-  return { ...base, reasons: [failure.reason] };
+  const primary = err instanceof CleanupContextError ? err.primary : err;
+  return {
+    ...base,
+    reasons: primary instanceof AgentTargetOccupiedError ? [] : [failure.reason],
+  };
 }
 
 /**

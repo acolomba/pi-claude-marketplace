@@ -197,6 +197,59 @@ Given(
 );
 
 Given(
+  "the agents index of the {word} scope records generated name {string} for {string} at {string}",
+  async function (
+    this: ScenarioWorld,
+    scope: string,
+    generatedName: string,
+    id: string,
+    fileName: string,
+  ) {
+    const [plugin, marketplace, ...rest] = id.split("@");
+    assert.ok(plugin !== undefined && marketplace !== undefined && rest.length === 0, id);
+    const agentsDir = agentsDirectory(this, scope);
+    const targetPath = path.join(agentsDir, fileName);
+    await mkdir(agentsDir, { recursive: true });
+    await writeFile(targetPath, "User-owned agent notes.\n", { flag: "wx" });
+    const indexPath = path.join(extensionRoot(this, scope), "agents-index.json");
+    await writeFile(
+      indexPath,
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          agents: [
+            {
+              plugin,
+              marketplace,
+              sourceAgent: "foreign",
+              generatedName,
+              sourcePath: "/previous/foreign.md",
+              targetPath,
+              sourceHash: "foreign-hash",
+              droppedFields: [],
+              droppedTools: [],
+              warnings: [],
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  },
+);
+
+Given(
+  "the cached clones of git plugins in the {word} scope are deleted",
+  async function (this: ScenarioWorld, scope: string) {
+    await rm(path.join(extensionRoot(this, scope), "plugin-clones"), {
+      recursive: true,
+      force: true,
+    });
+  },
+);
+
+Given(
   "the user has deleted the installed skills of {string} in the {word} scope",
   async function (this: ScenarioWorld, id: string, scope: string) {
     const root = extensionRoot(this, scope);
@@ -291,6 +344,21 @@ Then(
   "the agents directory of the {word} scope holds these files:",
   async function (this: ScenarioWorld, scope: string, table: DataTable) {
     assert.deepStrictEqual(await fileRows(agentsDirectory(this, scope)), table.raw());
+  },
+);
+
+Then(
+  "the agents index of the {word} scope holds these rows:",
+  async function (this: ScenarioWorld, scope: string, table: DataTable) {
+    const indexPath = path.join(extensionRoot(this, scope), "agents-index.json");
+    const index = JSON.parse(await readFile(indexPath, "utf8")) as {
+      agents: Array<{ generatedName: string; targetPath: string }>;
+    };
+    const rows = index.agents.map((entry) => [
+      entry.generatedName,
+      path.basename(entry.targetPath),
+    ]);
+    assert.deepStrictEqual([["generated name", "target file"], ...rows], table.raw());
   },
 );
 

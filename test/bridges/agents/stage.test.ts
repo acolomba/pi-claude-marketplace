@@ -1062,8 +1062,8 @@ describe("commitPreparedAgents", () => {
 
       // act & assert
       await assert.rejects(commitPreparedAgents(createRemovalOps(), prepared), {
-        name: "Error",
-        message: `Cannot replace agent target with non-previous content at ${newTarget}`,
+        name: "AgentTargetOccupiedError",
+        message: `Cannot replace agent target with non-previous content at ${path.basename(newTarget)}`,
       });
       assert.strictEqual(await readFile(oldTarget, "utf8"), oldBytes);
       assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), oldIndexBytes);
@@ -1678,7 +1678,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     });
   });
 
-  test("D-PL1-15: force drops a staged-name row that points at another file and leaves that file", async (t) => {
+  test("D-PL10-13: force preserves a staged-name row that points at another file and leaves that file", async (t) => {
     // arrange
     const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
       t,
@@ -1735,7 +1735,10 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const index = JSON.parse(await readFile(locations.agentsIndexPath, "utf8")) as AgentsIndex;
     assert.deepStrictEqual(
       index.agents.map(({ generatedName, targetPath }) => ({ generatedName, targetPath })),
-      [{ generatedName: "pi-claude-marketplace-acme-current", targetPath: currentTarget }],
+      [
+        { generatedName: "pi-claude-marketplace-acme-current", targetPath: currentTarget },
+        { generatedName: "pi-claude-marketplace-acme-current", targetPath: userTarget },
+      ],
     );
   });
 
@@ -1798,8 +1801,8 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     assert.deepStrictEqual(
       { name: error.name, message: error.message, cause: error.cause },
       {
-        name: "Error",
-        message: `Cannot replace agent target with non-previous content at ${currentTarget}`,
+        name: "AgentTargetOccupiedError",
+        message: `Cannot replace agent target with non-previous content at ${path.basename(currentTarget)}`,
         cause: undefined,
       },
     );
@@ -1937,8 +1940,8 @@ describe("assertAgentCommitTargets", () => {
     assert.deepStrictEqual(
       { name: error.name, message: error.message, cause: error.cause },
       {
-        name: "Error",
-        message: `Cannot replace agent target with non-previous content at ${currentTarget}`,
+        name: "AgentTargetOccupiedError",
+        message: `Cannot replace agent target with non-previous content at ${path.basename(currentTarget)}`,
         cause: undefined,
       },
     );

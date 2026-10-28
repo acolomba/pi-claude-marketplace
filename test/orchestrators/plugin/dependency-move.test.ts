@@ -410,6 +410,41 @@ describe("runDependencyMove", () => {
     });
   });
 
+  test("D-PL10-12: carries a moved dependency's staging warnings and MCP notices", async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+    const { context, pluginRoot } = await seedDependency(t, {
+      recorded: "1.0.0",
+      offered: "2.0.0",
+    });
+    const duplicate = path.join(pluginRoot, "skills", "zcore-tool");
+    await mkdir(duplicate, { recursive: true });
+    await writeFile(path.join(duplicate, "SKILL.md"), "---\nname: tool\n---\n");
+    await writeFile(
+      path.join(pluginRoot, ".mcp.json"),
+      JSON.stringify({ mcpServers: { server1: { command: "node" } } }),
+    );
+    await mkdir(path.dirname(context.locations.mcpAdapterJsonPath), { recursive: true });
+    await writeFile(context.locations.mcpAdapterJsonPath, '// mine\n{"mcpServers":{}}\n');
+
+    // act
+    const run = await runDependencyMove(move("2.0.0"), context);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        landed: run.landed,
+        warningKinds: run.stagingWarnings?.map((warning) => warning.kind),
+        notices: run.mcpConfigNotices,
+      },
+      {
+        landed: true,
+        warningKinds: ["discovery"],
+        notices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+      },
+    );
+  });
+
   for (const { situation, requesters, cause } of [
     {
       situation: "after its range disclosure",

@@ -786,7 +786,7 @@ test("AGENT-01 / NFR-3: a reinstall refuses a file no index row names at its new
       indexBefore,
       stateBefore,
     });
-    const message = `Cannot replace agent target with non-previous content at ${newTarget}`;
+    const message = `Cannot replace agent target with non-previous content at ${path.basename(newTarget)}`;
     assert.deepStrictEqual(outcome, {
       partition: "failed",
       name: "hello",

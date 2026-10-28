@@ -12,6 +12,7 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import {
   materializeLatestVersion,
   recordCandidate,
+  reportedStagingWarnings,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -342,6 +343,17 @@ test("D-PL1-14: a candidate report holds the warnings the swap reported", async 
   });
 });
 
+test("D-PL1-14: reported warnings preserve the absent and present outcome shapes", () => {
+  // arrange
+  const warning = discoveryWarning("duplicate skill");
+
+  // act & assert
+  assert.deepStrictEqual(reportedStagingWarnings({}), {});
+  assert.deepStrictEqual(reportedStagingWarnings({ stagingWarnings: [warning] }), {
+    stagingWarnings: [warning],
+  });
+});
+
 const ZCORE_ROW = {
   status: "installed",
   name: "zcore@mp",
@@ -621,6 +633,38 @@ test("D-PL1-16: an updated outcome lists the settle's MCP config notices ahead o
     outcome.partition === "updated" && [outcome.dependencyRows, outcome.mcpConfigNotices],
     [[ZCORE_ROW], [SETTLE_NOTICE, SWAP_NOTICE]],
   );
+});
+
+test("D-PL10-12: an updated outcome lists the settle's warnings ahead of the swap's own", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { base, pluginRoot } = await seedRecordedPlugin(t, {
+    recorded: "1.0.0",
+    offered: "1.1.0",
+  });
+  const ownWarning = await seedCollidingSkill(pluginRoot);
+  const dependencyWarning = discoveryWarning("dependency skill collision");
+
+  // act
+  const outcome = await materializeLatestVersion(
+    {
+      ...base,
+      cascade: true,
+      settleDependencies: () =>
+        Promise.resolve({
+          kind: "settled",
+          rows: [ZCORE_ROW],
+          stagingWarnings: [dependencyWarning],
+        }),
+    },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome.partition === "updated" ? outcome.stagingWarnings : undefined, [
+    dependencyWarning,
+    ownWarning,
+  ]);
 });
 
 test("D-PL1-16: a settle that reports notices and no rows keeps its notices and adds no dependency rows", async (t) => {

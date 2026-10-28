@@ -292,8 +292,8 @@ test("AGENT-01 / NFR-3: update refuses an occupied agent target before its inten
       assert.deepStrictEqual(
         { name: error.name, message: error.message, cause: error.cause },
         {
-          name: "Error",
-          message: `Cannot replace agent target with non-previous content at ${newTarget}`,
+          name: "AgentTargetOccupiedError",
+          message: `Cannot replace agent target with non-previous content at ${path.basename(newTarget)}`,
           cause: undefined,
         },
       );
@@ -892,7 +892,7 @@ test("D-PL1-14: an agent-target refusal after a full prepare reports every handl
 
   // assert
   await assert.rejects(swap, {
-    message: `Cannot replace agent target with non-previous content at ${agentTarget}`,
+    message: `Cannot replace agent target with non-previous content at ${path.basename(agentTarget)}`,
   });
   assert.deepStrictEqual(reports, [bothHalvesWarnings(skillsDir)]);
 });
@@ -965,8 +965,8 @@ test("D-18-15 / NFR-3: without an overwrite policy a user-edited previous agent 
     assert.deepStrictEqual(
       { name: error.name, message: error.message, cause: error.cause },
       {
-        name: "Error",
-        message: `Cannot replace agent target with non-previous content at ${target}`,
+        name: "AgentTargetOccupiedError",
+        message: `Cannot replace agent target with non-previous content at ${path.basename(target)}`,
         cause: undefined,
       },
     );
