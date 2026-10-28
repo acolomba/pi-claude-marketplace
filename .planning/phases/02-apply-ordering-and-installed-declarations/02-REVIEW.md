@@ -1,8 +1,8 @@
 ---
 phase: 02-apply-ordering-and-installed-declarations
-reviewed: 2026-10-28T15:09:44Z
+reviewed: 2026-10-28T17:19:33Z
 depth: standard
-files_reviewed: 36
+files_reviewed: 44
 files_reviewed_list:
   - extensions/pi-claude-marketplace/edge/handlers/marketplace/add.ts
   - extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts
@@ -40,6 +40,14 @@ files_reviewed_list:
   - test/orchestrators/marketplace/add.test.ts
   - test/orchestrators/reconcile/load.test.ts
   - test/orchestrators/reconcile/notify.test.ts
+  - features/plugin/state-lock.feature
+  - test/orchestrators/plugin/operations.test.ts
+  - test/orchestrators/plugin/update-constraint-gate.test.ts
+  - test/orchestrators/reconcile/apply.test.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/constraint-fold.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts
+  - extensions/pi-claude-marketplace/transaction/with-state-guard.ts
 findings:
   critical: 0
   warning: 0
@@ -50,44 +58,80 @@ status: clean
 
 # Phase 2: Code Review Report
 
-**Reviewed:** 2026-10-28T15:09:44Z
+**Reviewed:** 2026-10-28T17:19:33Z
 **Depth:** standard
-**Files Reviewed:** 36
+**Files Reviewed:** 44
 **Status:** clean
 
 ## Narrative Findings (AI reviewer)
 
 ## Summary
 
-Re-reviewed the integrated tree at `69e804cf9c2b3875da64e604f75fc48cd01f1478` after fixes `d0b7e21e`, `7938b740`, and `69e804cf`. Both previous BLOCKER findings are resolved. No new Critical or Warning defect was found in the fix diffs and their affected callers.
+Final re-review of branch HEAD `fdf127dc`, with implementation/test HEAD
+`9692623df10a567019acdb7a24e5e3229a72cc80`. No Critical, Warning, or Info
+findings remain.
 
-This review retains the previous 32-file scope and adds the four regression-test files newly inspected for the fixes. It reuses the earlier review of unchanged source, inspects every source/test/Cucumber change since `ce020fa5`, and traces the affected planning, notification, load, placement, save, and rollback paths. Test-file review focuses on the relevant cases and their fixtures. Recorded project decisions remain authoritative; this review does not reopen the documented installed-copy/path-source distinction, refusal rows, separate move/enable rows, or other accepted Phase 2 choices.
+The review covers the implementation/test commits since `67a589aa`, retaining
+the prior review of unchanged source and inspecting the later locking,
+fast-path, retry, rollback, and regression-test changes with their relevant
+callers. Phase 2 plans, summaries, and CONTEXT are unchanged from the earlier
+review; current VALIDATION and SECURITY were also consulted. Recorded decisions
+remain authoritative.
 
 ## Previous finding dispositions
 
-| Finding | Disposition | Current evidence |
+| Finding | Disposition | Evidence |
 |---|---|---|
-| CR-01: Pending and load reject source changes apply repairs | **Resolved** | `pending.ts:481-501` uses `withMarketplaceSourceRepairs` for the initial plan, the post-toggle plan, and both dependency-release replans. The shared helper retains apply's replacement marker and removes the official fallback mismatch. `notify.ts:689-699` suppresses only a `source-mismatch` paired with an add for the same scope and marketplace; unknown-stored, dangling-reference, and malformed-key failures still render. `load.ts:142` uses the corrected composer. The revised tests assert an actionable replacement, official fallback's empty report, preservation of genuine diagnostic failures, and a load that does not mutate scope files. Behavioral scenarios compare pending, load without autoapply, and apply. |
-| CR-02: Hosted URL replacement fails with stale clone | **Resolved** | `add.ts:934-948` now includes hosted sources in the existing managed-directory swap. The swap occurs after the new catalog has been staged and its name validated. `replaceMarketplaceInState` restores the original directory on placement failure; `unwindUnsavedAdd` removes the new directory before restoring the old one on save failure; successful save discards the set-aside directory. Local path directories remain outside that flow. New tests cover hosted-to-hosted and hosted-to-github replacement while retaining installed records, and a failed save that checks original state, catalog bytes, ownership marker, and empty staging. Apply/import scenarios exercise a changed hosted URL, including a second no-op apply. |
+| CR-01: Pending/load reject source changes that apply repairs | Resolved | Pending applies the shared source-repair policy to its initial plan and every replan. The pending renderer suppresses only replacement markers paired with an add in the same scope. Other mismatch diagnostics remain failures. Ordinary replacement and official fallback scenarios cover pending, load, and apply. |
+| CR-02: Hosted URL replacement fails with stale clone | Resolved | Hosted sources use the existing managed-directory set-aside, restore-on-failure, and discard-after-save flow. Tests cover hosted-to-hosted, hosted-to-git, failed-save restoration, preserved installed records, and apply/import behavior. |
 
-The stale load assertion corrected by `69e804cf` now expects the replacement preview and apply trailer. It still checks that the load leaves the scope files unchanged.
+## Final regression assessment
 
-## Regression assessment
-
-- The shared source-policy helper adds no I/O to pending. It receives an already loaded config/state/plan; its import introduces no call to a mutating read pass.
-- Each pending replan starts with a new raw `planReconcile` result before normalization, so repeated dependency settlement does not accumulate duplicate replacement actions.
-- The pending projection leaves the marker available to `applyMarketplaceAdds`, which still selects `replaceRecorded`. Suppression is scoped to the pending display and requires a matching action.
-- Hosted replacement now follows the same containment-checked staging, restoration, and cleanup paths as git replacement. The failure test uses different replacement catalog bytes and checks the original hosted marker, so leaving the replacement tree behind cannot satisfy its assertions.
-- No new Critical, Warning, or Info findings remain from this re-review. Historical observations and earlier dispositions remain in `02-REVIEW-FIX.md` and repository history.
+- Installed declaration reads with a potential distinct holder run inside
+  `withExistingScopeLock`. This prevents a cooperating same-scope uninstall or
+  clone cleanup from removing the copy during the declaration walk. Acquisition,
+  compromise, and release failures reject the gate. The lock is released before
+  tag probing and candidate resolution, avoiding nested acquisition there.
+- The no-holder fast path excludes exactly the target and requester records
+  excluded by `collectHolders`. Every other installed record still requires the
+  locked declaration walk. The fast path continues through the normal fold, so
+  requester ranges and excluded versions remain effective.
+- `efb65789` is forward-restored by `33f1ce71`: both project- and user-scope
+  candidate-version failure expectations are restored. The final
+  `features/plugin/state-lock.feature` has no net change against the pre-change
+  version. The fast path restores the corresponding sole-record behavior.
+- The real dependency-install lock test calls
+  `createDependencyInstallOperation`, the same production composition used by
+  apply. It verifies a typed held-lock failure, byte-identical state after the
+  refusal, successful retry after release, the installed record, and no direct
+  notifications.
+- The apply read-failure backstop checks that the committed dependency move
+  survives, the missing dependency remains absent after the failure, and the
+  next apply installs it without reporting the move again.
+- The missing-dependency rollback case checks that the failed root and its
+  earlier cascade member leave neither installation records nor the member's
+  staged skill.
+- The new fixtures use temporary scope roots and the existing hermetic
+  environment helpers. Lock acquisition and release are explicitly sequenced.
+  No additional authorization or containment bypass was found in these changes.
 
 ## Validation evidence
 
-- The parent supplied the final combined-tree `npm run check` result at `69e804cf`, Node `v26.12.1`: exit 0; static, integration, and unpaired checks passed; Cucumber passed **1122 scenarios / 11447 steps**; direct coverage merged **309 LCOV records**.
-- Independently verified that the working-tree changes after that commit are limited to planning Markdown. The full-check result therefore applies to the reviewed source inputs under the local-verification rules.
-- Independently ran the targeted regression names in `pending.test.ts`, `notify.test.ts`, `load.test.ts`, and marketplace `add.test.ts` with `node --test --test-reporter=spec --test-name-pattern=...`: exit 0, all four reported file results passed.
-- Inspected the fixer's mutation evidence in `02-REVIEW-FIX.md`: the new regression cases and behavioral scenarios failed before their production fixes and passed afterward. This evidence was supplied by the fixer; the targeted passing run above was independently repeated.
-- Attempted `fallow review --base ce020fa5 --brief --format json --quiet --explain`. It exited 2 because it could not create a temporary base worktree. This is unavailable orientation evidence, not a clean structural result. The passing full-check static evidence remains applicable.
-- `git diff --check` passed. This reviewer changed only this report, made no implementation/test edits, and created no commit.
+- The orchestrator supplied the fresh `npm run check` result at `9692623d`,
+  Node `v26.12.1`: exit 0; Cucumber passed 1122 scenarios and 11447 steps;
+  direct coverage merged 309 LCOV records.
+- Independently verified that the source/test diff from `9692623d` to
+  `fdf127dc` is empty. The only dirty file is the orchestrator-owned
+  `02-VERIFICATION.md`.
+- Independently ran targeted lock, no-holder, requester, retry, and rollback
+  cases in `update-constraint-gate.test.ts`, `operations.test.ts`, and
+  `apply.test.ts` using `node --test --test-reporter=spec
+  --test-name-pattern=...`: exit 0; all three reported file results passed.
+- Previously repeated source-repair and hosted-replacement regression checks
+  remain applicable: their implementation and tests are unchanged by the later
+  locking commits.
+- `git diff --check` passed.
+- This final review made no file changes and no commit.
 
 ---
 
