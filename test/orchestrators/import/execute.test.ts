@@ -1952,9 +1952,6 @@ for (const { cause, installPlugin, order, title } of [
   });
 }
 
-// IMP-09: an unclassified failure carries the reason `install`'s failure row
-// reads off the same error -- a git host's answer, or the marketplace add an
-// install ran -- and the authentication row is bare, as install's is.
 test("REC-06: names a rollback the failed install could not finish as rollback partial", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "install-rollback-partial");
@@ -2063,6 +2060,8 @@ test("D-PL6-12: shows a rollback phase cause with each absolute path cut to its 
   verifyBoundary();
 });
 
+// IMP-09: an unclassified failure carries the reason `install`'s failure row
+// reads from the same error, and the authentication row is bare, as install's is.
 test("names the reason install gives an unclassified install failure", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "install-git-host");
