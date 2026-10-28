@@ -30,7 +30,8 @@ import {
 import { errorMessage, rethrowInvalidGitHubBaseUrl } from "../../../shared/errors.ts";
 import { notify, notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
-import { rejectUnknownFlag } from "../shared.ts";
+
+import { rejectUnknownFlag } from "./shared.ts";
 
 import type { SubcommandHandler } from "../../router.ts";
 import type { EdgeDeps } from "../../types.ts";

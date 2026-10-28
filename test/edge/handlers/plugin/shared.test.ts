@@ -37,6 +37,7 @@ import {
   parsePluginRef,
   parsePluginTarget,
   parseRequiredPluginMarketplaceRef,
+  rejectUnknownFlag,
   withParsedArgs,
   withScopeOnlyArgs,
   type ParsedMapModelArgs,
@@ -59,6 +60,41 @@ const UNINSTALL_USAGE =
 const FETCH_USAGE =
   "Usage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]";
 const APPLY_USAGE = "Usage: /claude:plugin apply [--scope user|project]";
+
+test("rejectUnknownFlag passes tokens with no long flag and stays silent", () => {
+  // arrange
+  const { ctx, verifyBoundary } = createNotificationBoundary(0);
+
+  // act
+  const rejected = rejectUnknownFlag(["marketplace", "-x"], {
+    ctx,
+    run: runWithNothingLoaded(),
+    usage: UNINSTALL_USAGE,
+  });
+
+  // assert
+  assert.strictEqual(rejected, false);
+  verifyBoundary();
+});
+
+test("rejectUnknownFlag names the first long flag with the caller's usage", () => {
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  const rejected = rejectUnknownFlag(["extra", "--bogus", "--other"], {
+    ctx,
+    run: runWithNothingLoaded(),
+    usage: UNINSTALL_USAGE,
+  });
+
+  // assert
+  assert.strictEqual(rejected, true);
+  assert.deepStrictEqual(notifications, [
+    { message: `Unknown flag: "--bogus".\n\n${UNINSTALL_USAGE}`, severity: "error" },
+  ]);
+  verifyBoundary();
+});
 
 describe("parseMapModelArgs", () => {
   test("reports both downstream flags off and omits the scope member when none is supplied", () => {

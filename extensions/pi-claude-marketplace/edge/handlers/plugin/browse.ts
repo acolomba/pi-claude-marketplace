@@ -27,7 +27,8 @@ import {
   type MarketplaceEntry,
   type PickerResult,
 } from "../../browser/plugin-browser.ts";
-import { rejectUnknownFlag } from "../shared.ts";
+
+import { rejectUnknownFlag } from "./shared.ts";
 
 import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { NotificationRun } from "../../../shared/notification-run.ts";

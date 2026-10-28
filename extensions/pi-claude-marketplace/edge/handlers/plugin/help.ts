@@ -7,7 +7,8 @@
 import { notifyUsageError, notifyUsageInfo } from "../../../shared/notification-dispatch.ts";
 import { tokenizeArgs } from "../../args.ts";
 import { MARKETPLACE_USAGE, TOP_LEVEL_USAGE } from "../../router.ts";
-import { rejectUnknownFlag } from "../shared.ts";
+
+import { rejectUnknownFlag } from "./shared.ts";
 
 import type { SubcommandHandler } from "../../router.ts";
 
