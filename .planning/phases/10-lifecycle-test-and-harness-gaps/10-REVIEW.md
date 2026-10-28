@@ -1,9 +1,10 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-reviewed: 2026-10-28T04:49:36Z
+reviewed: 2026-10-28T05:54:32Z
 depth: standard
-files_reviewed: 89
+files_reviewed: 100
 files_reviewed_list:
+  - .pre-commit-config.yaml
   - .agents/skills/cucumber/rules/layout.md
   - .agents/skills/cucumber/rules/world-and-stand-ins.md
   - extensions/pi-claude-marketplace/bridges/agents/stage.ts
@@ -16,6 +17,8 @@ files_reviewed_list:
   - extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts
@@ -68,7 +71,12 @@ files_reviewed_list:
   - features/support/world.ts
   - scripts/check-features.mjs
   - scripts/check-phase10-coverage.mjs
+  - test/architecture/gate-targets.ts
+  - test/architecture/hooks-lifecycle.test.ts
   - test/architecture/https-git-host-server.test.ts
+  - test/architecture/no-test-only-production-surface.test.ts
+  - test/architecture/partial-vocabulary-guard.test.ts
+  - test/architecture/workflows-marker-coverage.test.ts
   - test/bridges/agents/stage.test.ts
   - test/e2e/_rpc.ts
   - test/edge/handlers/plugin/browse.test.ts
@@ -81,6 +89,9 @@ files_reviewed_list:
   - test/orchestrators/plugin/fetch.test.ts
   - test/orchestrators/plugin/install-cascade.messaging.test.ts
   - test/orchestrators/plugin/install-cascade.test.ts
+  - test/orchestrators/plugin/install-flow-fixture.ts
+  - test/orchestrators/plugin/install-flow-ledger.test.ts
+  - test/orchestrators/plugin/install-flow-planning.test.ts
   - test/orchestrators/plugin/install-flow.test.ts
   - test/orchestrators/plugin/install.messaging.test.ts
   - test/orchestrators/plugin/marketplace-seed.ts
@@ -95,71 +106,73 @@ files_reviewed_list:
   - test/shared/git-failure-classifiers.test.ts
 findings:
   critical: 0
-  warning: 0
+  warning: 3
   info: 0
-  total: 0
-status: clean
+  total: 3
+status: issues_found
 ---
 
 # Phase 10: Code Review Report
 
-**Reviewed:** 2026-10-28T04:49:36Z
+**Reviewed:** 2026-10-28T05:54:32Z
 **Depth:** standard
-**Files Reviewed:** 89 (original review scope retained; 14 in-scope files changed on the integrated tree were re-reviewed)
-**Status:** clean
-**Re-review commits:** `5dd94d67`, `2150ca02`
-**Observed HEAD:** `e9db3b68`
+**Files Reviewed:** 100 (the retained 89-file Phase 10 scope plus 11 new post-split files)
+**Status:** issues_found
+**Observed HEAD:** `76c1dd77`
 **Runtime:** Node `v26.12.1`
 
 ## Structural Findings (fallow)
 
-The original review/audit against `4ce415254e89c39c0257c78977f1c047838c0d8c` reported no dead-code, complexity, or duplication findings under the repository configuration.
+`fallow audit --base b6959f52 --format json --quiet` passed for the integrated post-split tree: 18 changed files, no dead-code findings, no introduced complexity findings, no duplicate groups, no circular dependencies, and no architecture-policy violations. `fallow guard` accepted the root, planning, ledger, test-support, and architecture-inventory files. `fallow security` returned broad inherited path-sink candidates but did not establish a new containment, redaction, child-process, or network-boundary defect.
 
-Re-review ran `fallow audit --base 5dd94d67^ --max-crap 30 --format json --quiet`: exit 0, verdict pass. No introduced or worsened complexity findings, dead-code issues, or duplicate groups were reported. Three inherited complexity findings were reported with estimated coverage; these are retained as structural orientation, not new behavior or test-reliability findings. The earlier audit had not explicitly applied the max-CRAP-30 override.
-
-The integrated-tree review ran `fallow review --base 727d32f5 --brief`, `fallow guard` for the changed marketplace-add, import, reconcile, install-flow, and outcome-contract modules, and `fallow security`. The guard reported no architecture-policy violations in the reviewed modules. The security candidate list did not establish a correctness or security defect in the Phase 10 scope. CodeGraph was attempted first, but its local database could not be opened, so current source and call paths were verified with the evaluation-scope resolver, Git diffs, repository search, Fallow, and direct test execution.
+CodeGraph was attempted first as required, but its local database could not be opened. Current sources, import paths, and consumers were therefore traced with Fallow, Git diffs, repository search, and direct source review.
 
 ## Narrative Findings (AI reviewer)
 
 ### Summary
 
-No unresolved findings remain. The two prior blockers are fixed, and review of both complete fix diffs found no new issues. The original 89-file scope includes the phase task-commit union, all six requested outside-union files, and security fixes `d6c98433` and `689b4499`.
+The post-11-06 stale-verification review found no proven CAS-08/XPH-02 runtime semantic regression. The moved code preserves rollback/outcome ordering, deferred-pin composition, ledger/package phase order, containment checks, path redaction, and the public factory/type names. The prior Phase 10 blockers remain resolved. However, the split introduces three quality defects that weaken the promised ownership boundary and its regression protection.
 
-The stale-verification review retained that exact scope and re-reviewed the 14 Phase 10 in-scope files changed between `727d32f5` and the integrated Phase 11 head `e9db3b68`. It traced the marketplace-add `unchanged` outcome through apply and import consumers; verified the merge-resolved cache, config-byte, and standalone-notification assertions; traced deferred-pin restoration from the reconcile factory through convergence after a failed deferred enable; checked the required successful-install version contract at its producers; and reviewed the shared state-lock test-helper conversions for assertion loss or fixture drift. Phase 10's CAS/XPH install-flow implementation has no content diff from the previously reviewed tree, so the prior call-chain review and the combined regression gate remain applicable. No changed assertion was weakened and no containment, process-spawn, or network chokepoint was bypassed.
+The parent supplied exact-tree evidence that `npm run check` is green at `76c1dd77`: 1120 scenarios, 11411 steps, 306 direct-LCOV pairs, and 328/328 install-owner tests. Those results establish current behavior, but they do not close the test-routing and hook-policy defects below.
 
-The original review consulted CodeGraph for the reconcile call paths; current source was read where that earlier index had drifted. Source repair now expands once at each initial-plan or replan boundary. Completion assertions compare the full ordered result, including labels, insertion values with trailing spaces, and descriptions, against explicit nonempty tables.
+## Warnings
 
-### Prior-findings disposition
+### WR-01: Behavioral owner tests bypass the public composition root
 
-| Prior finding | Prior severity | Disposition | Fix |
-| --- | --- | --- | --- |
-| CR-01: duplicate marketplace source replacements | BLOCKER | Resolved | `5dd94d67` removes the second source-repair expansion from `planFrom`. Initial and replanned paths each retain one expansion. |
-| CR-02: empty completion provider passes both scenarios | BLOCKER | Resolved | `2150ca02` adds exact nonempty suggestion tables, validates insertion values and descriptions, and adds an eligible control plugin to the installed-version scenario. |
+**File:** `test/orchestrators/plugin/install-flow-fixture.ts:18-88`
+**Issue:** The shared fixture imports the ledger and planning leaves directly, then reimplements the production root's `INSTALL_PLANNING` binding and both install factories. Nearly all install behavior cases run through this test-only copy. The actual public-root pair only verifies that each returned value has type `"function"` (`test/orchestrators/plugin/install-flow.test.ts:22-65`). A production wiring error in `install-flow.ts`—for example dropping the explicit environment, binding the wrong planning implementation, or changing a factory argument—can therefore leave the 328 owner cases green. This also violates the split plan's requirement to retain end-to-end owner cases in the public-root test.
+**Fix:** Make the owner fixture import `createInstallPlugin` and `createInstallMissingDependency` from `install-flow.ts`. Keep only genuinely leaf-focused unit cases on the leaf factories. Add at least one public-root behavioral assertion that proves the explicit environment and planning-to-ledger handoff are observed, rather than only checking `typeof`.
 
-**CR-01 verification:** Independently ran the full `test/orchestrators/reconcile/read-pass.test.ts` owner suite: 36 tests passed, including the exact one-replacement normal-path assertion and the dependency-move replan case. An additional in-memory loader inserted a trace at the real `input.replan` invocation in `convergence.ts`; the dependency-move case emitted `REVIEW-REPLAN-EXECUTED` and passed its exact one-operation plan assertion. This confirms that the replan test actually reaches the callback.
+### WR-02: The planning leaf is coupled to 15 exported ledger internals
 
-Independently ran the named apply test `a source repair clones its replacement once and reports one added marketplace`: one test passed. Its exact assertions require one clone URL and one added-marketplace outcome. The public behavioral scenario `Apply downloads a replacement marketplace once` also passed, requiring exactly one hosted-manifest GET and one successful marketplace row.
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts:39-55`
+**Issue:** The planning module imports 15 runtime helpers from the ledger module, which exposes them in a bulk export block at `install-flow-ledger.ts:3306-3322`. The root injects planning callbacks into the ledger, but planning simultaneously reaches back into the ledger's private implementation surface. The graph is technically acyclic, yet the leaves are not independent owners and the split expanded a large internal export surface. Changes to ledger construction, failure projection, hook hydration, or config-entry writing can now break planning through undocumented cross-leaf contracts that the public root does not type or compose.
+**Fix:** Move genuinely shared operations into a cohesive sibling module with narrow named contracts, or expose a small typed ledger-ports factory that the public root passes to a planning factory. Remove the bulk helper export once the root owns the complete leaf composition.
 
-**CR-02 verification:** Independently ran `Market exposes marketplace completions` and `Completion uses the installed git version` with the real provider. Both passed. The alias case requires all ten expected suggestions for each spelling, including the corresponding insertion prefixes and trailing spaces. The version case requires exactly `alpha@extras` and excludes `ghp@tools`; its insertion string and empty description are checked. The step uses deep equality of the full table, so extra or missing rows fail.
+### WR-03: The “exact-path” large-file exception also matches path prefixes
 
-Repeated the original empty-provider mutation with a Node `registerHooks` loader that substitutes only the acceptance adapter with `export async function pluginCompletions(){return [];}`. Both scenarios failed at their expected completion-table assertions: exit 1, two failed scenarios, two failed steps (seed 750649). Repository source and tests were not edited.
+**File:** `.pre-commit-config.yaml:25`
+**Issue:** The new `check-added-large-files` exclusion is start-anchored but not end-anchored. It excludes not only the two stated files, but any path beginning with either name, such as `install-flow-ledger.ts.bak` or `install-flow-ledger.test.ts.old`. That is broader than the summary's exact-file security claim and creates an avoidable bypass for oversized newly added files.
+**Fix:** Keep the directory exception separate and end-anchor the exact-file alternatives, for example:
+
+```yaml
+exclude: ^\.planning/|^(package-lock\.json|test/e2e/pi-peer-floor/package-lock\.json|extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger\.ts|test/orchestrators/plugin/install-flow-ledger\.test\.ts)$
+```
 
 ### Verification record
 
-- `node --test --test-reporter=spec test/orchestrators/reconcile/read-pass.test.ts`: exit 0; 36/36 tests.
-- `node --test --test-reporter=spec --test-name-pattern 'a source repair clones its replacement once' test/orchestrators/reconcile/apply.test.ts`: exit 0; 1/1 test.
-- Replan trace run using an in-memory loader and `--test-name-pattern 'APPLY1-01: a dependent held down'`: exit 0; callback observed; 1/1 test.
-- Cucumber selection of both completion scenarios and the replacement-download scenario: exit 0; 3/3 scenarios, 36/36 steps (seed 215663).
-- Empty-provider mutation against both completion scenarios: expected exit 1; 2/2 scenarios rejected.
-- Integrated-tree focused run: `node --test --test-reporter=spec --test-name-pattern 'MPA-01: a same-source add into the declaring layer|reconcile apply consumes unchanged marketplace add|import execute consumes unchanged marketplace add|a pin restore that cannot take the state lock' test/orchestrators/marketplace/add.test.ts test/orchestrators/reconcile/apply.test.ts test/orchestrators/import/execute.test.ts`: exit 0; 3/3 selected tests.
-- `git diff --check 727d32f5..e9db3b68`: exit 0.
-- Integrated Nyquist evidence: 56/56 requirements covered. Integrated security evidence: 19/19 mitigations verified, zero open threats.
-- The parent supplied the combined integrated-tree gate result: `npm run check` exit 0, static checks green, 1120/1120 scenarios, 11411/11411 steps, 304 direct LCOV. Commit `e9db3b68` changes only an evidence-bearing test title after that gate; its focused owner/process checks and commit hook passed. This review did not rerun the full combined gate.
+- CodeGraph query attempted first; local database open failed.
+- `fallow review --base b6959f52 --brief`: completed for the split.
+- `fallow guard` on split sources/tests: no policy violation.
+- `fallow security --format json --quiet`: no proven new security defect.
+- `fallow audit --base b6959f52 --format json --quiet`: pass, no structural findings.
+- Original monolithic owner suite: 274 direct `test(` declarations and 1280 assertions. Split owner suites: 275 direct `test(` declarations and 1287 assertions. No coarse assertion-count loss was found.
+- Parent-supplied exact-tree gate: `npm run check` green, 1120 scenarios, 11411 steps, 306 direct-LCOV pairs; install owner 328/328.
 
-Only this report was changed. No implementation/test edits or commits were made.
+Only this report was changed. No implementation or test source was modified, and no commit was created.
 
 ---
 
-_Reviewed: 2026-10-28T04:49:36Z_
+_Reviewed: 2026-10-28T05:54:32Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
