@@ -1,6 +1,6 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-reviewed: 2026-10-28T03:45:47Z
+reviewed: 2026-10-28T04:04:16Z
 depth: standard
 files_reviewed: 89
 files_reviewed_list:
@@ -94,62 +94,65 @@ files_reviewed_list:
   - test/orchestrators/reconcile/read-pass.test.ts
   - test/shared/git-failure-classifiers.test.ts
 findings:
-  critical: 2
+  critical: 0
   warning: 0
   info: 0
-  total: 2
-status: issues_found
+  total: 0
+status: clean
 ---
 
 # Phase 10: Code Review Report
 
-**Reviewed:** 2026-10-28T03:45:47Z
+**Reviewed:** 2026-10-28T04:04:16Z
 **Depth:** standard
-**Files Reviewed:** 89
-**Status:** issues_found
+**Files Reviewed:** 89 (original review scope retained; seven changed files re-reviewed)
+**Status:** clean
+**Re-review commits:** `5dd94d67`, `2150ca02`
+**Observed HEAD:** `727d32f5`
+**Runtime:** Node `v26.12.1`
 
 ## Structural Findings (fallow)
 
-Fallow review and audit against `4ce415254e89c39c0257c78977f1c047838c0d8c` both completed successfully. Audit verdict: pass; dead-code issues: 0; complexity findings: 0; duplication clone groups: 0. These results orient the review and do not establish behavioral correctness. The audit reported its configured CRAP threshold as 0, so it is not evidence of a separate max-CRAP-30 check.
+The original review/audit against `4ce415254e89c39c0257c78977f1c047838c0d8c` reported no dead-code, complexity, or duplication findings under the repository configuration.
+
+Re-review ran `fallow audit --base 5dd94d67^ --max-crap 30 --format json --quiet`: exit 0, verdict pass. No introduced or worsened complexity findings, dead-code issues, or duplicate groups were reported. Three inherited complexity findings were reported with estimated coverage; these are retained as structural orientation, not new behavior or test-reliability findings. The earlier audit had not explicitly applied the max-CRAP-30 override.
 
 ## Narrative Findings (AI reviewer)
 
 ### Summary
 
-Reviewed the resolver's task-commit union, all six explicitly included outside-union files, and the source/test changes from security fixes `d6c98433` and `689b4499`. Planning records supplied context and are excluded from source findings. Review covered changed code and surrounding contracts, including lifecycle mutations, rollback diagnostics, containment, harness cleanup, and whether new scenarios reject incorrect behavior. CodeGraph was consulted before tracing call paths; stale indexed source was checked against the current files.
+No unresolved findings remain. The two prior blockers are fixed, and review of both complete fix diffs found no new issues. The original 89-file scope includes the phase task-commit union, all six requested outside-union files, and security fixes `d6c98433` and `689b4499`. This re-review inspected all seven source/test files changed by the two fixes, their surrounding contracts, and targeted runtime evidence; it did not repeat the original full-scope review.
 
-The reported full gate on `689b4499` remains useful regression evidence, but two targeted reproductions expose gaps it does not detect. No implementation or test files were modified during review.
+CodeGraph was consulted for the reconcile call paths; current source was read where its index had drifted. Source repair now expands once at each initial-plan or replan boundary. Completion assertions compare the full ordered result, including labels, insertion values with trailing spaces, and descriptions, against explicit nonempty tables.
 
-### Critical Issues
+### Prior-findings disposition
 
-#### CR-01: BLOCKER — The normal reconcile read pass schedules each source replacement twice
+| Prior finding | Prior severity | Disposition | Fix |
+| --- | --- | --- | --- |
+| CR-01: duplicate marketplace source replacements | BLOCKER | Resolved | `5dd94d67` removes the second source-repair expansion from `planFrom`. Initial and replanned paths each retain one expansion. |
+| CR-02: empty completion provider passes both scenarios | BLOCKER | Resolved | `2150ca02` adds exact nonempty suggestion tables, validates insertion values and descriptions, and adds an eligible control plugin to the installed-version scenario. |
 
-**File:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-p10-tests-79b511/extensions/pi-claude-marketplace/orchestrators/reconcile/read-pass.ts:190-215`
+**CR-01 verification:** Independently ran the full `test/orchestrators/reconcile/read-pass.test.ts` owner suite: 36 tests passed, including the exact one-replacement normal-path assertion and the dependency-move replan case. An additional in-memory loader inserted a trace at the real `input.replan` invocation in `convergence.ts`; the dependency-move case emitted `REVIEW-REPLAN-EXECUTED` and passed its exact one-operation plan assertion. This confirms that the replan test actually reaches the callback.
 
-**Related locations:** `read-pass.ts:86-121`, `read-pass.ts:382-399`; `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-p10-tests-79b511/extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:323-338`.
+Independently ran the named apply test `a source repair clones its replacement once and reports one added marketplace`: one test passed. Its exact assertions require one clone URL and one added-marketplace outcome. The public behavioral scenario `Apply downloads a replacement marketplace once` also passed, requiring exactly one hosted-manifest GET and one successful marketplace row.
 
-**Issue:** `readScopeLocked` already applies `withMarketplaceSourceRepairs` before passing the plan to its finishing callback. `readPassForScope` then applies the same transformation again in `planFrom`. The transformation copies existing additions and appends every source mismatch while retaining those mismatches, so it is not idempotent. The replan callback repeats the same double application. A single changed marketplace source consequently produces two identical replacement operations.
+**CR-02 verification:** Independently ran `Market exposes marketplace completions` and `Completion uses the installed git version` with the real provider. Both passed. The alias case requires all ten expected suggestions for each spelling, including the corresponding insertion prefixes and trailing spaces. The version case requires exactly `alpha@extras` and excludes `ghp@tools`; its insertion string and empty description are checked. The step uses deep equality of the full table, so extra or missing rows fail.
 
-The apply consumer iterates both additions and supplies `replaceRecorded` for both. This repeats replacement work, including cloning/downloading a remote source, and allows a second replacement failure to turn a successfully repaired marketplace into a failed apply result. This is an observable lifecycle error, not only redundant computation.
+Repeated the original empty-provider mutation with a Node `registerHooks` loader that substitutes only the acceptance adapter with `export async function pluginCompletions(){return [];}`. Both scenarios failed at their expected completion-table assertions: exit 1, two failed scenarios, two failed steps (seed 750649). Repository source and tests were not edited.
 
-**Evidence:** A direct temporary-directory reproduction seeded one recorded path marketplace with its old source and a configuration declaring its new source. `readPlainPlanForScope` returned one addition. `readPassForScope` returned two identical additions, each with the same scope, marketplace, new source, and config source. No repository files were changed.
+### Verification record
 
-**Fix:** Apply source-repair expansion exactly once on each planner path, or make the transformation idempotent by deduplicating additions by scope and marketplace. Cover the public `readPassForScope` path, including replanning, with an exact one-operation assertion. Add an apply regression asserting that a same-name remote source repair performs one replacement request and emits one outcome.
+- `node --test --test-reporter=spec test/orchestrators/reconcile/read-pass.test.ts`: exit 0; 36/36 tests.
+- `node --test --test-reporter=spec --test-name-pattern 'a source repair clones its replacement once' test/orchestrators/reconcile/apply.test.ts`: exit 0; 1/1 test.
+- Replan trace run using an in-memory loader and `--test-name-pattern 'APPLY1-01: a dependent held down'`: exit 0; callback observed; 1/1 test.
+- Cucumber selection of both completion scenarios and the replacement-download scenario: exit 0; 3/3 scenarios, 36/36 steps (seed 215663).
+- Empty-provider mutation against both completion scenarios: expected exit 1; 2/2 scenarios rejected.
+- The parent supplied the combined gate result after both fixes: `npm run check` exit 0, static checks green, 1120/1120 scenarios, 11411/11411 steps, 304 direct LCOV; coverage ledger 56/56. This re-review did not rerun that full gate. `git diff 2150ca02 -- . ':(exclude,glob).planning/**/*.md'` was empty, and the worktree was clean before updating this report.
 
-#### CR-02: BLOCKER — Both completion scenarios pass when the provider returns no completions
-
-**File:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-p10-tests-79b511/features/step_definitions/completion.steps.ts:18-33`
-
-**Related locations:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-p10-tests-79b511/features/marketplace/market-alias.feature:62-65`; `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-p10-tests-79b511/features/plugin/list.feature:7`.
-
-**Issue:** The alias scenario compares two captured result arrays without establishing an expected nonempty result. Two empty arrays therefore satisfy the entire scenario. The installed-git-version scenario asserts only that its result is empty. Together, these scenarios accept a provider that returns no suggestions for any input, so they cannot establish the completion behavior that this phase claims to cover. The comparison also drops insertion values and checks only labels/descriptions, leaving malformed completion insertion text undetected.
-
-**Evidence:** An in-memory Node loader replaced only `features/lib/plugin-completions.ts` with `export async function pluginCompletions(){return [];}`. Running the two scenarios through the real Cucumber runner still exited 0: **2 scenarios passed, 18 steps passed** (seed 538874). This mutation did not edit repository files.
-
-**Fix:** Assert an explicit, nonempty expected suggestion set for the marketplace alias and canonical command, including insertion values with the appropriate alias-prefix normalization. In the installed-version fixture, include an eligible control plugin and assert the exact result includes that plugin while excluding the mismatched git plugin. Retain an empty-provider mutation check while developing the assertions; both scenarios must reject it.
+Only this report was changed. No implementation/test edits or commits were made.
 
 ---
 
-_Reviewed: 2026-10-28T03:45:47Z_
+_Reviewed: 2026-10-28T04:04:16Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
