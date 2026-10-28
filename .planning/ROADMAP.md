@@ -295,29 +295,29 @@ Plans:
 3. Docs, CHANGELOG, and PROJECT.md decision rows match the shipped behavior (CLN-03).
 4. `BACKLOG.md` marks every entry this milestone settled closed with its disposition (CLN-04).
 
-**Plans:** 12 plans
+**Plans:** 11/12 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 11-01-PLAN.md — remove dead seams and require lifecycle result data at every caller
-- [ ] 11-02-PLAN.md — consolidate marketplace-not-added messages and enabled-declarer filtering
-- [ ] 11-04-PLAN.md — move plugin-only unknown-flag handling and its tests under plugin handlers
-- [ ] 11-05-PLAN.md — reconcile Phase 1-9-safe reader docs, decisions, and architecture records
-- [ ] 11-10-PLAN.md — replace the test-only deferred-pin request option with composition injection
-- [ ] 11-12-PLAN.md — shorten six lifecycle feature descriptions without changing scenarios
+- [x] 11-01-PLAN.md — remove dead seams and require lifecycle result data at every caller
+- [x] 11-02-PLAN.md — consolidate marketplace-not-added messages and enabled-declarer filtering
+- [x] 11-04-PLAN.md — move plugin-only unknown-flag handling and its tests under plugin handlers
+- [x] 11-05-PLAN.md — reconcile Phase 1-9-safe reader docs, decisions, and architecture records
+- [x] 11-10-PLAN.md — replace the test-only deferred-pin request option with composition injection
+- [x] 11-12-PLAN.md — shorten six lifecycle feature descriptions without changing scenarios
 
 **Wave 2**
-- [ ] 11-03-PLAN.md — introduce the hermetic state-lock helper and migrate its first consumers
+- [x] 11-03-PLAN.md — introduce the hermetic state-lock helper and migrate its first consumers
 
 **Wave 3**
-- [ ] 11-07-PLAN.md — add a truthful marketplace no-op outcome and update every union consumer
-- [ ] 11-11-PLAN.md — migrate the remaining ordinary lifecycle lock tests
+- [x] 11-07-PLAN.md — add a truthful marketplace no-op outcome and update every union consumer
+- [x] 11-11-PLAN.md — migrate the remaining ordinary lifecycle lock tests
 
 **Wave 4**
-- [ ] 11-08-PLAN.md — correct the stale import comment and update-preflight literal formatting
+- [x] 11-08-PLAN.md — correct the stale import comment and update-preflight literal formatting
 
 **Wave 5** *(blocked on Waves 1-4 and verified Phase 10 integration)*
-- [ ] 11-06-PLAN.md — split `install-flow.ts` into a flow root and paired leaf modules
+- [x] 11-06-PLAN.md — split `install-flow.ts` into a flow root and paired leaf modules
 
 **Wave 6** *(blocked on Wave 5 and verified Phase 10 integration)*
 - [ ] 11-09-PLAN.md — finalize Phase 10-dependent docs, backlog dispositions, and requirements closure
