@@ -4080,7 +4080,7 @@ test("syncClone-fail: gitOps.fetch throws -> notifyError fired and updatePlugins
   });
 });
 
-test("syncClone-fail: a non-Error injected rejection is normalized at the direct boundary", async () => {
+test("syncClone-fail: a non-Error injected rejection is a network error at the direct boundary", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-sync-non-error-");
     try {
@@ -4109,7 +4109,7 @@ test("syncClone-fail: a non-Error injected rejection is normalized at the direct
       // assert
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
-      assert.match(notifications[0]?.message ?? "", /\{unreadable manifest\}/);
+      assert.match(notifications[0]?.message ?? "", /\{network error\}/);
       assert.match(notifications[0]?.message ?? "", /transport string rejection/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -4272,9 +4272,10 @@ for (const { title, makeFailure, reason } of [
     reason: "invalid manifest",
   },
   {
-    title: "does not classify rollback keywords on an unknown error",
-    makeFailure: () => new Error("rollback invalid network concurrently updated"),
-    reason: "unreadable manifest",
+    title: "classifies an unknown network error without parsing message keywords",
+    makeFailure: () =>
+      new Error("rollback invalid network concurrently updated at /private/root/token.txt"),
+    reason: "network error",
   },
 ] as const) {
   test(title, async () => {
@@ -4304,6 +4305,14 @@ for (const { title, makeFailure, reason } of [
         // assert
         assert.equal(notifications.length, 1);
         assert.match(notifications[0]?.message ?? "", new RegExp(`\\{${reason}\\}`));
+        if (reason === "network error") {
+          assert.match(
+            notifications[0]?.message ?? "",
+            /cause: rollback invalid network concurrently updated at token\.txt/,
+          );
+          assert.doesNotMatch(notifications[0]?.message ?? "", /\/private\/root/);
+        }
+
         assert.equal(notifications[0]?.severity, "error");
       } finally {
         await rm(cwd, { recursive: true, force: true });
@@ -11937,6 +11946,75 @@ test("D-PL1-14: a cascade target whose prepare throws returns a failed outcome c
   });
 });
 
+for (const { title, failure, expectedReason, expectedCause } of [
+  {
+    title: "normalizes a non-Error cascade failure without inventing a cause",
+    failure: "opaque state failure",
+    expectedReason: "unreadable manifest",
+    expectedCause: undefined,
+  },
+  {
+    title: "redacts an HTTP cascade failure before constructing its cause",
+    failure: Object.assign(new Error("HTTP Error at /private/scope/token.txt"), {
+      code: "HttpError",
+      data: { statusCode: 503 },
+    }),
+    expectedReason: "network error",
+    expectedCause: "HTTP Error at token.txt",
+  },
+] as const) {
+  test(`D-PL10-11: ${title}`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await createCaseDir("update-cascade-failure-cause-");
+      const previousCwd = process.cwd();
+      try {
+        // arrange
+        await seedPathMarketplace({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          marketplaceName: "mp",
+          manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+          installedVersions: { hello: "1.0.0" },
+        });
+        process.chdir(cwd);
+        const { ctx, run } = makeCtx();
+        const isNonError = typeof failure === "string";
+        const operations = createPluginUpdateOperations(
+          createHooksRouting(createHooksRuntime(), { readHooksJson }),
+          createCompletionCache(),
+          isNonError
+            ? undefined
+            : {
+                saveState: () => Promise.reject(failure),
+              },
+          {},
+          isNonError
+            ? () => {
+                // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- covers defensive normalization of injected throws.
+                return Promise.reject(failure);
+              }
+            : undefined,
+        );
+
+        // act
+        const outcome = await operations.beginPluginUpdateRun({ ctx, run })(
+          "hello",
+          "mp",
+          "project",
+        );
+
+        // assert
+        assert.strictEqual(outcome.partition, "failed");
+        assert.deepStrictEqual(outcome.reasons, [expectedReason]);
+        assert.strictEqual(outcome.cause?.message, expectedCause);
+      } finally {
+        process.chdir(previousCwd);
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 test("NREG-01: a clean update outcome omits the notes key entirely", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-nreg-");
@@ -13837,7 +13915,7 @@ test("AFILE-04 / CR-01: a bulk update that aborts on a later marketplace sync st
           message:
             "A plugin operation has failed.\n\n" +
             "● zzz [project]\n" +
-            "  ⊘ zzz (failed) {unreadable manifest}\n" +
+            "  ⊘ zzz (failed) {network error}\n" +
             "    cause: network: connection refused\n\n" +
             "Plugin update: 1 failure",
           severity: "error",

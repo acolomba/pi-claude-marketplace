@@ -74,6 +74,7 @@ export type GitHostArm =
   | { readonly kind: "drop" }
   | { readonly kind: "hold" }
   | { readonly kind: "credential"; readonly user: string; readonly password: string }
+  | { readonly kind: "invalid-response" }
   | { readonly kind: "redirect"; readonly location: string };
 
 /** Returns `status` as an armed status, throwing on a status the host cannot be armed with. */
@@ -252,6 +253,11 @@ function failArmed(
       logged.status = 401;
       res.writeHead(401, { "WWW-Authenticate": 'Basic realm="git host"' });
       res.end();
+      return true;
+    case "invalid-response":
+      logged.status = 200;
+      res.writeHead(200, { "Content-Type": "application/x-git-upload-pack-advertisement" });
+      res.end("this is not a git smart-http response\n");
       return true;
     case "redirect":
       if (servedPath(arm.location, `https://${req.headers.host ?? ""}`) === served) {

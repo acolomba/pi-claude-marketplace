@@ -95,6 +95,13 @@ Given(
 );
 
 Given(
+  "the git host sends an invalid response for the {git repository}",
+  async function (this: ScenarioWorld, reference: GitRepositoryReference): Promise<void> {
+    await armRepository(this, reference, { kind: "invalid-response" });
+  },
+);
+
+Given(
   "the git host requires the user {string} with the password {string} for the {git repository}",
   async function (
     this: ScenarioWorld,

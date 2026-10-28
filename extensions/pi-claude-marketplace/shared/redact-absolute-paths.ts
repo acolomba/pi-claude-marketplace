@@ -69,6 +69,8 @@ function* causeChainLinks(error: unknown): Generator {
  * `{ cause: redactCauseChain(x) }` only when `x` is present
  * (`exactOptionalPropertyTypes`).
  */
+export function redactCauseChain(error: Error): Error;
+export function redactCauseChain(error: unknown): Error | undefined;
 export function redactCauseChain(error: unknown): Error | undefined {
   if (error === undefined || error === null) {
     return undefined;

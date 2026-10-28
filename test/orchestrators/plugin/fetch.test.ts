@@ -1698,7 +1698,7 @@ test("cleans failed clone staging and converges on retry", async () => {
     assert.deepStrictEqual(failedBoundary.notifications, [
       {
         message:
-          "A plugin operation has failed.\n\n● marketplace [project]\n  ⊘ retry (failed) {source missing}\n    cause: clone failed",
+          "A plugin operation has failed.\n\n● marketplace [project]\n  ⊘ retry (failed) {network error}\n    cause: clone failed",
         severity: "error",
       },
     ]);
@@ -1821,7 +1821,7 @@ test("surfaces a cleanup leak and retries safely after permissions are repaired"
     assert.strictEqual(failedBoundary.notifications.length, 1);
     assert.match(
       failedBoundary.notifications[0]?.message ?? "",
-      /^A plugin operation has failed\.\n\n● marketplace \[project\]\n {2}⊘ leak \(failed\) \{source missing\}\n {4}cause: clone interrupted \(additionally: failed to clean up plugin clone staging at .*\/sources-staging\/[0-9a-f-]+: EACCES: permission denied, rmdir '.*\/sources-staging\/[0-9a-f-]+'\) -> clone interrupted$/,
+      /^A plugin operation has failed\.\n\n● marketplace \[project\]\n {2}⊘ leak \(failed\) \{network error\}\n {4}cause: clone interrupted \(additionally: failed to clean up plugin clone staging at [0-9a-f-]+: EACCES: permission denied, rmdir '[0-9a-f-]+'\) -> clone interrupted$/,
     );
     assert.strictEqual(failedBoundary.notifications[0]?.severity, "error");
     assert.notDeepStrictEqual(leakedTree, []);
@@ -2487,6 +2487,48 @@ for (const { title, statusCode, statusText, expectedRow } of [
     });
   });
 }
+
+test("D-PL10-11: an unrecognized mirror failure is a redacted network error", async () => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    const cloneUrl = "https://example.com/unknown";
+    const marketplace = await marketplaceRecord({
+      cwd,
+      entries: [{ name: "unknown", source: { source: "url", url: cloneUrl } }],
+      name: "marketplace",
+      scope: "project",
+    });
+    await saveMarketplaces(cwd, "project", [marketplace]);
+    const boundary = notificationBoundary("unknown host failure");
+    const seam: FetchCloneCacheSeam = {
+      materializeOrRefreshPluginMirror: () =>
+        Promise.reject(new Error(`transport failed while opening ${cwd}/private/credential.txt`)),
+      materializePluginClone: () => assert.fail("an unpinned source never clones a pin"),
+      resolvePluginPin: () => assert.fail("an unpinned source never resolves a pin"),
+    };
+
+    // act
+    await fetchPlugins({
+      cloneCacheSeam: seam,
+      ctx: boundary.ctx,
+      cwd,
+      run: boundary.run,
+      scope: "project",
+      target: { kind: "plugin", marketplace: "marketplace", plugin: "unknown" },
+    });
+
+    // assert
+    assert.deepStrictEqual(boundary.notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● marketplace [project]\n  ⊘ unknown (failed) {network error}\n    cause: transport failed while opening credential.txt",
+        severity: "error",
+      },
+    ]);
+    assert.doesNotMatch(boundary.notifications[0]?.message ?? "", new RegExp(cwd));
+    verifyNotifications(boundary);
+  });
+});
 
 for (const { title, sha, expectedLockObservations } of [
   {

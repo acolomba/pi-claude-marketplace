@@ -128,6 +128,13 @@ Then("the command reports these results:", function (this: ScenarioWorld, table:
   this.markResultsCompared();
 });
 
+Then("the command result contains no absolute sandbox path", function (this: ScenarioWorld) {
+  const rendered = JSON.stringify(this.resultsOf("command"));
+  for (const root of [this.tokens.home, this.tokens.projectDir, this.tokens.agentDir]) {
+    assert.strictEqual(rendered.includes(root), false, `command result contains ${root}`);
+  }
+});
+
 // D-02: the marketplace and plugin rows of every result, in emission order.
 // Every result must have marketplace blocks, so no row goes unseen, or carry
 // no row array at all: an MCP config notice, whose notices are envelope

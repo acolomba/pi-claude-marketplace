@@ -53,6 +53,7 @@ import {
   narrowResolverNotes,
   narrowUnsupportedKinds,
 } from "../../shared/probe-classifiers.ts";
+import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
 
@@ -575,8 +576,9 @@ function failedRow(
   remoteUrl: string,
   rowRead: boolean,
 ): FetchMsg {
-  const error = err instanceof Error ? err : new Error(errorMessage(err));
   const { reason, frame } = narrowFetchFailure(err, remoteUrl, rowRead);
+  const rawError = err instanceof Error ? err : new Error(errorMessage(err));
+  const error = reason === "network error" ? redactCauseChain(rawError) : rawError;
   return {
     status: "failed",
     severity: "error",
@@ -608,7 +610,11 @@ function narrowFetchFailure(
     return { reason: "lock held" };
   }
 
-  const classified = classifyGitFailure(err, { notFound: "source missing" }, remoteUrl);
+  const classified = classifyGitFailure(
+    err,
+    { notFound: "source missing", unknown: "network error" },
+    remoteUrl,
+  );
   if (classified !== undefined) {
     return classified;
   }

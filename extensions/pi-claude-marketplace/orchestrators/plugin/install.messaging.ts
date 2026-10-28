@@ -23,6 +23,7 @@ import {
   narrowUnsupportedKinds,
   SOURCE_DIR_MISSING_NOTE,
 } from "../../shared/probe-classifiers.ts";
+import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -184,7 +185,7 @@ export function composeInstallFailureMessage(args: {
   entityErrorRow: EntityErrorRow | undefined;
 }): InstallMsg {
   const { err, plugin, scope, version, rolledBackPartial, rollbackPartials, entityErrorRow } = args;
-  const cause = err instanceof Error ? err : undefined;
+  const cause = installDisplayCause(err);
   const isPathContainment = err instanceof PathContainmentError;
 
   // Branch 1: PI-14 PathContainmentError. Bare failed row with cause
@@ -337,9 +338,27 @@ export function composePromotedRow(args: {
  * solely to preserve the orchestrated-mode string contract.
  */
 export function formatOrchestratedCause(err: unknown): string {
-  const head = errorMessage(err);
-  const trailer = causeChainTrailer(err);
+  const displayError = installDisplayCause(err) ?? err;
+  const head = errorMessage(displayError);
+  const trailer = causeChainTrailer(displayError);
   return trailer === "" ? head : `${head}\n\n${trailer}`;
+}
+
+/** Redacts install diagnostics while retaining lock paths needed for recovery. */
+function installDisplayCause(err: unknown): Error | undefined {
+  if (!(err instanceof Error)) {
+    return undefined;
+  }
+
+  if (err instanceof StateLockHeldError) {
+    return err;
+  }
+
+  const redacted = redactCauseChain(err);
+  return errorMessage(redacted) !== errorMessage(err) ||
+    causeChainTrailer(redacted) !== causeChainTrailer(err)
+    ? redacted
+    : err;
 }
 
 /**

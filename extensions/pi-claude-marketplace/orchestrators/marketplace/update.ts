@@ -593,11 +593,12 @@ async function refreshRecord(
     record.lastUpdatedAt = new Date().toISOString();
     return changed;
   } catch (err) {
-    // A refused name is read from the advanced checkout, so the clone moved,
-    // but a retry cannot change the refusal: the persist-failure frame and
-    // its retry hint do not apply.
+    // An invalid manifest is read from the advanced checkout, so the clone
+    // moved, but retrying the same revision cannot repair its content. Keep
+    // the clone-advanced retry hint only for failures that can succeed once
+    // the post-fetch persistence problem clears.
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside refreshGitHubClone.
-    const retryable = cloneAdvanced && !(err instanceof ReservedMarketplaceNameError);
+    const retryable = cloneAdvanced && !(err instanceof InvalidMarketplaceManifestError);
     throw new MarketplaceUpdateError(refreshFailureMessage(name, err, remoteUrl, retryable), {
       cause: err,
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- see above: cloneAdvanced is set by callback.
