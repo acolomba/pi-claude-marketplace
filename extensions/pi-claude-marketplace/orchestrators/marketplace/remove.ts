@@ -120,6 +120,7 @@ import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { ScopeDeclarationIndexResult } from "../plugin/dependency-index.ts";
 
 type RecordedSourceKind = "github" | "url" | "hosted" | "path" | "unknown";
 
@@ -706,7 +707,7 @@ async function readRetentionIndex(args: {
   readonly plan: RemovePlan;
   readonly locations: ScopedLocations;
   readonly read: typeof buildScopeDeclarationIndex;
-}): Promise<DeclarationIndex | undefined> {
+}): Promise<Extract<ScopeDeclarationIndexResult, { readonly ok: true }> | undefined> {
   const layerUninstalls = args.plan.layerOnly && args.plan.entries.length > 0;
   if (!layerUninstalls && !Object.values(args.record.plugins).some(isDependencyRecord)) {
     return undefined;
@@ -717,7 +718,7 @@ async function readRetentionIndex(args: {
     throw new DeclarationIndexStop(result.cause);
   }
 
-  return result.index;
+  return result;
 }
 
 /** One plugin a layer remove would uninstall while staying plugins declare it. */
@@ -891,7 +892,7 @@ async function runRemoveLockBody(args: {
       ? src.kind
       : undefined;
 
-  const index = await readRetentionIndex({
+  const indexResult = await readRetentionIndex({
     state: tx.state as ExtensionState,
     record,
     plan,
@@ -900,7 +901,9 @@ async function runRemoveLockBody(args: {
   });
   refuseHeldRemovals(
     plan,
-    index === undefined ? undefined : withoutDisabledHolders(index, tx.state as ExtensionState),
+    indexResult === undefined
+      ? undefined
+      : withoutDisabledHolders(indexResult.index, indexResult.candidates),
     opts.name,
   );
 
@@ -915,8 +918,8 @@ async function runRemoveLockBody(args: {
     mcpConfigNotices,
   };
   await cascadePluginsInPlace({ ...removal, entries: plan.entries });
-  if (index !== undefined) {
-    await cascadeDependencies({ ...removal, plan, index });
+  if (indexResult !== undefined) {
+    await cascadeDependencies({ ...removal, plan, index: indexResult.index });
   }
 
   // MR-7: a failed plugin keeps the record and writes no config.

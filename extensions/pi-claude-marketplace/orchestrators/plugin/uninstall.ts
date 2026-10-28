@@ -329,7 +329,7 @@ async function readDeclarers(args: {
     throw new UninstallRefusedError("unreadable", result.cause.message);
   }
 
-  const enabledIndex = withoutDisabledHolders(result.index, args.state);
+  const enabledIndex = withoutDisabledHolders(result.index, result.candidates);
   return { snapshot: result, enabledIndex, dependents: findDependents(args.key, enabledIndex) };
 }
 

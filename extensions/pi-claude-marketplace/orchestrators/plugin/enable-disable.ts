@@ -1617,7 +1617,7 @@ async function readEnabledDependents(args: {
     throw new EnableRefusedError("unreadable", result.cause.message);
   }
 
-  const dependents = findDependents(key, withoutDisabledHolders(result.index, state));
+  const dependents = findDependents(key, withoutDisabledHolders(result.index, result.candidates));
   if (dependents.length > 0) {
     throw new EnableRefusedError("dependents remain", composeDisableRefusalCause(key, dependents));
   }

@@ -60,6 +60,7 @@ import type {
   EnableDisablePluginOptions,
   EnableDisablePluginOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
+import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
@@ -6668,6 +6669,25 @@ async function seedEdepGraph(
   };
 }
 
+/** Moves `helper` under an outer key that differs from its recorded marketplace name. */
+async function moveHelperToAliasedMarketplace(
+  statePath: string,
+  dependencyDisabled?: true,
+): Promise<void> {
+  const state = JSON.parse(await readFile(statePath, "utf8")) as ExtensionState;
+  const official = state.marketplaces["official"]!;
+  const helper = official.plugins["helper"]!;
+  delete official.plugins["helper"];
+  state.marketplaces["alias"] = {
+    ...official,
+    name: "tools",
+    plugins: {
+      helper: dependencyDisabled === true ? { ...helper, dependencyDisabled } : helper,
+    },
+  };
+  await writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
+}
+
 test("EDEP-01: depth-2 transitivity enables the whole chain in dependency-first order", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
@@ -8139,6 +8159,79 @@ test("EDEP-02: a DISABLED declarer does not block the disable", async () => {
     );
     const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
     assert.equal(state.marketplaces.official!.plugins["shared-lib"]!.enabled, false);
+  });
+});
+
+test("EDEP-02: a user-disabled declarer under a mismatched outer key does not block the disable", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEdepGraph(home, [
+      { name: "shared-lib", version: "1.0.0", enabled: true },
+      {
+        name: "helper",
+        version: "1.0.0",
+        dependencies: [{ name: "shared-lib", marketplace: "official" }],
+        enabled: false,
+      },
+    ]);
+    await moveHelperToAliasedMarketplace(statePath);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "shared-lib",
+      enable: false,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\(disabled\)/);
+    const state = JSON.parse(await readFile(statePath, "utf8")) as ExtensionState;
+    assert.equal(state.marketplaces["official"]!.plugins["shared-lib"]!.enabled, false);
+  });
+});
+
+test("EDEP-02: a dependency-disabled declarer under a mismatched outer key still blocks the disable", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEdepGraph(home, [
+      { name: "shared-lib", version: "1.0.0", enabled: true },
+      {
+        name: "helper",
+        version: "1.0.0",
+        dependencies: [{ name: "shared-lib", marketplace: "official" }],
+        enabled: false,
+      },
+    ]);
+    await moveHelperToAliasedMarketplace(statePath, true);
+    const { transaction, calls } = countingTransaction();
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "shared-lib",
+      enable: false,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /\{dependents remain\}/);
+    assert.match(notifications[0]!.message, /Disable helper@tools first/);
+    assert.deepEqual(calls, { cascadeUnstage: 0, save: 0 });
   });
 });
 

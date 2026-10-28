@@ -551,14 +551,15 @@ export function buildInstalledScopeDeclarationDetail(
  */
 export function withoutDisabledHolders(
   index: DeclarationIndex,
-  state: ExtensionState,
+  candidates: readonly IndexedRecord[],
 ): DeclarationIndex {
   const disabled = new Set(
-    Object.entries(state.marketplaces).flatMap(([marketplace, record]) =>
-      Object.entries(record.plugins)
-        .filter(([, plugin]) => isRecordedButDisabled(plugin) && plugin.dependencyDisabled !== true)
-        .map(([name]) => `${name}@${marketplace}`),
-    ),
+    candidates
+      .filter(
+        (candidate) =>
+          isRecordedButDisabled(candidate.record) && candidate.record.dependencyDisabled !== true,
+      )
+      .map((candidate) => candidate.key),
   );
   return new Map([...index].filter(([holder]) => !disabled.has(holder)));
 }
