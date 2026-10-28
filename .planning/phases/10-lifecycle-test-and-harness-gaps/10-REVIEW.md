@@ -1,6 +1,6 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-reviewed: 2026-10-28T08:05:02Z
+reviewed: 2026-10-28T21:20:58Z
 depth: standard
 files_reviewed: 100
 files_reviewed_list:
@@ -105,55 +105,88 @@ files_reviewed_list:
   - test/orchestrators/reconcile/read-pass.test.ts
   - test/shared/git-failure-classifiers.test.ts
 findings:
-  critical: 0
-  warning: 0
+  critical: 2
+  warning: 1
   info: 0
-  total: 0
-status: clean
+  total: 3
+status: issues_found
 ---
 
 # Phase 10: Code Review Report
 
-**Reviewed:** 2026-10-28T08:05:02Z
+**Reviewed:** 2026-10-28T21:20:58Z
 **Depth:** standard
-**Files Reviewed:** 100 (the retained 89-file Phase 10 scope plus 11 new post-split files)
-**Status:** clean
-**Observed HEAD:** `67804335`
+**Files Reviewed:** 100 (the retained Phase 10 scope plus the current post-Phase-11 split owners)
+**Status:** issues_found
+**Observed HEAD:** `885537b1`
 **Runtime:** Node `v26.12.1`
 
 ## Structural Findings (fallow)
 
-`fallow review --base 09f7f113 --brief` passed with no dead-code, complexity, or duplication findings. `fallow guard` accepted the root, planning, ledger, and owner-test files. `fallow trace` found one planning-to-ledger type-only hop and no reverse path, so the split has no runtime cycle. `fallow security` surfaced four reachability-based path candidates in unchanged containment-aware callees; direct review found that the path-source read calls `assertPathInside`, manifest candidates are fixed literals and read through a bounded manifest boundary, and hook paths come from resolver-produced installable metadata. No new vulnerability was established.
+`fallow review --base 4ce415d9 --brief --format json` passed with zero dead-code, complexity, or duplication findings. The broad resolved range contained 244 changed files and was high risk, so that orientation result was not treated as a correctness gate. `fallow security --changed-since 4ce415d9` surfaced reachability candidates at path, process, and credential boundaries; direct tracing found existing containment checks, fixed manifest paths, argument-array process invocation, and redaction at the reviewed outputs. No additional security defect was proved.
 
-CodeGraph was attempted first as required, but its local database could not be opened. Current sources, import paths, and consumers were therefore traced with Fallow, Git diffs, repository search, and direct source review.
+CodeGraph was used first. Its current index still described some pre-split ownership, so every relevant path was checked against the current source before it was used as evidence.
 
 ## Narrative Findings (AI reviewer)
 
 ### Summary
 
-The final WR-02 refactor closes the remaining ownership defect. Planning privately owns a five-operation contract: prepare the plan, preview the root, run a cascade, project a caught failure, and project failed moves. The public root explicitly adapts five ledger operations into that contract. The ledger operations now contain the prior catalog, transaction, save, hook/config, marketplace-settlement, cascade-unwrapping, and failure-projection helpers instead of forwarding those helpers across the leaf boundary.
+The current tree preserves the important Phase 10 behavior boundaries: `rootCommit` crosses public planning into the dependency plan and final install member; all three CAS-08 failure routes have separate scenarios; apply exposes per-phase rollback detail; install/reinstall fixtures create loadable manifests before records; and the public install composition remains the owner after the Phase 11 split. The Phase 1/4/7 corrective changes do not reopen those boundaries.
 
-`InstallPlanningComposition` is private. Its test infers the factory return type; the factory itself is a real production composition seam used by the public root, so there is no test-only production export. The owner tests cover initial settlement, planned materialization, refusal, missing-marketplace propagation, failure projection, move-failure projection, preview pins, and public-root persistence. No behavior regression was found.
+Two behavioral tests nevertheless have false-green oracles. Both are shared Phase 8/10 PTY defects and already have Phase 8 convergence work assigned. The coverage-ledger checker also accepts a commit that cannot contain one of the evidence files it purports to identify.
 
-Previously closed findings remain closed. WR-01 still routes the fixture and the behavioral proof through public composition-root factories. WR-03 still uses exact, end-anchored large-file exceptions. The prune change still removes only redundant assertions while preserving the `Error`-typed values.
+## Critical Issues
 
-All reviewed files meet quality standards. No issues found.
+### CR-01: The wait-cap scenario exercises the hosted-download timeout, not the background gate (shared Phase 8 CR-03)
+
+**Classification:** BLOCKER
+
+**File:** `features/marketplace/background-update.feature:60-74`, `features/step_definitions/marketplace/background-update.steps.ts:35-79`, `extensions/pi-claude-marketplace/platform/hosted-manifest-fetch.ts:18`, `extensions/pi-claude-marketplace/orchestrators/marketplace/background-gate.ts:24-34`
+
+**Issue:** The scenario holds `GET /acme/tools/marketplace.json`. That request has its own 10,000 ms `DOWNLOAD_TIMEOUT_MS`, while the behavior under test is the gate's 30,000 ms `BACKGROUND_WAIT_CAP_MS`. The step accepts any positive duration up to 30 seconds and only proves that the held request was dropped. A focused real-PTY reproduction passed after about the hosted-fetch timeout. A broken or absent gate timer can therefore still pass when the unrelated download timeout ends the step first. This is the same shared defect already recorded as Phase 8 CR-03; it must not receive a divergent fix.
+
+**Impact:** `XPH01-TUI-CAP` is marked as scenario coverage although the scenario proves neither the production wait-cap signal nor its deadline. A foreground command can wait indefinitely on another background operation while this suite remains green.
+
+**Fix:** Use a held git smart-HTTP transfer whose own transport does not expire before the gate. Record that the gate's `AbortSignal` stopped it, and assert lower and upper elapsed-time bounds around the production cap. Keep the fix in the shared Phase 8 owner and consume it into Phase 10 convergence.
+
+### CR-02: Set-normalized terminal output hides duplicate background notices
+
+**Classification:** BLOCKER
+
+**File:** `features/lib/pi-tui.ts:244-248`, `features/step_definitions/marketplace/background-update.steps.ts:84-91`, `features/marketplace/background-update.feature:30-58`
+
+**Issue:** `backgroundUpdateNotices()` converts all matched notices to a `Set` before the step compares them with `[notice]`. The same-name scenario can receive the same notice twice and still pass. Phase 8's mutation reproduction demonstrated this false green by emitting one notice per updated marketplace. The current Phase 10 branch does not yet contain the corrective Phase 8 commit `7a436b05`.
+
+**Impact:** `XPH01-TUI-DEDUPE` does not distinguish one aggregate notification from repeated per-marketplace notifications, so a user-visible duplicate-notification regression can ship green.
+
+**Fix:** Do not infer identical emission counts from a terminal's final/redrawn screen. Retain the same-name final-state scenario and consume Phase 8 commit `7a436b05`, which adds a distinct-name cross-marketplace scenario requiring one exact combined `alpha and beta` notice plus direct oracle tests that fail under the per-marketplace mutation.
+
+## Warnings
+
+### WR-01: The coverage checker does not bind evidence paths and titles to their cited commit
+
+**Classification:** WARNING
+
+**File:** `scripts/check-phase10-coverage.mjs:127-159`, `.planning/phases/10-lifecycle-test-and-harness-gaps/10-COVERAGE.md:67`
+
+**Issue:** The checker separately proves that `row.commit` exists and that each evidence path/title exists in the current checkout. It never reads `path` at `commit`. The current `LCTEST-ROOT-COMMIT` row cites commit `07a8b54a`, but `test/orchestrators/plugin/install-flow-planning.test.ts` does not exist at that commit; the checker still reports `56/56 rows valid`.
+
+**Impact:** A stale or unrelated commit satisfies the supposedly exact evidence record. Refactors can silently sever the audit trail while the Phase 10 coverage gate stays green.
+
+**Fix:** Put a commit on each evidence entry, or define the row commit as a reconciliation commit containing every cited proof. Validate via `git show <commit>:<path>` and require the title in that content. Update the root-commit row to cite commit(s) that contain both current proofs.
 
 ### Verification record
 
-- CodeGraph was attempted first; its local database could not be opened.
-- `fallow review --base 09f7f113 --brief --format json`: passed; zero dead-code issues, complexity findings, and duplication clone groups.
-- `fallow guard` on the root, planning, ledger, and owner tests: passed.
-- `fallow security --changed-since 09f7f113`: reviewed all four candidates; no proven vulnerability.
-- Bidirectional `fallow trace --path`: planning reaches ledger through one type-only hop; ledger has no path back to planning.
-- Focused Node suites for the root, planning, ledger, and prune modules: passed.
-- `test/architecture/no-test-only-production-surface.test.ts`: passed.
-- Exact build inputs passed the full fix-branch `npm run check`: 1120 scenarios, 11411 steps, and 306 direct-LCOV pairs. The merged build inputs are unchanged.
+- Phase 10 coverage checker passed `56/56`, while `git show 07a8b54a:test/orchestrators/plugin/install-flow-planning.test.ts` failed with a missing path, proving WR-01.
+- The wait-cap scenario passed `1 scenario / 14 steps` in a real PTY after the independent hosted-fetch timeout; its exact request evidence was one dropped `/marketplace.json` request.
+- Fresh combined gate supplied to this review: `1126 scenarios`, `11509 steps`, and `309` direct-LCOV pairs, green on the current build inputs.
+- Fresh Nyquist audit: COMPLIANT at `7f76cda2`; fresh security audit: SECURED at `885537b1`, 19/19 rows closed and `threats_open: 0`.
+- Focused owner tests were not rerun in this dependency-light worktree because the TypeScript loader was unavailable. Their current behavior was traced directly, and the combined gate above covers the same build inputs.
 
 Only this report was changed. No implementation or test source was modified, and no commit was created.
 
 ---
 
-_Reviewed: 2026-10-28T08:05:02Z_
-_Reviewer: the agent (gsd-code-reviewer)_
+_Reviewed: 2026-10-28T21:20:58Z_
+_Reviewer: Codex (gsd-code-reviewer)_
 _Depth: standard_
