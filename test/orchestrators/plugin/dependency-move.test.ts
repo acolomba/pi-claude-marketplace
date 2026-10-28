@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test } from "node:test";
 
@@ -8,7 +8,9 @@ import {
   createHooksRuntime,
   readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { pluginCloneKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { collectPluginCloneCandidatesLocked } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts";
 import {
   failedMoveRow,
   freshDependencyMoveMemos,
@@ -27,6 +29,8 @@ import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
+
+import { INSTALL_HOST_HEAD, createGitOps, seamWith } from "./install-flow-fixture.ts";
 
 import type { DependencyMoveContext } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts";
 import type {
@@ -147,6 +151,31 @@ function move(
   return { request: request(overrides), version };
 }
 
+async function pinGitCandidate(
+  context: DependencyMoveContext,
+): Promise<{ readonly candidateRoot: string; readonly sourceRoot: string }> {
+  const state = await loadState(context.locations.extensionRoot);
+  const marketplace = state.marketplaces.mp;
+  assert.ok(marketplace !== undefined);
+  const manifest = JSON.parse(await readFile(marketplace.manifestPath, "utf8")) as {
+    plugins: { name: string; source: unknown }[];
+  };
+  const entry = manifest.plugins.find(({ name }) => name === "zcore");
+  assert.ok(entry !== undefined);
+  entry.source = {
+    source: "url",
+    url: "https://example.com/org/repo",
+    sha: INSTALL_HOST_HEAD,
+  };
+  await writeFile(marketplace.manifestPath, JSON.stringify(manifest));
+  return {
+    candidateRoot: await context.locations.pluginCloneDir(
+      pluginCloneKey("https://example.com/org/repo", INSTALL_HOST_HEAD),
+    ),
+    sourceRoot: path.join(marketplace.marketplaceRoot, "plugins", "zcore"),
+  };
+}
+
 describe("freshDependencyMoveMemos", () => {
   test("allocates an empty memo pair on every call", () => {
     // act
@@ -203,6 +232,90 @@ describe("judgeDependencyMove", () => {
     // assert
     assert.deepStrictEqual(judgement.ok && judgement.prepared.cleanupCloneKeys, [oldKey]);
     assert.deepStrictEqual(context.cloneCandidates, new Set([oldKey]));
+  });
+
+  test("keeps a warm candidate that a ruled-out move did not create", async (t) => {
+    // arrange
+    const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
+    const { candidateRoot, sourceRoot } = await pinGitCandidate(context);
+    await cp(sourceRoot, candidateRoot, { recursive: true });
+    const inner = seamWith(
+      createGitOps({
+        fixtureSourceDir: sourceRoot,
+        head: INSTALL_HOST_HEAD,
+        localRefs: { "refs/heads/main": INSTALL_HOST_HEAD },
+      }).gitOps,
+    );
+    let callbackPassed = false;
+
+    // act
+    const judgement = await judgeDependencyMove(
+      request({ requesters: [], excludedVersions: ["2.0.0"] }),
+      {
+        ...context,
+        cloneCacheSeam: {
+          ...inner,
+          materializePluginClone(args) {
+            callbackPassed = args.onCloneCreated !== undefined;
+            return inner.materializePluginClone(args);
+          },
+        },
+        constraintGate: () => Promise.resolve({ kind: "unconstrained" }),
+      },
+    );
+    await collectPluginCloneCandidatesLocked(context.locations, context.cloneCandidates);
+
+    // assert
+    assert.strictEqual(judgement.ok, false);
+    assert.strictEqual(callbackPassed, true);
+    assert.strictEqual(
+      await readFile(path.join(candidateRoot, ".claude-plugin", "plugin.json"), "utf8"),
+      JSON.stringify({ name: "zcore", version: "2.0.0" }),
+    );
+  });
+
+  test("keeps an exact-key race winner that a ruled-out move did not create", async (t) => {
+    // arrange
+    const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
+    const { candidateRoot, sourceRoot } = await pinGitCandidate(context);
+    const base = createGitOps({
+      fixtureSourceDir: sourceRoot,
+      head: INSTALL_HOST_HEAD,
+      localRefs: { "refs/heads/main": INSTALL_HOST_HEAD },
+    });
+    const inner = seamWith({
+      ...base.gitOps,
+      async checkout(options) {
+        await base.gitOps.checkout(options);
+        await cp(sourceRoot, candidateRoot, { recursive: true });
+      },
+    });
+    let callbackPassed = false;
+
+    // act
+    const judgement = await judgeDependencyMove(
+      request({ requesters: [], excludedVersions: ["2.0.0"] }),
+      {
+        ...context,
+        cloneCacheSeam: {
+          ...inner,
+          materializePluginClone(args) {
+            callbackPassed = args.onCloneCreated !== undefined;
+            return inner.materializePluginClone(args);
+          },
+        },
+        constraintGate: () => Promise.resolve({ kind: "unconstrained" }),
+      },
+    );
+    await collectPluginCloneCandidatesLocked(context.locations, context.cloneCandidates);
+
+    // assert
+    assert.strictEqual(judgement.ok, false);
+    assert.strictEqual(callbackPassed, true);
+    assert.strictEqual(
+      await readFile(path.join(candidateRoot, ".claude-plugin", "plugin.json"), "utf8"),
+      JSON.stringify({ name: "zcore", version: "2.0.0" }),
+    );
   });
 
   test("refuses a move whose catalog version falls outside the requester's range", async (t) => {

@@ -78,6 +78,8 @@ export interface DependencyMoveContext {
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
+  readonly cloneCacheSeam?: PreparePluginUpdateOptions["cloneCacheSeam"];
+  readonly constraintGate?: PreparePluginUpdateOptions["constraintGate"];
   /** D-10-18: one memo pair per operation, so the judge and the move list a source once. */
   readonly constraintTagMemo: NonNullable<CascadeThreePhaseArgs["constraintTagMemo"]>;
   readonly constraintMarketplaceTagMemo: NonNullable<
@@ -131,19 +133,13 @@ function cloneKeyForRoot(root: string, locations: ScopedLocations): string | und
   return relative.split(path.sep)[0];
 }
 
-/** Exact old and candidate cache entries a planned move may leave unreferenced. */
-function cleanupCloneKeys(
+/** The recorded cache entry a successful move may leave unreferenced. */
+function supersededCloneKeys(
   prepared: PreparedPluginUpdate,
   locations: ScopedLocations,
 ): readonly string[] {
-  return [
-    ...new Set(
-      [
-        cloneKeyForRoot(prepared.record.resolvedSource, locations),
-        cloneKeyForRoot(prepared.installable.pluginRoot, locations),
-      ].filter((key): key is string => key !== undefined),
-    ),
-  ];
+  const key = cloneKeyForRoot(prepared.record.resolvedSource, locations);
+  return key === undefined ? [] : [key];
 }
 
 /** What one move did: whether it landed, and the row that reports it. */
@@ -180,6 +176,8 @@ function moveArgs(
     ...(context.credentialOps !== undefined && { credentialOps: context.credentialOps }),
     ...(context.deviceFlowHttp !== undefined && { deviceFlowHttp: context.deviceFlowHttp }),
     ...(context.authMemo !== undefined && { authMemo: context.authMemo }),
+    ...(context.cloneCacheSeam !== undefined && { cloneCacheSeam: context.cloneCacheSeam }),
+    ...(context.constraintGate !== undefined && { constraintGate: context.constraintGate }),
     ...(context.stateTransaction !== undefined && { stateTransaction: context.stateTransaction }),
   };
 }
@@ -236,8 +234,8 @@ export async function judgeDependencyMove(
       return { ok: false, cause: refusalCause(prepared) };
     }
 
-    const candidateKeys = cleanupCloneKeys(prepared, context.locations);
-    for (const key of candidateKeys) {
+    const replacedKeys = supersededCloneKeys(prepared, context.locations);
+    for (const key of replacedKeys) {
       context.cloneCandidates.add(key);
     }
 
@@ -255,7 +253,7 @@ export async function judgeDependencyMove(
 
     return {
       ok: true,
-      prepared: { ...prepared, cleanupCloneKeys: candidateKeys },
+      prepared: { ...prepared, cleanupCloneKeys: replacedKeys },
     };
   } catch (err) {
     rethrowInvalidGitHubBaseUrl(err);
