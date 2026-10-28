@@ -109,10 +109,10 @@ export interface DependencySettlePorts {
   readonly plan: () => Promise<DependencyPlan>;
   readonly steps: DependencyStepPorts;
   /**
-   * Notes the clones on disk before the plan, and returns the sweep that
-   * removes the ones the operation left unreferenced. Never throws.
+   * Returns the sweep for the exact clone keys owned by the accepted plan's
+   * moves. Never throws.
    */
-  readonly planSweep: () => Promise<() => Promise<void>>;
+  readonly planSweep: (steps: readonly DependencyPlanStep[]) => Promise<() => Promise<void>>;
 }
 
 /** The error a dependency move that did not land reports. */
@@ -270,15 +270,20 @@ async function settlePlanned(ports: DependencySettlePorts): Promise<UpdateDepend
     return refused(ports.steps.refusal, plan.subject);
   }
 
-  const final: DependencyPlanStep[] =
-    plan.final.members.length > 0 ? [{ kind: "materialize", members: plan.final.members }] : [];
-  const ran = await runDependencySteps([...plan.steps, ...final], ports.steps);
-  const rows = ran.landed.map((entry) => entry.row);
-  const notices = mcpConfigNoticesMember(ran.mcpConfigNotices ?? []);
-  const warnings = warningsMember(ran.stagingWarnings ?? []);
-  return ran.ok
-    ? { kind: "settled", rows, ...notices, ...warnings }
-    : { kind: "refused", rows, cause: ran.cause, ...notices, ...warnings };
+  const sweep = await ports.planSweep(plan.steps);
+  try {
+    const final: DependencyPlanStep[] =
+      plan.final.members.length > 0 ? [{ kind: "materialize", members: plan.final.members }] : [];
+    const ran = await runDependencySteps([...plan.steps, ...final], ports.steps);
+    const rows = ran.landed.map((entry) => entry.row);
+    const notices = mcpConfigNoticesMember(ran.mcpConfigNotices ?? []);
+    const warnings = warningsMember(ran.stagingWarnings ?? []);
+    return ran.ok
+      ? { kind: "settled", rows, ...notices, ...warnings }
+      : { kind: "refused", rows, cause: ran.cause, ...notices, ...warnings };
+  } finally {
+    await sweep();
+  }
 }
 
 /** Runs an update's settle in its contracted order. */
@@ -298,10 +303,5 @@ export async function settleDependencies(
     return refused(ports.steps.refusal, first.subject);
   }
 
-  const sweep = await ports.planSweep();
-  try {
-    return await settlePlanned(ports);
-  } finally {
-    await sweep();
-  }
+  return settlePlanned(ports);
 }

@@ -240,12 +240,14 @@ async function installAfterMoves(
     capture: { rollbackPartials: [], version: undefined },
     orchestrated,
   };
-  const sweep = await planCloneSweep(target.locations);
+  let sweep = () => Promise.resolve();
   try {
     const plan = await planInstallMoves({ ledger, owners, opts, target, root, context, defers });
     if ("err" in plan) {
       return ledger.projectCaughtFailure({ ...failure, ...plan });
     }
+
+    sweep = await planCloneSweep(target.locations, plan.steps);
 
     const resolvedMembers = resolvedPlanMemberKeys(plan);
     const ran = await runDependencySteps(plan.steps, dependencyStepPorts(ledger, cascade, context));
@@ -373,7 +375,7 @@ async function settleUpdateDependencies(
           deferMoveDependencies: false,
         }),
       steps: dependencyStepPorts(ledger, cascade, context),
-      planSweep: () => planCloneSweep(target.locations),
+      planSweep: (steps) => planCloneSweep(target.locations, steps),
     });
   } finally {
     await discardCarriedAdds(carried, target.locations);

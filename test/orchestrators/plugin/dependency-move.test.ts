@@ -185,6 +185,24 @@ describe("judgeDependencyMove", () => {
     assert.strictEqual(await readFile(context.locations.stateJsonPath, "utf8"), stateBefore);
   });
 
+  test("carries only the move's cache entries into cleanup ownership", async (t) => {
+    // arrange
+    const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
+    const oldKey = "111111111111-aaaaaaaaaaaa";
+    const state = await loadState(context.locations.extensionRoot);
+    const record = state.marketplaces.mp?.plugins.zcore;
+    assert.ok(record !== undefined);
+    record.resolvedSource = path.join(context.locations.pluginClonesDir, oldKey, "plugin");
+    record.resolvedSha = "a".repeat(40);
+    await saveState(context.locations.extensionRoot, state);
+
+    // act
+    const judgement = await judgeDependencyMove(request(), context);
+
+    // assert
+    assert.deepStrictEqual(judgement.ok && judgement.prepared.cleanupCloneKeys, [oldKey]);
+  });
+
   test("refuses a move whose catalog version falls outside the requester's range", async (t) => {
     // arrange
     const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "1.5.0" });

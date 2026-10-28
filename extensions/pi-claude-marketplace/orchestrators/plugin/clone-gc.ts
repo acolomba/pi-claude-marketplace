@@ -83,24 +83,11 @@ async function readCloneKeys(locations: ScopedLocations): Promise<string[]> {
 }
 
 /**
- * UPD-DEP-D1 / IN-N4: the clone keys on disk now that no record references,
- * such as a mirror `fetch` warmed. A sweep after a dependency plan keeps them
- * and collects every other unreferenced clone: those the plan created, and
- * the revisions its moves replaced.
- */
-async function listUnreferencedPluginClones(
-  locations: ScopedLocations,
-): Promise<ReadonlySet<string>> {
-  const state = await loadState(locations.extensionRoot, { persistMigration: false });
-  const liveKeys = deriveLiveCloneKeys(state, locations.pluginClonesDir);
-  return new Set((await readCloneKeys(locations)).filter((key) => !liveKeys.has(key)));
-}
-
-/**
  * PURL-05 / PURL-06 / D-78-01: delete every unreferenced `plugin-clones/<key>/`
  * directory, returning per-dir rm-failure leak strings (callers ignore them --
  * hygienic cleanup never becomes the primary path, D-19-01). A key in `keep`
- * stays even when unreferenced (UPD-DEP-D1).
+ * stays even when unreferenced. When `candidates` is present, entries outside
+ * that set are not delete targets (UPD-DEP-D1).
  *
  * Flow:
  *   1. Load the scope state and derive the live clone-key set. A record
@@ -119,6 +106,7 @@ async function listUnreferencedPluginClones(
 async function garbageCollectPluginClones(
   locations: ScopedLocations,
   keep: ReadonlySet<string> = new Set(),
+  candidates?: ReadonlySet<string>,
 ): Promise<string[]> {
   const state = await loadState(locations.extensionRoot, { persistMigration: false });
   const liveKeys = deriveLiveCloneKeys(state, locations.pluginClonesDir);
@@ -126,7 +114,7 @@ async function garbageCollectPluginClones(
 
   const leaks: string[] = [];
   for (const key of entries) {
-    if (liveKeys.has(key) || keep.has(key)) {
+    if (liveKeys.has(key) || keep.has(key) || candidates?.has(key) === false) {
       continue;
     }
 
@@ -165,14 +153,16 @@ export function collectPluginClonesLocked(
 }
 
 /**
- * D-PL7-13: the unreferenced-clone listing under a fresh lock of `locations`'
- * scope, with the same caller rules as `collectPluginClonesLocked`. Unlocked,
- * a clone that a locked `fetch` adds between this listing and the sweep would
- * be missing from the listing, so the sweep would delete it. While another
- * holder has the lock it rejects with StateLockHeldError.
+ * Collects only the clone keys one operation owns, under the scope lock. A
+ * candidate that another record still references stays. Entries outside the
+ * candidate set are never delete targets, including a mirror another locked
+ * operation warmed after the owner planned its cleanup.
  */
-export function listUnreferencedPluginClonesLocked(
+export function collectPluginCloneCandidatesLocked(
   locations: ScopedLocations,
-): Promise<ReadonlySet<string>> {
-  return withExistingScopeLock(locations, () => listUnreferencedPluginClones(locations));
+  candidates: ReadonlySet<string>,
+): Promise<string[]> {
+  return withExistingScopeLock(locations, () =>
+    garbageCollectPluginClones(locations, new Set(), candidates),
+  );
 }

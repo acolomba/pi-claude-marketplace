@@ -10,10 +10,11 @@
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 
-import { collectPluginClonesLocked, listUnreferencedPluginClonesLocked } from "./clone-gc.ts";
+import { collectPluginCloneCandidatesLocked } from "./clone-gc.ts";
 import { cascadeFailureCause, composeCascadeFailureMessage } from "./install-cascade.messaging.ts";
 
 import type { DependencyMoveContext, DependencyMoveMemos } from "./dependency-move.ts";
+import type { DependencyPlanStep } from "./dependency-plan.ts";
 import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
 import type { UpdateHooksRouting } from "./update-cascade.ts";
 import type { MaterializationPolicy } from "./update-preflight.ts";
@@ -150,32 +151,29 @@ export function updateCaller(
 }
 
 /**
- * UPD-DEP-D1 / WR-A / IN-N4: notes the unreferenced clones on disk before a
- * plan, and returns the sweep that removes every other unreferenced clone
- * once the operation ends: those the plan created, and the revisions its
- * moves replaced. A clone that was unreferenced before, such as a mirror
- * `fetch` warmed, stays. D-PL7-05 / D-PL7-13: the listing and the sweep each
- * take a fresh scope lock, so the caller must hold none. IN-N5: when the
- * clones cannot be listed, a held lock included, the sweep removes nothing.
- * The sweep never throws (D-19-01): a failure, a held lock included, is
- * traced, and a later lifecycle operation retries it.
+ * UPD-DEP-D1 / WR-A / IN-N4: returns a sweep for the exact cache entries the
+ * accepted dependency moves materialized or may replace. D-PL7-05 /
+ * D-PL7-13: the sweep takes a fresh scope lock and rechecks state before each
+ * candidate is deleted. An unrelated mirror warmed after planning is not a
+ * candidate and stays. The caller must hold no lock. The sweep never throws
+ * (D-19-01): a failure, a held lock included, is traced, and a later lifecycle
+ * operation retries it.
  */
-export async function planCloneSweep(locations: ScopedLocations): Promise<() => Promise<void>> {
-  let before: ReadonlySet<string>;
-  try {
-    before = await listUnreferencedPluginClonesLocked(locations);
-  } catch (err) {
-    hookDebugLog(`dependency plan: clone listing failed: ${errorMessage(err)}`, "install");
-    return () => Promise.resolve();
-  }
+export function planCloneSweep(
+  locations: ScopedLocations,
+  steps: readonly DependencyPlanStep[],
+): Promise<() => Promise<void>> {
+  const candidates = new Set(
+    steps.flatMap((step) => (step.kind === "move" ? (step.move.cleanupCloneKeys ?? []) : [])),
+  );
 
-  return async () => {
+  return Promise.resolve(async () => {
     try {
-      await collectPluginClonesLocked(locations, before);
+      await collectPluginCloneCandidatesLocked(locations, candidates);
     } catch (err) {
       hookDebugLog(`dependency plan: clone cleanup failed: ${errorMessage(err)}`, "install");
     }
-  };
+  });
 }
 
 /**

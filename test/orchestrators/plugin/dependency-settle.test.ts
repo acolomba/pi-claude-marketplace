@@ -632,8 +632,8 @@ describe("settleDependencies", () => {
     });
     assert.deepStrictEqual(ports.calls, [
       "first run",
-      "list clones",
       "plan",
+      "list clones",
       "move lib@mp 2.0.0",
       "materialize helper@mp",
       "sweep",
@@ -654,14 +654,14 @@ describe("settleDependencies", () => {
     assert.deepStrictEqual(settled, { kind: "settled", rows: [updatedRow("lib@mp")] });
     assert.deepStrictEqual(ports.calls, [
       "first run",
-      "list clones",
       "plan",
+      "list clones",
       "move lib@mp 2.0.0",
       "sweep",
     ]);
   });
 
-  test("UPD-DEP-D1: a refused plan changes nothing, refuses with the failing row, and sweeps", async () => {
+  test("UPD-DEP-D1: a refused plan changes nothing and refuses with the failing row", async () => {
     // arrange
     const ports = settlePorts({
       firstRun: () => Promise.resolve({ kind: "planned" }),
@@ -677,13 +677,7 @@ describe("settleDependencies", () => {
       rows: [failedRow("helper@mp", REFUSAL_CAUSE)],
       cause: REFUSAL_CAUSE,
     });
-    assert.deepStrictEqual(ports.calls, [
-      "first run",
-      "list clones",
-      "plan",
-      "refusal member",
-      "sweep",
-    ]);
+    assert.deepStrictEqual(ports.calls, ["first run", "plan", "refusal member"]);
   });
 
   test("UPD-DEP-D1: a step that fails refuses the settle with every change that landed, and sweeps", async () => {
@@ -702,14 +696,14 @@ describe("settleDependencies", () => {
     assert.deepStrictEqual(settled, { kind: "refused", rows: [kept], cause: LIB_DID_NOT_MOVE });
     assert.deepStrictEqual(ports.calls, [
       "first run",
-      "list clones",
       "plan",
+      "list clones",
       "move lib@mp 2.0.0",
       "sweep",
     ]);
   });
 
-  test("UPD-DEP-D1 / CR-N2: a plan that throws refuses the settle with what it threw, and sweeps", async () => {
+  test("UPD-DEP-D1 / CR-N2: a plan that throws refuses the settle with what it threw", async () => {
     // arrange
     const thrown = new Error("marketplace.json is not valid JSON");
     const ports = settlePorts({
@@ -722,10 +716,10 @@ describe("settleDependencies", () => {
 
     // assert
     assert.deepStrictEqual(settled, { kind: "refused", rows: [], cause: thrown });
-    assert.deepStrictEqual(ports.calls, ["first run", "list clones", "plan", "sweep"]);
+    assert.deepStrictEqual(ports.calls, ["first run", "plan"]);
   });
 
-  test("GHB-03: a plan that meets an invalid GitHub base override fails the command, and sweeps", async () => {
+  test("GHB-03: a plan that meets an invalid GitHub base override fails the command", async () => {
     // arrange
     const invalid = new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "query");
     const ports = settlePorts({
@@ -735,6 +729,6 @@ describe("settleDependencies", () => {
 
     // act & assert
     await assert.rejects(settleDependencies(ports), invalid);
-    assert.deepStrictEqual(ports.calls, ["first run", "list clones", "plan", "sweep"]);
+    assert.deepStrictEqual(ports.calls, ["first run", "plan"]);
   });
 });

@@ -23,6 +23,7 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { DependencyCascadeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { withExistingScopeLock } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -31,6 +32,7 @@ import { holdStateLock } from "../state-lock.ts";
 
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type { DependencyCaller } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts";
+import type { DependencyPlanStep } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts";
 import type { CascadeThreePhaseArgs } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -88,6 +90,24 @@ function stateWith(plugins: Record<string, PluginRecord>): ExtensionState {
         marketplaceRoot: "/work/mp",
         plugins,
       },
+    },
+  };
+}
+
+/** One planned move that owns `cleanupCloneKeys`. */
+function moveStep(cleanupCloneKeys?: readonly string[]): DependencyPlanStep {
+  return {
+    kind: "move",
+    move: {
+      request: {
+        key: "lib@mp",
+        name: "lib",
+        marketplace: "mp",
+        recordedVersion: "1.0.0",
+        requesters: [],
+      },
+      version: "2.0.0",
+      ...(cleanupCloneKeys !== undefined && { cleanupCloneKeys }),
     },
   };
 }
@@ -320,17 +340,19 @@ describe("updateCaller", () => {
 });
 
 describe("planCloneSweep", () => {
-  test("UPD-DEP-D1 / IN-N4: removes the clones the operation left unreferenced and keeps the ones unreferenced before it", async (t) => {
+  test("removes a replaced clone without deleting a mirror fetched after planning", async (t) => {
     // arrange
     const { cwd } = await createHermeticEnvironment(t, "dependency-bindings-sweep-");
     const locations = locationsFor("project", cwd);
-    const live = path.join(locations.pluginClonesDir, "111111111111-aaaaaaaaaaaa");
-    await mkdir(path.join(locations.pluginClonesDir, "fetched"), { recursive: true });
+    const replacedKey = "111111111111-aaaaaaaaaaaa";
+    const live = path.join(locations.pluginClonesDir, replacedKey);
     await mkdir(live, { recursive: true });
     await saveState(locations.extensionRoot, stateWith({ lib: gitRecord(live) }));
-    const sweep = await planCloneSweep(locations);
-    await mkdir(path.join(locations.pluginClonesDir, "planned"), { recursive: true });
+    const sweep = await planCloneSweep(locations, [moveStep([replacedKey])]);
     await saveState(locations.extensionRoot, stateWith({}));
+    await withExistingScopeLock(locations, () =>
+      mkdir(path.join(locations.pluginClonesDir, "fetched"), { recursive: true }),
+    );
 
     // act
     await sweep();
@@ -344,7 +366,10 @@ describe("planCloneSweep", () => {
     const { cwd } = await createHermeticEnvironment(t, "dependency-bindings-sweep-fail-");
     const locations = locationsFor("project", cwd);
     await saveState(locations.extensionRoot, { schemaVersion: 2, marketplaces: {} });
-    const sweep = await planCloneSweep(locations);
+    const sweep = await planCloneSweep(locations, [
+      { kind: "materialize", members: [] },
+      moveStep(),
+    ]);
     await rm(locations.pluginClonesDir, { recursive: true, force: true });
     await writeFile(locations.pluginClonesDir, "not a directory");
 
@@ -352,47 +377,39 @@ describe("planCloneSweep", () => {
     await assert.doesNotReject(sweep());
   });
 
-  test("IN-N5: removes nothing when the clones cannot be listed before the plan", async (t) => {
+  test("keeps every cache entry when the plan owns none", async (t) => {
     // arrange
-    const { cwd } = await createHermeticEnvironment(t, "dependency-bindings-sweep-list-");
-    const locations = locationsFor("project", cwd);
-    await saveState(locations.extensionRoot, { schemaVersion: 2, marketplaces: {} });
-    await writeFile(locations.pluginClonesDir, "not a directory");
-    const sweep = await planCloneSweep(locations);
-    await rm(locations.pluginClonesDir, { force: true });
-    await mkdir(path.join(locations.pluginClonesDir, "planned"), { recursive: true });
-
-    // act
-    await sweep();
-
-    // assert
-    assert.deepStrictEqual(await readdir(locations.pluginClonesDir), ["planned"]);
-  });
-
-  test("GLK-03 / D-PL7-13: a scope lock held while the clones are listed makes the sweep remove nothing", async (t) => {
-    // arrange
-    const { cwd } = await createHermeticEnvironment(t, "dependency-bindings-sweep-held-list-");
+    const { cwd } = await createHermeticEnvironment(t, "dependency-bindings-sweep-empty-");
     const locations = locationsFor("project", cwd);
     await saveState(locations.extensionRoot, stateWith({}));
     await mkdir(path.join(locations.pluginClonesDir, "fetched"), { recursive: true });
-    const release = await holdStateLock(locations);
-    let sweep: () => Promise<void>;
-    try {
-      sweep = await planCloneSweep(locations);
-    } finally {
-      await release();
-    }
-
-    await mkdir(path.join(locations.pluginClonesDir, "planned"), { recursive: true });
+    const sweep = await planCloneSweep(locations, [
+      { kind: "materialize", members: [] },
+      moveStep(),
+    ]);
 
     // act
     await sweep();
 
     // assert
-    assert.deepStrictEqual((await readdir(locations.pluginClonesDir)).sort(), [
-      "fetched",
-      "planned",
-    ]);
+    assert.deepStrictEqual(await readdir(locations.pluginClonesDir), ["fetched"]);
+  });
+
+  test("keeps an owned clone while state still references it", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "dependency-bindings-sweep-live-");
+    const locations = locationsFor("project", cwd);
+    const liveKey = "111111111111-aaaaaaaaaaaa";
+    const live = path.join(locations.pluginClonesDir, liveKey);
+    await mkdir(live, { recursive: true });
+    await saveState(locations.extensionRoot, stateWith({ lib: gitRecord(live) }));
+    const sweep = await planCloneSweep(locations, [moveStep([liveKey])]);
+
+    // act
+    await sweep();
+
+    // assert
+    assert.deepStrictEqual(await readdir(locations.pluginClonesDir), [liveKey]);
   });
 
   test("GLK-03 / D-PL7-05: a scope lock held while the sweep runs leaves every clone and the sweep resolves", async (t) => {
@@ -401,7 +418,7 @@ describe("planCloneSweep", () => {
     const locations = locationsFor("project", cwd);
     await saveState(locations.extensionRoot, stateWith({}));
     await mkdir(path.join(locations.pluginClonesDir, "fetched"), { recursive: true });
-    const sweep = await planCloneSweep(locations);
+    const sweep = await planCloneSweep(locations, [moveStep(["planned"])]);
     await mkdir(path.join(locations.pluginClonesDir, "planned"), { recursive: true });
     const release = await holdStateLock(locations);
 

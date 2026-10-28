@@ -20,6 +20,8 @@
 // Not a plugin ledger and names no git surface: the preflight and the shared
 // runner reach git through their own seams.
 
+import path from "node:path";
+
 import { MAX_REFUSAL_VERSION_CHARS, truncateForRefusal } from "../../domain/dependency-range.ts";
 import { errorMessage, rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
 import { companionSeverity } from "../../shared/notify-reasons.ts";
@@ -31,7 +33,11 @@ import { isUpdatePreflightOutcome, preparePluginUpdate } from "./update-prefligh
 import { updatedRowFromOutcome } from "./update-row.ts";
 import { assertUpdateNamesFree } from "./update-swap.ts";
 
-import type { DependencyMoveRequest, PlannedDependencyMove } from "./dependency-plan.ts";
+import type {
+  DependencyMoveRequest,
+  PlannedCandidate,
+  PlannedDependencyMove,
+} from "./dependency-plan.ts";
 import type {
   MaterializationPolicy,
   PreparedPluginUpdate,
@@ -108,8 +114,36 @@ export function freshDependencyMoveMemos(): DependencyMoveMemos {
  * the same candidate.
  */
 export type DependencyMoveJudgement =
-  | { readonly ok: true; readonly prepared: PreparedPluginUpdate }
+  | {
+      readonly ok: true;
+      readonly prepared: PreparedPluginUpdate & Pick<PlannedCandidate, "cleanupCloneKeys">;
+    }
   | { readonly ok: false; readonly cause: string; readonly updateBlocked?: true };
+
+/** The cache entry containing `root`, when it belongs to this scope's plugin cache. */
+function cloneKeyForRoot(root: string, locations: ScopedLocations): string | undefined {
+  const relative = path.relative(locations.pluginClonesDir, root);
+  if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
+    return undefined;
+  }
+
+  return relative.split(path.sep)[0];
+}
+
+/** Exact old and candidate cache entries a planned move may leave unreferenced. */
+function cleanupCloneKeys(
+  prepared: PreparedPluginUpdate,
+  locations: ScopedLocations,
+): readonly string[] {
+  return [
+    ...new Set(
+      [
+        cloneKeyForRoot(prepared.record.resolvedSource, locations),
+        cloneKeyForRoot(prepared.installable.pluginRoot, locations),
+      ].filter((key): key is string => key !== undefined),
+    ),
+  ];
+}
 
 /** What one move did: whether it landed, and the row that reports it. */
 export interface DependencyMoveRun {
@@ -212,7 +246,10 @@ export async function judgeDependencyMove(
       return { ok: false, cause: namesTaken, updateBlocked: true };
     }
 
-    return { ok: true, prepared };
+    return {
+      ok: true,
+      prepared: { ...prepared, cleanupCloneKeys: cleanupCloneKeys(prepared, context.locations) },
+    };
   } catch (err) {
     rethrowInvalidGitHubBaseUrl(err);
     return { ok: false, cause: errorMessage(err) };

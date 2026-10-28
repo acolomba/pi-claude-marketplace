@@ -124,6 +124,7 @@ function ports(world: {
   readonly updateBlocked?: true;
   /** GV-01: each version lands at a release tag, its commit appended. */
   readonly tagged?: boolean;
+  readonly cleanupCloneKeys?: readonly string[];
 }): DependencyPlanPorts<PlannedCandidate> & { readonly calls: Calls } {
   const calls: Calls = { walks: [], judged: [], previewed: [] };
   return {
@@ -145,7 +146,15 @@ function ports(world: {
               cause: world.refusalCause ?? "version 1.5.0 falls outside the range",
               ...(world.updateBlocked && { updateBlocked: world.updateBlocked }),
             }
-          : { ok: true, prepared: landedAt(version, world.tagged === true) },
+          : {
+              ok: true,
+              prepared: {
+                ...landedAt(version, world.tagged === true),
+                ...(world.cleanupCloneKeys !== undefined && {
+                  cleanupCloneKeys: world.cleanupCloneKeys,
+                }),
+              },
+            },
       );
     },
     preview: (previewed) => {
@@ -227,6 +236,7 @@ describe("planDependencyGraph", () => {
         "lib@mp=2.0.0": graph([walked("lib", APP_ASKS_2)], ["lib@mp"]),
       },
       versions: () => "2.0.0",
+      cleanupCloneKeys: ["old-clone", "candidate-clone"],
     });
 
     // act
@@ -235,7 +245,16 @@ describe("planDependencyGraph", () => {
     // assert
     assert.deepStrictEqual(plan, {
       ok: true,
-      steps: [{ kind: "move", move: { request: request("lib"), version: "2.0.0" } }],
+      steps: [
+        {
+          kind: "move",
+          move: {
+            request: request("lib"),
+            version: "2.0.0",
+            cleanupCloneKeys: ["old-clone", "candidate-clone"],
+          },
+        },
+      ],
       final: { members: [{ kind: "install", member: member("app") }], alreadyInstalled: [] },
     });
     assert.deepStrictEqual(bound.calls.walks, ["", "lib@mp=2.0.0"]);
