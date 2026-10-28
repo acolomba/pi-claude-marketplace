@@ -8885,7 +8885,7 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
-  test("D-PL2-01: a read that fails after the moves installs no missing dependency from the plan made before them", async (t) => {
+  test("D-PL2-01: a read failure after moves leaves them committed and the next apply installs the missing dependency", async (t) => {
     // arrange
     const { cwd, project } = await seedConvergenceScope(t, "moves-then-read-fails", {
       trees: { widget: { skill: "clean" }, ycore: { skill: "clean" }, newdep: { skill: "clean" } },
@@ -8925,6 +8925,17 @@ describe("applyReconcile catalog convergence", () => {
       completionCache: createCompletionCache(),
       hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     });
+    const firstRecords = await Promise.all(
+      ["widget", "ycore", "newdep"].map((plugin) => recordFor(project, "mp", plugin)),
+    );
+    const retry = createNotificationBoundary(1);
+    await applyReconcile({
+      ctx: retry.ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+    });
 
     // assert
     assert.equal(failed, true);
@@ -8948,9 +8959,23 @@ describe("applyReconcile catalog convergence", () => {
         severity: "error",
       },
     ]);
-    assert.equal(await recordFor(project, "mp", "newdep"), undefined);
+    assert.deepStrictEqual(
+      firstRecords.map((record) => record?.version),
+      ["1.0.0", "2.0.0", undefined],
+    );
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
+    assert.deepStrictEqual(
+      [
+        (await recordFor(project, "mp", "widget"))?.version,
+        (await recordFor(project, "mp", "ycore"))?.version,
+        (await recordFor(project, "mp", "newdep"))?.version,
+      ],
+      ["1.0.0", "2.0.0", "1.0.0"],
+    );
+    assert.match(retry.notifications[0]?.message ?? "", /newdep v1\.0\.0 \(installed\)/);
+    assert.doesNotMatch(retry.notifications[0]?.message ?? "", /ycore v1\.0\.0 → v2\.0\.0/);
+    retry.verifyBoundary();
   });
 
   test("D-26 / D-PL2-18: the move of a plugin that declares a record waiting on a missing dependency runs after that record's move and enable", async (t) => {
@@ -10642,6 +10667,29 @@ describe("createScopeDependencyInstall", () => {
     assert.equal(cause?.message, 'Dependency "crypto-core@mp" is not declared by its marketplace.');
     assert.deepStrictEqual(scopeInstall.mcpConfigNotices, []);
     assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
+  });
+
+  test("a refused missing dependency rolls back its earlier committed cascade member", async (t) => {
+    // arrange
+    const { cwd, project } = await seedDeployKitScope(t, "scope-step-member-rollback", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { dependencies: ["alpha"], mcpServer: true },
+      alpha: { skill: "clean" },
+    });
+    await rm(project.mcpAdapterJsonPath);
+    await mkdir(project.mcpAdapterJsonPath);
+
+    // act
+    const scopeInstall = await runStep(scopeDependencyInstall(), cwd, () => true);
+
+    // assert
+    assert.deepStrictEqual(
+      scopeInstall.rows.map(({ name, status }) => [name, status]),
+      [["secrets-vault@mp", "failed"]],
+    );
+    assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
+    assert.equal(await recordFor(project, "mp", "alpha"), undefined);
+    assert.equal(await pathExists(path.join(project.skillsTargetDir, "alpha-tool")), false);
   });
 
   for (const { thrown, failure, reason } of [

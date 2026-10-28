@@ -4,7 +4,7 @@ slug: "apply-ordering-and-installed-declarations"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
 status: validated
-nyquist_compliant: true
+nyquist_compliant: false
 wave_0_complete: true
 created: "2026-10-26"
 ---
@@ -72,6 +72,18 @@ All phase behaviors have automated verification.
 
 RCN-03 caveat: the existing scenario fails if neither apply disable path runs. The Phase 02 summary records that removing only the final judgment disable leaves the scenario green because the earlier toggle step also disables the dependent. The requirement's observable same-run behavior is covered; the final judgment path is not isolated by this scenario.
 
+## Verification Backstops
+
+| Requirement | Backstop | Automated command | Status |
+|-------------|----------|-------------------|--------|
+| RCN-01 | A read fails after moves; retry preserves the committed move and installs the missing dependency | `node --test --test-name-pattern 'a read failure after moves leaves them committed' test/orchestrators/reconcile/apply.test.ts` | ✅ green |
+| RCN-02 | Scope lock held at MISS-01; only that install fails and retry succeeds | none: no deterministic public seam at the post-move/install boundary | ⬜ unverified |
+| RCN-03 | Scope lock held at final judgment disable; retry disables dependent | none: no deterministic public seam at the judgment/disable boundary | ⬜ unverified |
+| RCN-05 | Installed-copy reads overlap a same-scope uninstall | none: existing installed-copy cases do not coordinate the read with removal | ⬜ unverified |
+| RCN-07 | A later MISS-01 cascade member fails and the earlier member is rolled back | `node --test --test-name-pattern 'a refused missing dependency rolls back its earlier committed cascade member' test/orchestrators/reconcile/apply.test.ts` | ✅ green |
+
+The three PLAN prohibitions remain flagged. Existing same-run apply cases show dependents disabled when the disable succeeds, but a lock-held disable in RCN-03 can leave one enabled until retry, so the unconditional wording needs a decision. D-09-14 permits an already-disabled dependent's remedy row to be silent on retry. Add, bootstrap and autoupdate scope tests cover their named paths; they do not prove a universal absence of cross-scope installs.
+
 ---
 
 ## Validation Sign-Off
@@ -81,6 +93,8 @@ RCN-03 caveat: the existing scenario fails if neither apply disable path runs. T
 - [x] Wave 0 covers all MISSING references
 - [x] No watch-mode flags
 - [x] Feedback latency < 120s for focused task checks
-- [x] `nyquist_compliant: true` set in frontmatter
+- [ ] `nyquist_compliant: true` set in frontmatter; three concurrency backstops and the PLAN prohibitions remain unverified
 
 **Approval:** validated. `npm run check` exited 0 on `67a589aa` with Node `v26.12.1` in this worktree: static checks passed, Cucumber passed 1,120 scenarios and 11,411 steps, and direct coverage merged 309 records. The RCN-03 focused scenario also passed 1 scenario and 15 steps. The full run needed loopback access because the default sandbox denied the Cucumber harness binding to `127.0.0.1`.
+
+The later verification audit found additional PLAN backstops. The prior full gate predates the new test assertions above; their focused verification is recorded in the backstop map. Nyquist compliance remains partial until the unverified backstops and flagged prohibitions are resolved.
