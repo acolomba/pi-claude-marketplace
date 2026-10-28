@@ -4,7 +4,7 @@ slug: "apply-ordering-and-installed-declarations"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
 status: validated
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: true
 created: "2026-10-26"
 ---
@@ -77,12 +77,12 @@ RCN-03 caveat: the existing scenario fails if neither apply disable path runs. T
 | Requirement | Backstop | Automated command | Status |
 |-------------|----------|-------------------|--------|
 | RCN-01 | A read fails after moves; retry preserves the committed move and installs the missing dependency | `node --test --test-name-pattern 'a read failure after moves leaves them committed' test/orchestrators/reconcile/apply.test.ts` | ✅ green |
-| RCN-02 | Scope lock held at MISS-01; only that install fails and retry succeeds | none: no deterministic public seam at the post-move/install boundary | ⬜ unverified |
-| RCN-03 | Scope lock held at final judgment disable; retry disables dependent | none: no deterministic public seam at the judgment/disable boundary | ⬜ unverified |
-| RCN-05 | Installed-copy reads overlap a same-scope uninstall | none: existing installed-copy cases do not coordinate the read with removal | ⬜ unverified |
+| RCN-02 | Scope lock held at MISS-01; the install fails without changing state and succeeds after release | `node --test --test-name-pattern 'a missing-dependency install refused by a held scope lock succeeds after release' test/orchestrators/plugin/operations.test.ts`; apply's `installAfterMoves` calls `applyDependencyInstalls`, which creates this same operation | ✅ green, compositional |
+| RCN-03 | Scope lock held at final judgment disable; retry disables dependent | `node --test --test-name-pattern 'a held project lock returns lock-held in orchestrated mode and succeeds after release' test/orchestrators/plugin/enable-disable.test.ts`; apply's final judgment calls `applyDependencyDisables`, which creates this same operation | ✅ green, compositional |
+| RCN-05 | Installed-copy reads are locked against a same-scope uninstall when a distinct holder can exist | `node --test --test-name-pattern 'refuses a held scope lock, then retries using the installed copy' test/orchestrators/plugin/update-constraint-gate.test.ts`; `npm run check` covers the enable and update paths | ✅ green |
 | RCN-07 | A later MISS-01 cascade member fails and the earlier member is rolled back | `node --test --test-name-pattern 'a refused missing dependency rolls back its earlier committed cascade member' test/orchestrators/reconcile/apply.test.ts` | ✅ green |
 
-The three PLAN prohibitions remain flagged. Existing same-run apply cases show dependents disabled when the disable succeeds, but a lock-held disable in RCN-03 can leave one enabled until retry, so the unconditional wording needs a decision. D-09-14 permits an already-disabled dependent's remedy row to be silent on retry. Add, bootstrap and autoupdate scope tests cover their named paths; they do not prove a universal absence of cross-scope installs.
+The PLAN prohibitions are resolved against their active contracts. APPLY1-D1 covers a successful final judgment; the explicit RCN-03 lock failure leaves a transient unsatisfied dependent for the next `apply`. The `apply.feature` keeper/orphan case and `apply.test.ts` LOAD-01 and post-cascade judgment cases assert successful disables. D-PL2-11 requires the failed dependency row and newly disabled dependent's remedy; `apply.feature` asserts that pair. D-09-14 permits no second disabled row once the dependent is already down; its `apply.test.ts` retry case asserts this. Scope isolation follows the literal call chain `request.scope` → `readPlainPlanForScope` → each install's `op.scope` → `locationsFor(scope, cwd)`; the add recorder asserts project scope, bootstrap asserts user scope, and the marketplace update cases exercise project and user scopes independently.
 
 ---
 
@@ -93,8 +93,8 @@ The three PLAN prohibitions remain flagged. Existing same-run apply cases show d
 - [x] Wave 0 covers all MISSING references
 - [x] No watch-mode flags
 - [x] Feedback latency < 120s for focused task checks
-- [ ] `nyquist_compliant: true` set in frontmatter; three concurrency backstops and the PLAN prohibitions remain unverified
+- [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** validated. `npm run check` exited 0 on `67a589aa` with Node `v26.12.1` in this worktree: static checks passed, Cucumber passed 1,120 scenarios and 11,411 steps, and direct coverage merged 309 records. The RCN-03 focused scenario also passed 1 scenario and 15 steps. The full run needed loopback access because the default sandbox denied the Cucumber harness binding to `127.0.0.1`.
 
-The later verification audit found additional PLAN backstops. The prior full gate predates the new test assertions above; their focused verification is recorded in the backstop map. Nyquist compliance remains partial until the unverified backstops and flagged prohibitions are resolved.
+The later verification audit found additional PLAN backstops. Their focused checks and compositional call paths are recorded above. The combined tree at `33f1ce71` passed `npm run check` with 1,122 Cucumber scenarios, 11,447 steps, and 309 direct coverage records. The new dependency-operation lock test is verified by its owner test and direct pair coverage; the combined-tree gate must be rerun after that test change.
