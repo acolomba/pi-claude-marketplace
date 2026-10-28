@@ -87,6 +87,7 @@ import {
 } from "../../platform/pi-inventory-seed.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
+import { whileStateLockHeld } from "../state-lock.ts";
 
 import type { ParsedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
@@ -10403,14 +10404,10 @@ test("GIT-03: `info --fetch` of a not-installed git plugin under a held state lo
       materializePluginClone: () => assert.fail("a held lock never clones"),
       materializeOrRefreshPluginMirror: () => assert.fail("a held lock never refreshes the mirror"),
     };
-    const release = await lockfile.lock(locations.extensionRoot, {
-      lockfilePath: locations.stateLockFile,
-      realpath: false,
-    });
     const { ctx, run, notifications } = makeCtx();
 
-    // act
-    try {
+    await whileStateLockHeld(locations, async () => {
+      // act
       await getPluginInfo({
         ctx,
         run,
@@ -10421,9 +10418,7 @@ test("GIT-03: `info --fetch` of a not-installed git plugin under a held state lo
         fetch: true,
         cloneCacheSeam: seam,
       });
-    } finally {
-      await release();
-    }
+    });
 
     // assert
     assert.equal(notifications.length, 1);
@@ -10452,14 +10447,10 @@ test("GIT-03: `info --fetch` of an installed git plugin under a held state lock 
       materializePluginClone: () => assert.fail("a held lock never clones"),
       materializeOrRefreshPluginMirror: () => assert.fail("a held lock never refreshes the mirror"),
     };
-    const release = await lockfile.lock(locations.extensionRoot, {
-      lockfilePath: locations.stateLockFile,
-      realpath: false,
-    });
     const { ctx, run, notifications } = makeCtx();
 
-    // act
-    try {
+    await whileStateLockHeld(locations, async () => {
+      // act
       await getPluginInfo({
         ctx,
         run,
@@ -10470,9 +10461,7 @@ test("GIT-03: `info --fetch` of an installed git plugin under a held state lock 
         fetch: true,
         cloneCacheSeam: seam,
       });
-    } finally {
-      await release();
-    }
+    });
 
     // assert
     assert.equal(notifications.length, 1);

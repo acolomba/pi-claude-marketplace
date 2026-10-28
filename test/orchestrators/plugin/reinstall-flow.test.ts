@@ -7,7 +7,6 @@ import path from "node:path";
 import test from "node:test";
 
 import * as git from "isomorphic-git";
-import lockfile from "proper-lockfile";
 
 import {
   createHooksRouting,
@@ -56,6 +55,7 @@ import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
+import { whileStateLockHeld } from "../state-lock.ts";
 
 import { materializeCommitCopyWith } from "./mirror-checkout.ts";
 import { retryTree } from "./scope-tree-inventory.ts";
@@ -1664,14 +1664,9 @@ test("UPR-03: a reinstall refused at its intent mark by a held lock names the ve
       const stateBefore = await readFile(locations.stateJsonPath, "utf8");
       const { ctx, run, notifications } = makeCtx();
       const lockMessage = `Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes.`;
-      const release = await lockfile.lock(locations.extensionRoot, {
-        lockfilePath: locations.stateLockFile,
-        realpath: false,
-      });
-      let outcome;
-      try {
+      const outcome = await whileStateLockHeld(locations, async () => {
         // act
-        outcome = await reinstallPlugin({
+        return reinstallPlugin({
           ctx,
           run,
           scope: "project",
@@ -1679,9 +1674,7 @@ test("UPR-03: a reinstall refused at its intent mark by a held lock names the ve
           marketplace: "mp",
           plugin: "hello",
         });
-      } finally {
-        await release();
-      }
+      });
 
       // assert
       assert.ok(outcome.partition === "failed");
