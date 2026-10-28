@@ -87,25 +87,39 @@ Feature: Marketplace background update
       | extras           | user              | true                           | beta@extras | beta  | installed |         | user    | 1.10.0  |
       | tools            | project           | true                           | alpha@tools | alpha | installed |         | project | 1.10.0  |
 
-  Scenario: A foreground command stops an in-flight background request within the wait cap
+  Scenario: A foreground command cancels a held background git update before dependency settlement
     Given pi runs with the background update delay "0"
     Given the git repository "ghp" holds these plugins:
       | name | version | path |
       | ghp  | 1.0.0   |      |
-    Given the marketplace "tools" is published as a hosted source
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | app  | 1.0.0   |
+      | dep  | 1.0.0   |
     Given the marketplace "tools" offers these plugins from git repositories:
       | name | source kind | repository | pinned |
       | ghp  | github      | ghp        | false  |
     Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
     Given the user has run "/claude:plugin install ghp@tools --scope project"
     Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
-    Given the git host holds the connection for the marketplace "tools"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.1.0   | dep          |
+      | dep  | 1.0.0   |              |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the published plugin "app" of the marketplace "tools" has the agent "helper"
+    Given the agents directory of the project scope holds the file "pi-claude-marketplace-app-helper.md" with the text "My own helper agent."
+    Given the git host holds the response body for the plugin "ghp"
     When the user runs a foreground plugin list while the tui background request is in flight
-    Then the foreground plugin list stops the background request within the wait cap
-    When the user runs "/claude:plugin list"
-    Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace details autoupdate | id        | name | status    | reasons | scope   | version |
-      | tools            | project           | true                           | ghp@tools | ghp  | installed |         | project | 1.0.0   |
+    Then the foreground plugin list waits for the background git request to stop at the wait cap
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | app@tools | 1.0.0   | true    |
+      | ghp@tools | 1.0.0   | true    |
 
   Scenario: A message in an RPC session leaves the plugins of an autoupdate marketplace as they are
     Given pi runs with the background update delay "0"

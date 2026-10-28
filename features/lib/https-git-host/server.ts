@@ -73,6 +73,7 @@ export type GitHostArm =
   | { readonly kind: "status"; readonly status: ArmedStatus }
   | { readonly kind: "drop" }
   | { readonly kind: "hold" }
+  | { readonly kind: "hold-git-body" }
   | { readonly kind: "credential"; readonly user: string; readonly password: string }
   | { readonly kind: "invalid-response" }
   | { readonly kind: "redirect"; readonly location: string };
@@ -240,6 +241,20 @@ function failArmed(
       return true;
     case "hold":
       return true;
+    case "hold-git-body": {
+      res.writeHead(200, { "Content-Type": "application/x-git-upload-pack-advertisement" });
+      // An unfinished packet keeps git waiting; bytes prevent the HTTP idle timeout.
+      res.write("ffff");
+      const heartbeat = setInterval(() => {
+        res.write("0");
+      }, 1_000);
+      heartbeat.unref();
+      res.once("close", () => {
+        clearInterval(heartbeat);
+      });
+      return true;
+    }
+
     case "status":
       logged.status = arm.status;
       res.statusCode = arm.status;
