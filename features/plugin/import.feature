@@ -512,7 +512,7 @@ Feature: Plugin import
       | tally warnings | 0                            |
     Then the result lists these plugins:
       | marketplace name | marketplace scope | marketplace status | id                | name     | status | reasons   | scope | cause chain                                                                                                                                                                       | cause truncated | leaks | rollback partial |
-      | fixtures         | user              | failed             | fixtures@fixtures | fixtures | failed | lock held | user  | Another pi-claude-marketplace operation is in progress for user scope ({agent dir}/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
+      | fixtures         | user              | failed             | fixtures | fixtures | failed | lock held | user  | Another pi-claude-marketplace operation is in progress for user scope ({agent dir}/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
     Then the import leaves no installation record in the user scope
     Then the user scope holds no marketplace checkout
     Then the "claude-plugins.json" file of the user scope does not exist
@@ -788,12 +788,15 @@ Feature: Plugin import
       | name     | source                       |
       | fixtures | {home}/marketplaces/fixtures |
 
-  Scenario: Importing settings that give a known marketplace a new source adds it again from that source and keeps its installed plugins
+  Scenario: Importing settings that give a locally declared marketplace a new source updates that layer and keeps its installed plugins
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given a config in scope user and layer local, with these marketplaces:
+      | name     | source                       | autoupdate |
+      | fixtures | {home}/marketplaces/fixtures |            |
     Given a second marketplace declaring the name "fixtures" is ready to add from "fixtures-copy"
     Given the claude code settings file of the user scope holds this text:
       """
@@ -823,6 +826,9 @@ Feature: Plugin import
       | demo@fixtures      | 1.0.0   | true    |
       | formatter@fixtures | 1.0.0   | true    |
     Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+    Then the "claude-plugins.local.json" file of the user scope declares these marketplaces:
       | name     | source                            |
       | fixtures | {home}/marketplaces/fixtures-copy |
     Then the "claude-plugins.json" file of the user scope declares these plugins:
@@ -916,7 +922,7 @@ Feature: Plugin import
       | tally warnings | 0                            |
     Then the result lists these plugins:
       | marketplace name | marketplace scope | marketplace status | id                | name     | status | reasons | scope | cause chain                                                                    | cause truncated | leaks | rollback partial |
-      | fixtures         | user              | failed             | fixtures@fixtures | fixtures | failed |         | user  | marketplace.json names the marketplace "tools", not "fixtures", which it replaces | false           |       |                  |
+      | fixtures         | user              | failed             | fixtures          | fixtures | failed |         | user  | marketplace.json names the marketplace "tools", not "fixtures", which it replaces | false           |       |                  |
     Then the user scope has no installed plugins
     Then the "claude-plugins.json" file of the user scope declares these marketplaces:
       | name     | source                       |
