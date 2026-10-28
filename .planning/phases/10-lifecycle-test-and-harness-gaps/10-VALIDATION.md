@@ -117,3 +117,29 @@ The full `npm run check` result from `8184f337` remains valid for the current
 tree because only Phase 10 review Markdown changed after that commit. It passed
 1,120 scenarios, 11,411 steps, and 306 direct LCOV records. No behavior is
 unverified.
+
+## Stale-Verification Validation Audit 2026-10-28
+
+| Metric | Count |
+|---|---|
+| Gaps found | 1 |
+| Resolved | 1 |
+| Escalated | 0 |
+| Evidence rows valid | 56/56 |
+
+The post-split coverage ledger still cited the removed ledger-owner title for
+`LCTEST-ROOT-COMMIT`. The behavior remains directly owned at its current
+boundaries: the dependency planner proves that the root receives
+`previewedCommit`, and the public install-planning owner proves that the same
+pin materializes after one mirror resolution when a dependency moves. The two
+focused owner cases pass, so the ledger now cites those current tests instead
+of restoring a duplicate ledger case.
+
+`node scripts/check-phase10-coverage.mjs` passes all 56 rows.
+`npm run check:features` passes. Four focused harness and fixture owners pass,
+including the real-child process-tree case under process-group permissions.
+Thirteen representative Cucumber scenarios pass with 162 steps across TST-01,
+TST-02, CAS-08, MIM-05, XPH-01, and XPH-02. Direct coverage for the public
+install root, planning leaf, and ledger leaf remains 100% for lines, branches,
+and functions. TST-03 is covered by the focused manifest-first install and
+reinstall fixture owners. No production or test source changed.
