@@ -22,6 +22,7 @@
 
 import { parsePluginSource } from "../../domain/source.ts";
 import { isPluginDirectoryMarketplace } from "../../domain/version.ts";
+import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
 
 import { admitsRange, evaluateCatalogConstraint, transportHeld } from "./constraint-fold.ts";
 import { buildInstalledScopeDeclarationDetail } from "./dependency-index.ts";
@@ -33,6 +34,7 @@ import type {
   ConstraintRequester,
   UpdateConstraintVerdict,
 } from "./constraint-fold.ts";
+import type { ScopeDeclarationDetailOptions } from "./dependency-index.ts";
 import type { DependencyTagListingFailureReason } from "./dependency-tag-probe.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
@@ -86,7 +88,10 @@ export interface UpdateConstraintOptions {
 // `evaluateCatalogConstraint` with the catalog-first walk, so the two can judge
 // a holder whose installed copy and catalog disagree differently.
 const REAL_UPDATE_CONSTRAINT_SEAM: UpdateConstraintSeam = Object.freeze({
-  buildScopeDeclarationDetail: buildInstalledScopeDeclarationDetail,
+  // RCN-05: uninstall and clone GC use this lock. Release it before tag probes
+  // and candidate resolution, which can take their own scope locks.
+  buildScopeDeclarationDetail: (options: ScopeDeclarationDetailOptions) =>
+    withExistingScopeLock(options.locations, () => buildInstalledScopeDeclarationDetail(options)),
   probeDependencyTags,
   probeMarketplaceTags,
 });

@@ -9,8 +9,12 @@ import { probeDependencyTags } from "../../../extensions/pi-claude-marketplace/o
 import { probeMarketplaceTags } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
 import { evaluateUpdateConstraint } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { DependencyDeclarationsUnreadableError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  DependencyDeclarationsUnreadableError,
+  StateLockHeldError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
+import { whileStateLockHeld } from "../state-lock.ts";
 
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type {
@@ -224,12 +228,16 @@ describe("evaluateUpdateConstraint", () => {
     });
   });
 
-  test("without an injected seam, the gate composes the real declaration walk", async () => {
+  test("without an injected seam, the gate composes the real declaration walk", async (t) => {
     // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "update-constraint-empty-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const locations = locationsFor("project", root);
+    await mkdir(locations.extensionRoot, { recursive: true });
     const state: ExtensionState = { schemaVersion: 2, marketplaces: {} };
 
     // act
-    const verdict = await evaluateUpdateConstraint(options({ state }));
+    const verdict = await evaluateUpdateConstraint(options({ state, locations }));
 
     // assert
     assert.deepStrictEqual(verdict, { kind: "unconstrained" });
@@ -886,7 +894,7 @@ describe("evaluateUpdateConstraint", () => {
     assert.deepStrictEqual(second.pin, { oid: "oid-1.0.0", version: "1.0.0" });
   });
 
-  test("D-PL2-06: a holder's installed copy constrains the target though its catalog entry declares nothing", async (t) => {
+  test("refuses a held scope lock, then retries using the installed copy's constraint", async (t) => {
     // arrange
     const root = await mkdtemp(path.join(tmpdir(), "update-constraint-gate-"));
     t.after(() => rm(root, { recursive: true, force: true }));
@@ -930,15 +938,26 @@ describe("evaluateUpdateConstraint", () => {
       },
     };
 
+    const constraintOptions = options({
+      state,
+      locations,
+      marketplaceRoot,
+      entry: { name: "target", source: pathSource("./plugins/target") },
+    });
+
     // act
-    const verdict = await evaluateUpdateConstraint(
-      options({
-        state,
-        locations,
-        marketplaceRoot,
-        entry: { name: "target", source: pathSource("./plugins/target") },
-      }),
+    await whileStateLockHeld(locations, () =>
+      assert.rejects(
+        () => evaluateUpdateConstraint(constraintOptions),
+        (error: unknown) => {
+          assert.ok(error instanceof StateLockHeldError);
+          assert.strictEqual(error.scope, "project");
+          assert.strictEqual(error.lockPath, locations.stateLockFile);
+          return true;
+        },
+      ),
     );
+    const verdict = await evaluateUpdateConstraint(constraintOptions);
 
     // assert
     assert.deepStrictEqual(verdict, {
