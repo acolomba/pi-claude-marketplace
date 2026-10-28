@@ -1,27 +1,69 @@
 ---
 phase: 02-apply-ordering-and-installed-declarations
-fixed_at: 2026-10-27T09:40:00Z
+fixed_at: 2026-10-28T14:41:51Z
 review_path: .planning/phases/02-apply-ordering-and-installed-declarations/02-REVIEW.md
-iteration: 2
-findings_in_scope: 3
-fixed: 3
+iteration: 3
+findings_in_scope: 2
+fixed: 2
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 2: Code Review Fix Report
 
-**Fixed at:** 2026-10-27T09:40:00Z
+**Fixed at:** 2026-10-28T14:41:51Z
 **Source review:** .planning/phases/02-apply-ordering-and-installed-declarations/02-REVIEW.md
-**Iteration:** 2
+**Iteration:** 3
 
 **Summary:**
 
-- Findings in scope: 3 (WR-02 carried over, WR-07, WR-08; the scope was critical_warning, so IN-01..IN-04 were not attempted)
-- Fixed: 3
+- Findings in scope: 2 (CR-01 and CR-02; critical_warning)
+- Fixed: 2
 - Skipped: 0
 
-**Where verification ran:** all of it ran in the main checkout
+## Fixed Issues (round 3)
+
+### CR-01: Pending and load still reject source changes that apply repairs
+
+**Status:** fixed: requires human verification
+**Commit:** d0b7e21e — `fix(reconcile): preview marketplace source replacements`
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/reconcile/read-pass.ts`, `extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts`, `extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts`, `test/orchestrators/reconcile/pending.test.ts`, `test/orchestrators/reconcile/notify.test.ts`, `features/plugin/apply.feature`.
+
+**Applied fix:** Pending calls the same source-repair normalization as apply for its first plan and every replan. Apply retains its source-mismatch marker to select replacement. The pending renderer excludes that marker when the same scope and marketplace has a planned add. Other mismatch causes retain their failure rows. The official fallback declaration is current when that marketplace is recorded, as D-PL10-24 requires.
+
+**Regression evidence:** Three unit cases failed before production edits: pending's changed-source row and apply trailer, the official fallback's empty report, and the replacement marker's rendered row. The two behavioral scenarios also failed on the old code. They now compare pending, a new session without autoapply, and apply for ordinary replacement and the official fallback. Both pass: 2 scenarios, 35 steps.
+
+### CR-02: Replacing an existing hosted marketplace fails with a stale clone
+
+**Status:** fixed: requires human verification
+**Commit:** 7938b740 — `fix(marketplace): restore hosted sources when replacement fails`
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts`, `test/orchestrators/marketplace/add.test.ts`, `features/plugin/apply.feature`, `features/plugin/import.feature`.
+
+**Applied fix:** Hosted sources join github and url sources in the existing reversible managed-directory swap. Replacement puts the old hosted directory into staging, restores it on failure, and discards it after a successful save. User-owned path directories retain the existing behavior. The change is one source-kind condition and its documentation.
+
+**Regression evidence:** Hosted-to-hosted and hosted-to-git replacements failed with `stale clone` before the fix. A third regression forces a save failure after placement; it now reaches `EISDIR` and verifies the original state, installed records, catalog bytes, ownership marker, and empty staging directory. The replacement catalog has different bytes, so leaving it behind cannot pass. Two new behavioral scenarios reproduce the hosted URL change through apply and import. Both failed before the fix and pass afterward: 2 scenarios, 26 steps. The apply scenario also verifies a second apply has nothing to change.
+
+## Verification (round 3)
+
+All checks ran in the existing isolated worktree `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-b-258`, branch `agent-reverify-b`, Node `v26.12.1`. No nested worktree was created or removed. The checks requiring local loopback servers ran outside the sandbox after the sandbox refused `listen` with `EPERM`.
+
+- Re-read every changed production section and inspected the diff; `git diff --check` passed.
+- `npm run test:coverage:direct -- extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts extensions/pi-claude-marketplace/orchestrators/reconcile/read-pass.ts` exited 0. Each source-test pair reached 100% direct coverage. The commit hook verified the final extracted notification helper as well.
+- `npm run test:coverage:direct -- extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts` exited 0: all 198 owner tests passed and the source-test pair reached 100% direct coverage.
+- `npx cucumber-js --parallel 1 --name 'Apply replaces a marketplace whose declared source changed|The official fallback source is already up to date'` exited 0: 2 scenarios, 35 steps.
+- `npx cucumber-js --parallel 1 --name 'replaces an existing hosted marketplace'` exited 0: 2 scenarios, 26 steps.
+- `fallow audit --base HEAD --format human` passed before each commit. CR-01's initial inline filter exceeded the notification function's complexity threshold; extracting the filter removed the finding.
+- Both commits passed the normal hooks, including `npm run check:commit` (project typecheck, lint, static gates, unpaired tests, and staged-pair direct coverage). No hook was bypassed. CR-01's first commit attempt caught an unresolved helper return type; the corrected retry passed.
+- The first combined-tree `npm run check` exposed one stale load expectation for the former source-mismatch error. Commit `69e804cf` updates it to the actionable replacement preview; its 21-test owner suite and direct coverage pass.
+- The final combined-tree `npm run check` exited 0 at `69e804cf` with Node `v26.12.1`: static, integration, and unpaired checks passed; Cucumber passed 1,122 scenarios and 11,447 steps; direct coverage merged 309 LCOV records.
+
+This report records completed fixes, not a clean re-review. `02-REVIEW.md` remains unchanged by the fixer and retains `issues_found`. The orchestrator must re-review before closing the findings. No source or test changes remain uncommitted; this report is intentionally left for the orchestrator to commit.
+
+## Previous review rounds
+
+The following records retain the dispositions and evidence from iterations 1 and 2. Their observations describe those revisions; later recorded decisions and review findings take precedence.
+
+**Round 2 verification:** all of it ran in the main checkout
 (`/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-p2-apply-954f68`, branch
 `features/plugin-lifecycle-p2`). No worktree was used. Each fix shipped a unit test, and
 each test was shown to fail with the source change reverted. WR-07 and WR-08 also have a
