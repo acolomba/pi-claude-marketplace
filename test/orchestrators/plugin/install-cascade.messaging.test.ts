@@ -530,6 +530,109 @@ describe("composeCascadeMemberRows", () => {
 });
 
 describe("composeCascadeMemberRow", () => {
+  for (const { title, signals, reasons, severity } of [
+    {
+      title: "a malformed skill warns without an unloaded companion",
+      signals: { degradedKinds: ["skill"] },
+      reasons: ["malformed skill"],
+      severity: "warning",
+    },
+    {
+      title: "a malformed command warns without an unloaded companion",
+      signals: { degradedKinds: ["command"] },
+      reasons: ["malformed command"],
+      severity: "warning",
+    },
+    {
+      title: "malformed reasons are ordered and deduplicated after orphan rewake",
+      signals: { orphanRewake: true, degradedKinds: ["command", "skill", "command", "skill"] },
+      reasons: ["orphan rewake", "malformed skill", "malformed command"],
+      severity: "warning",
+    },
+    {
+      title: "orphan rewake with no degraded kinds stays informational",
+      signals: { orphanRewake: true, degradedKinds: [] },
+      reasons: ["orphan rewake"],
+      severity: "info",
+    },
+  ] satisfies ReadonlyArray<{
+    title: string;
+    signals: Partial<CascadeInstalledRow>;
+    reasons: readonly string[];
+    severity: "info" | "warning";
+  }>) {
+    test(title, () => {
+      // arrange
+      const installed = member(signals);
+
+      // act
+      const row = composeCascadeMemberRow(installed, PROBE_BOTH_LOADED);
+
+      // assert
+      assert.deepStrictEqual(row, {
+        status: "installed",
+        name: "formatter@tools",
+        dependencies: [],
+        version: "2.1.0",
+        reasons,
+        severity,
+        needsReload: true,
+      });
+    });
+  }
+
+  for (const { title, origin, reasons } of [
+    {
+      title: "a degraded partial dependency preserves its current-copy reason",
+      origin: { fellBackToCurrentCopy: true },
+      reasons: [
+        "dependency current copy",
+        "orphan rewake",
+        "malformed skill",
+        "malformed command",
+        "unsupported component",
+        "lsp",
+      ],
+    },
+    {
+      title: "a degraded partial dependency preserves its re-enable reasons",
+      origin: { reEnabledFromRecord: true },
+      reasons: [
+        "already installed",
+        "dependency enabled",
+        "orphan rewake",
+        "malformed skill",
+        "malformed command",
+        "unsupported component",
+        "lsp",
+      ],
+    },
+  ]) {
+    test(title, () => {
+      // arrange
+      const installed = member({
+        ...origin,
+        orphanRewake: true,
+        degradedKinds: ["command", "skill", "skill"],
+        unsupported: ["outputStyles", "themes", "lspServers"],
+      });
+
+      // act
+      const row = composeCascadeMemberRow(installed, PROBE_BOTH_LOADED);
+
+      // assert
+      assert.deepStrictEqual(row, {
+        status: "partially-installed",
+        name: "formatter@tools",
+        dependencies: [],
+        version: "2.1.0",
+        reasons,
+        severity: "warning",
+        needsReload: true,
+      });
+    });
+  }
+
   for (const { title, origin, reasons } of [
     {
       title: "a partial dependency preserves its current-copy reason and companion warning",

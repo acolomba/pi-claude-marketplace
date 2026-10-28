@@ -26,6 +26,25 @@ Feature: Plugin install dependencies
       | /skill:app-skill | A skill of app 1.0.0. |
       | /skill:lib-skill | A skill of lib 1.2.0. |
 
+  Scenario: Installing a dependency with malformed frontmatter warns while its requester stays installed
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the published plugin "lib" of the marketplace "tools" has a skill with malformed frontmatter
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | warning                             |
+      | needs reload | true                                |
+      | summary      | A plugin operation needs attention. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status    | reasons         | scope   | version |
+      | tools            | project           | app@tools | app       | installed |                 | project | 1.0.0   |
+      | tools            | project           | lib@tools | lib@tools | installed | malformed skill | project | 1.0.0   |
+
   Scenario: Installing a fresh dependency partially reports its own partial status
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:

@@ -114,7 +114,7 @@ import { DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
 import { cascadeUnstagePlugin, foldUnstageNotices } from "../marketplace/shared.ts";
 
 import { probeDependencyTags } from "./dependency-tag-probe.ts";
-import { runInstallLedger } from "./install-outcome.ts";
+import { ledgerDegradationSignals, runInstallLedger } from "./install-outcome.ts";
 import { probeMarketplaceTags } from "./marketplace-tag-probe.ts";
 import { applyPartialCascadeFold } from "./shared.ts";
 
@@ -131,6 +131,7 @@ import type {
   InstallLedgerTransaction,
 } from "./install-outcome.ts";
 import type { MarketplaceTagProbeOptions } from "./marketplace-tag-probe.ts";
+import type { LedgerDegradationSignals } from "./shared.ts";
 import type {
   ClosureLookup,
   ClosureMember,
@@ -430,7 +431,10 @@ interface MemberConstraintOptions {
 }
 
 /** One member the cascade itself materialized, in install order. */
-export interface CascadeMemberOutcome {
+export interface CascadeMemberOutcome extends Pick<
+  LedgerDegradationSignals,
+  "orphanRewake" | "degradedKinds"
+> {
   readonly key: string;
   readonly name: string;
   readonly marketplace: string;
@@ -1259,6 +1263,7 @@ function recordMaterializedMember(
     ...(summary.resolved.state === "partially-available" && {
       unsupported: [...summary.resolved.unsupported],
     }),
+    ...ledgerDegradationSignals(summary),
     declaresAgents: summary.stagedAgentNames.length > 0,
     declaresMcp: summary.stagedMcpServerNames.length > 0,
     declaresWorkflows: summary.stagedWorkflowNames.length > 0,

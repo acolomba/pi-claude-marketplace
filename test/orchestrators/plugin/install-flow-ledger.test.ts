@@ -15440,6 +15440,83 @@ test("retry proof: install: state commit race after staged work retries from unc
 // -- which are exactly the failures this surface exists to prevent.
 // ───────────────────────────────────────────────────────────────────────────
 
+for (const { title, file, partial, manifest, memberRow } of [
+  {
+    title: "a dependency with a malformed skill warns while its requesting plugin stays installed",
+    file: "skills/tool/SKILL.md",
+    partial: false,
+    manifest: {},
+    memberRow: "  ● lib@mp v1.0.0 (installed) {malformed skill}",
+  },
+  {
+    title:
+      "a partial dependency with a malformed command reports both reasons and keeps its requester installed",
+    file: "commands/run.md",
+    partial: true,
+    manifest: { outputStyles: ["./styles"] },
+    memberRow: "  ◉ lib@mp v1.0.0 (partially-installed) {malformed command, unsupported component}",
+  },
+]) {
+  test(title, async () => {
+    await withHermeticHome(async ({ installPlugin }) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({
+        app: { version: "1.0.0", dependencies: ["lib"] },
+        lib: { version: "1.0.0" },
+      });
+      try {
+        const pluginRoot = path.join(marketplaceRoot, "plugins", "lib");
+        const target = path.join(pluginRoot, file);
+        await mkdir(path.dirname(target), { recursive: true });
+        await writeFile(target, "---\nname: [unterminated\n---\nBody.\n");
+        await writeFile(
+          path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+          JSON.stringify({ name: "lib", version: "1.0.0", ...manifest }),
+        );
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        const outcome = await installPlugin({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "app",
+          partial,
+        });
+
+        // assert
+        assert.strictEqual(outcome.status, "installed");
+        assert.deepStrictEqual(notifications, [
+          {
+            severity: "warning",
+            message: [
+              "A plugin operation needs attention.",
+              "",
+              "● mp [project]",
+              "  ● app v1.0.0 (installed)",
+              memberRow,
+              "",
+              "/reload to pick up changes",
+            ].join("\n"),
+          },
+        ]);
+        const state = await loadState(locationsFor("project", cwd).extensionRoot);
+        assert.deepStrictEqual(
+          [
+            state.marketplaces.mp?.plugins.app?.enabled,
+            state.marketplaces.mp?.plugins.lib?.enabled,
+          ],
+          [true, true],
+        );
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 test("RESV-01 / RESV-06: a successful cascade renders one row per member", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-resv06-rows-"));
