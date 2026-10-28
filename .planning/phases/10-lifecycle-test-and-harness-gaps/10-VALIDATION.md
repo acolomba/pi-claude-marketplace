@@ -99,3 +99,21 @@ ledger still named the retired monolithic owner path and title.
 The ledger now cites the PI-6 ledger case and both `rootCommit` owner cases.
 `node scripts/check-phase10-coverage.mjs` passes all 56 rows, and the three
 focused post-split cases pass without changing implementation.
+
+## Post-Review-Fix Validation Audit 2026-10-28
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+The final install-flow boundary keeps all 56 Phase 10 evidence rows valid. The
+relocated PI-6 and `rootCommit` owner cases pass. The three CAS-08 scenarios
+also pass with 39 steps. Direct coverage for the public root, planning leaf,
+and ledger leaf remains 100% for lines, branches, and functions.
+
+The full `npm run check` result from `8184f337` remains valid for the current
+tree because only Phase 10 review Markdown changed after that commit. It passed
+1,120 scenarios, 11,411 steps, and 306 direct LCOV records. No behavior is
+unverified.
