@@ -295,7 +295,7 @@ Plans:
 3. Docs, CHANGELOG, and PROJECT.md decision rows match the shipped behavior (CLN-03).
 4. `BACKLOG.md` marks every entry this milestone settled closed with its disposition (CLN-04).
 
-**Plans:** 12/12 plans executed
+**Plans:** 12/13 plans executed
 
 Plans:
 **Wave 1**
@@ -321,6 +321,9 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5 and verified Phase 10 integration)*
 - [x] 11-09-PLAN.md — finalize Phase 10-dependent docs, backlog dispositions, and requirements closure
+
+**Wave 7** *(verification gap closure after Wave 6)*
+- [ ] 11-13-PLAN.md — finish the install-flow ledger split and remove its large-file exceptions
 
 ## Carried Forward
 
