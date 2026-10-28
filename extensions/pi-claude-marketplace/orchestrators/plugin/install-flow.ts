@@ -3,23 +3,22 @@
 // Public composition root for install transaction sequencing.
 
 import {
-  createInstallLedgerPlugin,
   createInstallMissingDependencyLedger,
   prepareInstallDependencyPlan,
   previewInstallDependencyPlanRoot,
   projectCaughtInstallDependencyPlanFailure,
   projectFailedInstallDependencyPlanMoves,
   runInstallDependencyPlanCascade,
-} from "./install-flow-ledger.ts";
+} from "./install-flow-dependency-ledger.ts";
+import { createInstallLedgerPlugin } from "./install-flow-ledger.ts";
 import { createInstallPlanning } from "./install-flow-planning.ts";
 
 import type { InstallHooksRouting } from "./install-disable-cascade.ts";
 import type {
   InstallMissingDependencyOptions,
   InstallMissingDependencyOutcome,
-  InstallPluginOptions,
-  InstallTransaction,
-} from "./install-flow-ledger.ts";
+} from "./install-flow-dependency-ledger.ts";
+import type { InstallPluginOptions, InstallTransaction } from "./install-flow-ledger.ts";
 import type { UpdateDependencyResolver } from "./update-swap.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -28,9 +27,8 @@ import type { InstallPluginOutcome } from "../types.ts";
 export type {
   InstallMissingDependencyOptions,
   InstallMissingDependencyOutcome,
-  InstallPluginOptions,
-  InstallTransaction,
-} from "./install-flow-ledger.ts";
+} from "./install-flow-dependency-ledger.ts";
+export type { InstallPluginOptions, InstallTransaction } from "./install-flow-ledger.ts";
 
 const INSTALL_PLANNING = createInstallPlanning({
   preparePlan: prepareInstallDependencyPlan,
