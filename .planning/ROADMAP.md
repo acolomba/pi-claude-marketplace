@@ -54,7 +54,7 @@ parent session applies them at merge.
 - [x] **Phase 8: Background Autoupdate** - autoupdate updates in the background, as Claude Code does (completed 2026-10-27)
 - [x] **Phase 9: Plugin Package Dependencies** - a plugin's own npm or bun dependencies install with it (completed 2026-10-27)
 - [x] **Phase 10: Lifecycle Test and Harness Gaps** - the open scenario, unit, and harness gaps are closed (completed 2026-10-28)
-- [ ] **Phase 11: Cleanup, Split, and Docs** - dead code, the install-flow split, docs, and backlog closures
+- [x] **Phase 11: Cleanup, Split, and Docs** - dead code, the install-flow split, docs, and backlog closures (completed 2026-10-28)
 
 ## Phase Details
 
@@ -295,7 +295,7 @@ Plans:
 3. Docs, CHANGELOG, and PROJECT.md decision rows match the shipped behavior (CLN-03).
 4. `BACKLOG.md` marks every entry this milestone settled closed with its disposition (CLN-04).
 
-**Plans:** 13/13 plans executed
+**Plans:** 13/13 plans complete
 
 Plans:
 **Wave 1**
