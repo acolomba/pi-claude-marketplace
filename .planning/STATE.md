@@ -2,14 +2,14 @@
 gsd_state_version: "1.0"
 milestone: plugin-lifecycle
 milestone_name: Marketplace and Plugin Lifecycle Backlog
-current_phase: 3
+current_phase: 03
 current_phase_name: Dependency Cascade Rows and Status
 status: verifying
-stopped_at: Phase 04 complete, ready to verify Phase 3
-last_updated: "2026-10-28T17:59:21.118Z"
+stopped_at: Phase 01 complete, ready to verify Phase 03
+last_updated: "2026-10-28T16:41:24.410Z"
 last_activity: 2026-10-28
-last_activity_desc: Phase 04 complete, transitioned to Phase 3
-state_head: 3cc95cb3ec63feee82dd83614ae29b6fd41364c7
+last_activity_desc: Phase 01 complete, transitioned to Phase 03
+state_head: f9128881acff87223b1f6ee03825159a899f2e0a
 progress:
   total_phases: 11
   completed_phases: 10
@@ -27,14 +27,15 @@ See: `.planning/PROJECT.md` (updated 2026-10-22 at the lifecycle-coverage start)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 04 — Dependency Resolver Residue
+**Current focus:** Phase 11 — Cleanup, Split, and Docs
 
 ## Current Position
 
-Phase: 3 — Dependency Cascade Rows and Status
+Phase: 03 — Dependency Cascade Rows and Status
 Plan: 6
 Status: Phase complete — ready for verification
-Last activity: 2026-10-28 — Phase 04 complete, transitioned to Phase 3
+Last activity: 2026-10-28 — Phase 01 complete, transitioned to Phase 03
+
 
 ### mcp-4 closeout
 
@@ -129,35 +130,35 @@ injected collaborator honoring a prose-only contract that nothing type-enforces.
 
 Items acknowledged and deferred at milestone close, most recent first.
 
-| Category       | Item                                                                                                                                                                                         | Status                                                                                   | Deferred At          | Milestone            |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | -------------------- | -------------------- |
-| todos          | 2026-10-13-cucumber-rules-trial.md: try the cucumber rules on another repository (§3; reviewed in Phase 10 and not folded)                                                                   | acknowledged — still pending                                                             | 2026-10-21           | marketplace-features |
-| deferred_items | 07/deferred-items.md: DEP-07-03-01 brace-expansion advisory in the root Pi tree; TEST-07-06-01 optional pi-subagents resolver skip                                                           | acknowledged — carried as BACKLOG DEPADV-01; WINDOWS #92 (was #89 before the main merge) | 2026-10-11           | json-output          |
-| deferred_items | 08/deferred-items.md: DEF-08-04-01 `windows status --pick` fails when stdout is a pipe                                                                                                       | acknowledged — upstream gsd-tools, out of scope                                          | 2026-10-11           | json-output          |
-| deferred_items | 05/deferred-items.md: the record (five open comment-drift items, three closed; the scanner reads the file as one entry)                                                                      | acknowledged                                                                             | 2026-09-18           | test-backlog         |
-| deferred_items | 06/deferred-items.md: Six ledger notes name a witness coordinate the fresh report no longer holds (table converted to bullets at this close; item 1 was resolved by the #196 hermetic merge) | acknowledged                                                                             | 2026-09-18           | test-backlog         |
-| quick_tasks    | 260907-qqo-hkps-01-if-field-powershell-rule-prefix-                                                                                                                                          | unknown (work is complete; scanner misreads it)                                          | 2026-09-13           | refine-unit-tests    |
-| deferred_items | 06/deferred-items.md: 1. Stale notification hub reference outside Plan 06-19 callers                                                                                                         | acknowledged — RESOLVED, condition no longer holds                                       | 2026-09-13           | refine-unit-tests    |
-| deferred_items | 06/deferred-items.md: 2. Node 26 direct-coverage negative-control subprocess capture                                                                                                         | acknowledged — promoted to backlog `NEGCTL-01`                                           | 2026-09-13           | refine-unit-tests    |
-| deferred_items | 25/deferred-items.md (archived v1.4.1): `test/e2e/import-command.test.ts` 3 failures                                                                                                         | acknowledged — promoted to backlog `E2EIMP-01`                                           | 2026-09-13           | refine-unit-tests    |
-| Tooling        | Detect unused code and unused type members — no gate reports a type member nothing reads (measured: typecheck, lint, and fallow all pass with one planted)                                   | closed — test-backlog `06/` (06-VERIFICATION 2/2); gate `lint:type-members` in `check`   | Phase 116 discussion | v1.19                |
-| quick_tasks    | 260720-d8i-move-agent-provenance-from-body-comment-                                                                                                                                          | unknown                                                                                  | 2026-09-04           | v1.19                |
-| todos          | 2026-09-02-detect-unused-code-and-type-members.md                                                                                                                                            | (presence-only)                                                                          | 2026-09-04           | v1.19                |
-| uat_gaps       | 89/89-UAT.md (archived v1.16)                                                                                                                                                                | passed                                                                                   | 2026-09-04           | v1.19                |
-| uat_gaps       | 63/63-UAT.md (archived v1.13)                                                                                                                                                                | passed                                                                                   | 2026-09-04           | v1.19                |
-| uat_gaps       | 56/56-UAT-FIX-2.md (archived v1.12)                                                                                                                                                          | all_fixed                                                                                | 2026-09-04           | v1.19                |
-| uat_gaps       | 56/56-UAT-FIX.md (archived v1.12)                                                                                                                                                            | all_fixed                                                                                | 2026-09-04           | v1.19                |
-| deferred_items | 112/deferred-items.md: Phase 112 deferred items - `npm run check` reaches `format:check` but reports pre-existing format differences in user-owned, untracked `.mcp.json` and                | acknowledged                                                                             | 2026-09-04           | v1.19                |
-| deferred_items | 117/deferred-items.md: 1. Stale test path in an `install.messaging.ts` doc comment                                                                                                           | acknowledged                                                                             | 2026-09-04           | v1.19                |
-| deferred_items | 117/deferred-items.md: 2. Stale byte-form-lock path in the output catalog                                                                                                                    | acknowledged                                                                             | 2026-09-04           | v1.19                |
-| deferred_items | 117/deferred-items.md: 3. Stale `test/helpers/` references throughout the codebase map                                                                                                       | acknowledged                                                                             | 2026-09-04           | v1.19                |
-| deferred_items | 117/deferred-items.md: 4. RESOLVED - `--all` cannot complete: the seven D-116-01a shortfalls are accepted                                                                                    | acknowledged                                                                             | 2026-09-04           | v1.19                |
-| deferred_items | 117/deferred-items.md: 5. RESOLVED - The PATH interpreter was upgraded mid-phase and reddened 11 tests                                                                                       | acknowledged                                                                             | 2026-09-04           | v1.19                |
-| deferred_items | 117/deferred-items.md: 6. RESOLVED - The direct-coverage sweeps still have no automated control                                                                                              | acknowledged                                                                             | 2026-09-04           | v1.19                |
-| deferred_items | 90/deferred-items.md (archived v1.17): 90-03 execution — pre-existing pi-subagents global-peer environment failure                                                                           | acknowledged                                                                             | 2026-09-04           | v1.19                |
-| deferred_items | 86/deferred-items.md (archived v1.15): pre-existing integration test failures, identical on the base commit                                                                                  | acknowledged                                                                             | 2026-09-04           | v1.19                |
-| deferred_items | 85/deferred-items.md (archived v1.14): pre-existing integration-test failures, unrelated to the phase                                                                                        | acknowledged                                                                             | 2026-09-04           | v1.19                |
-| deferred_items | 50/deferred-items.md (archived v1.11): pre-existing reinstall README documentation gap                                                                                                       | acknowledged                                                                             | 2026-09-04           | v1.19                |
+| Category       | Item                                                                                                                                                                                          | Status          | Deferred At          | Milestone |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------- | --------- |
+| todos          | 2026-10-13-cucumber-rules-trial.md: try the cucumber rules on another repository (§3; reviewed in Phase 10 and not folded) | acknowledged — still pending | 2026-10-21 | marketplace-features |
+| deferred_items | 07/deferred-items.md: DEP-07-03-01 brace-expansion advisory in the root Pi tree; TEST-07-06-01 optional pi-subagents resolver skip | acknowledged — carried as BACKLOG DEPADV-01; WINDOWS #92 (was #89 before the main merge) | 2026-10-11 | json-output |
+| deferred_items | 08/deferred-items.md: DEF-08-04-01 `windows status --pick` fails when stdout is a pipe | acknowledged — upstream gsd-tools, out of scope | 2026-10-11 | json-output |
+| deferred_items | 05/deferred-items.md: the record (five open comment-drift items, three closed; the scanner reads the file as one entry)                                                                | acknowledged    | 2026-09-18           | test-backlog |
+| deferred_items | 06/deferred-items.md: Six ledger notes name a witness coordinate the fresh report no longer holds (table converted to bullets at this close; item 1 was resolved by the #196 hermetic merge)  | acknowledged    | 2026-09-18           | test-backlog |
+| quick_tasks    | 260907-qqo-hkps-01-if-field-powershell-rule-prefix-                                                                                                                                           | unknown (work is complete; scanner misreads it) | 2026-09-13 | refine-unit-tests |
+| deferred_items | 06/deferred-items.md: 1. Stale notification hub reference outside Plan 06-19 callers                                                                                                          | acknowledged — RESOLVED, condition no longer holds | 2026-09-13 | refine-unit-tests |
+| deferred_items | 06/deferred-items.md: 2. Node 26 direct-coverage negative-control subprocess capture                                                                                                          | acknowledged — promoted to backlog `NEGCTL-01` | 2026-09-13 | refine-unit-tests |
+| deferred_items | 25/deferred-items.md (archived v1.4.1): `test/e2e/import-command.test.ts` 3 failures                                                                                                         | acknowledged — promoted to backlog `E2EIMP-01` | 2026-09-13 | refine-unit-tests |
+| Tooling        | Detect unused code and unused type members — no gate reports a type member nothing reads (measured: typecheck, lint, and fallow all pass with one planted)                                    | closed — test-backlog `06/` (06-VERIFICATION 2/2); gate `lint:type-members` in `check` | Phase 116 discussion | v1.19     |
+| quick_tasks    | 260720-d8i-move-agent-provenance-from-body-comment-                                                                                                                                           | unknown         | 2026-09-04           | v1.19     |
+| todos          | 2026-09-02-detect-unused-code-and-type-members.md                                                                                                                                             | (presence-only) | 2026-09-04           | v1.19     |
+| uat_gaps       | 89/89-UAT.md (archived v1.16)                                                                                                                                                                 | passed          | 2026-09-04           | v1.19     |
+| uat_gaps       | 63/63-UAT.md (archived v1.13)                                                                                                                                                                 | passed          | 2026-09-04           | v1.19     |
+| uat_gaps       | 56/56-UAT-FIX-2.md (archived v1.12)                                                                                                                                                           | all_fixed       | 2026-09-04           | v1.19     |
+| uat_gaps       | 56/56-UAT-FIX.md (archived v1.12)                                                                                                                                                             | all_fixed       | 2026-09-04           | v1.19     |
+| deferred_items | 112/deferred-items.md: Phase 112 deferred items - `npm run check` reaches `format:check` but reports pre-existing format differences in user-owned, untracked `.mcp.json` and                 | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 117/deferred-items.md: 1. Stale test path in an `install.messaging.ts` doc comment                                                                                                            | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 117/deferred-items.md: 2. Stale byte-form-lock path in the output catalog                                                                                                                     | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 117/deferred-items.md: 3. Stale `test/helpers/` references throughout the codebase map                                                                                                       | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 117/deferred-items.md: 4. RESOLVED - `--all` cannot complete: the seven D-116-01a shortfalls are accepted                                                                                     | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 117/deferred-items.md: 5. RESOLVED - The PATH interpreter was upgraded mid-phase and reddened 11 tests                                                                                        | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 117/deferred-items.md: 6. RESOLVED - The direct-coverage sweeps still have no automated control                                                                                               | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 90/deferred-items.md (archived v1.17): 90-03 execution — pre-existing pi-subagents global-peer environment failure                                                                            | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 86/deferred-items.md (archived v1.15): pre-existing integration test failures, identical on the base commit                                                                                   | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 85/deferred-items.md (archived v1.14): pre-existing integration-test failures, unrelated to the phase                                                                                         | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 50/deferred-items.md (archived v1.11): pre-existing reinstall README documentation gap                                                                                                        | acknowledged    | 2026-09-04           | v1.19     |
 
 ### The phase-25 table limitation is FIXED
 
@@ -175,20 +176,20 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Quick Tasks Completed
 
-| #                                       | Description                                                                                                                                                                                                    | Date       | Commit   | Status   | Directory                                                                                                                     |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| 1                                       | Run init.sh in new worktrees: SessionStart guard keyed on node_modules/.init-done (7f4c2178)                                                                                                                   | 2026-10-24 | 7f4c2178 | —        | —                                                                                                                             |
-| 2                                       | APPLYTHROW-01: report the changes an apply made before it failed                                                                                                                                               | 2026-10-25 | 20ee9b25 | complete | [261025-j40](./quick/261025-j40-report-the-changes-an-apply-made-before-/)                                                    |
-| 3                                       | APPLY1-01: move a plugin and its newer dependency in one apply                                                                                                                                                 | 2026-10-25 | a777b12f | complete | [261025-n1z](./quick/261025-n1z-move-a-plugin-and-its-newer-dependency-i/)                                                    |
-| 261025-vf1                              | UPD-DEP-D1: settle the dependencies of every version a plugin moves to                                                                                                                                         | 2026-10-26 | 1daa12d0 | complete | [261025-vf1-resolve-the-new-version-s-dependency-clo](./quick/261025-vf1-resolve-the-new-version-s-dependency-clo/)           |
-| 261026-26d                              | UPDDEP-REVIEW: plan every dependency move before the first write                                                                                                                                               | 2026-10-26 | 6d57cb9a | complete | [261026-26d-plan-dependency-moves-before-any-write](./quick/261026-26d-plan-dependency-moves-before-any-write/)               |
-| 261026-c06                              | Lifecycle-coverage leftovers: a lost state lock, apply dependency judgement, cross-marketplace trust                                                                                                           | 2026-10-26 | 82ef8cac | complete | [261026-c06-fix-lock-compromise-apply-dependency-jud](./quick/261026-c06-fix-lock-compromise-apply-dependency-jud/)           |
-| 261026-gv1                              | GV-01: record git plugin versions as Claude Code does; errno wording per Node; two Sonar findings                                                                                                              | 2026-10-26 | cf2a1c37 | complete | [261026-gv1-record-git-plugin-versions-as-claude-code](./quick/261026-gv1-record-git-plugin-versions-as-claude-code/)         |
-| 261026-gvt                              | GV-01: record plugins at a range-selected release tag as Claude Code does, the tag semver kept as resolvedVersion                                                                                              | 2026-10-26 | 2638b001 | complete | [261026-gvt-record-plugins-at-release-tags-as-claude-code](./quick/261026-gvt-record-plugins-at-release-tags-as-claude-code/) |
-| 261026-glv                              | GV-01: an update with no tag drops the tag commit from the record; plugin directory plugins pick no release tag and their listed copy answers the range                                                        | 2026-10-26 | 33c9ac69 | complete | [261026-glv-match-claude-code-on-untagged-updates-an](./quick/261026-glv-match-claude-code-on-untagged-updates-an/)           |
-| 261026-dpt                              | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/)             |
-| **Stopped at:** Completed 11-13-PLAN.md |
-| **Resume file:** None                   |
+| # | Description | Date | Commit | Status | Directory |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Run init.sh in new worktrees: SessionStart guard keyed on node_modules/.init-done (7f4c2178) | 2026-10-24 | 7f4c2178 | — | — |
+| 2 | APPLYTHROW-01: report the changes an apply made before it failed | 2026-10-25 | 20ee9b25 | complete | [261025-j40](./quick/261025-j40-report-the-changes-an-apply-made-before-/) |
+| 3 | APPLY1-01: move a plugin and its newer dependency in one apply | 2026-10-25 | a777b12f | complete | [261025-n1z](./quick/261025-n1z-move-a-plugin-and-its-newer-dependency-i/) |
+| 261025-vf1 | UPD-DEP-D1: settle the dependencies of every version a plugin moves to | 2026-10-26 | 1daa12d0 | complete | [261025-vf1-resolve-the-new-version-s-dependency-clo](./quick/261025-vf1-resolve-the-new-version-s-dependency-clo/) |
+| 261026-26d | UPDDEP-REVIEW: plan every dependency move before the first write | 2026-10-26 | 6d57cb9a | complete | [261026-26d-plan-dependency-moves-before-any-write](./quick/261026-26d-plan-dependency-moves-before-any-write/) |
+| 261026-c06 | Lifecycle-coverage leftovers: a lost state lock, apply dependency judgement, cross-marketplace trust | 2026-10-26 | 82ef8cac | complete | [261026-c06-fix-lock-compromise-apply-dependency-jud](./quick/261026-c06-fix-lock-compromise-apply-dependency-jud/) |
+| 261026-gv1 | GV-01: record git plugin versions as Claude Code does; errno wording per Node; two Sonar findings | 2026-10-26 | cf2a1c37 | complete | [261026-gv1-record-git-plugin-versions-as-claude-code](./quick/261026-gv1-record-git-plugin-versions-as-claude-code/) |
+| 261026-gvt | GV-01: record plugins at a range-selected release tag as Claude Code does, the tag semver kept as resolvedVersion | 2026-10-26 | 2638b001 | complete | [261026-gvt-record-plugins-at-release-tags-as-claude-code](./quick/261026-gvt-record-plugins-at-release-tags-as-claude-code/) |
+| 261026-glv | GV-01: an update with no tag drops the tag commit from the record; plugin directory plugins pick no release tag and their listed copy answers the range | 2026-10-26 | 33c9ac69 | complete | [261026-glv-match-claude-code-on-untagged-updates-an](./quick/261026-glv-match-claude-code-on-untagged-updates-an/) |
+| 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
+**Stopped at:** Completed 11-13-PLAN.md
+**Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
 `claude/plugin-lifecycle-coverage-b1d431`. Next: `/gsd-plan-phase 1` (Suite
@@ -278,133 +279,133 @@ archived milestone artifacts.
 
 ## Performance Metrics
 
-| Plan           | Duration | Tasks   | Files    |
-| -------------- | -------- | ------- | -------- |
-| Phase 01 P01   | 50 min   | 3 tasks | 5 files  |
-| Phase 01 P02   | 80 min   | 2 tasks | 11 files |
-| Phase 01 P03   | 67 min   | 2 tasks | 15 files |
-| Phase 01 P04   | 122 min  | 2 tasks | 42 files |
-| Phase 01 P05   | 73 min   | 2 tasks | 37 files |
-| Phase 01 P06   | 74 min   | 2 tasks | 25 files |
-| Phase 01 P07   | 71 min   | 2 tasks | 25 files |
-| Phase 01 P08   | 51 min   | 2 tasks | 22 files |
-| Phase 01 P09   | 70 min   | 2 tasks | 24 files |
-| Phase 01 P10   | 67 min   | 2 tasks | 23 files |
-| Phase 01 P11   | 81 min   | 2 tasks | 19 files |
-| Phase 01 P12   | 62 min   | 2 tasks | 27 files |
-| Phase 01 P13   | 75 min   | 2 tasks | 18 files |
-| Phase 01 P14   | 77 min   | 2 tasks | 17 files |
-| Phase 01 P15   | 50 min   | 2 tasks | 32 files |
-| Phase 01 P16   | 78 min   | 2 tasks | 26 files |
-| Phase 03 P01   | 1h 17m   | 2 tasks | 10 files |
-| Phase 03 P02   | 1h 15m   | 2 tasks | 10 files |
-| Phase 03 P03   | 1h 13m   | 2 tasks | 20 files |
-| Phase 03 P04   | 1h 3m    | 2 tasks | 4 files  |
-| Phase 04 P01   | 89min    | 2 tasks | 15 files |
-| Phase 04 P02   | 85min    | 2 tasks | 20 files |
-| Phase 04 P03   | 113min   | 2 tasks | 17 files |
-| Phase 04 P04   | 84min    | 2 tasks | 9 files  |
-| Phase 04 P05   | 67 min   | 2 tasks | 6 files  |
-| Phase 04 P06   | 83 min   | 2 tasks | 6 files  |
-| Phase 05 P01   | 35 min   | 2 tasks | 69 files |
-| Phase 05 P02   | 33 min   | 2 tasks | 51 files |
-| Phase 05 P03   | 30 min   | 2 tasks | 14 files |
-| Phase 05 P04   | 25 min   | 2 tasks | 30 files |
-| Phase 05 P05   | 30 min   | 2 tasks | 10 files |
-| Phase 05 P06   | 29 min   | 2 tasks | 8 files  |
-| Phase 05 P07   | 32 min   | 2 tasks | 2 files  |
-| Phase 08 P01   | 28 min   | 3 tasks | 1 files  |
-| Phase 08 P02   | 5 min    | 2 tasks | 2 files  |
-| Phase 08 P03   | 4 min    | 2 tasks | 4 files  |
-| Phase 08 P04   | 6 min    | 3 tasks | 2 files  |
-| Phase 09 P01   | 10 min   | 3 tasks | 3 files  |
-| Phase 01 P01   | 8 min    | 3 tasks | 12 files |
-| Phase 01 P02   | 13 min   | 3 tasks | 4 files  |
-| Phase 01 P03   | 13 min   | 3 tasks | 10 files |
-| Phase 01 P04   | 12 min   | 3 tasks | 7 files  |
-| Phase 01 P05   | 4 min    | 2 tasks | 6 files  |
-| Phase 02 P01   | 14min    | 2 tasks | 7 files  |
-| Phase 02 P02   | 13 min   | 2 tasks | 10 files |
-| Phase 02 P03   | 18 min   | 3 tasks | 16 files |
-| Phase 02 P04   | 15 min   | 3 tasks | 10 files |
-| Phase 02 P05   | 14 min   | 3 tasks | 10 files |
-| Phase 03 P01   | 7 min    | 2 tasks | 5 files  |
-| Phase 03 P02   | 5 min    | 2 tasks | 3 files  |
-| Phase 03 P03   | 7 min    | 2 tasks | 3 files  |
-| Phase 03.1 P01 | 21min    | 3 tasks | 12 files |
-| Phase 03.1 P02 | 20min    | 3 tasks | 13 files |
-| Phase 03.1 P03 | 16min    | 2 tasks | 7 files  |
-| Phase 03.1 P04 | 16min    | 3 tasks | 11 files |
-| Phase 03.1 P05 | 11min    | 3 tasks | 7 files  |
-| Phase 03.2 P03 | 15min    | 3 tasks | 24 files |
-| Phase 03.2 P04 | 38min    | 3 tasks | 11 files |
-| Phase 03.2 P05 | 25min    | 3 tasks | 9 files  |
-| Phase 03.3 P01 | 16min    | 1 tasks | 16 files |
-| Phase 03.3 P02 | 9min     | 1 tasks | 12 files |
-| Phase 03.3 P03 | 31min    | 2 tasks | 9 files  |
-| Phase 03.3 P04 | 36min    | 2 tasks | 18 files |
-| Phase 03.3 P05 | 28min    | 2 tasks | 19 files |
-| Phase 03.3 P06 | 37min    | 3 tasks | 13 files |
-| Phase 03.3 P10 | 16min    | 2 tasks | 9 files  |
-| Phase 03.4 P06 | 19min    | 2 tasks | 10 files |
-| Phase 03.4 P07 | 15min    | 2 tasks | 15 files |
-| Phase 03.4 P08 | 36min    | 3 tasks | 56 files |
-| Phase 03.4 P10 | 40min    | 2 tasks | 20 files |
-| Phase 06 P02   | 50 min   | 3 tasks | 6 files  |
-| Phase 07 P01   | 10 min   | 2 tasks | 8 files  |
-| Phase 07 P02   | 11 min   | 2 tasks | 6 files  |
-| Phase 07 P03   | 7 min    | 2 tasks | 9 files  |
-| Phase 07 P04   | 7min     | 3 tasks | 1 files  |
-| Phase 08 P01   | 4 min    | 2 tasks | 1 files  |
-| Phase 08 P02   | 11 min   | 3 tasks | 12 files |
-| Phase 08 P03   | 12 min   | 2 tasks | 20 files |
-| Phase 08 P04   | 9 min    | 2 tasks | 10 files |
-| Phase 08 P05   | 12 min   | 3 tasks | 10 files |
-| Phase 09 P01   | 14 min   | 1 tasks | 16 files |
-| Phase 09 P02   | 6min     | 2 tasks | 6 files  |
-| Phase 09 P03   | 11min    | 3 tasks | 6 files  |
-| Phase 09 P04   | 12 min   | 2 tasks | 4 files  |
-| Phase 09 P05   | 11 min   | 2 tasks | 13 files |
-| Phase 09 P06   | 7 min    | 2 tasks | 8 files  |
-| Phase 09 P07   | 6 min    | 2 tasks | 3 files  |
-| Phase 09 P08   | 8 min    | 3 tasks | 4 files  |
-| Phase 10 P01   | 8min     | 2 tasks | 9 files  |
-| Phase 10 P02   | 14min    | 2 tasks | 8 files  |
-| Phase 10 P03   | 10 min   | 3 tasks | 11 files |
-| Phase 10 P04   | 19 min   | 2 tasks | 7 files  |
-| Phase 10 P05   | 5min     | 2 tasks | 4 files  |
-| Phase 10 P06   | 14min    | 2 tasks | 8 files  |
-| Phase 10 P07   | 13min    | 2 tasks | 2 files  |
-| Phase 01 P01   | 9 min    | 3 tasks | 3 files  |
-| Phase 01 P02   | 11 min   | 2 tasks | 14 files |
-| Phase 01 P03   | 10 min   | 2 tasks | 9 files  |
-| Phase 01 P04   | 8 min    | 2 tasks | 4 files  |
-| Phase 01 P05   | 8 min    | 2 tasks | 8 files  |
-| Phase 01 P06   | 10 min   | 3 tasks | 10 files |
-| Phase 01 P07   | 9 min    | 2 tasks | 8 files  |
-| Phase 01 P08   | 10 min   | 2 tasks | 8 files  |
-| Phase 01 P09   | 12 min   | 2 tasks | 6 files  |
-| Phase 01 P10   | 10 min   | 3 tasks | 10 files |
-| Phase 29 P01   | 28 min   | 2 tasks | 27 files |
-| Phase 29 P02   | 46 min   | 2 tasks | 17 files |
-| Phase 29 P03   | 27 min   | 2 tasks | 24 files |
-| Phase 29 P04   | 29 min   | 2 tasks | 27 files |
-| Phase 29 P05   | 40 min   | 2 tasks | 24 files |
-| Phase 29 P06   | 24 min   | 2 tasks | 24 files |
-| Phase 29 P07   | 19 min   | 2 tasks | 7 files  |
-| Phase 29 P08   | 27 min   | 2 tasks | 15 files |
-| Phase 29 P09   | 52 min   | 3 tasks | 41 files |
-| Phase 29 P10   | 54 min   | 3 tasks | 31 files |
-| Phase 29 P11   | 27 min   | 2 tasks | 14 files |
-| Phase 29 P12   | 70 min   | 3 tasks | 34 files |
-| Phase 29 P13   | 48 min   | 3 tasks | 44 files |
-| Phase 29 P14   | 20 min   | 2 tasks | 9 files  |
-| Phase 10 P05   | 59min    | 3 tasks | 37 files |
-| Phase 10 P06   | 28min    | 3 tasks | 14 files |
-| Phase 10 P07   | 15min    | 3 tasks | 4 files  |
-| Phase 11 P06   | 42min    | 3 tasks | 13 files |
-| Phase 11 P09   | 15min    | 3 tasks | 7 files  |
-| Phase 11 P13   | 47min    | 3 tasks | 11 files |
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 01 P01 | 50 min | 3 tasks | 5 files |
+| Phase 01 P02 | 80 min | 2 tasks | 11 files |
+| Phase 01 P03 | 67 min | 2 tasks | 15 files |
+| Phase 01 P04 | 122 min | 2 tasks | 42 files |
+| Phase 01 P05 | 73 min | 2 tasks | 37 files |
+| Phase 01 P06 | 74 min | 2 tasks | 25 files |
+| Phase 01 P07 | 71 min | 2 tasks | 25 files |
+| Phase 01 P08 | 51 min | 2 tasks | 22 files |
+| Phase 01 P09 | 70 min | 2 tasks | 24 files |
+| Phase 01 P10 | 67 min | 2 tasks | 23 files |
+| Phase 01 P11 | 81 min | 2 tasks | 19 files |
+| Phase 01 P12 | 62 min | 2 tasks | 27 files |
+| Phase 01 P13 | 75 min | 2 tasks | 18 files |
+| Phase 01 P14 | 77 min | 2 tasks | 17 files |
+| Phase 01 P15 | 50 min | 2 tasks | 32 files |
+| Phase 01 P16 | 78 min | 2 tasks | 26 files |
+| Phase 03 P01 | 1h 17m | 2 tasks | 10 files |
+| Phase 03 P02 | 1h 15m | 2 tasks | 10 files |
+| Phase 03 P03 | 1h 13m | 2 tasks | 20 files |
+| Phase 03 P04 | 1h 3m | 2 tasks | 4 files |
+| Phase 04 P01 | 89min | 2 tasks | 15 files |
+| Phase 04 P02 | 85min | 2 tasks | 20 files |
+| Phase 04 P03 | 113min | 2 tasks | 17 files |
+| Phase 04 P04 | 84min | 2 tasks | 9 files |
+| Phase 04 P05 | 67 min | 2 tasks | 6 files |
+| Phase 04 P06 | 83 min | 2 tasks | 6 files |
+| Phase 05 P01 | 35 min | 2 tasks | 69 files |
+| Phase 05 P02 | 33 min | 2 tasks | 51 files |
+| Phase 05 P03 | 30 min | 2 tasks | 14 files |
+| Phase 05 P04 | 25 min | 2 tasks | 30 files |
+| Phase 05 P05 | 30 min | 2 tasks | 10 files |
+| Phase 05 P06 | 29 min | 2 tasks | 8 files |
+| Phase 05 P07 | 32 min | 2 tasks | 2 files |
+| Phase 08 P01 | 28 min | 3 tasks | 1 files |
+| Phase 08 P02 | 5 min | 2 tasks | 2 files |
+| Phase 08 P03 | 4 min | 2 tasks | 4 files |
+| Phase 08 P04 | 6 min | 3 tasks | 2 files |
+| Phase 09 P01 | 10 min | 3 tasks | 3 files |
+| Phase 01 P01 | 8 min | 3 tasks | 12 files |
+| Phase 01 P02 | 13 min | 3 tasks | 4 files |
+| Phase 01 P03 | 13 min | 3 tasks | 10 files |
+| Phase 01 P04 | 12 min | 3 tasks | 7 files |
+| Phase 01 P05 | 4 min | 2 tasks | 6 files |
+| Phase 02 P01 | 14min | 2 tasks | 7 files |
+| Phase 02 P02 | 13 min | 2 tasks | 10 files |
+| Phase 02 P03 | 18 min | 3 tasks | 16 files |
+| Phase 02 P04 | 15 min | 3 tasks | 10 files |
+| Phase 02 P05 | 14 min | 3 tasks | 10 files |
+| Phase 03 P01 | 7 min | 2 tasks | 5 files |
+| Phase 03 P02 | 5 min | 2 tasks | 3 files |
+| Phase 03 P03 | 7 min | 2 tasks | 3 files |
+| Phase 03.1 P01 | 21min | 3 tasks | 12 files |
+| Phase 03.1 P02 | 20min | 3 tasks | 13 files |
+| Phase 03.1 P03 | 16min | 2 tasks | 7 files |
+| Phase 03.1 P04 | 16min | 3 tasks | 11 files |
+| Phase 03.1 P05 | 11min | 3 tasks | 7 files |
+| Phase 03.2 P03 | 15min | 3 tasks | 24 files |
+| Phase 03.2 P04 | 38min | 3 tasks | 11 files |
+| Phase 03.2 P05 | 25min | 3 tasks | 9 files |
+| Phase 03.3 P01 | 16min | 1 tasks | 16 files |
+| Phase 03.3 P02 | 9min | 1 tasks | 12 files |
+| Phase 03.3 P03 | 31min | 2 tasks | 9 files |
+| Phase 03.3 P04 | 36min | 2 tasks | 18 files |
+| Phase 03.3 P05 | 28min | 2 tasks | 19 files |
+| Phase 03.3 P06 | 37min | 3 tasks | 13 files |
+| Phase 03.3 P10 | 16min | 2 tasks | 9 files |
+| Phase 03.4 P06 | 19min | 2 tasks | 10 files |
+| Phase 03.4 P07 | 15min | 2 tasks | 15 files |
+| Phase 03.4 P08 | 36min | 3 tasks | 56 files |
+| Phase 03.4 P10 | 40min | 2 tasks | 20 files |
+| Phase 06 P02 | 50 min | 3 tasks | 6 files |
+| Phase 07 P01 | 10 min | 2 tasks | 8 files |
+| Phase 07 P02 | 11 min | 2 tasks | 6 files |
+| Phase 07 P03 | 7 min | 2 tasks | 9 files |
+| Phase 07 P04 | 7min | 3 tasks | 1 files |
+| Phase 08 P01 | 4 min | 2 tasks | 1 files |
+| Phase 08 P02 | 11 min | 3 tasks | 12 files |
+| Phase 08 P03 | 12 min | 2 tasks | 20 files |
+| Phase 08 P04 | 9 min | 2 tasks | 10 files |
+| Phase 08 P05 | 12 min | 3 tasks | 10 files |
+| Phase 09 P01 | 14 min | 1 tasks | 16 files |
+| Phase 09 P02 | 6min | 2 tasks | 6 files |
+| Phase 09 P03 | 11min | 3 tasks | 6 files |
+| Phase 09 P04 | 12 min | 2 tasks | 4 files |
+| Phase 09 P05 | 11 min | 2 tasks | 13 files |
+| Phase 09 P06 | 7 min | 2 tasks | 8 files |
+| Phase 09 P07 | 6 min | 2 tasks | 3 files |
+| Phase 09 P08 | 8 min | 3 tasks | 4 files |
+| Phase 10 P01 | 8min | 2 tasks | 9 files |
+| Phase 10 P02 | 14min | 2 tasks | 8 files |
+| Phase 10 P03 | 10 min | 3 tasks | 11 files |
+| Phase 10 P04 | 19 min | 2 tasks | 7 files |
+| Phase 10 P05 | 5min | 2 tasks | 4 files |
+| Phase 10 P06 | 14min | 2 tasks | 8 files |
+| Phase 10 P07 | 13min | 2 tasks | 2 files |
+| Phase 01 P01 | 9 min | 3 tasks | 3 files |
+| Phase 01 P02 | 11 min | 2 tasks | 14 files |
+| Phase 01 P03 | 10 min | 2 tasks | 9 files |
+| Phase 01 P04 | 8 min | 2 tasks | 4 files |
+| Phase 01 P05 | 8 min | 2 tasks | 8 files |
+| Phase 01 P06 | 10 min | 3 tasks | 10 files |
+| Phase 01 P07 | 9 min | 2 tasks | 8 files |
+| Phase 01 P08 | 10 min | 2 tasks | 8 files |
+| Phase 01 P09 | 12 min | 2 tasks | 6 files |
+| Phase 01 P10 | 10 min | 3 tasks | 10 files |
+| Phase 29 P01 | 28 min | 2 tasks | 27 files |
+| Phase 29 P02 | 46 min | 2 tasks | 17 files |
+| Phase 29 P03 | 27 min | 2 tasks | 24 files |
+| Phase 29 P04 | 29 min | 2 tasks | 27 files |
+| Phase 29 P05 | 40 min | 2 tasks | 24 files |
+| Phase 29 P06 | 24 min | 2 tasks | 24 files |
+| Phase 29 P07 | 19 min | 2 tasks | 7 files |
+| Phase 29 P08 | 27 min | 2 tasks | 15 files |
+| Phase 29 P09 | 52 min | 3 tasks | 41 files |
+| Phase 29 P10 | 54 min | 3 tasks | 31 files |
+| Phase 29 P11 | 27 min | 2 tasks | 14 files |
+| Phase 29 P12 | 70 min | 3 tasks | 34 files |
+| Phase 29 P13 | 48 min | 3 tasks | 44 files |
+| Phase 29 P14 | 20 min | 2 tasks | 9 files |
+| Phase 10 P05 | 59min | 3 tasks | 37 files |
+| Phase 10 P06 | 28min | 3 tasks | 14 files |
+| Phase 10 P07 | 15min | 3 tasks | 4 files |
+| Phase 11 P06 | 42min | 3 tasks | 13 files |
+| Phase 11 P09 | 15min | 3 tasks | 7 files |
+| Phase 11 P13 | 47min | 3 tasks | 11 files |
 
 ## Decisions
 
@@ -746,7 +747,7 @@ archived milestone artifacts.
 - [Phase 08]: The agents and skills rollback marker sits above the throw in the else-if arm (bridges/agents/stage.ts:517): the first span line carries an eslint-disable-next-line directive, and a fallow marker above the directive does not hide the group.
 - [Phase 08]: dispatchRow keeps an unknown-valued view of the render map and casts the looked-up arm once; a typed RenderFn view fails tsc (function parameters are contravariant)
 - [Phase 08]: D-08-03: the adapter-loaded enable and import shapes are pinned by tests; SEV-01 kept, no renderer change
-- [Phase 08]: D-08-07: shared/own-key.ts (ownValue, setOwn) is the own-key helper every zone imports; isReservedRecordKey reserves only **proto**; marketplace add checks reserved and duplicate names in one helper (newMarketplaceName)
+- [Phase 08]: D-08-07: shared/own-key.ts (ownValue, setOwn) is the own-key helper every zone imports; isReservedRecordKey reserves only __proto__; marketplace add checks reserved and duplicate names in one helper (newMarketplaceName)
 - [Phase 08]: D-08-04 header cleanliness is checked on written values with the adapter's own reference regex; the split token is unclean even if its variable is set
 - [Phase 08]: A non-string written header value withdraws auth (defense in depth; the resolver marks it malformed)
 - [Phase 08]: An unparseable authServerMetadataUrl is malformed before any feature blocks
@@ -758,7 +759,7 @@ archived milestone artifacts.
 - [Phase 08]: Own-key install, enable, disable and uninstall: test Proxies that fake a record answer getOwnPropertyDescriptor, and ones that drop a write trap defineProperty, because ownValue and setOwn bypass get and set (D-08-07)
 - [Phase 08]: Reinstall, update and list read state records by own key; the reinstalled record is written with setOwn (D-08-07)
 - [Phase 08]: Reconcile, import, config write-back and marketplace modules read by own key and write config maps with setOwn; mcp-migration imports the shared ownValue (D-08-07)
-- [Phase 08]: End-to-end reserved-name proof runs the registered /claude:plugin handler and the real applyReconcile in a hermetic home; install **proto**@<mp> is refused at the closure root-key token rule as (failed) {invalid manifest}, and the resolver's (unavailable) {unsupported source} row surfaces through list
+- [Phase 08]: End-to-end reserved-name proof runs the registered /claude:plugin handler and the real applyReconcile in a hermetic home; install __proto__@<mp> is refused at the closure root-key token rule as (failed) {invalid manifest}, and the resolver's (unavailable) {unsupported source} row surfaces through list
 - [Phase 08]: The MCP bridge keeps one isPlainObject, exported from bridges/mcp/marker.ts (a module with no sibling imports); the ENOTDIR-as-absent change in stage.ts readOptionalBytes is declined because such a stage throws before it records a prior file
 - [Phase 08]: Every Phase 1-7 review ledger is closed by hand with open: 0; fixed rows cite commits, wontfix rows carry reasons, and ledgers holding wontfix note the code-review parser reads it as open (DEBT-02)
 - [Phase 08]: Broken-windows entry 90 (misleading dependency cause for an invalid root plugin name) is carried by BACKLOG ROOTKEY-01 and waived in the ledger; code unchanged
@@ -829,5 +830,5 @@ in the phase deferred items. The milestone remains open for audit and archival.
 ## Session Continuity
 
 Last session: 2026-10-28T11:38:54.366Z
-Stopped at: Phase 04 complete, ready to verify Phase 3
+Stopped at: Phase 01 complete, ready to verify Phase 03
 Resume file: None
