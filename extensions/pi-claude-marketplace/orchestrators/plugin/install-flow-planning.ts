@@ -36,23 +36,6 @@ import {
   runDependencyCascadeOrPlanMoves,
   walkDependencyGraph,
 } from "./install-cascade.ts";
-import {
-  buildInstallLedgerOptions,
-  catalogLookup,
-  collectInstalledKeys,
-  dependencyLedgerOptions,
-  handleCaughtInstallFailure,
-  hydrateInstalledHooks,
-  loadInstallRootAllowlist,
-  installMcpConfigNoticesMember,
-  movedMember,
-  movedRows,
-  settleAddedMarketplaces,
-  sharedCascadeOptions,
-  trackInstallAdds,
-  unwrapCascade,
-  writeReEnabledCascadeMemberConfigEntries,
-} from "./install-flow-ledger.ts";
 import { DEFAULT_MARKETPLACE_ADD, previewInstall } from "./install-outcome.ts";
 import { formatOrchestratedCause } from "./install.messaging.ts";
 import { collectInstallReachableMarketplaces, resolveInstallMarketplaceSource } from "./shared.ts";
@@ -78,6 +61,8 @@ import type {
   InstallAdds,
   InstallAfterPlan,
   InstallPlanningOwners,
+  InstallPlanningLedgerPorts,
+  InstallPlanning,
   InstallPluginOptions,
   InstallTransaction,
   TargetRecordFor,
@@ -105,7 +90,7 @@ import type { InstallPluginOutcome, MovedDependency } from "../types.ts";
  * (`installAfterMoves`), and `keepAddsForMoves` keeps what the run added for
  * the run after it.
  */
-export function routeInstallCascade(
+function routeInstallCascade(
   installed: Extract<RootCascadeResult, { readonly kind: "installed" }> | CascadePlan | undefined,
   keepAddsForMoves: () => void,
 ):
@@ -130,6 +115,7 @@ export function routeInstallCascade(
  * writes nothing.
  */
 function planningCatalog(
+  ledger: InstallPlanningLedgerPorts,
   state: ExtensionState,
   target: DependencyTarget,
 ): { readonly recordFor: TargetRecordFor; readonly lookup: ClosureLookup } {
@@ -144,7 +130,7 @@ function planningCatalog(
     )?.sourceRecord;
   return {
     recordFor,
-    lookup: catalogLookup(recordFor, target.locations, { mcpConfigNotices: [] }),
+    lookup: ledger.catalogLookup(recordFor, target.locations, { mcpConfigNotices: [] }),
   };
 }
 
@@ -181,21 +167,22 @@ function candidateLookup(
  * install preview.
  */
 async function planningPorts(args: {
+  readonly ledger: InstallPlanningLedgerPorts;
   readonly owners: InstallPlanningOwners;
   readonly target: DependencyTarget;
   readonly caller: DependencyCaller;
   readonly context: DependencyMoveContext;
   readonly root: PlanRoot;
 }): Promise<DependencyPlanPorts> {
-  const { owners, target, caller, context, root } = args;
+  const { ledger, owners, target, caller, context, root } = args;
   const state = await loadState(target.locations.extensionRoot);
-  const catalog = planningCatalog(state, target);
-  const ledgerOptionsFor = dependencyLedgerOptions(caller, owners.env, {
+  const catalog = planningCatalog(ledger, state, target);
+  const ledgerOptionsFor = ledger.dependencyLedgerOptions(caller, owners.env, {
     scope: target.scope,
     cwd: target.cwd,
-    adds: trackInstallAdds(owners.transaction, undefined),
+    adds: ledger.trackInstallAdds(owners.transaction, undefined),
   });
-  const rootAllowedMarketplaces = await loadInstallRootAllowlist(
+  const rootAllowedMarketplaces = await ledger.loadInstallRootAllowlist(
     catalog.recordFor,
     root.marketplace,
     root.plugin,
@@ -220,7 +207,7 @@ async function planningPorts(args: {
             : candidateLookup(prepared, subject);
         },
         marketplaceRecordFor: catalog.recordFor,
-        installedKeys: collectInstalledKeys(state),
+        installedKeys: ledger.collectInstalledKeys(state),
         readThrough: new Set(moving.keys()),
         knownMarketplaces,
         ledgerOptionsFor,
@@ -233,6 +220,7 @@ async function planningPorts(args: {
 
 /** What one locked run of a cascade rooted at the operation's plugin reads. */
 interface RootCascade {
+  readonly ledger: InstallPlanningLedgerPorts;
   readonly owners: InstallPlanningOwners;
   readonly target: DependencyTarget;
   readonly caller: DependencyCaller;
@@ -267,12 +255,13 @@ async function lockedRootCascade<S extends Exclude<InstallCascadeResult, Cascade
   finish: (settled: S, run: LockedRootRun) => Promise<T>,
 ): Promise<T | Extract<SettleCascadeRun, { readonly kind: "refused" }>> {
   const { owners, target, caller, root } = args;
+  const { ledger } = args;
   const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
   const sink: CascadeFailureSink = { mcpConfigNotices: [] };
-  const adds = trackInstallAdds(owners.transaction, undefined, args.carried);
+  const adds = ledger.trackInstallAdds(owners.transaction, undefined, args.carried);
   try {
     const run = await adds.lockOwner.withLockedStateTransaction(target.locations, async (tx) => {
-      const shared = await sharedCascadeOptions({
+      const shared = await ledger.sharedCascadeOptions({
         opts: caller,
         env: owners.env,
         state: tx.state,
@@ -284,7 +273,7 @@ async function lockedRootCascade<S extends Exclude<InstallCascadeResult, Cascade
         transaction: owners.transaction,
       });
       const prepared = root.prepared;
-      const settled = unwrapCascade(
+      const settled = ledger.unwrapCascade(
         await cascade({
           ...shared,
           lookup: (subject) =>
@@ -293,7 +282,10 @@ async function lockedRootCascade<S extends Exclude<InstallCascadeResult, Cascade
               : shared.lookup(subject),
           tagMemo: args.memos.constraintTagMemo,
           marketplaceTagMemo: args.memos.constraintMarketplaceTagMemo,
-          ledgerOptionsFor: dependencyLedgerOptions(caller, owners.env, { ...target, adds }),
+          ledgerOptionsFor: ledger.dependencyLedgerOptions(caller, owners.env, {
+            ...target,
+            adds,
+          }),
         }),
         capture,
         root.key,
@@ -305,7 +297,7 @@ async function lockedRootCascade<S extends Exclude<InstallCascadeResult, Cascade
 
       return finish(settled, { tx, adds });
     });
-    await settleAddedMarketplaces(
+    await ledger.settleAddedMarketplaces(
       adds.committedAdds,
       adds.marketplaceAdd,
       target.locations,
@@ -333,11 +325,14 @@ async function saveRootClosure(
   run: LockedRootRun,
 ): Promise<SettleCascadeRun> {
   if (args.writesConfig) {
-    await writeReEnabledCascadeMemberConfigEntries(args.target.locations, settled.members);
+    await args.ledger.writeReEnabledCascadeMemberConfigEntries(
+      args.target.locations,
+      settled.members,
+    );
   }
 
   await run.tx.save();
-  await hydrateInstalledHooks({
+  await args.ledger.hydrateInstalledHooks({
     hooksRouting: args.owners.hooksRouting,
     scope: args.target.scope,
     cwd: args.target.cwd,
@@ -348,7 +343,7 @@ async function saveRootClosure(
     rows: settled.members.map((member) =>
       composeCascadeMemberRow(member, args.caller.run.softDeps),
     ),
-    ...installMcpConfigNoticesMember(settled.mcpConfigNotices),
+    ...args.ledger.installMcpConfigNoticesMember(settled.mcpConfigNotices),
   };
 }
 
@@ -405,15 +400,18 @@ type InstallPlanResult =
  * clones the operation left unreferenced are removed, and clones that were
  * there before stay.
  */
-export async function installAfterMoves(args: {
-  readonly owners: InstallPlanningOwners;
-  readonly opts: InstallPluginOptions;
-  readonly carried: CarriedAdd[];
-  readonly installAgain: (
-    opts: InstallPluginOptions,
-    afterPlan: InstallAfterPlan,
-  ) => Promise<InstallPluginOutcome>;
-}): Promise<InstallPluginOutcome> {
+async function installAfterMoves(
+  ledger: InstallPlanningLedgerPorts,
+  args: {
+    readonly owners: InstallPlanningOwners;
+    readonly opts: InstallPluginOptions;
+    readonly carried: CarriedAdd[];
+    readonly installAgain: (
+      opts: InstallPluginOptions,
+      afterPlan: InstallAfterPlan,
+    ) => Promise<InstallPluginOutcome>;
+  },
+): Promise<InstallPluginOutcome> {
   const { owners, opts, carried } = args;
   const orchestrated = opts.notifications?.mode === "orchestrated";
   const target = {
@@ -438,6 +436,7 @@ export async function installAfterMoves(args: {
     memos,
   });
   const cascade: RootCascade = {
+    ledger,
     owners,
     target,
     caller: opts,
@@ -458,16 +457,16 @@ export async function installAfterMoves(args: {
   };
   const sweep = await planCloneSweep(target.locations);
   try {
-    const plan = await planInstallMoves({ owners, opts, target, root, context, defers });
+    const plan = await planInstallMoves({ ledger, owners, opts, target, root, context, defers });
     if ("err" in plan) {
-      return handleCaughtInstallFailure({ ...failure, ...plan });
+      return ledger.handleCaughtInstallFailure({ ...failure, ...plan });
     }
 
     const resolvedMembers = resolvedPlanMemberKeys(plan);
     const ran = await runDependencySteps(plan.steps, dependencyStepPorts(cascade, context));
     if (!ran.ok) {
       const reported = new Set([root.key, ...ran.landed.map((entry) => entry.key)]);
-      return failedMoveOutcome({
+      return failedMoveOutcome(ledger, {
         opts,
         moved: ran.landed,
         cause: ran.cause,
@@ -505,6 +504,7 @@ function resolvedPlanMemberKeys(
  * rendered at the catch site like the first run's.
  */
 async function planInstallMoves(args: {
+  readonly ledger: InstallPlanningLedgerPorts;
   readonly owners: InstallPlanningOwners;
   readonly opts: InstallPluginOptions;
   readonly target: DependencyTarget;
@@ -512,12 +512,12 @@ async function planInstallMoves(args: {
   readonly context: DependencyMoveContext;
   readonly defers: boolean;
 }): Promise<InstallPlanResult> {
-  const { owners, opts, target } = args;
+  const { ledger, owners, opts, target } = args;
   try {
     const rootCommit = await previewInstall(
       await loadState(target.locations.extensionRoot),
       target.locations,
-      buildInstallLedgerOptions(opts, owners.env, {
+      ledger.buildInstallLedgerOptions(opts, owners.env, {
         scope: target.scope,
         cwd: target.cwd,
         marketplace: opts.marketplace,
@@ -548,13 +548,16 @@ async function planInstallMoves(args: {
  * `{dependency failed}` beside the rows of every change that landed and the
  * one that failed. The changes made before it stay, each complete.
  */
-function failedMoveOutcome(args: {
-  readonly opts: InstallPluginOptions;
-  readonly moved: readonly MovedDependency[];
-  readonly cause: Error;
-  readonly orchestrated: boolean;
-  readonly unmaterialized: readonly string[];
-}): InstallPluginOutcome {
+function failedMoveOutcome(
+  ledger: InstallPlanningLedgerPorts,
+  args: {
+    readonly opts: InstallPluginOptions;
+    readonly moved: readonly MovedDependency[];
+    readonly cause: Error;
+    readonly orchestrated: boolean;
+    readonly unmaterialized: readonly string[];
+  },
+): InstallPluginOutcome {
   const { opts } = args;
   if (!args.orchestrated) {
     notifyWithContext(
@@ -572,7 +575,7 @@ function failedMoveOutcome(args: {
               reasons: ["dependency failed"],
               severity: "error",
             },
-            ...movedRows(args.moved),
+            ...ledger.movedRows(args.moved),
             ...composeUnmaterializedRows(args.unmaterialized, [
               `${opts.plugin}@${opts.marketplace}`,
               ...args.moved.map((entry) => entry.key),
@@ -589,7 +592,7 @@ function failedMoveOutcome(args: {
     status: "failed",
     error: args.cause,
     cause: formatOrchestratedCause(args.cause),
-    ...movedMember(args.moved),
+    ...ledger.movedMember(args.moved),
   };
 }
 
@@ -599,12 +602,15 @@ function failedMoveOutcome(args: {
  * install's own cascade, plan and steps. WR-C: the swap's PI-6 name check
  * runs first, so a name conflict refuses the update before anything lands.
  */
-async function settleUpdateDependencies(input: {
-  readonly owners: InstallPlanningOwners;
-  readonly args: ThreePhaseArgs;
-  readonly prepared: PreparedPluginUpdate;
-  readonly notification: { readonly ctx: NotificationContext; readonly run: NotificationRun };
-}): Promise<UpdateDependencySettlement> {
+async function settleUpdateDependencies(
+  ledger: InstallPlanningLedgerPorts,
+  input: {
+    readonly owners: InstallPlanningOwners;
+    readonly args: ThreePhaseArgs;
+    readonly prepared: PreparedPluginUpdate;
+    readonly notification: { readonly ctx: NotificationContext; readonly run: NotificationRun };
+  },
+): Promise<UpdateDependencySettlement> {
   const { owners, args, prepared } = input;
   await assertUpdateNamesFree(args, prepared);
   const target = { scope: args.scope, cwd: args.cwd, locations: args.locations };
@@ -625,6 +631,7 @@ async function settleUpdateDependencies(input: {
     memos,
   });
   const cascade: RootCascade = {
+    ledger,
     owners,
     target,
     caller,
@@ -640,9 +647,12 @@ async function settleUpdateDependencies(input: {
           saveRootClosureOrKeepPlan(cascade, settled, run),
         ),
       plan: async () =>
-        planDependencyGraph(await planningPorts({ owners, target, caller, context, root }), {
-          deferMoveDependencies: false,
-        }),
+        planDependencyGraph(
+          await planningPorts({ ledger, owners, target, caller, context, root }),
+          {
+            deferMoveDependencies: false,
+          },
+        ),
       steps: dependencyStepPorts(cascade, context),
       planSweep: () => planCloneSweep(target.locations),
     });
@@ -655,17 +665,30 @@ async function settleUpdateDependencies(input: {
  * Binds the update dependency cascade to one install transaction owner, as
  * `createInstallMissingDependency` binds its own.
  */
-export function createUpdateDependencyResolverPlanning(
-  transaction: InstallTransaction,
-  hooksRouting: InstallHooksRouting,
-  completionCache: CompletionCache,
-  env: ClaudeEnv = process.env,
-): UpdateDependencyResolver {
-  return (args, prepared, notification) =>
-    settleUpdateDependencies({
-      owners: { transaction, hooksRouting, completionCache, env },
-      args,
-      prepared,
-      notification,
-    });
+export interface InstallPlanningComposition extends InstallPlanning {
+  readonly createUpdateDependencyResolver: (
+    transaction: InstallTransaction,
+    hooksRouting: InstallHooksRouting,
+    completionCache: CompletionCache,
+    env?: ClaudeEnv,
+  ) => UpdateDependencyResolver;
+}
+
+/** Binds dependency planning to the ledger port supplied by the root. */
+export function createInstallPlanning(
+  ledger: InstallPlanningLedgerPorts,
+): InstallPlanningComposition {
+  return {
+    routeInstallCascade,
+    installAfterMoves: (args) => installAfterMoves(ledger, args),
+    createUpdateDependencyResolver:
+      (transaction, hooksRouting, completionCache, env = process.env) =>
+      (args, prepared, notification) =>
+        settleUpdateDependencies(ledger, {
+          owners: { transaction, hooksRouting, completionCache, env },
+          args,
+          prepared,
+          notification,
+        }),
+  };
 }

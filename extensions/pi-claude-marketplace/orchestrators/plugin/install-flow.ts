@@ -5,18 +5,14 @@
 import {
   createInstallLedgerPlugin,
   createInstallMissingDependencyLedger,
+  createInstallPlanningLedgerPorts,
 } from "./install-flow-ledger.ts";
-import {
-  createUpdateDependencyResolverPlanning,
-  installAfterMoves,
-  routeInstallCascade,
-} from "./install-flow-planning.ts";
+import { createInstallPlanning } from "./install-flow-planning.ts";
 
 import type { InstallHooksRouting } from "./install-disable-cascade.ts";
 import type {
   InstallMissingDependencyOptions,
   InstallMissingDependencyOutcome,
-  InstallPlanning,
   InstallPluginOptions,
   InstallTransaction,
 } from "./install-flow-ledger.ts";
@@ -32,7 +28,7 @@ export type {
   InstallTransaction,
 } from "./install-flow-ledger.ts";
 
-const INSTALL_PLANNING: InstallPlanning = { installAfterMoves, routeInstallCascade };
+const INSTALL_PLANNING = createInstallPlanning(createInstallPlanningLedgerPorts());
 
 /** Binds install orchestration to one required semantic transaction owner. */
 export function createInstallPlugin(
@@ -67,5 +63,10 @@ export function createUpdateDependencyResolver(
   completionCache: CompletionCache,
   env: ClaudeEnv = process.env,
 ): UpdateDependencyResolver {
-  return createUpdateDependencyResolverPlanning(transaction, hooksRouting, completionCache, env);
+  return INSTALL_PLANNING.createUpdateDependencyResolver(
+    transaction,
+    hooksRouting,
+    completionCache,
+    env,
+  );
 }

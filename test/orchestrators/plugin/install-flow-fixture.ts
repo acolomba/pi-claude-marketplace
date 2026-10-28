@@ -16,13 +16,9 @@ import {
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import {
-  createInstallLedgerPlugin,
-  createInstallMissingDependencyLedger,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts";
-import {
-  installAfterMoves,
-  routeInstallCascade,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts";
+  createInstallMissingDependency as createPublicInstallMissingDependency,
+  createInstallPlugin as createPublicInstallPlugin,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -41,10 +37,7 @@ import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bri
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { InstallCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts";
 import type { InstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts";
-import type {
-  InstallPlanning,
-  InstallTransaction,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts";
+import type { InstallTransaction } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
 import type {
   NotificationContext,
   SoftDepStatus,
@@ -52,9 +45,9 @@ import type {
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
-export type InstallOperation = ReturnType<typeof createInstallLedgerPlugin>;
+export type InstallOperation = ReturnType<typeof createPublicInstallPlugin>;
 export type InstallMissingDependencyOperation = ReturnType<
-  typeof createInstallMissingDependencyLedger
+  typeof createPublicInstallMissingDependency
 >;
 
 const REAL_INSTALL_TRANSACTION: InstallTransaction = {
@@ -62,21 +55,13 @@ const REAL_INSTALL_TRANSACTION: InstallTransaction = {
   withLockedStateTransaction: (...args) => withLockedStateTransaction(...args),
 };
 
-const INSTALL_PLANNING: InstallPlanning = { installAfterMoves, routeInstallCascade };
-
 export function createInstallPlugin(
   transaction: InstallTransaction,
   hooksRouting: InstallHooksRouting,
   completionCache: CompletionCache,
   env: NodeJS.ProcessEnv = process.env,
 ): InstallOperation {
-  return createInstallLedgerPlugin(
-    transaction,
-    hooksRouting,
-    completionCache,
-    INSTALL_PLANNING,
-    env,
-  );
+  return createPublicInstallPlugin(transaction, hooksRouting, completionCache, env);
 }
 
 export function createInstallMissingDependency(
@@ -85,7 +70,7 @@ export function createInstallMissingDependency(
   completionCache: CompletionCache,
   env: NodeJS.ProcessEnv = process.env,
 ): InstallMissingDependencyOperation {
-  return createInstallMissingDependencyLedger(transaction, hooksRouting, completionCache, env);
+  return createPublicInstallMissingDependency(transaction, hooksRouting, completionCache, env);
 }
 
 export interface InstallTestOwner {

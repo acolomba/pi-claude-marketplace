@@ -15,6 +15,13 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import { runPhases } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
 import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 
+import {
+  INSTALL_HOST_HEAD,
+  installGitAppAfterDependencyMove,
+  recordedSha,
+  withHermeticHome,
+} from "./install-flow-fixture.ts";
+
 import type { InstallTransaction } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
 
 const TRANSACTION: InstallTransaction = { runPhases, withLockedStateTransaction };
@@ -64,3 +71,29 @@ for (const { name, createOperation } of [
     assert.strictEqual(typeof explicitOperation, expectedType);
   });
 }
+
+test("composes an explicit environment through dependency planning and ledger persistence", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const installPlugin = createInstallPlugin(
+      owner.transaction,
+      owner.hooksRouting,
+      owner.completionCache,
+      {},
+    );
+
+    // act
+    const { cwd, install } = await installGitAppAfterDependencyMove({
+      ...owner,
+      installPlugin,
+    });
+
+    // assert
+    assert.deepStrictEqual(install, {
+      status: "installed",
+      mirrors: 1,
+      pins: [INSTALL_HOST_HEAD],
+    });
+    assert.strictEqual(await recordedSha(cwd, "app"), INSTALL_HOST_HEAD);
+  });
+});

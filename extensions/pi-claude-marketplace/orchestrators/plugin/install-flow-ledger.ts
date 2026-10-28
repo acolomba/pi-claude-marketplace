@@ -329,7 +329,7 @@ export interface InstallTransaction {
  * narrowed so `installMissingDependencyWithTransaction` can share the builder
  * without carrying every `InstallPluginOptions` field (D-09-05).
  */
-export type InstallLedgerCallerOptions = Pick<
+type InstallLedgerCallerOptions = Pick<
   InstallPluginOptions,
   | "ctx"
   | "run"
@@ -521,7 +521,7 @@ async function settleAddedMarketplaces(
  * carries this; the D-04-07 promotion builds it for the one record it
  * re-materializes.
  */
-export type HydratableMember = Pick<
+type HydratableMember = Pick<
   CascadeMemberOutcome,
   "key" | "name" | "marketplace" | "pluginRoot" | "hooksConfigPath"
 >;
@@ -854,7 +854,7 @@ function catalogLookup(
 }
 
 /** The cascade options both install owners pass the same way. */
-export type SharedCascadeOptions = Pick<
+type SharedCascadeOptions = Pick<
   Parameters<typeof runInstallCascade>[0],
   | "state"
   | "locations"
@@ -3301,23 +3301,44 @@ export function createInstallMissingDependencyLedger(
     installMissingDependencyWithTransaction(transaction, hooksRouting, completionCache, env, opts);
 }
 
-/** The collaborators one install transaction owner binds for UPD-DEP-D1. */
+/** The narrow ledger port that dependency planning receives from the root. */
+export interface InstallPlanningLedgerPorts {
+  readonly buildInstallLedgerOptions: typeof buildInstallLedgerOptions;
+  readonly catalogLookup: typeof catalogLookup;
+  readonly collectInstalledKeys: typeof collectInstalledKeys;
+  readonly dependencyLedgerOptions: typeof dependencyLedgerOptions;
+  readonly handleCaughtInstallFailure: typeof handleCaughtInstallFailure;
+  readonly hydrateInstalledHooks: typeof hydrateInstalledHooks;
+  readonly installMcpConfigNoticesMember: typeof installMcpConfigNoticesMember;
+  readonly loadInstallRootAllowlist: typeof loadInstallRootAllowlist;
+  readonly movedMember: typeof movedMember;
+  readonly movedRows: typeof movedRows;
+  readonly settleAddedMarketplaces: typeof settleAddedMarketplaces;
+  readonly sharedCascadeOptions: typeof sharedCascadeOptions;
+  readonly trackInstallAdds: typeof trackInstallAdds;
+  readonly unwrapCascade: typeof unwrapCascade;
+  readonly writeReEnabledCascadeMemberConfigEntries: typeof writeReEnabledCascadeMemberConfigEntries;
+}
 
-export {
-  buildInstallLedgerOptions,
-  catalogLookup,
-  collectInstalledKeys,
-  dependencyLedgerOptions,
-  handleCaughtInstallFailure,
-  hydrateInstalledHooks,
-  loadInstallRootAllowlist,
-  installMcpConfigNoticesMember,
-  movedMember,
-  movedRows,
-  settleAddedMarketplaces,
-  sharedCascadeOptions,
-  trackInstallAdds,
-  unwrapCascade,
-  writeReEnabledCascadeMemberConfigEntries,
-};
+/** Gives the composition root dependency planning's ledger boundary. */
+export function createInstallPlanningLedgerPorts(): InstallPlanningLedgerPorts {
+  return {
+    buildInstallLedgerOptions,
+    catalogLookup,
+    collectInstalledKeys,
+    dependencyLedgerOptions,
+    handleCaughtInstallFailure,
+    hydrateInstalledHooks,
+    installMcpConfigNoticesMember,
+    loadInstallRootAllowlist,
+    movedMember,
+    movedRows,
+    settleAddedMarketplaces,
+    sharedCascadeOptions,
+    trackInstallAdds,
+    unwrapCascade,
+    writeReEnabledCascadeMemberConfigEntries,
+  };
+}
+
 export type { CascadeFailureSink, InstallAdds, TargetRecordFor };
