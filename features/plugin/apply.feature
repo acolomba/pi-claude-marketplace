@@ -177,12 +177,15 @@ Feature: Plugin apply
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
-  Scenario: Apply that cannot install one hand-declared plugin reports it and installs the other
+  Scenario: Apply that cannot install one hand-declared plugin still makes every other hand edit
     Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install alpha@fixtures --scope project"
+    Given the user has run "/claude:plugin install beta@fixtures --scope project"
     Given a config in scope project and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | ghost  |         |
       | fixtures    | demo   |         |
+      | fixtures    | beta   | false   |
     When the user runs "/claude:plugin apply --scope project"
     Then the result has these fields:
       | kind                | reconcile-applied-cascade      |
@@ -192,11 +195,13 @@ Feature: Plugin apply
       | tally label         | Reconcile                      |
       | tally failures      | 1                              |
       | tally warnings      | 0                              |
-      | tally success count | 1                              |
+      | tally success count | 3                              |
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id             | name  | status    | reasons         | scope   | version | leaks | rollback partial |
+      | fixtures         | project           | alpha@fixtures | alpha | uninstalled |                 | project | 1.0.0   |       |                  |
       | fixtures         | project           | ghost@fixtures | ghost | failed    | not in manifest | project |         |       |                  |
       | fixtures         | project           | demo@fixtures  | demo  | installed |                 | project | 1.0.0   |       |                  |
+      | fixtures         | project           | beta@fixtures  | beta  | disabled  |                 | project | 1.0.0   |       |                  |
     When the user starts a new pi session
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
@@ -1133,6 +1138,7 @@ Feature: Plugin apply
   Scenario: Apply with nothing to change reports so and changes nothing
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the config and installation record bytes of the project scope are remembered
     When the user runs "/claude:plugin apply --scope project"
     Then the result has these fields:
       | kind         | reconcile-pending-empty |
@@ -1141,6 +1147,7 @@ Feature: Plugin apply
     Then the installation record of the project scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
+    Then the config and installation record bytes of the project scope are unchanged
 
   Scenario: Apply moves a path-source plugin to the version its marketplace now offers
     Given the marketplace "fixtures" is added to the project scope

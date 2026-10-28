@@ -3,13 +3,14 @@
  *
  * An add stages its checkout under `sources-staging/` and moves it to
  * `sources/` once it succeeds (FLR-03). A partial checkout may hold no `.git`
- * directory, so the git clone steps cannot see it; the steps read both
- * directories whole.
+ * directory, so the git clone steps cannot see it; the checkout step reads
+ * both directories whole. The record step separately proves a failed add did
+ * not retain a marketplace entry in state.json.
  */
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { readdir, rm, stat } from "node:fs/promises";
+import { readFile, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { Given, Then } from "@cucumber/cucumber";
@@ -51,5 +52,18 @@ Then(
       },
       { sources: [], "sources-staging": [] },
     );
+  },
+);
+
+Then(
+  "the {word} scope holds no marketplace record",
+  async function (this: ScenarioWorld, scope: string) {
+    const stateFile = path.join(extensionRootOf(this, scope), "state.json");
+    if (!existsSync(stateFile)) {
+      return;
+    }
+
+    const state = JSON.parse(await readFile(stateFile, "utf8")) as { marketplaces?: unknown };
+    assert.deepStrictEqual(state.marketplaces ?? {}, {});
   },
 );

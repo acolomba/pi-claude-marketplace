@@ -16,6 +16,7 @@ Feature: Marketplace usage errors
       | arguments | usage                                                                                   |
       | add       | Usage: /claude:plugin marketplace add <source> [--scope user\|project] [--local]        |
       | remove    | Usage: /claude:plugin marketplace <remove\|rm> <name> [--scope user\|project] [--local] |
+      | rm        | Usage: /claude:plugin marketplace <remove\|rm> <name> [--scope user\|project] [--local] |
       | info      | Usage: /claude:plugin marketplace info <name> [--scope user\|project]                   |
 
   Scenario Outline: A marketplace subcommand rejects more arguments than it takes
@@ -31,7 +32,9 @@ Feature: Marketplace usage errors
       | arguments                | usage                                                                                     |
       | add tools extra          | Usage: /claude:plugin marketplace add <source> [--scope user\|project] [--local]          |
       | remove tools extra       | Usage: /claude:plugin marketplace <remove\|rm> <name> [--scope user\|project] [--local]   |
+      | rm tools extra           | Usage: /claude:plugin marketplace <remove\|rm> <name> [--scope user\|project] [--local]   |
       | list tools               | Usage: /claude:plugin marketplace <list\|ls> [--scope user\|project]                      |
+      | ls tools                 | Usage: /claude:plugin marketplace <list\|ls> [--scope user\|project]                      |
       | info tools extra         | Usage: /claude:plugin marketplace info <name> [--scope user\|project]                     |
       | update tools extra       | Usage: /claude:plugin marketplace update [<name>] [--scope user\|project]                 |
       | autoupdate tools extra   | Usage: /claude:plugin marketplace autoupdate [<name>] [--scope user\|project] [--local]   |
@@ -50,7 +53,9 @@ Feature: Marketplace usage errors
       | arguments                  | message                  | usage                                                                                     |
       | add tools --bogus          | Unknown flag: "--bogus". | Usage: /claude:plugin marketplace add <source> [--scope user\|project] [--local]          |
       | remove tools --bogus       | Unknown flag: "--bogus". | Usage: /claude:plugin marketplace <remove\|rm> <name> [--scope user\|project] [--local]   |
+      | rm tools --bogus           | Unknown flag: "--bogus". | Usage: /claude:plugin marketplace <remove\|rm> <name> [--scope user\|project] [--local]   |
       | list --bogus               | Unknown flag: "--bogus". | Usage: /claude:plugin marketplace <list\|ls> [--scope user\|project]                      |
+      | ls --bogus                 | Unknown flag: "--bogus". | Usage: /claude:plugin marketplace <list\|ls> [--scope user\|project]                      |
       | info tools --bogus         | Unknown flag: "--bogus". | Usage: /claude:plugin marketplace info <name> [--scope user\|project]                     |
       | update --bogus             | Unknown flag: "--bogus". | Usage: /claude:plugin marketplace update [<name>] [--scope user\|project]                 |
       | autoupdate --bogus         | Unknown flag: "--bogus". | Usage: /claude:plugin marketplace autoupdate [<name>] [--scope user\|project] [--local]   |
@@ -77,9 +82,11 @@ Feature: Marketplace usage errors
       | add --scope --local tools    | --local | Usage: /claude:plugin marketplace add <source> [--scope user\|project] [--local]          |
       | add --scope tools            | tools   | Usage: /claude:plugin marketplace add <source> [--scope user\|project] [--local]          |
       | remove tools --scope bad     | bad     | Usage: /claude:plugin marketplace <remove\|rm> <name> [--scope user\|project] [--local]   |
+      | rm tools --scope bad         | bad     | Usage: /claude:plugin marketplace <remove\|rm> <name> [--scope user\|project] [--local]   |
       | info --scope bad tools       | bad     | Usage: /claude:plugin marketplace info <name> [--scope user\|project]                     |
       | info tools --scope bad       | bad     | Usage: /claude:plugin marketplace info <name> [--scope user\|project]                     |
       | list --scope bad             | bad     | Usage: /claude:plugin marketplace <list\|ls> [--scope user\|project]                      |
+      | ls --scope bad               | bad     | Usage: /claude:plugin marketplace <list\|ls> [--scope user\|project]                      |
       | update --scope bad tools     | bad     | Usage: /claude:plugin marketplace update [<name>] [--scope user\|project]                 |
       | update tools --scope bad     | bad     | Usage: /claude:plugin marketplace update [<name>] [--scope user\|project]                 |
       | autoupdate --scope bad tools | bad     | Usage: /claude:plugin marketplace autoupdate [<name>] [--scope user\|project] [--local]   |
@@ -100,8 +107,10 @@ Feature: Marketplace usage errors
       | arguments                | usage                                                                                     |
       | add tools --scope        | Usage: /claude:plugin marketplace add <source> [--scope user\|project] [--local]          |
       | remove tools --scope     | Usage: /claude:plugin marketplace <remove\|rm> <name> [--scope user\|project] [--local]   |
+      | rm tools --scope         | Usage: /claude:plugin marketplace <remove\|rm> <name> [--scope user\|project] [--local]   |
       | info tools --scope       | Usage: /claude:plugin marketplace info <name> [--scope user\|project]                     |
       | list --scope             | Usage: /claude:plugin marketplace <list\|ls> [--scope user\|project]                      |
+      | ls --scope               | Usage: /claude:plugin marketplace <list\|ls> [--scope user\|project]                      |
       | update tools --scope     | Usage: /claude:plugin marketplace update [<name>] [--scope user\|project]                 |
       | autoupdate tools --scope | Usage: /claude:plugin marketplace autoupdate [<name>] [--scope user\|project] [--local]   |
       | noautoupdate --scope     | Usage: /claude:plugin marketplace noautoupdate [<name>] [--scope user\|project] [--local] |
@@ -120,6 +129,7 @@ Feature: Marketplace usage errors
       | add ''          | Source must not be empty.           | Usage: /claude:plugin marketplace add <source> [--scope user\|project] [--local]          |
       | add '   '       | Source must not be empty.           | Usage: /claude:plugin marketplace add <source> [--scope user\|project] [--local]          |
       | remove ''       | Marketplace name must not be empty. | Usage: /claude:plugin marketplace <remove\|rm> <name> [--scope user\|project] [--local]   |
+      | rm ''           | Marketplace name must not be empty. | Usage: /claude:plugin marketplace <remove\|rm> <name> [--scope user\|project] [--local]   |
       | info ''         | Marketplace name must not be empty. | Usage: /claude:plugin marketplace info <name> [--scope user\|project]                     |
       | update ''       | Marketplace name must not be empty. | Usage: /claude:plugin marketplace update [<name>] [--scope user\|project]                 |
       | update '   '    | Marketplace name must not be empty. | Usage: /claude:plugin marketplace update [<name>] [--scope user\|project]                 |
