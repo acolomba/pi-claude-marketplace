@@ -1,13 +1,14 @@
 ---
 phase: 01-staging-warning-channels
-reviewed: 2026-10-28T15:17:15Z
+reviewed: 2026-10-28T16:04:11Z
 depth: standard
-source_commit: da9756bdb4362e255c829bb263b594e6f37bf1f4
-review_head: 6e56b22fc54a3534465927e7e5daf37e426a7b86
+source_commit: 4bcdf9697b87ea97d21face0154933e6c7f625a5
+review_head: 503343bcbcf979ac246bd34822ae89b94d32e088
 review_fix_commits:
   - 15e12fdf24c5c0444d5707646983980dae58b438
   - da9756bdb4362e255c829bb263b594e6f37bf1f4
-files_reviewed: 16
+  - 4bcdf9697b87ea97d21face0154933e6c7f625a5
+files_reviewed: 22
 files_reviewed_list:
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-dependency-ledger.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts
@@ -20,11 +21,17 @@ files_reviewed_list:
   - extensions/pi-claude-marketplace/orchestrators/plugin/staging-diagnostics.ts
   - extensions/pi-claude-marketplace/shared/compare-name-scope.ts
   - features/plugin/staging-warnings.feature
+  - features/lib/npm-registry.ts
+  - features/lib/layer-config.ts
+  - features/step_definitions/config.steps.ts
+  - features/support/world.ts
+  - features/support/npm-registry.ts
   - test/orchestrators/plugin/install-flow-dependency-ledger.test.ts
   - test/orchestrators/plugin/install-flow-ledger.test.ts
   - test/orchestrators/plugin/install-flow-planning.test.ts
   - test/orchestrators/plugin/install-flow-results.test.ts
   - test/orchestrators/plugin/install-flow-fixture.ts
+  - test/platform/hermetic-environment.ts
 findings:
   critical: 1
   warning: 0
@@ -35,137 +42,141 @@ status: issues_found
 
 # Phase 01: Code Review Report
 
-**Reviewed:** 2026-10-28T15:17:15Z
+**Reviewed:** 2026-10-28T16:04:11Z
 **Depth:** standard
-**Files reviewed:** 16
+**Files reviewed:** 22
 **Status:** issues_found
 
 ## Summary
 
-Re-review of the two fixes recorded in `01-REVIEW-FIX.md`, against HEAD
-`6e56b22f`. CR-02 is closed. CR-01 is partially fixed: successful installs,
-later dependency-move failures and caught final-root failures preserve the
-earlier MCP notices, but a non-throwing final-root validation failure still
-loses them.
+CR-01 is closed by the iteration-2 finalizer, and CR-02 remains closed.
+One new finding remains: five regression cases added by the iteration-1
+fixes leave their temporary project trees behind. The two iteration-2
+invalid-config cases correctly remove their trees.
 
-The scope is the nine source/test/feature files changed by the two fix commits,
-plus seven directly relevant callers, renderers, ordering helpers and fixture
-modules listed above. Large existing test modules were reviewed at the changed
-cases and their surrounding fixture/assertion contracts. The previous review's
-assessment of unchanged Phase 1 producers and integrations is the baseline;
-this report does not claim a new full-file review of its entire 47-file scope.
+This is a focused re-review of commits `15e12fdf`, `da9756bd`, and
+`4bcdf969`, including their changed code, tests, feature scenarios and
+relevant callers and fixture contracts. Large pre-existing test modules
+were read at the changed cases and their supporting code. The earlier
+Phase 1 review remains the baseline for unchanged phase implementations;
+this report does not claim another full-file review of its entire scope.
 
 ## Narrative Findings (AI reviewer)
 
-### CR-01: Final-root validation abort still drops committed dependency MCP notices
+### CR-03: Five added regression cases leak their temporary project trees
 
 **Classification:** BLOCKER
-**File:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710/extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts:1069-1080`
-**Related lines:** `install-flow-ledger.ts:533,1082-1126`;
-`install-flow-planning.ts:264-270`.
-**Disposition:** Original CR-01 remains open on an unhandled return path.
+**File:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710/test/orchestrators/plugin/install-flow-planning.test.ts:401-488`
+**Related file:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710/test/orchestrators/plugin/install-flow-ledger.test.ts:15639-15683`
 
-**Issue:** The fix carries dependency-step notices into `InstallAfterPlan`
-and reads them as `priorNotices`. It merges those notices in the catch,
-promotion, disable-failure and installed arms. The `invalid-config` arm
-returns `failedRowOutcome(...)` directly, without the prior notices.
-The `marketplace-absent`, `refused` and `declared` arms likewise bypass
-the notice finalizer.
+**Issue:** Both parameterized MCP tests (four cases) and the row-order
+test allocate a project through `seedCatalogScope` without registering
+cleanup. That helper creates `install-upd-dep-*` directly under
+`tmpdir()` (`install-flow-fixture.ts:283-285`).
+`withHermeticHome` removes only its separately allocated `install-*`
+environment, through `withHermeticEnvironment`; these project trees
+are siblings of that environment, so its cleanup cannot remove them.
+The tests leave plugin sources, generated artifacts, state and config
+files on disk even after successful completion. The failed-move cases
+also leave their deliberately chmod-000 skill file behind.
 
-These are not necessarily pre-mutation aborts of the whole operation: the
-dependency plan releases the state lock and commits its steps before entering
-the final root transaction. A user or another process can edit the config
-between those transactions. When the final read rejects that config, changes
-made by earlier steps remain, including an MCP rewrite that removed comments.
-The returned outcome omits its notice, and standalone mode never tells the
-user that the comments were removed.
+**Evidence:** Ran only the four MCP cases, the row-order case and the
+two iteration-2 invalid-config cases in a fresh temporary directory,
+using that directory as the child test process's `TMPDIR`. The command
+exited 0. The parent then enumerated exactly five surviving
+`install-upd-dep-*` directories. There is no matching cleanup in those
+five cases or a module-level teardown. The two iteration-2 cases have a
+`finally` at `install-flow-ledger.test.ts:206-208` and leave no tree.
+The probe removed its complete temporary root in its own `finally`.
 
-**Reproduction:** Ran the real `createInstallPlugin` entry point with the
-existing hermetic fixture helpers, in both standalone and orchestrated modes:
+This classification follows the project's
+`.agents/skills/typescript-unit-tests/rules/review.md`: leaked
+filesystem writes are a BLOCKER hermeticity defect.
 
-1. Install `aaa@1.0.0`.
-2. Publish `app@1.0.0 -> aaa@^2.0.0`, `aaa@2.0.0 -> zzz`, and
-   `zzz@1.0.0` with an MCP server.
-3. Seed project `mcp-adapter.json` with
-   `// mine\n{"mcpServers":{}}\n`.
-4. Wrap the existing transaction owner. Before acquiring the final root lock,
-   once durable state records `aaa@2.0.0` and `zzz`, write malformed
-   `claude-plugins.json`. This deterministically models an interleaved config
-   edit; the wrapper otherwise calls the real transaction unchanged.
-5. Install `app`.
-
-Both runs return `status: "failed"` with no `mcpConfigNotices`. The MCP file
-contains `zzz`'s server and no comment. Standalone mode emits only the failed
-cascade, naming the invalid config and the landed dependencies; orchestrated
-mode emits nothing and gives its caller no notice to render.
-
-**Fix:** Finalize prior-step notices for every terminal result after a plan,
-including non-throwing aborts. For example, wrap the invalid-config result
-in `withMcpConfigNotices(ctx, run, orchestrated, failedRowOutcome(...), priorNotices)`,
-and apply the same rule to the other early result arms. Prefer one outcome
-boundary if that can preserve the current row/diagnostic-before-notice order
-without emitting notices twice. Keep outcome properties absent when the notice
-list is empty.
-
-Add regression cases for an interleaved invalid config in both modes. Assert
-the exact `comments-dropped` payload on the returned outcome, exactly one
-standalone notice after the failed rows, and zero direct notifications in
-orchestrated mode. Retain the successful, later-move-failure and caught-failure
-cases.
+**Fix:** Give each of these five cases ownership of its project cleanup,
+matching the iteration-2 cases. Immediately after successful allocation,
+wrap the setup, action and assertions in `try/finally` and call
+`await rm(cwd, { recursive: true, force: true })` in `finally`.
+Alternatively register the same cleanup with the case's `t.after`.
+Keep the fix local to these newly added cases; unrelated older tests
+need not be changed. Repeat the selected cases under an isolated
+`TMPDIR` and assert that it is empty afterward, on success and when a
+case assertion fails.
 
 ## Fix Dispositions
 
 | Finding | Verdict | Evidence |
 | --- | --- | --- |
-| CR-01 | Partially fixed; remains BLOCKER above. | Planning forwards `ran.mcpConfigNotices` on success and failed moves; the failed-moves projection uses the common mode-aware notice helper. Final-root success and catch retain the notices. Non-throwing validation aborts still omit them. |
-| CR-02 | Closed. | `cascadeStagingDiagnostics` at `install-flow-results.ts:811-840` sorts the root's display name and members' qualified row keys with the same `compareByNameThenScope` used by `composeCascadeMemberRows`. It excludes the root member by exact key and preserves diagnostic header names. The ledger emits the resulting sequence after cascade rows and before MCP notices. |
+| CR-01 | Closed. | All terminal non-throwing transaction arms now reach the common notice boundary at `install-flow-ledger.ts:1282`. The caught-failure path still finalizes its merged notices independently. The dependency-planning arm delegates ownership without another emission. |
+| CR-02 | Closed. | The shared row comparator orders root display names and qualified member keys in `cascadeStagingDiagnostics`; the exact root key is excluded from member diagnostics. Headers preserve plugin names. Runtime regression passes with the dependency diagnostic before the root diagnostic. |
+| CR-03 | Open, BLOCKER. | The five iteration-1 regression cases leave temporary project trees behind, independently reproduced above. |
 
-The previously closed selected findings remain outside the fix delta. No
-additional Critical, Warning or Info finding was established in this re-review.
-The open CR-01 is a continuation of the original notice-loss finding, not a
-duplicate counted under a new ID.
+### CR-01 terminal-path audit
+
+- `invalid-config`, `marketplace-absent`, `refused`, and `declared`
+  assign their result and retain `priorNotices` before the common boundary.
+  Their prior returns no longer bypass notice delivery.
+- `promoted`, `disable-cascade-failed`, and `installed` append their
+  own notices after prior dependency notices, then reach that same boundary.
+  Rows and any discovery diagnostics are produced first.
+- The `declared` arm is standalone-only:
+  `declareInstalledPlugin` rejects orchestrated mode before returning it
+  (`install-flow-results.ts:889-902`). Its row helper therefore cannot
+  leak a notification from a reachable orchestrated declaration.
+- `dependency-moves` returns the delegated result. Planning forwards
+  `ran.mcpConfigNotices` to either the failed-move projection or the next
+  install. The resumed run uses `runInstallCascade` with a planned closure,
+  not another planning pass, so it does not consume the same notices twice.
+- The catch merges prior notices with notices captured by the current
+  transaction before producing the failure outcome. It returns through its
+  own finalizer and cannot also reach the normal boundary.
+- `withMcpConfigNotices` emits only in standalone mode and adds the
+  outcome member only for a non-empty list. Orchestrated mode returns
+  notices to its caller without direct emission.
 
 ## Verification Evidence and Limits
 
-- Read the existing review/fix report, project instructions, relevant Phase 1
-  requirements and planning records, both fix diffs, changed source modules,
-  changed test cases and their supporting call chains. Applied the TypeScript,
-  unit-test, Cucumber and local-verification review rules. The reviewer-specific
-  configured-skill query returned no additional skills.
-- Used CodeGraph before locating implementation symbols. Its index predates
-  the four source changes, so their current source was read directly.
-- Inspected the four new CR-01 success/later-move-failure cases, the CR-02
-  full-notification install case, the projection's exact row/header identity
-  assertions, and all three added behavioral scenarios. They discriminate
-  the original reproductions but do not cover the final validation abort.
-- Ran two inline hermetic probes for the open finding, one per notification
-  mode, on Node `v26.12.1`; both completed with exit 0 and produced the
-  incorrect outputs described above.
-- Ran five additional inline hermetic checks, exit 0: final-root success and
-  caught final-root failure in both notification modes, plus the
-  `aaa`/`zroot` diagnostic-order case. The four MCP checks asserted the exact
-  single notice on the outcome, exactly one standalone notice or zero
-  orchestrated notifications. The ordering check asserted three notifications:
-  cascade, `aaa` diagnostic, `zroot` diagnostic.
-- Probes used existing production entry points and fixture helpers, changed only
-  disposable scope data, and removed each temporary project in `finally`.
-  No implementation or test file was edited.
-- The fix report records successful direct coverage for all four changed source
-  pairs, mandatory commit hooks and 19 passing Phase 1 Cucumber scenarios
-  (227 steps) at `da9756bd`. The coordinating owner is running the required
-  combined-tree `npm run check`; it was not duplicated here, and this report
-  does not claim its result before the owner supplies it.
-- Confirmed `git diff da9756bd -- . ':(exclude,glob).planning/**/*.md'`
-  is empty at review HEAD and that no untracked build inputs exist. These
-  fixes are the only implementation differences from the preceding review.
-- Ran `node_modules/.bin/fallow review --base 15e12fdf^ --brief`, exit 0,
-  after an escalated retry allowed its disposable comparison worktree.
-  It reported zero dead-code, complexity and duplication metrics and identified
-  the public composition root as a consumer; that caller was reviewed.
-  Its test-reach hints were not treated as proof of missing tests because the
-  actual changed tests call both named functions.
-- No external reviewer evidence or structural-findings payload was supplied.
-  Only this report was written. No commit was created by the reviewer.
+- Read project instructions, existing review and fix report, the three fix
+  diffs, relevant Phase 1 requirements and notice/ordering plan records,
+  changed cases and fixture contracts. Applied TypeScript, unit-test,
+  Cucumber and local-verification review rules. The configured reviewer
+  skill query returned no additional entries.
+- Used CodeGraph before locating code, then read current source where its
+  index identified changed files. No structural-findings payload or
+  external-reviewer evidence was supplied.
+- On Node `v26.12.1`, ran the selected regression cases with:
+  `node --test --test-name-pattern 'keeps dependency-step MCP notices|keeps dependency MCP notices when the final config|reports install diagnostics in row order' test/orchestrators/plugin/install-flow-planning.test.ts test/orchestrators/plugin/install-flow-ledger.test.ts`.
+  Exit 0. These exercise successful final roots, failed later moves,
+  final invalid configuration in both modes, and diagnostic order.
+  The isolated temporary-directory wrapper exposed CR-03.
+- Ran two additional inline hermetic probes through the real
+  `createInstallPlugin` entry point. A transaction wrapper threw before
+  the final root lock after durable state recorded the dependency's move.
+  Both modes returned the exact one-element `comments-dropped` notice
+  array. Standalone mode emitted the failure cascade followed by exactly
+  one MCP notice; orchestrated mode emitted nothing. Exit 0. Each probe
+  removed its temporary project in `finally`.
+- Checked the iteration-2 unit cases' full notification assertions,
+  durable dependency versions and MCP file contents. Their setup uses
+  the real transaction after an interleaved config edit, with no production
+  test seam, and their project cleanup runs in `finally`.
+- Checked the new behavioral fixture: the npm server belongs to one
+  scenario, binds loopback, consumes its callback before awaiting it, and
+  the world registers server closure. The callback writes only the sandbox
+  local config through the existing layer writer. The scenario asserts
+  every result, row, exact MCP notice, final config text and full request
+  window. It uses no delay or network service outside the local stand-ins.
+- The fix report records passing direct coverage of the changed ledger
+  pair, the commit hook, and all 20 staging-warning scenarios (248 steps)
+  at `4bcdf969`, plus regression failures with only the source fix removed.
+  Those are the fixer's recorded results, not commands rerun by this reviewer.
+- The owner is responsible for the full `npm run check` result on these
+  inputs. It was not duplicated here; no unreported full-check pass is
+  claimed by this report.
+- At review HEAD `503343bc`, the build-input diff from `4bcdf969` was
+  empty and the worktree had no untracked build inputs. Only this report
+  was changed by the reviewer. No implementation or test edits and no
+  commit were made.
 
 ---
 
