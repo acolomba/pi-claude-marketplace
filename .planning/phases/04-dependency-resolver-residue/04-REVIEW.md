@@ -1,210 +1,248 @@
 ---
 phase: 04-dependency-resolver-residue
-reviewed: 2026-10-27T00:00:00Z
+reviewed: 2026-10-28T17:15:25Z
 depth: standard
-files_reviewed: 24
+files_reviewed: 44
 files_reviewed_list:
   - extensions/pi-claude-marketplace/bridges/agents/index.ts
+  - extensions/pi-claude-marketplace/bridges/agents/index-mutation.ts
+  - extensions/pi-claude-marketplace/bridges/agents/marker.ts
+  - extensions/pi-claude-marketplace/bridges/agents/stage.ts
   - extensions/pi-claude-marketplace/bridges/agents/target-check.ts
   - extensions/pi-claude-marketplace/domain/release-tag.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-cascade-context.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-dependency-ledger.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-results.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts
+  - extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts
+  - extensions/pi-claude-marketplace/shared/errors-bridges.ts
   - features/lib/published-marketplace.ts
   - features/plugin/install-dependencies.feature
   - features/plugin/update-dependencies.feature
   - features/step_definitions/plugin/installation.steps.ts
   - features/step_definitions/plugin/publishing.steps.ts
+  - features/support/pi-process.ts
+  - features/support/world.ts
   - test/bridges/agents/index.test.ts
+  - test/bridges/agents/stage.test.ts
   - test/bridges/agents/target-check.test.ts
   - test/domain/release-tag.test.ts
   - test/orchestrators/plugin/dependency-plan.test.ts
   - test/orchestrators/plugin/dependency-tag-probe.test.ts
   - test/orchestrators/plugin/install-cascade.test.ts
-  - test/orchestrators/plugin/install-flow.test.ts
+  - test/orchestrators/plugin/install-flow-cascade-context.test.ts
+  - test/orchestrators/plugin/install-flow-dependency-ledger.test.ts
+  - test/orchestrators/plugin/install-flow-ledger.test.ts
+  - test/orchestrators/plugin/install-flow-planning.test.ts
   - test/orchestrators/plugin/install-outcome.test.ts
   - test/orchestrators/plugin/marketplace-tag-probe.test.ts
   - test/orchestrators/plugin/update-swap.test.ts
 findings:
-  critical: 0
-  warning: 4
-  info: 4
-  total: 8
+  critical: 1
+  warning: 1
+  info: 0
+  total: 2
 status: issues_found
+reviewed_commit: 92501edf2f60f1b12370a0d2766923438f469553
 ---
 
 # Phase 04: Code Review Report
 
-**Reviewed:** 2026-10-27
+**Reviewed:** 2026-10-28
 **Depth:** standard
-**Files Reviewed:** 24
+**Files Reviewed:** 44
 **Status:** issues_found
 
 ## Summary
 
-Scope: `git diff 2829db68..HEAD -- extensions test features`, checked against D-PL4-01..07.
+Fresh review of the integrated implementation of RSV-01..RSV-05 and
+D-PL4-01..07, following the Phase 11 install-flow owners and the later
+agent-error and Phase 1 fixes. One reproducible blocker remains: an agent
+name held by a foreign index row passes preview when its target file is
+absent, then refuses after an earlier dependency move has committed.
+There is also one inaccurate outcome-contract comment.
 
-What holds up:
+The file list records the files inspected for this phase's behavior and
+its current callers/tests; it is not a claim that all unrelated behavior
+in the large integrated owner suites was re-audited. The scope resolver
+reported `degraded` / `phase-range` / `no-task-commit-rows` and included
+later milestone work. The review therefore used the six Phase 4 plans,
+the previous 24-file review, and the current split owners to follow the
+explicit RSV scope supplied by the orchestrator.
 
-- **Previewed-commit hand-off (D-PL4-01).** `memberLedgerPin` gives a release-tag pin (`pin.oid` plus `resolvedVersion`) precedence over `previewedCommit`. When the preview ran with that pin, the preview's commit is the same oid anyway. `previewedCommit` carries no `resolvedVersion`, so `deriveInstallVersion` takes its third tier and records what an unpinned install of the same commit records.
-- **Path sources.** These never produce a `previewedCommit`. `preflightInstallResolve` sets `resolvedSha` only from `resolveGitPluginRoot`, or from `resolvePathPluginRoot` when a pin already exists.
-- **Clone keys.** The pinned arm (`materializePluginClone`) and the unpinned arm (`materializePluginCommitCopy`) both key on `pluginCloneKey(cloneUrl, sha)`. So the install finds the preview's copy and records the same `resolvedSource`.
-- **Clone cleanup between preview and install.** Move steps use `leaveClonesToTheSweep`, so no cleanup removes the preview's copy before the install reads it.
-- **`rootCommit`.** It is set only by `planInstallMoves`, and an update plan has no root.
-- **Agent-target check (D-PL4-04).** The write-free check follows the agents commit's non-force rule: the plugin's own index rows whose files pass `isOwnedAgentFile` are replaced, and any other existing file at a new target is refused.
-- **Swap split.** The swap keeps `assertNamesFree` (names only). Reinstall (`overwrite: true`) never reaches the move judge or WR-C, and the existing RINST-01 forced-overwrite tests in `reinstall-flow.test.ts` would fail if the swap ran the full check.
-- **Redaction (D-PL4-07).** It is applied once, in `unmovable`, and it is idempotent.
-- **Test strength.** The new install-flow tests discriminate: they count mirror resolves and pinned clones (`mirrors: 1`, `pins: [HOST_HEAD]`). The D-PL4-02 and D-PL4-03 plan tests pin the refusal and the walk/judge order.
-- **Test run.** The targeted tests (`target-check`, `dependency-plan`, `update-swap`) pass.
+## Narrative Findings (AI reviewer)
 
-No Critical issues. The findings are about consistency and maintainability:
+### Critical Issues
 
-- The new refusal is an untyped `Error`. Because of that, the new update scenario pins a misleading `unreadable manifest` reason.
-- One failure (an occupied agent target) now renders three different ways across the new scenarios.
-- The write-free check copies the commit rule instead of sharing it.
-- The target-check unit tests use one generated name per case.
+### CR-01: Foreign agent-index ownership still refuses after an earlier move commits
 
-## Warnings
+**Classification:** BLOCKER
+**File:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710/extensions/pi-claude-marketplace/bridges/agents/target-check.ts:34-48`
+**Related:** `bridges/agents/stage.ts:127-145`,
+`orchestrators/plugin/dependency-move.ts:167-218`,
+`orchestrators/plugin/install-flow-planning.ts:252`.
 
-### WR-01: The occupied-agent-target refusal is an untyped `Error`, and the new update scenario pins a misleading `unreadable manifest` reason for it
+**Issue:** The write-free check discards the `other` partition of the
+agents index and checks only existing target files. The actual staging
+operation first runs `findOwnershipConflicts(otherEntries, names)` and
+throws `AgentOwnershipConflictError`, even when the target file is
+absent. The state-based PI-6 check cannot cover a stale index row whose
+owner/resource is no longer present in `state.json`.
 
-**File:** `extensions/pi-claude-marketplace/bridges/agents/target-check.ts:46`, `features/plugin/update-dependencies.feature:61` (with `extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:957`)
+This leaves a deterministic, already-readable refusal until execution.
+A two-move install can update its first dependency and then fail the
+second one; the plan could have rejected the operation before either
+move. A missing target does not make the foreign index claim
+replaceable under the actual bridge's AG-9 rule.
 
-**Issue:** `assertAgentTargetsFree` throws a plain `Error`, copying the commit's plain `Error` in `bridges/agents/stage.ts:328`. CONVENTIONS.md requires one typed error class per failure mode, and callers narrow with `instanceof`. Because the error has no type:
+**Reproduction, executed on the reviewed tree:** A hermetic Node module
+used the existing public install fixture (`withHermeticHome`,
+`seedCatalogScope`, `publishCatalog`, `makeCtx`) and real bridge:
 
-- In WR-C, `narrowDirectFailReason` can only reach the generic fallback, `"unreadable manifest"`.
-- The new cucumber scenario "Updating a plugin whose new version would overwrite a user's agent file..." now asserts `reasons: unreadable manifest` for a refusal that has nothing to do with a manifest. A behavioral test should not lock in a misleading reason.
-- Every new test (`target-check.test.ts`, `install-outcome.test.ts`, `update-swap.test.ts`, the install-flow D-PL4-04 case) can only assert the message string. The unit-test rules say to assert errors by class and structured fields.
+1. Install `aaa@mp` and `zzz@mp` at 1.0.0.
+2. Publish `app@mp` requiring `aaa@^2.0.0,zzz@^2.0.0`, publish both
+   dependencies at 2.0.0, and give `zzz` a valid `agents/helper.md`.
+3. Write a valid `agents-index.json` row for
+   `pi-claude-marketplace-zzz-helper`, owned by
+   `zzz@old-catalog`, pointing at its usual target in `agents/`.
+   Leave that target absent and leave `old-catalog` absent from state.
+4. Call the public `owner.installPlugin` for `app@mp`.
 
-**Fix:** Add a typed error in `shared/errors-bridges.ts` and throw it from both `assertAgentCommitTargets` and `assertAgentTargetsFree`. Keep the message, as D-PL4-04 requires:
+Measured result:
 
-```ts
-export class AgentTargetOccupiedError extends Error {
-  readonly targetPath: string;
-  constructor(targetPath: string) {
-    super(`Cannot replace agent target with non-previous content at ${targetPath}`);
-    this.name = "AgentTargetOccupiedError";
-    this.targetPath = targetPath;
+```json
+{
+  "status": "failed",
+  "versions": {
+    "aaa": "2.0.0",
+    "zzz": "1.0.0"
   }
 }
 ```
 
-Then map it in `typedDirectFailReason` to an accurate reason. The closed vocabulary has no fitting member, so adding one is a user-visible choice: ask the user. Update the tests to assert `instanceof AgentTargetOccupiedError` and `targetPath`.
+The outcome reported `aaa@mp` updated and `zzz@mp` failed.
+A separate bridge-level reproduction with the same missing-target /
+foreign-owner condition printed:
 
-### WR-02: The same occupied-target failure renders three different ways in the new scenarios
-
-**File:** `features/plugin/install-dependencies.feature:938`, `features/plugin/install-dependencies.feature:970`, `features/plugin/update-dependencies.feature:61`; `extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts:193`
-
-**Issue:** D-PL4-07's stated reason is "the same failure should read the same wherever it is found". But redaction is applied only to the move-refusal subject (`unmovable`). The three new scenarios now pin three spellings of one failure:
-
-- **A move refused by the judge** (line 938): `... at pi-claude-marketplace-zzz-helper.md` (basename).
-- **A fresh dependency refused by `previewInstall`** (line 970): `... at {project dir}/.pi/agents/pi-claude-marketplace-kit-helper.md`. The `previewFresh` member subject carries the raw error.
-- **The update root refused in WR-C** (`update-dependencies.feature:61`): the full path again.
-
-The full-path forms also contradict T-55-02-02's basename policy for row causes. The phase added both of those surfaces as new early-refusal points.
-
-**Fix:** Pick one rendering and apply it at the plan's other refusal point:
-
-- In `previewFresh` (`dependency-plan.ts:461-469`), wrap the caught error with `redactCauseChain` (`shared/redact-absolute-paths.ts`), as `dependency-move.ts:307` does for a failed move.
-- Make the WR-C rendering match.
-
-If keeping the full path for non-move rows is deliberate, record that under D-PL4-07 so the scenarios do not read as an accident.
-
-### WR-03: The write-free check duplicates the agents commit rule instead of sharing it, so the two can drift silently
-
-**File:** `extensions/pi-claude-marketplace/bridges/agents/target-check.ts:27-49` vs `extensions/pi-claude-marketplace/bridges/agents/stage.ts:156-176,314-333`
-
-**Issue:** D-PL4-04's guarantee is that the plan refuses exactly what the commit would refuse. `assertAgentTargetsFree` gets there by copying three things:
-
-- the AG-5 partition loop from `prepareStagePluginAgents` (step 6),
-- the occupied-target loop from `assertAgentCommitTargets`,
-- the target-path derivation (`path.join(agentsDir, name + ".md")`) from step 7.
-
-No test compares the two rules against each other. A later change to one side would let the plan admit a target that the commit then refuses after moves have landed (the b6 failure this phase closes), or refuse one the commit would accept. Examples: the forced-row containment check, a new marker, a different target spelling. Nothing would report the drift.
-
-**Fix:** Extract the shared parts in the agents bridge and use them from both sides. For example:
-
-- `agentTargetPath(locations, generatedName)`
-- `findOccupiedAgentTarget(replacedTargets: ReadonlySet<string>, targets: readonly string[]): Promise<string | undefined>`
-
-`assertAgentCommitTargets` would pass `previous.replaced` targets, and `assertAgentTargetsFree` would pass the targets of the rows that `isOwnedAgentFile` admits. As a minimum, add a table-driven test in `test/bridges/agents/` that runs the same fixtures through `prepareStagePluginAgents` + `assertAgentCommitTargets` and through `assertAgentTargetsFree`, and asserts the same verdict.
-
-### WR-04: The target-check unit tests pass one generated name per case, so a check that inspects only the first name passes all of them
-
-**File:** `test/bridges/agents/target-check.test.ts:63-128`
-
-**Issue:** All five cases call `assertAgentTargetsFree(..., [GENERATED_NAME])`. Two plausible wrong implementations pass the whole suite:
-
-- one that checks only `generatedNames[0]`;
-- one that returns as soon as one name is free (for example `if (!(await pathExists(target))) return;`).
-
-A plugin with several agents, where only the second agent's target is occupied, is exactly the RSV-04 shape. The unit-test rules make "a case a wrong implementation would pass" the top finding.
-
-**Fix:** Add a case with two names where the first target is free (or owned and replaced) and the second holds a user file. Assert the refusal names the second target:
-
-```ts
-test("D-PL4-04: refuses an occupied target that follows a free one", async (t) => {
-  // arrange
-  const locations = await createScope(t);
-  const second = path.join(locations.agentsDir, "pi-claude-marketplace-acme-second.md");
-  await writeFile(second, USER_BYTES);
-
-  // act & assert
-  await assert.rejects(
-    assertAgentTargetsFree(locations, { marketplace: "catalog", plugin: "acme" }, [
-      GENERATED_NAME,
-      "pi-claude-marketplace-acme-second",
-    ]),
-    assertOccupiedRefusal(second),
-  );
-});
+```text
+preview: accepted missing target with foreign index owner
+prepare: AgentOwnershipConflictError
 ```
 
-## Info
+Both reproductions cleaned their temporary directories. No repository
+source or test was changed.
 
-### IN-01: `assertUpdateNamesFree` no longer describes what it checks, and `assertNamesFree`'s doc names the wrong caller
+**Fix:** Retain both partitions in `assertAgentTargetsFree`; run the
+same AG-9 ownership check as `prepareStagePluginAgents` before checking
+target files, throwing the same typed error and structured conflicts.
+Prefer a shared ownership assertion so preview and staging cannot drift.
+Keep the existing commit-time checks. Add a paired missing-target /
+foreign-index test and a behavioral two-move regression that requires
+both records to remain at 1.0.0. This directly addresses prior IN-03;
+the duplicated-rule concern in prior WR-03 is related and is not counted
+again as a separate finding.
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts:1362-1368`, `:1391`
+### Warnings
 
-**Issue:** The exported `assertUpdateNamesFree` now also refuses occupied agent targets. Its name still says "names", so a reader at `dependency-move.ts:186` or `install-flow.ts:3712` cannot tell that it reads the agents index and the disk.
+### WR-01: The rollback-partial contract still says apply does not render it
 
-The doc on the now-private `assertNamesFree` still says "UPD-DEP-D1's plan runs it before any dependency moves". The plan now runs the wrapper, and the only direct caller left is the swap.
+**Classification:** WARNING
+**File:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710/extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-dependency-ledger.ts:170-175`
+**Related:** `orchestrators/reconcile/apply.ts:583-649,890`.
 
-**Fix:** Rename the export, for example to `assertUpdateTargetsFree`. If touching `dependency-move.ts` is out of scope, defer the rename and reword the `assertNamesFree` doc so it names the swap as its direct caller.
+**Issue:** The `InstallMissingDependencyOutcome` field comment says
+"`apply` does not render them yet (LCORCH-01)". The current
+`applyDependencyInstalls` failure arm forwards this outcome to
+`installFailedOutcomes`, which reads `rollbackPartials`, projects
+per-phase detail, and emits `rollback partial` rows. This is an
+inaccurate description of a public outcome contract after the later
+integration; it directs future consumers to treat already-supported
+reporting as unfinished work.
 
-### IN-02: The `rollbackPartials` doc on `InstallMissingDependencyOutcome` claims a consumer that does not exist
+**Fix:** Remove the obsolete sentence, keeping the description of the
+failed undo steps and omission when every undo succeeds. If a consumer
+is named, identify the current `applyDependencyInstalls` /
+`installFailedOutcomes` path.
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts:2992-2996`
+## Disposition of the previous review
 
-**Issue:** The doc says the field exists "so an orchestrated caller reports `{rollback partial}` as the standalone row does". The only orchestrated caller, `orchestrators/reconcile/apply.ts:670-730`, never reads it. D-PL4-06 defers that rendering (LCORCH-01). A reader would assume `apply` already renders it.
+| Previous ID | Current disposition | Evidence |
+|-------------|---------------------|----------|
+| WR-01: untyped occupied-target error / unreadable-manifest reason | Resolved | Both bridge sites throw `AgentTargetOccupiedError`; `update-flow.ts:908,1146` suppress the unrelated reason for cascade/direct paths. The update scenario expects an empty reasons cell. |
+| WR-02: inconsistent full-path/basename messages | Resolved | `errors-bridges.ts:61-69` redacts the error message at construction. Current move, fresh-dependency and direct-update scenarios all expect the basename. |
+| WR-03: separate preview/commit rules | Subsumed by CR-01 | The ownership/refusal logic remains separate, and there is no shared-fixture parity test. This review demonstrates a concrete mismatch rather than counting the same concern twice. `AGTARGET-01` remains the existing maintenance carrier. |
+| WR-04: only first target tested | Resolved | `target-check.test.ts:134-149` supplies a free first target and an occupied second target. |
+| IN-01: names-only function comment / export naming | Comment resolved; no defect reported for the name | `update-swap.ts:1404-1435` documents the private names check and public agent-target wrapper. The export name alone does not establish a bug. |
+| IN-02: rollback-partial consumer claim | Later integration made the replacement comment stale | Runtime propagation and apply rendering now exist; current inaccurate text is WR-01 above. |
+| IN-03: AG-9 absent from preview | Confirmed, escalated to CR-01 | Both bridge-level and public two-move reproductions establish the late refusal. |
+| IN-04: agents-directory setup cleanup | No leak established | The run's `Before` hook removes all sandbox contents and `AfterAll` removes its root (`features/support/pi-process.ts:118-166`); the user file also has its own release. The directory is intentionally a setup precondition. |
 
-**Fix:** Describe the field without the consumer claim. For example: "REC-06: the undo steps the failed install's own ledger could not finish; omitted when every undo finished (NREG-01). `apply` does not render it yet (LCORCH-01)."
+## Other reviewed paths and limits
 
-### IN-03: The write-free check does not cover prepare's AG-9 index-ownership refusal
+- The fresh-member commit map is keyed by member key. `previewFresh`
+  returns the preflight commit, and `schedule` attaches it to materialize
+  and final entries. The install root travels through `rootCommit`.
+- Both current ledger builders call `memberLedgerPin`. A release-tag
+  pin takes precedence; an ordinary preview commit supplies only
+  `sourcePin`, which becomes `sourcePinOverride`. The pinned clone
+  probe reads that commit. The existing cases assert one mirror resolve,
+  the pinned commit, installed records, and the real git request pair.
+- D-PL4-02 still previews fresh dependencies deferred by apply. D-PL4-03
+  deliberately keeps the greedy, incomplete search; the test checks the
+  exact four rounds and six judge calls. The recorded completeness limit
+  is not a newly discovered defect.
+- Reinstall's forced overwrite continues through the swap's names-only
+  check and the force-aware commit check.
+- The no-match tag result has no range field; the cascade derives the
+  reported range from the declaration. Listing failure is a separate arm.
+- Failed missing-dependency outcomes still carry the original partial
+  rollback detail through the result projection. The REC-06 test now
+  lives in `install-flow-ledger.test.ts:6766`.
+- Deferred workflow-target and re-enable refusals remain documented in
+  `MOVEREFUSE-01`. This review does not silently expand RSV-04 to those
+  separately recorded cases.
 
-**File:** `extensions/pi-claude-marketplace/bridges/agents/target-check.ts:32-33`
+## Validation and review evidence
 
-**Issue:** `prepareStagePluginAgents` throws `AgentOwnershipConflictError` when another `(marketplace, plugin)` owns a generated name in the agents index (`stage.ts:126-136`). The write-free check reads the same index but ignores the other-owner rows.
-
-In the usual case the state-based PI-6 check catches this first. But when the index and `state.json` disagree (a hand-edited or partly rolled-back index) and the target file is absent, the plan admits the member. The ledger then refuses with AG-9 after earlier moves have landed. This is the failure order RSV-04 closes, in a narrow drift case.
-
-**Fix:** Optionally run `findOwnershipConflicts(other, generatedNames)` in the same function and throw `AgentOwnershipConflictError`, as prepare does. Or record the limit next to D-PL4-04.
-
-### IN-04: The new agents-directory `Given` creates a directory that no release removes
-
-**File:** `features/step_definitions/plugin/installation.steps.ts:188`
-
-**Issue:** `the agents directory of the {word} scope holds the file ...` runs `mkdir(directory, { recursive: true })`, but only the file gets an `onRelease`. The directory sits inside the scenario sandbox, so nothing leaks today.
-
-There is also an asymmetry with the data-directory step. That step asserts the directory already exists ("so the install did not create it"). This step creates the shared `agents/` directory itself. So a scenario cannot tell whether an install would have created `agents/` without being asked.
-
-**Fix:** If the sandbox removal does not already cover it, register a release for the created directory (only when the step created it). Optionally state in the step module's `@fileoverview` that this step creates `agents/`.
+- Reviewed commit: `92501edf2f60f1b12370a0d2766923438f469553`,
+  branch `agent-reverify-a`, Node `v26.12.1`.
+- Reused the orchestrator's same-session `npm run check`, exit 0 at
+  `99747f39`: 1124 scenarios, 11468 steps, 309 LCOV records.
+  Independently checked that
+  `git diff 99747f39 -- . ':(exclude,glob).planning/**/*.md'` is empty
+  and there are no untracked build inputs. The only pre-existing working
+  change was planning STATE.md.
+- The orchestrator's focused evidence covers 11 unit modules and four
+  scenarios / 57 steps. Passing coverage does not exercise CR-01's
+  absent-target / foreign-index combination.
+- Independently executed two disposable Node reproductions for CR-01
+  on the current code; both exited 0 and printed the observed mismatch.
+- Used CodeGraph first. It identified stale indexed split modules, which
+  were read directly from disk for this review.
+- `fallow review --base 2829db68 --brief` could not create its temporary
+  attribution worktree. The read-only fallback
+  `fallow review --base 2829db68 --brief --gate all` exited 0 and reported
+  dead code 0, complexity 0, duplication 0. Its 683-file integrated range
+  served only as orientation; it is neither the phase scope nor evidence
+  against the runtime finding.
+- No structural-findings payload or external-reviewer evidence was
+  supplied. Source, unit-test assertions, behavioral scenarios, and
+  current callers were inspected directly.
+- Only this report was written. No source fixes, test changes, or commits
+  were made by the reviewer.
 
 ---
 
-_Reviewed: 2026-10-27_
-_Reviewer: Claude (gsd-code-reviewer)_
+_Reviewer: gsd-code-reviewer_
 _Depth: standard_
