@@ -11,7 +11,7 @@
   - `marketplace add` accepts an https URL to a hosted `marketplace.json`, and `marketplace update` downloads it again. A plugin that a hosted marketplace lists by a relative path is unavailable, as in Claude Code.
   - `marketplace add` and `update` refuse every name that Claude Code reserves. Each load reports a marketplace recorded under such a name until you remove it.
   - `/claude:plugin market` works as an alias of `marketplace`, the `owner/repo@ref` shorthand splits at the first `@` or `#`, and adding a marketplace again restores a missing checkout.
-  - `import` now adds every marketplace your Claude settings list. A marketplace whose source you added under another name is reused, and its plugins fail as not added. A changed source is added again in place.
+  - `import` now adds every marketplace your Claude settings list. A marketplace whose source you added under another name is reused, and its plugins fail as not added. `import` and `apply` replace a changed marketplace source in place.
   - `import` and `apply` now name each step of a failed install whose rollback failed, as `install` does. All three name the skill that a failed rollback leaves behind.
   - Staging warnings now show for `enable`, failed installs, updates, reinstalls, `marketplace update`, autoupdate, and `apply`, under a header that names the plugin's scope. `update` also shows its dependencies' MCP config notices.
   - `pending` and `apply` now list and make catalog moves, missing dependency installs, and enables in the same order. One `apply` installs a missing dependency that needs a version the same `apply` moves to.
