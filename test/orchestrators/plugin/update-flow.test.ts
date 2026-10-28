@@ -19,7 +19,6 @@ import test, { type TestContext } from "node:test";
 
 import * as git from "isomorphic-git";
 import http from "isomorphic-git/http/node";
-import lockfile from "proper-lockfile";
 
 import {
   createHooksRouting,
@@ -74,6 +73,7 @@ import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
+import { whileStateLockHeld } from "../state-lock.ts";
 
 import { materializeCommitCopyWith } from "./mirror-checkout.ts";
 
@@ -1705,11 +1705,7 @@ test("GLK-04: a held scope lock refuses the marketplace sync as lock held before
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
       const { ctx, run, notifications } = makeCtx();
-      const release = await lockfile.lock(locations.extensionRoot, {
-        lockfilePath: locations.stateLockFile,
-        realpath: false,
-      });
-      try {
+      await whileStateLockHeld(locations, async () => {
         // act
         await updatePlugins({
           ctx,
@@ -1720,9 +1716,7 @@ test("GLK-04: a held scope lock refuses the marketplace sync as lock held before
           gitOps,
           credentialOps: makeCredentialOps(),
         });
-      } finally {
-        await release();
-      }
+      });
 
       // assert
       assert.deepStrictEqual(notifications, [
@@ -2567,17 +2561,10 @@ test("FLR-02: updateSinglePlugin under a held state lock fails as lock held with
       });
       const stateBefore = await readFile(locations.stateJsonPath, "utf8");
       process.chdir(cwd);
-      const release = await lockfile.lock(locations.extensionRoot, {
-        lockfilePath: locations.stateLockFile,
-        realpath: false,
-      });
-      let outcome: Awaited<ReturnType<PluginUpdateFn>>;
-      try {
+      const outcome = await whileStateLockHeld(locations, async () => {
         // act
-        outcome = await updateSinglePlugin("hello", "mp", "project");
-      } finally {
-        await release();
-      }
+        return updateSinglePlugin("hello", "mp", "project");
+      });
 
       // assert
       assert.ok(outcome.partition === "failed");
@@ -6323,11 +6310,7 @@ test("WR-02 / NFR-3: an already-current disabled record does not take the scope 
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
-      const release = await lockfile.lock(locations.extensionRoot, {
-        lockfilePath: locations.stateLockFile,
-        realpath: false,
-      });
-      try {
+      await whileStateLockHeld(locations, async () => {
         const { ctx, run, notifications } = makeCtx();
         await updatePlugins({
           ctx,
@@ -6344,9 +6327,7 @@ test("WR-02 / NFR-3: an already-current disabled record does not take the scope 
         assert.equal(notifications.length, 1);
         assert.match(notifications[0]!.message, /\(skipped\) \{up-to-date\}/);
         assert.doesNotMatch(notifications[0]!.message, /lock held|\(failed\)/);
-      } finally {
-        await release();
-      }
+      });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -6368,11 +6349,7 @@ test("FLR-01: a held scope lock fails an update that is due as lock held and kee
       });
       const stateBefore = await readFile(locations.stateJsonPath, "utf8");
       const { ctx, run, notifications } = makeCtx();
-      const release = await lockfile.lock(locations.extensionRoot, {
-        lockfilePath: locations.stateLockFile,
-        realpath: false,
-      });
-      try {
+      await whileStateLockHeld(locations, async () => {
         // act
         await updatePlugins({
           ctx,
@@ -6381,9 +6358,7 @@ test("FLR-01: a held scope lock fails an update that is due as lock held and kee
           cwd,
           target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
         });
-      } finally {
-        await release();
-      }
+      });
 
       // assert: the lock is hit at the intent mark, after the candidate, so
       // the row names the move it attempted (UPR-03).
@@ -6470,11 +6445,7 @@ test("WR-08 / NFR-3: the lock-free skip survives multi-element compatibility lis
         `notes must carry >=2 entries for order to be observable: ${JSON.stringify(settled.compatibility.notes)}`,
       );
 
-      const release = await lockfile.lock(locations.extensionRoot, {
-        lockfilePath: locations.stateLockFile,
-        realpath: false,
-      });
-      try {
+      await whileStateLockHeld(locations, async () => {
         const { ctx, run, notifications } = makeCtx();
         await updatePlugins({
           ctx,
@@ -6491,9 +6462,7 @@ test("WR-08 / NFR-3: the lock-free skip survives multi-element compatibility lis
           /lock held|\(failed\)/,
           "the re-derived lists compared equal to the persisted ones, so no lock was needed -- a `lock held` row here means the resolver's emit order stopped being stable across resolutions",
         );
-      } finally {
-        await release();
-      }
+      });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

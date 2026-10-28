@@ -30,6 +30,7 @@ import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
+import { whileStateLockHeld } from "../state-lock.ts";
 
 import type { MarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -2336,13 +2337,8 @@ test("GIT-03: a held state lock fails the row as lock held and refreshes no mirr
       materializeOrRefreshPluginMirror: () => assert.fail("a held lock never refreshes the mirror"),
     };
     const boundary = notificationBoundary("lock held");
-    const release = await lockfile.lock(locations.extensionRoot, {
-      lockfilePath: locations.stateLockFile,
-      realpath: false,
-    });
-
-    // act
-    try {
+    await whileStateLockHeld(locations, async () => {
+      // act
       await fetchPlugins({
         cloneCacheSeam: seam,
         ctx: boundary.ctx,
@@ -2351,9 +2347,7 @@ test("GIT-03: a held state lock fails the row as lock held and refreshes no mirr
         scope: "project",
         target: { kind: "plugin", marketplace: "marketplace", plugin: "locked" },
       });
-    } finally {
-      await release();
-    }
+    });
 
     // assert
     assert.strictEqual(boundary.notifications.length, 1);
