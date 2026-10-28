@@ -1,8 +1,8 @@
 ---
 phase: 11-cleanup-split-and-docs
-reviewed: 2026-10-28T09:45:17Z
+reviewed: 2026-10-28T12:22:45Z
 depth: deep
-files_reviewed: 64
+files_reviewed: 70
 files_reviewed_list:
   - .pre-commit-config.yaml
   - CHANGELOG.md
@@ -20,8 +20,11 @@ files_reviewed_list:
   - extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-cascade-context.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-dependency-ledger.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-results.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/prune.ts
@@ -54,9 +57,12 @@ files_reviewed_list:
   - test/orchestrators/plugin/dependency-bindings.test.ts
   - test/orchestrators/plugin/fetch.test.ts
   - test/orchestrators/plugin/info.test.ts
+  - test/orchestrators/plugin/install-flow-cascade-context.test.ts
+  - test/orchestrators/plugin/install-flow-dependency-ledger.test.ts
   - test/orchestrators/plugin/install-flow-fixture.ts
   - test/orchestrators/plugin/install-flow-ledger.test.ts
   - test/orchestrators/plugin/install-flow-planning.test.ts
+  - test/orchestrators/plugin/install-flow-results.test.ts
   - test/orchestrators/plugin/install-flow.test.ts
   - test/orchestrators/plugin/reinstall-flow.test.ts
   - test/orchestrators/plugin/update-flow.test.ts
@@ -70,35 +76,43 @@ files_reviewed_list:
   - test/platform/removal-ops-fake.ts
 findings:
   critical: 0
-  warning: 0
+  warning: 1
   info: 0
-  total: 0
-status: clean
+  total: 1
+status: issues_found
 ---
 
 # Phase 11: Code Review Report
 
-**Reviewed:** 2026-10-28T09:45:17Z
+**Reviewed:** 2026-10-28T12:22:45Z
 **Depth:** deep
-**Files Reviewed:** 64
-**Status:** clean
+**Files Reviewed:** 70
+**Status:** issues_found
 
 ## Summary
 
-The review covered the exact union of Phase 11 implementation commits and re-reviewed all three prior findings after commits `34b77e6f`, `2f1cc6f8`, and `f880a4f3` were merged at `885b4f37`. The supplemental documentation-truth audit also covered the Phase 11 planning records and `.planning/{PROJECT,BACKLOG,REQUIREMENTS}.md` plus `.planning/codebase/ARCHITECTURE.md`; planning artifacts are excluded from the formal source-file count above.
+The review covered the exact union of Phase 11 implementation commits through `33799ae7`, including the six Plan 11-13 source/test owners added after the prior clean review. It re-reviewed the Plan 11-13 split and the filesystem-capability remediation at `4cceceb2`, with call-chain checks for public API stability, recursive install re-entry, transaction ordering, dependency moves, rollback and deferred-pin projection, package containment, and the new typed removal capability. The supplemental documentation-truth audit also covered all 13 plan/summary pairs, `11-SECURITY.md`, `11-SECURITY-FIX.md`, `11-VALIDATION.md`, `.planning/{PROJECT,BACKLOG,REQUIREMENTS}.md`, and `.planning/codebase/ARCHITECTURE.md`; planning artifacts are excluded from the formal source-file count above.
 
-The disabled-holder helper now consumes the exact candidates produced by the same declaration-index walk. All three consumers preserve those indexed keys. The mismatched `alias`/`tools` regressions prove that a user-disabled declarer does not block a standalone disable while a `dependencyDisabled` declarer still blocks it as `helper@tools`. The architecture map now names the public composition root, planning owner, private five-operation port, ledger owner, and private transaction entry point; its child-process and hosted-manifest fetch chokepoints remain intact. The PRD's quality gate and Pi API dependency ranges now match `package.json` and the shipped checks.
+The public `install-flow.ts` root still exports the same three factories and four contract types and binds the same five-operation planning port. Recursive re-entry carries the same `InstallLedgerComposition`, and missing-dependency, preview, initial/materialized cascade, and update-settlement paths receive the root-owned removal capability. The remediation binds data-directory creation to the transaction's own `pluginDataDir`; cascade and result owners do not acquire raw filesystem removal authority. Dependency-ledger imports the main ledger in one direction only, so the split adds no runtime or type-only cycle. The architecture map retains the child-process, hosted-manifest fetch, and path-containment chokepoints.
 
-Fallow's review brief passed with no introduced dead-code, complexity, duplication, boundary, or cycle findings. Fallow architecture reported zero issues, guard showed the expected rule coverage, and the security scan's changed-scope candidates were inherited lines outside the fix hunks. The focused owner checks passed, including 264 uninstall tests and 60 architecture tests. The full `npm run check` evidence at `f880a4f3` remains valid for merged HEAD because the only later change is the planning-only `11-REVIEW-FIX.md`; it passed 1,120 Cucumber scenarios, 11,411 steps, and 306 direct-coverage records under Node `26.12.1`. CodeGraph was attempted first but could not open its database.
+Fallow's final review brief passed with no introduced dead-code, complexity, duplication, boundary, or cycle findings. Fallow architecture reported zero issues, guard showed the expected rule coverage, and explicit traces proved there is no reverse ledger-to-dependency-ledger edge. Its changed-scope security candidates are unchanged contained sinks that became reachable from the newly extracted module under Fallow's module-level taint heuristic; the source paths still enforce the existing containment checks. The exact build-input tree at `91f46fe7` passed the full `npm run check` gate with 1,120 Cucumber scenarios, 11,411 steps, and 309 direct-coverage records under Node `26.12.1`; every later commit through `33799ae7` changes planning/security/validation records only, so that evidence is reusable under the local-verification policy. All six install-flow pairs also passed 100% direct coverage in the refreshed validation. CodeGraph was attempted first but could not open its database.
 
-All reviewed files meet quality standards. No issues found.
+The implementation behavior and security boundaries are sound, but the split left misleading pre-split comments in two owners. Those comments now name the wrong file or functions that no longer exist in that owner.
 
 ## Narrative Findings (AI reviewer)
 
-None.
+### WR-01: Split owners retain misleading pre-split comments
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts:1`
+
+**Related locations:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts:516-520`; `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-results.ts:240-248`
+
+**Issue:** The ledger header still identifies the file as `install-flow.ts`. Its sequencing comment says helpers are "extracted above" and names `collectPostCommitWarnings`, `buildInstalledOutcome`, and `handleInstallThrow`; after Plan 11-13, those implementations live in the result sibling, two names no longer exist, and the ledger-facing wrapper is `collectInstallPostCommitWarnings`. The results sibling also has a detached WARN-01 JSDoc immediately before `failedRowOutcome`, although that prose describes malformed-component aggregation rather than the function that follows. These comments are now false navigation aids in transaction-sensitive code and conflict with the project's rule that comments describe the current code.
+
+**Fix:** Rename the ledger header to `install-flow-ledger.ts`; rewrite the sequencing comment with the current sibling/function names (or remove the obsolete helper list); and either attach the WARN-01 prose to the malformed-reason helper it documents or delete the detached block.
 
 ---
 
-_Reviewed: 2026-10-28T09:45:17Z_
+_Reviewed: 2026-10-28T12:22:45Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: deep_
