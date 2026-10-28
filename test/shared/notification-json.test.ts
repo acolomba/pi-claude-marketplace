@@ -1918,6 +1918,85 @@ test("converts a marketplace-info presentation with every optional field", () =>
   });
 });
 
+test("masks a stored name before successful marketplace info reaches the wire", () => {
+  // arrange
+  const name = "ghp_0123456789abcdefghijklmnopqrstuvwxyz";
+  const message: MarketplaceInfoMessage = { ...githubMarketplaceInfo(), name };
+
+  // act
+  const payload = toWirePayload(presentNotification(runWithNothingLoaded(), message), {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+    kind: "marketplace-info",
+    severity: "info",
+    needsReload: false,
+    name: "***",
+    scope: "user",
+    details: { autoupdate: false },
+    source: { sourceKind: "github", owner: "acme", repo: "mp" },
+  });
+  assert.strictEqual(JSON.stringify(payload).includes(name), false);
+});
+
+test("masks stored names and URL credentials before a marketplace info cascade reaches the wire", () => {
+  // arrange
+  const name = "ghp_0123456789abcdefghijklmnopqrstuvwxyz";
+
+  // act
+  const payload = toWirePayload(
+    presentNotification(runWithNothingLoaded(), {
+      kind: "marketplace-info-cascade",
+      blocks: [
+        { ...githubMarketplaceInfo(), name, source: { sourceKind: "path", absPath: "/srv/mp" } },
+        {
+          ...githubMarketplaceInfo(),
+          name,
+          source: { sourceKind: "url", url: "https://user:secret123@host/mp.git" },
+        },
+      ],
+    }),
+    {
+      kind: "command",
+      commandId: "plugin",
+      invocationId: "test-run",
+    },
+  );
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+    kind: "marketplace-info-cascade",
+    severity: "info",
+    needsReload: false,
+    blocks: [
+      {
+        name: "***",
+        scope: "user",
+        details: { autoupdate: false },
+        source: { sourceKind: "path", absPath: "/srv/mp" },
+      },
+      {
+        name: "***",
+        scope: "user",
+        details: { autoupdate: false },
+        source: { sourceKind: "url", url: "https://***@host/mp.git" },
+      },
+    ],
+  });
+  assert.doesNotMatch(
+    JSON.stringify(payload),
+    /ghp_0123456789abcdefghijklmnopqrstuvwxyz|secret123/,
+  );
+});
+
 test("converts an unresolved catalogue plugin-info row with no scope and empty reasons", () => {
   // arrange
   const presentation = {

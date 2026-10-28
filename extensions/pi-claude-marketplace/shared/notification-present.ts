@@ -197,16 +197,21 @@ export function presentNotification(
 }
 
 /**
- * PMOD-04: a url source can hold the userinfo the user typed, so its `url` is
- * redacted. A github or path source carries no credential, and the message
- * comes back as the same object.
+ * PMOD-04: redact stored names and URL userinfo before either renderer reads
+ * them. Keep the original message when neither field changes.
  */
 function redactMarketplaceInfo(message: MarketplaceInfoMessage): MarketplaceInfoMessage {
+  const name = redactCredentials(message.name);
   if (message.source.sourceKind !== "url") {
+    return name === message.name ? message : { ...message, name };
+  }
+
+  const url = redactCredentials(message.source.url);
+  if (name === message.name && url === message.source.url) {
     return message;
   }
 
-  return { ...message, source: { ...message.source, url: redactCredentials(message.source.url) } };
+  return { ...message, name, source: { ...message.source, url } };
 }
 
 /**

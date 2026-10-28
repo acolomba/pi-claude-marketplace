@@ -605,13 +605,72 @@ describe("presentNotification", () => {
     assert.strictEqual(presentation.message, message);
   });
 
-  test("PMOD-04 / D-07 redacts the url block of a marketplace-info cascade", () => {
+  for (const source of [
+    { sourceKind: "path", absPath: "/srv/mp" },
+    { sourceKind: "github", owner: "acme", repo: "mp" },
+    { sourceKind: "url", url: "https://host/mp.git", ref: "main" },
+  ] satisfies readonly MarketplaceInfoMessage["source"][]) {
+    test(`redacts a stored marketplace-info name with a ${source.sourceKind} source`, () => {
+      // arrange
+      const message: MarketplaceInfoMessage = {
+        ...marketplaceInfo(),
+        name: "ghp_0123456789abcdefghijklmnopqrstuvwxyz",
+        source,
+        description: "Tools",
+        allowedMarketplaces: ["other"],
+      };
+
+      // act
+      const presentation = presentNotification(runWithAllLoaded(), message);
+
+      // assert
+      assert.deepStrictEqual(presentation, {
+        kind: "marketplace-info",
+        envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
+        message: {
+          kind: "marketplace-info",
+          name: "***",
+          scope: "user",
+          details: { autoupdate: false },
+          source,
+          description: "Tools",
+          allowedMarketplaces: ["other"],
+        },
+      });
+    });
+  }
+
+  test("preserves marketplace-info when neither its name nor its URL needs redaction", () => {
+    // arrange
+    const message: MarketplaceInfoMessage = {
+      ...marketplaceInfo(),
+      source: { sourceKind: "url", url: "https://host/mp.git", ref: "main" },
+    };
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "marketplace-info",
+      envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
+      message,
+    });
+    assert.ok(presentation.kind === "marketplace-info");
+    assert.strictEqual(presentation.message, message);
+  });
+
+  test("redacts the name and URL of a marketplace-info cascade block", () => {
     // arrange
     const githubBlock = marketplaceInfo();
     const message = {
       kind: "marketplace-info-cascade",
       blocks: [
-        { ...marketplaceInfo(), source: { sourceKind: "url", url: "ssh://git@host/mp.git" } },
+        {
+          ...marketplaceInfo(),
+          name: "ghp_0123456789abcdefghijklmnopqrstuvwxyz",
+          source: { sourceKind: "url", url: "ssh://git@host/mp.git" },
+        },
         githubBlock,
       ],
     } satisfies MarketplaceInfoCascadeMessage;
@@ -628,7 +687,7 @@ describe("presentNotification", () => {
         blocks: [
           {
             kind: "marketplace-info",
-            name: "mp",
+            name: "***",
             scope: "user",
             details: { autoupdate: false },
             source: { sourceKind: "url", url: "ssh://***@host/mp.git" },

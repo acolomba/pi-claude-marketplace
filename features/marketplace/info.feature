@@ -144,6 +144,22 @@ Feature: Marketplace info
       | marketplace-info | info     | false        |                                | tools | project | false              | {scenario time}         | path        | {home}/marketplaces/tools-project |                  |                   |                                |               |             |           |                  |              |                            |
       | plugin-info      | error    | false        | A plugin operation has failed. |       |         |                    |                         |             |                                   | tools            | user              | false                          | failed        | tools       | tools     | invalid manifest | user         | false                      |
 
+  Scenario: Info hides credentials in a stored marketplace name when its manifest is healthy
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" info record in the project scope has the stored name "ghp_0123456789abcdefghijklmnopqrstuvwxyz"
+    When the user runs "/claude:plugin marketplace info tools --scope project"
+    Then the result has these fields:
+      | kind                    | marketplace-info          |
+      | name                    | ***                       |
+      | scope                   | project                   |
+      | details autoupdate      | false                     |
+      | details last updated at | {scenario time}           |
+      | source kind             | path                      |
+      | source abs path         | {home}/marketplaces/tools |
+      | severity                | info                      |
+      | needs reload            | false                     |
+
   Scenario: Info hides credentials in a stored marketplace name when its manifest is invalid
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
