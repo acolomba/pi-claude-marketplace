@@ -82,3 +82,20 @@ orchestrated `unchanged` result added in Phase 11.
 The audit passed `node scripts/check-phase10-coverage.mjs` (56/56 rows), the
 focused marketplace-add and real-child process-tree owner cases (1/1 each), and
 10 representative Cucumber scenarios (116/116 steps) on the integrated tree.
+
+## Post-Split Validation Audit 2026-10-28
+
+| Metric | Count |
+|---|---|
+| Gaps found | 2 |
+| Resolved | 2 |
+| Escalated | 0 |
+
+Plan 11-06 moved the PI-6 marketplace-fixture case into the ledger pair and
+split the `rootCommit` hand-off proof between planning selection and ledger
+persistence. The behavioral assertions remained in place, but the coverage
+ledger still named the retired monolithic owner path and title.
+
+The ledger now cites the PI-6 ledger case and both `rootCommit` owner cases.
+`node scripts/check-phase10-coverage.mjs` passes all 56 rows, and the three
+focused post-split cases pass without changing implementation.
