@@ -398,10 +398,13 @@ test("UPD-DEP-D1: installing moves a dependency whose new version installs a dep
 });
 
 for (const orchestrated of [false, true]) {
-  test(`keeps dependency-step MCP notices after a successful ${orchestrated ? "orchestrated" : "standalone"} install`, async () => {
+  test(`keeps dependency-step MCP notices after a successful ${orchestrated ? "orchestrated" : "standalone"} install`, async (t) => {
     await withHermeticHome(async (owner) => {
       // arrange
       const { cwd, marketplaceRoot } = await seedCatalogScope({ aaa: { version: "1.0.0" } });
+      t.after(async () => {
+        await rm(cwd, { recursive: true, force: true });
+      });
       await installed(owner, cwd, "aaa");
       await publishCatalog(marketplaceRoot, {
         app: { version: "1.0.0", dependencies: ["aaa@^2.0.0"] },
@@ -442,10 +445,13 @@ for (const orchestrated of [false, true]) {
     });
   });
 
-  test(`keeps dependency-step MCP notices when a later move fails in a ${orchestrated ? "orchestrated" : "standalone"} install`, async () => {
+  test(`keeps dependency-step MCP notices when a later move fails in a ${orchestrated ? "orchestrated" : "standalone"} install`, async (t) => {
     await withHermeticHome(async (owner) => {
       // arrange
       const { cwd, marketplaceRoot } = await seedCatalogScope({ aaa: { version: "1.0.0" } });
+      t.after(async () => {
+        await rm(cwd, { recursive: true, force: true });
+      });
       await installed(owner, cwd, "aaa");
       await publishCatalog(marketplaceRoot, {
         app: { version: "1.0.0", dependencies: ["aaa@^2.0.0"] },

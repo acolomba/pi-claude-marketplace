@@ -15636,12 +15636,15 @@ test("D-PL10-16: a cascade dependency reports its discovery note under its own h
   });
 });
 
-test("reports install diagnostics in row order when the root sorts after its dependency", async () => {
+test("reports install diagnostics in row order when the root sorts after its dependency", async (t) => {
   await withHermeticHome(async ({ installPlugin }) => {
     // arrange
     const { cwd, marketplaceRoot } = await seedCatalogScope({
       zroot: { version: "1.0.0", dependencies: ["aaa"] },
       aaa: { version: "1.0.0" },
+    });
+    t.after(async () => {
+      await rm(cwd, { recursive: true, force: true });
     });
     for (const plugin of ["zroot", "aaa"]) {
       const duplicate = path.join(marketplaceRoot, "plugins", plugin, "skills", `${plugin}-tool`);
