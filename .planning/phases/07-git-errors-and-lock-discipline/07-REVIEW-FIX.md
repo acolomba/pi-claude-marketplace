@@ -1,8 +1,8 @@
 ---
 phase: 07-git-errors-and-lock-discipline
-fixed_at: 2026-10-28T14:57:12-04:00
+fixed_at: 2026-10-28T15:55:51-04:00
 review_path: .planning/phases/07-git-errors-and-lock-discipline/07-REVIEW.md
-iteration: 3
+iteration: 4
 findings_in_scope: 1
 fixed: 1
 skipped: 0
@@ -414,6 +414,107 @@ All checks ran in the isolated owner worktree
 
 ______________________________________________________________________
 
+______________________________________________________________________
+
+## Iteration 4
+
+**Fixed at:** 2026-10-28T15:55:51-04:00
+**Source review:** .planning/phases/07-git-errors-and-lock-discipline/07-REVIEW.md
+**Iteration:** 4
+
+**Summary:**
+
+- Findings in scope: 1
+- Fixed: 1
+- Skipped: 0
+
+### Fixed Issues
+
+#### CR-01: Planning can leak clones that never become final move keys
+
+**Files modified:**
+`extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-cascade-context.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-dependency-ledger.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts`,
+and their 10 paired test modules under `test/orchestrators/plugin/`.
+
+**Commit:** 967fdb8a
+**Status:** fixed: requires human verification
+
+**Applied fix:** Each dependency-planning attempt now creates one mutable set
+of exact clone-cache keys before any root preview, member preview, or move
+judgment. Clone materializers report a key only when their atomic promotion
+returns `renamed`. A warm-cache hit and a promotion lost to another process do
+not report ownership. Install and update thread this set through root, fresh
+member, and move preflight materialization. A successful move judgment records
+its keys before later exclusion and name checks can rule the candidate out.
+
+Install and update also create the candidate-only sweep before planning and run
+it from an outer `finally`. Cleanup therefore runs after success, refusal, or a
+throw. Planning still takes its own short materialization locks. The sweep then
+takes one fresh lock, re-reads live keys, and deletes only an attempt-owned key
+that is still unreferenced. Deletes continue through `pluginCloneDir`, and a
+cleanup failure is logged and swallowed for a later retry.
+
+**Ownership proof:** The creation callback sits after the atomic rename in all
+four cache writers: pinned clone, commit copy, unpinned mirror, and marketplace
+tag clone. This makes ownership a positive event from the process that created
+the cache entry; it is never inferred from a before-and-after directory diff.
+The one attempt set collects root previews, fresh-member previews, and every
+materializable move candidate, including candidates that resolver backtracking
+later rejects. At cleanup time the existing locked collector still preserves
+landed, shared, and otherwise live keys. A distinct mirror made by a concurrent
+real scope-lock holder was never reported to this attempt and cannot be a
+delete target.
+
+**RED/GREEN evidence:**
+
+- The refused-plan case seeds a warm key, lets a real git root preview create
+  its mirror and commit keys, and creates a distinct mirror under a concurrent
+  real scope-lock holder. Before the fix, the two preview keys leaked. After the
+  fix, only those two keys are removed; the warm and concurrent keys remain.
+- The backtracking case publishes two real tagged candidates. Resolution first
+  materializes version 2.1, rejects it after a transitive range conflict, and
+  lands version 2.0. Before the fix, both exact tag-clone keys remained. After
+  the fix, the rejected 2.1 key is removed and the landed 2.0 key remains.
+- Existing candidate-only negative controls still prove that shared and live
+  keys remain.
+
+### Verification
+
+All checks ran in the isolated owner worktree
+`/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710`.
+`workflow.use_worktrees=false`, so the fixer created no nested worktree.
+
+- Focused owner tests: 10 test modules passed, 10/10, including both new RED
+  cases after the fix.
+- Direct coverage: all 11 changed source/test pairs passed at 100% line,
+  function, and branch coverage.
+- TypeScript: `npm run typecheck -- --incremental false` passed, exit 0.
+- Fallow audit: PASS, exit 0, with no dead-code, complexity, duplication, or
+  diff-risk finding.
+- Required pre-commit fixers: passed. The first normal commit attempt found
+  three lint-only formatting/import-order errors. Those exact errors were
+  corrected, and the second normal commit passed every hook, including
+  `npm run check:commit` and gitlint.
+- A separate full-tree no-cache ESLint invocation produced no diagnostic but
+  did not terminate within its 300-second bound in this worktree. The normal
+  commit hook's lint gate subsequently completed and passed.
+- Cucumber: not added. This changes deterministic cache ownership during an
+  internal planning interleaving and adds no new user-visible command behavior.
+- Full combined `npm run check`: not run here; the phase orchestrator must run
+  it on the combined tree before the final re-review and verifier.
+
+______________________________________________________________________
+
 _Fixed: 2026-10-28_
 _Fixer: the agent (gsd-code-fixer)_
-_Iteration: 3_
+_Iteration: 4_
