@@ -228,12 +228,11 @@ describe("evaluateUpdateConstraint", () => {
     });
   });
 
-  test("without an injected seam, the gate composes the real declaration walk", async (t) => {
+  test("an empty scope needs no declaration walk", async (t) => {
     // arrange
     const root = await mkdtemp(path.join(tmpdir(), "update-constraint-empty-"));
     t.after(() => rm(root, { recursive: true, force: true }));
     const locations = locationsFor("project", root);
-    await mkdir(locations.extensionRoot, { recursive: true });
     const state: ExtensionState = { schemaVersion: 2, marketplaces: {} };
 
     // act
@@ -242,6 +241,69 @@ describe("evaluateUpdateConstraint", () => {
     // assert
     assert.deepStrictEqual(verdict, { kind: "unconstrained" });
   });
+
+  test("a sole installed target needs no declaration lock", async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "update-constraint-target-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const locations = locationsFor("project", root);
+    await mkdir(locations.extensionRoot, { recursive: true });
+
+    // act
+    const verdict = await whileStateLockHeld(locations, () =>
+      evaluateUpdateConstraint(options({ locations })),
+    );
+
+    // assert
+    assert.deepStrictEqual(verdict, { kind: "unconstrained" });
+  });
+
+  for (const { title, excludedVersions, expectedVerdict } of [
+    {
+      title: "requesters replace their installed declarations and still probe path tags",
+      excludedVersions: [],
+      expectedVerdict: {
+        kind: "admits",
+        range: "1.0.0",
+        holders: [{ key: "app@other", range: "1.0.0", disabled: false }],
+        fellBackToCurrentCopy: true,
+        disclosure: 'constrained to the combined range (1.0.0) -- required by "app@other"',
+      },
+    },
+    {
+      title: "requesters still respect excluded versions without a declaration lock",
+      excludedVersions: ["1.0.0"],
+      expectedVerdict: {
+        kind: "held",
+        cause: 'the declared ranges admit no version in common (1.0.0) -- required by "app@other"',
+      },
+    },
+  ]) {
+    test(title, async (t) => {
+      // arrange
+      const root = await mkdtemp(path.join(tmpdir(), "update-constraint-requester-"));
+      t.after(() => rm(root, { recursive: true, force: true }));
+      const locations = locationsFor("project", root);
+      await mkdir(locations.extensionRoot, { recursive: true });
+      const state = stateOf({ mp: { target: pluginRecord() }, other: { app: pluginRecord() } });
+
+      // act
+      const verdict = await whileStateLockHeld(locations, () =>
+        evaluateUpdateConstraint(
+          options({
+            locations,
+            state,
+            marketplaceRoot: root,
+            requesters: [{ key: "app@other", ranges: ["1.0.0"] }],
+            excludedVersions,
+          }),
+        ),
+      );
+
+      // assert
+      assert.deepStrictEqual(verdict, expectedVerdict);
+    });
+  }
 
   for (const { title, cause } of [
     {
