@@ -38,3 +38,50 @@ All checks ran in the assigned isolated worktree `/home/acolomba/src/pi-claude-m
 - No production source/test pair changed, so no direct-coverage pair applies to this harness-only change.
 
 A fresh combined-tree `npm run check` and security re-verification remain with the orchestrator. This report does not change REVIEW or SECURITY dispositions and is left uncommitted for the orchestrator.
+
+## Iteration 2: CR-02 and CR-03
+
+**Fixed at:** 2026-10-28. **Source review:** `08-REVIEW.md` at `26279bbf`.
+**Commit:** `4412c2cb989acc1f02fd88348970d77450c5d291` (`fix: gate background dependency settlement and verify cancellation`).
+**Disposition:** both fixes implemented; fresh combined-tree verification and re-review remain required. The two findings share one behavioral regression and are committed together. Earlier dispositions above are preserved.
+
+### CR-02: Dependency settlement respects the background boundary
+
+`background-pass.ts` wraps the dependency installer. It skips settlement after stop or abort, yields through the real gate, then checks current stop/abort/autoupdate state again. An eligible settlement runs under its own gate signal's async scope. Its `finally` records abort without releasing the gate; `updateOneMarketplace` still owns the gate until the entire marketplace operation returns.
+
+Red-first owner evidence used real `createBackgroundPass`, `updateMarketplace`, a real gate, and temporary persisted state. All five initial regressions failed before the production change:
+
+- Stopped, aborted, and opted-out cascades still called the dependency installer.
+- Settlement had only two gate signals (refresh and plugin), instead of its own third signal.
+- At foreground cancellation, the dependency installer's active async signal was not aborted.
+
+The final suite adds a stop while yielding to foreground and a real held-scope-lock refusal/retry. The cancellation case holds settlement open after abort and proves the order `dependencies settled`, `marketplace settled`, `foreground`. No production seam or public API was added.
+
+The real PTY scenario also fails without the wrapper. It uses existing publication and agent-file-collision fixtures: `app` declares an available missing dependency, its update is refused before dependency installation, and the later `ghp` git update is held until foreground cancellation. With the wrapper removed, the final installed-record assertion found an unexpected `dep@tools` installation after abort: seed `986902`, 18 steps passed and 1 failed. With the wrapper, only the two original plugins remain installed.
+
+### CR-03: The PTY scenario exercises git cancellation
+
+The hosted-request scenario is replaced by `A foreground command cancels a held background git update before dependency settlement`. Its host arm writes an unfinished git packet and continues sending one byte per second. This prevents the independent HTTP idle timeout from ending the request before the 30-second gate deadline. The interval is unreferenced and cleared when the response closes. Existing bounded PTY shutdown releases a failed scenario. The original host `hold` arm remains for its existing architecture contract; its unused Cucumber step was replaced.
+
+The scenario observes the request before sending the foreground command, rejects foreground output during the first second while the request is pending, requires output after the 30-second deadline and within a five-second cleanup margin, then checks that the request was dropped and no update notice appeared. The owner test separately proves that the gate is retained until marketplace settlement completes. Same-name and distinct-name notice scenarios remain intact.
+
+Mutation evidence against the final combined scenario:
+
+- Removing `step.abort()` from the gate: foreground output timed out at 35 seconds; seed `24268`, 16 steps passed, 1 failed, 2 skipped.
+- Bypassing `waitForStep()` in `runForeground`: the early blocking assertion failed (`true !== false`); seed `905303`, 16 steps passed, 1 failed, 2 skipped.
+
+Both mutations were removed before committing. `background-gate.ts` matches the baseline exactly. An initial non-streaming held git body ended at the independent HTTP idle timeout; that fixture was rejected and is not the committed oracle.
+
+### Iteration 2 verification
+
+Checks ran in the assigned worktree `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-b-258`, Node `v26.12.1`.
+
+- Background-pass owner suite: 36 tests passed, including seven new real-cascade cases.
+- `npm run test:coverage:direct -- extensions/pi-claude-marketplace/orchestrators/marketplace/background-pass.ts`: exit 0, 100% direct line/function/branch coverage. This is the only changed production source/test pair.
+- Background gate/update, marketplace update, notice architecture, TUI oracle, and transaction-lifecycle integration suites: 236 tests passed.
+- Existing HTTPS git-host architecture suite: 8 tests passed.
+- Full `features/marketplace/background-update.feature` over real PTYs: 6 scenarios and 88 steps passed, seed `991744`.
+- Fallow audit: exit 0, no issues in six changed files; the existing TypeScript cache entry-point skip warning remains.
+- Final normal commit hooks passed, including `npm run check:commit` and gitlint. The first attempt exposed the old host-arm architecture consumer and one switch-spacing lint error; both were fixed before the successful retry. Hooks were never bypassed.
+
+The commit changes only `background-pass.ts`, its paired test, the background feature and steps, and the existing git-host fixture and steps. REVIEW and SECURITY are untouched. This appendix is left uncommitted. A fresh full `npm run check` and independent re-review remain with the orchestrator.
