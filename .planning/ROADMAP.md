@@ -53,7 +53,7 @@ parent session applies them at merge.
 - [x] **Phase 7: Git Errors and Lock Discipline** - one git-host classifier, and every clone read or cleanup under the lock (completed 2026-10-27)
 - [x] **Phase 8: Background Autoupdate** - autoupdate updates in the background, as Claude Code does (completed 2026-10-27)
 - [x] **Phase 9: Plugin Package Dependencies** - a plugin's own npm or bun dependencies install with it (completed 2026-10-27)
-- [ ] **Phase 10: Lifecycle Test and Harness Gaps** - the open scenario, unit, and harness gaps are closed
+- [x] **Phase 10: Lifecycle Test and Harness Gaps** - the open scenario, unit, and harness gaps are closed (completed 2026-10-28)
 - [ ] **Phase 11: Cleanup, Split, and Docs** - dead code, the install-flow split, docs, and backlog closures
 
 ## Phase Details
