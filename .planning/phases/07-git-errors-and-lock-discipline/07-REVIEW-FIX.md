@@ -1,12 +1,12 @@
 ---
 phase: 07-git-errors-and-lock-discipline
-fixed_at: 2026-10-27T08:58:29Z
+fixed_at: 2026-10-28T14:57:12-04:00
 review_path: .planning/phases/07-git-errors-and-lock-discipline/07-REVIEW.md
-iteration: 2
-findings_in_scope: 4
-fixed: 2
-skipped: 2
-status: partial
+iteration: 3
+findings_in_scope: 1
+fixed: 1
+skipped: 0
+status: all_fixed
 ---
 
 # Phase 7: Code Review Fix Report
@@ -329,6 +329,91 @@ gives.
 
 ______________________________________________________________________
 
-_Fixed: 2026-10-27_
-_Fixer: Claude (gsd-code-fixer)_
-_Iteration: 2_
+## Iteration 3
+
+**Fixed at:** 2026-10-28T14:57:12-04:00
+**Source review:** .planning/phases/07-git-errors-and-lock-discipline/07-REVIEW.md
+**Iteration:** 3
+
+**Summary:**
+
+- Findings in scope: 1
+- Fixed: 1
+- Skipped: 0
+
+### Fixed Issues
+
+#### CR-01: A dependency sweep can delete a clone that a concurrent fetch just completed
+
+**Files modified:**
+`extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts`,
+`test/orchestrators/plugin/clone-gc.test.ts`,
+`test/orchestrators/plugin/dependency-bindings.test.ts`,
+`test/orchestrators/plugin/dependency-move.test.ts`,
+`test/orchestrators/plugin/dependency-plan.test.ts`,
+`test/orchestrators/plugin/dependency-settle.test.ts`
+
+**Commit:** d4436bd3
+**Status:** fixed: requires human verification
+
+**Applied fix:** Dependency move judgment now derives the exact cache keys of
+the recorded clone and the prepared candidate from their contained plugin
+roots. The accepted plan carries those keys on its move. Both install and
+update settlement create the cleanup only after that plan is accepted. The
+cleanup takes a fresh scope lock, derives the current live-key set, and deletes
+only owned candidates that are still unreferenced. It never treats every name
+absent from an earlier directory snapshot as owned. The old unreferenced-list
+API and its misleading two-lock protocol were removed.
+
+This keeps the lock non-reentrant: planning and materialization still acquire
+their own locks, and cleanup acquires one fresh lock only after the steps end.
+Containment is preserved because each candidate delete still routes through
+`locations.pluginCloneDir(key)`. Cleanup failures are still traced and
+swallowed for a later retry.
+
+**Ownership proof:** A path contributes a candidate key only when
+`path.relative(pluginClonesDir, root)` stays inside that cache. The move owns
+the old record root and the prepared candidate root. The planner copies those
+exact keys onto the corresponding move. At cleanup time, the candidate-only
+collector also checks persisted state, so a key shared by any surviving record
+stays. A distinct mirror created by a concurrent fetch is absent from the
+candidate set and cannot become a delete target.
+
+**RED/GREEN evidence:** The new deterministic unit case obtains the sweep,
+makes the replaced clone unreferenced, creates a distinct fetched mirror under
+the real `withExistingScopeLock`, then runs cleanup. Before the fix, the case
+failed because the snapshot-based collector deleted the fetched mirror. After
+the fix, the replaced clone is removed and the fetched mirror remains.
+
+### Verification
+
+All checks ran in the isolated owner worktree
+`/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710`.
+`workflow.use_worktrees=false`, so the fixer created no nested worktree.
+
+- Focused owner tests: all 6 changed source/test modules passed.
+- Direct coverage: all 6 changed source/test pairs passed at 100% line,
+  function, and branch coverage.
+- TypeScript: `npx tsc --noEmit --incremental false` passed. The normal npm
+  script's first isolated-worktree attempt could not write its tsbuildinfo to
+  the read-only dependency tree; it reported no source diagnostic.
+- Fallow audit: PASS with no dead code, complexity, duplication, or diff-risk
+  finding.
+- Pre-commit fixers: passed.
+- Normal commit hooks, including `npm run check:commit`: passed.
+- Cucumber: not added. The Phase 7 context accepts this deterministic
+  concurrency boundary as unit-only, and no reliable public interleaving
+  fixture was introduced.
+- Full combined `npm run check`: not run here; the phase orchestrator must run
+  it on the combined tree before verification.
+
+______________________________________________________________________
+
+_Fixed: 2026-10-28_
+_Fixer: the agent (gsd-code-fixer)_
+_Iteration: 3_
