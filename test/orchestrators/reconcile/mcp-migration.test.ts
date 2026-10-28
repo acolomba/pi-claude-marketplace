@@ -17,8 +17,6 @@ import { mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises"
 import path from "node:path";
 import { describe, test } from "node:test";
 
-import lockfile from "proper-lockfile";
-
 import {
   commitPreparedMcp,
   prepareStageMcpServers,
@@ -45,6 +43,7 @@ import {
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
+import { holdStateLockForTest as holdStateLock } from "../state-lock.ts";
 
 import type { McpMigrationOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/mcp-migration.ts";
 import type {
@@ -418,16 +417,6 @@ function freshAdapterText(
   }
 
   return `${JSON.stringify({ mcpServers }, null, 2)}\n`;
-}
-
-async function holdStateLock(t: TestContext, locations: ScopedLocations): Promise<void> {
-  const release = await lockfile.lock(locations.extensionRoot, {
-    lockfilePath: locations.stateLockFile,
-    realpath: false,
-  });
-  t.after(async () => {
-    await release();
-  });
 }
 
 interface NotMovableSeed {

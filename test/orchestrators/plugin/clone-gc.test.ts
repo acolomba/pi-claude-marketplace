@@ -13,6 +13,7 @@ import {
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { StateLockHeldError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { holdStateLock } from "../state-lock.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -82,13 +83,6 @@ async function seedCloneDirectories(
     await mkdir(path.join(locations.pluginClonesDir, key), { recursive: true });
     await writeFile(path.join(locations.pluginClonesDir, key, "sentinel.txt"), key);
   }
-}
-
-function holdStateLock(locations: ScopedLocations): Promise<() => Promise<void>> {
-  return lockfile.lock(locations.extensionRoot, {
-    lockfilePath: locations.stateLockFile,
-    realpath: false,
-  });
 }
 
 function stateLockHeld(locations: ScopedLocations): Promise<boolean> {
