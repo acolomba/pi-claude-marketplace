@@ -1,13 +1,14 @@
 ---
 phase: 01-staging-warning-channels
-reviewed: 2026-10-28T16:04:11Z
+reviewed: 2026-10-28T16:25:52Z
 depth: standard
-source_commit: 4bcdf9697b87ea97d21face0154933e6c7f625a5
-review_head: 503343bcbcf979ac246bd34822ae89b94d32e088
+source_commit: 2cba203e0c694a2ef5567398f33971ca6a905829
+review_head: 99747f3937f358c2aaa2720952985c7a0403422e
 review_fix_commits:
   - 15e12fdf24c5c0444d5707646983980dae58b438
   - da9756bdb4362e255c829bb263b594e6f37bf1f4
   - 4bcdf9697b87ea97d21face0154933e6c7f625a5
+  - 2cba203e0c694a2ef5567398f33971ca6a905829
 files_reviewed: 22
 files_reviewed_list:
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-dependency-ledger.ts
@@ -33,150 +34,146 @@ files_reviewed_list:
   - test/orchestrators/plugin/install-flow-fixture.ts
   - test/platform/hermetic-environment.ts
 findings:
-  critical: 1
+  critical: 0
   warning: 0
   info: 0
-  total: 1
-status: issues_found
+  total: 0
+status: clean
 ---
 
 # Phase 01: Code Review Report
 
-**Reviewed:** 2026-10-28T16:04:11Z
+**Reviewed:** 2026-10-28T16:25:52Z
 **Depth:** standard
 **Files reviewed:** 22
-**Status:** issues_found
+**Status:** clean
 
 ## Summary
 
-CR-01 is closed by the iteration-2 finalizer, and CR-02 remains closed.
-One new finding remains: five regression cases added by the iteration-1
-fixes leave their temporary project trees behind. The two iteration-2
-invalid-config cases correctly remove their trees.
+CR-01, CR-02, and CR-03 are closed. No new Critical, Warning, or Info
+findings were found in the reviewed fixes.
 
-This is a focused re-review of commits `15e12fdf`, `da9756bd`, and
-`4bcdf969`, including their changed code, tests, feature scenarios and
-relevant callers and fixture contracts. Large pre-existing test modules
-were read at the changed cases and their supporting code. The earlier
+This is the final focused re-review of the four fix commits above.
+The cleanup diff and affected cases were reviewed in full; the earlier
+production fixes were traced through their current callers, result
+projections, and relevant feature fixtures. Large pre-existing modules
+were read at the changed sections and their supporting code. The earlier
 Phase 1 review remains the baseline for unchanged phase implementations;
-this report does not claim another full-file review of its entire scope.
+this report does not claim a fresh full-file review of the entire phase.
 
 ## Narrative Findings (AI reviewer)
 
-### CR-03: Five added regression cases leak their temporary project trees
-
-**Classification:** BLOCKER
-**File:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710/test/orchestrators/plugin/install-flow-planning.test.ts:401-488`
-**Related file:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710/test/orchestrators/plugin/install-flow-ledger.test.ts:15639-15683`
-
-**Issue:** Both parameterized MCP tests (four cases) and the row-order
-test allocate a project through `seedCatalogScope` without registering
-cleanup. That helper creates `install-upd-dep-*` directly under
-`tmpdir()` (`install-flow-fixture.ts:283-285`).
-`withHermeticHome` removes only its separately allocated `install-*`
-environment, through `withHermeticEnvironment`; these project trees
-are siblings of that environment, so its cleanup cannot remove them.
-The tests leave plugin sources, generated artifacts, state and config
-files on disk even after successful completion. The failed-move cases
-also leave their deliberately chmod-000 skill file behind.
-
-**Evidence:** Ran only the four MCP cases, the row-order case and the
-two iteration-2 invalid-config cases in a fresh temporary directory,
-using that directory as the child test process's `TMPDIR`. The command
-exited 0. The parent then enumerated exactly five surviving
-`install-upd-dep-*` directories. There is no matching cleanup in those
-five cases or a module-level teardown. The two iteration-2 cases have a
-`finally` at `install-flow-ledger.test.ts:206-208` and leave no tree.
-The probe removed its complete temporary root in its own `finally`.
-
-This classification follows the project's
-`.agents/skills/typescript-unit-tests/rules/review.md`: leaked
-filesystem writes are a BLOCKER hermeticity defect.
-
-**Fix:** Give each of these five cases ownership of its project cleanup,
-matching the iteration-2 cases. Immediately after successful allocation,
-wrap the setup, action and assertions in `try/finally` and call
-`await rm(cwd, { recursive: true, force: true })` in `finally`.
-Alternatively register the same cleanup with the case's `t.after`.
-Keep the fix local to these newly added cases; unrelated older tests
-need not be changed. Repeat the selected cases under an isolated
-`TMPDIR` and assert that it is empty afterward, on success and when a
-case assertion fails.
+None. All reviewed changes meet the applicable quality standards.
 
 ## Fix Dispositions
 
 | Finding | Verdict | Evidence |
 | --- | --- | --- |
-| CR-01 | Closed. | All terminal non-throwing transaction arms now reach the common notice boundary at `install-flow-ledger.ts:1282`. The caught-failure path still finalizes its merged notices independently. The dependency-planning arm delegates ownership without another emission. |
-| CR-02 | Closed. | The shared row comparator orders root display names and qualified member keys in `cascadeStagingDiagnostics`; the exact root key is excluded from member diagnostics. Headers preserve plugin names. Runtime regression passes with the dependency diagnostic before the root diagnostic. |
-| CR-03 | Open, BLOCKER. | The five iteration-1 regression cases leave temporary project trees behind, independently reproduced above. |
+| CR-01 | Closed. | Dependency-step notices reach the failed-move projection or the resumed install. Every normal terminal transaction arm reaches the common notice finalizer; caught failures merge prior notices and finalize separately. Successful roots, failed later moves, and invalid final configuration pass in both notification modes. |
+| CR-02 | Closed. | Root display names and qualified member keys use the same comparator as cascade rows. The exact root key is excluded from member diagnostics; diagnostic headers retain plugin names. The runtime regression reports the dependency note before the root note. |
+| CR-03 | Closed. | Each of the five iteration-1 cases now registers an awaited teardown immediately after allocation. Independent success and forced-assertion-failure probes leave their isolated temporary directories empty, including the chmod-000 failed-move fixtures. |
+
+### CR-03 cleanup audit
+
+The only test changes in `2cba203e` are the test-context parameters and
+three teardown registrations, covering five concrete cases:
+
+- `install-flow-planning.test.ts:405-407`: successful standalone and
+  orchestrated installs.
+- `install-flow-planning.test.ts:452-454`: failed later moves in
+  standalone and orchestrated installs.
+- `install-flow-ledger.test.ts:15646-15648`: dependency/root diagnostic
+  ordering.
+
+Each registration closes over its own `cwd` and awaits
+`rm(cwd, { recursive: true, force: true })`. It precedes every subsequent
+setup operation, install, and assertion. The tests retain their original
+setup, actions, and assertions. No fixture helper or production seam was
+changed.
+
+`seedCatalogScope` creates the separate project tree under `tmpdir()`.
+`withHermeticHome` removes its own environment in `finally`; the new
+test teardown removes the sibling project tree even when the callback
+throws. It does not depend on the environment variables restored by that
+wrapper.
 
 ### CR-01 terminal-path audit
 
+- Planning forwards `ran.mcpConfigNotices` on both failed moves and
+  resumed installs (`install-flow-planning.ts:253-269`).
 - `invalid-config`, `marketplace-absent`, `refused`, and `declared`
-  assign their result and retain `priorNotices` before the common boundary.
-  Their prior returns no longer bypass notice delivery.
-- `promoted`, `disable-cascade-failed`, and `installed` append their
-  own notices after prior dependency notices, then reach that same boundary.
-  Rows and any discovery diagnostics are produced first.
-- The `declared` arm is standalone-only:
-  `declareInstalledPlugin` rejects orchestrated mode before returning it
-  (`install-flow-results.ts:889-902`). Its row helper therefore cannot
-  leak a notification from a reachable orchestrated declaration.
-- `dependency-moves` returns the delegated result. Planning forwards
-  `ran.mcpConfigNotices` to either the failed-move projection or the next
-  install. The resumed run uses `runInstallCascade` with a planned closure,
-  not another planning pass, so it does not consume the same notices twice.
-- The catch merges prior notices with notices captured by the current
-  transaction before producing the failure outcome. It returns through its
-  own finalizer and cannot also reach the normal boundary.
-- `withMcpConfigNotices` emits only in standalone mode and adds the
-  outcome member only for a non-empty list. Orchestrated mode returns
-  notices to its caller without direct emission.
+  preserve prior notices and reach the common finalizer at
+  `install-flow-ledger.ts:1282`.
+- `promoted`, `disable-cascade-failed`, and `installed` append current
+  notices after prior notices before that finalizer.
+- The catch merges prior notices with captured transaction notices and
+  returns through its own finalizer (`install-flow-ledger.ts:1001-1021`).
+- The dependency-moves arm delegates notice ownership. The resumed run
+  uses its planned closure, so it does not start another planning pass.
+- Orchestrated mode emits no notice directly. Standalone mode emits notices
+  after the operation's rows and discovery diagnostics.
+- The declaration helper rejects orchestrated mode before returning a
+  declared outcome (`install-flow-results.ts:889-902`).
+
+### CR-02 ordering audit
+
+`cascadeStagingDiagnostics` at `install-flow-results.ts:810-839`
+sorts the root and members together, using the same
+`compareByNameThenScope` as cascade rows. It excludes the root by full
+key, retains members from other marketplaces, and preserves each
+member's manifest name in the diagnostic header. Empty warning arrays
+produce no notification through `surfaceDiscoveryWarnings`.
 
 ## Verification Evidence and Limits
 
-- Read project instructions, existing review and fix report, the three fix
-  diffs, relevant Phase 1 requirements and notice/ordering plan records,
-  changed cases and fixture contracts. Applied TypeScript, unit-test,
-  Cucumber and local-verification review rules. The configured reviewer
-  skill query returned no additional entries.
-- Used CodeGraph before locating code, then read current source where its
-  index identified changed files. No structural-findings payload or
-  external-reviewer evidence was supplied.
-- On Node `v26.12.1`, ran the selected regression cases with:
-  `node --test --test-name-pattern 'keeps dependency-step MCP notices|keeps dependency MCP notices when the final config|reports install diagnostics in row order' test/orchestrators/plugin/install-flow-planning.test.ts test/orchestrators/plugin/install-flow-ledger.test.ts`.
-  Exit 0. These exercise successful final roots, failed later moves,
-  final invalid configuration in both modes, and diagnostic order.
-  The isolated temporary-directory wrapper exposed CR-03.
-- Ran two additional inline hermetic probes through the real
-  `createInstallPlugin` entry point. A transaction wrapper threw before
-  the final root lock after durable state recorded the dependency's move.
-  Both modes returned the exact one-element `comments-dropped` notice
-  array. Standalone mode emitted the failure cascade followed by exactly
-  one MCP notice; orchestrated mode emitted nothing. Exit 0. Each probe
-  removed its temporary project in `finally`.
-- Checked the iteration-2 unit cases' full notification assertions,
-  durable dependency versions and MCP file contents. Their setup uses
-  the real transaction after an interleaved config edit, with no production
-  test seam, and their project cleanup runs in `finally`.
-- Checked the new behavioral fixture: the npm server belongs to one
-  scenario, binds loopback, consumes its callback before awaiting it, and
-  the world registers server closure. The callback writes only the sandbox
-  local config through the existing layer writer. The scenario asserts
-  every result, row, exact MCP notice, final config text and full request
-  window. It uses no delay or network service outside the local stand-ins.
-- The fix report records passing direct coverage of the changed ledger
-  pair, the commit hook, and all 20 staging-warning scenarios (248 steps)
-  at `4bcdf969`, plus regression failures with only the source fix removed.
-  Those are the fixer's recorded results, not commands rerun by this reviewer.
-- The owner is responsible for the full `npm run check` result on these
-  inputs. It was not duplicated here; no unreported full-check pass is
-  claimed by this report.
-- At review HEAD `503343bc`, the build-input diff from `4bcdf969` was
-  empty and the worktree had no untracked build inputs. Only this report
-  was changed by the reviewer. No implementation or test edits and no
-  commit were made.
+- Read project instructions, the previous review, the iteration-3 fix
+  report, all four fix diffs, changed cases, fixture contracts, production
+  notice paths, diagnostic ordering, and the relevant behavioral scenarios.
+  Applied the TypeScript, unit-test, Cucumber, and local-verification
+  review rules. The configured reviewer skill query returned no extra
+  entries. No structural-findings payload or external evidence lane was
+  supplied.
+- Used CodeGraph for initial code navigation, then read current source
+  where its index reported changed files.
+- Independently ran each of the five cleanup cases with
+  `node --test --test-reporter=tap --test-name-pattern '^<exact title>$' <owner test>`
+  on Node `v26.12.1` at `99747f39`. Each used a fresh child-process
+  `TMPDIR`, exited 0, and left that directory empty.
+- Repeated each case with a child-only data-URL preload that throws an
+  `AssertionError` at `assert.deepStrictEqual`. All five exited 1 and
+  left their temporary directories empty. Assertion stack markers
+  independently confirmed execution at planning-test lines 433 and 482
+  and ledger-test line 15669, after each operation. In the corresponding
+  successful probes, the same wrapper called the original assertion:
+  two assertions per successful-install case, three per failed-move
+  case, and one in the row-order case. This guards against mistaking an
+  unmatched test filter for a cleanup pass.
+- Probe markers and temporary directories lived outside the repository
+  and were removed in the probe's own `finally`. No probe code was saved
+  in source or tests. Initial probe attempts could not confirm assertion
+  execution from Node's file-level output; they were superseded by the
+  stack-marker probes and are not the failure-cleanup evidence.
+- Independently reran both invalid-final-config cases with
+  `node --test --test-reporter=tap --test-name-pattern 'keeps dependency MCP notices when the final config' test/orchestrators/plugin/install-flow-ledger.test.ts`.
+  Exit 0; its isolated temporary directory was empty afterward.
+- The iteration-3 fix report records passing direct coverage for both
+  affected source/test pairs at `2cba203e`, with 100% line, function,
+  and branch coverage, plus a passing commit hook and Fallow audit.
+  Those are the fixer's recorded checks.
+- The coordinating owner reported the final `npm run check` completed
+  with exit 0 at `99747f3937f358c2aaa2720952985c7a0403422e` on Node
+  `v26.12.1`: typecheck, lint, workflow lint, Fallow, formatting,
+  source/test correspondence, and feature validation passed; 16 hooks,
+  1,124 scenarios, and 11,468 steps passed; 309 direct-coverage LCOV
+  records were merged. This is the owner's combined-tree gate evidence,
+  not a duplicate run by this reviewer.
+- `fallow review --base 2cba203e^ --brief` exited 0 and reported no
+  consequential structural decision. This orientation output is not
+  treated as a replacement for the owner's gate.
+- Production and feature files are unchanged from `4bcdf969`.
+  The non-planning-Markdown diff from `2cba203e` is empty, and no
+  untracked inputs were present at review HEAD. The reviewer changed
+  only this report, made no source/test edits, and made no commit.
 
 ---
 
