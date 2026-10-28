@@ -36,6 +36,9 @@ const LOCAL_OR_METADATA_HOSTS = new Set([
   "localhost4.localdomain4",
   "localhost6",
   "localhost6.localdomain6",
+]);
+
+const METADATA_IPV4_ADDRESSES = new Set([
   /* eslint-disable sonarjs/no-hardcoded-ip -- the cloud metadata addresses Claude Code refuses */
   "100.100.100.200",
   "168.63.129.16",
@@ -57,12 +60,12 @@ const IPV4_EMBEDDING_PREFIXES = [
 ];
 
 /**
- * Whether an IPv4 address whose first two octets are `a` and `b` is this
- * machine (0/8, 127/8), link-local (169.254/16), or private (10/8, 172.16/12,
- * 192.168/16).
+ * Whether an IPv4 address is this machine, link-local, private, or one of
+ * the explicit cloud metadata addresses.
  */
-function isLocalIpv4(a: number, b: number): boolean {
+function isDisallowedIpv4(a: number, b: number, c: number, d: number): boolean {
   return (
+    METADATA_IPV4_ADDRESSES.has(`${a}.${b}.${c}.${d}`) ||
     a === 0 ||
     a === 10 ||
     a === 127 ||
@@ -72,10 +75,12 @@ function isLocalIpv4(a: number, b: number): boolean {
   );
 }
 
-/** The first two octets of `host` when it is a dotted-quad IPv4 address. */
-function ipv4Head(host: string): readonly [number, number] | undefined {
+/** The octets of `host` when it is a dotted-quad IPv4 address. */
+function ipv4Octets(host: string): readonly [number, number, number, number] | undefined {
   const match = IPV4_ADDRESS.exec(host);
-  return match === null ? undefined : [Number(match[1]), Number(match[2])];
+  return match === null
+    ? undefined
+    : [Number(match[1]), Number(match[2]), Number(match[3]), Number(match[4])];
 }
 
 /**
@@ -102,14 +107,14 @@ function expandIpv6(host: string): string {
 /**
  * Whether the IPv6 address `host` (brackets removed) is link-local
  * (fe80::/10), unique-local (fc00::/7, which holds the EC2 metadata address
- * fd00:ec2::254), or embeds an IPv4 address `isLocalIpv4` refuses. The URL
+ * fd00:ec2::254), or embeds an IPv4 address `isDisallowedIpv4` refuses. The URL
  * parser writes `[::169.254.169.254]` as `[::a9fe:a9fe]`.
  */
 function isLocalIpv6(host: string): boolean {
   const digits = expandIpv6(host);
   const octet = (start: number): number => Number.parseInt(digits.slice(start, start + 2), 16);
   if (IPV4_EMBEDDING_PREFIXES.some((prefix) => digits.startsWith(prefix))) {
-    return isLocalIpv4(octet(24), octet(26));
+    return isDisallowedIpv4(octet(24), octet(26), octet(28), octet(30));
   }
 
   const first = Number.parseInt(digits.slice(0, 4), 16);
@@ -127,12 +132,12 @@ function isDisallowedHost(hostname: string): boolean {
     return isLocalIpv6(host.slice(1, -1));
   }
 
-  const head = ipv4Head(host);
+  const octets = ipv4Octets(host);
   return (
     LOCAL_OR_METADATA_HOSTS.has(host) ||
     host.endsWith(".localhost") ||
     (host.startsWith("instance-data.") && host.endsWith(".compute.internal")) ||
-    (head !== undefined && isLocalIpv4(...head))
+    (octets !== undefined && isDisallowedIpv4(...octets))
   );
 }
 
