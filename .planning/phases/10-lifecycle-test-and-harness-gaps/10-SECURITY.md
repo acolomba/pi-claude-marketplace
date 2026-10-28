@@ -76,6 +76,7 @@ The plan-qualified references preserve the seven distinct acceptance rationales.
 |------------|---------------|--------|------|--------|
 | 2026-10-27 | 19 | 19 | 0 | GSD security auditor, ASVS L1 |
 | 2026-10-28 | 19 | 19 | 0 | GSD security re-auditor, ASVS L1 |
+| 2026-10-28 | 19 | 19 | 0 | GSD final post-merge security auditor, ASVS L1 |
 
 Evidence was audited at `689b4499`. The coverage checker passed 56/56 rows. The full repository gate exited 0 with 1,119 scenarios, 11,393 steps, and 304 direct LCOV records.
 
@@ -86,6 +87,24 @@ current coverage checker passes 56/56 rows; the latest combined repository
 gate on the unchanged build inputs passed 1,126 scenarios, 11,509 steps, and
 309 direct LCOV records.
 
+The final post-merge audit traced the integrated tree at `0d36e2a3`. All 12
+declared mitigations remain present and all seven accepted risks remain
+documented. The streaming-git wait-cap fixture clears its heartbeat on response
+close, and refresh, plugin update, dependency settlement and reporting remain
+inside gate-owned abort scopes. PTY and RPC children retain realpath-contained
+sandboxes, allowlisted environments, bounded readiness and shutdown, and
+process-group cleanup. Notification boundaries redact paths, credentials,
+stored identities and background-update versions before text or JSON rendering.
+Package-manager timeouts terminate POSIX process groups or Windows process
+trees. The Phase 10 coverage checker now binds every evidence path and title to
+its cited commit through argument-array `git show`, while retaining current-tree
+containment and existence checks.
+
+The coverage ledger passed 56/56 rows. Its negative commit-binding mutation was
+rejected. The integrated `npm run check` passed static checks, 1,131 scenarios,
+11,584 steps, and 309 direct LCOV records. No unregistered or reopened threat
+was found.
+
 ---
 
 ## Sign-Off
@@ -95,4 +114,4 @@ gate on the unchanged build inputs passed 1,126 scenarios, 11,509 steps, and
 - [x] `threats_open: 0` confirmed.
 - [x] `status: verified` set in frontmatter.
 
-**Approval:** verified 2026-10-27.
+**Approval:** verified 2026-10-28 after final post-merge audit at `0d36e2a3`.
