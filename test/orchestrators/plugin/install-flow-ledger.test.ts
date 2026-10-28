@@ -15531,6 +15531,52 @@ test("D-PL10-16: a cascade dependency reports its discovery note under its own h
   });
 });
 
+test("reports install diagnostics in row order when the root sorts after its dependency", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope({
+      zroot: { version: "1.0.0", dependencies: ["aaa"] },
+      aaa: { version: "1.0.0" },
+    });
+    for (const plugin of ["zroot", "aaa"]) {
+      const duplicate = path.join(marketplaceRoot, "plugins", plugin, "skills", `${plugin}-tool`);
+      await mkdir(duplicate, { recursive: true });
+      await writeFile(path.join(duplicate, "SKILL.md"), `---\nname: ${plugin}-tool\n---\n`);
+    }
+
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    const outcome = await installPlugin({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      marketplace: "mp",
+      plugin: "zroot",
+    });
+
+    // assert
+    assert.strictEqual(outcome.status, "installed");
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n  ● aaa@mp v1.0.0 (installed)\n  ● zroot v1.0.0 (installed)\n\n/reload to pick up changes",
+      },
+      {
+        message:
+          'Plugin "aaa" [project] installed; 1 declared component has a note.\n\nskill source "tool" in "skills" elides to generated name "aaa-tool", already produced by skill source "aaa-tool"; ignoring duplicate.',
+        severity: "warning",
+      },
+      {
+        message:
+          'Plugin "zroot" [project] installed; 1 declared component has a note.\n\nskill source "zroot-tool" in "skills" elides to generated name "zroot-tool", already produced by skill source "tool"; ignoring duplicate.',
+        severity: "warning",
+      },
+    ]);
+  });
+});
+
 test("RESV-05 / RESV-06: an already-installed dependency renders as left alone", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-resv06-skip-"));

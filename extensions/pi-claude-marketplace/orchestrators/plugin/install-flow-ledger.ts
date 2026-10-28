@@ -51,7 +51,7 @@ import {
 } from "./install-flow-results.ts";
 import { installedPluginOutcome } from "./install-outcome.ts";
 import { loadTargetLayers, writeAdoptingConfigEntries } from "./shared.ts";
-import { surfaceDiscoveryWarnings, surfaceStagingDiagnostics } from "./staging-diagnostics.ts";
+import { surfaceDiscoveryWarnings } from "./staging-diagnostics.ts";
 
 import type { CarriedAdd } from "./carried-marketplace-adds.ts";
 import type { DependencyMoveOwners } from "./dependency-bindings.ts";
@@ -1261,20 +1261,13 @@ async function installPluginWithTransaction(
           undefined,
           "single",
         );
-        surfaceDiscoveryWarnings(ctx, run, {
-          plugin,
-          scope,
-          verb: "installed",
-          warnings: installCtx.discoveryWarnings,
+        cascadeStagingDiagnostics(outcome.members, scope, {
+          key: rootKey,
+          name: plugin,
+          discoveryWarnings: installCtx.discoveryWarnings,
+        }).forEach((diagnostic) => {
+          surfaceDiscoveryWarnings(ctx, run, diagnostic);
         });
-        surfaceStagingDiagnostics(
-          ctx,
-          run,
-          cascadeStagingDiagnostics(
-            outcome.members.filter((member) => member.key !== rootKey),
-            scope,
-          ),
-        );
       }
 
       // AFILE-04: every cascade member's notices, after the block's own rows.

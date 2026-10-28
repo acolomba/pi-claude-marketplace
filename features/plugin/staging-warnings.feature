@@ -285,6 +285,24 @@ Feature: Plugin staging warnings
       | fixtures         | project           | lib@fixtures  | lib@fixtures  | installed | requires pi-mcp-adapter  | project | 1.0.0   |                                   |                 |       |                  |
       | fixtures         | project           | demo@fixtures | demo@fixtures | failed    |                         | project | 1.0.0   | {unreadable skill file copy error} | false           |       |                  |
 
+  Scenario: Installing a root that sorts after its dependency reports both notes in row order
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | zroot | 1.0.0   | aaa          |
+      | aaa   | 1.0.0   |              |
+    Given the published plugin "zroot" of the marketplace "fixtures" has a second skill whose name collides with its first
+    Given the published plugin "aaa" of the marketplace "fixtures" has a second skill whose name collides with its first
+    When the user runs "/claude:plugin install zroot@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                           | lines                                                                                                                                   |
+      | cascade    | info     | true         |                                                                  |                                                                                                                                         |
+      | diagnostic | warning  | false        | Plugin "aaa" [project] installed; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "aaa-skill", already produced by skill source "aaa-skill"; ignoring duplicate. |
+      | diagnostic | warning  | false        | Plugin "zroot" [project] installed; 1 declared component has a note. | skill source "zroot-skill" in "skills" elides to generated name "zroot-skill", already produced by skill source "skill"; ignoring duplicate. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id             | name         | status    | reasons | scope   | version |
+      | fixtures         | project           | aaa@fixtures   | aaa@fixtures | installed |         | project | 1.0.0   |
+      | fixtures         | project           | zroot@fixtures | zroot        | installed |         | project | 1.0.0   |
+
   Scenario: A bare update over two marketplaces reports the skips in the order of the rows
     Given the marketplace "addons" is published as a dir source
     Given the marketplace "addons" offers these plugins:
