@@ -264,7 +264,7 @@ const TOKEN_WAIVERS: readonly TokenWaiver[] = [
     why: "a legacy `state.json` fixture spells the persisted `compatibility.unsupported` component-kind KEY. The key survives the rename (the guard's own presence checks pin it), so the fixture must keep it byte-for-byte.",
   },
   {
-    file: "test/orchestrators/plugin/install-flow.test.ts",
+    file: "test/orchestrators/plugin/install-flow-ledger.test.ts",
     token: '"unsupported"',
     category: "homonym",
     why: '`Object.hasOwn(clean, "unsupported")` reads the SAME component-kind field as the fixture above, as a property key. NREG-01 needs the absent-key fact, which cannot be asserted without naming the key.',

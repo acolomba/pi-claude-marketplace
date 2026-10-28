@@ -20,7 +20,9 @@ repos:
       - id: detect-private-key
       - id: check-added-large-files
         args: ["--maxkb=64"]
-        exclude: ^(package-lock\.json|test/e2e/pi-peer-floor/package-lock\.json|\.planning/)
+        # These text files are extracted, reduced portions of the pre-existing
+        # oversized install-flow source and owner suite, not generated or binary assets.
+        exclude: ^(package-lock\.json|test/e2e/pi-peer-floor/package-lock\.json|\.planning/|extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger\.ts|test/orchestrators/plugin/install-flow-ledger\.test\.ts)
       - id: check-json
         exclude: ^test/orchestrators/marketplace/_fixtures/invalid-manifest/
       - id: check-yaml

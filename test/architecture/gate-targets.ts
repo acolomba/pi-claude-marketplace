@@ -56,7 +56,7 @@ export const MARKETPLACE_LEDGER_TARGETS = [
  * express it.
  */
 export const HOOKS_LIFECYCLE_TARGETS = [
-  "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts",
   "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts",
