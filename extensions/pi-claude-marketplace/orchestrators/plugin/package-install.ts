@@ -111,7 +111,7 @@ const LOCKFILE_TABLE = [
 // Claude Code refuses these when no table lockfile is present.
 const UNSUPPORTED_LOCKFILES = ["yarn.lock", "pnpm-lock.yaml"] as const;
 const UNSUPPORTED_LOCKFILE_NOTE =
-  "Skipped: yarn/pnpm lockfiles are not supported (resolution-time hooks bypass --ignore-scripts). Use bun or npm.";
+  "The packages it lists were not installed, because it uses a yarn or pnpm lockfile, which plugin installs do not support.";
 
 const LISTING_FIELDS = [
   "dependencies",
@@ -331,11 +331,6 @@ async function detectInstall(target: PackageStepTarget): Promise<Detection> {
     return SKIP;
   }
 
-  const row = chooseLockfile(entries);
-  if ("kind" in row) {
-    return row;
-  }
-
   const packageJson = await readBoundedFile(pluginRoot, "package.json");
   if ("refusal" in packageJson) {
     return { kind: "note", note: skippedNote(packageJson.refusal) };
@@ -348,6 +343,11 @@ async function detectInstall(target: PackageStepTarget): Promise<Detection> {
 
   if (!listsPackages(manifest.value)) {
     return SKIP;
+  }
+
+  const row = chooseLockfile(entries);
+  if ("kind" in row) {
+    return row;
   }
 
   if (!(await isInsideExtensionRoot(locations.extensionRoot, pluginRoot))) {

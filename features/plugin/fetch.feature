@@ -106,8 +106,8 @@ Feature: Plugin fetch
     Then the git-source plugin "ghp" installed in the project scope runs revision 1 of its repository
     Then the project scope holds these git clones:
       | clone  | origin                          | revision         |
-      | plugin | https://github.com/acme/ghp.git |                  |
       | plugin | https://github.com/acme/ghp.git | {ghp revision 1} |
+      | plugin | https://github.com/acme/ghp.git | {ghp revision 2} |
     When the user starts a new pi session
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
@@ -186,7 +186,7 @@ Feature: Plugin fetch
       | GET    | /acme/urlp.git/info/refs?service=git-upload-pack | 503    |
     Then the project scope holds no git clones
 
-  Scenario: A bare fetch fetches the git-source plugins of every marketplace in the scope
+  Scenario: A bare fetch continues through every marketplace after one plugin fails
     Given the git repository "ghp" holds these plugins:
       | name | version | path |
       | ghp  | 1.0.0   |      |
@@ -211,25 +211,26 @@ Feature: Plugin fetch
     Given the marketplace "gits" is added to the project scope
     Given the marketplace "more" is added to the project scope
     Given the marketplace "others" is added to the user scope
+    Given the git host answers 404 for the plugin "ghp"
     When the user runs "/claude:plugin fetch --scope project"
     Then the result has these fields:
-      | kind                | cascade      |
-      | severity            | info         |
-      | needs reload        | false        |
-      | tally label         | Plugin fetch |
-      | tally failures      | 0            |
-      | tally warnings      | 0            |
-      | tally success count | 2            |
+      | kind                | cascade                        |
+      | severity            | error                          |
+      | needs reload        | false                          |
+      | summary             | A plugin operation has failed. |
+      | tally label         | Plugin fetch                   |
+      | tally failures      | 1                              |
+      | tally warnings      | 0                              |
+      | tally success count | 1                              |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name | status    | reasons | version |
-      | gits             | project           | ghp@gits  | ghp  | available |         | 1.0.0   |
-      | more             | project           | urlp@more | urlp | available |         | 1.0.0   |
+      | marketplace name | marketplace scope | id        | name | status    | reasons        | scope   | version | cause chain                                                                                                | cause truncated | leaks | rollback partial |
+      | gits             | project           | ghp@gits  | ghp  | failed    | source missing | project |         | 404 on https://{git host}/acme/ghp.git, HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git | false           |       |                  |
+      | more             | project           | urlp@more | urlp | available |                |         | 1.0.0   |                                                                                                            |                 |       |                  |
     # A new copy of an unpinned plugin is cloned once, so each repository
     # answers one round.
     Then the git host receives these requests:
       | method | path                                             | status |
-      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack  | 200    |
-      | POST   | /acme/ghp.git/git-upload-pack                    | 200    |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack  | 404    |
       | GET    | /acme/urlp.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/urlp.git/git-upload-pack                   | 200    |
 

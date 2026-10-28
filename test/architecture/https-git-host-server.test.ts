@@ -43,6 +43,7 @@ async function send(
   host: HttpsGitHost,
   requestPath: string,
   body = Buffer.alloc(0),
+  signal?: AbortSignal,
 ): Promise<Answer> {
   const ca = await readFile(host.certificatePath);
   const { hostname, port } = new URL(`https://${host.address}`);
@@ -56,6 +57,7 @@ async function send(
         headers: { "content-length": body.length },
         ca,
         agent: false,
+        signal,
       },
       (response) => {
         const chunks: Buffer[] = [];
@@ -153,6 +155,27 @@ describe("HttpsGitHost", () => {
         },
       },
     );
+  });
+
+  test("holds an armed repository request until its caller aborts", async (t) => {
+    // arrange
+    const host = await startHost(t);
+    await host.arm("tools", { kind: "hold" });
+    const window = host.mark();
+    const abort = new AbortController();
+
+    // act
+    const answer = send(host, INFO_REFS, Buffer.alloc(0), abort.signal);
+    await host.waitForRequestAfter(window);
+    abort.abort();
+
+    // assert
+    await assert.rejects(answer, { name: "AbortError" });
+    await host.waitForRequestsSettledAfter(window);
+    assert.deepStrictEqual(host.requestsSince(window), {
+      requests: [{ method: "GET", path: INFO_REFS, status: "dropped" }],
+      connections: 1,
+    });
   });
 
   test("answers a served catalog file with its bytes and keeps serving repositories", async (t) => {

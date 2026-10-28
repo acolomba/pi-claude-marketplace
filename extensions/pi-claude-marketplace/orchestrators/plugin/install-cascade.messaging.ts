@@ -8,7 +8,11 @@ import {
 import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import { printable } from "../../shared/notification-mcp.ts";
 import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
-import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
+import {
+  redactAbsolutePaths,
+  redactCauseChain,
+  redactedRollbackPartials,
+} from "../../shared/redact-absolute-paths.ts";
 
 import { INSTALL_CONTEXT } from "./install.messaging.ts";
 
@@ -171,6 +175,7 @@ export type CascadeFailureSubject =
       readonly kind: "member";
       readonly key: string;
       readonly error: Error;
+      readonly version?: string;
       readonly rollbackPartials: readonly RollbackPartial[];
       readonly unmaterialized?: readonly string[];
     };
@@ -582,6 +587,7 @@ function failureFacts(subject: CascadeFailureSubject, rootKey: string): CascadeF
     key: subject.key,
     reasons: memberReasons(subject),
     cause: memberCause(subject, rootKey),
+    ...(subject.version !== undefined && { version: subject.version }),
     ...(subject.rollbackPartials.length > 0 && { rollbackPartials: subject.rollbackPartials }),
   };
 }
@@ -610,12 +616,20 @@ function unmaterializedOf(subject: CascadeFailureSubject): readonly string[] {
  * install would have installed and did not. The failing member, the root, and
  * every `moved` key are excluded, because each already has its row (D-PL3-15).
  */
-function unmaterializedRows(
-  subject: CascadeFailureSubject,
+export function composeUnmaterializedRows(
+  keys: readonly string[],
   reported: readonly string[],
 ): PluginFailedMessage[] {
-  return unmaterializedOf(subject)
-    .filter((key) => !reported.includes(key))
+  const seen = new Set(reported);
+  return keys
+    .filter((key) => {
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
+    })
     .map((key) => ({
       status: "failed",
       name: key,
@@ -658,6 +672,9 @@ export function composeCascadeFailureMessage(args: {
   readonly moved?: readonly { readonly name: string }[];
 }): readonly CascadeMsg[] {
   const facts = failureFacts(args.subject, args.rootKey);
+  const redactedCause = new Error(redactAbsolutePaths(facts.cause.message), {
+    cause: redactCauseChain(facts.cause.cause),
+  });
   const isRoot = facts.key === args.rootKey;
   const failed: PluginFailedMessage = {
     status: "failed",
@@ -665,16 +682,13 @@ export function composeCascadeFailureMessage(args: {
     reasons: facts.reasons,
     ...(facts.version !== undefined && { version: facts.version }),
     ...(facts.rollbackPartials !== undefined && {
-      rollbackPartial: facts.rollbackPartials.map((partial) => ({
-        phase: partial.phase,
-        ...(partial.cause !== undefined && { cause: partial.cause }),
-      })),
+      rollbackPartial: redactedRollbackPartials(facts.rollbackPartials),
     }),
-    cause: facts.cause,
+    cause: redactedCause,
     severity: "error",
     needsReload: false,
   };
-  const members = unmaterializedRows(args.subject, [
+  const members = composeUnmaterializedRows(unmaterializedOf(args.subject), [
     facts.key,
     args.rootKey,
     ...(args.moved ?? []).map((row) => row.name),

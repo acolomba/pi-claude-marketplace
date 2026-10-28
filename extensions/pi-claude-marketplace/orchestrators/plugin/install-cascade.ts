@@ -143,6 +143,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { RemoteTag } from "../../platform/git.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type { DiscoveryWarning } from "../../shared/staging-warnings.ts";
 import type { Phase, RollbackPartial, RunPhasesResult } from "../../transaction/phase-ledger.ts";
 
 /** Materialization operations the cascade drives, injectable for fault tests. */
@@ -459,6 +460,8 @@ export interface CascadeMemberOutcome {
    */
   readonly pluginRoot: string;
   readonly hooksConfigPath: string | undefined;
+  /** D-PL10-16: the member's own discovery notes, omitted when it raised none. */
+  readonly discoveryWarnings?: readonly DiscoveryWarning[];
   /**
    * TAGS-02: whether this member installed the marketplace's current copy
    * because no tag satisfied its constraint, rather than a pin.
@@ -1256,6 +1259,9 @@ function recordMaterializedMember(
     declaresWorkflows: summary.stagedWorkflowNames.length > 0,
     pluginRoot: summary.resolved.pluginRoot,
     hooksConfigPath: summary.resolved.hooksConfigPath,
+    ...(summary.discoveryWarnings.length > 0 && {
+      discoveryWarnings: summary.discoveryWarnings,
+    }),
     ...origin,
   });
 }

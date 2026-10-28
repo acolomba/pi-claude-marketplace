@@ -1129,6 +1129,141 @@ for (const { stored, title } of [
   });
 }
 
+test("D-PL10-25: rewrites a re-added marketplace in its owning local layer", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "recorded-different-local");
+  const baseBytes = configBytes({
+    marketplaces: { mp: { source: "owner/old" } },
+    plugins: { "two@mp": {} },
+  });
+  const localBytes = configBytes({
+    marketplaces: { kept: { source: "./kept" }, mp: { source: "owner/old" } },
+    plugins: {},
+  });
+  await writeUnder(project.baseConfigJsonPath, baseBytes);
+  await writeUnder(project.localConfigJsonPath, localBytes);
+  const { ctx, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: () => Promise.resolve(installedOutcome()),
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: { "one@mp": true, "two@mp": true },
+            extraKnownMarketplaces: { mp: { github: { repo: "owner/new" } } },
+          }),
+        ),
+      loadState: () =>
+        Promise.resolve(
+          recordedState([
+            recordedMarketplace({
+              name: "mp",
+              plugins: ["two"],
+              scope: "project",
+              source: githubSource("owner", "old"),
+            }),
+          ]),
+        ),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("mp", "project")],
+    changedResources: true,
+    installedPlugins: [installed("one", "mp", "project")],
+    skippedExistingPlugins: [skippedPlugin("two", "mp", "project")],
+  });
+  assert.strictEqual(
+    await readFile(project.baseConfigJsonPath, "utf8"),
+    configBytes({
+      marketplaces: { mp: { source: "owner/old" } },
+      plugins: { "two@mp": {}, "one@mp": {} },
+    }),
+  );
+  assert.strictEqual(
+    await readFile(project.localConfigJsonPath, "utf8"),
+    configBytes({
+      marketplaces: { kept: { source: "./kept" }, mp: { source: "owner/new" } },
+      plugins: {},
+    }),
+  );
+  verifyBoundary();
+});
+
+test("D-PL10-25: does not recreate a local declaration removed before the post-pass", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "recorded-different-local-removed");
+  await writeUnder(
+    project.baseConfigJsonPath,
+    configBytes({ marketplaces: { mp: { source: "owner/old" } }, plugins: {} }),
+  );
+  await writeUnder(
+    project.localConfigJsonPath,
+    configBytes({ marketplaces: { mp: { source: "owner/old" } }, plugins: {} }),
+  );
+  const { ctx, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: async () => {
+        await writeUnder(
+          project.localConfigJsonPath,
+          configBytes({ marketplaces: { kept: { source: "./kept" } }, plugins: {} }),
+        );
+        return installedOutcome();
+      },
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: { "one@mp": true },
+            extraKnownMarketplaces: { mp: { github: { repo: "owner/new" } } },
+          }),
+        ),
+      loadState: () =>
+        Promise.resolve(
+          recordedState([
+            recordedMarketplace({
+              name: "mp",
+              scope: "project",
+              source: githubSource("owner", "old"),
+            }),
+          ]),
+        ),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.strictEqual(
+    await readFile(project.baseConfigJsonPath, "utf8"),
+    configBytes({
+      marketplaces: { mp: { source: "owner/new" } },
+      plugins: { "one@mp": {} },
+    }),
+  );
+  assert.strictEqual(
+    await readFile(project.localConfigJsonPath, "utf8"),
+    configBytes({ marketplaces: { kept: { source: "./kept" } }, plugins: {} }),
+  );
+  verifyBoundary();
+});
+
 test("D-PL6-19: blocks the plugins of a settings marketplace whose re-add fails and shows the add's cause", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "recorded-different-add-fails");

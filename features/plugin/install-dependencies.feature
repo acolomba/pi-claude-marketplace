@@ -123,6 +123,56 @@ Feature: Plugin install dependencies
     When the user starts a new pi session
     Then the session offers no skills
 
+  Scenario: A root ledger failure lists every resolved dependency that did not install
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | aaa, zzz     |
+      | aaa  | 1.0.0   |              |
+      | zzz  | 1.0.0   |              |
+    Given the published plugin "app" of the marketplace "tools" has an unreadable skill file
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | Some plugin operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status | reasons           | scope   | version | cause chain                        | cause truncated | leaks | rollback partial |
+      | tools            | project           | aaa@tools | aaa@tools | failed | dependency failed | project |         |                                    |                 |       |                  |
+      | tools            | project           | app@tools | app       | failed |                   | project | 1.0.0   | {unreadable skill file copy error} | false           |       |                  |
+      | tools            | project           | zzz@tools | zzz@tools | failed | dependency failed | project |         |                                    |                 |       |                  |
+    Then the project scope has no installed plugins
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+
+  Scenario: A catalog failure mid walk lists the members already resolved
+    Given the marketplace "other" is published as a dir source
+    Given the marketplace "other" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | zzz  | 1.0.0   |              |
+    Given the marketplace "other" is added to the project scope
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies   |
+      | app  | 1.0.0   | aaa, zzz@other |
+      | aaa  | 1.0.0   |                |
+    Given the marketplace "tools" allows dependencies on the marketplace "other"
+    Given the marketplace "tools" is added to the project scope
+    Given the manifest of the marketplace "other" is no longer valid json
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | Some plugin operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status | reasons           | scope   | cause chain                                                                                                                                                                                                             | cause truncated | leaks | rollback partial |
+      | tools            | project           | aaa@tools | aaa@tools | failed | dependency failed | project |                                                                                                                                                                                                                         |                 |       |                  |
+      | tools            | project           | app@tools | app       | failed | dependency failed | project |                                                                                                                                                                                                                         |                 |       |                  |
+      | tools            | project           | zzz@other | zzz@other | failed |                   | project | marketplace.json is not valid JSON: SyntaxError: Expected ',' or '}' after property value in JSON at position 56 (line 1 column 57), Expected ',' or '}' after property value in JSON at position 56 (line 1 column 57) | false           |       |                  |
+    Then the project scope has no installed plugins
+
   Scenario: Installing a plugin whose dependencies ask for versions that do not overlap fails as a version conflict and installs nothing
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
@@ -824,7 +874,7 @@ Feature: Plugin install dependencies
       | lib@tools | 1.2.0   | true    |
     Then the project scope holds these git clones:
       | clone  | origin                         | revision |
-      | plugin | https://{git host}/acme/xx.git |          |
+      | plugin | https://{git host}/acme/xx.git | {xx revision 1} |
 
   Scenario: Installing a plugin in the project scope that moves a dependency and needs a marketplace only the user scope holds clones that marketplace once
     Given the marketplace "up" is published as a url source
@@ -1254,7 +1304,7 @@ Feature: Plugin install dependencies
       | a9@tools  | 2.0.0   | true    |
       | app@tools | 1.0.0   | true    |
 
-  Scenario: Installing a plugin whose second dependency move fails lists the pin of a disabled dependency the first move refreshed
+  Scenario: A dependency plan failure lists every resolved member that did not install
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name | version | dependencies |
@@ -1266,9 +1316,10 @@ Feature: Plugin install dependencies
     Given the user has run "/claude:plugin disable ddd@tools --scope project"
     Given the marketplace "tools" offers these plugins with dependencies:
       | name | version | dependencies          |
-      | app  | 1.0.0   | ddd@^2.0.0,aaa@^2.0.0 |
+      | app  | 1.0.0   | ddd@^2.0.0,aaa@^2.0.0,zzz |
       | aaa  | 2.0.0   |                       |
       | ddd  | 2.0.0   |                       |
+      | zzz  | 1.0.0   |                       |
     Given the published plugin "aaa" of the marketplace "tools" has an unreadable skill file
     When the user runs "/claude:plugin install app@tools --scope project"
     Then the result has these fields:
@@ -1281,6 +1332,7 @@ Feature: Plugin install dependencies
       | tools            | project           | app@tools | app       | failed  | dependency failed | project |         |       |       |                                    |                 |       |                  |
       | tools            | project           | ddd@tools | ddd@tools | updated | already disabled  | project |         | 1.0.0 | 2.0.0 |                                    |                 |       |                  |
       | tools            | project           | aaa@tools | aaa@tools | failed  |                   | project | 1.0.0   |       |       | {unreadable skill file copy error} | false           |       |                  |
+      | tools            | project           | zzz@tools | zzz@tools | failed  | dependency failed | project |         |       |       |                                    |                 |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id        | version | enabled |
       | aaa@tools | 1.0.0   | true    |

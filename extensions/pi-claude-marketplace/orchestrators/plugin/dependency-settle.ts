@@ -46,6 +46,7 @@ import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
 import type { CascadePlan, PlannedCascadeMember } from "./install-cascade.ts";
 import type { UpdateDependencySettlement } from "./update-swap.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { MovedDependency, UpdateDependencyRow } from "../types.ts";
 
 /**
@@ -58,6 +59,7 @@ export type SettleCascadeRun =
       readonly kind: "installed";
       readonly rows: readonly UpdateDependencyRow[];
       readonly mcpConfigNotices?: readonly McpConfigNotice[];
+      readonly stagingWarnings?: readonly StagingWarning[];
     }
   | { readonly kind: "refused"; readonly subject: CascadeFailureSubject };
 
@@ -89,12 +91,14 @@ export type DependencyStepsResult =
       readonly ok: true;
       readonly landed: readonly MovedDependency[];
       readonly mcpConfigNotices?: readonly McpConfigNotice[];
+      readonly stagingWarnings?: readonly StagingWarning[];
     }
   | {
       readonly ok: false;
       readonly landed: readonly MovedDependency[];
       readonly cause: Error;
       readonly mcpConfigNotices?: readonly McpConfigNotice[];
+      readonly stagingWarnings?: readonly StagingWarning[];
     };
 
 /** The operations an update's settle composes. */
@@ -134,6 +138,7 @@ export function movedFromRow(row: UpdateDependencyRow): MovedDependency {
 interface StepRun {
   readonly rows: readonly UpdateDependencyRow[];
   readonly notices: readonly McpConfigNotice[];
+  readonly warnings: readonly StagingWarning[];
   readonly failure?: Error;
 }
 
@@ -141,17 +146,32 @@ async function runStep(step: DependencyPlanStep, ports: DependencyStepPorts): Pr
   if (step.kind === "move") {
     const moved = await ports.move(step.move);
     return moved.landed
-      ? { rows: moved.rows, notices: [] }
-      : { rows: moved.rows, notices: [], failure: failedMoveError(step.move.request) };
+      ? {
+          rows: moved.rows,
+          notices: moved.mcpConfigNotices ?? [],
+          warnings: moved.stagingWarnings ?? [],
+        }
+      : {
+          rows: moved.rows,
+          notices: moved.mcpConfigNotices ?? [],
+          warnings: moved.stagingWarnings ?? [],
+          failure: failedMoveError(step.move.request),
+        };
   }
 
   const run = await ports.materialize(step.members);
   if (run.kind === "installed") {
-    return { rows: run.rows, notices: run.mcpConfigNotices ?? [] };
+    return { rows: run.rows, notices: run.mcpConfigNotices ?? [], warnings: [] };
   }
 
   const refusal = ports.refusal(run.subject);
-  return { rows: refusal.rows, notices: [], failure: refusal.cause };
+  return { rows: refusal.rows, notices: [], warnings: [], failure: refusal.cause };
+}
+
+function warningsMember(warnings: readonly StagingWarning[]): {
+  readonly stagingWarnings?: readonly StagingWarning[];
+} {
+  return warnings.length > 0 ? { stagingWarnings: warnings } : {};
 }
 
 /**
@@ -170,6 +190,7 @@ export async function runDependencySteps(
 ): Promise<DependencyStepsResult> {
   let landed: MovedDependency[] = [];
   let notices: McpConfigNotice[] = [];
+  let warnings: StagingWarning[] = [];
   for (const step of steps) {
     let run: StepRun;
     try {
@@ -181,7 +202,13 @@ export async function runDependencySteps(
       }
 
       if (step.kind === "materialize") {
-        return { ok: false, landed, cause: err as Error, ...mcpConfigNoticesMember(notices) };
+        return {
+          ok: false,
+          landed,
+          cause: err as Error,
+          ...mcpConfigNoticesMember(notices),
+          ...warningsMember(warnings),
+        };
       }
 
       return {
@@ -189,6 +216,7 @@ export async function runDependencySteps(
         landed: [...landed, movedFromRow(failedMoveRow(step.move.request, err))],
         cause: failedMoveError(step.move.request),
         ...mcpConfigNoticesMember(notices),
+        ...warningsMember(warnings),
       };
     }
 
@@ -197,12 +225,24 @@ export async function runDependencySteps(
       ...run.rows.map(movedFromRow),
     ];
     notices = [...notices, ...run.notices];
+    warnings = [...warnings, ...run.warnings];
     if (run.failure !== undefined) {
-      return { ok: false, landed, cause: run.failure, ...mcpConfigNoticesMember(notices) };
+      return {
+        ok: false,
+        landed,
+        cause: run.failure,
+        ...mcpConfigNoticesMember(notices),
+        ...warningsMember(warnings),
+      };
     }
   }
 
-  return { ok: true, landed, ...mcpConfigNoticesMember(notices) };
+  return {
+    ok: true,
+    landed,
+    ...mcpConfigNoticesMember(notices),
+    ...warningsMember(warnings),
+  };
 }
 
 function refused(
@@ -235,9 +275,10 @@ async function settlePlanned(ports: DependencySettlePorts): Promise<UpdateDepend
   const ran = await runDependencySteps([...plan.steps, ...final], ports.steps);
   const rows = ran.landed.map((entry) => entry.row);
   const notices = mcpConfigNoticesMember(ran.mcpConfigNotices ?? []);
+  const warnings = warningsMember(ran.stagingWarnings ?? []);
   return ran.ok
-    ? { kind: "settled", rows, ...notices }
-    : { kind: "refused", rows, cause: ran.cause, ...notices };
+    ? { kind: "settled", rows, ...notices, ...warnings }
+    : { kind: "refused", rows, cause: ran.cause, ...notices, ...warnings };
 }
 
 /** Runs an update's settle in its contracted order. */

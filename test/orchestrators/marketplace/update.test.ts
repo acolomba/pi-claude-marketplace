@@ -1575,7 +1575,7 @@ test("D-PL8-24: a refresh whose fetch is aborted leaves state.json, the clone, a
   });
 });
 
-test("MU-5: clone advances + manifest re-validation fails -- 'Retry the command.' retry hint", async () => {
+test("D-PL10-17: clone advances to an invalid manifest without a retry hint", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     // Seed with a VALID manifest and its saved baseline. The clone-advanced + POST-revalidation-fails path under test is reached
@@ -1594,8 +1594,8 @@ test("MU-5: clone advances + manifest re-validation fails -- 'Retry the command.
         await gitOps.checkout(opts);
         // After the clone advances (fetch + checkout), the working-tree
         // manifest is INVALID, so the read of the recorded manifest throws ->
-        // MarketplaceUpdateError with the "clone advanced but manifest could
-        // not be persisted" diagnostic.
+        // MarketplaceUpdateError that identifies the invalid manifest without
+        // suggesting that the same invalid revision should be retried.
         await cp(fixtureMarketplaceDir("invalid-manifest"), cloneDir, { recursive: true });
       },
     };
@@ -1612,18 +1612,15 @@ test("MU-5: clone advances + manifest re-validation fails -- 'Retry the command.
 
     // assert
 
-    // Clone advanced + manifest re-read failed: the synthetic failed-plugin
-    // child surfaces the underlying MarketplaceUpdateError cause-chain so the
-    // user sees what failed (the "clone advanced but manifest could not be
-    // persisted" diagnostic, MU-5). The literal "Retry the command." anchor
-    // stays on MarketplaceUpdateError.retryHint (a separate field) for
-    // programmatic inspection; the cause chain renders the error message only.
     assert.equal(notifications.length, 1);
     const first = notifications[0];
     assert.ok(first !== undefined);
     assert.equal(first.severity, "error");
     assert.match(first.message, /^⊘ broken \[project\] \(failed\)$/m);
-    assert.match(first.message, /cause:.*clone advanced but manifest could not be persisted/);
+    assert.match(first.message, /\(failed\) \{unparseable\}/);
+    assert.match(first.message, /cause: Failed to update marketplace "broken"\./);
+    assert.doesNotMatch(first.message, /clone advanced but manifest could not be persisted/);
+    assert.doesNotMatch(first.message, /Retry the command\./);
   });
 });
 
@@ -1663,7 +1660,7 @@ test("CR-05 / MU-5: url-source pre-fetch failure (gitOps.fetch throws) does NOT 
   });
 });
 
-test("MU-5: url-source clone advances + manifest re-validation fails -- 'clone advanced' diagnostic", async () => {
+test("D-PL10-17: url-source clone advances to an invalid manifest without a retry hint", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const { cloneDir } = await seedUrlMarketplace({ cwd, name: "urlbroken" });
@@ -1701,7 +1698,10 @@ test("MU-5: url-source clone advances + manifest re-validation fails -- 'clone a
     assert.ok(first !== undefined);
     assert.equal(first.severity, "error");
     assert.match(first.message, /^⊘ urlbroken \[project\] \(failed\)$/m);
-    assert.match(first.message, /cause:.*clone advanced but manifest could not be persisted/);
+    assert.match(first.message, /\(failed\) \{unparseable\}/);
+    assert.match(first.message, /cause: Failed to update marketplace "urlbroken"\./);
+    assert.doesNotMatch(first.message, /clone advanced but manifest could not be persisted/);
+    assert.doesNotMatch(first.message, /Retry the command\./);
   });
 });
 

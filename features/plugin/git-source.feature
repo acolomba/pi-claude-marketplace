@@ -393,11 +393,11 @@ Feature: Plugin git source
       | gits             | project           | demo@gits | demo | uninstalled |         | project | 1.0.0   |
     Then the project scope holds these git clones:
       | clone  | origin                           | revision          |
-      | plugin | https://{git host}/acme/urlp.git |                   |
+      | plugin | https://{git host}/acme/urlp.git | {urlp revision 1} |
       | plugin | https://{git host}/acme/urlp.git | {urlp revision 1} |
     Then the git-source plugin "urlp" installed in the project scope runs revision 1 of its repository
 
-  Scenario: A git-source plugin that declares no version records the first 12 hex digits of its commit
+  Scenario: Installation records expose git revisions
     Given the git repository "ghp" holds these plugins:
       | name | version | path |
       | ghp  | 1.0.0   |      |
@@ -411,6 +411,9 @@ Feature: Plugin git source
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version          |
       | gits             | project           | ghp@gits | ghp  | installed |         | project | {ghp revision 2} |
+    Then the installation record of the project scope holds these plugins:
+      | id       | version          | enabled |
+      | ghp@gits | {ghp revision 2} | true    |
     When the user runs "/claude:plugin list --scope project"
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version          |

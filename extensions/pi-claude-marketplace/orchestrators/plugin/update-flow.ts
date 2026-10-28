@@ -87,6 +87,7 @@ import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import { notifyUpdateNoOpWithContext, notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
+import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildGitHubAuth } from "../auth-host.ts";
 import { DEFAULT_GIT_OPS, refreshGitHubClone, refreshUrlClone } from "../marketplace/shared.ts";
@@ -437,6 +438,7 @@ async function updatePluginsWith(
         // failed-row identity (Option B) so the cause-chain trailer renders.
         pluginName: t.marketplace,
         err,
+        unknownGitFailure: true,
       });
       abortUpdateBatch(ctx, run, outcomes, cardinality, composeCascade, []);
       return;
@@ -872,6 +874,9 @@ function cascadeFailureOutcome(
 ): PluginUpdateOutcome {
   const cleanupFailures = cleanupFailuresFromError(err);
   const failure = classifyUpdateFailure(err);
+  const rawCause = err instanceof Error ? err : undefined;
+  const cause =
+    !failure.typed && failure.reason === "network error" ? redactCauseChain(rawCause) : rawCause;
   const base: PluginUpdateOutcome = {
     partition: "failed",
     name: plugin,
@@ -879,7 +884,7 @@ function cascadeFailureOutcome(
     // before one.
     ...report.move,
     notes: [composeErrorWithCauseChain(err)],
-    ...(!failure.typed && err instanceof Error && { cause: err }),
+    ...(!failure.typed && cause !== undefined && { cause }),
     ...(cleanupFailures.length > 0 && {
       cause: err as Error,
       cleanupFailures,
@@ -897,7 +902,11 @@ function cascadeFailureOutcome(
     declaresMcp: false,
     declaresWorkflows: false,
   };
-  return { ...base, reasons: [failure.reason] };
+  const primary = err instanceof CleanupContextError ? err.primary : err;
+  return {
+    ...base,
+    reasons: primary instanceof AgentTargetOccupiedError ? [] : [failure.reason],
+  };
 }
 
 /**
@@ -909,14 +918,17 @@ function cascadeFailureOutcome(
  * from a typed error, whose row carries a cause only where
  * `cascadeFailureOutcome` names one.
  */
-function classifyUpdateFailure(err: unknown): {
+function classifyUpdateFailure(
+  err: unknown,
+  unknownGitFailure = false,
+): {
   readonly reason: ContentReason;
   readonly typed: boolean;
 } {
   const primary = err instanceof CleanupContextError ? err.primary : err;
   const typedReason = typedUpdateFailReason(primary);
   return typedReason === undefined
-    ? { reason: untypedUpdateFailReason(primary), typed: false }
+    ? { reason: untypedUpdateFailReason(primary, unknownGitFailure), typed: false }
     : { reason: typedReason, typed: true };
 }
 
@@ -933,9 +945,12 @@ const PLUGIN_CLONE_RULE: Parameters<typeof classifyGitFailure>[1] = {
  * the plugin-clone rule first, then the errno (D-13: a bridge's staging
  * error reads its filesystem cause), then `unreadable manifest`.
  */
-function untypedUpdateFailReason(primary: unknown): ContentReason {
+function untypedUpdateFailReason(primary: unknown, unknownGitFailure: boolean): ContentReason {
   return (
-    classifyGitFailure(primary, PLUGIN_CLONE_RULE)?.reason ?? errnoFailReason(failureErrno(primary))
+    classifyGitFailure(primary, {
+      ...PLUGIN_CLONE_RULE,
+      ...(unknownGitFailure && { unknown: "network error" as const }),
+    })?.reason ?? errnoFailReason(failureErrno(primary))
   );
 }
 
@@ -1034,6 +1049,8 @@ interface NotifyDirectFailureArgs {
   readonly scope: Scope;
   readonly pluginName: string;
   readonly err: unknown;
+  /** The throw came directly from the marketplace git refresh boundary. */
+  readonly unknownGitFailure?: boolean;
   /**
    * Optional override that pins the closed-set Reason on the synthetic
    * PluginFailedMessage. Used by the phase-3 aggregate path where the
@@ -1059,8 +1076,11 @@ interface NotifyDirectFailureArgs {
 
 function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
   const { ctx, run, marketplace, scope, pluginName, err } = args;
-  const cause = err instanceof Error ? err : new Error(String(err));
-  const reasons = directFailReasons(args.reasonOverride, cause);
+  const rawCause = err instanceof Error ? err : new Error(String(err));
+  const failure = classifyUpdateFailure(rawCause, args.unknownGitFailure === true);
+  const cause =
+    !failure.typed && failure.reason === "network error" ? redactCauseChain(rawCause) : rawCause;
+  const reasons = directFailReasons(args.reasonOverride, rawCause, args.unknownGitFailure === true);
   // WR-05: row-level `scope` is OMITTED -- it always matched the
   // marketplace block's `scope` at every callsite below, and
   // `renderScopeBracket` (shared/notification-grammar.ts) suppresses the
@@ -1116,13 +1136,16 @@ function rollbackPartialCauseSlot(p: UpdatePhase3Failure): { readonly cause: Err
 function directFailReasons(
   reasonOverride: ContentReason | undefined,
   cause: Error,
+  unknownGitFailure: boolean,
 ): readonly ContentReason[] {
   if (reasonOverride !== undefined) {
     return [reasonOverride];
   }
 
   const primary = cause instanceof CleanupContextError ? cause.primary : cause;
-  return primary instanceof AgentTargetOccupiedError ? [] : [classifyUpdateFailure(cause).reason];
+  return primary instanceof AgentTargetOccupiedError
+    ? []
+    : [classifyUpdateFailure(cause, unknownGitFailure).reason];
 }
 
 /**

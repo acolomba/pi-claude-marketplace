@@ -28,6 +28,7 @@ import {
 import { npmConfigText, NpmRegistry } from "../lib/npm-registry.ts";
 import { readSession } from "../lib/pi-commands.ts";
 import { PiProcess } from "../lib/pi-process.ts";
+import { PiTuiSession } from "../lib/pi-tui.ts";
 import { rowArrays } from "../lib/result-rows.ts";
 
 import { currentRun } from "./pi-process.ts";
@@ -37,6 +38,7 @@ import type { GitHostTraffic, HttpsGitHost, RequestWindow } from "../lib/https-g
 import type { NpmRegistryRequest } from "../lib/npm-registry.ts";
 import type { NotificationPayload, OfferedSkill, SessionReport } from "../lib/pi-commands.ts";
 import type { RpcGitEnvironment } from "../lib/pi-process.ts";
+import type { PluginCompletion } from "../lib/plugin-completions.ts";
 import type { PublicationSites, PublishedMarketplace } from "../lib/published-marketplace.ts";
 import type { RunTokens } from "../lib/run-tokens.ts";
 
@@ -63,6 +65,12 @@ export class ScenarioWorld extends World {
   // so a session payload without rows would otherwise pass unseen. The steps
   // that state the fields of every result call `markResultsCompared()`.
   uncomparedSessionResults: readonly string[] = [];
+  // A TUI message may produce background notices; its assertion compares the complete set.
+  uncomparedTuiNotices = false;
+  backgroundForegroundWaitMs: number | undefined = undefined;
+  backgroundRequestWindow: RequestWindow | undefined = undefined;
+  private readonly completionSets = new Map<string, readonly PluginCompletion[]>();
+  private readonly uncomparedCompletionSets = new Set<string>();
   // Cucumber builds the world before any `Before()` hook, so the
   // `{scenario time}` window opens before any setup command runs (D-05).
   readonly startedAt = Date.now();
@@ -82,6 +90,8 @@ export class ScenarioWorld extends World {
   // A Pi this scenario started with an environment of its own; while set it
   // takes the place of the run's Pi.
   private scenarioPi: PiProcess | undefined = undefined;
+  private tuiSession: PiTuiSession | undefined = undefined;
+  private tuiEnvironment: RpcGitEnvironment | undefined = undefined;
 
   /**
    * The Pi the steps talk to: the one this scenario started with
@@ -427,10 +437,84 @@ export class ScenarioWorld extends World {
    * ten-minute maximum.
    */
   async usePiWithBackgroundUpdateDelay(value: string): Promise<void> {
-    await this.usePiWith({
+    const environment = {
       ...currentRun().piEnvironment,
       PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS: value,
+    } satisfies RpcGitEnvironment;
+    this.tuiEnvironment = environment;
+    await this.usePiWith(environment);
+  }
+
+  /** Starts one contained production TUI and registers its release before waiting for readiness. */
+  async startTuiSession(): Promise<PiTuiSession> {
+    if (this.tuiSession !== undefined) {
+      throw new Error("a TUI session already started in this scenario");
+    }
+
+    const run = currentRun();
+    const tui = await PiTuiSession.start({
+      sandbox: run.sandbox,
+      git: this.tuiEnvironment ?? run.piEnvironment,
     });
+    this.onRelease(() => tui.stop());
+    this.tuiSession = tui;
+    await tui.waitUntilReady();
+    return tui;
+  }
+
+  /** Returns the contained TUI this scenario started. */
+  requireTuiSession(): PiTuiSession {
+    if (this.tuiSession === undefined) {
+      throw new Error("no TUI session started in this scenario");
+    }
+
+    return this.tuiSession;
+  }
+
+  /** Marks that a TUI message may have produced notices that a Then step must compare. */
+  expectTuiNotices(): void {
+    assert.strictEqual(this.uncomparedTuiNotices, false, "TUI notices are already uncompared");
+    this.uncomparedTuiNotices = true;
+  }
+
+  /** Marks the complete TUI notice set compared. */
+  markTuiNoticesCompared(): void {
+    this.uncomparedTuiNotices = false;
+  }
+
+  /** Records the complete registered-provider completion set for `prefix`. */
+  recordCompletions(prefix: string, completions: readonly PluginCompletion[]): void {
+    assert.strictEqual(
+      this.completionSets.has(prefix),
+      false,
+      `${prefix} completions already exist`,
+    );
+    this.completionSets.set(prefix, completions);
+    this.uncomparedCompletionSets.add(prefix);
+  }
+
+  /** Returns the complete completion set recorded for `prefix`. */
+  completionsFor(prefix: string): readonly PluginCompletion[] {
+    const completions = this.completionSets.get(prefix);
+    if (completions === undefined) {
+      throw new Error(`no plugin completions were requested for ${prefix}`);
+    }
+
+    return completions;
+  }
+
+  /** Marks the completion set for `prefix` compared by a Then step. */
+  markCompletionsCompared(prefix: string): void {
+    assert.strictEqual(
+      this.uncomparedCompletionSets.delete(prefix),
+      true,
+      `${prefix} completions were not awaiting comparison`,
+    );
+  }
+
+  /** Returns every completion prefix still awaiting a complete-set comparison. */
+  completionSetsAwaitingComparison(): readonly string[] {
+    return [...this.uncomparedCompletionSets];
   }
 
   /** Registers `release` to run when the scenario ends, before anything registered earlier. */
@@ -469,6 +553,8 @@ After(async function (this: ScenarioWorld, { result }: ITestCaseHookParameter): 
   const uncompared = this.uncomparedRows;
   const uncomparedNotices = this.uncomparedNotices;
   const uncomparedSessionResults = this.uncomparedSessionResults;
+  const uncomparedTuiNotices = this.uncomparedTuiNotices;
+  const uncomparedCompletionSets = this.completionSetsAwaitingComparison();
   await this.release();
   if (result?.status === Status.PASSED) {
     assert.deepStrictEqual(uncompared, [], "no step compared these rows of the last results");
@@ -481,6 +567,12 @@ After(async function (this: ScenarioWorld, { result }: ITestCaseHookParameter): 
       uncomparedSessionResults,
       [],
       "no step compared the fields of these results of the last session",
+    );
+    assert.strictEqual(uncomparedTuiNotices, false, "no step compared the TUI notice set");
+    assert.deepStrictEqual(
+      uncomparedCompletionSets,
+      [],
+      "no step compared these plugin completion sets",
     );
   }
 });

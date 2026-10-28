@@ -42,6 +42,8 @@ import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { SoftDepStatus } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
@@ -113,6 +115,8 @@ export type DependencyMoveJudgement =
 export interface DependencyMoveRun {
   readonly landed: boolean;
   readonly rows: readonly UpdateDependencyRow[];
+  readonly stagingWarnings?: readonly StagingWarning[];
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
 }
 
 function moveArgs(
@@ -332,7 +336,12 @@ export async function runDependencyMove(
     { ...context.policy, refreshSource: false },
   );
   const row = moveRow(context, move, outcome);
-  return { landed: moveLanded(outcome), rows: row === undefined ? [] : [row] };
+  return {
+    landed: moveLanded(outcome),
+    rows: row === undefined ? [] : [row],
+    ...("stagingWarnings" in outcome && { stagingWarnings: outcome.stagingWarnings }),
+    ...("mcpConfigNotices" in outcome && { mcpConfigNotices: outcome.mcpConfigNotices }),
+  };
 }
 
 /**

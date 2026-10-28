@@ -77,6 +77,7 @@ import {
   pathExists,
 } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { redactAbsolutePaths } from "../../../extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts";
 import {
   runPhases,
   type Phase,
@@ -92,6 +93,7 @@ import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts"
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
+import { seedMarketplaceRecord } from "./marketplace-seed.ts";
 import { materializeCommitCopyWith } from "./mirror-checkout.ts";
 import { retryTree } from "./scope-tree-inventory.ts";
 
@@ -246,11 +248,12 @@ function assertRetryFailure(
   outcome: Awaited<ReturnType<InstallOperation>>,
   expectedMessage: string,
 ): void {
+  const redactedMessage = redactAbsolutePaths(expectedMessage);
   assert.deepStrictEqual(Object.keys(outcome).sort(), ["cause", "error", "status"]);
   assert.strictEqual(outcome.status, "failed");
   assert.ok(outcome.error instanceof Error);
   assert.strictEqual(outcome.error.message, expectedMessage);
-  assert.strictEqual(outcome.cause, retryCauseChain(expectedMessage));
+  assert.strictEqual(outcome.cause, retryCauseChain(redactedMessage));
 }
 
 /**
@@ -259,8 +262,8 @@ function assertRetryFailure(
  * text. `expectedPrefix` is a case-authored literal covering every byte the
  * module under test is responsible for, and `expectedTail` pins the shape of
  * the remainder. Returns the two halves rejoined so a case that renders the
- * cause into a notification asserts against that rather than against the raw
- * actual message.
+ * Returns the raw halves rejoined so a caller can inspect the typed cause or
+ * redact it before comparing a notification.
  */
 function assertRetryPartialFailure(
   outcome: Awaited<ReturnType<InstallOperation>>,
@@ -275,9 +278,10 @@ function assertRetryPartialFailure(
   const tail = outcome.error.message.slice(expectedPrefix.length);
   assert.match(tail, expectedTail);
   const expectedMessage = `${expectedPrefix}${tail}`;
+  const redactedMessage = redactAbsolutePaths(expectedMessage);
   const expectedCause = wrapped
-    ? `${expectedMessage}\n\ncause: ${expectedMessage} -> ${expectedMessage}`
-    : retryCauseChain(expectedMessage);
+    ? `${redactedMessage}\n\ncause: ${redactedMessage} -> ${redactedMessage}`
+    : retryCauseChain(redactedMessage);
   assert.strictEqual(outcome.cause, expectedCause);
   return expectedMessage;
 }
@@ -504,51 +508,6 @@ async function writeWorkflowScripts(
         `export const meta = { name: "${workflow.sourceName}", description: "does ${workflow.sourceName}" };\n`,
     );
   }
-}
-
-/**
- * PI-6 fixture: a SECOND marketplace whose installed plugin already owns one
- * of the generated names the plugin under test would produce, so the
- * cross-plugin conflict guard has something to collide with.
- */
-function conflictingMarketplaceRecord(
-  cp: {
-    marketplace: string;
-    plugin: string;
-    skillName?: string;
-    commandName?: string;
-    agentName?: string;
-  },
-  scope: "user" | "project",
-  cwd: string,
-): ExtensionState["marketplaces"][string] {
-  return {
-    name: cp.marketplace,
-    scope,
-    source: pathSource("./other-mp"),
-    addedFromCwd: cwd,
-    manifestPath: path.join(cwd, "other-mp.json"),
-    marketplaceRoot: path.join(cwd, "other-mp"),
-    plugins: {
-      [cp.plugin]: {
-        version: "0.0.1",
-        resolvedSource: "/dev/null",
-        compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-        resources: {
-          skills: cp.skillName === undefined ? [] : [cp.skillName],
-          prompts: cp.commandName === undefined ? [] : [cp.commandName],
-          agents: cp.agentName === undefined ? [] : [cp.agentName],
-          mcpServers: [],
-          hooks: [],
-          workflows: [],
-        },
-        enabled: true,
-        provenance: "explicit",
-        installedAt: "2026-01-01T00:00:00.000Z",
-        updatedAt: "2026-01-01T00:00:00.000Z",
-      },
-    },
-  };
 }
 
 /**
@@ -900,16 +859,62 @@ async function seedPathMarketplaceWithPlugin(opts: {
   };
 
   if (opts.conflictingPriorPlugin !== undefined) {
-    state.marketplaces[opts.conflictingPriorPlugin.marketplace] = conflictingMarketplaceRecord(
-      opts.conflictingPriorPlugin,
-      scope,
+    const conflict = opts.conflictingPriorPlugin;
+    state.marketplaces[conflict.marketplace] = await seedMarketplaceRecord({
       cwd,
-    );
+      marketplace: conflict.marketplace,
+      scope,
+      plugins: {
+        [conflict.plugin]: {
+          version: "0.0.1",
+          resolvedSource: "/dev/null",
+          compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+          resources: {
+            skills: conflict.skillName === undefined ? [] : [conflict.skillName],
+            prompts: conflict.commandName === undefined ? [] : [conflict.commandName],
+            agents: conflict.agentName === undefined ? [] : [conflict.agentName],
+            mcpServers: [],
+            hooks: [],
+            workflows: [],
+          },
+          enabled: true,
+          provenance: "explicit",
+          installedAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      },
+    });
   }
 
   await saveState(locations.extensionRoot, state);
   return { pluginRoot, marketplaceRoot, manifestPath };
 }
+
+test("the marketplace record seeder refuses a symlinked marketplace root", async (t) => {
+  // arrange
+  const cwd = await mkdtemp(path.join(tmpdir(), "marketplace-seed-root-"));
+  const outside = await mkdtemp(path.join(tmpdir(), "marketplace-seed-outside-"));
+  t.after(async () => {
+    await Promise.all([
+      rm(cwd, { recursive: true, force: true }),
+      rm(outside, { recursive: true, force: true }),
+    ]);
+  });
+  await symlink(outside, path.join(cwd, "escape"));
+
+  // act & assert
+  await assert.rejects(
+    () =>
+      seedMarketplaceRecord({
+        cwd,
+        marketplace: "escape",
+        plugins: {},
+        scope: "project",
+      }),
+    SymlinkRefusedError,
+  );
+  assert.deepStrictEqual(await readdir(outside), []);
+});
 
 // ───────────────────────────────────────────────────────────────────────────
 // PI-3 -- plugin not in marketplace manifest
@@ -1551,7 +1556,7 @@ test("D-PL1-13: a standalone install that fails in its mcp phase reports the age
             "",
             "● mp [project]",
             "  ⊘ hello v0.0.1 (failed)",
-            `    cause: ${readFailure}`,
+            `    cause: ${redactAbsolutePaths(readFailure)}`,
           ].join("\n"),
           severity: "error",
         },
@@ -3808,7 +3813,7 @@ test("AFILE-02: an MCP install over an unparseable mcp-adapter.json fails and ke
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ hello v0.0.1 (failed)\n" +
-            `    cause: MCP config ${adapterPath} is not valid JSONC; it was left unchanged.`,
+            "    cause: MCP config mcp-adapter.json is not valid JSONC; it was left unchanged.",
         },
       ]);
       assert.equal(notifications[0]?.message.includes("sk-secret-abc"), false);
@@ -3936,7 +3941,7 @@ test("AFILE-04: a failed dependency cascade still reports the removed comments a
       // arrange
       await seedMcpDependencyCascade(cwd);
       await writeCommentedProjectAdapterFile(cwd);
-      const agentsPath = await seedForeignServer1();
+      await seedForeignServer1();
       const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
       const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
 
@@ -3948,10 +3953,11 @@ test("AFILE-04: a failed dependency cascade still reports the removed comments a
         {
           severity: "error",
           message:
-            "A plugin operation has failed.\n\n" +
+            "Some plugin operations have failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ hello v0.0.1 (failed)\n" +
-            `    cause: Refusing to stage MCP server "plugin_hello_server1_": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
+            '    cause: Refusing to stage MCP server "plugin_hello_server1_": mcp.json already defines it, and pi-mcp-adapter would load the definition in mcp-adapter.json.\n' +
+            "  ⊘ some-other-plugin@mp (failed) {dependency failed}",
         },
         PROJECT_COMMENTS_DROPPED_NOTICE,
       ]);
@@ -4045,8 +4051,7 @@ test("AVAR-04: a failed dependency cascade shows no variable notice for the depe
           },
         ],
       });
-      const agentsPath = await seedForeignServer1();
-      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      await seedForeignServer1();
       const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
       const installPlugin = createInstallPlugin(transaction, hooksRouting, completionCache, {});
 
@@ -4058,10 +4063,11 @@ test("AVAR-04: a failed dependency cascade shows no variable notice for the depe
         {
           severity: "error",
           message:
-            "A plugin operation has failed.\n\n" +
+            "Some plugin operations have failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ hello v0.0.1 (failed)\n" +
-            `    cause: Refusing to stage MCP server "plugin_hello_server1_": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
+            '    cause: Refusing to stage MCP server "plugin_hello_server1_": mcp.json already defines it, and pi-mcp-adapter would load the definition in mcp-adapter.json.\n' +
+            "  ⊘ some-other-plugin@mp (failed) {dependency failed}",
         },
       ]);
     } finally {
@@ -4523,7 +4529,7 @@ test("AFILE-06: a failed dependency cascade writes its dependency's override bac
         cwd,
         "plugin_some-other-plugin_server2_",
       );
-      const agentsPath = await seedForeignServer1();
+      await seedForeignServer1();
       const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
 
       // act
@@ -4534,10 +4540,11 @@ test("AFILE-06: a failed dependency cascade writes its dependency's override bac
         {
           severity: "error",
           message:
-            "A plugin operation has failed.\n\n" +
+            "Some plugin operations have failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ hello v0.0.1 (failed)\n" +
-            `    cause: Refusing to stage MCP server "plugin_hello_server1_": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
+            '    cause: Refusing to stage MCP server "plugin_hello_server1_": mcp.json already defines it, and pi-mcp-adapter would load the definition in mcp-adapter.json.\n' +
+            "  ⊘ some-other-plugin@mp (failed) {dependency failed}",
         },
       ]);
       assert.equal(await readFile(adapterPath, "utf8"), overrideBytes);
@@ -4809,7 +4816,7 @@ test("AFILE-05: install refuses a server ~/.agents/mcp.json already defines and 
         pluginName: "hello",
         mcpServers: { server1: { command: "node", args: ["server.js"] } },
       });
-      const agentsPath = await seedForeignServer1();
+      await seedForeignServer1();
       const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
       const { ctx, run, notifications } = makeCtx();
 
@@ -4822,7 +4829,7 @@ test("AFILE-05: install refuses a server ~/.agents/mcp.json already defines and 
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ hello v0.0.1 (failed)\n" +
-            `    cause: Refusing to stage MCP server "plugin_hello_server1_": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
+            '    cause: Refusing to stage MCP server "plugin_hello_server1_": mcp.json already defines it, and pi-mcp-adapter would load the definition in mcp-adapter.json.',
         },
       ]);
       assert.equal(await pathExists(adapterPath), false);
@@ -13126,8 +13133,9 @@ test("GHB-03: an invalid base after a dependency's undo failed reports the rollb
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n" +
+            "Some plugin operations have failed.\n\n" +
             "● mp [project]\n" +
+            "  ⊘ dep@mp (failed) {dependency failed}\n" +
             "  ⊘ gh (failed) {rollback partial}\n" +
             `    cause: ${variableMessage}\n` +
             "    [dep@mp] (rollback failed)\n" +
@@ -13170,8 +13178,9 @@ test("GHB-03: an invalid base after a dependency rewrote the MCP config reports 
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n" +
+            "Some plugin operations have failed.\n\n" +
             "● mp [project]\n" +
+            "  ⊘ dep@mp (failed) {dependency failed}\n" +
             "  ⊘ gh (failed)\n" +
             "    cause: PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme.",
           severity: "error",
@@ -15253,7 +15262,7 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
       });
 
       // assert
-      const expectedCause = assertRetryPartialFailure(
+      const rawCause = assertRetryPartialFailure(
         first,
         retryStagingMkdirPrefix(locations.commandsStagingDir),
         RETRY_STAGING_UUID,
@@ -15261,7 +15270,8 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
       );
       const rollbackError = (first as { readonly error: Error }).error;
       assert.ok(rollbackError.cause instanceof Error);
-      assert.strictEqual(rollbackError.cause.message, expectedCause);
+      assert.strictEqual(rollbackError.cause.message, rawCause);
+      const expectedCause = redactAbsolutePaths(rawCause);
       assert.deepStrictEqual(second, {
         declaresAgents: false,
         declaresMcp: false,
@@ -15352,6 +15362,7 @@ test("retry proof: install: containment failure preserves the refused residue an
       const expectedRefusal =
         `skill target destination contains symlink ${skillTarget} -> ` +
         `/tmp/retry-proof-decoy (parent: ${locations.skillsTargetDir}, target: ${skillTarget}).`;
+      const redactedRefusal = redactAbsolutePaths(expectedRefusal);
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
@@ -15403,7 +15414,7 @@ test("retry proof: install: containment failure preserves the refused residue an
       assert.strictEqual(first.error.linkTarget, "/tmp/retry-proof-decoy");
       assert.strictEqual(first.error.message, expectedRefusal);
       assert.strictEqual(first.error.cause, undefined);
-      assert.strictEqual(first.cause, `${expectedRefusal}\n\ncause: ${expectedRefusal}`);
+      assert.strictEqual(first.cause, `${redactedRefusal}\n\ncause: ${redactedRefusal}`);
       assert.deepStrictEqual(second, {
         declaresAgents: false,
         declaresMcp: false,
@@ -15418,7 +15429,7 @@ test("retry proof: install: containment failure preserves the refused residue an
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ retryable v0.0.1 (failed)\n" +
-            `    cause: ${expectedRefusal}`,
+            `    cause: ${redactedRefusal}`,
           severity: "error",
         },
         {
@@ -15656,6 +15667,60 @@ test("RESV-01 / RESV-06: a successful cascade renders one row per member", async
             "",
             "/reload to pick up changes",
           ].join("\n"),
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-PL10-16: a cascade dependency reports its discovery note under its own header", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-cascade-member-note-"));
+    try {
+      // arrange
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot,
+        marketplaceName: "mp",
+        pluginName: "hello",
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const duplicate = path.join(
+        marketplaceRoot,
+        "plugins",
+        "some-other-plugin",
+        "skills",
+        "some-other-plugin-tool",
+      );
+      await mkdir(duplicate, { recursive: true });
+      await writeFile(
+        path.join(duplicate, "SKILL.md"),
+        "---\nname: some-other-plugin-tool\n---\n\nBody.\n",
+      );
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "● mp [project]",
+            "  ● hello v0.0.1 (installed)",
+            "  ● some-other-plugin@mp v0.0.1 (installed)",
+            "",
+            "/reload to pick up changes",
+          ].join("\n"),
+        },
+        {
+          message:
+            'Plugin "some-other-plugin" [project] installed; 1 declared component has a note.\n\nskill source "tool" in "skills" elides to generated name "some-other-plugin-tool", already produced by skill source "some-other-plugin-tool"; ignoring duplicate.',
+          severity: "warning",
         },
       ]);
     } finally {
@@ -16770,8 +16835,59 @@ test("D-09-05: a malformed skill degrades the missing dependency and surfaces a 
       assert.equal(outcome.status, "installed");
       assert.ok(outcome.status === "installed");
       assert.ok((outcome.postCommitWarnings ?? []).length > 0);
+      assert.deepStrictEqual(
+        outcome.stagingWarnings?.map((warning) => warning.kind),
+        ["hygiene"],
+      );
       const after = await loadState(locations.extensionRoot);
       assert.equal(after.marketplaces["mp"]?.plugins["secrets-vault"]?.enabled, true);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-PL10-19: a missing dependency keeps bridge hygiene warnings tagged", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-dep-hygiene-"));
+    try {
+      // arrange
+      const { pluginRoot } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "secrets-vault",
+        skills: [{ sourceName: "skill" }, { sourceName: "secrets-vault-skill" }],
+        agents: [{ sourceName: "helper", description: "Helper", body: "Help.\n" }],
+      });
+      await writeFile(
+        path.join(pluginRoot, "agents", "helper.md"),
+        "---\nname: helper\ndescription: Helper\ncolor: blue\n---\n\nHelp.\n",
+      );
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "secrets-vault",
+        ranges: [],
+        requiredBy: "deploy-kit@mp",
+      });
+
+      // assert
+      assert.ok(outcome.status === "installed");
+      assert.deepStrictEqual(
+        outcome.stagingWarnings?.map((warning) => warning.kind),
+        ["discovery", "hygiene"],
+      );
+      assert.deepStrictEqual(outcome.stagingWarnings?.at(-1), {
+        kind: "hygiene",
+        message: "[helper] dropped fields: color",
+      });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -18969,8 +19085,9 @@ for (const orchestrated of [false, true]) {
       });
       await installed(owner, cwd, "lib");
       await publishCatalog(marketplaceRoot, {
-        app: { version: "1.0.0", dependencies: ["lib@^2.0.0"] },
+        app: { version: "1.0.0", dependencies: ["lib@^2.0.0", "zzz"] },
         lib: { version: "2.0.0", mcp: true },
+        zzz: { version: "1.0.0" },
       });
       const adapterPath = locationsFor("project", cwd).mcpAdapterJsonPath;
       await rm(adapterPath, { force: true });
@@ -18997,17 +19114,23 @@ for (const orchestrated of [false, true]) {
       );
       // The cause line is the runner's EISDIR, whose text varies across Node releases.
       assert.deepStrictEqual(
-        notifications.map((notification) => notification.message.split("\n").slice(0, 5)),
+        notifications.map((notification) => ({
+          head: notification.message.split("\n").slice(0, 5),
+          listsUnmaterialized: notification.message.includes("zzz@mp (failed) {dependency failed}"),
+        })),
         orchestrated
           ? []
           : [
-              [
-                "Some plugin operations have failed.",
-                "",
-                "● mp [project]",
-                "  ⊘ app (failed) {dependency failed}",
-                "  ⊘ lib@mp v1.2.0 (failed)",
-              ],
+              {
+                head: [
+                  "Some plugin operations have failed.",
+                  "",
+                  "● mp [project]",
+                  "  ⊘ app (failed) {dependency failed}",
+                  "  ⊘ lib@mp v1.2.0 (failed)",
+                ],
+                listsUnmaterialized: true,
+              },
             ],
       );
       assert.deepStrictEqual(await recordedVersions(cwd), { lib: ["1.2.0", true] });

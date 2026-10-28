@@ -160,7 +160,7 @@ async function resolveLocation(location: string): Promise<string> {
 // ones the child receives, so nothing can swap a location after the check.
 // Pi asks for project trust in every directory under the repository, and the
 // session cancels every dialog, so a location there is refused by name.
-async function resolveSandbox(sandbox: RpcSandbox): Promise<RpcSandbox> {
+export async function resolveRpcSandbox(sandbox: RpcSandbox): Promise<RpcSandbox> {
   const repoRoot = await realpath(REPO_ROOT);
   const tmpRoot = await realpath(tmpdir());
   const resolve = async (location: string): Promise<string> => {
@@ -211,12 +211,14 @@ export function rpcChildEnvironment(
   return environment;
 }
 
-function piArguments(extraExtensions: readonly string[]): string[] {
+export function piArguments(
+  mode: "rpc" | "tui",
+  extraExtensions: readonly string[] = [],
+): string[] {
   const extensions = [EXTENSION_ENTRY, ...extraExtensions];
   return [
     resolvePiRuntime(REPO_ROOT).cliPath,
-    "--mode",
-    "rpc",
+    ...(mode === "rpc" ? ["--mode", "rpc"] : []),
     "--offline",
     "--no-session",
     ...extensions.flatMap((extension) => ["--extension", extension]),
@@ -389,7 +391,7 @@ function spawnPi(
   extraExtensions: readonly string[],
   git?: RpcGitEnvironment,
 ): ChildProcessByStdio<Writable, Readable, Readable> {
-  return spawn(process.execPath, piArguments(extraExtensions), {
+  return spawn(process.execPath, piArguments("rpc", extraExtensions), {
     cwd: sandbox.cwd,
     // Its own process group, so the stops can kill Pi's children too. A dead
     // parent closes stdin, and Pi exits on that.
@@ -425,7 +427,7 @@ function startSession(options: RpcSessionOptions, sandbox: RpcSandbox): SessionS
  * aborted.
  */
 export async function runRpcSession(options: RpcSessionOptions): Promise<RpcSessionResult> {
-  const sandbox = await resolveSandbox(options.sandbox);
+  const sandbox = await resolveRpcSandbox(options.sandbox);
   options.signal?.throwIfAborted();
   return collect(startSession(options, sandbox), options);
 }
@@ -441,7 +443,7 @@ export async function startRpcPi(
   sandbox: RpcSandbox,
   git: RpcGitEnvironment,
 ): Promise<ChildProcessByStdio<Writable, Readable, Readable>> {
-  return spawnPi(await resolveSandbox(sandbox), [], git);
+  return spawnPi(await resolveRpcSandbox(sandbox), [], git);
 }
 
 /** Returns `data.disposition` of a successful prompt response. */

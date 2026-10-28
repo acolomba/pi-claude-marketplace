@@ -142,8 +142,8 @@ Feature: Plugin package dependencies
 
     Examples:
       | lockfile       | note                                                                                                                                    |
-      | yarn.lock      | Skipped: yarn/pnpm lockfiles are not supported (resolution-time hooks bypass --ignore-scripts). Use bun or npm.                         |
-      | pnpm-lock.yaml | Skipped: yarn/pnpm lockfiles are not supported (resolution-time hooks bypass --ignore-scripts). Use bun or npm.                         |
+      | yarn.lock      | The packages it lists were not installed, because it uses a yarn or pnpm lockfile, which plugin installs do not support.               |
+      | pnpm-lock.yaml | The packages it lists were not installed, because it uses a yarn or pnpm lockfile, which plugin installs do not support.               |
       | bun.lockb      | Skipped installing this plugin's dependencies: its bun.lockb is a binary lockfile that cannot be checked; ship a text bun.lock instead. |
 
   Scenario: Updating a plugin installs the packages its new lockfile lists

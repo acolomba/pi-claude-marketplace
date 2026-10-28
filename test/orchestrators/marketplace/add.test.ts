@@ -1300,9 +1300,10 @@ test("marketplace add returns unchanged for an identical recorded source", async
     });
     const declaration = makeCtx();
     const standalone = makeCtx();
+    const completionCache = createCompletionCacheRecorder();
 
     // act
-    const added = await addMarketplace({
+    const added = await addMarketplaceWithCache({
       ctx,
       run,
       scope: "project",
@@ -1310,9 +1311,12 @@ test("marketplace add returns unchanged for an identical recorded source", async
       rawSource: "anthropics/claude-plugins-official",
       gitOps: gitOps1,
       notifications: { mode: "orchestrated" },
+      completionCache: completionCache.cache,
     });
+    completionCache.clearCalls();
+
     const stateBefore = await readFile(locations.stateJsonPath, "utf8");
-    const unchanged = await addMarketplace({
+    const unchanged = await addMarketplaceWithCache({
       ctx: ctx2,
       run: run2,
       scope: "project",
@@ -1320,6 +1324,7 @@ test("marketplace add returns unchanged for an identical recorded source", async
       rawSource: "anthropics/claude-plugins-official",
       gitOps: gitOps2,
       notifications: { mode: "orchestrated" },
+      completionCache: completionCache.cache,
     });
     const configAfterOrchestrated = await pathExists(locations.baseConfigJsonPath);
     await addMarketplace({
@@ -1330,6 +1335,7 @@ test("marketplace add returns unchanged for an identical recorded source", async
       rawSource: "anthropics/claude-plugins-official",
       gitOps: gitOps2,
     });
+    const configBeforeStandalone = await readFile(locations.baseConfigJsonPath, "utf8");
     await addMarketplace({
       ctx: standalone.ctx,
       run: standalone.run,
@@ -1350,8 +1356,13 @@ test("marketplace add returns unchanged for an identical recorded source", async
       { message: "● valid-marketplace [project] (skipped) {already added}" },
     ]);
     assert.deepStrictEqual(gitState2.cloneCalls, []);
+    assert.deepStrictEqual(completionCache.calls, []);
     assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
     assert.strictEqual(configAfterOrchestrated, false);
+    assert.strictEqual(
+      await readFile(locations.baseConfigJsonPath, "utf8"),
+      configBeforeStandalone,
+    );
   });
 });
 
@@ -6780,6 +6791,52 @@ test("AFILE-04 / D-PL2-09: the MCP config notices of the step's installs follow 
           "MCP config comments removed.\n\n" +
           "The project-scope mcp-adapter.json was rewritten to update plugin MCP servers; " +
           "its JSONC comments were removed and everything else in it was kept.",
+        severity: "warning",
+      },
+    ]);
+  });
+});
+
+test("D-PL10-19: tagged hygiene warnings from dependency installs follow the add row", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx(2);
+    const step = recordingDependencyInstall({
+      rows: [DEPENDENCY_INSTALLED_ROW],
+      stagingDiagnostics: [
+        {
+          plugin: "lib",
+          scope: "project",
+          verb: "installed",
+          warnings: [{ kind: "hygiene", message: "[helper] dropped fields: color" }],
+        },
+      ],
+      mcpConfigNotices: [],
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: fixtureMarketplaceDir("valid-marketplace"),
+      installMissingDependencies: step.installMissingDependencies,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● valid-marketplace [project] (added)\n" +
+          "  ● lib@valid-marketplace v1.0.0 (installed) {dependency installed}\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+      {
+        message:
+          'Plugin "lib" [project] installed; 1 staging warning.\n\n' +
+          "[helper] dropped fields: color",
         severity: "warning",
       },
     ]);

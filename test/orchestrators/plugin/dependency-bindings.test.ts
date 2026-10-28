@@ -421,7 +421,7 @@ describe("planCloneSweep", () => {
 });
 
 describe("dependencyRefusal", () => {
-  test("keeps only the failing dependency's row and the error naming it", () => {
+  test("keeps only the failing dependency's row and a typed error naming it", () => {
     // act
     const refusal = dependencyRefusal({ rootKey: "widget@mp", scope: "project" })({
       kind: "constraint",
@@ -429,22 +429,37 @@ describe("dependencyRefusal", () => {
     });
 
     // assert
-    const cause = new DependencyCascadeError(
-      'Dependency "base@mp" has no release tag satisfying ^3.0.0.',
-      "base@mp",
-    );
-    assert.deepStrictEqual(refusal, {
-      rows: [
-        {
-          status: "failed",
-          name: "base@mp",
-          reasons: ["no matching version"],
-          cause,
-          severity: "error",
-          needsReload: false,
+    assert.ok(refusal.cause instanceof DependencyCascadeError);
+    assert.deepStrictEqual(
+      {
+        rows: refusal.rows.map((row) => ({
+          ...row,
+          cause:
+            row.status !== "failed" || row.cause === undefined
+              ? undefined
+              : { name: row.cause.name, message: row.cause.message },
+        })),
+        cause: { message: refusal.cause.message, key: refusal.cause.key },
+      },
+      {
+        rows: [
+          {
+            status: "failed",
+            name: "base@mp",
+            reasons: ["no matching version"],
+            cause: {
+              name: "Error",
+              message: 'Dependency "base@mp" has no release tag satisfying ^3.0.0.',
+            },
+            severity: "error",
+            needsReload: false,
+          },
+        ],
+        cause: {
+          message: 'Dependency "base@mp" has no release tag satisfying ^3.0.0.',
+          key: "base@mp",
         },
-      ],
-      cause,
-    });
+      },
+    );
   });
 });

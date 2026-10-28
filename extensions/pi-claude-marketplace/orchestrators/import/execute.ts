@@ -15,7 +15,11 @@ import {
 import { buildScopeSatisfactionVerdict } from "../../orchestrators/reconcile/dependency-verdict.ts";
 import { enabledRowFromOutcome } from "../../orchestrators/reconcile/notify.ts";
 import { marketplaceSourceClaims, planReconcile } from "../../orchestrators/reconcile/plan.ts";
-import { loadConfig, type PluginConfigEntry } from "../../persistence/config-io.ts";
+import {
+  loadConfig,
+  type PluginConfigEntry,
+  type ScopeConfig,
+} from "../../persistence/config-io.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import {
   writeBatchedConfigEntries,
@@ -949,6 +953,7 @@ function blockToMarketplaceMessage(
       const causeRow: PluginFailedMessage = {
         status: "failed",
         name,
+        marketplaceSubject: true,
         reasons: block.failure.reasons,
         cause: block.failure.cause,
         severity: "error",
@@ -1490,9 +1495,14 @@ type ImportReadPass =
        * D-PL6-17: each recorded marketplace the scope's config claims, mapped to
        * the name the config declares it under.
        */
-      readonly configNames: ReadonlyMap<string, string>;
+      readonly configClaims: ReadonlyMap<string, ConfigMarketplaceClaim>;
     }
   | { readonly kind: "lock-held"; readonly error: StateLockHeldError };
+
+interface ConfigMarketplaceClaim {
+  readonly name: string;
+  readonly layer: "base" | "local";
+}
 
 /**
  * D-PL6-17: the name the scope's merged config uses for each recorded
@@ -1502,18 +1512,27 @@ type ImportReadPass =
  * marketplace directly and the config declares it under another name, the
  * post-pass keeps the config's name, so no later `pending` plans an add.
  */
-function configNamesByRecorded(
+function configClaimsByRecorded(
   config: MergedConfig["marketplaces"],
   recorded: ExtensionState["marketplaces"],
-): ReadonlyMap<string, string> {
-  return new Map(
-    [...marketplaceSourceClaims(config, recorded)].map(([declared, record]) => [record, declared]),
-  );
+): ReadonlyMap<string, ConfigMarketplaceClaim> {
+  const claims = new Map<string, ConfigMarketplaceClaim>();
+  for (const [declared, record] of marketplaceSourceClaims(config, recorded)) {
+    const entry = ownValue(config, declared);
+    if (entry !== undefined) {
+      claims.set(record, { name: declared, layer: entry.source });
+    }
+  }
+
+  return claims;
 }
 
 /** D-PL6-17: the name the post-pass declares a marketplace and its plugins under. */
-function declaredNameFor(configNames: ReadonlyMap<string, string>, marketplace: string): string {
-  return configNames.get(marketplace) ?? marketplace;
+function declaredNameFor(
+  configClaims: ReadonlyMap<string, ConfigMarketplaceClaim>,
+  marketplace: string,
+): string {
+  return configClaims.get(marketplace)?.name ?? marketplace;
 }
 
 /**
@@ -1544,7 +1563,7 @@ async function readPassForImport(
           kind: "planned",
           state: tx.state,
           plan: planReconcile(desiredConfigFor(scopePlan), tx.state, scope, verdict),
-          configNames: configNamesByRecorded(config.merged.marketplaces, tx.state.marketplaces),
+          configClaims: configClaimsByRecorded(config.merged.marketplaces, tx.state.marketplaces),
         };
       },
       { loadState: async () => loadState(scope, opts.cwd) },
@@ -1841,7 +1860,7 @@ async function executeScopedPlan(
   // marketplace for REMOVAL and its plugins for UNINSTALL. The repair makes
   // a re-run converge CONSTRUCTIVELY (re-declare what import installed)
   // instead of destructively.
-  await writeBatchedConfigForScope(opts, result, scopePlan, read.configNames);
+  await writeBatchedConfigForScope(opts, result, scopePlan, read.configClaims);
 }
 
 /**
@@ -1871,7 +1890,7 @@ async function executeScopedPlan(
  * marketplace name, preserving the `samePlannedSource` contract.
  *
  * D-PL6-17: each marketplace and plugin key names the marketplace the way the
- * scope's config already names it (`configNames`). A config that reaches a
+ * scope's config already names it (`configClaims`). A config that reaches a
  * recorded marketplace through another name is the planner's steady state, so
  * the post-pass keeps that name rather than declaring the recorded name beside
  * it, which would leave the other name claiming nothing.
@@ -1887,10 +1906,10 @@ async function writeBatchedConfigForScope(
   opts: ImportClaudeSettingsOptions,
   result: MutableImportResult,
   scopePlan: ScopedImportPlan,
-  configNames: ReadonlyMap<string, string>,
+  configClaims: ReadonlyMap<string, ConfigMarketplaceClaim>,
 ): Promise<void> {
   const scope = scopePlan.scope;
-  const { ensure, repair } = buildBatchedPatchForScope(result, scopePlan, configNames);
+  const { ensure, repair } = buildBatchedPatchForScope(result, scopePlan, configClaims);
   if (isEmptyPatch(ensure) && isEmptyPatch(repair)) {
     return;
   }
@@ -1913,11 +1932,17 @@ async function writeBatchedConfigForScope(
       }
 
       const current = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 as const };
+      const layerEnsure = await stampReaddedMarketplaceWhereLocalDeclares(
+        locations,
+        ensure,
+        configClaims,
+        current,
+      );
       const baseEnsure = await stampReenabledWhereLocalDeclares(
         locations,
         result,
-        ensure,
-        configNames,
+        layerEnsure,
+        configClaims,
       );
       // WR-01: repairs apply ONLY when the key is absent from the loaded
       // config (already-declared entries are untouched -- byte stability).
@@ -1949,6 +1974,55 @@ async function writeBatchedConfigForScope(
 }
 
 /**
+ * D-PL10-25: a re-add must replace the source in the layer whose declaration
+ * won the read-pass merge. Otherwise a local declaration keeps overriding the
+ * repaired base entry and the next import repeats the same re-add. Preserve
+ * every other local entry, and leave the base declaration byte-stable when it
+ * already supplies the marketplace needed by base-layer plugin declarations.
+ */
+async function stampReaddedMarketplaceWhereLocalDeclares(
+  locations: ScopedLocations,
+  ensure: ImportConfigPatch,
+  configClaims: ReadonlyMap<string, ConfigMarketplaceClaim>,
+  currentBase: ScopeConfig,
+): Promise<ImportConfigPatch> {
+  const localCfg = await loadConfig(locations.localConfigJsonPath);
+  if (localCfg.status !== "valid") {
+    return ensure;
+  }
+
+  const marketplaces = { ...ensure.marketplaces };
+  const localMarketplaces: ImportConfigPatch["marketplaces"] = {};
+  for (const claim of configClaims.values()) {
+    if (claim.layer !== "local") {
+      continue;
+    }
+
+    const patch = ownValue(marketplaces, claim.name);
+    if (patch === undefined || ownValue(localCfg.config.marketplaces, claim.name) === undefined) {
+      continue;
+    }
+
+    setOwn(localMarketplaces, claim.name, patch);
+    if (ownValue(currentBase.marketplaces, claim.name) !== undefined) {
+      Reflect.deleteProperty(marketplaces, claim.name);
+    }
+  }
+
+  if (Object.keys(localMarketplaces).length === 0) {
+    return ensure;
+  }
+
+  await writeBatchedConfigEntries(
+    localCfg.config,
+    locations.localConfigJsonPath,
+    locations.scopeRoot,
+    { marketplaces: localMarketplaces, plugins: {} },
+  );
+  return { ...ensure, marketplaces };
+}
+
+/**
  * D-04-07 / D-103-16: the enable path writes `{ enabled: true }` to the config
  * that declares the key, and the disable verb's `{ enabled: false }` may live
  * in the local config, whose explicit `enabled` wins over the base entry's
@@ -1965,7 +2039,7 @@ async function stampReenabledWhereLocalDeclares(
   locations: ScopedLocations,
   result: MutableImportResult,
   ensure: ImportConfigPatch,
-  configNames: ReadonlyMap<string, string>,
+  configClaims: ReadonlyMap<string, ConfigMarketplaceClaim>,
 ): Promise<ImportConfigPatch> {
   const plugins = { ...ensure.plugins };
   for (const installed of result.installedPlugins) {
@@ -1973,7 +2047,7 @@ async function stampReenabledWhereLocalDeclares(
       continue;
     }
 
-    const marketplace = declaredNameFor(configNames, installed.marketplace);
+    const marketplace = declaredNameFor(configClaims, installed.marketplace);
     const key = `${installed.plugin}@${marketplace}`;
     // eslint-disable-next-line no-await-in-loop -- each stamp reads the previous stamp's write
     const localCfg = await loadConfig(locations.localConfigJsonPath);
@@ -1999,7 +2073,7 @@ async function stampReenabledWhereLocalDeclares(
 function buildBatchedPatchForScope(
   result: MutableImportResult,
   scopePlan: ScopedImportPlan,
-  configNames: ReadonlyMap<string, string>,
+  configClaims: ReadonlyMap<string, ConfigMarketplaceClaim>,
 ): { ensure: ImportConfigPatch; repair: ImportConfigPatch } {
   // Map marketplace name -> verbatim rawSource so the batched patch records
   // `source: rawSource` exactly as the user/Claude settings declared it
@@ -2023,7 +2097,7 @@ function buildBatchedPatchForScope(
       continue;
     }
 
-    setOwn(marketplaces, declaredNameFor(configNames, added.marketplace), { source: rawSource });
+    setOwn(marketplaces, declaredNameFor(configClaims, added.marketplace), { source: rawSource });
   }
 
   const plugins: Record<string, Partial<PluginConfigEntry>> = {};
@@ -2032,7 +2106,7 @@ function buildBatchedPatchForScope(
       continue;
     }
 
-    const key = `${installed.plugin}@${declaredNameFor(configNames, installed.marketplace)}`;
+    const key = `${installed.plugin}@${declaredNameFor(configClaims, installed.marketplace)}`;
     // D-04-07: a promotion that enabled a disabled record declares it the way
     // the enable path does; every other install declares the bare key.
     setOwn(plugins, key, installed.reenabled === true ? { enabled: true } : {});
@@ -2040,7 +2114,7 @@ function buildBatchedPatchForScope(
 
   return {
     ensure: { marketplaces, plugins },
-    repair: buildRepairPatchForScope(result, scopePlan, rawSourceByName, configNames),
+    repair: buildRepairPatchForScope(result, scopePlan, rawSourceByName, configClaims),
   };
 }
 
@@ -2054,7 +2128,7 @@ function buildRepairPatchForScope(
   result: MutableImportResult,
   scopePlan: ScopedImportPlan,
   rawSourceByName: ReadonlyMap<string, string>,
-  configNames: ReadonlyMap<string, string>,
+  configClaims: ReadonlyMap<string, ConfigMarketplaceClaim>,
 ): ImportConfigPatch {
   const marketplaces: ImportConfigPatch["marketplaces"] = {};
   for (const skipped of result.skippedExistingMarketplaces) {
@@ -2067,7 +2141,9 @@ function buildRepairPatchForScope(
       continue;
     }
 
-    setOwn(marketplaces, declaredNameFor(configNames, skipped.marketplace), { source: rawSource });
+    setOwn(marketplaces, declaredNameFor(configClaims, skipped.marketplace), {
+      source: rawSource,
+    });
   }
 
   const plugins: Record<string, Record<string, never>> = {};
@@ -2076,7 +2152,7 @@ function buildRepairPatchForScope(
       continue;
     }
 
-    setOwn(plugins, `${skipped.plugin}@${declaredNameFor(configNames, skipped.marketplace)}`, {});
+    setOwn(plugins, `${skipped.plugin}@${declaredNameFor(configClaims, skipped.marketplace)}`, {});
   }
 
   return { marketplaces, plugins };

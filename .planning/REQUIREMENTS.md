@@ -50,10 +50,10 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 - [ ] **CAS-05**: A refusal for a non-root cascade member names every declarer that required it, and names and ranges in those refusals are truncated as Claude Code truncates them (PARITYGV-01 b2, b3)
 - [ ] **CAS-06**: The offline refusal of an install that would move a git dependency names the next step (UPDDEP-01 b2)
 - [ ] **CAS-07**: A hold row's cause never interpolates an unbounded catalog `version` string (VERSTR-01)
-- [ ] **CAS-08**: The routes D-PL3-15 left with one failed row (the root's own ledger failure, UPD-DEP-D1 plan-step failures, a catalog lookup that throws mid-walk) also give a row to each member that resolved but did not install (CLOSUREROW-01 residue)
-- [ ] **MIM-05**: A partial rollback of `apply`'s missing-dependency (MISS-01) install shows the per-phase detail `install` shows, like the other import and apply rows MIM-03 covers (D-PL6-05 residue; needs Phase 4's outcome type)
-- [ ] **XPH-01**: Wave-1 cross-phase residue is closed after the merge: the add-time MISS-01 step routes its post-commit hygiene warnings through the tagged warning channel (2.30); `import`'s own `<mp>@<mp>` row and the retired D-76-04 citation in `orchestrators/import/marketplaces.ts` are fixed (5.27, 5.28); and scenarios pin the git-revision post-move read (2.19), the reinstall `{status} on {url}` frame (7.16), and completion after `market` (7.15, with the completion harness it needs); `apply` and the load re-add a marketplace in place on a declared source change, as `import` does under D-PL6-19, the official marketplace's fallback source reads as up to date as upstream's `sourceIsFallback` does, and a local-layer declaration of an old source no longer outlives an import re-add; a pty-backed `tui` cucumber driver gives the background autoupdate pass, its wait cap, and its notice dedupe scenarios (D-PL8 follow-ups); and the package-install tree kill gets a scenario
-- [ ] **XPH-02**: The babysit-review residue across phases is closed: the `marketplace update` cascade gives an occupied agent target no reason, as the direct update path does (D-PL4-09); `fetch` and `update` read an unrecognised network error the same way; a dependency move during `update` or `apply` keeps its staging warnings and MCP notices; a forced reinstall keeps or reports a foreign agents-index row whose generated name it stages; a failed install's root cause redacts absolute paths as its members' causes do; the commit-time occupied-agent refusal is typed and shows the file name only, as the preview refusal does; install-cascade members show their package note (WRN-02); a post-clone invalid manifest no longer suggests retrying; and a plugin with only a `yarn.lock` or `pnpm-lock.yaml` behaves as Claude Code does
+- [x] **CAS-08**: The routes D-PL3-15 left with one failed row (the root's own ledger failure, UPD-DEP-D1 plan-step failures, a catalog lookup that throws mid-walk) also give a row to each member that resolved but did not install (CLOSUREROW-01 residue)
+- [x] **MIM-05**: A partial rollback of `apply`'s missing-dependency (MISS-01) install shows the per-phase detail `install` shows, like the other import and apply rows MIM-03 covers (D-PL6-05 residue; needs Phase 4's outcome type)
+- [x] **XPH-01**: Wave-1 cross-phase residue is closed after the merge: the add-time MISS-01 step routes its post-commit hygiene warnings through the tagged warning channel (2.30); `import`'s own `<mp>@<mp>` row and the retired D-76-04 citation in `orchestrators/import/marketplaces.ts` are fixed (5.27, 5.28); and scenarios pin the git-revision post-move read (2.19), the reinstall `{status} on {url}` frame (7.16), and completion after `market` (7.15, with the completion harness it needs); `apply` and the load re-add a marketplace in place on a declared source change, as `import` does under D-PL6-19, the official marketplace's fallback source reads as up to date as upstream's `sourceIsFallback` does, and a local-layer declaration of an old source no longer outlives an import re-add; a pty-backed `tui` cucumber driver gives the background autoupdate pass, its wait cap, and its notice dedupe scenarios (D-PL8 follow-ups); and the package-install tree kill gets a scenario
+- [x] **XPH-02**: The babysit-review residue across phases is closed: the `marketplace update` cascade gives an occupied agent target no reason, as the direct update path does (D-PL4-09); `fetch` and `update` read an unrecognised network error the same way; a dependency move during `update` or `apply` keeps its staging warnings and MCP notices; a forced reinstall keeps or reports a foreign agents-index row whose generated name it stages; a failed install's root cause redacts absolute paths as its members' causes do; the commit-time occupied-agent refusal is typed and shows the file name only, as the preview refusal does; install-cascade members show their package note (WRN-02); a post-clone invalid manifest no longer suggests retrying; and a plugin with only a `yarn.lock` or `pnpm-lock.yaml` behaves as Claude Code does
 
 ### Dependency resolver (RSV)
 
@@ -106,9 +106,9 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 
 ### Tests and harness (TST)
 
-- [ ] **TST-01**: Every open LCTEST-01 scenario and unit gap has a scenario or unit case, or is recorded as unit-only by a harness limit (LCTEST-01)
-- [ ] **TST-02**: The LCHARN-01 harness items are fixed: clone listing, data-directory listing, unknown run tokens, the rules-doc conflict, the unpinned-mirror revision, the `list` filter fixture, and the `browse` fixed waits; the network guard is built or recorded as declined (LCHARN-01)
-- [ ] **TST-03**: `install-flow.test.ts`'s `conflictingMarketplaceRecord` fixture has a loadable manifest, through a seeding helper that writes a record and its manifest together (TEST-PHANTOMMP-01)
+- [x] **TST-01**: Every open LCTEST-01 scenario and unit gap has a scenario or unit case, or is recorded as unit-only by a harness limit (LCTEST-01)
+- [x] **TST-02**: The LCHARN-01 harness items are fixed: clone listing, data-directory listing, unknown run tokens, the rules-doc conflict, the unpinned-mirror revision, the `list` filter fixture, and the `browse` fixed waits; the network guard is built or recorded as declined (LCHARN-01)
+- [x] **TST-03**: `install-flow.test.ts`'s `conflictingMarketplaceRecord` fixture has a loadable manifest, through a seeding helper that writes a record and its manifest together (TEST-PHANTOMMP-01)
 
 ### Cleanup and docs (CLN)
 
@@ -159,10 +159,10 @@ None.
 | CAS-05 | Phase 3 | Pending |
 | CAS-06 | Phase 3 | Pending |
 | CAS-07 | Phase 3 | Pending |
-| CAS-08 | Phase 10 | Pending |
-| MIM-05 | Phase 10 | Pending |
-| XPH-01 | Phase 10 | Pending |
-| XPH-02 | Phase 10 | Pending |
+| CAS-08 | Phase 10 | Complete |
+| MIM-05 | Phase 10 | Complete |
+| XPH-01 | Phase 10 | Complete |
+| XPH-02 | Phase 10 | Complete |
 | RSV-01 | Phase 4 | Complete |
 | RSV-02 | Phase 4 | Complete |
 | RSV-03 | Phase 4 | Complete |
@@ -194,9 +194,9 @@ None.
 | PKD-01 | Phase 9 | Complete |
 | PKD-02 | Phase 9 | Complete |
 | PKD-03 | Phase 9 | Complete |
-| TST-01 | Phase 10 | Pending |
-| TST-02 | Phase 10 | Pending |
-| TST-03 | Phase 10 | Pending |
+| TST-01 | Phase 10 | Complete |
+| TST-02 | Phase 10 | Complete |
+| TST-03 | Phase 10 | Complete |
 | CLN-01 | Phase 11 | Pending |
 | CLN-02 | Phase 11 | Pending |
 | CLN-03 | Phase 11 | Pending |

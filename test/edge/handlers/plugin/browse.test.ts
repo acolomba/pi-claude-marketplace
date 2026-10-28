@@ -8,7 +8,7 @@
 //     info, enable, disable
 
 import assert from "node:assert/strict";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
@@ -31,9 +31,34 @@ import type { ExtensionState } from "../../../../extensions/pi-claude-marketplac
 import type { ExtensionCommandContext } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
+type PersistMarketplace = typeof mergeMarketplaceIntoState;
 
 interface HermeticScope {
   readonly cwd: string;
+}
+
+interface RenderBarrier {
+  readonly rendered: Promise<void>;
+  readonly requestRender: () => void;
+}
+
+function pluginRenderBarrier(): RenderBarrier {
+  let resolveRendered = (): void => {};
+
+  const rendered = new Promise<void>((resolve) => {
+    resolveRendered = resolve;
+  });
+
+  let requests = 0;
+  return {
+    rendered,
+    requestRender: () => {
+      requests += 1;
+      if (requests === 2) {
+        resolveRendered();
+      }
+    },
+  };
 }
 
 async function createHermeticScope(t: TestContext, name: string): Promise<HermeticScope> {
@@ -62,14 +87,22 @@ async function seedMarketplace(
   cwd: string,
   marketplaceName: string,
   plugins: MarketplaceRecord["plugins"] = {},
+  persistMarketplace: PersistMarketplace = mergeMarketplaceIntoState,
 ): Promise<void> {
   const locations = locationsFor("project", cwd);
+  const record = marketplaceRecordIn(cwd, marketplaceName, plugins);
+  const manifest = {
+    name: marketplaceName,
+    plugins: Object.entries(plugins).map(([name, plugin]) => ({
+      name,
+      source: `./plugins/${name}`,
+      version: plugin.version,
+    })),
+  };
   await mkdir(locations.extensionRoot, { recursive: true });
-  await mergeMarketplaceIntoState(
-    locations.extensionRoot,
-    marketplaceName,
-    marketplaceRecordIn(cwd, marketplaceName, plugins),
-  );
+  await mkdir(path.dirname(record.manifestPath), { recursive: true });
+  await writeFile(record.manifestPath, JSON.stringify(manifest), "utf8");
+  await persistMarketplace(locations.extensionRoot, marketplaceName, record);
 }
 
 function createMockActionHandlers(): {
@@ -259,6 +292,31 @@ test("TUI mode with no marketplaces emits structured (no marketplaces) notificat
   verify(ui);
 });
 
+test("browse fixtures write a loadable manifest before their state record", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "manifest-first");
+  const pluginRecord = buildInstalledPluginRecord(
+    { version: "1.0.0" },
+    { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+  ) as unknown as MarketplaceRecord["plugins"][string];
+  let manifestAtPersist: unknown;
+  const persistMarketplace: PersistMarketplace = async (extensionRoot, marketplaceName, record) => {
+    const manifestPath = record.manifestPath;
+    assert.ok(typeof manifestPath === "string");
+    manifestAtPersist = JSON.parse(await readFile(manifestPath, "utf8")) as unknown;
+    await mergeMarketplaceIntoState(extensionRoot, marketplaceName, record);
+  };
+
+  // act
+  await seedMarketplace(scope.cwd, "official", { "test-plugin": pluginRecord }, persistMarketplace);
+
+  // assert
+  assert.deepStrictEqual(manifestAtPersist, {
+    name: "official",
+    plugins: [{ name: "test-plugin", source: "./plugins/test-plugin", version: "1.0.0" }],
+  });
+});
+
 test("TUI mode with cancel (null result) invokes no action handler", async (t) => {
   // arrange
   const run = runWithNothingLoaded();
@@ -407,9 +465,6 @@ test("TUI mode exercises custom UI factory, render, invalidate, handleInput, and
     { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
   ) as unknown as MarketplaceRecord["plugins"][string];
   await seedMarketplace(scope.cwd, "official", { "test-plugin": pluginRecord });
-  const manifestPath = marketplaceRecordIn(scope.cwd, "official").manifestPath;
-  await mkdir(path.dirname(manifestPath), { recursive: true });
-  await writeFile(manifestPath, JSON.stringify({ name: "official", plugins: [] }), "utf8");
 
   const { handlers } = createMockActionHandlers();
   const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
@@ -432,7 +487,8 @@ test("TUI mode exercises custom UI factory, render, invalidate, handleInput, and
   const factory = customFactory.value;
   assert.ok(factory !== undefined);
   let capturedResult: unknown;
-  const tui = { requestRender: () => {} } as unknown as Parameters<typeof factory>[0];
+  const plugins = pluginRenderBarrier();
+  const tui = { requestRender: plugins.requestRender } as unknown as Parameters<typeof factory>[0];
   const theme = {
     fg: (_c: string, s: string) => s,
     bold: (s: string) => s,
@@ -446,7 +502,7 @@ test("TUI mode exercises custom UI factory, render, invalidate, handleInput, and
   comp.invalidate();
   // Press Enter to open the marketplace and execute pluginLoader
   comp.handleInput?.("\r");
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await plugins.rendered;
   // Press Enter to open actions for test-plugin
   comp.handleInput?.("\r");
   // Press Enter on first action (Uninstall) to trigger onSelect -> done(r)
@@ -494,7 +550,8 @@ test("TUI mode pluginLoader fallback when marketplace block is missing", async (
 
   const factory = customFactory.value;
   assert.ok(factory !== undefined);
-  const tui = { requestRender: () => {} } as unknown as Parameters<typeof factory>[0];
+  const plugins = pluginRenderBarrier();
+  const tui = { requestRender: plugins.requestRender } as unknown as Parameters<typeof factory>[0];
   const theme = {
     fg: (_c: string, s: string) => s,
     bold: (s: string) => s,
@@ -508,7 +565,7 @@ test("TUI mode pluginLoader fallback when marketplace block is missing", async (
   await rm(path.join(locations.extensionRoot, "state.json"));
 
   comp.handleInput?.("\r");
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await plugins.rendered;
 
   verify(ctx);
   verify(ui);

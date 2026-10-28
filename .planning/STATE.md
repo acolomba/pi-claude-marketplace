@@ -5,17 +5,17 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 11
 current_phase_name: Cleanup, Split, and Docs
 status: executing
-stopped_at: Phase 4 complete, ready to verify Phase 1
-last_updated: "2026-10-27T22:09:58.455Z"
-last_activity: 2026-10-27
-last_activity_desc: Phase 4 complete, transitioned to Phase 1
-state_head: 4ce415254e89c39c0257c78977f1c047838c0d8c
+stopped_at: Phase 10 merged; Phase 11 plans 11-06 and 11-09 remain
+last_updated: "2026-10-28T04:30:00.000Z"
+last_activity: 2026-10-28
+last_activity_desc: Phase 10 verified complete; Phase 11 is 10/12 plans complete
+state_head: 4132f93c
 progress:
   total_phases: 11
-  completed_phases: 1
-  total_plans: 72
-  completed_plans: 60
-  percent: 9
+  completed_phases: 10
+  total_plans: 79
+  completed_plans: 77
+  percent: 91
 ---
 
 # Project State
@@ -27,14 +27,14 @@ See: `.planning/PROJECT.md` (updated 2026-10-22 at the lifecycle-coverage start)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 07 — Git Errors and Lock Discipline
+**Current focus:** Phase 11 — Cleanup, Split, and Docs
 
 ## Current Position
 
-Phase: 11 (Cleanup, Split, and Docs) — READY TO EXECUTE
-Plan: 12
-Status: Ready to execute
-Last activity: 2026-10-27 — Completed quick task 261027-9lp: agent-target refusal redaction and update reason
+Phase: 11 — Cleanup, Split, and Docs
+Plan: 10 of 12 complete; next 11-06
+Status: Executing after Phase 10 integration
+Last activity: 2026-10-28 — Phase 10 verified complete; Phase 11 barrier released
 
 
 ### mcp-4 closeout
@@ -188,7 +188,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-gvt | GV-01: record plugins at a range-selected release tag as Claude Code does, the tag semver kept as resolvedVersion | 2026-10-26 | 2638b001 | complete | [261026-gvt-record-plugins-at-release-tags-as-claude-code](./quick/261026-gvt-record-plugins-at-release-tags-as-claude-code/) |
 | 261026-glv | GV-01: an update with no tag drops the tag commit from the record; plugin directory plugins pick no release tag and their listed copy answers the range | 2026-10-26 | 33c9ac69 | complete | [261026-glv-match-claude-code-on-untagged-updates-an](./quick/261026-glv-match-claude-code-on-untagged-updates-an/) |
 | 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
-**Stopped at:** Phase 4 complete, ready to verify Phase 1
+**Stopped at:** Completed 10-07-PLAN.md; awaiting Phase 10 verification
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -400,6 +400,9 @@ archived milestone artifacts.
 | Phase 29 P12 | 70 min | 3 tasks | 34 files |
 | Phase 29 P13 | 48 min | 3 tasks | 44 files |
 | Phase 29 P14 | 20 min | 2 tasks | 9 files |
+| Phase 10 P05 | 59min | 3 tasks | 37 files |
+| Phase 10 P06 | 28min | 3 tasks | 14 files |
+| Phase 10 P07 | 15min | 3 tasks | 4 files |
 
 ## Decisions
 
@@ -599,6 +602,13 @@ archived milestone artifacts.
 - [Phase 29]: The cascade failure classifier reads the errno a BridgeStagingError carries on its cause, so an unreadable plugin source is permission denied (also in the autoupdate cascade)
 - [Phase 29]: apply runs growth-only moves through convergePlugin with rematerialize (skipSameRevision off, overwrite off) and reports them with the plugin-backfilled row; the load-time backfill, its stamp gate and EXTENSION_VERSION are deleted, lastReconciledExtensionVersion stays readable and nothing writes it (D-10, D-13, D-25)
 - [Phase 29]: README.md's dependents sentence says apply reinstalls an uninstalled dependency a dependent still declares and disables the dependents only if that install fails; the APL-D1 and APL-D2 rows record the read-only load and the NFR-2 amendment
+- [Phase 10]: Typed lifecycle diagnostics remain structured until outcome rendering.
+- [Phase 10]: Malformed cloned manifests use content-failure framing without transport retry guidance.
+- [Phase 10]: Yarn and pnpm refusal notes require packages listed in package.json.
+- [Phase 10]: A no-op apply is write-free only when the raw config and state bytes both remain identical.
+- [Phase 10]: Unit-only lifecycle rows require a concrete public-harness limitation and an exact owner test.
+- [Phase 10]: Package process-tree coverage stays unit-only because the public 60-second timeout cannot be shortened without a forbidden test-only production seam.
+- [Phase 10]: The Node-only network preload is declined because it cannot govern git or credential-helper subprocesses.
 
 ### mcp-4 decisions
 
@@ -805,3 +815,9 @@ in the phase deferred items. The milestone remains open for audit and archival.
   last `@` (D-76-04), Claude Code at the first; a parity decision for later.
 - [Milestone] Phases 1-7 read stale verification (later phases touched files
   their reports cover); the milestone audit must re-verify them.
+
+## Session Continuity
+
+Last session: 2026-10-28T03:02:08.717Z
+Stopped at: Phase 10 verified complete; Phase 11 execution continues in its separate worktree
+Resume file: None

@@ -407,6 +407,12 @@ test("a materialized member's outcome carries what its own ledger summary report
     ...barBase,
     version: "1.2.3",
     stagedAgentNames: ["bar-agent"],
+    discoveryWarnings: [
+      {
+        kind: "discovery",
+        message: "The packages it lists were not installed.",
+      },
+    ],
     resolved: {
       ...barBase.resolved,
       pluginRoot: path.join(environment.cwd, "bar-root"),
@@ -454,6 +460,12 @@ test("a materialized member's outcome carries what its own ledger summary report
       declaresWorkflows: false,
       pluginRoot: path.join(environment.cwd, "bar-root"),
       hooksConfigPath: "hooks/hooks.json",
+      discoveryWarnings: [
+        {
+          kind: "discovery",
+          message: "The packages it lists were not installed.",
+        },
+      ],
       fellBackToCurrentCopy: false,
       reEnabledFromRecord: false,
     },

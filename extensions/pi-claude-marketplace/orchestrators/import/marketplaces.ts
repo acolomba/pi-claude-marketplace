@@ -49,7 +49,7 @@ function nestedMarketplaceSource(src: Record<string, unknown>): string | undefin
     }
 
     case "github": {
-      // The @ref form folds into a github source with ref (D-76-04).
+      // D-PL5-13: the @ref form folds into a github source with ref.
       if (typeof src.repo !== "string") {
         return undefined;
       }

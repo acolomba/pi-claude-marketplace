@@ -140,12 +140,12 @@ Feature: Marketplace update
     @url
     Examples:
       | source kind | source                           | cause chain                                                                                                                      |
-      | url         | https://{git host}/acme/zeta.git | Marketplace "zeta" clone advanced but manifest could not be persisted., marketplace.json schema invalid: /plugins: must be array |
+      | url         | https://{git host}/acme/zeta.git | Failed to update marketplace "zeta"., marketplace.json schema invalid: /plugins: must be array |
 
     @github
     Examples:
       | source kind | source    | cause chain                                                                                                                      |
-      | github      | acme/zeta | Marketplace "zeta" clone advanced but manifest could not be persisted., marketplace.json schema invalid: /plugins: must be array |
+      | github      | acme/zeta | Failed to update marketplace "zeta"., marketplace.json schema invalid: /plugins: must be array |
 
   Scenario Outline: A bare update refreshes the only populated scope
     Given the marketplace "tools" is published as a <source kind> source

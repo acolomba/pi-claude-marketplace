@@ -5,7 +5,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdir, readFile, rm, stat } from "node:fs/promises";
+import { chmod, mkdir, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { Given } from "@cucumber/cucumber";
@@ -53,6 +53,22 @@ Given(
     );
     assert.deepStrictEqual([error.code, error.syscall], ["EISDIR", "read"]);
     this.recordErrorMessage("{mcp-adapter.json read error}", error.message);
+  },
+);
+
+// The configuration remains readable during update preparation. Its parent becomes
+// read-only before the command, so the atomic replacement fails during commit.
+Given(
+  "the {word} scope directory that holds mcp-adapter.json is read-only",
+  async function (this: ScenarioWorld, scope: string) {
+    const file = mcpAdapterFile(this, scope);
+    const root = path.dirname(file);
+    await writeCommentedMcpConfig(file);
+    this.onRelease(() => rm(file, { force: true }));
+    await chmod(root, 0o555);
+    this.onRelease(() => chmod(root, 0o755));
+    assert.strictEqual((await stat(root)).mode & 0o777, 0o555);
+    assert.match(await readFile(file, "utf8"), /^\/\/ /u);
   },
 );
 

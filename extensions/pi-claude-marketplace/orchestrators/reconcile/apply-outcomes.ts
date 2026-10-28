@@ -160,6 +160,7 @@ export interface PluginInstalledOutcome
    * surfacing channel.
    */
   readonly postCommitWarnings?: readonly string[];
+  readonly stagingWarnings?: readonly StagingWarning[];
 }
 
 /**
@@ -922,10 +923,12 @@ export function stagingDiagnosticsOf(outcomes: readonly PerEntryOutcome[]): Stag
     .map(stagingDiagnosticOf);
 }
 
-type StagingOutcome = PluginConvergedOutcome | PluginBackfilledOutcome | PluginEnabledOutcome;
+type StagingOutcome =
+  PluginInstalledOutcome | PluginConvergedOutcome | PluginBackfilledOutcome | PluginEnabledOutcome;
 
 function isStagingOutcome(outcome: PerEntryOutcome): outcome is StagingOutcome {
   return (
+    outcome.kind === "plugin-installed" ||
     outcome.kind === "plugin-converged" ||
     outcome.kind === "plugin-backfilled" ||
     outcome.kind === "plugin-enabled"
@@ -943,6 +946,8 @@ function stagingDiagnosticOf(outcome: StagingOutcome): StagingDiagnostic {
 
 function stagingVerbOf(outcome: StagingOutcome): StagingDiagnostic["verb"] {
   switch (outcome.kind) {
+    case "plugin-installed":
+      return "installed";
     case "plugin-converged":
       return outcome.row.status === "failed" ? "update failed" : "updated";
     case "plugin-backfilled":

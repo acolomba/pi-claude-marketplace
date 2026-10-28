@@ -126,6 +126,7 @@ export async function materializeLatestVersion(
       declaresAgents: false,
       declaresMcp: false,
       declaresWorkflows: false,
+      ...settleWarningsFirst(settled, undefined),
       // D-PL1-16: the dependencies installed before the refusal rewrote the file.
       ...settleNoticesFirst(settled, undefined),
     };
@@ -159,7 +160,19 @@ export async function materializeLatestVersion(
  * through `swapAfterSettle`, so no notice is dropped for want of a row.
  */
 function reportsChanges(settled: UpdateDependencySettlement): boolean {
-  return settled.rows.length > 0 || (settled.mcpConfigNotices ?? []).length > 0;
+  return (
+    settled.rows.length > 0 ||
+    (settled.mcpConfigNotices ?? []).length > 0 ||
+    (settled.stagingWarnings ?? []).length > 0
+  );
+}
+
+function settleWarningsFirst(
+  settled: UpdateDependencySettlement,
+  own: readonly StagingWarning[] | undefined,
+): Pick<PluginUpdateFailedOutcome, "stagingWarnings"> {
+  const warnings = [...(settled.stagingWarnings ?? []), ...(own ?? [])];
+  return warnings.length > 0 ? { stagingWarnings: warnings } : {};
 }
 
 /**
@@ -222,6 +235,7 @@ async function swapAfterSettle(
     return {
       ...outcome,
       ...dependencyRowsMember(settled),
+      ...settleWarningsFirst(settled, ownWarnings(outcome)),
       ...settleNoticesFirst(settled, ownNotices(outcome)),
     };
   } catch (err) {
@@ -238,7 +252,7 @@ async function swapAfterSettle(
       declaresMcp: false,
       declaresWorkflows: false,
       // D-PL1-14: the warnings of the handles prepared before the throw.
-      ...reportedStagingWarnings(report),
+      ...settleWarningsFirst(settled, report.stagingWarnings),
       ...settleNoticesFirst(settled, undefined),
     };
   }
@@ -254,6 +268,10 @@ function dependencyRowsMember(settled: UpdateDependencySettlement): {
 /** The swap outcome's own MCP config notices; only its updated and failed arms carry any. */
 function ownNotices(outcome: UpdateRunOutcome): readonly McpConfigNotice[] | undefined {
   return "mcpConfigNotices" in outcome ? outcome.mcpConfigNotices : undefined;
+}
+
+function ownWarnings(outcome: UpdateRunOutcome): readonly StagingWarning[] | undefined {
+  return "stagingWarnings" in outcome ? outcome.stagingWarnings : undefined;
 }
 
 /**

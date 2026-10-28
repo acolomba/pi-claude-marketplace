@@ -144,20 +144,26 @@ function isRemoteNotFound(error: Error): boolean {
  *   - a remote `NotFoundError` (a ref or object the remote does not have) ->
  *     `rule.missingRef`. With no `missingRef`, it stays unclassified, so a
  *     local read that finds no ref on a clone already on disk is never
- *     reported as a repository the host lacks.
+ *     reported as a repository the host lacks;
+ *   - an otherwise unclassified error without an errno code -> `network
+ *     error` when `rule.unknown` requests that git-operation fallback. An
+ *     error with an unrecognized filesystem code stays available to the
+ *     caller's local filesystem ladder.
  *
  * `frame` is `{status} on {url}` for a classified non-auth HTTP status, set
  * only when `remoteUrl` is passed, because a reason token cannot carry either
  * (UPD-11, ADD-10). `remoteUrl` is rebuilt to the URL the fetch sent: the
  * fetch already went out, so the GitHub base override is valid here. Returns
- * undefined for any other throw, so each caller keeps its own fallthrough.
- * The error behind a cleanup leak is the one classified (INR-02).
+ * Returns undefined for non-Errors and errors with an unrecognized code, so
+ * each caller keeps its own filesystem fallthrough. The error behind a
+ * cleanup leak is the one classified (INR-02).
  */
 export function classifyGitFailure(
   thrown: unknown,
   rule: {
     readonly notFound: "source missing" | "network error";
     readonly missingRef?: "source missing";
+    readonly unknown?: "network error";
   },
   remoteUrl?: string,
 ):
@@ -189,9 +195,13 @@ export function classifyGitFailure(
     };
   }
 
-  return isRemoteNotFound(error) && rule.missingRef !== undefined
-    ? { reason: rule.missingRef }
-    : undefined;
+  if (isRemoteNotFound(error)) {
+    return rule.missingRef === undefined ? undefined : { reason: rule.missingRef };
+  }
+
+  const code = (error as NodeJS.ErrnoException).code;
+  const filesystemErrno = code !== undefined && /^E[A-Z0-9_]+$/u.test(code);
+  return !filesystemErrno && rule.unknown !== undefined ? { reason: rule.unknown } : undefined;
 }
 
 /**

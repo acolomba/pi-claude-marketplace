@@ -532,3 +532,28 @@ Feature: Marketplace add
     Then the installation record of the project scope holds these plugins:
       | id        | version | enabled |
       | app@tools | 1.0.0   | true    |
+
+  Scenario: Marketplace add reports post-commit hygiene warnings
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | app  | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@other    |
+    Given the marketplace "tools" allows dependencies on the marketplace "other"
+    Given the marketplace "other" is published as a dir source
+    Given the marketplace "other" offers these plugins:
+      | name | version |
+      | lib  | 1.0.0   |
+    Given the published plugin "lib" of the marketplace "other" has an agent "helper" that sets a color
+    When the user runs "/claude:plugin marketplace add {home}/marketplaces/other --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                               | lines                          |
+      | cascade    | info     | true         |                                                      |                                |
+      | diagnostic | warning  | false        | Plugin "lib" [project] installed; 1 staging warning. | [helper] dropped fields: color |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id        | name      | status    | reasons                                         | scope   | version |
+      | other            | project           | added              | lib@other | lib@other | installed | dependency installed, requires pi-subagents | project | 1.0.0   |

@@ -151,11 +151,7 @@ import {
   NO_STORED_CREDENTIAL_CAUSE,
   buildGitHubAuth,
 } from "../auth-host.ts";
-// WR-12 / WR-03: the `(updated)` row composer, imported from the LEAF module
-// that holds it rather than from the plugin-update ledger. The ledger stays
-// behind the injected `pluginUpdate` seam -- and now stays out of this module's
-// import graph too, so no future edge can close an
-// `orchestrators/marketplace` <-> `orchestrators/plugin` cycle here.
+import { surfaceCascadeStagingDiagnostics } from "../plugin/staging-diagnostics.ts";
 
 import {
   DEFAULT_HOSTED_MANIFEST_FETCH,
@@ -172,6 +168,11 @@ import {
   type GitAuthBundle,
   type GitOps,
 } from "./shared.ts";
+// WR-12 / WR-03: the `(updated)` row composer, imported from the LEAF module
+// that holds it rather than from the plugin-update ledger. The ledger stays
+// behind the injected `pluginUpdate` seam -- and now stays out of this module's
+// import graph too, so no future edge can close an
+// `orchestrators/marketplace` <-> `orchestrators/plugin` cycle here.
 import {
   UPDATE_CONTEXT,
   outcomeToCascadePluginMessage,
@@ -592,11 +593,12 @@ async function refreshRecord(
     record.lastUpdatedAt = new Date().toISOString();
     return changed;
   } catch (err) {
-    // A refused name is read from the advanced checkout, so the clone moved,
-    // but a retry cannot change the refusal: the persist-failure frame and
-    // its retry hint do not apply.
+    // An invalid manifest is read from the advanced checkout, so the clone
+    // moved, but retrying the same revision cannot repair its content. Keep
+    // the clone-advanced retry hint only for failures that can succeed once
+    // the post-fetch persistence problem clears.
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside refreshGitHubClone.
-    const retryable = cloneAdvanced && !(err instanceof ReservedMarketplaceNameError);
+    const retryable = cloneAdvanced && !(err instanceof InvalidMarketplaceManifestError);
     throw new MarketplaceUpdateError(refreshFailureMessage(name, err, remoteUrl, retryable), {
       cause: err,
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- see above: cloneAdvanced is set by callback.
@@ -718,7 +720,11 @@ interface AutoupdateCascade {
   readonly installs: ScopeDependencyInstallResult;
 }
 
-const NO_DEPENDENCY_INSTALLS: ScopeDependencyInstallResult = { rows: [], mcpConfigNotices: [] };
+const NO_DEPENDENCY_INSTALLS: ScopeDependencyInstallResult = {
+  rows: [],
+  stagingDiagnostics: [],
+  mcpConfigNotices: [],
+};
 
 const NO_AUTOUPDATE_CASCADE: AutoupdateCascade = { outcomes: [], installs: NO_DEPENDENCY_INSTALLS };
 
@@ -1091,6 +1097,7 @@ function notifyRefreshed(
   ];
   notifyWithContext(ctx, run, UPDATE_CONTEXT, cascadeRows, undefined, cardinality);
   surfaceCascadeStagingWarnings(ctx, run, outcomes, scope);
+  surfaceCascadeStagingDiagnostics(ctx, run, installs.stagingDiagnostics ?? []);
   // AFILE-04: the notices of the cascade's updates, shown after the rows they
   // explain. A failed update can carry them too: its MCP commit succeeded
   // before a later bridge or the finalize failed. The no-op paths above have

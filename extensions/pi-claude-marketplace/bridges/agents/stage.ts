@@ -28,7 +28,10 @@ import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { loadAgentsIndex, saveAgentsIndex } from "../../persistence/agents-index-io.ts";
-import { AgentOwnershipConflictError } from "../../shared/errors-bridges.ts";
+import {
+  AgentOwnershipConflictError,
+  AgentTargetOccupiedError,
+} from "../../shared/errors-bridges.ts";
 import { appendLeakToError, appendLeaks, errorMessage } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
@@ -298,8 +301,7 @@ function formatAgentWarnings(converted: ConvertedAgent): string[] {
  * overwrite: it also replaces the AG-5 rows whose `generatedName` this
  * staging produces (D-PL1-15), but only when the row's `targetPath` is the
  * path this staging writes for that name. A staged-name row that points
- * anywhere else, as a hand-edited index can, is in neither set: the commit
- * drops the row, since the new entry takes its name, and leaves the file.
+ * anywhere else, as a hand-edited index can, stays in the index with its file.
  * Any other AG-5 row, such as one the user named by hand, keeps its file and
  * its row, as an unforced commit keeps it. A kept row whose target equals a
  * new entry's target makes the commit refuse before it removes anything. A
@@ -316,7 +318,6 @@ function partitionPreviousEntries(
   const stagedTargets = new Map(
     prepared.newEntries.map((entry) => [entry.generatedName, entry.targetPath]),
   );
-  const isStaged = (entry: AgentsIndexEntry): boolean => stagedTargets.has(entry.generatedName);
   const isOverwritten = (entry: AgentsIndexEntry): boolean =>
     stagedTargets.get(entry.generatedName) === entry.targetPath;
   return {
@@ -324,7 +325,7 @@ function partitionPreviousEntries(
       ...prepared.previousEntries,
       ...prepared.foreignPreservedEntries.filter(isOverwritten),
     ],
-    kept: prepared.foreignPreservedEntries.filter((entry) => !isStaged(entry)),
+    kept: prepared.foreignPreservedEntries.filter((entry) => !isOverwritten(entry)),
   };
 }
 
@@ -352,9 +353,7 @@ export async function assertAgentCommitTargets(
   for (const entry of prepared.newEntries) {
     // eslint-disable-next-line no-await-in-loop -- the first non-previous target throws before any rm
     if (!previousTargets.has(entry.targetPath) && (await pathExists(entry.targetPath))) {
-      throw new Error(
-        `Cannot replace agent target with non-previous content at ${entry.targetPath}`,
-      );
+      throw new AgentTargetOccupiedError(entry.targetPath);
     }
   }
 }
@@ -389,8 +388,8 @@ async function assertForcedTargetsContained(
  * `options.force` is reinstall's repair overwrite (RINST-01, D-18-15): the
  * plugin's own user-edited previous agent files that this staging writes
  * again, at the same path, are replaced and their preserved index rows
- * dropped. A preserved row with a staged name and another path loses its row
- * and keeps its file; any other preserved row keeps its file and row
+ * dropped. A preserved row with a staged name and another path keeps its row
+ * and file; any other preserved row keeps its file and row
  * (D-PL1-15). `update` and install never pass it. A file at
  * a new target that no index row names is refused with or without it (PI-6).
  *

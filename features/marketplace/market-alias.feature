@@ -58,3 +58,31 @@ Feature: Marketplace market alias
       | needs reload | false                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
       | message      | marketplace requires a subcommand.                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
       | usage        | Usage: /claude:plugin marketplace <add\|remove\|rm\|list\|ls\|info\|update\|autoupdate\|noautoupdate> ...\n  add <source> [--scope user\|project] [--local]\n  remove <name> [--scope user\|project] [--local]   (alias: rm)\n  list [--scope user\|project]                      (alias: ls)\n  info <name> [--scope user\|project]\n  update [<name>] [--scope user\|project]\n  autoupdate [<name>] [--scope user\|project] [--local]\n  noautoupdate [<name>] [--scope user\|project] [--local] |
+
+  Scenario: Market exposes marketplace completions
+    When the user requests plugin completions for "market "
+    Then the plugin completion set for "market " contains these suggestions:
+      | label        | value                   | description |
+      | add          | "market add "           |             |
+      | remove       | "market remove "        |             |
+      | rm           | "market rm "            |             |
+      | list         | "market list "          |             |
+      | ls           | "market ls "            |             |
+      | info         | "market info "          |             |
+      | update       | "market update "        |             |
+      | autoupdate   | "market autoupdate "    |             |
+      | noautoupdate | "market noautoupdate "  |             |
+      | help         | "market help "          |             |
+    When the user requests plugin completions for "marketplace "
+    Then the plugin completion set for "marketplace " contains these suggestions:
+      | label        | value                        | description |
+      | add          | "marketplace add "           |             |
+      | remove       | "marketplace remove "        |             |
+      | rm           | "marketplace rm "            |             |
+      | list         | "marketplace list "          |             |
+      | ls           | "marketplace ls "            |             |
+      | info         | "marketplace info "          |             |
+      | update       | "marketplace update "        |             |
+      | autoupdate   | "marketplace autoupdate "    |             |
+      | noautoupdate | "marketplace noautoupdate "  |             |
+      | help         | "marketplace help "          |             |

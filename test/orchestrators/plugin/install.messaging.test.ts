@@ -210,10 +210,12 @@ describe("composeInstallFailureMessage", () => {
     });
   });
 
-  test("maps rollback-partial children in causal order with true cause omission", () => {
+  test("redacts rollback-partial child causes and preserves causal order", () => {
     // arrange
     const failure = new Error("install failed");
-    const rollbackCause = new Error("remove failed");
+    const rollbackCause = new Error("remove failed at /private/scope/skill.md", {
+      cause: new Error("unlink failed at /private/scope/state.json"),
+    });
     const entityErrorRow = {
       kind: "entity-error",
       name: "ignored",
@@ -245,7 +247,15 @@ describe("composeInstallFailureMessage", () => {
       cause: failure,
       severity: "error",
       needsReload: false,
-      rollbackPartial: [{ phase: "phase3a", cause: rollbackCause }, { phase: "phase3b" }],
+      rollbackPartial: [
+        {
+          phase: "phase3a",
+          cause: new Error("remove failed at skill.md", {
+            cause: new Error("unlink failed at state.json"),
+          }),
+        },
+        { phase: "phase3b" },
+      ],
     });
   });
 
@@ -830,6 +840,64 @@ describe("formatOrchestratedCause", () => {
       cause,
       "outer failure\n\ncause: outer failure -> middle failure -> inner failure",
     );
+  });
+
+  test("D-PL10-14: redacts absolute paths from the complete root cause chain", () => {
+    // arrange
+    const failure = new Error("root failed at /private/scope/plugin.json", {
+      cause: new Error("nested failed at /private/scope/state.json"),
+    });
+
+    // act
+    const cause = formatOrchestratedCause(failure);
+
+    // assert
+    assert.strictEqual(
+      cause,
+      "root failed at plugin.json\n\ncause: root failed at plugin.json -> nested failed at state.json",
+    );
+  });
+
+  test("D-PL10-14: preserves lock recovery paths in the root cause", () => {
+    // arrange
+    const failure = new StateLockHeldError("project", "/private/scope/state.lock");
+
+    // act
+    const cause = formatOrchestratedCause(failure);
+
+    // assert
+    assert.match(cause, /\/private\/scope\/state\.lock/);
+  });
+});
+
+test("D-PL10-14: redacts the standalone install root cause when constructing the row", () => {
+  // arrange
+  const failure = new Error("install failed at /private/scope/plugin.json", {
+    cause: new Error("read failed at /private/scope/state.json"),
+  });
+
+  // act
+  const message = composeInstallFailureMessage({
+    err: failure,
+    plugin: "helper",
+    scope: "project",
+    version: undefined,
+    rolledBackPartial: false,
+    rollbackPartials: [],
+    entityErrorRow: undefined,
+  });
+
+  // assert
+  assert.deepStrictEqual(message, {
+    status: "failed",
+    name: "helper",
+    reasons: [],
+    scope: "project",
+    cause: new Error("install failed at plugin.json", {
+      cause: new Error("read failed at state.json"),
+    }),
+    severity: "error",
+    needsReload: false,
   });
 });
 

@@ -120,6 +120,7 @@ import {
   type AuthAttemptResult,
 } from "../auth-host.ts";
 import { seedSameRepoPluginMirrors } from "../plugin/clone-cache.ts";
+import { surfaceCascadeStagingDiagnostics } from "../plugin/staging-diagnostics.ts";
 
 import { ADD_CONTEXT } from "./add.messaging.ts";
 import {
@@ -1598,7 +1599,11 @@ async function runAddOutcome<U extends UnchangedAdd>(
   return { status: "added", name: recordedName };
 }
 
-const NO_DEPENDENCY_INSTALLS: ScopeDependencyInstallResult = { rows: [], mcpConfigNotices: [] };
+const NO_DEPENDENCY_INSTALLS: ScopeDependencyInstallResult = {
+  rows: [],
+  stagingDiagnostics: [],
+  mcpConfigNotices: [],
+};
 
 /**
  * The standalone `(added)` notification. D-PL2-09: the missing-dependency
@@ -1633,6 +1638,7 @@ async function notifyAdded(opts: AddMarketplaceOptions, recordedName: string): P
       },
     ];
     notifyWithContext(opts.ctx, opts.run, ADD_CONTEXT, addedRows, undefined, "single");
+    surfaceCascadeStagingDiagnostics(opts.ctx, opts.run, installs.stagingDiagnostics ?? []);
     // AFILE-04: the notices of the step's installs follow the rows they explain.
     notifyMcpConfigNotices(opts.ctx, opts.run, installs.mcpConfigNotices);
   }

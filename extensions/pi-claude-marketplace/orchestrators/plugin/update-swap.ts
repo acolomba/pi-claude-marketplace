@@ -168,12 +168,14 @@ export type UpdateDependencySettlement =
       readonly kind: "settled";
       readonly rows: readonly UpdateDependencyRow[];
       readonly mcpConfigNotices?: readonly McpConfigNotice[];
+      readonly stagingWarnings?: readonly StagingWarning[];
     }
   | {
       readonly kind: "refused";
       readonly rows: readonly UpdateDependencyRow[];
       readonly cause: Error;
       readonly mcpConfigNotices?: readonly McpConfigNotice[];
+      readonly stagingWarnings?: readonly StagingWarning[];
     };
 
 /**

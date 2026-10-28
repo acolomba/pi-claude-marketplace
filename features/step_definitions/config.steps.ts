@@ -7,8 +7,9 @@
  * `marketplaces` member, each keeping the config's other members; the
  * marketplaces step expands the run tokens in each source. The third writes
  * the whole text, which can leave the file broken. Every other step only
- * reads, so this module writes nothing else and deletes nothing. `holds this text` compares the raw text of a config, so
- * a scenario can show that a broken config stayed as it was.
+ * reads, so this module writes nothing else and deletes nothing. `holds this
+ * text` compares the raw text of a config, while the byte snapshot steps prove
+ * a no-op leaves both the base config and installation record untouched.
  *
  * A missing file fails every step that reads one; it never reads as zero
  * declarations. A file whose `marketplaces` map is empty declares that no
@@ -46,6 +47,21 @@ const CONFIG_FILES: ReadonlySet<string> = new Set([
   "claude-plugins.json",
   "claude-plugins.local.json",
 ]);
+
+interface ScopeBytes {
+  readonly config: Buffer;
+  readonly state: Buffer;
+}
+
+const rememberedScopeBytes = new WeakMap<ScenarioWorld, ReadonlyMap<string, ScopeBytes>>();
+
+async function scopeBytes(world: ScenarioWorld, scope: string): Promise<ScopeBytes> {
+  const scopeRoot = world.scopeRoot(scope);
+  return {
+    config: await readFile(path.join(scopeRoot, "claude-plugins.json")),
+    state: await readFile(path.join(scopeRoot, "pi-claude-marketplace", "state.json")),
+  };
+}
 
 function configFilePath(world: ScenarioWorld, fileName: string, scope: string): string {
   if (!CONFIG_FILES.has(fileName)) {
@@ -155,6 +171,15 @@ Given(
 );
 
 Given(
+  "the config and installation record bytes of the {word} scope are remembered",
+  async function (this: ScenarioWorld, scope: string) {
+    const remembered = new Map(rememberedScopeBytes.get(this));
+    remembered.set(scope, await scopeBytes(this, scope));
+    rememberedScopeBytes.set(this, remembered);
+  },
+);
+
+Given(
   "a config in scope {word} and layer {word}, with these marketplaces:",
   async function (this: ScenarioWorld, scope: string, layer: string, table: DataTable) {
     const file = layerConfigPath(this, scope, layer);
@@ -190,6 +215,15 @@ Then(
       "marketplaces",
       "name",
     );
+  },
+);
+
+Then(
+  "the config and installation record bytes of the {word} scope are unchanged",
+  async function (this: ScenarioWorld, scope: string) {
+    const remembered = rememberedScopeBytes.get(this)?.get(scope);
+    assert.ok(remembered !== undefined, `the ${scope} scope bytes were not remembered`);
+    assert.deepStrictEqual(await scopeBytes(this, scope), remembered);
   },
 );
 

@@ -1052,9 +1052,26 @@ describe("createPackagesPhase", () => {
       assert.deepStrictEqual(
         seeded.context.discoveryWarnings.map((w) => w.message),
         [
-          "Skipped: yarn/pnpm lockfiles are not supported (resolution-time hooks bypass --ignore-scripts). Use bun or npm.",
+          "The packages it lists were not installed, because it uses a yarn or pnpm lockfile, which plugin installs do not support.",
         ],
       );
+      verify(runPackageManager);
+    });
+
+    test(`D-PL10-18: ignores a ${lockfile} when package.json lists no packages`, async (t) => {
+      // arrange
+      const seeded = await seedPlugin(t, {
+        "package.json": '{"name":"plugin"}',
+        [lockfile]: LOCKFILE,
+      });
+      const runPackageManager = idleRunner();
+      const phase = createPackagesPhase(opsWith(runPackageManager));
+
+      // act
+      await phase.do(seeded.context);
+
+      // assert
+      assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
       verify(runPackageManager);
     });
   }

@@ -336,14 +336,29 @@ describe("classifyGitFailure", () => {
       expected: { reason: "network unreachable" },
     },
     {
-      title: "leaves a network code on an error cause for the caller to unwrap",
+      title: "classifies an unrecognized outer error as network error",
       createFailure: () =>
         new Error("outer failure", {
           cause: Object.assign(new Error("inner failure"), { code: "ECONNRESET" }),
         }),
+      rule: { ...PLUGIN_CLONE_RULE, unknown: "network error" as const },
+      remoteUrl: undefined,
+      expected: { reason: "network error" },
+    },
+    {
+      title: "leaves an unrecognized filesystem errno for the caller",
+      createFailure: () => Object.assign(new Error("local filesystem failed"), { code: "ELOOP" }),
       rule: PLUGIN_CLONE_RULE,
       remoteUrl: undefined,
       expected: undefined,
+    },
+    {
+      title: "classifies an unrecognized git error code under the unknown rule",
+      createFailure: () =>
+        Object.assign(new Error("invalid smart-http response"), { code: "ParseError" }),
+      rule: { ...PLUGIN_CLONE_RULE, unknown: "network error" as const },
+      remoteUrl: undefined,
+      expected: { reason: "network error" },
     },
     {
       title: "classifies a transport failure behind a cleanup leak",
