@@ -75,8 +75,16 @@ The plan-qualified references preserve the seven distinct acceptance rationales.
 | Audit Date | Threats Total | Closed | Open | Run By |
 |------------|---------------|--------|------|--------|
 | 2026-10-27 | 19 | 19 | 0 | GSD security auditor, ASVS L1 |
+| 2026-10-28 | 19 | 19 | 0 | GSD security re-auditor, ASVS L1 |
 
 Evidence was audited at `689b4499`. The coverage checker passed 56/56 rows. The full repository gate exited 0 with 1,119 scenarios, 11,393 steps, and 304 direct LCOV records.
+
+The stale-verification re-audit traced the current post-split implementation at
+`7f76cda2`. All 12 mitigations remain present, all seven accepted-risk entries
+remain documented, and no unregistered or reopened threat was found. The
+current coverage checker passes 56/56 rows; the latest combined repository
+gate on the unchanged build inputs passed 1,126 scenarios, 11,509 steps, and
+309 direct LCOV records.
 
 ---
 
