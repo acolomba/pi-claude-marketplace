@@ -202,6 +202,22 @@ async function seedWaitingDependent(scope: ProjectScope): Promise<void> {
 }
 
 describe("readPassForScope", () => {
+  test("plans exactly one replacement for a changed marketplace source", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "source-replacement");
+    await seedRecordedState(scope);
+    const replacement = path.join(scope.cwd, "replacement-mp");
+    await writeUnder(scope.project.localConfigJsonPath, declaring({ mp: replacement }));
+
+    // act
+    const readResult = await readPassForScope(reader, "project", scope.cwd);
+
+    // assert
+    assert.deepStrictEqual(readResult.plan?.marketplacesToAdd, [
+      { scope: "project", marketplace: "mp", source: replacement, configSource: "local" },
+    ]);
+  });
+
   test("WR-05: a scope with neither a state file nor a config returns no plan and creates nothing", async (t) => {
     // arrange
     const { cwd, project } = await createProjectScope(t, "pristine");
@@ -358,18 +374,43 @@ describe("readPassForScope", () => {
       ...seeded,
       marketplaces: {
         mp: { ...mp, plugins: { app: record("app", false), lib: record("lib", true) } },
+        repair: { ...mp, name: "repair" },
       },
     });
     await writeUnder(
       scope.project.baseConfigJsonPath,
-      declaring({ mp: scope.marketplaceRoot }, { "app@mp": {}, "lib@mp": {} }),
+      declaring(
+        { mp: scope.marketplaceRoot, repair: "acme/replacement" },
+        { "app@mp": {}, "lib@mp": {} },
+      ),
     );
 
     // act
     const readResult = await readPassForScope(reader, "project", scope.cwd);
 
     // assert
-    assert.deepStrictEqual(readResult.plan, planOf({}));
+    assert.deepStrictEqual(
+      readResult.plan,
+      planOf({
+        marketplacesToAdd: [
+          {
+            scope: "project",
+            marketplace: "repair",
+            source: "acme/replacement",
+            configSource: "base",
+          },
+        ],
+        sourceMismatches: [
+          {
+            scope: "project",
+            marketplace: "repair",
+            cause: "source-mismatch",
+            declaredSource: "acme/replacement",
+            recordedSource: scope.marketplaceRoot,
+          },
+        ],
+      }),
+    );
     assert.deepStrictEqual(readResult.deferredEnables, [
       { scope: "project", plugin: "app", marketplace: "mp" },
     ]);

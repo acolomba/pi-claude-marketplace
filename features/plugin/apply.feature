@@ -93,6 +93,29 @@ Feature: Plugin apply
       | severity     | info                    |
       | needs reload | false                   |
 
+  Scenario: Apply downloads a replacement marketplace once
+    Given the marketplace "tools" is published as a hosted source
+    Given a second marketplace declaring the name "tools" is ready to add from "original"
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/original --scope project"
+    Given a config in scope project and layer local, with these marketplaces:
+      | name  | source                                      | autoupdate |
+      | tools | https://{git host}/acme/tools/marketplace.json |            |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                     |
+      | needs reload        | false                    |
+      | tally label         | Reconcile                |
+      | tally failures      | 0                        |
+      | tally warnings      | 0                        |
+      | tally success count | 1                        |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the git host receives these requests:
+      | method | path                         | status |
+      | GET    | /acme/tools/marketplace.json | 200    |
+
   Scenario: The official fallback source is already up to date
     Given the marketplace "claude-plugins-official" is published as a dir source
     Given an earlier version recorded the marketplace "claude-plugins-official" in the project scope

@@ -3919,6 +3919,53 @@ describe("applyReconcile", () => {
     second.verifyBoundary();
   });
 
+  test("a source repair clones its replacement once and reports one added marketplace", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "source-replace-remote");
+    const oldSource = await writeMarketplaceSource(cwd, "old-tools", "tools", {});
+    const newSource = await writeMarketplaceSource(cwd, "new-tools", "tools", {});
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { tools: { source: "acme/tools" } },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        tools: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "tools",
+          rawSource: oldSource.marketplaceRoot,
+          manifestPath: oldSource.manifestPath,
+          marketplaceRoot: oldSource.marketplaceRoot,
+        }),
+      },
+    });
+    const boundary = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createRemoteGitOps({
+      allowedRemoteUrls: ["https://github.com/acme/tools.git"],
+      fixtureSourceDir: newSource.marketplaceRoot,
+    });
+
+    // act
+    await applyReconcile({
+      ctx: boundary.ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(boundary.notifications, [
+      { message: "● tools [project] (added)\n\nReconcile: 1 success" },
+    ]);
+    assert.deepStrictEqual(clonedUrls(), ["https://github.com/acme/tools.git"]);
+    boundary.verifyBoundary();
+  });
+
   test("D-PL6-19: the official fallback source is already up to date", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "official-source-fallback");

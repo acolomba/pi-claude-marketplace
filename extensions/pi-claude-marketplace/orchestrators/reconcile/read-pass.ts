@@ -188,16 +188,12 @@ export async function readPassForScope(
       // landed, as `pending` plans, because `apply` runs its missing-dependency
       // install after the moves.
       const planFrom = (from: ScopeSatisfactionVerdict, planned: ReconcilePlan): ReconcilePlan =>
-        withPlannedInstallsLanded(
-          withMarketplaceSourceRepairs(merged, state, planned),
-          from,
-          state,
-          (released) =>
-            withMarketplaceSourceRepairs(
-              merged,
-              state,
-              planReconcile(merged, state, scope, released),
-            ),
+        withPlannedInstallsLanded(planned, from, state, (released) =>
+          withMarketplaceSourceRepairs(
+            merged,
+            state,
+            planReconcile(merged, state, scope, released),
+          ),
         );
       const settled = await settleMoveCascade({
         scope,
