@@ -286,3 +286,27 @@ Feature: Plugin list
       | marketplace name | marketplace scope | id        | name | status     | reasons | scope   | version                |
       | tools            | project           | app@tools | app  | installed  |         | project | 1.0.0                  |
       | tools            | project           | lib@tools | lib  | upgradable |         | project | 2.0.0-{lib revision 2} |
+
+  Scenario: The list shows an installed plugin as partially upgradable when its new version adds an unsupported component
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | app  | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | app  | 1.1.0   |
+    Given the published plugin "app" of the marketplace "tools" has an output style
+    When the user runs "/claude:plugin list --scope project"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status               | reasons               | scope   | version |
+      | tools            | project           | app@tools | app  | partially-upgradable | unsupported component | project | 1.0.0   |

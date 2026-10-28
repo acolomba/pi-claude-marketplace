@@ -677,3 +677,22 @@ Feature: Plugin update
       | app@tools     | 1.0.0   | true    |
       | demo@fixtures | 1.0.0   | true    |
       | lib@tools     | 1.0.0   | true    |
+
+  Scenario: A bridge failure after an update starts replacing files reports the reinstall remedy
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" declares the mcp server "demo-server"
+    Given the project scope directory that holds mcp-adapter.json is read-only
+    When the user runs "/claude:plugin update demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the failed update names these repairs:
+      | marketplace name | marketplace scope | id            | name | status | reasons          | scope   | from  | version | repair                                                                                                      | cause truncated | leaks | rollback phases |
+      | fixtures         | project           | demo@fixtures | demo | failed | rollback partial | project | 1.0.0 | 1.1.0   | Plugin "demo" failed during physical replace. Run /claude:plugin reinstall demo@fixtures to repair it. | false           |       | mcp             |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |

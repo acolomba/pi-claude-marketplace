@@ -119,3 +119,6 @@ Feature: Plugin prune
     Then the installation record of the project scope holds these plugins:
       | id        | version | enabled |
       | lib@tools | 1.2.0   | true    |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id        |
+      | lib@tools |
