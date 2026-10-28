@@ -1291,16 +1291,19 @@ test("MPA-01: a same-source add into the declaring layer is skipped as already a
     const { gitOps: gitOps1 } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
+    const completionCache = createCompletionCacheRecorder();
     // First add succeeds.
     // act
-    await addMarketplace({
+    await addMarketplaceWithCache({
       ctx,
       run,
       scope: "project",
       cwd,
       rawSource: "anthropics/claude-plugins-official",
       gitOps: gitOps1,
+      completionCache: completionCache.cache,
     });
+    completionCache.clearCalls();
 
     const stateBefore = await readFile(locations.stateJsonPath, "utf8");
     const configBefore = await readFile(locations.baseConfigJsonPath, "utf8");
@@ -1308,13 +1311,14 @@ test("MPA-01: a same-source add into the declaring layer is skipped as already a
     const { gitOps: gitOps2, state: gitState2 } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
-    await addMarketplace({
+    await addMarketplaceWithCache({
       ctx: ctx2,
       run: run2,
       scope: "project",
       cwd,
       rawSource: "anthropics/claude-plugins-official",
       gitOps: gitOps2,
+      completionCache: completionCache.cache,
     });
 
     // assert
@@ -1322,6 +1326,7 @@ test("MPA-01: a same-source add into the declaring layer is skipped as already a
       { message: "● valid-marketplace [project] (skipped) {already added}" },
     ]);
     assert.deepStrictEqual(gitState2.cloneCalls, []);
+    assert.deepStrictEqual(completionCache.calls, []);
     assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
     assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), configBefore);
   });
