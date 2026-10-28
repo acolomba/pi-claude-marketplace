@@ -1,9 +1,9 @@
 ---
 phase: "10"
 slug: "lifecycle-test-and-harness-gaps"
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: complete
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-10-27"
 ---
 
@@ -44,10 +44,10 @@ The planner must give every task an exact owner-test or scenario command and an 
 
 ## Wave 0 Requirements
 
-- [ ] PTY TUI driver and world lifecycle support.
-- [ ] Completion capture step/API.
-- [ ] Shared marketplace-record seeder for unit fixtures.
-- [ ] Test fixtures selecting each CAS-08 failure route.
+- [x] PTY TUI driver and world lifecycle support.
+- [x] Completion capture step/API.
+- [x] Shared marketplace-record seeder for unit fixtures.
+- [x] Test fixtures selecting each CAS-08 failure route.
 
 ## Manual-Only Verifications
 
@@ -55,11 +55,12 @@ None planned. Any unreachable behavior must carry a concrete harness-limit reaso
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verification or explicit Wave 0 dependencies.
-- [ ] Sampling continuity: no three consecutive tasks without automated verification.
-- [ ] Wave 0 covers all missing references.
-- [ ] No watch-mode flags.
-- [ ] Focused feedback latency stays below 120 seconds.
-- [ ] `nyquist_compliant: true` is set after execution evidence is complete.
+- [x] All tasks have `<automated>` verification or explicit Wave 0 dependencies.
+- [x] Sampling continuity: no three consecutive tasks without automated verification.
+- [x] Wave 0 covers all missing references.
+- [x] No watch-mode flags.
+- [x] Focused feedback latency stays below 120 seconds.
+- [x] `nyquist_compliant: true` is set after execution evidence is complete.
 
-**Approval:** pending
+**Approval:** complete -- `node scripts/check-phase10-coverage.mjs` validates all
+56 source rows and their exact evidence commits, paths, and titles.
