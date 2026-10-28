@@ -112,10 +112,10 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 
 ### Cleanup and docs (CLN)
 
-- [ ] **CLN-01**: The LCCODE-01 dead code, optional fields, duplicates, misplacements, the `prototypeReads` pin, and the over-long literals are fixed (LCCODE-01 b1, b4, b5, b8-b11); the test-only `ApplyReconcileOptions.restoreDeferredPin` option is replaced by an injected collaborator
-- [ ] **CLN-02**: `orchestrators/plugin/install-flow.ts` is split so no module passes the size the project's other split verbs keep (UPDDEP-01 b7)
-- [ ] **CLN-03**: CHANGELOG, the PRD, the output catalog, stale comments, the feature descriptions, and PROJECT.md decision rows match the shipped behavior, including PROJECT.md's NFR-5 constraint line (AAP-D1, D-PL5-08, D-PL8-01, D-PL9-10) and ARCHITECTURE.md's rule-pack list (`child-process-chokepoint`, D-PL9-11) and `fetch` chokepoint (`platform/hosted-manifest-fetch.ts`, D-PL5-07) (LCDOC-01)
-- [ ] **CLN-04**: Every lifecycle backlog entry this milestone settles is closed in `BACKLOG.md` with its disposition
+- [x] **CLN-01**: The LCCODE-01 dead code, optional fields, duplicates, misplacements, the `prototypeReads` pin, and the over-long literals are fixed (LCCODE-01 b1, b4, b5, b8-b11); the test-only `ApplyReconcileOptions.restoreDeferredPin` option is replaced by an injected collaborator
+- [x] **CLN-02**: `orchestrators/plugin/install-flow.ts` is split so no module passes the size the project's other split verbs keep (UPDDEP-01 b7)
+- [x] **CLN-03**: CHANGELOG, the PRD, the output catalog, stale comments, the feature descriptions, and PROJECT.md decision rows match the shipped behavior, including PROJECT.md's NFR-5 constraint line (AAP-D1, D-PL5-08, D-PL8-01, D-PL9-10) and ARCHITECTURE.md's rule-pack list (`child-process-chokepoint`, D-PL9-11) and `fetch` chokepoint (`platform/hosted-manifest-fetch.ts`, D-PL5-07) (LCDOC-01)
+- [x] **CLN-04**: Every lifecycle backlog entry this milestone settles is closed in `BACKLOG.md` with its disposition
 
 ## Future Requirements
 
@@ -197,9 +197,9 @@ None.
 | TST-01 | Phase 10 | Complete |
 | TST-02 | Phase 10 | Complete |
 | TST-03 | Phase 10 | Complete |
-| CLN-01 | Phase 11 | Pending |
-| CLN-02 | Phase 11 | Pending |
-| CLN-03 | Phase 11 | Pending |
-| CLN-04 | Phase 11 | Pending |
+| CLN-01 | Phase 11 | Complete |
+| CLN-02 | Phase 11 | Complete |
+| CLN-03 | Phase 11 | Complete |
+| CLN-04 | Phase 11 | Complete |
 
 **Coverage:** 60 requirements, 60 mapped, 0 unmapped.
