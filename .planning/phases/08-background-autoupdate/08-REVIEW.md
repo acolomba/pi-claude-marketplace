@@ -1,8 +1,8 @@
 ---
 phase: 08-background-autoupdate
-reviewed: 2026-10-28T21:14:45Z
+reviewed: 2026-10-28T21:55:54Z
 depth: standard
-files_reviewed: 36
+files_reviewed: 38
 files_reviewed_list:
   - extensions/pi-claude-marketplace/orchestrators/marketplace/background-gate.ts
   - extensions/pi-claude-marketplace/orchestrators/marketplace/background-pass.ts
@@ -40,109 +40,105 @@ files_reviewed_list:
   - test/architecture/hermetic-git-environment.test.ts
   - test/platform/hermetic-environment.ts
   - test/edge/handlers/marketplace-seed.ts
+  - features/lib/https-git-host/server.ts
+  - features/step_definitions/git-host.steps.ts
 findings:
-  critical: 2
+  critical: 0
   warning: 0
   info: 0
-  total: 2
-status: issues_found
+  total: 0
+status: clean
 ---
 
 # Phase 8: Code Review Report
 
-**Reviewed:** 2026-10-28T21:14:45Z
+**Reviewed:** 2026-10-28T21:55:54Z
 **Depth:** standard
-**Files Reviewed:** 36
-**Status:** issues_found
+**Files Reviewed:** 38
+**Status:** clean
 
 ## Narrative Findings (AI reviewer)
 
-The final integrated review found two blockers outside the otherwise correct
-SEC-08-01 notice-oracle fix. Five focused owner and architecture suites pass,
-but they do not exercise these integrated dependency and cancellation paths.
+No actionable findings remain. The final re-review at `2fab7ba3` inspected
+commit `4412c2cb`, its real-cascade regression tests, the streaming git fixture,
+the PTY scenario, and affected gate, marketplace-update, and dependency-install
+callers. The previously reviewed remainder is unchanged. All reviewed files
+meet quality standards.
 
-## CR-02 — BLOCKER: Missing-dependency installation bypasses the background halt boundary
+## Blocker closures
 
-**Files:**
+### CR-02: Dependency settlement bypassed the background boundary — resolved
 
-- `extensions/pi-claude-marketplace/orchestrators/marketplace/background-pass.ts:190-199`
-- `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts:791-829`
-- `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:2474`
+The background pass now supplies a dependency wrapper that checks halted state
+before yielding. After acquiring a fresh gate step, it reads current
+configuration and checks stopped/aborted state and autoupdate eligibility before
+invoking the installer.
 
-`background-pass` forwards `installMissingDependencies` unchanged. The real
-marketplace cascade invokes it after the plugin loop, including when the
-background wrapper skipped plugins because the runtime stopped or the pass
-aborted.
+Eligible settlement receives the fresh gate signal through the async abort
+scope. The wrapper records abort in `finally` without releasing the gate; the
+enclosing marketplace operation retains ownership until its cascade and
+reporting settle. Results and errors continue through existing reporting paths.
 
-A hermetic reproduction used real `createBackgroundPass`, real
-`updateMarketplace`, a real gate, and temporary state. The injected plugin
-operation set `isStopped()` to true, after which the dependency installer ran:
+Seven real-cascade cases cover stopped and aborted passes, opt-out, fresh signal
+ownership, foreground cancellation and settlement order, stop during a yield,
+and held-scope-lock refusal followed by a later successful pass. The cancellation
+case verifies dependency settlement, then marketplace settlement, then the
+foreground command. The command-level regression also proves cancellation leaves
+no unexpected dependency installation; removing the wrapper produced an extra
+`dep@tools` record.
 
-```text
-["plugin update", "dependency installer called with stopped=true"]
-```
+### CR-03: The PTY scenario exercised hosted timeout — resolved
 
-The production callback plans and executes dependency installations. This
-contradicts D-PL8-15 and D-PL8-25. It also resumes in the original refresh
-abort scope after plugin wrappers used the gate's current nested signal.
+The replacement scenario holds a git response body. An unfinished git packet
+receives one byte per second, preventing the independent HTTP idle timeout from
+ending the request before the gate's 30-second deadline.
 
-**Fix scope:** wrap the dependency step at the background boundary. Recheck
-halt and current autoupdate eligibility before it starts, run it in a correctly
-owned gate/abort scope, and retain the gate until the marketplace operation
-settles. Add real-cascade cases for stopped, aborted, and mid-cascade opt-out,
-plus dependency-step foreground cancellation.
+The scenario verifies a pending request and no foreground result during the
+initial interval, then requires output after 30 seconds within a five-second
+cleanup margin. It checks the dropped request, absence of an update notice, and
+unchanged installed records. Removing cancellation times out awaiting foreground
+output; bypassing the foreground gate fails the early blocking assertion.
 
-## CR-03 — BLOCKER: The PTY wait-cap scenario tests hosted timeout, not gate cancellation
-
-**Files:**
-
-- `features/marketplace/background-update.feature:90`
-- `features/step_definitions/marketplace/background-update.steps.ts:37-81`
-- `extensions/pi-claude-marketplace/platform/hosted-manifest-fetch.ts:18,294`
-
-The scenario holds a hosted catalog request. That fetch has its own ten-second
-timeout and does not use the gate's git abort scope. Gate cancellation begins
-after thirty seconds, so the hosted request finishes first.
-
-Its assertions only require foreground output after a positive duration and
-within thirty seconds, followed eventually by a dropped hosted request. A
-foreground command that bypasses the gate also satisfies them. The scenario
-therefore cannot prove D-PL8-23 and violates the behavioral-test quality rule.
-
-**Fix scope:** hold a git request reached through `runWithGitAbortSignal`.
-Assert the foreground command remains blocked before cancellation and completes
-only after the active operation settles. Allow bounded cleanup beyond the
-cancellation deadline. Record red evidence with cancellation removed and with
-foreground gating bypassed. Keep any hosted-timeout case under an accurate title.
+The heartbeat is unreferenced and cleared on response close. Scenario release
+stops the PTY process group and disarms the repository; host shutdown closes
+connections and sandbox teardown removes fixture files.
 
 ## Prior finding dispositions
 
-| Finding | Disposition |
+| Finding | Final disposition |
 | --- | --- |
-| Original CR-01 / SEC-08-01 | Resolved. Distinct alpha/beta scenario detects split notices; exact-entry owner assertion checks one emission. |
-| WR-01 | Resolved by RPC quiet-window collection. The TUI oracle explicitly reports distinct texts, not emission counts. |
-| WR-02 | Scheduler and owner coverage prove deferred execution; RPC is a negative control under TUI-only scheduling. |
-| WR-03 | Resolved: completed updates are reported before an early failure, preserving the original error if notification also fails. |
-| WR-04 | Resolved for plugin updates through config revalidation. CR-02 identifies the uncovered dependency extension. |
-| IN-01 | Resolved: documentation attaches to the correct resolver. |
-| IN-02 | Resolved: halted passes skip later scopes. |
-| IN-03 | Resolved: comments describe process environment lifetime accurately. |
-| IN-04 | Superseded by D-PL8-23..25. CR-02 exposes an integrated dependency-path gap. |
+| Original CR-01 / SEC-08-01 | Resolved by distinct alpha/beta aggregation, split-notice mutation evidence, and an exact-entry owner assertion. |
+| WR-01 | Resolved by RPC quiet-window collection; TUI parsing reports distinct visible texts, not event counts. |
+| WR-02 | Resolved by synchronous scheduling and deferred-pass owner coverage; RPC is a TUI-only negative control. |
+| WR-03 | Resolved: completed updates are reported before early failure while preserving the original error. |
+| WR-04 | Resolved for plugin updates and dependency settlement eligibility. |
+| IN-01 | Resolved: resolver documentation attaches correctly. |
+| IN-02 | Resolved: halted passes do not read later scopes. |
+| IN-03 | Resolved: environment-lifetime comments are accurate. |
+| IN-04 | Superseded by D-PL8-23 through D-PL8-25, with dependency signal propagation corrected. |
+| CR-02 | Resolved by the gated dependency wrapper and real-cascade regressions. |
+| CR-03 | Resolved by streaming git I/O, blocking/order assertions, and cancellation/bypass mutations. |
 
-The four oracle tests accurately document synchronized-redraw ambiguity.
-Identical-notification event counts cannot be inferred from PTY screen bytes;
-the complementary exact-entry owner assertion and distinct-name mutation
-evidence are sufficient for SEC-08-01.
+Current decisions remain respected: TUI-only scheduling, official-name defaults
+with explicit configuration precedence, invalid-config fail-closed behavior,
+bare-name notice deduplication, and cancellation at the wait cap followed by
+operation settlement. Quit retains its recorded immediate-return exception.
+
+The same-name and distinct-name notice scenarios remain intact. Synchronized
+terminal redraw bytes cannot establish identical-event counts; the complementary
+exact-entry owner assertion and distinct-name mutation proof remain sufficient.
 
 ## Validation evidence
 
-- Five focused owner and architecture modules passed independently.
-- The supplied full gate at `7a436b05` passed 1,125 scenarios, 11,481 steps,
-  and 309 LCOV records.
-- The non-planning diff from that commit to reviewed HEAD `98eee938` is empty.
-- Real integrated and behavioral probes reproduced CR-02 and CR-03 despite
-  those passing checks.
-- This review changed no files and created no commit.
+- Fresh `npm run check` at `4412c2cb` passed 1,125 scenarios, 11,486 steps,
+  and 309 LCOV records on Node `v26.12.1`.
+- Supplied focused evidence: 36 background-pass owner tests, 236 adjacent tests,
+  eight host tests, and six PTY scenarios with 88 steps. The changed production
+  pair reached 100% direct coverage; Fallow and hooks passed.
+- The reviewer reran four focused modules successfully.
+- The non-planning diff from `4412c2cb` to `2fab7ba3` is empty, so the full gate
+  applies to the reviewed build inputs.
+- Review was read-only.
 
 ---
 
