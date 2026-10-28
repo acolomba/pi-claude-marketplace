@@ -301,9 +301,32 @@ test("UNI-01 / MPR-01: dropping disabled holders keeps enabled and load-time-dis
     ["paused@mp", new Set(["base@mp"])],
     ["held@mp", new Set(["base@mp"])],
   ]);
+  const candidates = [
+    {
+      key: "app@mp",
+      provenance: "explicit" as const,
+      marketplace: mp,
+      plugin: "app",
+      record: mp.plugins["app"]!,
+    },
+    {
+      key: "paused@mp",
+      provenance: "explicit" as const,
+      marketplace: mp,
+      plugin: "paused",
+      record: mp.plugins["paused"]!,
+    },
+    {
+      key: "held@mp",
+      provenance: "explicit" as const,
+      marketplace: mp,
+      plugin: "held",
+      record: mp.plugins["held"]!,
+    },
+  ];
 
   // act
-  const enabled = withoutDisabledHolders(index, stateOf(mp));
+  const enabled = withoutDisabledHolders(index, candidates);
 
   // assert
   assert.deepStrictEqual([...enabled.keys()], ["app@mp", "held@mp"]);

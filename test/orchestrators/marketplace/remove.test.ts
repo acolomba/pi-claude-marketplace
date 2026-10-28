@@ -2380,11 +2380,19 @@ test("MR-7: a layer remove whose plugin fails to unstage writes no config and ke
 type IndexShape = Readonly<Record<string, readonly string[]>>;
 
 function syntheticIndex(shape: IndexShape): typeof buildScopeDeclarationIndex {
-  return () =>
+  return ({ state }) =>
     Promise.resolve({
       ok: true,
       index: new Map(Object.entries(shape).map(([holder, keys]) => [holder, new Set(keys)])),
-      candidates: [],
+      candidates: Object.values(state.marketplaces).flatMap((marketplace) =>
+        Object.entries(marketplace.plugins).map(([plugin, record]) => ({
+          key: `${plugin}@${marketplace.name}`,
+          provenance: record.provenance,
+          marketplace,
+          plugin,
+          record,
+        })),
+      ),
     });
 }
 
