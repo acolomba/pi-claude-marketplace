@@ -169,8 +169,7 @@ export type InstallMissingDependencyOutcome =
       readonly reason?: "cross-marketplace";
       /**
        * REC-06: the undo steps the failed install's own ledger could not
-       * finish. `apply` does not render them yet (LCORCH-01). Omitted when
-       * every undo finished (NREG-01).
+       * finish. Omitted when every undo finished (NREG-01).
        */
       readonly rollbackPartials?: readonly RollbackPartial[];
       /**
