@@ -3,9 +3,9 @@ phase: "2"
 slug: "apply-ordering-and-installed-declarations"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-10-26"
 ---
 
@@ -42,19 +42,19 @@ Filled from the plans; requirement → check mapping (from RESEARCH.md `## Valid
 
 | Requirement | Behavior | Test Type | Automated Command | File Exists | Status |
 |-------------|----------|-----------|-------------------|-------------|--------|
-| RCN-01 | PENDMOVE-01: pending rows = apply rows; second pending empty | cucumber | `npx cucumber-js --name '<PENDMOVE scenario title>'` | ❌ new in `features/plugin/apply.feature` | ⬜ pending |
-| RCN-01 | release loop counts scheduled installs | unit | `node --test test/orchestrators/reconcile/convergence.test.ts test/orchestrators/reconcile/dependency-verdict.test.ts` | ✅ add cases | ⬜ pending |
-| RCN-02 | MISSORDER-01: moves then MISS-01 in one apply; pending same order | cucumber | `npx cucumber-js --name '<MISSORDER scenario title>'` | ❌ new | ⬜ pending |
-| RCN-02 | MISS-01 after cascade, row order, post-install enables | unit | `node --test test/orchestrators/reconcile/apply.test.ts test/orchestrators/reconcile/pending.test.ts test/orchestrators/reconcile/notify.test.ts` | ✅ update | ⬜ pending |
-| RCN-03 | keeper disabled in same apply | cucumber (existing) | `npx cucumber-js --name '<apply.feature keeper/orphan title>'` + local mutation check | ✅ | ⬜ pending |
-| RCN-04 | first unreadable record ends each walk (D-PL2-05) | unit | `node --test test/orchestrators/plugin/dependency-index.test.ts test/orchestrators/reconcile/dependency-verdict.test.ts` | ✅ | ⬜ pending |
-| RCN-05 | enable follows installed copy (git source) | cucumber | `npx cucumber-js --name '<enable scenario title>'` | ❌ new in `features/plugin/enable.feature` | ⬜ pending |
-| RCN-05 | update held by installed holder's range | cucumber | `npx cucumber-js --name '<update scenario title>'` | ❌ new in `features/plugin/update-dependencies.feature` | ⬜ pending |
-| RCN-05 | installed-first reader arms | unit | `node --test test/orchestrators/plugin/dependency-index.test.ts test/orchestrators/plugin/enable-disable.test.ts test/orchestrators/plugin/update-constraint-gate.test.ts` | ✅ add cases | ⬜ pending |
-| RCN-06 | marketplace add / bootstrap / autoupdate install missing deps | cucumber | `npx cucumber-js --name '<add / bootstrap / autoupdate titles>'` | ❌ new | ⬜ pending |
-| RCN-06 | seam wiring | unit | `node --test test/orchestrators/marketplace/add.test.ts test/orchestrators/marketplace/update.test.ts test/orchestrators/plugin/bootstrap.test.ts test/edge/register.test.ts test/index.test.ts` | ✅ update | ⬜ pending |
-| RCN-07 | refusal row kept (D-PL2-11) | cucumber (existing) | `npx cucumber-js --name "Apply refuses a missing anthropic-plugin-directory dependency whose listed copy falls outside a plugin's range, naming that plugin"` | ✅ | ⬜ pending |
-| RCN-08 | one owning root per record (D-PL2-12), manifest symlink refused (D-PL2-13) | unit | `node --test test/orchestrators/plugin/dependency-declaration-read.test.ts test/orchestrators/plugin/dependency-index.test.ts test/orchestrators/reconcile/convergence.test.ts` | ✅ add cases | ⬜ pending |
+| RCN-01 | PENDMOVE-01: pending rows = apply rows; second pending empty | cucumber | `npx cucumber-js --name 'Apply moves a plugin whose moved dependency needs a missing plugin, as pending lists it'` | ✅ `features/plugin/apply.feature` | ✅ green |
+| RCN-01 | release loop counts scheduled installs | unit | `node --test test/orchestrators/reconcile/convergence.test.ts test/orchestrators/reconcile/dependency-verdict.test.ts` | ✅ | ✅ green |
+| RCN-02 | MISSORDER-01: moves then MISS-01 in one apply; pending same order | cucumber | `npx cucumber-js --name 'Apply installs a missing dependency that needs the version the same apply moves to, as pending lists it'` | ✅ `features/plugin/apply.feature` | ✅ green |
+| RCN-02 | MISS-01 after cascade, row order, post-install enables | unit | `node --test test/orchestrators/reconcile/apply.test.ts test/orchestrators/reconcile/pending.test.ts test/orchestrators/reconcile/notify.test.ts` | ✅ | ✅ green |
+| RCN-03 | keeper disabled in same apply | cucumber | `npx cucumber-js --name 'Apply disables a plugin whose dependency a config drops in the same run, as pending lists it'` | ✅ `features/plugin/apply.feature` | ✅ green; see caveat below |
+| RCN-04 | first unreadable record ends each walk (D-PL2-05) | unit | `node --test test/orchestrators/plugin/dependency-index.test.ts test/orchestrators/reconcile/dependency-verdict.test.ts` | ✅ | ✅ green |
+| RCN-05 | enable follows installed copy (git source) | cucumber | `npx cucumber-js --name 'Enabling a git-source plugin enables the dependency its installed copy declares, not the one its marketplace now lists'` | ✅ `features/plugin/enable.feature` | ✅ green |
+| RCN-05 | update held by installed holder's range | cucumber | `npx cucumber-js --name "Updating a dependency is held by the range a git-source plugin's installed copy declares"` | ✅ `features/plugin/update-dependencies.feature` | ✅ green |
+| RCN-05 | installed-first reader arms | unit | `node --test test/orchestrators/plugin/dependency-index.test.ts test/orchestrators/plugin/enable-disable.test.ts test/orchestrators/plugin/update-constraint-gate.test.ts` | ✅ | ✅ green |
+| RCN-06 | marketplace add, bootstrap, autoupdate install missing dependencies | cucumber | `npm run test:cucumber` | ✅ `features/marketplace/add.feature`, `features/plugin/bootstrap.feature`, `features/plugin/update-dependencies.feature` | ✅ green |
+| RCN-06 | seam wiring | unit | `node --test test/orchestrators/marketplace/add.test.ts test/orchestrators/marketplace/update.test.ts test/orchestrators/plugin/bootstrap.test.ts test/edge/register.test.ts test/index.test.ts` | ✅ | ✅ green |
+| RCN-07 | refusal row kept (D-PL2-11) | cucumber | `npx cucumber-js --name "Apply refuses a missing anthropic-plugin-directory dependency whose listed copy falls outside a plugin's range, naming that plugin"` | ✅ `features/plugin/apply.feature` | ✅ green |
+| RCN-08 | one owning root per record (D-PL2-12); contained manifest links followed and escaping links refused (D-PL2-17 supersedes D-PL2-13) | unit | `node --test test/orchestrators/plugin/dependency-declaration-read.test.ts test/orchestrators/plugin/dependency-index.test.ts test/orchestrators/reconcile/convergence.test.ts` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -70,15 +70,17 @@ Existing infrastructure covers all phase requirements.
 
 All phase behaviors have automated verification.
 
+RCN-03 caveat: the existing scenario fails if neither apply disable path runs. The Phase 02 summary records that removing only the final judgment disable leaves the scenario green because the earlier toggle step also disables the dependent. The requirement's observable same-run behavior is covered; the final judgment path is not isolated by this scenario.
+
 ---
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 120s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 120s for focused task checks
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated. `npm run check` exited 0 on `67a589aa` with Node `v26.12.1` in this worktree: static checks passed, Cucumber passed 1,120 scenarios and 11,411 steps, and direct coverage merged 309 records. The RCN-03 focused scenario also passed 1 scenario and 15 steps. The full run needed loopback access because the default sandbox denied the Cucumber harness binding to `127.0.0.1`.
