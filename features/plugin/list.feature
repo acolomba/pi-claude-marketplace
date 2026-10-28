@@ -29,12 +29,24 @@ Feature: Plugin list
       }
       """
     Given the user has run "/claude:plugin marketplace update tools --scope project"
+    Given the marketplace "extras" is published as a dir source
+    Given the marketplace "extras" offers these plugins:
+      | name  | version |
+      | alpha | 1.0.0   |
+    Given the marketplace "extras" is added to the project scope
+    Given the user has run "/claude:plugin install alpha@extras --scope project"
+    Given the marketplace "extras" offers these plugins:
+      | name  | version |
+      | alpha | 2.0.0   |
     When the user runs "/claude:plugin list --scope project"
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name | status    | reasons | scope   | version |
-      | tools            | project           | ghp@tools | ghp  | installed |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id           | name  | status     | reasons | scope   | version |
+      | extras           | project           | alpha@extras | alpha | upgradable |         | project | 1.0.0   |
+      | tools            | project           | ghp@tools    | ghp   | installed  |         | project | 1.0.0   |
     When the user requests plugin completions for "update --partial --scope project "
-    Then the plugin completion set for "update --partial --scope project " is empty
+    Then the plugin completion set for "update --partial --scope project " contains these suggestions:
+      | label        | value                                           | description |
+      | alpha@extras | "update --partial --scope project alpha@extras " |             |
 
   Scenario: The list shows each kind of plugin with its status and scope
     Given the git repository "ghp" holds these plugins:

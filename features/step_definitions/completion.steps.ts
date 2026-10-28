@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 
-import { Then, When } from "@cucumber/cucumber";
+import { type DataTable, Then, When } from "@cucumber/cucumber";
 
 import { pluginCompletions } from "../lib/plugin-completions.ts";
 
@@ -16,20 +16,14 @@ When(
 );
 
 Then(
-  "the plugin completion set for {string} matches {string}",
-  function (this: ScenarioWorld, first: string, second: string): void {
-    const projection = (prefix: string) =>
-      this.completionsFor(prefix).map(({ label, description }) => ({ label, description }));
-    assert.deepStrictEqual(projection(first), projection(second));
-    this.markCompletionsCompared(first);
-    this.markCompletionsCompared(second);
-  },
-);
-
-Then(
-  "the plugin completion set for {string} is empty",
-  function (this: ScenarioWorld, prefix: string): void {
-    assert.deepStrictEqual(this.completionsFor(prefix), []);
+  "the plugin completion set for {string} contains these suggestions:",
+  function (this: ScenarioWorld, prefix: string, table: DataTable): void {
+    const rows = this.completionsFor(prefix).map(({ label, value, description }) => [
+      label,
+      JSON.stringify(value),
+      description ?? "",
+    ]);
+    assert.deepStrictEqual([["label", "value", "description"], ...rows], table.raw());
     this.markCompletionsCompared(prefix);
   },
 );
