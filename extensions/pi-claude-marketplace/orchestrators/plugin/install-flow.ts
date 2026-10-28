@@ -32,6 +32,7 @@ import {
 } from "../../shared/notify-reasons.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
+import { hygieneWarning } from "../../shared/staging-warnings.ts";
 import { cascadeUnstagePlugin, crossScopeFlag, foldUnstageNotices } from "../marketplace/shared.ts";
 
 import {
@@ -169,6 +170,7 @@ import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { ContentReason, McpConfigNotice } from "../../shared/notification-types.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial, runPhases } from "../../transaction/phase-ledger.ts";
 import type {
@@ -3017,6 +3019,7 @@ export type InstallMissingDependencyOutcome =
       readonly status: "installed";
       readonly members: readonly CascadeMemberOutcome[];
       readonly postCommitWarnings?: readonly string[];
+      readonly stagingWarnings?: readonly StagingWarning[];
       /** AFILE-04: the cascade's MCP config notices; omitted when none (NREG-01). */
       readonly mcpConfigNotices?: readonly McpConfigNotice[];
     } & Pick<LedgerDegradationSignals, "orphanRewake" | "degradedKinds">)
@@ -3246,10 +3249,17 @@ async function installMissingDependencyWithTransaction(
 
   // D-03-INV: drops the root marketplace's completion cache, same as install.
   const warnings = await collectPostCommitWarnings(outcome.root, completionCache, scope, true);
+  const discoveryMessages = new Map(
+    outcome.root.discoveryWarnings.map((warning) => [warning.message, warning]),
+  );
+  const stagingWarnings = warnings.map(
+    (warning): StagingWarning => discoveryMessages.get(warning) ?? hygieneWarning(warning),
+  );
   return {
     status: "installed",
     members: outcome.members,
     ...(warnings.length > 0 && { postCommitWarnings: warnings }),
+    ...(stagingWarnings.length > 0 && { stagingWarnings }),
     ...mcpConfigNoticesMember(outcome.mcpConfigNotices),
     ...ledgerDegradationSignals(outcome.root),
   };

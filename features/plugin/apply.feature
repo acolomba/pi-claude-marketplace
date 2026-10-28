@@ -62,6 +62,52 @@ Feature: Plugin apply
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
+  Scenario: Apply replaces a marketplace whose declared source changed
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given a second marketplace declaring the name "tools" is ready to add from "replacement"
+    Given a config in scope project and layer local, with these marketplaces:
+      | name  | source                           | autoupdate |
+      | tools | {home}/marketplaces/replacement |            |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | false                     |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 1                         |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                     |
+      | tools | {home}/marketplaces/tools |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name  | source                           |
+      | tools | {home}/marketplaces/replacement |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+
+  Scenario: The official fallback source is already up to date
+    Given the marketplace "claude-plugins-official" is published as a dir source
+    Given an earlier version recorded the marketplace "claude-plugins-official" in the project scope
+    Given a config in scope project and layer base, with these marketplaces:
+      | name                    | source                               | autoupdate |
+      | claude-plugins-official | anthropics/claude-plugins-official |            |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name                    | source                               |
+      | claude-plugins-official | anthropics/claude-plugins-official |
+
   Scenario: Apply uninstalls a plugin removed from a config by hand and keeps the others
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
@@ -1169,22 +1215,24 @@ Feature: Plugin apply
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.1.0   |
 
-  Scenario: Apply moves a path-source and a git-source plugin to the versions a marketplace update brought
+  Scenario: Apply reads the landed git revision after a dependency move
     Given the git repository "ghp" holds these plugins:
       | name | version | path |
       | ghp  | 1.0.0   |      |
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | ghp          |
     Given the marketplace "fixtures" offers these plugins from git repositories:
       | name | source kind | repository | pinned |
       | ghp  | github      | ghp        | true   |
     Given the marketplace "fixtures" is added to the project scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has run "/claude:plugin install ghp@fixtures --scope project"
+    Given the user has run "/claude:plugin install app@fixtures --scope project"
     Given the git repository "ghp" holds these plugins:
       | name | version | path |
       | ghp  | 2.0.0   |      |
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.1.0   |
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.1.0   | ghp          |
     Given the marketplace "fixtures" offers these plugins from git repositories:
       | name | source kind | repository | pinned |
       | ghp  | github      | ghp        | true   |
@@ -1200,11 +1248,11 @@ Feature: Plugin apply
       | tally success count | 2                         |
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status  | reasons | scope   | from  | to    |
-      | fixtures         | project           | demo@fixtures | demo | updated |         | project | 1.0.0 | 1.1.0 |
       | fixtures         | project           | ghp@fixtures  | ghp  | updated |         | project | 1.0.0 | 2.0.0 |
+      | fixtures         | project           | app@fixtures  | app  | updated |         | project | 1.0.0 | 1.1.0 |
     Then the installation record of the project scope holds these plugins:
       | id            | version | enabled |
-      | demo@fixtures | 1.1.0   | true    |
+      | app@fixtures  | 1.1.0   | true    |
       | ghp@fixtures  | 2.0.0   | true    |
     Then the git-source plugin "ghp" installed in the project scope runs revision 2 of its repository
 

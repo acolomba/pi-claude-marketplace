@@ -16750,8 +16750,59 @@ test("D-09-05: a malformed skill degrades the missing dependency and surfaces a 
       assert.equal(outcome.status, "installed");
       assert.ok(outcome.status === "installed");
       assert.ok((outcome.postCommitWarnings ?? []).length > 0);
+      assert.deepStrictEqual(
+        outcome.stagingWarnings?.map((warning) => warning.kind),
+        ["hygiene"],
+      );
       const after = await loadState(locations.extensionRoot);
       assert.equal(after.marketplaces["mp"]?.plugins["secrets-vault"]?.enabled, true);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-PL10-19: a missing dependency keeps bridge hygiene warnings tagged", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-dep-hygiene-"));
+    try {
+      // arrange
+      const { pluginRoot } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "secrets-vault",
+        skills: [{ sourceName: "skill" }, { sourceName: "secrets-vault-skill" }],
+        agents: [{ sourceName: "helper", description: "Helper", body: "Help.\n" }],
+      });
+      await writeFile(
+        path.join(pluginRoot, "agents", "helper.md"),
+        "---\nname: helper\ndescription: Helper\ncolor: blue\n---\n\nHelp.\n",
+      );
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "secrets-vault",
+        ranges: [],
+        requiredBy: "deploy-kit@mp",
+      });
+
+      // assert
+      assert.ok(outcome.status === "installed");
+      assert.deepStrictEqual(
+        outcome.stagingWarnings?.map((warning) => warning.kind),
+        ["discovery", "hygiene"],
+      );
+      assert.deepStrictEqual(outcome.stagingWarnings?.at(-1), {
+        kind: "hygiene",
+        message: "[helper] dropped fields: color",
+      });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

@@ -37,7 +37,10 @@ import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
 import type { InstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts";
 import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
-import type { ScopePassAccumulators } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/read-pass.ts";
+import type {
+  ReconcileStateReader,
+  ScopePassAccumulators,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/read-pass.ts";
 import type {
   McpMigrationInput,
   McpMigrationStep,
@@ -542,6 +545,86 @@ describe("readPlainPlanForScope", () => {
         },
       ],
     });
+  });
+
+  test("D-PL6-19: a changed declared source is planned as a replacement add", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "plain-source-replacement");
+    await seedRecordedState(scope);
+    const replacement = path.join(scope.cwd, "replacement-mp");
+    await writeUnder(scope.project.localConfigJsonPath, declaring({ mp: replacement }));
+
+    // act
+    const readResult = await readPlainPlanForScope(reader, "project", scope.cwd);
+
+    // assert
+    assert.deepStrictEqual(readResult.plan?.marketplacesToAdd, [
+      {
+        scope: "project",
+        marketplace: "mp",
+        source: replacement,
+        configSource: "local",
+      },
+    ]);
+    assert.deepStrictEqual(
+      readResult.plan?.sourceMismatches.map((mismatch) => mismatch.cause),
+      ["source-mismatch"],
+    );
+  });
+
+  test("D-PL6-19: the official fallback declaration produces no repair or mismatch", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "plain-official-fallback");
+    const mp = recordedState(scope).marketplaces.mp;
+    assert.ok(mp !== undefined);
+    await mkdir(scope.project.extensionRoot, { recursive: true });
+    await saveState(scope.project.extensionRoot, {
+      schemaVersion: 3,
+      marketplaces: {
+        "claude-plugins-official": {
+          ...mp,
+          name: "claude-plugins-official",
+        },
+      },
+    });
+    await writeUnder(
+      scope.project.baseConfigJsonPath,
+      declaring({ "claude-plugins-official": "anthropics/claude-plugins-official" }),
+    );
+
+    // act
+    const readResult = await readPlainPlanForScope(reader, "project", scope.cwd);
+
+    // assert
+    assert.deepStrictEqual(readResult.plan?.marketplacesToAdd, []);
+    assert.deepStrictEqual(readResult.plan?.sourceMismatches, []);
+  });
+
+  test("D-PL6-19: an unrecognized stored source remains report-only", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "plain-unknown-source");
+    const state = recordedState(scope);
+    const mp = state.marketplaces.mp;
+    assert.ok(mp !== undefined);
+    await mkdir(scope.project.extensionRoot, { recursive: true });
+    await writeUnder(scope.project.baseConfigJsonPath, declaring({ mp: scope.marketplaceRoot }));
+    const unknownReader: ReconcileStateReader = {
+      loadState: () =>
+        Promise.resolve({
+          ...state,
+          marketplaces: { mp: { ...mp, source: "opaque" } },
+        }),
+    };
+
+    // act
+    const readResult = await readPlainPlanForScope(unknownReader, "project", scope.cwd);
+
+    // assert
+    assert.deepStrictEqual(readResult.plan?.marketplacesToAdd, []);
+    assert.deepStrictEqual(
+      readResult.plan?.sourceMismatches.map((mismatch) => mismatch.cause),
+      ["unknown-stored"],
+    );
   });
 
   test("D-PL2-01: a planned dependency install does not count as landed, so the dependent waiting on it is not enabled", async (t) => {

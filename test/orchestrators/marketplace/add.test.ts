@@ -6766,6 +6766,52 @@ test("AFILE-04 / D-PL2-09: the MCP config notices of the step's installs follow 
   });
 });
 
+test("D-PL10-19: tagged hygiene warnings from dependency installs follow the add row", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx(2);
+    const step = recordingDependencyInstall({
+      rows: [DEPENDENCY_INSTALLED_ROW],
+      stagingDiagnostics: [
+        {
+          plugin: "lib",
+          scope: "project",
+          verb: "installed",
+          warnings: [{ kind: "hygiene", message: "[helper] dropped fields: color" }],
+        },
+      ],
+      mcpConfigNotices: [],
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: fixtureMarketplaceDir("valid-marketplace"),
+      installMissingDependencies: step.installMissingDependencies,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● valid-marketplace [project] (added)\n" +
+          "  ● lib@valid-marketplace v1.0.0 (installed) {dependency installed}\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+      {
+        message:
+          'Plugin "lib" [project] installed; 1 staging warning.\n\n' +
+          "[helper] dropped fields: color",
+        severity: "warning",
+      },
+    ]);
+  });
+});
+
 test("D-PL2-09: a step that throws still reports the committed add before the throw reaches the caller", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange

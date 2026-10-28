@@ -668,6 +668,19 @@ export interface ScopeDependencyInstallRequest {
  */
 export interface ScopeDependencyInstallResult {
   readonly rows: readonly ScopeDependencyInstallRow[];
+  readonly stagingDiagnostics?: readonly {
+    readonly plugin: string;
+    readonly scope: Scope;
+    readonly verb:
+      | "installed"
+      | "updated"
+      | "reinstalled"
+      | "enabled"
+      | "install failed"
+      | "update failed"
+      | "reinstall failed";
+    readonly warnings: readonly StagingWarning[];
+  }[];
   readonly mcpConfigNotices: readonly McpConfigNotice[];
 }
 

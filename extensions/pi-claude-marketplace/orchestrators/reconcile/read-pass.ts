@@ -33,6 +33,7 @@ import { errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
 import { notifyMcpMigration } from "../../shared/notification-dispatch.ts";
 import { notifyReconcileAppliedWithContext } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
@@ -70,6 +71,54 @@ import type { InstallHooksRouting } from "../plugin/install-disable-cascade.ts";
 /** Reads the one state snapshot selected by the reconcile read pass. */
 export interface ReconcileStateReader {
   readonly loadState: typeof loadState;
+}
+
+const OFFICIAL_CLAUDE_MARKETPLACE = "claude-plugins-official";
+const OFFICIAL_CLAUDE_MARKETPLACE_SOURCE = "anthropics/claude-plugins-official";
+
+/**
+ * D-PL6-19: turn a same-name declared-source change into the add path that
+ * replaces the recorded marketplace in place. A conflict or an unrecognized
+ * stored source stays report-only. Claude Code treats its built-in official
+ * source as a fallback, so that declaration is already current regardless of
+ * the source the record carries.
+ */
+function withMarketplaceSourceRepairs(
+  merged: MergedConfig,
+  state: ExtensionState,
+  plan: ReconcilePlan,
+): ReconcilePlan {
+  const additions = [...plan.marketplacesToAdd];
+  const mismatches: ReconcilePlan["sourceMismatches"][number][] = [];
+  for (const mismatch of plan.sourceMismatches) {
+    if (
+      mismatch.cause === "source-mismatch" &&
+      mismatch.marketplace === OFFICIAL_CLAUDE_MARKETPLACE &&
+      mismatch.declaredSource === OFFICIAL_CLAUDE_MARKETPLACE_SOURCE
+    ) {
+      continue;
+    }
+
+    if (mismatch.cause !== "source-mismatch") {
+      mismatches.push(mismatch);
+      continue;
+    }
+
+    const declaration = ownValue(merged.marketplaces, mismatch.marketplace);
+    const recorded = ownValue(state.marketplaces, mismatch.marketplace);
+    if (declaration !== undefined && recorded !== undefined) {
+      additions.push({
+        scope: mismatch.scope,
+        marketplace: mismatch.marketplace,
+        source: mismatch.declaredSource,
+        configSource: declaration.source,
+      });
+    }
+
+    mismatches.push(mismatch);
+  }
+
+  return { ...plan, marketplacesToAdd: additions, sourceMismatches: mismatches };
 }
 
 // An absent or invalid layer declares nothing.
@@ -139,8 +188,16 @@ export async function readPassForScope(
       // landed, as `pending` plans, because `apply` runs its missing-dependency
       // install after the moves.
       const planFrom = (from: ScopeSatisfactionVerdict, planned: ReconcilePlan): ReconcilePlan =>
-        withPlannedInstallsLanded(planned, from, state, (released) =>
-          planReconcile(merged, state, scope, released),
+        withPlannedInstallsLanded(
+          withMarketplaceSourceRepairs(merged, state, planned),
+          from,
+          state,
+          (released) =>
+            withMarketplaceSourceRepairs(
+              merged,
+              state,
+              planReconcile(merged, state, scope, released),
+            ),
         );
       const settled = await settleMoveCascade({
         scope,
@@ -148,7 +205,15 @@ export async function readPassForScope(
         locations,
         plan: planFrom(verdict, plan),
         verdict,
-        replan: (released) => planFrom(released, planReconcile(merged, state, scope, released)),
+        replan: (released) =>
+          planFrom(
+            released,
+            withMarketplaceSourceRepairs(
+              merged,
+              state,
+              planReconcile(merged, state, scope, released),
+            ),
+          ),
       });
       const deferred = new Set(
         settled.deferredEnables.map((op) => `${op.plugin}@${op.marketplace}`),
@@ -314,13 +379,23 @@ async function readScopeLocked(
       // record, the verdict is taken again over the scope as those toggles
       // leave it, so a dependent of a record the config disables is held down
       // in the same apply, and `pending` (which plans the same way) lists it.
-      const firstPlan = planReconcile(outcome.merged, state, scope, firstVerdict);
+      const firstPlan = withMarketplaceSourceRepairs(
+        outcome.merged,
+        state,
+        planReconcile(outcome.merged, state, scope, firstVerdict),
+      );
       const verdict = await verdictAfterToggles({ state, locations: loc }, firstVerdict, {
         enable: firstPlan.pluginsToEnable,
         disable: firstPlan.pluginsToDisable,
       });
       const toggled =
-        verdict === firstVerdict ? firstPlan : planReconcile(outcome.merged, state, scope, verdict);
+        verdict === firstVerdict
+          ? firstPlan
+          : withMarketplaceSourceRepairs(
+              outcome.merged,
+              state,
+              planReconcile(outcome.merged, state, scope, verdict),
+            );
       return finish({ merged: outcome.merged, state, locations: loc, verdict, plan: toggled });
     },
     { loadState: reader.loadState },

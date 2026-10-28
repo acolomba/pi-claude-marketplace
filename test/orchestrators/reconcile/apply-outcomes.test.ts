@@ -1325,6 +1325,14 @@ describe("stagingDiagnosticsOf", () => {
     const outcomes: PerEntryOutcome[] = [
       { kind: "mp-added", scope: "project", marketplace: "official" },
       {
+        kind: "plugin-installed",
+        scope: "project",
+        marketplace: "official",
+        plugin: "aardvark",
+        dependencies: [],
+        stagingWarnings: [hygieneWarning("installed note")],
+      },
+      {
         kind: "plugin-enabled",
         scope: "user",
         marketplace: "official",
@@ -1383,6 +1391,12 @@ describe("stagingDiagnosticsOf", () => {
 
     // assert
     assert.deepStrictEqual(diagnostics, [
+      {
+        plugin: "aardvark",
+        scope: "project",
+        verb: "installed",
+        warnings: [hygieneWarning("installed note")],
+      },
       { plugin: "beta", scope: "project", verb: "updated", warnings: moved },
       { plugin: "gamma", scope: "project", verb: "update failed", warnings: failed },
       { plugin: "alpha", scope: "user", verb: "enabled", warnings: [] },

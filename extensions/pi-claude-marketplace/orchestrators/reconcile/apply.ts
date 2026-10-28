@@ -321,6 +321,9 @@ async function applyMarketplaceAdds(
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
   for (const op of plan.marketplacesToAdd) {
+    const replacesRecorded = plan.sourceMismatches.some(
+      (mismatch) => mismatch.cause === "source-mismatch" && mismatch.marketplace === op.marketplace,
+    );
     // eslint-disable-next-line no-await-in-loop -- each add locks the scope (retries: 0)
     const result = await addMarketplace({
       ctx: opts.ctx,
@@ -330,6 +333,8 @@ async function applyMarketplaceAdds(
       rawSource: op.source,
       completionCache: opts.completionCache,
       notifications: { mode: "orchestrated" },
+      ...(op.configSource === "local" && { local: true }),
+      ...(replacesRecorded && { replaceRecorded: op.marketplace }),
       ...(opts.gitOps !== undefined && { gitOps: opts.gitOps }),
     });
     if (result.status === "added") {
@@ -871,6 +876,7 @@ async function applyDependencyInstalls(
           // AFILE-04: the cascade's notices ride the root's row, like the
           // warnings above; the root is always a materialized member.
           ...(member.key === rootKey && carriedMcpConfigNotices(result)),
+          ...(member.key === rootKey && carriedStagingWarnings(result)),
           // TAGS-02: `fellBackToCurrentCopy` is a REQUIRED member fact
           // (`CascadeMemberOutcome`); every member, not only the root, can
           // have fallen back to its current copy.
@@ -1294,7 +1300,16 @@ async function applyPlan(
   const installed = await applyPluginInstalls(opts, plan, outcomes);
   const toggles = installed ? await refreshTogglePlan(reader, opts, round1, outcomes) : round1;
   await applyToggleSteps(opts, toggles.plan, outcomes);
-  outcomes.push(...sourceMismatchOutcomes(plan));
+  const repairedMarketplaces = new Set(plan.marketplacesToAdd.map((op) => op.marketplace));
+  outcomes.push(
+    ...sourceMismatchOutcomes({
+      ...plan,
+      sourceMismatches: plan.sourceMismatches.filter(
+        (mismatch) =>
+          mismatch.cause !== "source-mismatch" || !repairedMarketplaces.has(mismatch.marketplace),
+      ),
+    }),
+  );
   return toggles;
 }
 
@@ -2443,8 +2458,12 @@ export function createScopeDependencyInstall(
       installs,
       outcomes,
     );
+    const stagingDiagnostics = stagingDiagnosticsOf(outcomes).filter(
+      (diagnostic) => diagnostic.warnings.length > 0,
+    );
     return {
       rows: dependencyInstallRows(outcomes),
+      ...(stagingDiagnostics.length > 0 && { stagingDiagnostics }),
       mcpConfigNotices: carriedOutcomeNotices(outcomes),
     };
   };
@@ -2464,7 +2483,7 @@ function surfacePostCommitWarnings(
       continue;
     }
 
-    if (o.postCommitWarnings === undefined) {
+    if (o.postCommitWarnings === undefined || "stagingWarnings" in o) {
       continue;
     }
 

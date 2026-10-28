@@ -3838,7 +3838,7 @@ describe("applyReconcile", () => {
         message:
           "Some operations have failed.\n" +
           "\n" +
-          "⊘ mp [project] (failed) {source mismatch}\n" +
+          "⊘ mp [project] (failed) {invalid manifest}\n" +
           "\n" +
           "⊘ nokey [project] (failed) {source mismatch}\n" +
           "\n" +
@@ -3854,6 +3854,111 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(
       Object.keys((await loadState(project.extensionRoot)).marketplaces).sort(),
       ["mp", "weird"],
+    );
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-PL6-19: a local-layer source change re-adds the marketplace in place and converges", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "source-replace-local");
+    const oldSource = await writeMarketplaceSource(cwd, "old-tools", "tools", {});
+    const newSource = await writeMarketplaceSource(cwd, "new-tools", "tools", {});
+    const baseBytes = configBytes({ marketplaces: {} });
+    const localBytes = configBytes({
+      marketplaces: { tools: { source: newSource.marketplaceRoot } },
+    });
+    await writeUnder(project.baseConfigJsonPath, baseBytes);
+    await writeUnder(project.localConfigJsonPath, localBytes);
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        tools: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "tools",
+          rawSource: oldSource.marketplaceRoot,
+          manifestPath: oldSource.manifestPath,
+          marketplaceRoot: oldSource.marketplaceRoot,
+        }),
+      },
+    });
+    const first = createNotificationBoundary(1);
+    const second = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({
+      ctx: first.ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+    });
+    await applyReconcile({
+      ctx: second.ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(first.notifications, [
+      { message: "● tools [project] (added)\n\nReconcile: 1 success" },
+    ]);
+    assert.deepStrictEqual(second.notifications, [APPLY_EMPTY_NOTICE]);
+    const record = (await loadState(project.extensionRoot)).marketplaces.tools;
+    assert.deepStrictEqual(record?.source, pathSource(newSource.marketplaceRoot));
+    assert.equal(record?.manifestPath, newSource.manifestPath);
+    assert.equal(record?.marketplaceRoot, newSource.marketplaceRoot);
+    assert.equal(await readFile(project.baseConfigJsonPath, "utf8"), baseBytes);
+    assert.equal(await readFile(project.localConfigJsonPath, "utf8"), localBytes);
+    assert.deepStrictEqual(clonedUrls(), []);
+    first.verifyBoundary();
+    second.verifyBoundary();
+  });
+
+  test("D-PL6-19: the official fallback source is already up to date", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "official-source-fallback");
+    const recorded = await writeMarketplaceSource(
+      cwd,
+      "official-mirror",
+      "claude-plugins-official",
+      {},
+    );
+    const declaration = configBytes({
+      marketplaces: {
+        "claude-plugins-official": { source: "anthropics/claude-plugins-official" },
+      },
+    });
+    await writeUnder(project.baseConfigJsonPath, declaration);
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        "claude-plugins-official": marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "claude-plugins-official",
+          rawSource: recorded.marketplaceRoot,
+          manifestPath: recorded.manifestPath,
+          marketplaceRoot: recorded.marketplaceRoot,
+        }),
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
+    assert.equal(await readFile(project.baseConfigJsonPath, "utf8"), declaration);
+    assert.deepStrictEqual(
+      (await loadState(project.extensionRoot)).marketplaces["claude-plugins-official"]?.source,
+      pathSource(recorded.marketplaceRoot),
     );
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
@@ -5680,7 +5785,7 @@ describe("applyReconcile", () => {
       /secrets-vault v1\.0\.0 \(installed\) \{dependency installed, malformed skill\}/,
     );
     assert.equal(cascade?.severity, "warning");
-    assert.match(diagnostic?.message ?? "", /post-install warning/);
+    assert.match(diagnostic?.message ?? "", /installed; 1 staging warning/);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
@@ -10353,6 +10458,35 @@ describe("createScopeDependencyInstall", () => {
     const secretsVault = await recordFor(project, "mp", "secrets-vault");
     assert.equal(secretsVault?.provenance, "dependency");
     assert.equal(secretsVault?.enabled, true);
+  });
+
+  test("D-PL10-19: returns tagged warnings from a selected missing dependency", async (t) => {
+    // arrange
+    const { cwd } = await seedDeployKitScope(t, "scope-step-warning", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "malformed" },
+    });
+
+    // act
+    const scopeInstall = await runStep(scopeDependencyInstall(), cwd, () => true);
+
+    // assert
+    assert.deepStrictEqual(
+      scopeInstall.stagingDiagnostics?.map(({ plugin, scope, verb, warnings }) => ({
+        plugin,
+        scope,
+        verb,
+        warningKinds: warnings.map((warning) => warning.kind),
+      })),
+      [
+        {
+          plugin: "secrets-vault",
+          scope: "project",
+          verb: "installed",
+          warningKinds: ["hygiene"],
+        },
+      ],
+    );
   });
 
   test("leaves a missing dependency the request does not select uninstalled", async (t) => {
