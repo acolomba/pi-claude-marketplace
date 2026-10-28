@@ -1,90 +1,67 @@
 ---
 phase: 01-staging-warning-channels
-fixed_at: 2026-10-27T00:00:00Z
+fixed_at: 2026-10-28T15:05:48Z
 review_path: .planning/phases/01-staging-warning-channels/01-REVIEW.md
 iteration: 1
-findings_in_scope: 5
-fixed: 5
+findings_in_scope: 2
+fixed: 2
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 01: Code Review Fix Report
 
-**Fixed at:** 2026-10-27
+**Fixed at:** 2026-10-28T15:05:48Z
 **Source review:** .planning/phases/01-staging-warning-channels/01-REVIEW.md
 **Iteration:** 1
 
 **Summary:**
 
-- Findings in scope: 5 (WR-01, WR-02, IN-01, IN-05, IN-07, as selected by the caller)
-- Fixed: 5
+- Findings in scope: 2 (CR-01 and CR-02)
+- Fixed: 2
 - Skipped: 0
-- Not in scope: IN-02, IN-03, IN-04 and IN-06 stay as they are, as the caller asked.
 
 ## Fixed Issues
 
-### WR-01: Staging diagnostics render in outcome order, not row order, across marketplace blocks
+### CR-01: Install drops MCP notices from dependency steps that already changed the file
 
-**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts`, `extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts`, `test/orchestrators/plugin/update-flow.test.ts`, `test/orchestrators/reconcile/apply-outcomes.test.ts`
-**Commit:** a6513334
-**Applied fix:** Both paths now stable-sort by the marketplace block key `{ name: marketplace, scope }` with `compareByNameThenScope`, the comparator `update-cascade.ts` and `reconcile/notify.ts` use for their blocks. Inside a block, rows keep outcome order, so the stable sort gives the row order. `stagingDiagnosticsOf` now filters to the three staging outcome kinds with a type guard before it sorts, because not every `PerEntryOutcome` carries `marketplace`. The existing `stagingDiagnosticsOf` test now pins row order (project block before user block). There is a new unit case with marketplaces `zeta` then `alpha`, and a new direct-update case: a project `zeta` and a user `alpha`, where the bare update visits zeta first and the diagnostics follow the alpha-first rows. Both new cases fail without the source change. The behavioral scenario came in a later commit, `a463dafc`; see below.
-**Status:** fixed: requires human verification (logic change)
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-dependency-ledger.ts`, `test/orchestrators/plugin/install-flow-planning.test.ts`, `test/orchestrators/plugin/install-flow-dependency-ledger.test.ts`, `features/plugin/staging-warnings.feature`
+**Commit:** `15e12fdf`
+**Status:** fixed: requires human verification
 
-### WR-02: `marketplace/update.messaging.ts` imports the `plugin/shared.ts` hub
+**Applied fix:** Dependency-step notices now reach both the failed-moves projection and the final install through `InstallAfterPlan`. The final install prepends prior notices to its own notices before the existing mode-selected emission, including its caught-failure path. Failed dependency moves use that same emission helper. Orchestrated installs return the notices without sending a notification; standalone installs emit them once after their rows and diagnostics.
 
-**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/staging-diagnostics.ts` (new), `extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts`, `extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts`, `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts`, `extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts`, `test/orchestrators/plugin/shared.test.ts`, `test/orchestrators/plugin/staging-diagnostics.test.ts` (new), `.planning/codebase/ARCHITECTURE.md`
-**Commit:** 28c9304b
-**Applied fix:** `StagingDiagnostic`, `surfaceStagingDiagnostics` and `surfaceDiscoveryWarnings` moved unchanged to the leaf `orchestrators/plugin/staging-diagnostics.ts`. That module imports only `shared/` modules: notification-dispatch, redact-absolute-paths and staging-warnings, plus type-only imports. Every caller imports the leaf directly, and `plugin/shared.ts` does not re-export it. Their tests, including the D-PL1-04 `@ts-expect-error` pin, moved to the paired `test/orchestrators/plugin/staging-diagnostics.test.ts`. The leaf list in the ARCHITECTURE.md marketplace-to-plugin import rule now names `staging-diagnostics.ts`. The leaf is in the same fallow `orchestrators` zone and is not a BLOCK C ledger, so no gate config changed.
-**Status:** fixed
+Four new unit cases cover successful installs and a later dependency move failing, each in standalone and orchestrated modes. They assert the exact `comments-dropped` notice; the successful standalone case also compares the complete notification sequence. Two new Cucumber scenarios compare the complete results and rows for the success and later-move-failure cases. No new step definition was needed.
 
-### IN-01: Comments the change made false
+**Regression proof:** Removing only this finding's source diff made all four new unit cases fail because the notice was absent. The source diff was restored in a `finally` block. All three modified source modules passed their own direct-coverage checks.
 
-**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts`
-**Commit:** 2000fed3
-**Applied fix:**
+### CR-02: Install member diagnostics no longer follow their row order
 
-- `install-outcome.ts` (WR-04 block): the comment now says that on a phase throw, `captureStagingWarnings` copies the collected warnings onto the failure capture (D-PL1-13).
-- `update-swap.ts` (`prepareUpdateHandles`): the comment now says that a throw reports the prepared handles' warnings through `reportStagingWarnings`, and that the caller reports the full set on success.
-- `reinstall-flow.ts` header: the self-rendering arm's reinstalled outcome leaves `discoveryWarnings` undefined, and failed outcomes carry it on both arms.
-- `reinstall-flow.ts` maintenance note: the side effect is now only the data-dir rm.
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-results.ts`, `test/orchestrators/plugin/install-flow-ledger.test.ts`, `test/orchestrators/plugin/install-flow-results.test.ts`, `features/plugin/staging-warnings.feature`
+**Commit:** `da9756bd`
+**Status:** fixed: requires human verification
 
-**Status:** fixed
+**Applied fix:** The root and dependency diagnostics are composed together and sorted with `compareByNameThenScope`, using the root's displayed name and each dependency's qualified row key. The root's member entry is excluded so it cannot emit twice. Diagnostic headers retain the root's display name and each member's plugin name. The ordered entries still pass through the discovery-only renderer, after the cascade and before MCP notices.
 
-### IN-05: D-PL1-15 matches rows by `generatedName` but deletes each row's own `targetPath`
+A new install-owner case compares the complete notification sequence when `zroot` depends on `aaa` and both produce notes. The projection case now checks member ordering, distinct row and header names, the root's displayed name, and exclusion of its duplicate member entry. A new Cucumber scenario compares every notification and row for the same root-after-dependency ordering.
 
-**Files modified:** `extensions/pi-claude-marketplace/bridges/agents/stage.ts`, `test/bridges/agents/stage.test.ts`
-**Commit:** 7d9d624c
-**Applied fix:** Under `force`, `partitionPreviousEntries` maps each staged `generatedName` to the `targetPath` this staging writes for it. A foreign-preserved row is replaced (file removed, row dropped) only when its target equals that path. A staged-name row that points at another file goes in neither set: the commit drops the row, because the new entry takes its name, and leaves the file. A new unit case covers this with a hand-edited row whose `targetPath` is another user file inside `agents/`. It fails without the fix.
-
-The change had a knock-on effect on the existing NFR-10 escape case. A foreign row can no longer reach the forced containment check, because a replaced foreign row always sits at a path this staging writes. So that case now uses an owned row: the file outside `agents/` carries the generated marker and passes the ownership check. That is the one kind of replaced row that can still point outside `agents/`. The case still proves the refusal. The containment check's comment says the same.
-**Status:** fixed: requires human verification (logic change)
-
-### IN-07: `materializeLatestVersion` relies on an unstated rule that a settle with no rows has no notices
-
-**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts`, `test/orchestrators/plugin/materialize-latest.test.ts`
-**Commit:** f5c4aec7
-**Applied fix:** I chose to read the notices rather than add a type invariant. A type invariant would change the `UpdateDependencySettlement` producers in `dependency-settle.ts`, and this fix needs no producer change. A settle now goes through `swapAfterSettle` when it reports rows or MCP notices (`reportsChanges`). `swapAfterSettle` adds `dependencyRows` only when there are rows (`dependencyRowsMember`, NREG-01), on both its updated and failed returns. A new unit case: a settle with notices and no rows keeps its notices and has no `dependencyRows` key. It fails without the fix.
-**Status:** fixed
+**Regression proof:** Removing only this finding's source diff made the Cucumber scenario fail on the reversed `zroot` and `aaa` diagnostics. The source diff was restored in a `finally` block. Both modified source modules passed their own direct-coverage checks.
 
 ## Verification
 
-All checks ran in the main checkout of this worktree (`/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-p1-warnings-6e004c`, branch `features/plugin-lifecycle-p1`). No nested review-fix worktree was created.
+All checks ran in the existing isolated checkout `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710`, on `agent-reverify-a`, using Node `v26.12.1`. The owner temporarily set `workflow.use_worktrees=false`; no nested worktree or recovery sentinel was created. The fixer neither changed nor staged `.planning/config.json`.
 
-Per fix: typecheck, ESLint on the touched files, `npm run test:coverage:direct -- <source>` for each touched source (all exit 0), `npm run fallow` for WR-02 and IN-07, and the commit hook's `check:commit`.
+- Re-read all changed source sections and checked their callers.
+- `npm run test:coverage:direct -- <source paths>` passed for the three CR-01 modules and the two CR-02 modules. Each pair met the required 100% line, function, and branch coverage.
+- `SKIP=npm-check pre-commit run --files <changed paths>` passed before each successful commit, after applying formatting fixes.
+- `fallow audit --base HEAD` passed before each successful commit.
+- Both successful commits passed the mandatory `npm run check:commit` hook, including typecheck, lint, Fallow, feature validation, unpaired tests, and staged-pair direct coverage. CR-02 hook failures were corrected before its successful commit; no hook was bypassed.
+- At final commit `da9756bd`, `npx cucumber-js features/plugin/staging-warnings.feature` exited 0: 19 scenarios and 227 steps passed.
+- `git diff --check` passed. No uncommitted build-input changes remain from this fixer.
 
-After all fixes: `npm run check` exited 0. That run included 912 cucumber scenarios, all passed. It exited 0 again after the WR-01 scenario was added (913 scenarios).
-
-## Behavioral scenario (closes the former open item)
-
-WR-01 changes the order of notes the user sees, so AGENTS.md asks for a cucumber scenario. The coordinator approved one. Commit `a463dafc` adds "A bare update over two marketplaces reports the skips in the order of the rows" to `features/plugin/staging-warnings.feature`. The project scope adds `fixtures` first and `addons` second, so the bare update visits `demo@fixtures` first. The rows show the `addons` block first, and the scenario requires the `tool` diagnostic before the `demo` one.
-
-Red proof: I reverse-applied the `a6513334` hunks of `update-flow.ts` and `apply-outcomes.ts` to the working tree for one run, and the scenario failed on the swapped diagnostic order. I then restored both files with `git checkout --`, and the scenario passed. I did not restore the literal pre-`a6513334` file bytes, because `28c9304b` later moved the renderer import, so those bytes no longer load.
-
-After the scenario commit, `npm run check` exited 0 (913 scenarios passed).
+The combined-tree `npm run check` gate remains the coordinating workflow's responsibility. Focused checks and commit hooks do not substitute for that gate. This report is intentionally uncommitted for the coordinator.
 
 ---
 
-_Fixed: 2026-10-27_
-_Fixer: Claude (gsd-code-fixer)_
+_Fixer: gsd-code-fixer_
 _Iteration: 1_
