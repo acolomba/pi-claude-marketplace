@@ -85,3 +85,9 @@ Checks ran in the assigned worktree `/home/acolomba/src/pi-claude-marketplace-22
 - Final normal commit hooks passed, including `npm run check:commit` and gitlint. The first attempt exposed the old host-arm architecture consumer and one switch-spacing lint error; both were fixed before the successful retry. Hooks were never bypassed.
 
 The commit changes only `background-pass.ts`, its paired test, the background feature and steps, and the existing git-host fixture and steps. REVIEW and SECURITY are untouched. This appendix is left uncommitted. A fresh full `npm run check` and independent re-review remain with the orchestrator.
+
+## Iteration 3: Wait-cap documentation
+
+Commit `9384204a1b380379f019b2f08e56d2de8f5440b2` changes only the background wait paragraph in `docs/env-vars.md`. It states that cancellation starts after 30 seconds and the command or session keeps waiting until the active step finishes. The canceled step fails cleanly, earlier completed changes remain, background work stops for that runtime, and quit does not wait. The wording was checked against D-PL8-23..25, `background-gate.ts`, and the shutdown handler.
+
+No owner test reads this document. The exact seven-name verification loop and pre-commit command in `08-02-PLAN.md` passed in the assigned `pl-reverify-b-258` worktree. Fallow reported no issues. Normal commit hooks, including Markdown formatting, Markdown lint, and gitlint, passed. The npm hook correctly skipped this documentation-only input. No implementation or test file changed. This minimal fix evidence is left uncommitted for the orchestrator.
