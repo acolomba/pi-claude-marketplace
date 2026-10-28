@@ -498,6 +498,7 @@ function redactedDependencyCascadeError(error: DependencyCascadeError): Dependen
 /** The failed arm of an orchestrated install, as `installFailedOutcomes` reads it. */
 type FailedPluginInstall = Parameters<typeof carriedMcpConfigNotices>[0] & {
   readonly error: Error;
+  readonly reason?: "cross-marketplace";
   readonly rollbackPartials?: readonly { readonly phase: string; readonly cause?: Error }[];
 };
 
@@ -574,7 +575,7 @@ function showsFailedDependency(
  * config, so their notices ride the requested plugin's failed row.
  */
 function installFailedOutcomes(
-  op: ReconcilePlan["pluginsToInstall"][number],
+  op: { readonly scope: Scope; readonly marketplace: string; readonly plugin: string },
   result: FailedPluginInstall,
   outcomes: readonly PerEntryOutcome[],
 ): PerEntryOutcome[] {
@@ -589,10 +590,11 @@ function installFailedOutcomes(
     return [
       {
         ...subject,
-        ...installFailureReasonFields(error),
+        ...installFailureReasonFields(error, result.reason),
         ...(error instanceof DependencyCascadeError && {
           cause: redactedDependencyCascadeError(error),
         }),
+        ...(error instanceof DirectoryPinUnsatisfiedError && { cause: error }),
         ...carriedMcpConfigNotices(result),
       },
     ];
@@ -879,18 +881,7 @@ async function applyDependencyInstalls(
       continue;
     }
 
-    outcomes.push({
-      kind: "plugin-install-failed",
-      scope: op.scope,
-      marketplace: op.marketplace,
-      plugin: op.plugin,
-      ...installFailureReasonFields(result.error, result.reason),
-      ...(result.error instanceof DependencyCascadeError && {
-        cause: redactedDependencyCascadeError(result.error),
-      }),
-      ...(result.error instanceof DirectoryPinUnsatisfiedError && { cause: result.error }),
-      ...carriedMcpConfigNotices(result),
-    });
+    outcomes.push(...installFailedOutcomes(op, result, outcomes));
   }
 
   return satisfied;

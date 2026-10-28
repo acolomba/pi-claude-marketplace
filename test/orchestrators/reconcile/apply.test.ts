@@ -5989,6 +5989,10 @@ describe("applyReconcile", () => {
         plugins: { "app@mp": {} },
       }),
     );
+    await writeUnder(
+      path.join(project.extensionRoot, "resources", "skills", "app-tool", "SKILL.md"),
+      "---\nname: app-tool\ndescription: installed app\n---\n",
+    );
     await seedState(project, {
       schemaVersion: 3,
       marketplaces: {
@@ -6212,6 +6216,81 @@ describe("applyReconcile", () => {
       Object.keys((await loadState(project.extensionRoot)).marketplaces),
       beforeMarketplaces,
     );
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("MIM-05: a missing dependency whose own dependency cannot roll back shows both rows", async (t) => {
+    // arrange
+    const { cwd, denyWrites, project, restoreWrites } = await createHermeticScopes(
+      t,
+      "missing-dependency-rollback-partial",
+    );
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      app: { skill: "clean", dependencies: ["lib"] },
+      lib: { skill: "clean", dependencies: ["bar"] },
+      bar: { skill: "clean" },
+    });
+    const readOnly = path.join(marketplaceRoot, "plugins", "bar", "skills", "tool", "read-only");
+    await writeUnder(path.join(readOnly, "data.txt"), "data\n");
+    await denyWrites(readOnly);
+    restoreWrites(path.join(project.extensionRoot, "resources", "skills", "bar-tool", "read-only"));
+    await mkdir(project.mcpAdapterJsonPath, { recursive: true });
+    const adapterReadError = await redactedReadErrorMessage(project.mcpAdapterJsonPath);
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "app@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            app: pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "app"),
+              skills: ["app-tool"],
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some plugin operations have failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ bar (failed) {rollback partial}\n" +
+          `    cause: ${adapterReadError} -> ${adapterReadError}\n` +
+          "    leaked: bar-tool\n" +
+          "    [skills] (rollback failed)\n" +
+          "      cause: EACCES: permission denied, unlink 'data.txt'\n" +
+          "  ⊘ lib (failed) {dependency failed}\n" +
+          "  ⊘ app (failed) {unreadable}\n" +
+          "\n" +
+          "Reconcile: 3 failures",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await recordFor(project, "mp", "bar"), undefined);
+    assert.equal(await recordFor(project, "mp", "lib"), undefined);
+    assert.equal((await recordFor(project, "mp", "app"))?.enabled, true);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
