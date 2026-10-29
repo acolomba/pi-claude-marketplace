@@ -4,8 +4,8 @@ slug: "apply-ordering-and-installed-declarations"
 status: verified
 threats_open: 0
 asvs_level: 1
-audited_commit: "9692623df10a567019acdb7a24e5e3229a72cc80"
-created: "2026-10-28"
+audited_commit: "be0de0c3"
+created: "2026-10-29"
 ---
 
 # Phase 2 — Security
@@ -83,6 +83,7 @@ None. All six plan summaries report no security surface outside their registered
 |------------|---------------|--------|------|--------|
 | 2026-10-28 | 19 | 19 | 0 | GSD security auditor, ASVS L1 |
 | 2026-10-28 | 19 | 19 | 0 | GSD final merged-tree security auditor, ASVS L1 |
+| 2026-10-29 | 19 | 19 | 0 | GSD final-head security auditor, ASVS L1 |
 
 The audit verified 12 mitigation rows and recorded the seven PLAN-authorized accepted risks. Counts preserve all six plan-qualified `T-02-SC` occurrences; the deduplicated register contains 14 IDs.
 
@@ -100,6 +101,14 @@ Nyquist is COMPLIANT 8/8, and the exact integrated full gate passed 1,142
 scenarios, 11,734 steps, and 309 LCOV records. No new or reopened threat was
 found; `threats_open` remains 0.
 
+The final-head recheck at executable head `be0de0c3` again verified all 19
+plan-qualified threats: 12 mitigations and seven documented accepted risks.
+D-PL2-17, D-PL2-23, and D-PL2-24 remain the formal amendments to the older
+symlink and owning-root literals while preserving fail-closed containment.
+Nyquist is COMPLIANT 8/8. The unchanged-input full gate is green with 1,145
+scenarios, 11,777 steps, and 309 LCOV records. No unregistered flag or open
+threat remains.
+
 ---
 
 ## Sign-Off
@@ -109,4 +118,4 @@ found; `threats_open` remains 0.
 - [x] `threats_open: 0` confirmed.
 - [x] `status: verified` set in frontmatter.
 
-**Approval:** verified 2026-10-28.
+**Approval:** verified 2026-10-29.
