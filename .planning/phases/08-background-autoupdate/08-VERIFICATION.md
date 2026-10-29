@@ -1,6 +1,6 @@
 ---
 phase: 08-background-autoupdate
-verified: 2026-10-29T05:40:04Z
+verified: 2026-10-29T13:42:50Z
 status: passed
 score: 4/4 must-haves verified
 covered_files:
@@ -12,12 +12,6 @@ covered_files:
   - .planning/phases/08-background-autoupdate/08-03-SUMMARY.md
   - .planning/phases/08-background-autoupdate/08-04-PLAN.md
   - .planning/phases/08-background-autoupdate/08-04-SUMMARY.md
-  - .planning/phases/08-background-autoupdate/08-CONTEXT.md
-  - .planning/phases/08-background-autoupdate/08-RESEARCH.md
-  - .planning/phases/08-background-autoupdate/08-REVIEW-FIX.md
-  - .planning/phases/08-background-autoupdate/08-REVIEW.md
-  - .planning/phases/08-background-autoupdate/08-SECURITY.md
-  - .planning/phases/08-background-autoupdate/08-VALIDATION.md
   - AGENTS.md
   - docs/env-vars.md
   - docs/json-output.md
@@ -74,7 +68,7 @@ covered_files:
   - test/shared/notification-json.test.ts
   - test/shared/notification-resolve.test.ts
   - test/shared/notification-wire.test.ts
-covered_digest: "v4:sha256:829ea8825b118e4dae21b0a039e033d98344eae37f62ff20643502ad4a9eb131"
+covered_digest: "v4:sha256:ba04c850818c9e6c41b1cf6bacfc7969316b548ab14fe7106b6dc9c11eb05e2f"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
@@ -88,7 +82,7 @@ re_verification:
 # Phase 8: Background Autoupdate Verification Report
 
 **Phase goal:** A marketplace with autoupdate on is refreshed and its plugins updated in the background after a session starts, as Claude Code does, with one passive notice.
-**Verified:** 2026-10-29T05:40:04Z
+**Verified:** 2026-10-29T13:42:50Z
 **Status:** passed
 **Re-verification:** Yes; the earlier report predates the current TUI, default, notice, and cancellation decisions.
 
@@ -111,7 +105,7 @@ The four PLANs contain 19 authored truth statements. Accepted decisions supersed
 
 | Historical clause | Current authority and verified behavior |
 | --- | --- |
-| 08-01 and 08-04 expected RPC to schedule and show a positive notice. | Reversed D-PL8-02 and D-PL8-20 require TUI-only scheduling. Real PTY scenarios prove the positive path; the RPC scenario proves no background update. |
+| 08-01 and 08-04 expected RPC to schedule and show a positive notice. | The current D-PL8-02 contract and D-PL8-20 evidence boundary require TUI-only scheduling. Real PTY scenarios prove the positive path; the RPC scenario proves no background update. |
 | 08-01 and 08-02 described default-off except explicit config. | Reversed D-PL8-07 applies official-name default-on at read time, while explicit local/base values win and invalid config fails closed. |
 | 08-03 deduplicated notice text by `<plugin>@<marketplace>`. | D-PL8-21 requires bare plugin-name deduplication. The wire still retains each updated installation. |
 | 08-01's initial known limit allowed an unbounded stalled-step wait. | D-PL8-23 through D-PL8-25 start abort at 30 seconds, propagate it through git, stop later background steps, and retain the gate until settlement. |
@@ -137,10 +131,10 @@ No output in the goal flow ends in a static fixture or hardcoded empty value. Th
 
 | Check | Result |
 | --- | --- |
-| Fresh exact `npm run check` at merged build-input HEAD `118f54ba` | Exit 0: **1,143 Cucumber scenarios, 11,742 steps, and 309 merged LCOV records**. The current validation records direct coverage for all five audited source/test pairs, including gate, pass, scheduler, grammar, and dispatch. Later Phase 8 commits are planning evidence or the WR-01 contract comment and do not change executable behavior. |
-| Focused verifier spot-check | Six named tests passed independently: first-message TUI arming; official/default-off selection; 30-second abort-then-settle; stop during config read; abort during config read; and the distinct-name split-notice false-green oracle. |
+| Exact reusable `npm run check` at executable HEAD `be0de0c3` | Exit 0: **1,145 Cucumber scenarios, 11,777 steps, and 309 merged LCOV records**. `git diff --quiet be0de0c3 -- . ':(exclude,glob).planning/**/*.md'` is still clean at report HEAD `165720c5`. The final Nyquist audit also passed all five audited direct-coverage pairs. |
+| Focused verifier spot-check | Fresh named-test selections passed in `background-gate.test.ts`, `background-pass.test.ts`, and `notification-grammar.test.ts`: 30-second abort-then-settle, official/default-off selection, stop and abort during config read, unchanged-run silence, and D-PL8-21 notice composition. |
 | Real Pi feature | `background-update.feature` has six current scenarios: TUI update, same-name deduplication, distinct-name aggregation, held-git foreground cancellation, RPC negative control, and PTY readiness. The final recorded run passed six scenarios and 88 steps. |
-| Review and security | `08-REVIEW.md` is a complete **53-file CLEAN 0/0/0** review at current HEAD `693d2796`; it confirms CR-01 was closed by `f61d5848` and WR-01 by `5384e63b`. `08-SECURITY.md` is **SECURED 21/21**, all 15 mitigations verified, all six accepted dispositions recorded, and `threats_open: 0`. |
+| Review and security | `08-REVIEW.md` is a complete **53-file CLEAN 0/0/0** final-head review at `5fe4aae9`. `08-SECURITY.md` is **SECURED 21/21** at `165720c5`, with all 15 mitigations verified, all six accepted dispositions recorded, and `threats_open: 0`. |
 | Test-quality and anti-pattern audit | Requirement-linked tests assert independent expected state, exact notice text/cardinality, a recorded split-notice mutant failure, and persisted install outcomes; none is disabled. No `TBD`, `FIXME`, `XXX`, `TODO`, `HACK`, or `PLACEHOLDER` appears in the Phase 8 changed production/test scope. No Phase 08 probe is declared. |
 
 The TUI screen parser observes distinct visible notice texts, not identical event counts. The distinct-name scenario and its recorded split-notice mutant failure prove aggregate visible output; the owner assertion proves exact notification-entry cardinality.
@@ -169,5 +163,5 @@ None. The four current roadmap outcomes and AUP-01 through AUP-03 are achieved o
 
 ---
 
-_Verified: 2026-10-29T05:40:04Z_
+_Verified: 2026-10-29T13:42:50Z_
 _Verifier: Codex (gsd-verifier)_
