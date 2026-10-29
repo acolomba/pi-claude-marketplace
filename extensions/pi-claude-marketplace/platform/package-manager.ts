@@ -343,7 +343,7 @@ function startProcess(
     // A detached Windows process would open a console window of its own.
     const spawnOptions: PackageManagerSpawnOptions = {
       cwd: request.cwd,
-      env: { ...options.env, npm_config_update_notifier: "false", ...(request.env ?? {}) },
+      env: { ...options.env, npm_config_update_notifier: "false", ...request.env },
       shell: false,
       stdio: ["ignore", "pipe", "pipe"],
       detached: options.host.platform !== "win32",
