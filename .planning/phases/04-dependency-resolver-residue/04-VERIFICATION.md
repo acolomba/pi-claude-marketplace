@@ -1,8 +1,8 @@
 ---
 phase: 04-dependency-resolver-residue
-verified: 2026-10-28T17:56:28Z
+verified: 2026-10-29T03:51:38Z
 status: passed
-score: 4/4 roadmap success criteria verified
+score: 4/4 must-haves verified
 covered_files:
   - ".planning/phases/04-dependency-resolver-residue/04-01-PLAN.md"
   - ".planning/phases/04-dependency-resolver-residue/04-01-SUMMARY.md"
@@ -17,11 +17,17 @@ covered_files:
   - ".planning/phases/04-dependency-resolver-residue/04-06-PLAN.md"
   - ".planning/phases/04-dependency-resolver-residue/04-06-SUMMARY.md"
   - "extensions/pi-claude-marketplace/bridges/agents/index-mutation.ts"
+  - "extensions/pi-claude-marketplace/bridges/agents/index.ts"
+  - "extensions/pi-claude-marketplace/bridges/agents/marker.ts"
   - "extensions/pi-claude-marketplace/bridges/agents/stage.ts"
   - "extensions/pi-claude-marketplace/bridges/agents/target-check.ts"
   - "extensions/pi-claude-marketplace/domain/release-tag.ts"
+  - "extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts"
+  - "extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts"
+  - "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts"
+  - "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts"
@@ -30,22 +36,39 @@ covered_files:
   - "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-results.ts"
+  - "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts"
+  - "extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts"
+  - "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts"
+  - "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts"
+  - "extensions/pi-claude-marketplace/shared/errors-bridges.ts"
+  - "features/lib/published-marketplace.ts"
   - "features/plugin/install-dependencies.feature"
   - "features/plugin/update-dependencies.feature"
   - "features/step_definitions/plugin/installation.steps.ts"
+  - "features/step_definitions/plugin/publishing.steps.ts"
+  - "features/support/pi-process.ts"
+  - "features/support/world.ts"
+  - "test/bridges/agents/index.test.ts"
+  - "test/bridges/agents/stage.test.ts"
   - "test/bridges/agents/target-check.test.ts"
   - "test/domain/release-tag.test.ts"
+  - "test/orchestrators/plugin/clone-cache.test.ts"
+  - "test/orchestrators/plugin/clone-gc.test.ts"
+  - "test/orchestrators/plugin/dependency-move.test.ts"
   - "test/orchestrators/plugin/dependency-plan.test.ts"
+  - "test/orchestrators/plugin/dependency-settle.test.ts"
   - "test/orchestrators/plugin/dependency-tag-probe.test.ts"
   - "test/orchestrators/plugin/install-cascade.test.ts"
   - "test/orchestrators/plugin/install-flow-cascade-context.test.ts"
+  - "test/orchestrators/plugin/install-flow-dependency-ledger.test.ts"
   - "test/orchestrators/plugin/install-flow-ledger.test.ts"
   - "test/orchestrators/plugin/install-flow-planning.test.ts"
   - "test/orchestrators/plugin/install-outcome.test.ts"
+  - "test/orchestrators/plugin/marketplace-tag-probe.test.ts"
   - "test/orchestrators/plugin/update-swap.test.ts"
-covered_digest: "v4:sha256:40b6d9d9de026b32166afbdbb4952c71bf89287d43916271c637a222025d842f"
+covered_digest: "v4:sha256:465b46996b3909b4ae0f561561bb7518baba3470b37dbfe7457aaf39d34c3dab"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
@@ -63,7 +86,7 @@ decision_coverage:
 # Phase 4: Dependency Resolver Residue Verification Report
 
 **Phase Goal:** The dependency resolver installs the commit it previewed, refuses before any move lands, and its completeness and `apply` behavior are decided against Claude Code.
-**Verified:** 2026-10-28
+**Verified:** 2026-10-29
 **Status:** passed
 **Re-verification:** Yes -- stale fingerprint refresh after later integration, install-flow splitting, and a completed review/fix loop.
 
@@ -130,9 +153,9 @@ No UI component renders dynamic data in this phase. The operational data flows a
 | Fresh git dependency installs previewed commit with one resolve                  | named D-PL4-01 case in `test/orchestrators/plugin/install-flow-planning.test.ts`                                               | 1/1 passed                                            | PASS   |
 | Failed undo reaches missing-dependency outcome                                   | named REC-06 case in `test/orchestrators/plugin/install-flow-ledger.test.ts`                                                   | 1/1 passed                                            | PASS   |
 | Probe returns a range-free no-match and cascade uses declared range              | named cases in dependency-tag-probe and install-cascade tests                                                                  | 2/2 passed                                            | PASS   |
-| Combined tree                                                                    | `npm run check` at build-input commit `c9dbf878` (planning-only commits followed)                                              | exit 0; 1126 scenarios, 11509 steps, 309 LCOV records | PASS   |
+| Combined tree                                                                    | `npm run check` at merged build-input commit `1c8be58f`                                                                        | exit 0; 1142 scenarios, 11734 steps, 309 LCOV records | PASS   |
 
-The combined-tree evidence is reusable: `git diff c9dbf878 -- . ':(exclude,glob).planning/**/*.md'` is empty and there are no untracked build inputs. Node was `v26.12.1`.
+The combined-tree evidence is current for this exact merged HEAD: `npm run check` passed at `1c8be58f` after the comment-only contract fix and final 52-file clean review. There are no later build-input changes and no untracked build inputs. Node was `v26.12.1`.
 
 ### Probe Execution
 
@@ -184,5 +207,5 @@ None. All roadmap success criteria, requirements, decisions, artifacts, and curr
 
 ---
 
-_Verified: 2026-10-28T17:56:28Z_
+_Verified: 2026-10-29T03:51:38Z_
 _Verifier: gsd-verifier_
