@@ -6,8 +6,8 @@ threats_open: 0
 asvs_level: 1
 block_on: high
 register_authored_at_plan_time: true
-audited_at: 59e5075b2edcdddde72cc7c21e69fa3e5e9db49f
-source_commit: 59e5075b2edcdddde72cc7c21e69fa3e5e9db49f
+audited_at: 0ea56531e157dabc4e4d7d5227f99178d6a8393a
+source_commit: 0ea56531e157dabc4e4d7d5227f99178d6a8393a
 base: d98660a7
 created: 2026-10-27
 updated: 2026-10-29
@@ -15,7 +15,7 @@ updated: 2026-10-29
 
 # Phase 6 - Security
 
-> Final threat verification for import marketplace planning (milestone `plugin-lifecycle`). Every mitigation below was rechecked on the final merged tree at `59e5075b2edcdddde72cc7c21e69fa3e5e9db49f`, after the review fixes and the SEC-06-01 follow-up.
+> Final threat verification for import marketplace planning (milestone `plugin-lifecycle`). Every mitigation below was rechecked on the final merged tree at `0ea56531e157dabc4e4d7d5227f99178d6a8393a`, after the review fixes, SEC-06-01, and CR-01 diagnostic-redaction follow-up.
 
 **Verdict:** SECURED — 14/14 threats closed; 11 mitigated and 3 documented accepted risks.
 
@@ -47,7 +47,7 @@ updated: 2026-10-29
 | T-06-07 | Elevation of privilege | An unreferenced git-source entry now clones over the network | low | accept | Claude Code registers every entry (E1). NFR-5 allows network for a git-source marketplace add. The add shows as an `(added)` row and is declared in the config (`test/orchestrators/import/execute.test.ts:1144`). The user can undo it with `marketplace remove`. See R-06-02. | closed |
 | T-06-08 | Tampering | A settings name resolves to the wrong recorded marketplace | high | mitigate | D-PL6-17/18 block installation under an absent settings name. `execute.ts:1638` records every plugin as `marketplace-not-added`; the unchanged-add arm also checks the returned canonical name at line 1404. Remaining config-name preservation uses the planner's one-to-one claims. Exact current regressions cover same-command reuse and canonical-only declarations. | closed |
 | T-06-09 | Repudiation | A marketplace/add failure or reused-source failure is omitted | medium | mitigate | D-PL6-19 routes eligible source changes through re-add and shared failure bookkeeping. The unchanged-add branch records different-name reuse failures and preserves same-name plugin headers. `marketplaceBlocks` creates the failed header, and exact regressions assert error severity and tally. | closed |
-| T-06-10 | Information disclosure | Import failure causes, rollback phases, and leaks expose paths | high | mitigate | Import rebuilds root and nested causes plus rollback phases through the shared redactor. SEC-06-01 is closed by `250acaad`: actual Node errno diagnostics with spaces, Unicode, `O'Brien`, `O' Brien`, two-path syscalls, UNC forms, nested causes, JSON serialization, and structured leaks reduce to basenames. Exact composed import TUI/JSON regressions are in `execute.test.ts`. | closed |
+| T-06-10 | Information disclosure | Import failure causes, rollback phases, and leaks expose paths | high | mitigate | Import rebuilds root and nested causes plus rollback phases through the shared redactor. SEC-06-01 is closed by `250acaad`: actual Node errno diagnostics with spaces, Unicode, `O'Brien`, `O' Brien`, two-path syscalls, UNC forms, nested causes, JSON serialization, and structured leaks reduce to basenames. CR-01 is closed by `2d258ae7`: state-read and config-write catches redact production `state.json at ...` and `Failed to read/write ...` forms before constructing returned diagnostics or notifications; exact owner and Cucumber regressions assert the absolute scope root is absent. | closed |
 | T-06-11 | Information disclosure | Apply install/enable/move failure causes, phases, and leaks expose paths | high | mitigate | Apply rebuilds dependency, root, rollback, failed-enable, and failed-move causes through the shared redactor before notify/JSON projection. Exact TUI/JSON regressions cover install and enable recovery under a spaced Unicode `O' Brien` root; leaked resources remain basename-only. | closed |
 | T-06-12 | Tampering | Splitting a dependency key into marketplace and plugin | low | mitigate | `dependencyRollbackOutcome` splits at `error.key.lastIndexOf("@")` (`apply.ts:495-499`). This is the same rule as `parsePluginKey` (`plan.ts:87-96`). | closed |
 | T-06-13 | Tampering | Import enable rows after the outcome is narrowed | low | mitigate | `installedRow` rebuilds `stagedAgents`, `stagedMcpServers`, and `stagedWorkflows` from the required `declaresAgents`, `declaresMcp`, and `declaresWorkflows` members (`execute.ts:702-704`; the members are required at `execute.ts:130-131` and `161`; `enableSignals` omits the staged facts at `execute.ts:156-159`). The IMP-05 enable case asserts the companion markers in its exact rendered text (`execute.test.ts:5107`). | closed |
@@ -97,6 +97,7 @@ These notes come from reading the review-fix changes. None of them is a missing 
 | 2026-10-29 | 14 | 12 | 2 | Fresh re-audit at `a04c4756`; SEC-06-01 opened T-06-10/T-06-11 |
 | 2026-10-29 | 14 | 14 | 0 | Final independent re-audit at `250acaad`; 131 diagnostic/projection assertions |
 | 2026-10-29 | 14 | 14 | 0 | Final merged-tree ASVS L1 re-audit at `59e5075b`; 11/11 mitigations verified, 3/3 accepted risks logged, no unregistered flags; exact green gate reused (1,142 scenarios, 11,734 steps, 309 LCOV records) |
+| 2026-10-29 | 14 | 14 | 0 | Post-CR-01 merged-tree ASVS L1 re-audit at `0ea56531`; diagnostic disclosure closed by `2d258ae7`; returned data and all transports receive redacted text; fresh gate green (1,143 scenarios, 11,742 steps, 309 LCOV records) |
 
 ---
 
@@ -107,4 +108,4 @@ These notes come from reading the review-fix changes. None of them is a missing 
 - [x] `threats_open: 0` is confirmed.
 - [x] `status: verified` is set in frontmatter.
 
-**Approval:** SECURED 2026-10-29 at `59e5075b2edcdddde72cc7c21e69fa3e5e9db49f`.
+**Approval:** SECURED 2026-10-29 at `0ea56531e157dabc4e4d7d5227f99178d6a8393a`.
