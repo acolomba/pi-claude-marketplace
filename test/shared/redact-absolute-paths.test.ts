@@ -108,9 +108,29 @@ describe("redactAbsolutePaths", () => {
       expected: "unlink '[redacted path]",
     },
     {
-      name: "stops a POSIX path before later slash-bearing prose",
+      name: "fails closed for an embedded quote before a balanced later value",
+      input: "open '/tmp/O' Brien/private/secret.json 'x'",
+      expected: "open '[redacted path]",
+    },
+    {
+      name: "fails closed for an embedded double quote before a balanced later value",
+      input: String.raw`open "C:\private\O" Brien\secret.json "x"`,
+      expected: 'open "[redacted path]',
+    },
+    {
+      name: "fails closed for an embedded UNC quote before a balanced later value",
+      input: String.raw`open '\\server\private\O' Brien\secret.json 'x'`,
+      expected: "open '[redacted path]",
+    },
+    {
+      name: "fails closed when four matching quotes follow the opener",
+      input: "open '/tmp/O' Brien/private/secret.json 'x' tail '",
+      expected: "open '[redacted path]",
+    },
+    {
+      name: "fails closed before later single-quoted diagnostic text",
       input: "open '/tmp/private/file.json' failed; see docs/errors 'E_READ'",
-      expected: "open 'file.json' failed; see docs/errors 'E_READ'",
+      expected: "open '[redacted path]",
     },
     {
       name: "fails closed for a POSIX path before a bare unmatched quote",
@@ -183,29 +203,29 @@ describe("redactAbsolutePaths", () => {
       expected: 'open "[redacted path]',
     },
     {
-      name: "stops a drive path before later slash-bearing prose",
+      name: "fails closed for a drive path before later single-quoted text",
       input: String.raw`open 'C:\private\file.json' failed; see docs/errors 'E_READ'`,
-      expected: "open 'file.json' failed; see docs/errors 'E_READ'",
+      expected: "open '[redacted path]",
     },
     {
-      name: "stops a UNC path before later slash-bearing prose",
+      name: "fails closed for a UNC path before later single-quoted text",
       input: String.raw`open '\\server\private\file.json' failed; see docs/errors 'E_READ'`,
-      expected: "open 'file.json' failed; see docs/errors 'E_READ'",
+      expected: "open '[redacted path]",
     },
     {
-      name: "stops a POSIX path before immediate slash-bearing prose",
+      name: "fails closed before immediate prose and a quoted value",
       input: "open '/tmp/private/file.json' docs/errors 'E_READ'",
-      expected: "open 'file.json' docs/errors 'E_READ'",
+      expected: "open '[redacted path]",
     },
     {
-      name: "stops a drive path before immediate slash-bearing prose",
+      name: "fails closed for a drive path before a quoted value",
       input: String.raw`open 'C:\private\file.json' docs/errors 'E_READ'`,
-      expected: "open 'file.json' docs/errors 'E_READ'",
+      expected: "open '[redacted path]",
     },
     {
-      name: "stops a UNC path before immediate slash-bearing prose",
+      name: "fails closed for a UNC path before a quoted value",
       input: String.raw`open '\\server\private\file.json' docs/errors 'E_READ'`,
-      expected: "open 'file.json' docs/errors 'E_READ'",
+      expected: "open '[redacted path]",
     },
     {
       name: "fails closed before separate paths with internal apostrophes",
@@ -303,6 +323,11 @@ describe("redactAbsolutePaths", () => {
       expected: 'read "secret file.json"',
     },
     {
+      name: "preserves a quoted single-segment JSON pointer",
+      input: 'invalid "/schemaVersion"',
+      expected: 'invalid "/schemaVersion"',
+    },
+    {
       name: "preserves quoted URLs and single-segment JSON pointers",
       input: 'invalid "/schemaVersion" at "https://example.test/a/b" or "file:///a/b"',
       expected: 'invalid "/schemaVersion" at "https://example.test/a/b" or "file:///a/b"',
@@ -383,9 +408,9 @@ describe("redactAbsolutePaths", () => {
       expected: "open '[redacted path]",
     },
     {
-      name: "keeps a UNC basename when its quote chain is unambiguous",
+      name: "fails closed for a UNC path followed by a quoted value",
       input: String.raw`open '\\server\private;see=hidden\secret.json' docs/errors 'x'`,
-      expected: "open 'secret.json' docs/errors 'x'",
+      expected: "open '[redacted path]",
     },
     {
       name: "preserves a single-segment JSON pointer",
@@ -428,7 +453,7 @@ describe("redactAbsolutePaths", () => {
       { boundary: "closing bracket", quotedValue: "]hidden" },
       { boundary: "closing brace", quotedValue: "}hidden" },
     ] as const) {
-      test(`stops a ${platform} path before slash-bearing prose and a ${boundary} quoted value`, () => {
+      test(`fails closed for a ${platform} path before a ${boundary} quoted value`, () => {
         // arrange
         const input = `open '${absolutePath}' docs/errors '${quotedValue}'`;
 
@@ -436,7 +461,7 @@ describe("redactAbsolutePaths", () => {
         const text = redactAbsolutePaths(input);
 
         // assert
-        assert.strictEqual(text, `open 'file.json' docs/errors '${quotedValue}'`);
+        assert.strictEqual(text, "open '[redacted path]");
       });
     }
   }
@@ -568,7 +593,7 @@ describe("redactCauseChain", () => {
     assert.doesNotMatch(trailer, /Brien\/秘密\/secret\.json/u);
   });
 
-  test("keeps prose after a closed quoted path in a cause chain", () => {
+  test("fails closed before later quoted text in a cause chain", () => {
     // arrange
     const failure = new Error("open '/tmp/private/file.json' failed; see docs/errors 'E_READ'");
 
@@ -576,7 +601,7 @@ describe("redactCauseChain", () => {
     const trailer = causeChainTrailer(redactCauseChain(failure));
 
     // assert
-    assert.strictEqual(trailer, "cause: open 'file.json' failed; see docs/errors 'E_READ'");
+    assert.strictEqual(trailer, "cause: open '[redacted path]");
   });
 
   test("fails closed for ambiguous quote boundaries in a cause chain", () => {
@@ -589,13 +614,10 @@ describe("redactCauseChain", () => {
     const trailer = causeChainTrailer(redactCauseChain(failure));
 
     // assert
-    assert.strictEqual(
-      trailer,
-      "cause: unlink '[redacted path] -> open 'file.json' docs/errors 'E_READ'",
-    );
+    assert.strictEqual(trailer, "cause: unlink '[redacted path] -> open '[redacted path]");
   });
 
-  test("keeps slash-bearing prose before punctuation-prefixed quoted values", () => {
+  test("fails closed before punctuation-prefixed quoted values", () => {
     // arrange
     const failure = new Error("open '/tmp/private/file.json' docs/errors '.hidden'", {
       cause: new Error("open 'C:\\private\\file.json' docs/errors ':E_READ'", {
@@ -609,9 +631,7 @@ describe("redactCauseChain", () => {
     // assert
     assert.strictEqual(
       trailer,
-      "cause: open 'file.json' docs/errors '.hidden' -> " +
-        "open 'file.json' docs/errors ':E_READ' -> " +
-        "open 'file.json' docs/errors ' E_READ'",
+      "cause: open '[redacted path] -> open '[redacted path] -> open '[redacted path]",
     );
   });
 
@@ -695,6 +715,19 @@ describe("redactCauseChain", () => {
 
     // assert
     assert.strictEqual(trailer, "cause: open '[redacted path] -> open '[redacted path]");
+  });
+
+  test("fails closed when an embedded path quote precedes a balanced value", () => {
+    // arrange
+    const failure = new Error("open '/tmp/O' Brien/private/secret.json 'x'", {
+      cause: new Error(String.raw`open "C:\private\O" Brien\secret.json "x"`),
+    });
+
+    // act
+    const trailer = causeChainTrailer(redactCauseChain(failure));
+
+    // assert
+    assert.strictEqual(trailer, "cause: open '[redacted path] -> open \"[redacted path]");
   });
 
   test("fails closed when later quoted fragments resemble path delimiters", () => {

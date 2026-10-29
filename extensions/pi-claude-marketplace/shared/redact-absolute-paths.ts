@@ -73,37 +73,22 @@ function isQuotedPathBoundary(character: string | undefined): boolean {
 }
 
 const REDACTED_PATH = "[redacted path]";
-function hasResolvedQuoteChain(text: string, quote: string, fromIndex: number): boolean {
-  let opening = text.indexOf(quote, fromIndex);
-  while (opening >= 0) {
-    if (!isQuotedPathBoundary(text[opening - 1])) {
-      return false;
-    }
-
-    const closing = text.indexOf(quote, opening + 1);
-    if (closing < 0 || !isQuotedPathBoundary(text[closing + 1])) {
-      return false;
-    }
-
-    opening = text.indexOf(quote, closing + 1);
-  }
-
-  return true;
-}
-
 function quotedPathEnd(text: string, quote: string, fromIndex: number): number | undefined {
   const delimiter = text.indexOf(quote, fromIndex);
-  if (delimiter < 0 || !isQuotedPathBoundary(text[delimiter + 1])) {
+  if (
+    delimiter < 0 ||
+    !isQuotedPathBoundary(text[delimiter + 1]) ||
+    text.includes(quote, delimiter + 1) ||
+    /[/\\]/u.test(text.slice(delimiter + 1))
+  ) {
     return undefined;
   }
 
-  const laterQuote = text.indexOf(quote, delimiter + 1);
-  if (laterQuote >= 0) {
-    return hasResolvedQuoteChain(text, quote, laterQuote) ? delimiter : undefined;
-  }
+  return delimiter;
+}
 
-  const suffix = text.slice(delimiter + 1);
-  return /[/\\]/u.test(suffix) ? undefined : delimiter;
+function isQuotedAbsolutePathCandidate(candidate: string): boolean {
+  return /^(?:[A-Za-z]:[\\/]|\\\\|\/).*[/\\][^/\\]+$/s.test(candidate);
 }
 
 function redactQuotedAbsolutePaths(text: string): string {
@@ -115,6 +100,15 @@ function redactQuotedAbsolutePaths(text: string): string {
     const quote = text.charAt(match.index);
     const delimiter = quotedPathEnd(text, quote, opening.lastIndex);
     if (delimiter === undefined) {
+      const firstQuote = text.indexOf(quote, opening.lastIndex);
+      const candidateEnd = firstQuote < 0 ? text.length : firstQuote;
+      const candidate = text.slice(match.index + 1, candidateEnd);
+      if (!isQuotedAbsolutePathCandidate(candidate)) {
+        opening.lastIndex = match.index + 1;
+        match = opening.exec(text);
+        continue;
+      }
+
       redacted += text.slice(copiedThrough, match.index) + quote + REDACTED_PATH;
       copiedThrough = text.length;
       opening.lastIndex = copiedThrough;
@@ -124,7 +118,7 @@ function redactQuotedAbsolutePaths(text: string): string {
 
     const end = delimiter;
     const candidate = text.slice(match.index + 1, end);
-    if (/^(?:[A-Za-z]:[\\/]|\\\\|\/).*[/\\][^/\\]+$/s.test(candidate)) {
+    if (isQuotedAbsolutePathCandidate(candidate)) {
       redacted += text.slice(copiedThrough, match.index) + quote + pathBasename(candidate) + quote;
       copiedThrough = end + quote.length;
       opening.lastIndex = copiedThrough;

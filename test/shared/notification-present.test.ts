@@ -1056,7 +1056,7 @@ describe("presentNotification", () => {
     assert.ok(!Object.values(presentation).some((field) => field instanceof Error));
   });
 
-  test("keeps diagnostic prose after a redacted prune cause path", () => {
+  test("fails closed before later quoted diagnostic text", () => {
     // arrange
     const message = {
       kind: "prune-committed-warning",
@@ -1079,7 +1079,7 @@ describe("presentNotification", () => {
       },
       scope: "project",
       cause: {
-        causeChain: ["open 'file.json' failed; see docs/errors 'E_READ'"],
+        causeChain: ["open '[redacted path]"],
         truncated: false,
       },
     });
@@ -1109,14 +1109,11 @@ describe("presentNotification", () => {
         noOp: false,
       },
       scope: "project",
-      cause: {
-        causeChain: ["unlink '[redacted path]", "open 'file.json' docs/errors 'E_READ'"],
-        truncated: false,
-      },
+      cause: { causeChain: ["unlink '[redacted path]", "open '[redacted path]"], truncated: false },
     });
   });
 
-  test("keeps slash-bearing prose before a punctuation-prefixed quoted value", () => {
+  test("fails closed before a punctuation-prefixed quoted value", () => {
     // arrange
     const message = {
       kind: "prune-committed-warning",
@@ -1138,10 +1135,7 @@ describe("presentNotification", () => {
         noOp: false,
       },
       scope: "project",
-      cause: {
-        causeChain: ["open 'file.json' docs/errors '.hidden'"],
-        truncated: false,
-      },
+      cause: { causeChain: ["open '[redacted path]"], truncated: false },
     });
   });
 
@@ -1314,6 +1308,32 @@ describe("presentNotification", () => {
         causeChain: ["open '[redacted path]", "open '[redacted path]"],
         truncated: false,
       },
+    });
+  });
+
+  test("fails closed for an embedded path quote before a balanced value", () => {
+    // arrange
+    const message = {
+      kind: "prune-committed-warning",
+      scope: "project",
+      cause: new Error("open '/tmp/O' Brien/private/secret.json 'x'"),
+    } satisfies PruneCommittedWarningMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        needsApply: false,
+        noOp: false,
+      },
+      scope: "project",
+      cause: { causeChain: ["open '[redacted path]"], truncated: false },
     });
   });
 
