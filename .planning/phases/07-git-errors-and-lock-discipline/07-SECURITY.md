@@ -8,7 +8,7 @@ threats_closed: 31
 threats_open: 0
 audited: 2026-10-29
 diff_base: cc459a82
-audited_commit: d183d481a6b5d86c20208bc63a616e22b5c9430e
+audited_commit: be0de0c3
 ---
 
 # Phase 07 security audit
@@ -83,3 +83,10 @@ broad-listing literal: it locks, reloads live state, and deletes only
 operation-owned still-unreferenced keys. A focused 11-module adversarial run
 passed; the fresh full gate remains green with 1,143 scenarios, 11,742 steps,
 and 309 LCOV records.
+
+2026-10-29 — Final-head ASVS L1 re-audit at executable head `be0de0c3`:
+31/31 plan rows closed; 16 mitigations and 15 accepted rows verified; no
+unregistered flags; `threats_open: 0`. Exact-candidate collection remains the
+formal safe supersession of Plan 07-02's broad-listing literal. Nyquist
+GLK-01..08 is COMPLIANT, and the unchanged-input full gate remains green with
+1,145 scenarios, 11,777 steps, and 309 LCOV records.
