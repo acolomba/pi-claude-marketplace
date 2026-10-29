@@ -126,7 +126,7 @@ export async function materializeLatestVersion(
       declaresAgents: false,
       declaresMcp: false,
       declaresWorkflows: false,
-      ...settleWarningsFirst(settled, undefined),
+      ...dependencyStagingDiagnosticsMember(settled),
       // D-PL1-16: the dependencies installed before the refusal rewrote the file.
       ...settleNoticesFirst(settled, undefined),
     };
@@ -163,16 +163,16 @@ function reportsChanges(settled: UpdateDependencySettlement): boolean {
   return (
     settled.rows.length > 0 ||
     (settled.mcpConfigNotices ?? []).length > 0 ||
-    (settled.stagingWarnings ?? []).length > 0
+    (settled.stagingDiagnostics ?? []).length > 0
   );
 }
 
-function settleWarningsFirst(
+function dependencyStagingDiagnosticsMember(
   settled: UpdateDependencySettlement,
-  own: readonly StagingWarning[] | undefined,
-): Pick<PluginUpdateFailedOutcome, "stagingWarnings"> {
-  const warnings = [...(settled.stagingWarnings ?? []), ...(own ?? [])];
-  return warnings.length > 0 ? { stagingWarnings: warnings } : {};
+): Pick<PluginUpdateFailedOutcome, "dependencyStagingDiagnostics"> {
+  return settled.stagingDiagnostics === undefined
+    ? {}
+    : { dependencyStagingDiagnostics: settled.stagingDiagnostics };
 }
 
 /**
@@ -235,7 +235,7 @@ async function swapAfterSettle(
     return {
       ...outcome,
       ...dependencyRowsMember(settled),
-      ...settleWarningsFirst(settled, ownWarnings(outcome)),
+      ...dependencyStagingDiagnosticsMember(settled),
       ...settleNoticesFirst(settled, ownNotices(outcome)),
     };
   } catch (err) {
@@ -252,7 +252,8 @@ async function swapAfterSettle(
       declaresMcp: false,
       declaresWorkflows: false,
       // D-PL1-14: the warnings of the handles prepared before the throw.
-      ...settleWarningsFirst(settled, report.stagingWarnings),
+      ...reportedStagingWarnings(report),
+      ...dependencyStagingDiagnosticsMember(settled),
       ...settleNoticesFirst(settled, undefined),
     };
   }
@@ -268,10 +269,6 @@ function dependencyRowsMember(settled: UpdateDependencySettlement): {
 /** The swap outcome's own MCP config notices; only its updated and failed arms carry any. */
 function ownNotices(outcome: UpdateRunOutcome): readonly McpConfigNotice[] | undefined {
   return "mcpConfigNotices" in outcome ? outcome.mcpConfigNotices : undefined;
-}
-
-function ownWarnings(outcome: UpdateRunOutcome): readonly StagingWarning[] | undefined {
-  return "stagingWarnings" in outcome ? outcome.stagingWarnings : undefined;
 }
 
 /**

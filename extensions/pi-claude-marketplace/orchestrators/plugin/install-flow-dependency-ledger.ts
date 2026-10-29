@@ -580,13 +580,24 @@ async function saveInstallDependencyPlanClosure(
     cwd: args.target.cwd,
     members: settled.members,
   });
-  const stagingWarnings = settled.members.flatMap((member) => member.discoveryWarnings ?? []);
+  const stagingDiagnostics = settled.members.flatMap((member) =>
+    member.discoveryWarnings === undefined
+      ? []
+      : [
+          {
+            plugin: member.name,
+            scope: args.target.scope,
+            verb: "installed" as const,
+            warnings: member.discoveryWarnings,
+          },
+        ],
+  );
   return {
     kind: "installed",
     rows: settled.members.map((member) =>
       composeCascadeMemberRow(member, args.caller.run.softDeps),
     ),
-    ...(stagingWarnings.length > 0 && { stagingWarnings }),
+    ...(stagingDiagnostics.length > 0 && { stagingDiagnostics }),
     ...installMcpConfigNoticesMember(settled.mcpConfigNotices),
   };
 }

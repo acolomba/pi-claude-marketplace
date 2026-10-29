@@ -381,7 +381,7 @@ describe("runDependencySteps", () => {
     });
   });
 
-  test("D-PL10-12: a moved dependency carries its warnings and MCP notices through the step result", async () => {
+  test("D-PL10-16: a moved dependency keeps its warning owner through the step result", async () => {
     // arrange
     const warning = discoveryWarning("dependency skill collision");
     const ports = stepPorts({
@@ -389,7 +389,14 @@ describe("runDependencySteps", () => {
         Promise.resolve({
           landed: true,
           rows: [updatedRow("lib@mp")],
-          stagingWarnings: [warning],
+          stagingDiagnostics: [
+            {
+              plugin: "lib",
+              scope: "project",
+              verb: "updated",
+              warnings: [warning],
+            },
+          ],
           mcpConfigNotices: [ADAPTER_NOTICE],
         }),
     });
@@ -402,19 +409,33 @@ describe("runDependencySteps", () => {
       ok: true,
       landed: [moved(updatedRow("lib@mp"))],
       mcpConfigNotices: [ADAPTER_NOTICE],
-      stagingWarnings: [warning],
+      stagingDiagnostics: [
+        {
+          plugin: "lib",
+          scope: "project",
+          verb: "updated",
+          warnings: [warning],
+        },
+      ],
     });
   });
 
-  test("a materialized closure carries its dependency warnings", async () => {
+  test("a materialized closure keeps its dependency warning owner", async () => {
     // arrange
     const ports = stepPorts({
       materialize: (members) =>
         Promise.resolve({
           kind: "installed",
           rows: members.map((entry) => installedRow(entry.member.key)),
-          stagingWarnings: [PACKAGE_WARNING],
-        }),
+          stagingDiagnostics: [
+            {
+              plugin: "helper",
+              scope: "project",
+              verb: "installed",
+              warnings: [PACKAGE_WARNING],
+            },
+          ],
+        } as SettleCascadeRun),
     });
 
     // act
@@ -424,7 +445,14 @@ describe("runDependencySteps", () => {
     assert.deepStrictEqual(ran, {
       ok: true,
       landed: [moved(installedRow("helper@mp"))],
-      stagingWarnings: [PACKAGE_WARNING],
+      stagingDiagnostics: [
+        {
+          plugin: "helper",
+          scope: "project",
+          verb: "installed",
+          warnings: [PACKAGE_WARNING],
+        },
+      ],
     });
   });
 
@@ -566,15 +594,22 @@ describe("settleDependencies", () => {
     });
   });
 
-  test("a first run carries dependency warnings into the settlement", async () => {
+  test("a first run keeps its dependency warning owner in the settlement", async () => {
     // arrange
     const ports = settlePorts({
       firstRun: () =>
         Promise.resolve({
           kind: "installed",
           rows: [installedRow("zcore@mp")],
-          stagingWarnings: [PACKAGE_WARNING],
-        }),
+          stagingDiagnostics: [
+            {
+              plugin: "zcore",
+              scope: "project",
+              verb: "installed",
+              warnings: [PACKAGE_WARNING],
+            },
+          ],
+        } as SettleCascadeRun),
     });
 
     // act
@@ -584,7 +619,14 @@ describe("settleDependencies", () => {
     assert.deepStrictEqual(settled, {
       kind: "settled",
       rows: [installedRow("zcore@mp")],
-      stagingWarnings: [PACKAGE_WARNING],
+      stagingDiagnostics: [
+        {
+          plugin: "zcore",
+          scope: "project",
+          verb: "installed",
+          warnings: [PACKAGE_WARNING],
+        },
+      ],
     });
   });
 

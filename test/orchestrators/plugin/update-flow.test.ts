@@ -14544,6 +14544,19 @@ test("UPD-DEP-D1: a named update settles the new version's dependencies in the c
                 needsReload: true,
               },
             ],
+            stagingDiagnostics: [
+              {
+                plugin: "zcore",
+                scope: "project",
+                verb: "installed",
+                warnings: [
+                  {
+                    kind: "discovery",
+                    message: "dependency package install failed",
+                  },
+                ],
+              },
+            ],
           });
         },
       );
@@ -14562,6 +14575,11 @@ test("UPD-DEP-D1: a named update settles the new version's dependencies in the c
         {
           message:
             "● mp [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n  ● zcore@mp v1.0.0 (installed)\n\n/reload to pick up changes",
+        },
+        {
+          message:
+            'Plugin "zcore" [project] installed; 1 declared component has a note.\n\ndependency package install failed',
+          severity: "warning",
         },
       ]);
       assert.deepStrictEqual(settled, [["hello", "1.0.1", true, true]]);

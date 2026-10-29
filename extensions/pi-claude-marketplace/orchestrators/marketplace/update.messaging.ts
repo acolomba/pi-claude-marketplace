@@ -223,6 +223,7 @@ function cascadeStagingDiagnostic(outcome: PluginUpdateOutcome, scope: Scope): S
   }
 
   return [
+    ...(outcome.dependencyStagingDiagnostics ?? []),
     {
       plugin: outcome.name,
       scope,

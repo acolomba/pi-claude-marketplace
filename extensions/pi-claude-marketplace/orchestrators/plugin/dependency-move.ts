@@ -49,11 +49,10 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { SoftDepStatus } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
-import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { UpdateDependencyRow } from "../types.ts";
+import type { DependencyStagingDiagnostic, UpdateDependencyRow } from "../types.ts";
 import type { UpdateHooksRouting } from "./update-cascade.ts";
 
 /** The collaborators every dependency move of one operation shares. */
@@ -146,7 +145,7 @@ function supersededCloneKeys(
 export interface DependencyMoveRun {
   readonly landed: boolean;
   readonly rows: readonly UpdateDependencyRow[];
-  readonly stagingWarnings?: readonly StagingWarning[];
+  readonly stagingDiagnostics?: readonly DependencyStagingDiagnostic[];
   readonly mcpConfigNotices?: readonly McpConfigNotice[];
 }
 
@@ -384,10 +383,24 @@ export async function runDependencyMove(
   const stagingWarnings = ("stagingWarnings" in outcome ? outcome.stagingWarnings : []).filter(
     (warning) => warning.message !== packageNote,
   );
+  const stagingDiagnostics = [
+    ...(outcome.dependencyStagingDiagnostics ?? []),
+    ...(stagingWarnings.length === 0
+      ? []
+      : [
+          {
+            plugin: move.request.name,
+            scope: context.scope,
+            verb:
+              outcome.partition === "failed" ? ("update failed" as const) : ("updated" as const),
+            warnings: stagingWarnings,
+          },
+        ]),
+  ];
   return {
     landed: moveLanded(outcome),
     rows: row === undefined ? [] : [row],
-    ...(stagingWarnings.length > 0 && { stagingWarnings }),
+    ...(stagingDiagnostics.length > 0 && { stagingDiagnostics }),
     ...("mcpConfigNotices" in outcome && { mcpConfigNotices: outcome.mcpConfigNotices }),
   };
 }

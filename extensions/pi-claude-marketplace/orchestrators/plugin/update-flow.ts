@@ -567,6 +567,7 @@ function updateStagingDiagnostic({ target, outcome }: UpdateCascadeOutcome): Sta
   switch (outcome.partition) {
     case "updated":
       return [
+        ...(outcome.dependencyStagingDiagnostics ?? []),
         {
           plugin: outcome.name,
           scope: target.scope,
@@ -575,7 +576,10 @@ function updateStagingDiagnostic({ target, outcome }: UpdateCascadeOutcome): Sta
         },
       ];
     case "failed":
-      return [updateFailedDiagnostic(outcome.name, target.scope, outcome)];
+      return [
+        ...(outcome.dependencyStagingDiagnostics ?? []),
+        updateFailedDiagnostic(outcome.name, target.scope, outcome),
+      ];
     case "skipped":
     case "unchanged":
       return [];

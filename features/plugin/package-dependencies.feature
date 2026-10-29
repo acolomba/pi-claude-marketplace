@@ -476,7 +476,7 @@ Feature: Plugin package dependencies
     Then the command reports these results:
       | kind       | severity | needs reload | header                                                             | lines                                             |
       | cascade    | info     | true         |                                                                    |                                                   |
-      | diagnostic | warning  | false        | Plugin "widget" [project] updated; 1 declared component has a note. | Plugin dependency install failed (npm): no output |
+      | diagnostic | warning  | false        | Plugin "zcore" [project] installed; 1 declared component has a note. | Plugin dependency install failed (npm): no output |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id           | name        | status    | reasons | scope   | version | from  | to    |
       | tools            | project           | widget@tools | widget      | updated   |         | project |         | 1.0.0 | 1.1.0 |

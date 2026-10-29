@@ -335,13 +335,24 @@ describe("dependency planning operations", () => {
       assert.strictEqual(initial.kind, "installed");
       assert.deepStrictEqual(
         initial.kind === "installed"
-          ? initial.stagingWarnings?.map((warning) => warning.kind)
+          ? "stagingDiagnostics" in initial
+            ? initial.stagingDiagnostics
+            : undefined
           : undefined,
-        ["discovery"],
-      );
-      assert.match(
-        initial.kind === "installed" ? (initial.stagingWarnings?.[0]?.message ?? "") : "",
-        /yarn or pnpm lockfile/,
+        [
+          {
+            plugin: "dep",
+            scope: "project",
+            verb: "installed",
+            warnings: [
+              {
+                kind: "discovery",
+                message:
+                  "The packages it lists were not installed, because it uses a yarn or pnpm lockfile, which plugin installs do not support.",
+              },
+            ],
+          },
+        ],
       );
       assert.strictEqual(materialized.kind, "installed");
     });

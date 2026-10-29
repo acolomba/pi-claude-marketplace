@@ -151,6 +151,7 @@ import type {
   PluginUpdateFailedOutcome,
   PluginUpdateOutcome,
   RevisionMove,
+  DependencyStagingDiagnostic,
   UpdateDependencyRow,
 } from "../types.ts";
 
@@ -168,14 +169,14 @@ export type UpdateDependencySettlement =
       readonly kind: "settled";
       readonly rows: readonly UpdateDependencyRow[];
       readonly mcpConfigNotices?: readonly McpConfigNotice[];
-      readonly stagingWarnings?: readonly StagingWarning[];
+      readonly stagingDiagnostics?: readonly DependencyStagingDiagnostic[];
     }
   | {
       readonly kind: "refused";
       readonly rows: readonly UpdateDependencyRow[];
       readonly cause: Error;
       readonly mcpConfigNotices?: readonly McpConfigNotice[];
-      readonly stagingWarnings?: readonly StagingWarning[];
+      readonly stagingDiagnostics?: readonly DependencyStagingDiagnostic[];
     };
 
 /**

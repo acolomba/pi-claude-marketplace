@@ -46,8 +46,11 @@ import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
 import type { CascadePlan, PlannedCascadeMember } from "./install-cascade.ts";
 import type { UpdateDependencySettlement } from "./update-swap.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
-import type { StagingWarning } from "../../shared/staging-warnings.ts";
-import type { MovedDependency, UpdateDependencyRow } from "../types.ts";
+import type {
+  DependencyStagingDiagnostic,
+  MovedDependency,
+  UpdateDependencyRow,
+} from "../types.ts";
 
 /**
  * What one locked run of the closure cascade did. D-PL1-16: `installed`
@@ -59,7 +62,7 @@ export type SettleCascadeRun =
       readonly kind: "installed";
       readonly rows: readonly UpdateDependencyRow[];
       readonly mcpConfigNotices?: readonly McpConfigNotice[];
-      readonly stagingWarnings?: readonly StagingWarning[];
+      readonly stagingDiagnostics?: readonly DependencyStagingDiagnostic[];
     }
   | { readonly kind: "refused"; readonly subject: CascadeFailureSubject };
 
@@ -91,14 +94,14 @@ export type DependencyStepsResult =
       readonly ok: true;
       readonly landed: readonly MovedDependency[];
       readonly mcpConfigNotices?: readonly McpConfigNotice[];
-      readonly stagingWarnings?: readonly StagingWarning[];
+      readonly stagingDiagnostics?: readonly DependencyStagingDiagnostic[];
     }
   | {
       readonly ok: false;
       readonly landed: readonly MovedDependency[];
       readonly cause: Error;
       readonly mcpConfigNotices?: readonly McpConfigNotice[];
-      readonly stagingWarnings?: readonly StagingWarning[];
+      readonly stagingDiagnostics?: readonly DependencyStagingDiagnostic[];
     };
 
 /** The operations an update's settle composes. */
@@ -135,7 +138,7 @@ export function movedFromRow(row: UpdateDependencyRow): MovedDependency {
 interface StepRun {
   readonly rows: readonly UpdateDependencyRow[];
   readonly notices: readonly McpConfigNotice[];
-  readonly warnings: readonly StagingWarning[];
+  readonly diagnostics: readonly DependencyStagingDiagnostic[];
   readonly failure?: Error;
 }
 
@@ -146,12 +149,12 @@ async function runStep(step: DependencyPlanStep, ports: DependencyStepPorts): Pr
       ? {
           rows: moved.rows,
           notices: moved.mcpConfigNotices ?? [],
-          warnings: moved.stagingWarnings ?? [],
+          diagnostics: moved.stagingDiagnostics ?? [],
         }
       : {
           rows: moved.rows,
           notices: moved.mcpConfigNotices ?? [],
-          warnings: moved.stagingWarnings ?? [],
+          diagnostics: moved.stagingDiagnostics ?? [],
           failure: failedMoveError(step.move.request),
         };
   }
@@ -161,18 +164,18 @@ async function runStep(step: DependencyPlanStep, ports: DependencyStepPorts): Pr
     return {
       rows: run.rows,
       notices: run.mcpConfigNotices ?? [],
-      warnings: run.stagingWarnings ?? [],
+      diagnostics: run.stagingDiagnostics ?? [],
     };
   }
 
   const refusal = ports.refusal(run.subject);
-  return { rows: refusal.rows, notices: [], warnings: [], failure: refusal.cause };
+  return { rows: refusal.rows, notices: [], diagnostics: [], failure: refusal.cause };
 }
 
-function warningsMember(warnings: readonly StagingWarning[]): {
-  readonly stagingWarnings?: readonly StagingWarning[];
+function stagingDiagnosticsMember(diagnostics: readonly DependencyStagingDiagnostic[]): {
+  readonly stagingDiagnostics?: readonly DependencyStagingDiagnostic[];
 } {
-  return warnings.length > 0 ? { stagingWarnings: warnings } : {};
+  return diagnostics.length > 0 ? { stagingDiagnostics: diagnostics } : {};
 }
 
 /**
@@ -191,7 +194,7 @@ export async function runDependencySteps(
 ): Promise<DependencyStepsResult> {
   let landed: MovedDependency[] = [];
   let notices: McpConfigNotice[] = [];
-  let warnings: StagingWarning[] = [];
+  let diagnostics: DependencyStagingDiagnostic[] = [];
   for (const step of steps) {
     let run: StepRun;
     try {
@@ -208,7 +211,7 @@ export async function runDependencySteps(
           landed,
           cause: err as Error,
           ...mcpConfigNoticesMember(notices),
-          ...warningsMember(warnings),
+          ...stagingDiagnosticsMember(diagnostics),
         };
       }
 
@@ -217,7 +220,7 @@ export async function runDependencySteps(
         landed: [...landed, movedFromRow(failedMoveRow(step.move.request, err))],
         cause: failedMoveError(step.move.request),
         ...mcpConfigNoticesMember(notices),
-        ...warningsMember(warnings),
+        ...stagingDiagnosticsMember(diagnostics),
       };
     }
 
@@ -226,14 +229,14 @@ export async function runDependencySteps(
       ...run.rows.map(movedFromRow),
     ];
     notices = [...notices, ...run.notices];
-    warnings = [...warnings, ...run.warnings];
+    diagnostics = [...diagnostics, ...run.diagnostics];
     if (run.failure !== undefined) {
       return {
         ok: false,
         landed,
         cause: run.failure,
         ...mcpConfigNoticesMember(notices),
-        ...warningsMember(warnings),
+        ...stagingDiagnosticsMember(diagnostics),
       };
     }
   }
@@ -242,7 +245,7 @@ export async function runDependencySteps(
     ok: true,
     landed,
     ...mcpConfigNoticesMember(notices),
-    ...warningsMember(warnings),
+    ...stagingDiagnosticsMember(diagnostics),
   };
 }
 
@@ -277,10 +280,10 @@ async function settlePlanned(ports: DependencySettlePorts): Promise<UpdateDepend
     const ran = await runDependencySteps([...plan.steps, ...final], ports.steps);
     const rows = ran.landed.map((entry) => entry.row);
     const notices = mcpConfigNoticesMember(ran.mcpConfigNotices ?? []);
-    const warnings = warningsMember(ran.stagingWarnings ?? []);
+    const diagnostics = stagingDiagnosticsMember(ran.stagingDiagnostics ?? []);
     return ran.ok
-      ? { kind: "settled", rows, ...notices, ...warnings }
-      : { kind: "refused", rows, cause: ran.cause, ...notices, ...warnings };
+      ? { kind: "settled", rows, ...notices, ...diagnostics }
+      : { kind: "refused", rows, cause: ran.cause, ...notices, ...diagnostics };
   } finally {
     await ports.sweepPlanClones();
   }
@@ -296,7 +299,7 @@ export async function settleDependencies(
       kind: "settled",
       rows: first.rows,
       ...mcpConfigNoticesMember(first.mcpConfigNotices ?? []),
-      ...warningsMember(first.stagingWarnings ?? []),
+      ...stagingDiagnosticsMember(first.stagingDiagnostics ?? []),
     };
   }
 

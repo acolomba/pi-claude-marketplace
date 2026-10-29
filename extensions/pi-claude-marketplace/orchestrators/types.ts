@@ -309,6 +309,14 @@ export interface RevisionMove {
   readonly toCommit?: string;
 }
 
+/** One dependency's staging warnings, kept with the row owner that produced them. */
+export interface DependencyStagingDiagnostic {
+  readonly plugin: string;
+  readonly scope: Scope;
+  readonly verb: "installed" | "updated" | "update failed";
+  readonly warnings: readonly StagingWarning[];
+}
+
 export interface PluginUpdateBase {
   readonly name: string;
   /**
@@ -328,6 +336,8 @@ export interface PluginUpdateBase {
    * (NREG-01).
    */
   readonly dependencyRows?: readonly UpdateDependencyRow[];
+  /** D-PL10-16: dependency warnings retain their member identity through an update. */
+  readonly dependencyStagingDiagnostics?: readonly DependencyStagingDiagnostic[];
 }
 
 /** UPD-DEP-D1: a dependency a move changed, with the row that reports it. */

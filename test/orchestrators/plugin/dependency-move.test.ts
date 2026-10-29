@@ -572,15 +572,63 @@ describe("runDependencyMove", () => {
     assert.deepStrictEqual(
       {
         landed: run.landed,
-        warningKinds: run.stagingWarnings?.map((warning) => warning.kind),
+        diagnostics: run.stagingDiagnostics,
         notices: run.mcpConfigNotices,
       },
       {
         landed: true,
-        warningKinds: ["discovery"],
+        diagnostics: [
+          {
+            plugin: "zcore",
+            scope: "project",
+            verb: "updated",
+            warnings: [
+              {
+                kind: "discovery",
+                message: `skill source "zcore-tool" in "${path.join(pluginRoot, "skills")}" elides to generated name "zcore-tool", already produced by skill source "tool"; ignoring duplicate.`,
+              },
+            ],
+          },
+        ],
         notices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
       },
     );
+  });
+
+  test("keeps a failed dependency move's staging warning under that dependency", async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+    const { context, pluginRoot } = await seedDependency(t, {
+      recorded: "1.0.0",
+      offered: "2.0.0",
+    });
+    const duplicate = path.join(pluginRoot, "skills", "zcore-tool");
+    await mkdir(duplicate, { recursive: true });
+    await writeFile(path.join(duplicate, "SKILL.md"), "---\nname: tool\n---\n");
+    const added = path.join(pluginRoot, "skills", "bar");
+    await mkdir(added, { recursive: true });
+    await writeFile(path.join(added, "SKILL.md"), "---\nname: bar\n---\n");
+    await mkdir(context.locations.skillsTargetDir, { recursive: true });
+    await writeFile(path.join(context.locations.skillsTargetDir, "zcore-bar"), "obstacle");
+
+    // act
+    const run = await runDependencyMove(move("2.0.0"), context);
+
+    // assert
+    assert.strictEqual(run.landed, false);
+    assert.deepStrictEqual(run.stagingDiagnostics, [
+      {
+        plugin: "zcore",
+        scope: "project",
+        verb: "update failed",
+        warnings: [
+          {
+            kind: "discovery",
+            message: `skill source "zcore-tool" in "${path.join(pluginRoot, "skills")}" elides to generated name "zcore-tool", already produced by skill source "tool"; ignoring duplicate.`,
+          },
+        ],
+      },
+    ]);
   });
 
   for (const { situation, requesters, cause } of [
@@ -618,7 +666,7 @@ describe("runDependencyMove", () => {
       );
       assert.ok(row?.status === "updated");
       assert.deepStrictEqual(serializeCauseChain(row.cause), serializeCauseChain(cause()));
-      assert.strictEqual(run.stagingWarnings, undefined);
+      assert.strictEqual(run.stagingDiagnostics, undefined);
     });
   }
 
