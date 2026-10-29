@@ -84,9 +84,7 @@ function continuesQuotedPath(text: string, quote: string, quoteIndex: number): b
   }
 
   const continuation = text.slice(quoteIndex + 1, nextQuote);
-  return (
-    !/[\r\n]/u.test(continuation) && (continuation.includes("/") || continuation.includes("\\"))
-  );
+  return /^[ \t][^\s'"/\\]+[/\\]/u.test(continuation);
 }
 
 function quotedPathEnd(text: string, quote: string, fromIndex: number): number | undefined {
