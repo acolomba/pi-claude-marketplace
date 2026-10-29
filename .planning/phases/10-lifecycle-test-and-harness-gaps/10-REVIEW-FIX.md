@@ -1,22 +1,69 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-fixed_at: 2026-10-29T08:37:17Z
+fixed_at: 2026-10-29T08:52:46Z
 review_path: .planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md
-iteration: 10
-findings_in_scope: 1
-fixed: 1
+iteration: 11
+findings_in_scope: 2
+fixed: 2
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 10: Code Review Fix Report
 
-**Fixed at:** 2026-10-29T08:37:17Z
+**Fixed at:** 2026-10-29T08:52:46Z
 **Source review:** `.planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md`
-**Iteration:** 10
+**Iteration:** 11
 
-Iteration 10 fixes the remaining multi-quote disclosure. The package
+Iteration 11 fixes the complete boundary set after embedded quotes and bounds
+unclosed paths before later diagnostic prose. The package
 manager settlement fix and the earlier integration fixes remain closed.
+
+## Iteration 11 Fixes
+
+### CR-01: Embedded quotes followed by other boundaries leak paths
+
+**Status:** fixed: requires human verification
+**Commit:** `9ce72385` (`fix(redaction): accept all embedded quote boundaries`)
+**Files modified:**
+
+- `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`
+- `test/shared/redact-absolute-paths.test.ts`
+- `test/shared/notification-present.test.ts`
+
+The forward scan now applies the existing balanced-suffix state machine after
+every embedded matching quote. It no longer limits continuation to ASCII
+space and tab. The state machine still stops before balanced later quoted
+values, so the earlier prose controls stay intact.
+
+The RED run failed 56 cases: 54 utility cases across three platform forms,
+two quote types, and nine unsupported boundary characters, plus one cause
+case and one public-presentation case. The GREEN owners pass 275 tests. Both
+direct pairs pass 100% line, function, and branch coverage. The first commit
+hook rejected the nested matrix because it raised cognitive complexity. The
+flattened case data passes Fallow and the complete normal hook.
+
+### CR-02: An unclosed path consumes later slash-bearing prose
+
+**Status:** fixed: requires human verification
+**Commit:** `98683fb7` (`fix(redaction): bound unclosed quoted paths`)
+**Files modified:**
+
+- `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`
+- `test/shared/redact-absolute-paths.test.ts`
+- `test/shared/notification-present.test.ts`
+
+The delimiter scan now returns `undefined` when it finds no trustworthy
+closing quote. The caller uses the first whitespace as the conservative end
+of that unclosed path token. This keeps later slash-bearing prose, quoted
+values, and URLs outside the redacted candidate while preserving the existing
+simple and embedded-apostrophe unclosed-path cases.
+
+The RED run failed five cases: three platform utility cases, one cause-chain
+case, and one public-presentation case. The later quoted-value and URL control
+already passed and remains covered. The final GREEN owners pass 281 tests.
+Both direct pairs pass 100% line, function, and branch coverage. Type checking,
+Fallow guard and audit, pre-commit fixers, and the normal commit hook pass.
 
 ## Iteration 10 Fix
 
@@ -283,6 +330,18 @@ with Node `v26.12.1`.
 
 | Check | Result |
 | --- | --- |
+| Iteration 11 CR-01 focused RED | Failed 56 cases across utility, cause, and public-presentation boundaries |
+| Iteration 11 CR-02 focused RED | Failed 5 cases across utility, cause, and public-presentation boundaries |
+| Final focused owners | Passed: 281/281 |
+| Redactor direct coverage | Passed: 100% line, function, and branch coverage |
+| Notification-presentation direct coverage | Passed: 100% line, function, and branch coverage |
+| Type checking | Passed |
+| Fallow guard and audit | Passed with no final findings |
+| Required pre-commit fixers | Passed for both commits |
+| Commit hooks | Passed, including `npm run check:commit`, for both commits |
+
+| Check | Result |
+| --- | --- |
 | Integrated `npm run check` before the checker-only fix | Passed at `28915add`: 1,131 scenarios, 11,584 steps, 309 direct LCOV records |
 | Wait-cap git cancellation scenario | Passed: 1 scenario, 19 steps |
 | Aggregate-notice oracle owner tests | Passed: 4/4 |
@@ -323,6 +382,6 @@ re-review, and goal verification on the unchanged integrated tree.
 
 ---
 
-_Fixed: 2026-10-29T08:37:17Z_
+_Fixed: 2026-10-29T08:52:46Z_
 _Fixer: the agent (gsd-code-fixer)_
-_Iteration: 10_
+_Iteration: 11_
