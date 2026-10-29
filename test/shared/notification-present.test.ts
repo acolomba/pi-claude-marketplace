@@ -1085,7 +1085,7 @@ describe("presentNotification", () => {
     });
   });
 
-  test("handles ambiguous quote boundaries in a presented prune cause", () => {
+  test("fails closed for ambiguous quote boundaries in a presented prune cause", () => {
     // arrange
     const message = {
       kind: "prune-committed-warning",
@@ -1110,7 +1110,7 @@ describe("presentNotification", () => {
       },
       scope: "project",
       cause: {
-        causeChain: ["unlink 'secret.json'", "open 'file.json' docs/errors 'E_READ'"],
+        causeChain: ["unlink '[redacted path]", "open 'file.json' docs/errors 'E_READ'"],
         truncated: false,
       },
     });
@@ -1145,7 +1145,7 @@ describe("presentNotification", () => {
     });
   });
 
-  test("redacts multi-quote and trailing-space paths in a presented prune cause", () => {
+  test("fails closed for multi-quote paths in a presented prune cause", () => {
     // arrange
     const message = {
       kind: "prune-committed-warning",
@@ -1170,13 +1170,13 @@ describe("presentNotification", () => {
       },
       scope: "project",
       cause: {
-        causeChain: ["open 'secret.json'", "open 'secret.json '"],
+        causeChain: ["open '[redacted path]", "open '[redacted path]"],
         truncated: false,
       },
     });
   });
 
-  test("redacts embedded quotes before Unicode space in a presented prune cause", () => {
+  test("fails closed for an embedded quote before Unicode space", () => {
     // arrange
     const message = {
       kind: "prune-committed-warning",
@@ -1198,7 +1198,7 @@ describe("presentNotification", () => {
         noOp: false,
       },
       scope: "project",
-      cause: { causeChain: ["open 'secret.json'"], truncated: false },
+      cause: { causeChain: ["open '[redacted path]"], truncated: false },
     });
   });
 
@@ -1281,6 +1281,37 @@ describe("presentNotification", () => {
       scope: "project",
       cause: {
         causeChain: ["open '[redacted path]"],
+        truncated: false,
+      },
+    });
+  });
+
+  test("fails closed for ambiguous quote chains in a presented prune cause", () => {
+    // arrange
+    const message = {
+      kind: "prune-committed-warning",
+      scope: "project",
+      cause: new Error("open '/tmp/O' Brien/private/secret.json", {
+        cause: new Error("open '/tmp/private/file.json' help/guide '"),
+      }),
+    } satisfies PruneCommittedWarningMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        needsApply: false,
+        noOp: false,
+      },
+      scope: "project",
+      cause: {
+        causeChain: ["open '[redacted path]", "open '[redacted path]"],
         truncated: false,
       },
     });

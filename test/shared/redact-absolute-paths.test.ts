@@ -93,19 +93,19 @@ describe("redactAbsolutePaths", () => {
       expected: "ENOENT: no such file or directory, open 'private files/O' Brien/config.json'",
     },
     {
-      name: "redacts a single-quoted path with an internal apostrophe",
+      name: "fails closed for a single-quoted path with an internal apostrophe",
       input: "open '/tmp/O'Brien/private dir/秘密/secret.json'",
-      expected: "open 'secret.json'",
+      expected: "open '[redacted path]",
     },
     {
-      name: "redacts a single-quoted path after an apostrophe followed by a space",
+      name: "fails closed after an apostrophe followed by a space",
       input: "unlink '/tmp/O' Brien/秘密/secret.json'",
-      expected: "unlink 'secret.json'",
+      expected: "unlink '[redacted path]",
     },
     {
-      name: "redacts a multi-word path component after an apostrophe",
+      name: "fails closed for a multi-word component after an apostrophe",
       input: "unlink '/tmp/O' Mary Jane/秘密/secret.json'",
-      expected: "unlink 'secret.json'",
+      expected: "unlink '[redacted path]",
     },
     {
       name: "stops a POSIX path before later slash-bearing prose",
@@ -125,6 +125,16 @@ describe("redactAbsolutePaths", () => {
     {
       name: "fails closed for a UNC path before a relative value and unmatched quote",
       input: String.raw`open '\\server\private\file.json' docs/errors 'x/y' tail 'unclosed`,
+      expected: "open '[redacted path]",
+    },
+    {
+      name: "fails closed before slash-bearing prose and an unmatched quote",
+      input: "open '/tmp/private/file.json' help/guide '",
+      expected: "open '[redacted path]",
+    },
+    {
+      name: "fails closed before a relative value, slash-bearing prose, and an unmatched quote",
+      input: "open '/tmp/private/file.json' value 'rel/path' help/guide '",
       expected: "open '[redacted path]",
     },
     {
@@ -198,24 +208,24 @@ describe("redactAbsolutePaths", () => {
       expected: "open 'file.json' docs/errors 'E_READ'",
     },
     {
-      name: "keeps separate quoted paths with internal apostrophes",
+      name: "fails closed before separate paths with internal apostrophes",
       input: "rename '/tmp/O'Brien/a.json' -> '/tmp/D'Angelo/b.json'",
-      expected: "rename 'a.json' -> 'b.json'",
+      expected: "rename '[redacted path]",
     },
     {
-      name: "redacts double-quoted paths with internal double quotes",
+      name: "fails closed for double-quoted paths with internal double quotes",
       input: 'read "/tmp/a"b/private/secret.json", then "/tmp/c"d/other.json"',
-      expected: 'read "secret.json", then "other.json"',
+      expected: 'read "[redacted path]',
     },
     {
-      name: "keeps a quoted basename containing an apostrophe",
+      name: "fails closed for a quoted basename containing an apostrophe",
       input: "can't open '/tmp/O'Brien/secret's file.json' today",
-      expected: "can't open 'secret's file.json' today",
+      expected: "can't open '[redacted path]",
     },
     {
-      name: "keeps punctuation and unrelated quoted values after a path",
+      name: "fails closed before punctuation and later quoted values",
       input: "read '/tmp/O'Brien/a.json'); use 'relative/file' or 'https://example.test/a/b'",
-      expected: "read 'a.json'); use 'relative/file' or 'https://example.test/a/b'",
+      expected: "read '[redacted path]",
     },
     {
       name: "redacts a quoted POSIX path containing spaces",
@@ -313,6 +323,21 @@ describe("redactAbsolutePaths", () => {
       expected: "read '[redacted path]",
     },
     {
+      name: "fails closed for an unclosed path after a spaced apostrophe",
+      input: "open '/tmp/O' Brien/private/secret.json",
+      expected: "open '[redacted path]",
+    },
+    {
+      name: "fails closed for an unclosed drive path after a spaced double quote",
+      input: String.raw`open "C:\private\O" Brien\secret.json`,
+      expected: 'open "[redacted path]',
+    },
+    {
+      name: "fails closed for an unclosed UNC path after a spaced apostrophe",
+      input: String.raw`open '\\server\private\O' Brien\secret.json`,
+      expected: "open '[redacted path]",
+    },
+    {
       name: "fails closed for an unclosed POSIX path before slash-bearing prose",
       input: "open '/tmp/private/file.json failed; see docs/errors",
       expected: "open '[redacted path]",
@@ -358,9 +383,9 @@ describe("redactAbsolutePaths", () => {
       expected: "open '[redacted path]",
     },
     {
-      name: "fails closed for a UNC path whose component contains a no-space delimiter",
+      name: "keeps a UNC basename when its quote chain is unambiguous",
       input: String.raw`open '\\server\private;see=hidden\secret.json' docs/errors 'x'`,
-      expected: "open '[redacted path]",
+      expected: "open 'secret.json' docs/errors 'x'",
     },
     {
       name: "preserves a single-segment JSON pointer",
@@ -425,12 +450,25 @@ describe("redactAbsolutePaths", () => {
       { quoteName: "single quotes", quote: "'" },
       { quoteName: "double quotes", quote: '"' },
     ] as const) {
-      for (const { embeddedQuotes, component } of [
-        { embeddedQuotes: "no embedded quote", component: "private files" },
-        { embeddedQuotes: "one embedded quote", component: `O${quote} Brien` },
+      for (const { behavior, embeddedQuotes, component, expected } of [
         {
+          behavior: "redacts",
+          embeddedQuotes: "no embedded quote",
+          component: "private files",
+          expected: ({ trailingWhitespace }: { trailingWhitespace: string }) =>
+            `open ${quote}secret.json${trailingWhitespace}${quote}`,
+        },
+        {
+          behavior: "fails closed for",
+          embeddedQuotes: "one embedded quote",
+          component: `O${quote} Brien`,
+          expected: () => `open ${quote}[redacted path]`,
+        },
+        {
+          behavior: "fails closed for",
           embeddedQuotes: "multiple embedded quotes",
           component: `O${quote} Brien${quote}s files`,
+          expected: () => `open ${quote}[redacted path]`,
         },
       ] as const) {
         for (const { trailingName, trailingWhitespace } of [
@@ -439,7 +477,7 @@ describe("redactAbsolutePaths", () => {
           { trailingName: "a trailing tab", trailingWhitespace: "\t" },
           { trailingName: "a trailing Unicode space", trailingWhitespace: "\u00a0" },
         ] as const) {
-          test(`redacts a ${platform} path in ${quoteName} with ${embeddedQuotes} and ${trailingName}`, () => {
+          test(`${behavior} a ${platform} path in ${quoteName} with ${embeddedQuotes} and ${trailingName}`, () => {
             // arrange
             const absolutePath =
               root + separator + component + separator + "秘密" + separator + "secret.json";
@@ -449,7 +487,7 @@ describe("redactAbsolutePaths", () => {
             const text = redactAbsolutePaths(input);
 
             // assert
-            assert.strictEqual(text, `open ${quote}secret.json${trailingWhitespace}${quote}`);
+            assert.strictEqual(text, expected({ trailingWhitespace }));
           });
         }
       }
@@ -465,7 +503,7 @@ describe("redactAbsolutePaths", () => {
     boundaryName,
     boundary,
   } of EMBEDDED_QUOTE_BOUNDARY_CASES) {
-    test(`redacts a ${platform} path whose embedded ${quoteName} precedes a ${boundaryName}`, () => {
+    test(`fails closed for a ${platform} path whose embedded ${quoteName} precedes a ${boundaryName}`, () => {
       // arrange
       const absolutePath =
         root +
@@ -481,7 +519,7 @@ describe("redactAbsolutePaths", () => {
       const text = redactAbsolutePaths(input);
 
       // assert
-      assert.strictEqual(text, `open ${quote}secret.json${quote}`);
+      assert.strictEqual(text, `open ${quote}[redacted path]`);
     });
   }
 
@@ -518,7 +556,7 @@ describe("redactAbsolutePaths", () => {
 });
 
 describe("redactCauseChain", () => {
-  test("redacts the suffix of a quoted cause after an apostrophe followed by a space", () => {
+  test("fails closed for a quoted cause after an apostrophe followed by a space", () => {
     // arrange
     const failure = new Error("unlink '/tmp/O' Brien/秘密/secret.json'");
 
@@ -526,7 +564,7 @@ describe("redactCauseChain", () => {
     const trailer = causeChainTrailer(redactCauseChain(failure));
 
     // assert
-    assert.strictEqual(trailer, "cause: unlink 'secret.json'");
+    assert.strictEqual(trailer, "cause: unlink '[redacted path]");
     assert.doesNotMatch(trailer, /Brien\/秘密\/secret\.json/u);
   });
 
@@ -541,7 +579,7 @@ describe("redactCauseChain", () => {
     assert.strictEqual(trailer, "cause: open 'file.json' failed; see docs/errors 'E_READ'");
   });
 
-  test("handles ambiguous quote boundaries in a cause chain", () => {
+  test("fails closed for ambiguous quote boundaries in a cause chain", () => {
     // arrange
     const failure = new Error("unlink '/tmp/O' Mary Jane/秘密/secret.json'", {
       cause: new Error("open '/tmp/private/file.json' docs/errors 'E_READ'"),
@@ -553,7 +591,7 @@ describe("redactCauseChain", () => {
     // assert
     assert.strictEqual(
       trailer,
-      "cause: unlink 'secret.json' -> open 'file.json' docs/errors 'E_READ'",
+      "cause: unlink '[redacted path] -> open 'file.json' docs/errors 'E_READ'",
     );
   });
 
@@ -577,7 +615,7 @@ describe("redactCauseChain", () => {
     );
   });
 
-  test("redacts multi-quote and trailing-space paths across a cause chain", () => {
+  test("fails closed for multi-quote and trailing-space paths across a cause chain", () => {
     // arrange
     const failure = new Error("open '/tmp/O' Brien's files/秘密/secret.json'", {
       cause: new Error('open "C:\\private\\O" Brien"s files\\秘密\\secret.json"', {
@@ -591,11 +629,11 @@ describe("redactCauseChain", () => {
     // assert
     assert.strictEqual(
       trailer,
-      "cause: open 'secret.json' -> open \"secret.json\" -> open 'secret.json '",
+      "cause: open '[redacted path] -> open \"[redacted path] -> open '[redacted path]",
     );
   });
 
-  test("redacts embedded quotes before Unicode space and punctuation in a cause chain", () => {
+  test("fails closed for embedded quotes before Unicode space and punctuation", () => {
     // arrange
     const failure = new Error("open '/tmp/O'\u00a0Brien/秘密/secret.json'", {
       cause: new Error('open "C:\\private\\O",Brien\\秘密\\secret.json"'),
@@ -605,7 +643,7 @@ describe("redactCauseChain", () => {
     const trailer = causeChainTrailer(redactCauseChain(failure));
 
     // assert
-    assert.strictEqual(trailer, "cause: open 'secret.json' -> open \"secret.json\"");
+    assert.strictEqual(trailer, "cause: open '[redacted path] -> open \"[redacted path]");
   });
 
   test("fails closed for unclosed cause paths before slash-bearing prose", () => {
@@ -637,6 +675,19 @@ describe("redactCauseChain", () => {
     // arrange
     const failure = new Error("open '/tmp/private/file.json' docs/errors '", {
       cause: new Error("open 'C:\\private\\file.json' docs/errors 'x/y' tail 'unclosed"),
+    });
+
+    // act
+    const trailer = causeChainTrailer(redactCauseChain(failure));
+
+    // assert
+    assert.strictEqual(trailer, "cause: open '[redacted path] -> open '[redacted path]");
+  });
+
+  test("fails closed for embedded quotes and arbitrary slash prose in a cause chain", () => {
+    // arrange
+    const failure = new Error("open '/tmp/O' Brien/private/secret.json", {
+      cause: new Error("open '/tmp/private/file.json' help/guide '"),
     });
 
     // act

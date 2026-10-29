@@ -73,92 +73,37 @@ function isQuotedPathBoundary(character: string | undefined): boolean {
 }
 
 const REDACTED_PATH = "[redacted path]";
-const CLOSED_PATH_SUFFIXES = [" failed; see ", " docs/errors "] as const;
-const UNMATCHED_PATH_MARKERS = [" failed; ", ";see="] as const;
+function hasResolvedQuoteChain(text: string, quote: string, fromIndex: number): boolean {
+  let opening = text.indexOf(quote, fromIndex);
+  while (opening >= 0) {
+    if (!isQuotedPathBoundary(text[opening - 1])) {
+      return false;
+    }
 
-type QuoteCandidate = "ambiguous" | "close" | "continue";
+    const closing = text.indexOf(quote, opening + 1);
+    if (closing < 0 || !isQuotedPathBoundary(text[closing + 1])) {
+      return false;
+    }
 
-function classifyQuoteCandidate(
-  text: string,
-  currentQuote: number,
-  openedEarlier: boolean,
-  balancedAfter: boolean,
-  finalSeparator: number,
-): QuoteCandidate {
-  if (!isQuotedPathBoundary(text[currentQuote + 1])) {
-    return "continue";
+    opening = text.indexOf(quote, closing + 1);
   }
 
-  const continues = !balancedAfter && finalSeparator > currentQuote;
-  const locallyClosed = CLOSED_PATH_SUFFIXES.some((suffix) =>
-    text.startsWith(suffix, currentQuote + 1),
-  );
-  if (locallyClosed) {
-    return openedEarlier || continues ? "ambiguous" : "close";
-  }
-
-  return continues ? "continue" : "close";
+  return true;
 }
 
 function quotedPathEnd(text: string, quote: string, fromIndex: number): number | undefined {
-  const quoteIndices: number[] = [];
-  let quoteIndex = text.indexOf(quote, fromIndex);
-  while (quoteIndex >= 0) {
-    quoteIndices.push(quoteIndex);
-    quoteIndex = text.indexOf(quote, quoteIndex + 1);
+  const delimiter = text.indexOf(quote, fromIndex);
+  if (delimiter < 0 || !isQuotedPathBoundary(text[delimiter + 1])) {
+    return undefined;
   }
 
-  const balancedFromClosed = new Array<boolean>(quoteIndices.length + 1).fill(false);
-  const balancedFromOpen = new Array<boolean>(quoteIndices.length + 1).fill(false);
-  balancedFromClosed[quoteIndices.length] = true;
-  for (const [reverseIndex, currentQuote] of [...quoteIndices].reverse().entries()) {
-    const index = quoteIndices.length - reverseIndex - 1;
-    const canOpen = isQuotedPathBoundary(text[currentQuote - 1]);
-    const canClose = isQuotedPathBoundary(text[currentQuote + 1]);
-    const balancedClosedAfter = balancedFromClosed[index + 1] === true;
-    const balancedOpenAfter = balancedFromOpen[index + 1] === true;
-    balancedFromClosed[index] = canOpen ? balancedOpenAfter : !canClose && balancedClosedAfter;
-    balancedFromOpen[index] = canClose ? balancedClosedAfter : balancedOpenAfter;
+  const laterQuote = text.indexOf(quote, delimiter + 1);
+  if (laterQuote >= 0) {
+    return hasResolvedQuoteChain(text, quote, laterQuote) ? delimiter : undefined;
   }
 
-  const finalQuote = quoteIndices.at(-1) ?? text.length;
-  const finalSeparator = Math.max(
-    text.lastIndexOf("/", finalQuote),
-    text.lastIndexOf("\\", finalQuote),
-  );
-  let sawLaterValueOpening = false;
-  for (const [index, currentQuote] of quoteIndices.entries()) {
-    const openedEarlier = sawLaterValueOpening;
-    sawLaterValueOpening ||= isQuotedPathBoundary(text[currentQuote - 1]);
-    const candidate = classifyQuoteCandidate(
-      text,
-      currentQuote,
-      openedEarlier,
-      balancedFromClosed[index + 1] === true,
-      finalSeparator,
-    );
-    if (candidate === "ambiguous") {
-      return undefined;
-    }
-
-    if (candidate === "close") {
-      return currentQuote;
-    }
-  }
-
-  return undefined;
-}
-
-function unmatchedPathMarker(text: string, fromIndex: number): number | undefined {
-  let markerIndex: number | undefined;
-  for (const marker of UNMATCHED_PATH_MARKERS) {
-    const candidate = text.indexOf(marker, fromIndex);
-    if (candidate >= 0 && (markerIndex === undefined || candidate < markerIndex)) {
-      markerIndex = candidate;
-    }
-  }
-
-  return markerIndex;
+  const suffix = text.slice(delimiter + 1);
+  return /[/\\]/u.test(suffix) ? undefined : delimiter;
 }
 
 function redactQuotedAbsolutePaths(text: string): string {
@@ -169,8 +114,7 @@ function redactQuotedAbsolutePaths(text: string): string {
   while (match !== null) {
     const quote = text.charAt(match.index);
     const delimiter = quotedPathEnd(text, quote, opening.lastIndex);
-    const marker = unmatchedPathMarker(text, opening.lastIndex);
-    if (delimiter === undefined || (marker !== undefined && marker < delimiter)) {
+    if (delimiter === undefined) {
       redacted += text.slice(copiedThrough, match.index) + quote + REDACTED_PATH;
       copiedThrough = text.length;
       opening.lastIndex = copiedThrough;
