@@ -73,7 +73,20 @@ function isQuotedPathBoundary(character: string | undefined): boolean {
 }
 
 const REDACTED_PATH = "[redacted path]";
+const CLOSED_PATH_SUFFIXES = [" failed; see ", " docs/errors "] as const;
 const UNCLOSED_PATH_SUFFIXES = [" failed; ", ";see="] as const;
+
+function locallyClosedQuotedPathEnd(
+  text: string,
+  quote: string,
+  fromIndex: number,
+): number | undefined {
+  const candidates = CLOSED_PATH_SUFFIXES.map((suffix) =>
+    text.indexOf(quote + suffix, fromIndex),
+  ).filter((index) => index >= 0);
+  const delimiter = Math.min(...candidates);
+  return Number.isFinite(delimiter) ? delimiter : undefined;
+}
 
 function quotedPathEnd(text: string, quote: string, fromIndex: number): number | undefined {
   const quoteIndices: number[] = [];
@@ -134,7 +147,11 @@ function redactQuotedAbsolutePaths(text: string): string {
   let match = opening.exec(text);
   while (match !== null) {
     const quote = text.charAt(match.index);
-    const delimiter = quotedPathEnd(text, quote, opening.lastIndex);
+    // These diagnostic separators close the path locally. Once recognized,
+    // unrelated quote fragments later in the message cannot reopen it.
+    const delimiter =
+      locallyClosedQuotedPathEnd(text, quote, opening.lastIndex) ??
+      quotedPathEnd(text, quote, opening.lastIndex);
     const suffix = unclosedQuotedPathSuffix(text, opening.lastIndex);
     if (delimiter === undefined || (suffix !== undefined && suffix < delimiter)) {
       redacted += text.slice(copiedThrough, match.index) + quote + REDACTED_PATH;
