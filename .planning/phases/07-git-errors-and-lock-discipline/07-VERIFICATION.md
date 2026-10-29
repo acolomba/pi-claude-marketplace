@@ -1,6 +1,6 @@
 ---
 phase: 07-git-errors-and-lock-discipline
-verified: 2026-10-29T05:05:32Z
+verified: 2026-10-29T13:32:14Z
 status: passed
 score: 4/4 roadmap success criteria verified (8/8 requirements satisfied)
 covered_files:
@@ -55,12 +55,14 @@ covered_files:
   - "extensions/pi-claude-marketplace/platform/git.ts"
   - "extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts"
   - "extensions/pi-claude-marketplace/transaction/with-state-guard.ts"
+  - "features/lib/published-marketplace.ts"
   - "features/plugin/fetch.feature"
   - "features/plugin/git-source-update.feature"
   - "features/plugin/git-source.feature"
   - "features/plugin/info.feature"
   - "features/plugin/update-rollback.feature"
   - "features/plugin/url-marketplace-update.feature"
+  - "features/step_definitions/marketplace/update.steps.ts"
   - "test/architecture/catalog-uat/catalog-contract.test.ts"
   - "test/orchestrators/edge-deps.test.ts"
   - "test/orchestrators/marketplace/remove.test.ts"
@@ -84,7 +86,7 @@ covered_files:
   - "test/orchestrators/plugin/update-preflight.test.ts"
   - "test/orchestrators/plugin/update-swap.test.ts"
   - "test/shared/git-failure-classifiers.test.ts"
-covered_digest: "v4:sha256:e23ba41945cf6042c74c7dfdfe7a733346b91af98b6f5895e4c4b642766a4ce2"
+covered_digest: "v4:sha256:58099ae5bbf3e501a40eb886b8b18e9e3367376baf9062ef5f8a9e153a1387f9"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
@@ -103,7 +105,7 @@ decision_coverage:
 
 **Phase Goal:** One classifier reports every git host failure, and no clone
 read, copy, or cleanup runs outside the state lock.
-**Verified:** 2026-10-29T05:05:32Z
+**Verified:** 2026-10-29T13:32:14Z
 **Status:** passed
 **Re-verification:** Yes — final verification on the integrated Phase 1-10 tree.
 
@@ -151,7 +153,7 @@ None. No new-scope blocker or advisory was identified.
 | `plugin/clone-cache.ts` | Offline tag fallback | VERIFIED | Tracking-ref lookup falls back to local tag peeling and refreshes only on a real cache miss. |
 | `fetch.ts`, `info.ts`, `update-preflight.ts` | Locked read/copy and shared classification | VERIFIED | Unpinned materialize/copy and dependent row reads share the lock; host failures use the shared classifier. |
 | `edge-deps.ts` | Completion uses list's upgrade rule | VERIFIED | Imports and calls `upgradeCandidate`; browse consumes list payloads. |
-| Phase 7 unit/Cucumber evidence | Behavioral enforcement | VERIFIED | Named independent tests passed; the unchanged implementation tree also retains the exact full gate at 1,143 scenarios, 11,742 steps, and 309 LCOV records. |
+| Phase 7 unit/Cucumber evidence | Behavioral enforcement | VERIFIED | Named independent tests passed; the unchanged implementation tree also retains the exact full gate at 1,145 scenarios, 11,777 steps, and 309 LCOV records. |
 
 ## Key Link Verification
 
@@ -196,8 +198,8 @@ command rows exercised through the real Cucumber command surface.
 | User-visible offline reinstall | Focused Cucumber scenario | 1 scenario, 14 steps passed | PASS |
 
 The exact full `npm run check` result is reusable because
-`git diff e92e4c45 -- . ':(exclude,glob).planning/**/*.md'` is empty:
-static checks passed, 1,143 Cucumber scenarios / 11,742 steps passed, and
+`git diff be0de0c3 -- . ':(exclude,glob).planning/**/*.md'` is empty:
+static checks passed, 1,145 Cucumber scenarios / 11,777 steps passed, and
 direct coverage merged 309 LCOV records under Node v26.12.1.
 
 ## Probe Execution
@@ -267,5 +269,5 @@ defect without weakening Phase 7's lock discipline.
 
 ---
 
-_Verified: 2026-10-29T05:05:32Z_
+_Verified: 2026-10-29T13:32:14Z_
 _Verifier: the agent (gsd-verifier)_
