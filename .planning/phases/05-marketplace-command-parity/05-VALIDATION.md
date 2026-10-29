@@ -27,9 +27,11 @@ All nine plans and summaries are complete. MKT-01 through MKT-08 have behavioral
 
 ## Verification result
 
-The focused owner command covering eleven test modules passed ten modules in the sandbox. The only failed module was `add.test.ts`: its unrelated Unix-domain-socket fixture could not bind (`EPERM`). Running that owner module with socket permission passed 198/198 tests. The other ten modules passed. No product assertion failed.
+The final merged-tree owner audit at `b1dd3f15` passed all 13 modules in its focused batch: name and source parsing; router and completions; hosted fetch and catalog lifecycle; marketplace shared, update, remove, and info; the shared plugin fold; JSON notification rendering; and presentation redaction. The `marketplace/add` owner module initially hit the sandbox's Unix-socket `EPERM`; with socket permission it passed 198/198 tests. No product assertion failed.
 
-The parent's `npm run check` at commit `9692623d` exited 0: 1,122 Cucumber scenarios, 11,447 steps, and 309 merged LCOV records. Since that commit, only planning Markdown changed through `ef15a4e6`; no build input changed. The local-verification gate rule permits reuse of the passing combined-tree result for this documentation-only update.
+The focused behavioral audit passed 16/16 scenarios and 140/140 steps. It exercised the alias, embedded-`@` shorthand, hosted add/update and redirect refusal, the reserved-name exemption and official bootstrap, marketplace-subject bare ids, credential masking, the accepted remove report, EISDIR classification, and the outline variants selected by those behaviors.
+
+The parent's fresh final-tree `npm run check`, after the Phase 4 comment-only correction, exited 0: 1,142 Cucumber scenarios, 11,734 steps, and 309 merged LCOV records. Subsequent inputs through `b1dd3f15` are planning Markdown only, so the local-verification gate rule permits reuse of that passing combined-tree result for this validation update.
 
 ## Decision boundaries
 
@@ -42,6 +44,6 @@ The parent's `npm run check` at commit `9692623d` exited 0: 1,122 Cucumber scena
 - [x] All eight requirements map to executable tests or the expressly permitted recorded decision.
 - [x] Every implemented user-visible requirement has a Cucumber scenario.
 - [x] No missing Wave 0 fixture or test reference remains.
-- [x] The unchanged build inputs have a reusable passing full gate.
+- [x] The final merged build inputs have a reusable passing full gate and fresh focused behavioral evidence.
 
 **Approval:** validated; Nyquist compliant.
