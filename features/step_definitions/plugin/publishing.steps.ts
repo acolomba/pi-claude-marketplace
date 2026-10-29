@@ -38,6 +38,7 @@ import {
   restoreDirectoryWrites,
   rewritePublishedManifest,
   writePublishedPluginFile,
+  writePublishedPluginFiles,
 } from "../../lib/published-marketplace.ts";
 import { READ_ONLY_SKILL_REMOVAL_ERROR_TOKEN } from "../../lib/run-tokens.ts";
 
@@ -180,6 +181,20 @@ Given(
     assert.deepStrictEqual(
       entries.map((entry) => manifest.plugins.find((plugin) => plugin.name === entry.name)),
       entries,
+    );
+  },
+);
+
+Given(
+  "the published plugin {string} of the marketplace {string} has a skill with malformed frontmatter",
+  async function (this: ScenarioWorld, plugin: string, name: string) {
+    const published = this.requirePublished(name);
+    const file = path.join("skills", `${plugin}-skill`, "SKILL.md");
+    const text = "---\nname: [unterminated\n---\nBody.\n";
+    await writePublishedPluginFiles(published, plugin, { [file]: text });
+    assert.strictEqual(
+      await readFile(path.join(published.root, "plugins", plugin, file), "utf8"),
+      text,
     );
   },
 );

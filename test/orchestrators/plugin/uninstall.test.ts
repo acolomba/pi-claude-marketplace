@@ -3450,6 +3450,7 @@ test("GLK-03 / D-PL7-05: a held scope lock leaves the last referencer's clone an
       ]);
       assert.deepStrictEqual(await readdir(locations.pluginClonesDir), ["keySolo"]);
       assert.deepStrictEqual(logged, [
+        `[hooks] uninstall: package removal failed for solo@mp: Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes.`,
         `[hooks] uninstall: clone GC failed for solo@mp: Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes.`,
       ]);
     } finally {
@@ -7925,6 +7926,62 @@ test("D-PL9-22: uninstall keeps the step's node_modules while another installed 
         "pkd-dep",
       ]);
     } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("keeps packages a concurrent install reads under the scope lock before saving its new record", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-packages-concurrent-"));
+    let release: (() => Promise<void>) | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(locations, "mp", { x: {} }, cwd);
+      const pluginRoot = await placeStepPackages(locations, "mp", ["x"], "x");
+      const installedState = await loadState(locations.extensionRoot);
+      const installed = installedState.marketplaces.mp?.plugins.x;
+      assert.ok(installed !== undefined);
+      const { ctx, run, notifications } = makeCtx();
+      const uninstall = createUninstallOperation(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        {
+          ...createCompletionCache(),
+          dropMarketplaceCache: async () => {
+            // The install sees existing modules and will skip its package step.
+            release = await lockfile.lock(locations.extensionRoot, {
+              lockfilePath: locations.stateLockFile,
+              realpath: false,
+              retries: 0,
+            });
+            assert.deepStrictEqual(await sortedEntries(path.join(pluginRoot, "node_modules")), [
+              PACKAGE_STEP_MARKER,
+              "pkd-dep",
+            ]);
+          },
+        },
+      );
+
+      // act
+      await uninstall({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "x" });
+      const state = await loadState(locations.extensionRoot);
+      assert.ok(state.marketplaces.mp !== undefined);
+      state.marketplaces.mp.plugins.x = installed;
+      await saveState(locations.extensionRoot, state);
+
+      // assert
+      assert.deepStrictEqual(notifications, [{ message: UNINSTALLED_X_ROW }]);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.x,
+        installed,
+      );
+      assert.deepStrictEqual(await sortedEntries(path.join(pluginRoot, "node_modules")), [
+        PACKAGE_STEP_MARKER,
+        "pkd-dep",
+      ]);
+    } finally {
+      await release?.();
       await rm(cwd, { recursive: true, force: true });
     }
   });

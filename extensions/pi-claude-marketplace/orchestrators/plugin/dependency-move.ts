@@ -378,10 +378,16 @@ export async function runDependencyMove(
     { ...context.policy, refreshSource: false },
   );
   const row = moveRow(context, move, outcome);
+  // The dependency row owns its package note; forwarding it would also
+  // report it as a component warning of the requesting plugin.
+  const packageNote = outcome.partition === "updated" ? outcome.packageNote : undefined;
+  const stagingWarnings = ("stagingWarnings" in outcome ? outcome.stagingWarnings : []).filter(
+    (warning) => warning.message !== packageNote,
+  );
   return {
     landed: moveLanded(outcome),
     rows: row === undefined ? [] : [row],
-    ...("stagingWarnings" in outcome && { stagingWarnings: outcome.stagingWarnings }),
+    ...(stagingWarnings.length > 0 && { stagingWarnings }),
     ...("mcpConfigNotices" in outcome && { mcpConfigNotices: outcome.mcpConfigNotices }),
   };
 }

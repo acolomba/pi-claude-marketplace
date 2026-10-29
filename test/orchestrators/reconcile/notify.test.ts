@@ -1738,50 +1738,52 @@ describe("buildReconcileAppliedCascade", () => {
     });
   });
 
-  test("MIM-03: carries the rollback phases of a plugin-install-failed row that left them", () => {
-    // arrange
-    const cause = new Error("mcp-adapter.json could not be read");
-    const rollbackPartials = [
-      { phase: "skills", cause: new Error("EACCES: permission denied, unlink 'data.txt'") },
-      { phase: "agents" },
-    ];
-    const outcomes: readonly PerEntryOutcome[] = [
-      {
-        kind: "plugin-install-failed",
-        scope: "project",
-        marketplace: "mp",
-        plugin: "hello",
-        reason: "rollback partial",
-        cause,
-        rollbackPartials,
-      },
-    ];
-
-    // act
-    const cascade = buildReconcileAppliedCascade(outcomes);
-
-    // assert
-    assert.deepStrictEqual(cascade, {
-      kind: "reconcile-applied-cascade",
-      marketplaces: [
+  for (const kind of ["plugin-install-failed", "plugin-enable-failed"] as const) {
+    test(`carries the rollback phases of a ${kind} row that left them`, () => {
+      // arrange
+      const cause = new Error("mcp-adapter.json could not be read");
+      const rollbackPartials = [
+        { phase: "skills", cause: new Error("EACCES: permission denied, unlink 'data.txt'") },
+        { phase: "agents" },
+      ];
+      const outcomes: readonly PerEntryOutcome[] = [
         {
-          name: "mp",
+          kind,
           scope: "project",
-          plugins: [
-            {
-              status: "failed",
-              name: "hello",
-              reasons: ["rollback partial"],
-              cause,
-              rollbackPartial: rollbackPartials,
-              severity: "error",
-              needsReload: false,
-            },
-          ],
+          marketplace: "mp",
+          plugin: "hello",
+          reason: "rollback partial",
+          cause,
+          rollbackPartials,
         },
-      ],
+      ];
+
+      // act
+      const cascade = buildReconcileAppliedCascade(outcomes);
+
+      // assert
+      assert.deepStrictEqual(cascade, {
+        kind: "reconcile-applied-cascade",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "hello",
+                reasons: ["rollback partial"],
+                cause,
+                rollbackPartial: rollbackPartials,
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      });
     });
-  });
+  }
 
   test("MIM-03: gives a plugin-install-failed row with an empty rollback list no phase rows", () => {
     // arrange

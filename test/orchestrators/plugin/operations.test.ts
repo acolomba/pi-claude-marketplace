@@ -629,8 +629,8 @@ test("the composed prune operation removes an orphan in the default user scope",
         "● mp [user]\n  ○ orphan v1.0.0 (uninstalled) {dependency pruned}\n\n/reload to pick up changes",
     },
   ]);
-  // The state guard, then the clone cleanup's own scope lock.
-  assert.strictEqual(lockSpy.mock.callCount(), 2);
+  // The state guard, then separate scope locks for package and clone cleanup.
+  assert.strictEqual(lockSpy.mock.callCount(), 3);
   assert.strictEqual(fetchSpy.mock.callCount(), 0);
 });
 
@@ -684,8 +684,8 @@ test("the composed prune operation removes only the selected project orphan", as
     },
   ]);
   assert.strictEqual(cacheDropSpy.mock.callCount(), 1);
-  // The state guard, then the clone cleanup's own scope lock.
-  assert.strictEqual(lockSpy.mock.callCount(), 2);
+  // The state guard, then separate scope locks for package and clone cleanup.
+  assert.strictEqual(lockSpy.mock.callCount(), 3);
   assert.strictEqual(fetchSpy.mock.callCount(), 0);
 });
 

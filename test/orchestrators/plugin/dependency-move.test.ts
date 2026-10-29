@@ -543,7 +543,7 @@ describe("runDependencyMove", () => {
     });
   });
 
-  test("D-PL10-12: carries a moved dependency's staging warnings and MCP notices", async (t) => {
+  test("carries other staging warnings and MCP notices while the dependency row owns its package note", async (t) => {
     // arrange
     t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
     const { context, pluginRoot } = await seedDependency(t, {
@@ -559,6 +559,11 @@ describe("runDependencyMove", () => {
     );
     await mkdir(path.dirname(context.locations.mcpAdapterJsonPath), { recursive: true });
     await writeFile(context.locations.mcpAdapterJsonPath, '// mine\n{"mcpServers":{}}\n');
+    await writeFile(
+      path.join(pluginRoot, "package.json"),
+      JSON.stringify({ dependencies: { "pkd-dep": "1.0.0" } }),
+    );
+    await writeFile(path.join(pluginRoot, "package-lock.json"), '{"lockfileVersion":3}');
 
     // act
     const run = await runDependencyMove(move("2.0.0"), context);
@@ -613,6 +618,7 @@ describe("runDependencyMove", () => {
       );
       assert.ok(row?.status === "updated");
       assert.deepStrictEqual(serializeCauseChain(row.cause), serializeCauseChain(cause()));
+      assert.strictEqual(run.stagingWarnings, undefined);
     });
   }
 

@@ -1,8 +1,8 @@
 ---
 phase: 09-plugin-package-dependencies
-verified: 2026-10-27T09:00:00Z
+verified: 2026-10-29T02:25:18Z
 status: passed
-score: 7/7 must-haves verified
+score: 8/8 must-haves verified
 covered_files:
   - .planning/phases/09-plugin-package-dependencies/09-01-PLAN.md
   - .planning/phases/09-plugin-package-dependencies/09-01-SUMMARY.md
@@ -14,141 +14,236 @@ covered_files:
   - .planning/phases/09-plugin-package-dependencies/09-04-SUMMARY.md
   - .planning/phases/09-plugin-package-dependencies/09-05-PLAN.md
   - .planning/phases/09-plugin-package-dependencies/09-05-SUMMARY.md
+  - AGENTS.md
   - eslint.config.js
+  - extensions/pi-claude-marketplace/domain/package-lockfile.ts
+  - extensions/pi-claude-marketplace/domain/plugin-resolver.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/staging-diagnostics.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts
+  - extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts
   - extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts
+  - extensions/pi-claude-marketplace/orchestrators/reconcile/convergence.ts
+  - extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts
+  - extensions/pi-claude-marketplace/persistence/locations.ts
   - extensions/pi-claude-marketplace/platform/package-manager.ts
+  - extensions/pi-claude-marketplace/shared/path-safety.ts
+  - extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts
+  - extensions/pi-claude-marketplace/shared/redact-credentials.ts
+  - features/lib/npm-registry.ts
+  - features/lib/published-marketplace.ts
   - features/plugin/package-dependencies.feature
+  - features/step_definitions/npm-registry.steps.ts
+  - features/step_definitions/plugin/packages.steps.ts
+  - features/support/npm-registry.ts
+  - features/support/world.ts
   - rule-packs/architecture.json
+  - test/architecture/gate-targets.ts
   - test/architecture/no-shell-out.test.ts
-covered_digest: "v4:sha256:c057e414a975011be1e8ed28103dc6e526101376ef1395be8d2b98d9aa75c9e9"
+  - test/domain/package-lockfile.test.ts
+  - test/edge/register.test.ts
+  - test/orchestrators/plugin/dependency-move.test.ts
+  - test/orchestrators/plugin/dependency-settle.test.ts
+  - test/orchestrators/plugin/install-flow.test.ts
+  - test/orchestrators/plugin/install-outcome.test.ts
+  - test/orchestrators/plugin/materialize-latest.test.ts
+  - test/orchestrators/plugin/operations.test.ts
+  - test/orchestrators/plugin/package-install.test.ts
+  - test/orchestrators/plugin/uninstall.test.ts
+  - test/orchestrators/plugin/update-flow.test.ts
+  - test/orchestrators/plugin/update-preflight.test.ts
+  - test/orchestrators/reconcile/apply-outcomes.test.ts
+  - test/orchestrators/reconcile/apply.test.ts
+  - test/orchestrators/reconcile/notify.test.ts
+  - test/platform/package-manager.test.ts
+  - test/shared/redact-absolute-paths.test.ts
+  - test/shared/redact-credentials.test.ts
+covered_digest: "v4:sha256:5f37e0223ee6fa7df746c4dadedcf943e085f4b9434b2c38c856d6515576ffb6"
 behavior_unverified: 0
 overrides_applied: 0
-re_verification: false
-deferred:
-  - truth: "A package-install note reaches the user on a `marketplace update` / autoupdate cascade row"
-    addressed_in: "Phase 1 (WRN-02)"
-    evidence: "Phase 1 criterion 2: 'A marketplace update cascade, an autoupdate cascade, and an apply catalog move each render a moved plugin's warnings under one header that names the plugin and its scope (WRN-02)'. The install still runs and never blocks; only the cascade row drops the note today (update.messaging.ts reads no packageNote)."
-advisory:
-  - finding: "ROADMAP Phase 9 criterion 2 says 'lockfile-less'; the phase (D-PL9-02, as Claude Code does) keeps a missing lockfile silent and warns for refused lockfiles only"
-    category: other
-    reason: "Known handoff (uncertain choice 12): parent edits the criterion to 'refused' or overrules D-PL9-02"
-    evidence_status: "none needed; deliberate"
-  - finding: "PROJECT.md / AGENTS.md NFR-5 amendment, D-PL9-10/11 decision rows, CHANGELOG line and backlog entries (PKGDEP-02..05) are not yet applied"
-    category: other
-    reason: "Known handoff: forbidden to this phase; texts are in 09-05-SUMMARY (## CHANGELOG line, ## Decision rows, ## Backlog dispositions) and count as the recorded decisions for PKD-03"
-    evidence_status: "none needed; deliberate"
-  - finding: "WR-03 uninstall leaves node_modules in a kept clone, so a later install skips the package step (PKGDEP-05 proposed); a grandchild holding the pipes can outlive a timed-out run (no process-group kill)"
-    category: other
-    reason: "Recorded residue in 09-REVIEW-DISPOSITION.md and 09-05-SUMMARY; neither blocks a plugin or violates a PKD requirement"
-    evidence_status: "none provided"
+re_verification:
+  previous_status: passed
+  previous_score: 7/7
+  gaps_closed: []
+  gaps_remaining: []
+  regressions: []
+advisory: []
+decision_coverage:
+  honored: null
+  total: null
+  not_honored: []
 ---
 
 # Phase 9: Plugin Package Dependencies Verification Report
 
-**Phase Goal:** A plugin that ships `package.json` with a supported lockfile gets a frozen, `--ignore-scripts`, 60 s-bounded `npm ci` or `bun install --frozen-lockfile` when it is installed, updated, or reinstalled, matching Claude Code 2.1.310. A package-install failure or refusal never blocks the plugin; it leaves a warning note. NFR-5 gets an amendment and the spawn rule a decision ID (D-PL9-10, D-PL9-11).
-**Verified:** 2026-10-27
+**Phase Goal:** A plugin that ships `package.json` with a supported lockfile gets its dependencies installed as Claude Code installs them, without ever blocking the plugin.
+**Verified:** 2026-10-29T02:25:18Z
 **Status:** passed
-**Re-verification:** No, initial verification
+**Re-verification:** Yes — fresh stale-verification pass over the current implementation.
 
 ## Goal Achievement
+
+### Roadmap Success Criteria
+
+| # | Criterion | Status | Evidence |
+|---|-----------|--------|----------|
+| 1 | Installing a plugin with `package.json` and a supported lockfile runs the frozen, script-free install in a staged copy, and its hook or MCP server finds its modules. | ✓ VERIFIED | `package-install.ts` selects the closed lockfile table, sanitizes and rewrites inputs into `sources-staging`, runs npm or bun with `--ignore-scripts`, and renames `node_modules` into the plugin root. The focused install test passed. The session-start hook scenario passed 1/1 scenario and 12/12 steps through real npm and the loopback registry. |
+| 2 | Failure, timeout, and refused lockfiles leave the plugin installed with a warning; no lockfile remains silent. | ✓ VERIFIED | Detection and runner failures return notes rather than throws. Exact unit cases cover non-zero exits, launch failure, timeout, refusals, invalid files, and the silent no-lockfile branch. Install, update, reinstall, apply, autoupdate, and dependency-move scenarios verify visible warning placement and successful plugin lifecycle outcomes. |
+| 3 | NFR-5 and the spawn rule carry decision IDs, and `npm run check` is green. | ✓ VERIFIED | AGENTS.md and PROJECT.md contain D-PL9-10. PROJECT.md contains D-PL9-11 and the Phase 9 decision register. The exact-path ESLint seam and four-import architecture rule are active. Fresh `npm run check` passed on the final executable tree: 1,131 scenarios, 11,561 steps, and 309 LCOV records. |
+
+**Roadmap score:** 3/3 criteria verified.
 
 ### Observable Truths
 
 | # | Truth | Status | Evidence |
-| - | ----- | ------ | -------- |
-| 1 | Lockfile table and flags match Claude Code 2.1.310, first present wins (PKD-01, SC1) | VERIFIED | `package-install.ts` `LOCKFILE_TABLE`: `bun.lock` -> `bun install --frozen-lockfile --ignore-scripts`; `npm-shrinkwrap.json` then `package-lock.json` -> `npm ci --ignore-scripts --workspaces=false --no-audit --no-fund`; `bun.lockb` refused (verbatim text); yarn/pnpm-only note. Runs only when package.json lists `dependencies`/`optionalDependencies`/`peerDependencies`/`workspaces`. Order is data (`.find` over the table). Scenario Outline (3 refused-lockfile rows) and unit tests pass. |
-| 2 | The runner is shell-free, 60 s-bounded, kills, and never rejects (PKD-01/02) | VERIFIED | `platform/package-manager.ts`: `shell: false`, `stdio ["ignore","pipe","pipe"]`, async `spawn`; `DEFAULT_PACKAGE_INSTALL_OPS` binds `timeoutMs 60_000`, `killGraceMs 5_000`; SIGTERM at timeout, SIGKILL after grace, settles one grace later even if `close` never fires; output capped at 64 KiB; spawn throw and `error` resolve, not reject. Targeted unit tests (timeout, SIGKILL, never-closes, no-pid error, real child) all pass (package-manager.test.ts). Behavior-dependent invariants have passing named tests, so they are not PRESENT_BEHAVIOR_UNVERIFIED. |
-| 3 | The step runs on install (ledger), update, and reinstall, in the staged copy (PKD-01) | VERIFIED | `install-outcome.ts`: `packagesPhase` in the literal array `[..., workflowsPhase, packagesPhase, statePhase]`, injected via `transaction.packageInstallOps`; undo removes only a node_modules the phase created. `materialize-latest.ts` calls `installUpdatedPackages` on both swap paths with `force: revisionMoved(move)`; update-flow, reinstall-flow, and dependency-move all go through `materializeLatestVersion`. Work dir under `sourcesStagingDir`, only package.json + lockfile copied (no plugin `.npmrc`), node_modules renamed in, replaced one parked and restored on failure. Containment via `assertPathInside` on `extensionRoot`; local path-source folders are never written (D-PL9-03 note). Scenarios: install, update, reinstall (no request when installed; new lockfile after move) pass. |
-| 4 | Plugin's hook finds its modules (SC1) | VERIFIED | Scenario "A session start hook of an installed plugin loads the npm package its lockfile lists" passes (real npm against loopback registry stand-in). |
-| 5 | A failed, timed-out, or refused install never blocks and leaves a warning note (PKD-02, SC2) | VERIFIED | `installPluginPackages` catches every detect/run error into a note; `do` of the packages phase only pushes to `discoveryWarnings`; `installUpdatedPackages` adds `notes` + `packageNote` to the `updated` outcome and never converts it to a failure. Notes reach the user on: install (`discoveryWarnings` -> postCommitWarnings; scenario "A package install that fails leaves the plugin installed with a warning"), update and reinstall (`notes`; scenarios), apply catalog move (`carriedPackageNote` -> post-commit warning; scenario "Apply that moves a plugin whose package install fails reports the warning"), dependency move (`withPackageNote` on the moved row; `dependency-move.test.ts`), refused lockfiles (Outline) and local folder (scenario). Note text capped at 500, control chars/ANSI stripped, path-redacted. "Lockfile-less" read as "refused lockfile": deliberate handoff (advisory). |
-| 6 | NFR-5 amendment and spawn rule carry IDs and are gated (PKD-03, SC3) | VERIFIED | D-PL9-10 (amendment text, also rewriting the path-source clause) and D-PL9-11 (spawn rule text) are recorded in 09-05-SUMMARY (accepted as the recorded decisions). Gates: `rule-packs/architecture.json` `child-process-chokepoint` (4 exclusions: git-credential, dispatch-exec, async-rewake/registry, package-manager); `rg -l child_process` shows the other hits (`exec-timer.ts`, `spawn-helpers.ts`, `ring-buffer.ts`) are comments only; `no-shell-out.test.ts` whitelist "exactly four files" + `SHELL_OUT_EXEMPT_TARGETS` updated; `eslint.config.js` `PACKAGE_INSTALL_SEAM` BLOCK C zone allows only `package-install.ts` to import `platform/package-manager.ts`. `package-install.ts` is the sole importer. |
-| 7 | `npm run check` is green on the final code (SC3) | VERIFIED | Log `fix-check.log`: `CHECK_EXIT=0` at adb28310 (912 scenarios, direct coverage merged). `git diff adb28310 HEAD -- . ':(exclude).planning'` is empty. Not re-run, per instructions. |
+|---|-------|--------|----------|
+| 1 | Supported npm and bun lockfiles run the correct frozen, script-free command from a clean staged copy, then install modules atomically into the plugin root. | ✓ VERIFIED | `LOCKFILE_TABLE`, `checkLockfile`, `installInWorkDir`, `runInWorkDir`, and `moveNodeModules` form one wired path. The work directory receives only rewritten `package.json` and the selected lockfile. Existing modules are parked inside that work directory and restored on failure. |
+| 2 | Every materializing lifecycle path reaches the package step with the correct reinstall policy. | ✓ VERIFIED | The install ledger orders `workflowsPhase`, `packagesPhase`, `statePhase`. `materializeLatestVersion` runs `installUpdatedPackages` after either swap path. Update, reinstall, convergence, apply, and dependency moves call the shared materializer. A disabled revision refresh invalidates marked old packages under the state lock before saving the new revision; enable then installs from the new lockfile. |
+| 3 | An installed plugin can resolve its installed dependency from a session-start hook. | ✓ VERIFIED | The focused Cucumber scenario drove the real command, npm stand-in, installed hook, and new Pi session. It passed 1 scenario and 12 steps. |
+| 4 | Package failure, timeout, refusal, or launch failure never blocks the plugin; no supported lockfile remains a silent skip. | ✓ VERIFIED | `installPluginPackages` converts detection and run failures into bounded notes. The ledger adds a discovery warning without throwing; updated outcomes retain the `updated` partition. Focused install, silent-skip, and timeout-note tests each passed. |
+| 5 | Package diagnostics remain visible exactly once on install, direct update, marketplace/autoupdate, apply, and dependency moves. | ✓ VERIFIED | Discovery warnings flow through `stagingWarnings`; cascade diagnostics consume those warnings. Combined move-and-enable outcomes retain warnings and MCP notices. Dependency moves keep the package note on the dependency row while filtering that exact note from forwarded requester warnings. Behavioral scenarios compare complete payloads and rows. |
+| 6 | The package-manager runner is shell-free, bounded, process-tree aware, and Unicode-safe. | ✓ VERIFIED | Spawn uses `shell: false`, fixed argv, async pipes, a 60-second install timeout, SIGTERM/SIGKILL escalation, POSIX process groups, and Windows `taskkill /T /F`. Independent `StringDecoder`s preserve split UTF-8 while retaining stream and note caps. The named surviving-descendant regression passed. |
+| 7 | Package cleanup is containment-safe, marker-owned, atomic, and synchronized against concurrent lifecycle operations. | ✓ VERIFIED | Removal requires extension-root containment and a regular `.pi-claude-marketplace` marker, then moves modules into staging before deletion. Disabled refresh runs removal inside its state transaction. Uninstall takes a fresh scope lock around state reload, reference decision, and removal. The named disabled-refresh and competing-install regressions passed. |
+| 8 | Governance and quality gates prevent new spawn sites or untested package behavior. | ✓ VERIFIED | Artifact checks passed 16/16. The architecture rule admits exactly four `node:child_process` importers. The ESLint exception admits only the exact package-install seam. Validation is Nyquist-compliant, security is SECURED 25/25, the final 52-file review is CLEAN 0/0/0, and the full gate passed. |
 
-**Score:** 7/7 truths verified (0 present, behavior-unverified)
+**Score:** 8/8 truths verified (0 present-but-behavior-unverified).
 
-### Deferred Items
+## Re-verification Closure
 
-| # | Item | Addressed In | Evidence |
-| - | ---- | ------------ | -------- |
-| 1 | Package-install note on `marketplace update` / autoupdate cascade rows | Phase 1 (WRN-02) | Phase 1 criterion 2 requires cascade rows to render a moved plugin's warnings. Today `orchestrators/marketplace/update.messaging.ts` reads no `packageNote`/`notes` for the updated arm, so the note is dropped there; the install itself runs and never blocks. Phase 1 is a parallel wave-1 phase, so the parent should confirm WRN-02 renders the updated arm's `notes`. |
+The prior report’s deferred and advisory items are now resolved:
 
-### Advisory (carried handoffs, none blocking)
+- Marketplace and autoupdate package notes use the shared WRN-02/D-PL1-26 placement.
+- ROADMAP criterion 2 now correctly distinguishes refused lockfiles from a missing lockfile.
+- PROJECT.md and AGENTS.md contain the D-PL9-10 NFR-5 amendment and PROJECT.md records D-PL9-11.
+- The lockfile sanitizer is implemented; D-PL9-08’s original deferral is superseded.
+- Process-tree cleanup, uninstall cleanup, disabled-update package invalidation, warning ownership, and Unicode decoding now have regression tests.
+- No prior behavior regressed.
 
-| # | Finding | Category | Why advisory |
-| - | ------- | -------- | ------------ |
-| 1 | ROADMAP SC2 "lockfile-less" vs D-PL9-02 silent skip | other | Known handoff (uncertain choice 12) |
-| 2 | PROJECT.md/AGENTS.md NFR-5 text, decision rows, CHANGELOG, backlog PKGDEP-02..05 not applied | other | Known handoff; texts ready in 09-05-SUMMARY |
-| 3 | Uninstall leaves node_modules in a kept clone (WR-03); no process-group kill | other | Recorded residue |
+## Required Artifacts
 
-### Required Artifacts
+The automated artifact verifier passed all 16 declarations across the five plans.
 
-| Artifact | Expected | Status | Details |
-| -------- | -------- | ------ | ------- |
-| `orchestrators/plugin/package-install.ts` | table, detection, work dir, phase, update hook | VERIFIED | 534 lines, substantive, imported by `install-outcome.ts`, `materialize-latest.ts` |
-| `platform/package-manager.ts` | shell-free bounded runner | VERIFIED | 205 lines, sole importer `package-install.ts` |
-| `install-outcome.ts` packages phase | ledger slot | VERIFIED | literal 8-phase array |
-| `materialize-latest.ts` update hook | package step after swap | VERIFIED | both swap branches |
-| `rule-packs/architecture.json` | chokepoint rule | VERIFIED | `child-process-chokepoint` |
-| `eslint.config.js` | seam zone | VERIFIED | `PACKAGE_INSTALL_SEAM` |
-| `test/architecture/no-shell-out.test.ts`, `gate-targets.ts` | four-file whitelist | VERIFIED | |
-| `features/plugin/package-dependencies.feature` | scenarios | VERIFIED | 11 scenarios (9 + 3-row outline) pass |
+| Artifact group | Expected | Status | Details |
+|----------------|----------|--------|---------|
+| `platform/package-manager.ts` and paired test | Bounded shell-free package runner | ✓ VERIFIED | Substantive, imported only by the authorized seam, direct coverage green. |
+| `orchestrators/plugin/package-install.ts` and paired test | Detection, sanitizer bridge, staged install, notes, cleanup, ledger/update APIs | ✓ VERIFIED | Substantive and wired into both ledger and shared materializer. |
+| Ledger and materializer modules | Install and update/reinstall lifecycle wiring | ✓ VERIFIED | Literal phase order and both swap returns verified. |
+| Architecture rule, ESLint configuration, architecture tests | Four process sites and one package-runner consumer | ✓ VERIFIED | Exact-path and same-basename rejection tests are active. |
+| Registry stand-in, world/support, steps, and feature | Hermetic public-surface proof | ✓ VERIFIED | Loopback-only registry, exact request log, full result/row assertions, resource release. |
+| `09-05-SUMMARY.md` | Decision and merge handoff | ✓ VERIFIED | Required decision records exist and were applied to PROJECT.md/AGENTS.md. |
 
-### Key Link Verification
+## Key Link Verification
 
-| From | To | Via | Status |
-| ---- | -- | --- | ------ |
-| `install-outcome.ts` | `createPackagesPhase` | ledger array | WIRED |
-| `materialize-latest.ts` | `installUpdatedPackages` | after `swapPluginUpdate` / `swapAfterSettle` | WIRED |
-| `update-flow.ts`, `reinstall-flow.ts`, `dependency-move.ts` | `materializeLatestVersion` | call | WIRED |
-| `package-install.ts` | `createPackageManagerRunner` | `DEFAULT_PACKAGE_INSTALL_OPS` | WIRED |
-| updated outcome `packageNote` | apply post-commit warning / dependency row cause | `carriedPackageNote`, `withPackageNote` | WIRED |
-| ledger `discoveryWarnings` | install notification | postCommitWarnings | WIRED (scenario) |
+The automated link verifier passed 11 of 12 declared links. The remaining link is manually verified; its plan regex is stale, not the implementation.
 
-### Data-Flow Trace (Level 4)
+| From | To | Via | Status | Details |
+|------|----|-----|--------|---------|
+| `install-outcome.ts` | `package-install.ts` | `createPackagesPhase` in the literal ledger array | ✓ WIRED | `workflowsPhase`, `packagesPhase`, `statePhase` is present. |
+| `package-install.ts` | `package-manager.ts` | Production runner binding | ✓ WIRED | Both install and registry-query runners bind the real spawn and bounded timeouts. |
+| `materialize-latest.ts` | `package-install.ts` | Both swap returns call `installUpdatedPackages` | ✓ WIRED | The plan regex expects literal `DEFAULT_PACKAGE_INSTALL_OPS`; current code correctly takes injected `packageInstallOps = DEFAULT_PACKAGE_INSTALL_OPS` and passes that variable to both calls. |
+| Update/reinstall/apply/dependency paths | `materializeLatestVersion` | Shared update runner | ✓ WIRED | Current callers converge on the shared materializer. |
+| Package outcome warnings | User-visible diagnostics and rows | Staging-warning and row composition | ✓ WIRED | Direct update, cascade, apply, and dependency scenarios pin complete output. |
+| Feature steps | Loopback registry/world | Package fixtures, request windows, release hooks | ✓ WIRED | Real npm requests are constrained to the scenario’s loopback registry. |
 
-| Artifact | Data | Source | Real data | Status |
-| -------- | ---- | ------ | --------- | ------ |
-| failure note | `run.stderr`/`stdout`/`error` | real child process output | yes | FLOWING |
-| `node_modules` in plugin root | work-dir install result | real npm against loopback registry (scenarios) | yes | FLOWING |
+## Data-Flow Trace
 
-### Behavioral Spot-Checks
+| Data | Source | Flow | Status |
+|------|--------|------|--------|
+| Package inputs | Plugin `package.json` and selected lockfile | bounded read → sanitizer → rewritten staged files → package manager | ✓ FLOWING |
+| Installed modules | Package-manager work directory | marker write → atomic rename into contained plugin root | ✓ FLOWING |
+| Failure diagnostic | Child stderr/stdout/error/timeout | incremental decode → compact/cap → discovery warning → mode-selected notification | ✓ FLOWING |
+| Update package note | `installUpdatedPackages` | updated outcome `stagingWarnings`/`packageNote` → direct/cascade/apply/dependency renderer | ✓ FLOWING |
+| Cleanup decision | Current locked scope state | reference scan → contained marker check → staging move/delete | ✓ FLOWING |
+
+## Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
-| -------- | ------- | ------ | ------ |
-| Unit + architecture tests for the phase's modules | `node --test` on package-install, package-manager, no-shell-out, materialize-latest, install-outcome, dependency-move, apply, notify, apply-outcomes tests | 506 pass, 0 fail | PASS |
-| Package scenarios | `npx cucumber-js features/plugin/package-dependencies.feature` | 11 scenarios, 140 steps passed | PASS |
+|----------|---------|--------|--------|
+| Install, silent no-lockfile skip, and timeout degradation | Three named `node --test --test-name-pattern ... test/orchestrators/plugin/package-install.test.ts` runs | Each passed 1/1 | ✓ PASS |
+| Process-tree escalation after the direct child closes | Named package-manager test | Passed 1/1 | ✓ PASS |
+| Disabled refresh and concurrent uninstall cleanup | Named update-preflight and uninstall tests | Each passed 1/1 | ✓ PASS |
+| Dependency-warning ownership and hook module resolution | Named dependency-move test plus focused Cucumber hook scenario | Unit passed 1/1; Cucumber passed 1 scenario and 12 steps | ✓ PASS |
 
-### Probe Execution
+The first sandboxed Cucumber attempt could not bind loopback (`EPERM`). The permitted loopback run passed; this was an execution-sandbox restriction, not a product failure.
 
-SKIPPED: the phase declares no probe scripts.
+## Full Gate
 
-### Requirements Coverage
+The current executable inputs are identical to source commit `4a7ae05e`; later commits only refreshed planning reports.
 
-| Requirement | Source Plan | Description | Status | Evidence |
-| ----------- | ----------- | ----------- | ------ | -------- |
-| PKD-01 | 09-01..04 | frozen, script-free, bounded install in the staged copy | SATISFIED | Truths 1-4 |
-| PKD-02 | 09-01..04 | failure/timeout/skip degrades with a warning, never blocks | SATISFIED | Truth 5 (cascade-row gap deferred to WRN-02) |
-| PKD-03 | 09-01, 09-05 | NFR-5 and spawn rules amended with IDs | SATISFIED | Truth 6 (text recorded in 09-05-SUMMARY; PROJECT.md edit is the parent's handoff) |
+`npm run check` passed on Node v26.12.1:
 
-No orphaned requirements: REQUIREMENTS.md maps only PKD-01..03 to Phase 9.
+- typecheck, ESLint, workflow lint, Fallow, formatting, pairing, and feature checks passed;
+- unit and integration tests passed;
+- 1,131/1,131 Cucumber scenarios passed;
+- 11,561/11,561 Cucumber steps passed;
+- direct coverage merged 309 LCOV records.
 
-### Anti-Patterns Found
+## Requirements Coverage
 
-None blocking. No TBD/FIXME/XXX markers in the phase's source files. Grep of `package-install.ts` and `package-manager.ts` shows no stubs; the `ignoreFailure` best-effort cleanups are deliberate and commented.
+| Requirement | Source plans | Status | Evidence |
+|-------------|--------------|--------|----------|
+| PKD-01 | 09-01 through 09-04 | ✓ SATISFIED | Frozen, script-free, bounded install; sanitizer; staged copy; install/update/reinstall wiring; real hook/module behavioral proof. |
+| PKD-02 | 09-01 through 09-04 | ✓ SATISFIED | Failure/timeout/refusal stays non-blocking and visible; silent no-lockfile behavior; complete lifecycle warning placement; cleanup and retry regressions. |
+| PKD-03 | 09-01 and 09-05 | ✓ SATISFIED | D-PL9-10/11 records, NFR-5 amendment, exact spawn chokepoints, ESLint seam, and green full gate. |
 
-### Human Verification Required
+No orphaned Phase 9 requirements exist.
+
+## Test Quality Audit
+
+| Test area | Linked requirement | Active | Disabled | Circular | Strongest assertion | Verdict |
+|-----------|--------------------|--------|----------|----------|---------------------|---------|
+| Package install and lockfile sanitizer unit pairs | PKD-01, PKD-02 | Yes | 0 | No | Exact values, filesystem state, interaction checks | ✓ PASS |
+| Process runner unit pair | PKD-01, PKD-02 | Yes | 0 | No | Ordered signals, process results, exact output, real child | ✓ PASS |
+| Update, disabled refresh, reinstall, uninstall, dependency and apply pairs | PKD-01, PKD-02 | Yes | 0 | No | Multi-step state and concurrency assertions | ✓ PASS |
+| Architecture gate | PKD-03 | Yes | 0 | No | Exact importer set and violation lists | ✓ PASS |
+| Package-dependencies Cucumber feature | PKD-01, PKD-02 | 20 scenarios | 0 | No | Full payload/row/request/package-state comparisons | ✓ PASS |
+
+**Disabled requirement tests:** 0
+**Circular expected-value generation:** 0
+**Insufficient assertions:** 0
+
+## Decision Coverage
+
+The automated decision-coverage handler emitted no structured result because `09-CONTEXT.md` has no `<decisions>` block. Manual verification traced the current D-PL9 decisions through code, tests, PROJECT.md, AGENTS.md, and the final summaries. D-PL9-09 is explicitly superseded; D-PL9-08’s original deferral is explicitly reversed. No unhonored current decision was found.
+
+## Probe Execution
+
+No Phase 9 probe scripts are declared.
+
+## Anti-Patterns
+
+No blocking anti-pattern was found:
+
+- no unreferenced `TBD`, `FIXME`, or `XXX` marker in the reviewed scope;
+- no skipped/todo requirement test;
+- no test-only production hook;
+- no new suppression without a valid line-specific reason;
+- no placeholder or hollow package lifecycle path;
+- fresh security audit: SECURED, 25/25 threats closed;
+- fresh complete code review: CLEAN, 52 files, 0/0/0 findings.
+
+### Advisory (New Scope, Unevidenced)
 
 None.
 
-### Gaps Summary
+## Human Verification
 
-No gaps. The goal is achieved: frozen, `--ignore-scripts`, 60 s-bounded npm/bun installs run on install, update, reinstall (and apply and dependency moves), a failure never blocks, and the spawn and seam gates exist and passed in the full `npm run check`. Open items are known handoffs for the parent (ROADMAP SC2 wording, PROJECT.md/AGENTS.md/CHANGELOG/BACKLOG edits) and one deferred surface (marketplace-update cascade rows, WRN-02).
+None. Every state transition, cleanup/ordering invariant, and user-visible package diagnostic identified during this pass has an automated behavioral or focused regression test. Controlled Windows host/process cases cover the Windows launcher and taskkill decisions; no unverified truth remains.
+
+## Gaps Summary
+
+No gaps. Phase 9 achieves its goal: supported plugin packages install through a contained, sanitized, frozen and script-free path; the resulting modules work from plugin hooks; failures remain non-blocking and visible exactly once; silent skips remain silent; update and cleanup races are synchronized; and governance gates prevent the subprocess surface from widening.
 
 ---
 
-_Verified: 2026-10-27_
-_Verifier: Claude (gsd-verifier)_
+_Verified: 2026-10-29T02:25:18Z_
+_Verifier: gsd-verifier_

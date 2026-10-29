@@ -6,14 +6,18 @@ threats_open: 0
 asvs_level: 1
 block_on: high
 register_authored_at_plan_time: true
-audited_at: 9cdc6dc9
+audited_at: 250acaadf15622a66ee80b5e3443ad96be908016
+source_commit: 250acaadf15622a66ee80b5e3443ad96be908016
 base: d98660a7
 created: 2026-10-27
+updated: 2026-10-29
 ---
 
 # Phase 6 - Security
 
-> Threat verification for import marketplace planning (milestone `plugin-lifecycle`). Every mitigation below was checked in the code at HEAD `9cdc6dc9`, after the review fixes in `06-REVIEW-FIX.md`. Line numbers refer to that commit.
+> Final threat verification for import marketplace planning (milestone `plugin-lifecycle`). Every mitigation below was rechecked at `250acaadf15622a66ee80b5e3443ad96be908016`, after the review fixes and the SEC-06-01 follow-up.
+
+**Verdict:** SECURED — 14/14 threats closed; 11 mitigated and 3 documented accepted risks.
 
 ---
 
@@ -41,17 +45,21 @@ created: 2026-10-27
 | T-06-05 | Tampering | `PluginInstallFailedOutcome.cause` widened to `Error` | medium | mitigate | The type is `readonly cause?: Error` (`apply-outcomes.ts:233`). Every cause this phase assigns is rebuilt first: `apply.ts:502` and `562` (`redactedDependencyCascadeError`, which redacts the head and the chain, `apply.ts:456-462`) and `apply.ts:578` (`redactCauseChain(error)`). The pre-existing `DirectoryPinUnsatisfiedError` arm (`apply.ts:838`) was already allowed by the old type and is built from names, ranges, and a version. `test/orchestrators/reconcile/apply.test.ts:2425-2485` and `2487-2548` assert the exact rendered text. It shows `unlink 'data.txt'` and holds no absolute path. | closed |
 | T-06-06 | Tampering | Unreferenced `extraKnownMarketplaces` keys such as `__proto__` or `constructor` | medium | mitigate | The new pass walks own keys only: `Object.keys(extraKnownMarketplaces)` in `orchestrators/import/marketplaces.ts:137-140` and `166-171`. The section is built by object spread (`import/settings.ts:107-110`), so every key it holds is an own data property. Writes downstream use `setOwn` (`shared/own-key.ts:17-19`, `Object.defineProperty`): `desiredConfigFor` (`import/execute.ts:1452-1469`) and the post-pass (`execute.ts:1965`, `1977`, `2009`, `2018`, `2066`, `2077`). Reads use `ownValue` (`own-key.ts:9-14`): the planner (`reconcile/plan.ts:151`, `170`, `341`) and import (`execute.ts:1649`, `1697-1700`). Claims, aliases, and config names are held in `Map`/`Set` (`plan.ts:239-244`, `execute.ts:1502`, `1540`, `1546`). | closed |
 | T-06-07 | Elevation of privilege | An unreferenced git-source entry now clones over the network | low | accept | Claude Code registers every entry (E1). NFR-5 allows network for a git-source marketplace add. The add shows as an `(added)` row and is declared in the config (`test/orchestrators/import/execute.test.ts:1144`). The user can undo it with `marketplace remove`. See R-06-02. | closed |
-| T-06-08 | Tampering | A settings name aliased to the wrong recorded marketplace | high | mitigate | Import follows only the planner's one-to-one claims. `marketplaceSourceClaims` (`plan.ts:269-275`) returns `buildMarketplaceClaims(...).recordedByDeclared`. That map is set only for a claim by the record's own name (`plan.ts:170-172`) or for a single declaration claiming a single record (`plan.ts:212-217`). Records whose names are declared are never source candidates (`plan.ts:150-152`). An ambiguous source (`plan.ts:175-187`) or a multiply claimed record (`plan.ts:222-230`) becomes a planner `source-mismatch` (`plan.ts:387-394`). `ensurePlannedMarketplaces` checks that mismatch before any add (`execute.ts:1639-1648`, add at `1651`). It blocks the marketplace's plugins (`execute.ts:1076`, `968`). The read pass also drops self-claims and every claim of a name the settings declare, planned or not (WR-01, `execute.ts:1540`, `1546-1550`). CR-01 config names reuse the same claim rule (`execute.ts:1498-1510`). Tests: `execute.test.ts:5545`, `5594`, `5644` (conflicts block before any add), `5490` (WR-01), `5336` and `5390` (CR-01), and `plan.test.ts:2025` and `2102`. | closed |
-| T-06-09 | Repudiation | A settings marketplace with a source mismatch and no plugins renders nothing | medium | mitigate | `recordPlannedMismatch` sends a plugin-less mismatch to `recordMarketplaceAddFailure` with the mismatch cause (`execute.ts:1062-1073`, `961-980`). The block renders `(failed)` with a cause row (`execute.ts:769-773`, `905-928`). Pinned by `execute.test.ts:1256-1301`, and for a conflicted claim by `5594` and `5644`. | closed |
-| T-06-10 | Information disclosure | Import failed rows: rollback phase causes and the dependency row's cause | high | mitigate | `pushUnexpectedFailure` puts the head through `redactAbsolutePaths(errorMessage(error))` (`execute.ts:2118`) and the chain through `redactCauseChain(error.cause)` (`execute.ts:2107`, `2119`). Phase causes go through `redactCauseChain` (`execute.ts:2132`, `2143-2150`). The dependency row's cause is `failureCause(o)` (`execute.ts:649`, `598-604`), which is built from those redacted fields. Every install and enable failure arm, the defensive catch, and the not-installed race reach `pushUnexpectedFailure` (`execute.ts:1162`, `1191`, `1296`, `1328`, `1335`, `2195`, `2246`). The IN-02 dedupe (`execute.ts:637-670`) only drops a repeated row. Tests: `execute.test.ts:1762-1820` and `2190-2255` assert exact text with paths cut to `data.txt` and `mcp-adapter.json`. | closed |
-| T-06-11 | Information disclosure | Apply failed-install rows: the root cause, every phase cause, and the dependency row's cause | high | mitigate | Root cause: `redactCauseChain(error)` (`apply.ts:578`). Phase causes: `redactedRollbackPartials` (`apply.ts:475-483`, called at `569`), which drops the raw ledger `msg`. Dependency row: `redactedDependencyCascadeError(error)` (`apply.ts:502`). The no-partial dependency arm also uses it (`apply.ts:562`). `notify.ts:1168-1174` passes the already-redacted phases to the row. Tests: `apply.test.ts:2425-2485` and `2487-2548` assert the exact rendered text. | closed |
+| T-06-08 | Tampering | A settings name resolves to the wrong recorded marketplace | high | mitigate | D-PL6-17/18 block installation under an absent settings name. `execute.ts:1638` records every plugin as `marketplace-not-added`; the unchanged-add arm also checks the returned canonical name at line 1404. Remaining config-name preservation uses the planner's one-to-one claims. Exact current regressions cover same-command reuse and canonical-only declarations. | closed |
+| T-06-09 | Repudiation | A marketplace/add failure or reused-source failure is omitted | medium | mitigate | D-PL6-19 routes eligible source changes through re-add and shared failure bookkeeping. The unchanged-add branch records different-name reuse failures and preserves same-name plugin headers. `marketplaceBlocks` creates the failed header, and exact regressions assert error severity and tally. | closed |
+| T-06-10 | Information disclosure | Import failure causes, rollback phases, and leaks expose paths | high | mitigate | Import rebuilds root and nested causes plus rollback phases through the shared redactor. SEC-06-01 is closed by `250acaad`: actual Node errno diagnostics with spaces, Unicode, `O'Brien`, `O' Brien`, two-path syscalls, UNC forms, nested causes, JSON serialization, and structured leaks reduce to basenames. Exact composed import TUI/JSON regressions are in `execute.test.ts`. | closed |
+| T-06-11 | Information disclosure | Apply install/enable/move failure causes, phases, and leaks expose paths | high | mitigate | Apply rebuilds dependency, root, rollback, failed-enable, and failed-move causes through the shared redactor before notify/JSON projection. Exact TUI/JSON regressions cover install and enable recovery under a spaced Unicode `O' Brien` root; leaked resources remain basename-only. | closed |
 | T-06-12 | Tampering | Splitting a dependency key into marketplace and plugin | low | mitigate | `dependencyRollbackOutcome` splits at `error.key.lastIndexOf("@")` (`apply.ts:495-499`). This is the same rule as `parsePluginKey` (`plan.ts:87-96`). | closed |
 | T-06-13 | Tampering | Import enable rows after the outcome is narrowed | low | mitigate | `installedRow` rebuilds `stagedAgents`, `stagedMcpServers`, and `stagedWorkflows` from the required `declaresAgents`, `declaresMcp`, and `declaresWorkflows` members (`execute.ts:702-704`; the members are required at `execute.ts:130-131` and `161`; `enableSignals` omits the staged facts at `execute.ts:156-159`). The IMP-05 enable case asserts the companion markers in its exact rendered text (`execute.test.ts:5107`). | closed |
 | T-06-SC | Tampering | npm/pip/cargo installs | low | accept | No plan installs a package. `git diff --stat d98660a7..HEAD -- package.json package-lock.json` is empty. See R-06-03. | closed |
 
 *Only open threats at or above the configured `high` threshold count in `threats_open`.*
 
-The redaction and aliasing unit cases above were re-run at `9cdc6dc9` on Node v26.12.1. The test files were `test/orchestrators/import/execute.test.ts`, `test/orchestrators/reconcile/apply.test.ts`, `test/orchestrators/reconcile/plan.test.ts`, and `test/orchestrators/import/marketplaces.test.ts`, filtered to D-PL6-12, D-PL6-04, D-PL6-09, D-PL6-02, CR-01, MIM-03, `marketplaceSourceClaims`, `marketplaceClaimConflicts`, and MIM-02 / D-PL6-01. Result: 26 pass, 0 fail.
+The final independent audit passed 131 read-only assertions over actual Node diagnostics, cause/rollback/JSON projections, UNC strings, exclusions, and both one- and two-path errno forms. The redactor owner suite also passed. Fresh `npm run check` at the exact source passed all static checks, 1,125 scenarios, 11,467 steps, and 309 direct-coverage records.
+
+## SEC-06-01 Disposition
+
+Closed by `250acaadf15622a66ee80b5e3443ad96be908016`. The preceding audit found that an internal apostrophe terminated a single-quoted Node errno path early and left parent directories visible. The final parser recognizes Node errno path fields, keeps internal apostrophes (including apostrophe-space) inside the path, and treats `' -> '` as a two-path separator only for Node's two-path syscalls. A literal `' -> '` inside an `open` path remains one path. Generic prose retains conservative boundaries.
 
 ---
 
@@ -67,7 +75,7 @@ These notes come from reading the review-fix changes. None of them is a missing 
 
 1. **The feature-table projection no longer tells a cut path from a full path (IN-05, `features/lib/run-tokens.ts:80-87`, `126-128`).** `projectTokens` now maps a recorded error message to its token in two more forms: with each quoted path cut to its last segment, and with that path replaced by any path that ends in the same segment. In the import and apply scenarios that use an error token in a cause cell, the scenario therefore passes whether the row shows `'data.txt'` or `'/abs/path/data.txt'`. The redaction of T-06-10 and T-06-11 is still pinned, because the unit cases listed above assert the exact text. But a scenario alone would not catch a regression that leaks the full path.
 2. **A conflicted-claim or mismatch cause repeats the configured sources (D-PL6-09 / WR-02, `execute.ts:1004-1019`).** The plugin-less mismatch row now shows `Existing marketplace source <recorded> does not match Claude settings source <settings>.` or `Claude settings source <settings> matches more than one recorded marketplace: …`. Both values are config text that the user wrote. The recorded source is in its logical form (`sourceLogical`, `plan.ts:381`), which is how `marketplace list` shows a source. They are not paths found at run time, so the T-55-02-02 redaction rule does not apply. A user who writes an absolute `directory` source sees it again in this row.
-3. **Raw causes that predate this phase stay unredacted (outside the register).** The standalone `install` row shows its rollback phase causes as they are (`orchestrators/plugin/install.messaging.ts:216-219`). Import's marketplace add-failure arms pass `outcome.cause` and `errorMessage(err)` unchanged (`execute.ts:1404-1407`, `1429-1434`). The lock-held arm shows the lock path by design (IMP-07, `execute.ts:987-993`). All of these exist at `d98660a7`. D-PL6-01 sends more marketplaces through the add arm (unreferenced `extraKnownMarketplaces` entries), but the cause text is the one `marketplace add` already shows.
+3. **Parsing boundary.** Full quote-space handling follows Node errno grammar. Arbitrary free-form prose is inherently ambiguous and retains conservative path boundaries. UNC behavior is verified through platform-independent diagnostics and structured leak values, not a Windows filesystem run.
 
 ---
 
@@ -86,6 +94,8 @@ These notes come from reading the review-fix changes. None of them is a missing 
 | Audit Date | Threats Total | Closed | Open | Run By |
 |------------|---------------|--------|------|--------|
 | 2026-10-27 | 14 | 14 | 0 | GSD security auditor, ASVS level 1 (boundary placement checked for T-06-04, T-06-05, T-06-08, T-06-10, T-06-11) |
+| 2026-10-29 | 14 | 12 | 2 | Fresh re-audit at `a04c4756`; SEC-06-01 opened T-06-10/T-06-11 |
+| 2026-10-29 | 14 | 14 | 0 | Final independent re-audit at `250acaad`; 131 diagnostic/projection assertions |
 
 ---
 
@@ -96,4 +106,4 @@ These notes come from reading the review-fix changes. None of them is a missing 
 - [x] `threats_open: 0` is confirmed.
 - [x] `status: verified` is set in frontmatter.
 
-**Approval:** Verified 2026-10-27.
+**Approval:** SECURED 2026-10-29 at `250acaadf15622a66ee80b5e3443ad96be908016`.

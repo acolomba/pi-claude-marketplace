@@ -1,9 +1,13 @@
 ---
 phase: 03-dependency-cascade-rows-and-status
-verified: 2026-10-27T07:05:00Z
-status: human_needed
-score: 12/12 must-haves verified
+verified: 2026-10-28T23:20:26Z
+status: passed
+score: 8/8 must-haves verified
 covered_files:
+  - ".planning/BACKLOG.md"
+  - ".planning/PROJECT.md"
+  - ".planning/REQUIREMENTS.md"
+  - ".planning/ROADMAP.md"
   - ".planning/phases/03-dependency-cascade-rows-and-status/03-01-PLAN.md"
   - ".planning/phases/03-dependency-cascade-rows-and-status/03-01-SUMMARY.md"
   - ".planning/phases/03-dependency-cascade-rows-and-status/03-02-PLAN.md"
@@ -16,6 +20,12 @@ covered_files:
   - ".planning/phases/03-dependency-cascade-rows-and-status/03-05-SUMMARY.md"
   - ".planning/phases/03-dependency-cascade-rows-and-status/03-06-PLAN.md"
   - ".planning/phases/03-dependency-cascade-rows-and-status/03-06-SUMMARY.md"
+  - ".planning/phases/03-dependency-cascade-rows-and-status/03-CONTEXT.md"
+  - ".planning/phases/03-dependency-cascade-rows-and-status/03-REVIEW.md"
+  - ".planning/phases/03-dependency-cascade-rows-and-status/03-SECURITY.md"
+  - ".planning/phases/03-dependency-cascade-rows-and-status/03-VALIDATION.md"
+  - ".planning/phases/10-lifecycle-test-and-harness-gaps/10-03-PLAN.md"
+  - "AGENTS.md"
   - "docs/dependency-resolution.md"
   - "docs/output-catalog.md"
   - "extensions/pi-claude-marketplace/domain/dependency-closure.ts"
@@ -25,14 +35,21 @@ covered_files:
   - "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts"
-  - "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts"
+  - "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-cascade-context.ts"
+  - "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-dependency-ledger.ts"
+  - "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts"
+  - "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts"
+  - "extensions/pi-claude-marketplace/orchestrators/plugin/list-candidate-version.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts"
+  - "extensions/pi-claude-marketplace/orchestrators/plugin/list-installed-row.ts"
   - "extensions/pi-claude-marketplace/shared/notification-mcp.ts"
+  - "features/plugin/fetch.feature"
   - "features/plugin/install-dependencies.feature"
   - "features/plugin/install.feature"
   - "features/plugin/update-dependencies.feature"
   - "features/plugin/update.feature"
+  - "features/step_definitions/command.steps.ts"
   - "test/architecture/catalog-uat/catalog-contract.test.ts"
   - "test/architecture/catalog-uat/catalog-parser.test.ts"
   - "test/architecture/catalog-uat/catalog-wire.test.ts"
@@ -45,152 +62,113 @@ covered_files:
   - "test/orchestrators/plugin/dependency-plan.test.ts"
   - "test/orchestrators/plugin/install-cascade.messaging.test.ts"
   - "test/orchestrators/plugin/install-cascade.test.ts"
+  - "test/orchestrators/plugin/install-flow-ledger.test.ts"
   - "test/orchestrators/plugin/install-flow.test.ts"
   - "test/orchestrators/plugin/install-outcome.test.ts"
-  - "test/shared/notification-mcp.test.ts"
-covered_digest: "v4:sha256:c885d24fa0d30f0c8713f0ff0c1ff2fee5e78a6b954c5f849f14dc43f739270f"
+covered_digest: "v4:sha256:5d284951455e1e8b1a5095e227d8cc51d52b466b569756b9b0e01c3b63ecc7cf"
 behavior_unverified: 0
 overrides_applied: 0
-human_verification:
-  - test: "Accept or reverse D-PL3-15 (scope of the CAS-01 rows), and give its known gaps a carrier"
-    expected: "Either the operator accepts that three routes keep one failed row (the root's own ledger failure, UPD-DEP-D1 plan-step failures, a catalog lookup that throws mid-walk) and the gaps get a carrier in ROADMAP Phase 4 / Phase 11 success criteria or a BACKLOG entry, or the operator asks for rows on those routes now"
-    why_human: "CAS-01 reads 'each member that resolved but did not install'. On the root-ledger route (install-flow.ts:1112-1126, the subject is only set when cascade.key !== rootKey) the rolled-back dependencies get no row. D-PL3-15 records this as Uncertain, for user review. No ROADMAP success criterion and no BACKLOG entry carries it, so Phase 11's CLN-04 backlog sweep would not see it."
-  - test: "Accept or reverse D-PL3-06 (no propagation of a dependency's partial availability to its dependents)"
-    expected: "Operator confirms upstream parity (Claude Code has no partial state, E3) over the operator statement recorded in the DEPS-STATUS-01 backlog entry, or asks for a {dependency partial}-style reason"
-    why_human: "CAS-03 allows the decision-not-to, and it is recorded (docs/dependency-resolution.md:279), but CONTEXT marks it Uncertain and the backlog records an operator request for the opposite. Only the operator can settle it."
-  - test: "Accept or reverse D-PL3-07 (git-source list rows keep upgradable)"
-    expected: "Operator confirms the PL-5/RSTA/FTCH-licensed divergence (Claude Code's list shows no upgrade state for any source, E7), or asks to drop it"
-    why_human: "AGENTS.md upstream-parity rule: a divergence needs a recorded decision ID or a Pi capability gap. D-PL3-07 cites PL-5, but CONTEXT marks the choice Uncertain and for user review."
-  - test: "Accept or reverse D-PL3-10 (non-directory refusals keep the 200-per-range bound with '... (+N chars)')"
-    expected: "Operator accepts the divergence or schedules alignment to upstream (64 per range, 200 for the joined list, U+2026)"
-    why_human: "This is a divergence from Claude Code (E4) that the phase minted its own ID for and marked Uncertain. Under AGENTS.md's parity rule the operator must confirm it."
-  - test: "Accept or reverse D-PL3-13 (installed plugins outside the closure are not named on a non-root member's directory-pin refusal)"
-    expected: "Operator confirms D-03-10 licenses the divergence (upstream names them), or asks to fold their ranges in"
-    why_human: "Upstream divergence, marked Uncertain in CONTEXT; needs operator sign-off."
+re_verification:
+  previous_status: human_needed
+  previous_score: 12/12
+  gaps_closed: []
+  gaps_remaining: []
+  regressions: []
 ---
 
 # Phase 3: Dependency Cascade Rows and Status Verification Report
 
-**Phase Goal:** Cascade rows and refusals name every member and declarer the way Claude Code does, and a plugin degraded by its dependency says so.
-**Verified:** 2026-10-27T07:05:00Z
-**Status:** human_needed
-**Re-verification:** No (initial verification)
+**Phase goal:** Cascade rows and refusals name every member and declarer the way Claude Code does, and a plugin degraded by its dependency says so.
+**Verified:** 2026-10-28T23:20:26Z
+**Status:** passed
+**Re-verification:** Yes. This is a fresh goal-backward verdict after fixes 0ee37cf0 and 43124fa7. The previous 2026-10-27 report was stale and human_needed.
 
 ## Goal Achievement
 
-The code at HEAD (81d2494d) delivers every CAS requirement and every roadmap success criterion. The cucumber scenarios that pin the user-visible changes pass, and they compare rows exactly (`features/step_definitions/command.steps.ts:92-97`, `assert.deepStrictEqual` over the whole table). So a missing `lib` or `mid` row would fail them. Status is `human_needed`, not `passed`, for one reason. Several of the decisions that define the scope are marked Uncertain and "for user review" in `03-CONTEXT.md`. No operator acceptance is recorded for them, and two of them (D-PL3-10, D-PL3-13) are divergences from Claude Code that AGENTS.md routes to the user. One known gap (D-PL3-15) also has no carrier in a later phase.
+The five roadmap success criteria and CAS-01..07 resolve to eight distinct truths. Behavioral assertions and real-ledger tests in the supplied combined-tree gate support each runtime truth. No summary claim was used as implementation evidence.
 
 ### Observable Truths
 
-| #  | Truth | Status | Evidence |
-| -- | ----- | ------ | -------- |
-| 1  | SC1: the two `install-dependencies.feature` failure scenarios show a row for `lib` and `mid` (CAS-01) | VERIFIED | `features/plugin/install-dependencies.feature:89` (`lib@tools ... dependency failed`), `:144` (`mid@tools ... dependency failed`). Producer: `install-cascade.ts` `unmaterialized()` (filters root, failing key, read-through keys), wired on the closure arm (`resolveCascade`, closure-failed) and the constraint arm; renderer `install-cascade.messaging.ts` `unmaterializedRows`. Targeted cucumber run: 111/111 passed |
-| 2  | SC2: `install _x@mp` reports the resolver's real cause; the pinned integration case changes with it (CAS-02) | VERIFIED | `domain/dependency-closure.ts` `refuseUnsplittableRoot` looks the root up first under `installPolicy`, absent -> single-member closure (caller reports `{not in manifest}`), listed -> `invalid-root-id` with `invalidPart`. Messaging: `install-cascade.messaging.ts` `INVALID_ID_HALVES` and the `invalid-root-id` arm (upstream text, `printable`-escaped key). Integration pin: `test/integration/reserved-record-keys.test.ts:394-396`. Scenarios: `features/plugin/install.feature:72` (listed `_x`), `:88` (zero-width name escaped in row and cause), `:102` (unlisted `_x` -> `Plugin "_x" not found in marketplace "fixtures".`) |
-| 3  | SC3: a plugin depending on a partially available plugin shows the decided status, or the decision not to is recorded (CAS-03) | VERIFIED (decision recorded) | D-PL3-06 recorded in `docs/dependency-resolution.md:279`; no code change, `info.ts` untouched (not in the diff). Marked Uncertain in CONTEXT: see Human Verification |
-| 4  | SC4: git-source `list` rows, `required by` lists, and truncation match Claude Code or carry a recorded ID (CAS-04, CAS-05) | VERIFIED | Git `list`: D-PL3-07 cited at `orchestrators/plugin/list-flow.ts:44-47` and `docs/dependency-resolution.md:104`; behavior pinned by the existing `features/plugin/fetch.feature:60`. Requirers: `install-cascade.ts` `rangeRequirers` names every range-declaring cascade member (`requestersOf` over the recorded `declared` edges). Truncation: `domain/dependency-range.ts` `truncateForRefusal` + `MAX_DIRECTORY_PIN_FIELD_CHARS = 120`, applied to joined ranges (`install-cascade.ts` `resolveOneMember`) and to name, version, each requirer (`install-outcome.ts` `assertDirectoryPinSatisfied`). Other refusals keep 200 (D-PL3-10) |
-| 5  | SC5: the offline git-move refusal names a next step, and no hold cause carries an unbounded `version` string (CAS-06, CAS-07) | VERIFIED | Hint: `install-cascade.messaging.ts` `installedUnsatisfiedCause` (only when `declaredBy` includes the root key, set by `dependency-plan.ts` `unmovable`). Offline scenario `install-dependencies.feature:343`. Hold cause: `constraint-fold.ts:189-192` cuts `line.version` to 64; every `{dependents constrain}` producer (`update-preflight.ts:932,1087`, `reconcile/convergence.ts:493-514`) gets its cause from `describeConstraint`. Scenario `features/plugin/update.feature:409` |
-| 6  | CAS-01: a failed install closure gives a row to each member that resolved but did not install | VERIFIED (scoped by D-PL3-15) | Walk, constraint, and non-root member-ledger routes covered (`failedCascade` builds `unmaterialized` from `phaseKeys`; `install-flow.ts` `unwrapCascade` forwards it; `handleCascadeThrow` passes `moved`). Scenarios: `:89`, `:144`, `:494` (rolled-back `mid`), `:1164` (moved dependency listed once). Root-ledger, plan-step, and mid-walk lookup throw routes keep one row by D-PL3-15: see Human Verification |
-| 7  | CAS-02: `install` of a root name outside the token alphabet gets a verdict naming the real cause | VERIFIED | See truth 2. Enable walk (no `installPolicy`) keeps `unusable-declaration` (`refuseUnsplittableRoot`, `options.installPolicy === undefined`). `apply`/load/`import` show `{dependency failed}` + the new cause (D-PL3-17, recorded known limit) |
-| 8  | CAS-03: partial availability shown on list/info/install, or the choice not to is recorded with an ID | VERIFIED | D-PL3-06, see truth 3 |
-| 9  | CAS-04: `list` shows upgrade state for git-source plugins as Claude Code does, or carries a recorded ID | VERIFIED | D-PL3-07 (licensed by PL-5 + RSTA/FTCH), see truth 4 |
-| 10 | CAS-05: a non-root member's refusal names every declarer; names and ranges truncated as Claude Code does | VERIFIED | Scope per PARITYGV-01 b2/b3 (`.planning/BACKLOG.md:4285-4290`: "these refusal messages" = the plugin directory pin refusal). Scenarios: `install-dependencies.feature:523` (`required by "app", "mid"`, ranges `^2.0.0, >=2.0.0`), `:552` (120-cut version with `…`). Unit cases: `install-outcome.test.ts` (name past 120), `install-cascade.test.ts` (joined ranges cut once at 120), `dependency-range.test.ts` (surrogate handling) |
-| 11 | CAS-06: the offline refusal of an install that would move a git dependency names the next step | VERIFIED | See truth 5; also `update-dependencies.feature:119-127` (update settle refusal shows the hint) and catalog `docs/output-catalog.md:985` |
-| 12 | CAS-07: a hold row's cause never interpolates an unbounded catalog `version` string | VERIFIED | See truth 5. D-PL3-16 also cuts `dependency-move.ts:152-153,185-186`, and review WR-01 cut `recordedVersion` in `installedUnsatisfiedCause` (`install-cascade.messaging.ts:411-412`), pinned by the scenario at `install-dependencies.feature:206` |
+| # | Truth | Status | Current code and behavior evidence |
+| --- | --- | --- | --- |
+| 1 | Failed closures name every resolved member that did not install, including lib, mid, root-ledger, plan-step, and mid-walk failures (SC1, CAS-01). | VERIFIED | install-cascade.ts builds unmaterialized keys; install-flow-cascade-context.ts forwards root and lookup failures; install-flow-dependency-ledger.ts projects failed plan steps; install-cascade.messaging.ts composes deduplicated rows. install-dependencies.feature has exact complete-row scenarios for lib, mid, and the three CAS-08 routes at lines 200, 223, and 1381. |
+| 2 | Installing a listed invalid root id states the invalid-id cause; an unlisted one states not in manifest (SC2, CAS-02). | VERIFIED | dependency-closure.ts looks up the root before refusal; install-cascade.messaging.ts renders the invalid-manifest cause with printable escaping. install.feature has listed and unlisted cases; reserved-record-keys.test.ts pins the integration cause and unchanged state. |
+| 3 | A partial dependency has its own partial row and does not demote its requester on install, list, or info (SC3, CAS-03, D-PL3-06). | VERIFIED | recordMaterializedMember uses the member's resolved compatibility and unsupported kinds; composeCascadeMemberRow renders partially-installed. install-dependencies.feature:48 and :66 assert a fresh partial row and the requester remaining installed across install/list/info. |
+| 4 | A degraded dependency warns for malformed skill or command frontmatter while its requester stays installed. | VERIFIED | ledgerDegradationSignals in install-outcome.ts flows into recordMaterializedMember and composeCascadeMemberRow; malformedReasonsForKinds sets ordered reasons and warning severity. install-dependencies.feature:29 asserts the full warning and rows; install-flow-ledger.test.ts:15445 and :15453 assert whole notifications and both enabled records, including partial plus malformed command. |
+| 5 | Git-source list rows keep upgrade state under a recorded project divergence (SC4, CAS-04, D-PL3-07). | VERIFIED | list-installed-row.ts compares the installed record to resolveListCandidate; list-flow.ts documents PL-5; fetch.feature:60 asserts an upgradable git-source row. PROJECT.md records D-PL3-07 as Good and BACKLOG.md closes b1 as decided. |
+| 6 | A non-root directory-pin refusal names every in-closure range declarer and bounds fields as specified (SC4, CAS-05). | VERIFIED | install-cascade.ts rangeRequirers filters range edges and orders declarers; install-outcome.ts cuts plugin name, listed version, and each requirer to 120 UTF-16 units; dependency-range.ts handles surrogate-safe cuts. install-dependencies.feature:670 and :699 plus paired tests assert order and limits. D-PL3-13's outside-closure exclusion is recorded in PROJECT.md. |
+| 7 | A refused offline git dependency move names the update command when the root declares it (SC5, CAS-06). | VERIFIED | dependency-plan.ts carries declaredBy; installedUnsatisfiedCause checks it and updateBlocked before appending the fixed command. install-dependencies.feature:490 asserts the offline refusal; update-dependencies.feature covers update settlement. |
+| 8 | Hold and related refusal causes bound catalog versions to 64 UTF-16 units; non-directory ranges follow the superseding rendering decision (SC5, CAS-07). | VERIFIED | constraint-fold.ts, dependency-move.ts, and install-cascade.messaging.ts call truncateForRefusal. dependency-range.ts protects surrogate pairs and renders valid ranges as written, other text in curly quotes, and the joined list at 200 with the upstream suffix. update.feature:483 and install-dependencies.feature:350 assert long versions; paired unit tests cover cut boundaries. PROJECT.md records the user's reversal of D-PL3-10. |
 
-**Score:** 12/12 truths verified (0 present, behavior-unverified)
+**Score:** 8/8 verified; 0 present but behavior-unverified. No override applied.
 
-### Required Artifacts
+### Required Artifacts and Data Flow
 
-| Artifact | Expected | Status | Details |
-| -------- | -------- | ------ | ------- |
-| `domain/dependency-range.ts` | `truncateForRefusal`, `MAX_REFUSAL_VERSION_CHARS = 64`, `MAX_DIRECTORY_PIN_FIELD_CHARS = 120` | VERIFIED | Lines 294-320; imported by constraint-fold, dependency-move, install-cascade, install-cascade.messaging, install-outcome |
-| `domain/dependency-closure.ts` | `invalid-root-id` arm, lookup-first under `installPolicy` | VERIFIED | `refuseUnsplittableRoot`, `invalidIdPart`; called from `resolveDependencyClosure` |
-| `orchestrators/plugin/install-cascade.ts` | `Unmaterialized`, `recordingLookup`, every-declarer `rangeRequirers`, `declaredBy` | VERIFIED | `Unmaterialized` is REQUIRED on every failure arm (compile-enforced) |
-| `orchestrators/plugin/install-cascade.messaging.ts` | member rows, invalid-id cause, hint, escaped root row | VERIFIED | `unmaterializedRows`, `rootRowName`, `installedUnsatisfiedCause` |
-| `orchestrators/plugin/install-flow.ts` | forwards the member list and moved keys | VERIFIED | `unwrapCascade` (`unmaterialized: cascade.unmaterialized`), `handleCascadeThrow` (`moved`) |
-| `orchestrators/plugin/install-outcome.ts` | pre-cut directory pin fields | VERIFIED | `assertDirectoryPinSatisfied` |
-| `orchestrators/plugin/list-flow.ts` | PL-5 comment cites D-PL3-07 | VERIFIED | `:44-47` |
-| `docs/dependency-resolution.md` | D-PL3-06 and D-PL3-07 records, behavior text | VERIFIED | `:104`, `:279`, reason table, failure-list paragraph |
-| `docs/output-catalog.md` | `dependency-invalid-root-id` state; failure attribution; hint | VERIFIED | `:1133-1140`, `:900`, `:985-989`; catalog contract green per the check log |
+| Artifact | Substantive and wired evidence | Status |
+| --- | --- | --- |
+| domain/dependency-closure.ts; orchestrators/plugin/install-cascade.ts | Scoped lookup and actual ledger summaries supply closure, compatibility, unsupported kinds, and degraded kinds. | VERIFIED |
+| orchestrators/plugin/install-cascade.messaging.ts | Typed cascade facts become member, root, refusal, and warning rows; no static placeholder supplies a dynamic value. | VERIFIED |
+| orchestrators/plugin/install-flow-cascade-context.ts; install-flow-dependency-ledger.ts; install-flow-ledger.ts; install-flow-planning.ts | Root-ledger, catalog lookup, and failed plan-step facts reach the failure composer; ledger outcomes reach success rows and persisted records. | VERIFIED |
+| domain/dependency-range.ts; orchestrators/plugin/constraint-fold.ts; dependency-move.ts; install-outcome.ts | Shared cuts and range rendering are used at hold, move, and directory-pin refusal sites. | VERIFIED |
+| orchestrators/plugin/list-installed-row.ts; list-candidate-version.ts | Installed record and marketplace candidate feed upgrade classification; the git-source fetch scenario exercises the path. | VERIFIED |
+| docs/dependency-resolution.md; docs/output-catalog.md | Document the recorded decisions and emitted row forms; catalog contract tests are in the gate. | VERIFIED |
 
-### Key Link Verification
+### Key Links
 
-| From | To | Via | Status |
-| ---- | -- | --- | ------ |
-| `install-cascade.ts::resolveCascade` | `install-flow.ts::unwrapCascade` | `failure.unmaterialized` on closure and constraint arms; copied onto member subject | WIRED |
-| `install-flow.ts::handleCascadeThrow` | `composeCascadeFailureMessage` | `moved` argument excludes keys a moved row reports | WIRED |
-| `dependency-plan.ts::unmovable` | `installedUnsatisfiedCause` | `declaredBy` checked against `rootKey` | WIRED |
-| `resolveCascade` | `rangeRequirers` | `MemberConstraintOptions.declared` from `recordingLookup` | WIRED |
-| `resolveOneMember` | `assertDirectoryPinSatisfied` | `directoryPin.declared` (cut) + `requiredBy` | WIRED |
-| `constraint-fold.ts::describeConstraint` | `truncateForRefusal` | `line.version` cut to 64 | WIRED |
-| `closureFailureFacts` / `rootRowName` | `shared/notification-mcp.ts::printable` | exported `printable` | WIRED |
+| From | To | Evidence | Status |
+| --- | --- | --- | --- |
+| Closure, ledger, or plan failure | Failed notification | unmaterialized keys flow through unwrapCascade or projectFailedInstallDependencyPlanMoves to composeUnmaterializedRows; exact-row scenarios cover every route. | WIRED |
+| Member ledger summary | Dependency row | recordMaterializedMember spreads compatibility and ledgerDegradationSignals; composeCascadeMemberRow maps those facts to status, reasons, and severity; full-notification and enabled-record tests exercise the link. | WIRED |
+| Directory range edges | Pin refusal | rangeRequirers and 120-unit cuts feed DirectoryPinUnsatisfiedError; declarer and long-field scenarios exercise output. | WIRED |
+| Installed move decision | Update hint | declaredBy and updateBlocked gate installedUnsatisfiedCause; the offline git scenario exercises it. | WIRED |
+| Marketplace candidate and installed record | Git list row | resolveListCandidate feeds classifyInstalledRecord; the fetch scenario exercises upgradable output. | WIRED |
 
-### Behavioral Spot-Checks
+### Behavioral Evidence and Gate
 
-| Behavior | Command | Result | Status |
-| -------- | ------- | ------ | ------ |
-| Phase cucumber scenarios (CAS-01/02/05/06/07) and the git-list pin (CAS-04) | `npx cucumber-js features/plugin/install-dependencies.feature features/plugin/install.feature features/plugin/update.feature features/plugin/update-dependencies.feature features/plugin/fetch.feature` (hermetic sandbox, `features/support/pi-process.ts`) | 111 scenarios, 111 passed, exit 0 | PASS |
-| Paired unit tests | `node --test` over dependency-range, dependency-closure, constraint-fold, dependency-move, install-cascade, install-cascade.messaging, install-outcome, dependency-plan, notification-mcp tests | 429 tests, 0 failed | PASS |
-| Phase gate | `npm run check` (not re-run; caller-supplied log `check-fix.log`, written 02:48 after HEAD 02:45) | 911 scenarios passed, all static checks passed | PASS (reused) |
-
-### Probe Execution
-
-Not applicable. The phase declares no probes.
+| Check | Result | Status |
+| --- | --- | --- |
+| Supplied fresh npm run check at build-input HEAD 4e3e7d1fb97804723a128f8cc142ccb8fdd44321 on Node v26.12.1 | Exit 0; all static checks, 1123/1123 Cucumber scenarios, 11442/11442 steps, 309 direct-coverage records. Report-only commit 4b246ac4 changed no build inputs. | PASS, reused |
+| CAS-01 and CAS-08 exact-row failures | Distinct scenarios in install-dependencies.feature, included in the full Cucumber gate. | PASS |
+| Fresh partial, malformed skill, malformed command, and requester-status regressions | Cucumber and complete-notification real-ledger assertions included in the full gate. | PASS |
+| Probe execution | No Phase 3 probe is declared or implied by its acceptance criteria. | N/A |
 
 ### Requirements Coverage
 
-| Requirement | Source Plan | Status | Evidence |
-| ----------- | ----------- | ------ | -------- |
-| CAS-01 | 03-03 | SATISFIED (scoped by D-PL3-15) | Truths 1, 6 |
-| CAS-02 | 03-02 | SATISFIED | Truths 2, 7 |
-| CAS-03 | 03-06 | SATISFIED (decision-not-to, D-PL3-06) | Truths 3, 8 |
-| CAS-04 | 03-06 | SATISFIED (recorded divergence, D-PL3-07) | Truths 4, 9 |
-| CAS-05 | 03-04 | SATISFIED | Truths 4, 10 |
-| CAS-06 | 03-05 | SATISFIED | Truths 5, 11 |
-| CAS-07 | 03-01 | SATISFIED | Truths 5, 12 |
+| Requirement | Plan | Result | Evidence |
+| --- | --- | --- | --- |
+| CAS-01 | 03-03 | SATISFIED | Truth 1; Phase 10 CAS-08 closes the three former single-row routes. |
+| CAS-02 | 03-02 | SATISFIED | Truth 2. |
+| CAS-03 | 03-06 | SATISFIED | Truths 3 and 4; D-PL3-06 is recorded and tested. |
+| CAS-04 | 03-06 | SATISFIED | Truth 5; D-PL3-07 is recorded and git-source output tested. |
+| CAS-05 | 03-04 | SATISFIED | Truth 6; D-PL3-13 is recorded, D-PL3-10 superseded. |
+| CAS-06 | 03-05 | SATISFIED | Truth 7. |
+| CAS-07 | 03-01 | SATISFIED | Truth 8. |
 
-No orphaned requirements: REQUIREMENTS.md maps exactly CAS-01..07 to Phase 3, and every plan claims at least one.
+REQUIREMENTS.md maps exactly CAS-01..07 to Phase 3 and every one appears in a plan. No orphaned Phase 3 requirement was found. Its checkbox and traceability labels still say Pending; they are planning markers, not code evidence.
 
-### Anti-Patterns Found
+### Re-verification of Previous Human Items
 
-| File | Line | Pattern | Severity | Impact |
-| ---- | ---- | ------- | -------- | ------ |
-| (added lines across the phase diff) | - | TBD/FIXME/XXX/TODO/HACK | none found | - |
-| `orchestrators/plugin/update-preflight.ts` | 917 | raw `toVersion`/`expectVersion` in a plan-step failure note (review IN-04) | Warning | A failed row, not a hold cause, so CAS-07 holds. Assigned to Phase 4 by D-PL3-15, but Phase 4's success criteria do not name it and no BACKLOG entry carries it |
-| `orchestrators/plugin/install-cascade.messaging.ts` | 9 | imports `printable` from the MCP notice module (review IN-03, skipped) | Info | Coupling only; no behavior impact |
-| `orchestrators/plugin/install-cascade.messaging.ts` | `memberCause` | T-03-48 path redaction added outside the plan's must-haves | Info | Recorded deviation in 03-03-SUMMARY; it hardens output and is covered by the `leaks` column |
+| Previous item | Current disposition |
+| --- | --- |
+| D-PL3-15 root-ledger, plan-step, and mid-walk single-row routes | Closed by Phase 10 CAS-08 source and three exact-row scenarios. |
+| D-PL3-06 partial-status decision | Recorded as Good in PROJECT.md, closed as decided in BACKLOG.md, and exercised by an install/list/info scenario. No separate operator acceptance event is inferred. |
+| D-PL3-07 git-list divergence | Recorded as Good under PL-5, closed as decided, and pinned by the git-source fetch scenario. |
+| D-PL3-10 refusal-range divergence | Superseded by the user's 2026-10-27 reversal recorded in PROJECT.md; current renderer follows it. |
+| D-PL3-13 outside-closure declarers | Recorded as Good under D-03-10 and closed for cascade members in BACKLOG.md; current code and tests follow the recorded scope. |
+
+### Anti-patterns and Advisory
+
+No unreferenced TBD, FIXME, or XXX marker was found in the relevant production files. The scanned empty-array return in install-cascade.ts is a legitimate empty-result branch, not a rendered stub. The final Phase 3 review is CLEAN with 0/0/0 findings across 25 files; the security audit is SECURED with 15/15 dispositions; validation maps 7/7 CAS requirements to automated checks. No new-scope unevidenced advisory was established.
 
 ### Human Verification Required
 
-### 1. D-PL3-15 scope of the CAS-01 rows, and a carrier for its gaps
-
-**Test:** Decide whether the root's own ledger failure, UPD-DEP-D1 plan-step failures, and a mid-walk lookup throw may keep a single failed row.
-**Expected:** Accept, and add the gaps to ROADMAP Phase 4 / Phase 11 success criteria or BACKLOG. Or ask for rows on those routes now.
-**Why human:** On the root-ledger route, `install-flow.ts:1112-1126` sets no subject when `cascade.key === rootKey`, so the dependencies the cascade rolled back get no row, although CAS-01's wording covers them. CONTEXT marks the choice Uncertain. Nothing downstream carries it.
-
-### 2. D-PL3-06: no propagation of partial availability
-
-**Test:** Confirm the parity choice against the DEPS-STATUS-01 operator statement.
-**Expected:** Keep it (Claude Code has no partial state) or ask for a propagated reason.
-**Why human:** This is a product decision the operator asked about in the backlog. CONTEXT marks it Uncertain.
-
-### 3. D-PL3-07: git-source `list` keeps `upgradable`
-
-**Test:** Confirm the PL-5-licensed divergence.
-**Expected:** Keep it, or drop it for git sources or for all sources.
-**Why human:** This is an upstream divergence marked Uncertain.
-
-### 4. D-PL3-10 and D-PL3-13: remaining upstream divergences
-
-**Test:** Confirm that the non-directory refusals keep the 200-per-range bound, and that installed declarers outside the closure stay unnamed.
-**Expected:** Accept both, or schedule alignment.
-**Why human:** Under AGENTS.md, a divergence needs a recorded ID that the operator owns. The phase minted these IDs itself and marked them Uncertain.
+None. Every user-visible acceptance behavior has an automated scenario or real-ledger assertion. The project decision table records the parity choices; this report does not claim a separate operator acceptance event.
 
 ### Gaps Summary
 
-There are no blocking gaps. Every CAS requirement and every roadmap success criterion is delivered in source. The user-visible changes (CAS-01, 02, 05, 06, 07) each have an exact-match cucumber scenario that passes. CAS-03 and CAS-04 are decision records. CAS-04's kept behavior is pinned by the existing `fetch.feature:60`. CAS-03's no-propagation behavior has no dedicated scenario, which is acceptable because the phase changed no behavior there. The phase stops at `human_needed` for two reasons. First, the decisions that bound CAS-01, 03, 04, and 05 are marked Uncertain with no recorded operator acceptance. Second, the D-PL3-15 known gaps and review IN-04 have no carrier in a later phase's success criteria or in BACKLOG.md.
+No blocking or warning gap remains in the Phase 3 contract. The current implementation and behavioral evidence satisfy all five roadmap success criteria and CAS-01..07. Phase 10's CAS-08 closes the former known failure-row routes.
 
 ---
 
-_Verified: 2026-10-27T07:05:00Z_
-_Verifier: Claude (gsd-verifier)_
+_Verified: 2026-10-28T23:20:26Z_
+_Verifier: gsd-verifier_

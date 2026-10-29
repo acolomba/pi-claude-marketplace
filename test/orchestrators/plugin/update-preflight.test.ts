@@ -97,6 +97,7 @@ function pluginRecord(version: string, enabled = true): PluginRecord {
 }
 
 interface SeedOptions {
+  readonly contained?: boolean;
   /** A function receives the seeded plugin root, for a record at the candidate's own root. */
   readonly installed?: PluginRecord | ((pluginRoot: string) => PluginRecord);
   readonly declared?: boolean;
@@ -115,7 +116,11 @@ async function seedUpdate(options: SeedOptions = {}): Promise<{
 }> {
   const marketplaceName = options.marketplaceName ?? "mp";
   const cwd = await mkdtemp(path.join(tmpdir(), "update-preflight-"));
-  const marketplaceRoot = path.join(cwd, "marketplace");
+  const locations = locationsFor("project", cwd);
+  const marketplaceRoot =
+    options.contained === true
+      ? path.join(locations.extensionRoot, "sources", marketplaceName)
+      : path.join(cwd, "marketplace");
   const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
   await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
   await mkdir(path.join(pluginRoot, "skills", "tool"), { recursive: true });
@@ -142,7 +147,6 @@ async function seedUpdate(options: SeedOptions = {}): Promise<{
             ],
     }),
   );
-  const locations = locationsFor("project", cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
   const installed =
     typeof options.installed === "function" ? options.installed(pluginRoot) : options.installed;
@@ -744,6 +748,90 @@ test("refreshes a disabled pin without materializing its recorded resources", as
   assert.strictEqual(refreshed?.resolvedSource, seed.pluginRoot);
   assert.deepStrictEqual(refreshed?.resources, record.resources);
   assert.strictEqual(refreshed?.enabled, false);
+});
+
+test("invalidates owned packages before saving a disabled revision change in the same root", async (t) => {
+  // arrange
+  const seed = await seedUpdate({
+    contained: true,
+    installed: (pluginRoot) => ({ ...pluginRecord("1.0.0", false), resolvedSource: pluginRoot }),
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const modules = path.join(seed.pluginRoot, "node_modules");
+  await mkdir(modules);
+  await writeFile(path.join(modules, ".pi-claude-marketplace"), "owned");
+  await writeFile(path.join(modules, "old-package"), "1.0.0");
+
+  // act
+  const outcome = await prepare(seed);
+  const refreshed = (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "skipped",
+    name: "hello",
+    notes: [],
+    reasons: ["already disabled"],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  });
+  assert.strictEqual(refreshed?.version, "2.0.0");
+  assert.strictEqual(refreshed?.enabled, false);
+  assert.strictEqual(fs.existsSync(modules), false);
+});
+
+test("keeps the old disabled revision when its packages cannot be invalidated and retries later", async (t) => {
+  // arrange
+  const seed = await seedUpdate({
+    contained: true,
+    installed: (pluginRoot) => ({ ...pluginRecord("1.0.0", false), resolvedSource: pluginRoot }),
+  });
+  t.after(async () => {
+    await chmod(seed.pluginRoot, 0o755);
+    await rm(seed.cwd, { force: true, recursive: true });
+  });
+  const modules = path.join(seed.pluginRoot, "node_modules");
+  await mkdir(modules);
+  await writeFile(path.join(modules, ".pi-claude-marketplace"), "owned");
+  await chmod(seed.pluginRoot, 0o555);
+
+  // act & assert
+  await assert.rejects(prepare(seed), { code: "EACCES" });
+  assert.strictEqual(
+    (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello?.version,
+    "1.0.0",
+  );
+  assert.strictEqual(fs.existsSync(modules), true);
+  await chmod(seed.pluginRoot, 0o755);
+  await prepare(seed);
+  assert.strictEqual(
+    (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello?.version,
+    "2.0.0",
+  );
+  assert.strictEqual(fs.existsSync(modules), false);
+});
+
+test("keeps owned packages when a disabled refresh changes only compatibility", async (t) => {
+  // arrange
+  const seed = await seedUpdate({
+    contained: true,
+    installed: (pluginRoot) => ({
+      ...pluginRecord("2.0.0", false),
+      resolvedSource: pluginRoot,
+      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    }),
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const modules = path.join(seed.pluginRoot, "node_modules");
+  await mkdir(modules);
+  await writeFile(path.join(modules, ".pi-claude-marketplace"), "owned");
+
+  // act
+  await prepare(seed);
+
+  // assert
+  assert.strictEqual(await readFile(path.join(modules, ".pi-claude-marketplace"), "utf8"), "owned");
 });
 
 test("D-18-05: reinstall's policy skips a disabled record as already disabled without writing its pin", async (t) => {

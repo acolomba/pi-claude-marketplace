@@ -99,11 +99,7 @@ import {
   notifyDiagnostic,
   notifyMcpConfigNotices,
 } from "../../shared/notification-dispatch.ts";
-import {
-  type ContentReason,
-  type McpConfigNotice,
-  type Reason,
-} from "../../shared/notification-types.ts";
+import { type McpConfigNotice, type Reason } from "../../shared/notification-types.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import {
   redactAbsolutePaths,
@@ -152,6 +148,7 @@ import {
   convergedMoveOutcomes,
   dependencyInstallRows,
   enabledMoveOutcome,
+  failedRowFromOutcome,
 } from "./notify.ts";
 import {
   closeScopePass,
@@ -978,7 +975,7 @@ interface PluginToggleAxes {
     marketplace: string;
     plugin: string;
     reason: Reason;
-  }) => PerEntryOutcome;
+  }) => Extract<PerEntryOutcome, { kind: "plugin-enable-failed" | "plugin-disable-failed" }>;
 }
 
 /**
@@ -1072,6 +1069,11 @@ async function applyPluginToggles(
           plugin: op.plugin,
           reason: result.reason,
         }),
+        ...(axes.enable &&
+          result.rollbackPartials !== undefined && {
+            cause: redactCauseChain(result.error),
+            rollbackPartials: redactedRollbackPartials(result.rollbackPartials),
+          }),
         // AFILE-04: a toggle that failed after its cascade rewrote the MCP
         // config still reports the rewrite.
         ...carriedMcpConfigNotices(result),
@@ -1757,19 +1759,24 @@ function dependencyFailedRows(step: CascadeStep): PerEntryOutcome[] {
       });
 }
 
-/** The `(failed)` row of a move that did not land, with `reasons`. */
-function failedMoveRows(move: PlannedMove, reasons: readonly ContentReason[]): PerEntryOutcome[] {
-  return convergedMoveOutcomes(move, {
+/** The failed move row, retaining the enable failure's recovery details. */
+function failedMoveRows(move: PlannedMove, failure: PluginEnableFailedOutcome): PerEntryOutcome[] {
+  const outcomes = convergedMoveOutcomes(move, {
     partition: "failed",
     name: move.plugin,
     fromVersion: move.fromVersion,
     toVersion: move.toVersion,
     notes: [],
-    reasons,
+    reasons: [],
     declaresAgents: false,
     declaresMcp: false,
     declaresWorkflows: false,
   });
+  return outcomes.map((outcome) => ({
+    ...outcome,
+    ...carriedMcpConfigNotices(failure),
+    row: { ...outcome.row, ...failedRowFromOutcome(failure) },
+  }));
 }
 
 /**
@@ -1832,14 +1839,14 @@ async function runStep(
   if (landed) {
     run.reports.push({ key: step.key, rows: landedStepRows(step, move, enabled) });
   } else {
-    const reasons = enabled
-      .filter(
-        (outcome): outcome is PluginEnableFailedOutcome => outcome.kind === "plugin-enable-failed",
-      )
-      .map((outcome) => outcome.reason)
-      .filter(isContentReason);
+    const failures = enabled.filter(
+      (outcome): outcome is PluginEnableFailedOutcome => outcome.kind === "plugin-enable-failed",
+    );
     run.failed.all.add(step.key);
-    run.reports.push({ key: step.key, rows: failedMoveRows(move, reasons) });
+    run.reports.push({
+      key: step.key,
+      rows: failures.flatMap((failure) => failedMoveRows(move, failure)),
+    });
   }
 
   await runScopeIsolated(run.scope, run.sink, async () => {
@@ -1872,7 +1879,16 @@ function landedStepRows(
     return enabled;
   }
 
-  return [enabledMoveOutcome(move)];
+  const enables = enabled.filter((outcome) => outcome.kind === "plugin-enabled");
+  const stagingWarnings = enables.flatMap((outcome) => outcome.stagingWarnings ?? []);
+  const mcpConfigNotices = enables.flatMap((outcome) => outcome.mcpConfigNotices ?? []);
+  return [
+    {
+      ...enabledMoveOutcome(move),
+      ...(stagingWarnings.length > 0 && { stagingWarnings }),
+      ...(mcpConfigNotices.length > 0 && { mcpConfigNotices }),
+    },
+  ];
 }
 
 /**
@@ -1898,16 +1914,6 @@ async function collectClones(locations: ScopedLocations): Promise<void> {
   } catch (err) {
     hookDebugLog(`apply: clone cleanup failed: ${errorMessage(err)}`, "reconcile");
   }
-}
-
-const NON_CONTENT_REASONS: ReadonlySet<string> = new Set([
-  "marketplace not added",
-  "marketplace not added to user scope",
-  "marketplace not added to project scope",
-]);
-
-function isContentReason(reason: Reason): reason is ContentReason {
-  return !NON_CONTENT_REASONS.has(reason);
 }
 
 /** Enables one record; answers whether it landed. */

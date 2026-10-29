@@ -114,7 +114,7 @@ import { DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
 import { cascadeUnstagePlugin, foldUnstageNotices } from "../marketplace/shared.ts";
 
 import { probeDependencyTags } from "./dependency-tag-probe.ts";
-import { runInstallLedger } from "./install-outcome.ts";
+import { ledgerDegradationSignals, runInstallLedger } from "./install-outcome.ts";
 import { probeMarketplaceTags } from "./marketplace-tag-probe.ts";
 import { applyPartialCascadeFold } from "./shared.ts";
 
@@ -131,6 +131,7 @@ import type {
   InstallLedgerTransaction,
 } from "./install-outcome.ts";
 import type { MarketplaceTagProbeOptions } from "./marketplace-tag-probe.ts";
+import type { LedgerDegradationSignals } from "./shared.ts";
 import type {
   ClosureLookup,
   ClosureMember,
@@ -430,12 +431,17 @@ interface MemberConstraintOptions {
 }
 
 /** One member the cascade itself materialized, in install order. */
-export interface CascadeMemberOutcome {
+export interface CascadeMemberOutcome extends Pick<
+  LedgerDegradationSignals,
+  "orphanRewake" | "degradedKinds"
+> {
   readonly key: string;
   readonly name: string;
   readonly marketplace: string;
   readonly requiredBy: string | undefined;
   readonly version: string;
+  /** Unsupported kinds omitted by this member's partial installation. */
+  readonly unsupported?: readonly string[];
   /**
    * What the member staged, as the three soft-dependency kinds the renderer
    * probes for. Carried as booleans rather than as the staged name lists so a
@@ -1254,6 +1260,10 @@ function recordMaterializedMember(
     marketplace: member.marketplace,
     requiredBy: member.requiredBy,
     version: summary.version,
+    ...(summary.resolved.state === "partially-available" && {
+      unsupported: [...summary.resolved.unsupported],
+    }),
+    ...ledgerDegradationSignals(summary),
     declaresAgents: summary.stagedAgentNames.length > 0,
     declaresMcp: summary.stagedMcpServerNames.length > 0,
     declaresWorkflows: summary.stagedWorkflowNames.length > 0,

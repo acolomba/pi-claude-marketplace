@@ -28,8 +28,8 @@ interface PackageManagerProcessControl {
   close(code: number | null): void;
   fail(error: Error): void;
   kills(): readonly string[];
-  writeStderr(text: string): void;
-  writeStdout(text: string): void;
+  writeStderr(text: string | Buffer): void;
+  writeStdout(text: string | Buffer): void;
 }
 
 function createPackageManagerProcess(pid?: number): PackageManagerProcessControl {
@@ -81,12 +81,12 @@ function createPackageManagerProcess(pid?: number): PackageManagerProcessControl
     kills: () => [...signals],
     writeStderr: (text) => {
       for (const listener of stderrListeners) {
-        listener(Buffer.from(text));
+        listener(typeof text === "string" ? Buffer.from(text) : text);
       }
     },
     writeStdout: (text) => {
       for (const listener of stdoutListeners) {
-        listener(Buffer.from(text));
+        listener(typeof text === "string" ? Buffer.from(text) : text);
       }
     },
   };
@@ -212,6 +212,75 @@ test("resolves with the exit code and both streams when the process closes", asy
   // assert
   assert.deepStrictEqual(run, { code: 1, stdout: "ab", stderr: "c", timedOut: false });
 });
+
+test("decodes split UTF-8 characters independently in both output streams", async () => {
+  // arrange
+  const control = createPackageManagerProcess();
+  const runPackageManager = runnerFor(control);
+  const stdout = Buffer.from("😀");
+  const stderr = Buffer.from("café");
+
+  // act
+  const pending = runPackageManager(request);
+  control.writeStdout(stdout.subarray(0, 2));
+  control.writeStderr(stderr.subarray(0, 4));
+  control.writeStdout(stdout.subarray(2));
+  control.writeStderr(stderr.subarray(4));
+  control.close(1);
+  const run = await pending;
+
+  // assert
+  assert.deepStrictEqual(run, { code: 1, stdout: "😀", stderr: "café", timedOut: false });
+});
+
+test("flushes an unfinished UTF-8 sequence from each stream when the process closes", async () => {
+  // arrange
+  const control = createPackageManagerProcess();
+  const runPackageManager = runnerFor(control);
+
+  // act
+  const pending = runPackageManager(request);
+  control.writeStdout(Buffer.from([0xc3]));
+  control.writeStderr(Buffer.from([0xe2]));
+  control.writeStderr(Buffer.from([0x82]));
+  control.close(1);
+  const run = await pending;
+
+  // assert
+  assert.deepStrictEqual(run, { code: 1, stdout: "�", stderr: "�", timedOut: false });
+});
+
+for (const { prefixLength, ending } of [
+  { prefixLength: 65_534, ending: "😀" },
+  { prefixLength: 65_535, ending: "" },
+]) {
+  test(`keeps whole Unicode characters at the output cap after ${prefixLength} characters`, async () => {
+    // arrange
+    const control = createPackageManagerProcess();
+    const runPackageManager = runnerFor(control);
+    const emoji = Buffer.from("😀");
+
+    // act
+    const pending = runPackageManager(request);
+    control.writeStdout("x".repeat(prefixLength));
+    control.writeStdout(emoji.subarray(0, 2));
+    control.writeStderr("é".repeat(prefixLength));
+    control.writeStderr(emoji);
+    control.writeStdout(emoji.subarray(2));
+    control.writeStdout("tail");
+    control.writeStderr("tail");
+    control.close(0);
+    const run = await pending;
+
+    // assert
+    assert.deepStrictEqual(run, {
+      code: 0,
+      stdout: "x".repeat(prefixLength) + ending,
+      stderr: "é".repeat(prefixLength) + ending,
+      timedOut: false,
+    });
+  });
+}
 
 test("resolves with the spawn error and no exit code when the process cannot start", async () => {
   // arrange
@@ -370,6 +439,40 @@ test("signals nothing after the process closed", async (t) => {
 
   // assert
   assert.deepStrictEqual(control.kills(), []);
+});
+
+test("kills a surviving group after its timed-out parent closes", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const control = createPackageManagerProcess(42);
+  const groupSignals: GroupSignal[] = [];
+  let descendantRunning = true;
+  const runPackageManager = runnerFor(control, {
+    ...linuxHost(),
+    signalGroup: (pid, signal) => {
+      groupSignals.push([pid, signal]);
+      if (signal === "SIGKILL") {
+        descendantRunning = false;
+      }
+    },
+  });
+
+  // act
+  const pending = runPackageManager(request);
+  t.mock.timers.tick(TIMEOUT_MS);
+  control.close(null);
+  const run = await pending;
+  t.mock.timers.tick(KILL_GRACE_MS);
+  t.mock.timers.tick(KILL_GRACE_MS);
+  t.mock.timers.tick(TIMEOUT_MS);
+
+  // assert
+  assert.deepStrictEqual(run, { code: null, stdout: "", stderr: "", timedOut: true });
+  assert.strictEqual(descendantRunning, false);
+  assert.deepStrictEqual(groupSignals, [
+    [42, "SIGTERM"],
+    [42, "SIGKILL"],
+  ]);
 });
 
 test("runs a real child process and captures its exit code and output", async () => {

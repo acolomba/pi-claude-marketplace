@@ -1402,6 +1402,14 @@ async function addOnePlannedMarketplace(
     }
 
     if (outcome?.status === "unchanged") {
+      if (outcome.name !== marketplace.marketplace) {
+        recordReusedMarketplace(result, blockedMarketplaces, scopePlan, marketplace);
+      } else if (
+        pluginsForMarketplace(scopePlan.pluginsToInstall, marketplace.marketplace).length > 0
+      ) {
+        pushMarketplaceSkip(result, marketplace);
+      }
+
       return;
     }
 

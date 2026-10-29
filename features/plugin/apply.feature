@@ -13,6 +13,31 @@ Feature: Plugin apply
       | beta  | 1.0.0   |
       | gamma | 1.0.0   |
 
+  Scenario: Apply reports the rollback phases and leaks of a failed enable
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope project"
+    Given the published plugin "demo" of the marketplace "fixtures" has a read-only skill directory
+    Given a directory blocks the mcp-adapter.json file of the project scope
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   | true    |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade      |
+      | severity            | error                          |
+      | needs reload        | false                          |
+      | summary             | A plugin operation has failed. |
+      | tally label         | Reconcile                      |
+      | tally failures      | 1                              |
+      | tally warnings      | 0                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons          | scope   | cause chain                                               | cause truncated | leaks      | rollback partial                                                                                       |
+      | fixtures         | project           | demo@fixtures | demo | failed | rollback partial | project | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | demo-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | false   |
+
   Scenario: Apply installs a plugin that a config declares by hand and reports it
     Given the marketplace "fixtures" is added to the project scope
     Given a config in scope project and layer base, with these plugins:

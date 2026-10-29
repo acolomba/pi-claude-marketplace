@@ -117,6 +117,44 @@ Feature: Plugin import
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
+  Scenario: Importing two names for one new source reports the plugin under the absent name
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the claude code settings file of the project scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@fixtures": true, "demo@other": true },
+        "extraKnownMarketplaces": {
+          "fixtures": { "directory": "{home}/marketplaces/fixtures" },
+          "other": { "directory": "{home}/marketplaces/fixtures" }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope project"
+    Then the result has these fields:
+      | kind                | cascade                        |
+      | severity            | error                          |
+      | needs reload        | true                           |
+      | summary             | Some operations have failed.   |
+      | tally label         | Import                         |
+      | tally failures      | 2                              |
+      | tally warnings      | 0                              |
+      | tally success count | 2                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name | version | status    | scope   | cause chain                                          | cause truncated | leaks | reasons | rollback partial |
+      | fixtures         | project           | added              | demo@fixtures | demo | 1.0.0   | installed | project |                                                      |                 |       |         |                  |
+      | other            | project           | failed             | demo@other    | demo |         | failed    | project | Marketplace "other" is not added in the project scope. | false           |       |         |                  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+
   Scenario: Importing leaves out a plugin the claude code settings disable
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
