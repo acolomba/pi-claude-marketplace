@@ -1,6 +1,6 @@
 ---
 phase: 05-marketplace-command-parity
-verified: 2026-10-29T04:05:30Z
+verified: 2026-10-29T13:10:53.787Z
 status: passed
 score: 5/5 must-haves verified
 covered_files:
@@ -135,7 +135,7 @@ covered_files:
   - test/shared/errors.test.ts
   - test/shared/notification-json.test.ts
   - test/shared/notification-present.test.ts
-covered_digest: "v4:sha256:b6396a13a7d5d42814fd6024c8fa20f2193cc4750bad7b2c5c301683c61c18e9"
+covered_digest: "v4:sha256:c0a6cf7b4ebf097ae43f293875926ab907fd86a172e6453f32b3343e5f707191"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
@@ -149,9 +149,9 @@ re_verification:
 # Phase 5: Marketplace Command Parity Verification Report
 
 **Phase Goal:** The marketplace commands match Claude Code on reserved names, hosted manifests, the `market` alias, shorthand parsing, row ids, and remove reporting.
-**Verified:** 2026-10-29T04:05:30Z
+**Verified:** 2026-10-29T13:10:53.787Z
 **Status:** passed
-**Re-verification:** Yes; final verification on the integrated Phase 1-10 tree at `aa5ac5cd`.
+**Re-verification:** Yes; final verification on the integrated Phase 1-10 tree at `adc17f94`.
 
 ## Goal Achievement
 
@@ -232,13 +232,13 @@ No Phase 05 requirement is orphaned: all eight appear in PLAN frontmatter, `.pla
 
 | Check | Result |
 | --- | --- |
-| Fresh merged-tree `npm run check` at the current build inputs | Exit 0: 1,142 Cucumber scenarios, 11,734 steps, 309 merged LCOV records. Static checks, integration tests, behavioral tests, and every direct source/test pair passed. |
-| Current HEAD `aa5ac5cd` against validation HEAD `38a18b81` | `git diff 38a18b81..HEAD -- . ':(exclude,glob).planning/**/*.md'` is empty. Later commits changed planning Markdown only, so the exact full-gate result applies under the repository's local-verification reuse rule. |
+| Fresh merged-tree `npm run check` at the current build inputs | Exit 0: 1,145 Cucumber scenarios, 11,777 steps, 309 merged LCOV records. Static checks, integration tests, behavioral tests, and every direct source/test pair passed. |
+| Current HEAD `adc17f94` against gate input `be0de0c3` | `git diff --quiet be0de0c3 -- . ':(exclude,glob).planning/**/*.md'` exits 0. Later commits changed planning Markdown only, so the exact full-gate result applies under the repository's local-verification reuse rule. |
 | Independent focused owner spot-check | A named Node test command covering reserved-name refusal, hosted add/update, alias completions, missing-clone repair, and the six-axis removal fold exited 0; four owner modules passed in 3.4 s. |
-| Independent focused behavioral spot-check | Seven exact Cucumber scenarios covering the alias, first-delimiter shorthand, hosted refresh, official reserved-name exemption, accepted remove behavior, EISDIR classification, and credential-safe marketplace-info ID passed: 7 scenarios / 68 steps. The first sandboxed attempt reached no scenario because loopback bind was denied; the identical command passed with the hermetic fixture's socket permission. |
-| Phase validation | Commit `38a18b81` records `05-VALIDATION.md` as `validated` and Nyquist compliant for MKT-01 through MKT-08. |
-| Security | Commit `180d7a5b` records `05-SECURITY.md` as SECURED: 29/29 authored threat rows closed, 19 mitigations verified, `threats_open: 0`; accepted DNS residual AR-05-11 remains explicit. |
-| Code review | Commit `aa5ac5cd` records a complete 35-file review: clean, 0 critical / 0 warning / 0 info. `05-REVIEW-FIX.md` retains CR-01 literal-metadata and CR-02 successful-info masking closure. |
+| Independent focused behavioral spot-check | Seven exact Cucumber scenarios covering the alias, first-delimiter shorthand, hosted refresh, official reserved-name exemption, accepted remove behavior, EISDIR classification, and credential-safe marketplace-info ID passed: 7 scenarios / 67 steps / 16 hooks. The first sandboxed attempt reached no scenario because loopback bind was denied; the identical command passed with the hermetic fixture's socket permission. |
+| Phase validation | Commit `826ea409` records `05-VALIDATION.md` as COMPLIANT and Nyquist complete for MKT-01 through MKT-08. |
+| Security | Commit `adc17f94` records `05-SECURITY.md` as SECURED: 29/29 authored threat rows closed, 19 mitigations verified, `threats_open: 0`; accepted DNS residual AR-05-11 remains explicit. |
+| Code review | Commit `acfdac39` records a complete 45-file review: clean, 0 critical / 0 warning / 0 info. `05-REVIEW-FIX.md` retains CR-01 literal-metadata and CR-02 successful-info masking closure. |
 | Anti-pattern scan | No unreferenced `TBD`, `FIXME`, or `XXX` in the Phase 05 production goal paths. |
 | Probe scripts | None declared in the nine plans or summaries; not applicable. |
 
@@ -275,5 +275,5 @@ None. All five roadmap outcomes and MKT-01 through MKT-08 hold on the integrated
 
 ---
 
-_Verified: 2026-10-29T04:05:30Z_
+_Verified: 2026-10-29T13:10:53.787Z_
 _Verifier: Codex (gsd-verifier)_
