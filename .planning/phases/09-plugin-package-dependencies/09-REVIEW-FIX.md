@@ -56,6 +56,8 @@ Post-uninstall cleanup takes a fresh scope lock. It reads current references and
 
 **Combined-gate follow-up:** The parent's full gate exposed two stale lock-count assertions in `test/edge/register.test.ts`. Commit `9c41eb6b` (`test(prune): account for package cleanup lock`) changes only that expectation and its comment. Both registered-prune scope cases failed with `3 !== 2` before the change and passed afterward. They now account for the state guard, package cleanup lock, and clone cleanup lock. Fallow and the normal commit hook passed, including type checking, static checks, and the register pair's 100% direct coverage. The parent must rerun the combined gate on this test correction.
 
+**Second combined-gate follow-up:** Commit `df596941` (`test(prune): count cleanup locks in composed operations`) updates only the two matching expectations and comments in `test/orchestrators/plugin/operations.test.ts`. Both focused composed-prune cases failed with `3 !== 2` before the change and passed afterward. Fallow, fixers, and the normal commit hook passed, including static checks and the operations pair's 100% direct coverage. The combined gate still requires a fresh run after this correction.
+
 ### CR-04: Retain diagnostics on a combined move and enable
 
 **Status:** fixed: requires human verification
