@@ -1,7 +1,7 @@
 ---
 phase: 06-import-marketplace-planning
-reviewed: 2026-10-29T04:32:49Z
-reviewed_commit: f5f89da1ce874804434cf904d1354fadf06ac498
+reviewed: 2026-10-29T04:46:44Z
+reviewed_commit: 2072cdcde7231f811c810a3e03d27db3b8e16f67
 depth: standard
 review_scope_complete: true
 scope_status: explicit
@@ -47,108 +47,82 @@ files_reviewed_list:
   - test/orchestrators/reconcile/plan.test.ts
   - test/shared/redact-absolute-paths.test.ts
 findings:
-  critical: 1
+  critical: 0
   warning: 0
   info: 0
-  total: 1
-status: issues_found
+  total: 0
+status: clean
 ---
 
 # Phase 6: Code Review Report
 
-**Reviewed:** 2026-10-29T04:32:49Z
+**Reviewed:** 2026-10-29T04:46:44Z
 
-**Commit:** `f5f89da1ce874804434cf904d1354fadf06ac498`
+**Commit:** `2072cdcde7231f811c810a3e03d27db3b8e16f67`
 
 **Depth:** standard
 
 **Files reviewed:** 39
 
-**Status:** issues_found
+**Status:** clean
 
 ## Summary
 
-The post-fix review found that CR-01 is closed for the three newly recognized
-unquoted state-error grammars and for quoted Node errno diagnostics, but remains
-open for a production write-back failure. A state-lock error embeds its path in
-parentheses. When the scope root contains a space, the generic fallback redacts
-only the prefix and leaves the rest of the path visible in the returned
-diagnostic and every notification transport.
+The final post-fix review found no current blocker, warning, or informational
+finding in the complete explicit Phase 6 scope. CR-01 is closed for the state
+read and config-write diagnostic boundaries, including the production held and
+compromised state-lock error grammars that embed a path in parentheses.
 
-The explicit scope is the preceding complete 38-file Phase 6 scope plus the new
-import step module. Files outside commit `2d258ae7` are byte-identical to the
-complete preceding review; all six changed files and the downstream diagnostic
-transport were rechecked against their current contents. The fresh combined
-gate passed 1,143 scenarios, 11,742 steps, and 309 direct-coverage records, but
-the new write regression exercises a quoted, no-space `EEXIST` message and
-cannot detect this production grammar.
+The preceding complete 39-file review was at `f5f89da1`. Between that review
+and this one, only `redact-absolute-paths.ts`, its paired test, and the import
+execute test changed. The other 36 scoped files are byte-identical. This review
+rechecked the full scope and completely reviewed those three current deltas,
+their call path through `writeBatchedConfigForScope`,
+`surfaceImportDiagnostics`, and `notifyDiagnostic`, and their shared-export
+impact on the other redactor consumers.
 
 ## Narrative Findings (AI reviewer)
 
-## Critical Issues
+No current BLOCKER or WARNING findings. No informational findings.
 
-### CR-01: A spaced state-lock path still leaks from the config-write diagnostic
+## Closure of CR-01
 
-**Classification:** BLOCKER
-
-**Files:**
-
-- `extensions/pi-claude-marketplace/orchestrators/import/execute.ts:1971-1980`
-- `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts:23-64`
-- `test/orchestrators/import/execute.test.ts:4462-4530`
-- `test/shared/redact-absolute-paths.test.ts:92-102`
-
-**Issue:** The fixed write catch correctly calls `redactAbsolutePaths`, but the
-catch explicitly includes lock contention and wraps the whole
-`withLockedStateTransaction`. That transaction can throw `StateLockHeldError`
-or `StateLockCompromisedError`; both production messages put `lockPath` inside
-parentheses rather than quotes or a `Failed to read/write` prefix. The new
-special cases do not match that grammar, and the fallback character class
-excludes spaces.
-
-A direct reproduction with the production message shape gives:
-
-```text
-input:  Another pi-claude-marketplace operation is in progress for project scope (/tmp/private user/.pi/pi-claude-marketplace/.state-lock). Retry after it completes.
-output: Another pi-claude-marketplace operation is in progress for project scope (private user/.pi/pi-claude-marketplace/.state-lock). Retry after it completes.
-```
-
-The leading `/tmp/` is gone, but the unique parent directory and the rest of the
-scope path remain. `pushDiagnostic` retains that output in the returned
-`ClaudeImportExecutionResult`; `surfaceImportDiagnostics` forwards the same
-line to `notifyDiagnostic`, so TUI/print and JSON/RPC expose it too.
-
-The new write regression does not gate this case. It creates a no-space root
-and induces a quoted `EEXIST ... mkdir '<path>'` error, which the pre-existing
-quoted-path matcher already understands. Its two negative assertions search
-for the complete original `project.scopeRoot`; they still pass when only the
-first segment is removed and the sensitive suffix remains. The shared helper
-cases cover spaced `state.json at ...` and `Failed to read ...`, but not the
-parenthesized state-lock grammar or an exact `Failed to write ...` case.
-
-**Fix:** Redact the structured `lockPath` before the error becomes a diagnostic,
-or extend the shared redactor with a bounded state-lock-message grammar that
-collapses the complete parenthesized path to `.state-lock`. Add a post-pass
-write regression that forces a real held or compromised lock under a
-case-owned scope root containing spaces. Assert the complete returned
-diagnostic and every emitted transport payload, and assert that unique parent
-segments such as `private user` are absent rather than checking only for the
-original full root. Add the exact production message to the shared redactor
-table as well.
+- `redactAbsolutePaths` now recognizes the exact messages constructed by
+  `StateLockHeldError` and `StateLockCompromisedError`. The expressions are
+  bounded by the full product-owned prefix and suffix and require an absolute
+  path ending in `/.state-lock`; they do not introduce a broad parenthesis
+  matcher.
+- Direct probes over both scopes and POSIX, drive-letter, UNC, and extended
+  path forms produced only `.state-lock`. Reapplying the redactor was
+  idempotent in every case.
+- The real lock-race owner test uses a spaced case-owned root and compares the
+  complete returned diagnostic and TUI notification. The JSON and RPC cases
+  compare the exact diagnostic payload, require the exact entry count, and
+  scan the complete result and capture for the unique leaked suffix. `print`
+  shares the same resolved text branch as `tui`; both structured modes consume
+  the same already-redacted diagnostic lines.
+- The shared redactor table independently covers both held and compromised
+  production messages plus the unquoted failed-write grammar. The earlier
+  state-read Cucumber scenario continues to assert that no absolute sandbox
+  path reaches the public command result.
 
 ## Verification Evidence
 
-- Commit `2d258ae7` changed six files; all six and the full current Phase 6
-  scope were included in this review.
-- Fresh combined gate: 1,143/1,143 scenarios, 11,742/11,742 steps, 309 merged
-  direct-coverage records.
-- Direct read-only reproduction of `redactAbsolutePaths` with the production
-  `StateLockHeldError` message preserved `private user/.pi/.../.state-lock`.
+- Fix commits: `2d258ae7` and `b58cdd6e`.
+- Fresh exact combined gate at the reviewed implementation tree: 1,143/1,143
+  scenarios, 11,742/11,742 steps, and 309 merged direct-coverage records.
+- Owner suites after the final fix: 114 import execution tests and 45 shared
+  redactor tests; both changed source/test pairs reached 100% direct coverage.
+- Focused Cucumber: 2 scenarios and 20 steps passed.
+- Fallow changed-code review reported no dead-code, complexity, or duplication
+  finding. Its public-contract note was checked against the 20 shared-redactor
+  consumers; the new preprocessing changes only the exact state-lock messages
+  and preserves every other path through the existing redactor.
 - No source, test, state, security, or configuration file was modified by this
   reviewer.
 
 ---
 
-_Reviewed: 2026-10-29T04:32:49Z_
+_Reviewed: 2026-10-29T04:46:44Z_
 _Reviewer: gsd-code-reviewer_
 _Depth: standard_
