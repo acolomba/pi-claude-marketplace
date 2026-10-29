@@ -128,3 +128,34 @@ The exact final merged `npm run check` at `059a1edd` remains reusable because
 is empty. It passed all static checks, 1,142 Cucumber scenarios, 11,734 steps,
 and 309 direct LCOV records. No production or test file changed during this
 audit; Phase 2 remains Nyquist-compliant.
+
+## Final Integrated Stale-Verification Audit 2026-10-29
+
+| Metric                   | Count |
+| ------------------------ | ----: |
+| Gaps found               |     0 |
+| Resolved                 |     0 |
+| Escalated                |     0 |
+| Phase requirements green |   8/8 |
+
+The final integrated tree after the Phase 1 diagnostic fix preserves every
+Phase 2 requirement and must-have. The ten public Phase 2 scenarios passed
+with 159 steps and 2 hooks. They cover PENDMOVE-01 and MISSORDER-01 row parity
+and convergence, same-run dependent disablement, installed-copy enable and
+update reads, marketplace-add/bootstrap/autoupdate settlement, and the
+D-PL2-11 refusal report.
+
+The current owner selection passed 1,387 tests across 14 modules: command
+registration, marketplace add, plugin operations and update preflight, the
+installed-declaration reader and index, and reconcile apply, convergence,
+verdict, load, notification, pending, and read-pass. This directly rechecks
+D-PL2-05 fail-closed walks, D-PL2-12/D-PL2-17 containment, scheduled-install
+release, post-move ordering, and scope-isolated dependency installation.
+
+The exact integrated `npm run check` at executable head `be0de0c3` remains
+reusable at `52bc5652`: the executable-input diff between those revisions is
+empty. With Node `v26.12.1`, the gate passed all static checks, 1,145 Cucumber
+scenarios, 11,777 steps, and 309 direct LCOV records. No source, test,
+dependency, configuration, runtime, or tooling input changed after that gate.
+This audit changed only this validation record and preserved the
+orchestrator-owned `.planning/STATE.md` delta.
