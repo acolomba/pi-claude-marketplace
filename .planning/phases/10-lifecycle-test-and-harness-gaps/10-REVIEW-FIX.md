@@ -1,19 +1,65 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-fixed_at: 2026-10-29T09:58:44Z
+fixed_at: 2026-10-29T10:16:36Z
 review_path: .planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md
-iteration: 14
-findings_in_scope: 2
-fixed: 2
+iteration: 15
+findings_in_scope: 1
+fixed: 1
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 10: Code Review Fix Report
 
-**Fixed at:** 2026-10-29T09:58:44Z
+**Fixed at:** 2026-10-29T10:16:36Z
 **Source review:** `.planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md`
-**Iteration:** 14
+**Iteration:** 15
+
+Iteration 15 replaces the remaining quote-chain interpretation with the
+binding fail-closed rule. Outside the separately handled exact Node errno
+grammar, a quoted absolute field preserves its basename only when exactly one
+matching quote remains. Zero or more than one matching quotes replace the
+entire remainder with `[redacted path]`; the redactor does not try to balance
+later values or reinterpret embedded quotes.
+
+## Iteration 15 Fix
+
+### CR-01: Balanced later values can hide an ambiguous quoted path
+
+**Status:** fixed: requires human verification
+**Commit:** `d3f53c6d` (`fix(redaction): fail closed on ambiguous quotes`)
+**Files modified:**
+
+- `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`
+- `test/shared/redact-absolute-paths.test.ts`
+- `test/shared/notification-present.test.ts`
+
+The generic quote-chain state machine is deleted. The quoted-path scanner now
+accepts only one matching closer, and fails closed when the remaining message
+has no matching quote or has any surplus matching quote. The existing local
+boundary check remains conservative, and the absolute-path candidate check
+continues to preserve a quoted single-segment JSON pointer. Exact Node errno
+diagnostics, state-lock messages, and unquoted path handling are unchanged.
+
+The decisive matrices cover one closer, zero closers, and two, three, and four
+or more matching quotes across POSIX, drive, and UNC paths; single and double
+quotes; embedded quotes followed by balanced values; cause chains; and public
+notification presentation. Older expectations that preserved a basename
+before later same-quote text now require whole-remainder redaction.
+
+The RED run failed five focused cases: three utility cases, one cause-chain
+case, and one public-presentation case. The final GREEN focused run passes 320
+tests: 271 redactor-owner tests and 49 presentation-owner tests. Direct
+coverage is complete for both pairs: the redactor has 65/65 branches, 22/22
+functions, and 249/249 lines; notification presentation has 45/45 branches,
+11/11 functions, and 308/308 lines. Project-aware TypeScript checking, Fallow
+guard and audit, the required fixers, and the normal commit hook pass. The
+first normal hook rejected only `indexOf(...) >= 0` under `prefer-includes`;
+the mechanical `includes(...)` correction passed the complete hook on retry.
+
+These checks ran in the existing Session A worktree because
+`workflow.use_worktrees` was false for the fixer. The parent workflow owns the
+fresh full `npm run check` gate.
 
 Iteration 14 replaces the accumulated generic quote heuristics with one
 fail-closed rule. Outside the exact Node filesystem-diagnostic grammar, the
