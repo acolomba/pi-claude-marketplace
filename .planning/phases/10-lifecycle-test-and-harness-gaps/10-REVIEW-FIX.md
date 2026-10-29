@@ -1,8 +1,8 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-fixed_at: 2026-10-29T10:26:58Z
+fixed_at: 2026-10-29T10:42:11Z
 review_path: .planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md
-iteration: 16
+iteration: 17
 findings_in_scope: 1
 fixed: 1
 skipped: 0
@@ -11,9 +11,50 @@ status: all_fixed
 
 # Phase 10: Code Review Fix Report
 
-**Fixed at:** 2026-10-29T10:26:58Z
+**Fixed at:** 2026-10-29T10:42:11Z
 **Source review:** `.planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md`
-**Iteration:** 16
+**Iteration:** 17
+
+Iteration 17 reconciles the direct owner tests with the same binding
+fail-closed contract. Internal discovery warnings still retain their detailed
+absolute-path-bearing form; only their TUI, JSON, and RPC presentation
+expectations now require the redacted public value.
+
+## Iteration 17 Fix
+
+### CR-01: Direct owners retain pre-policy public diagnostic tails
+
+**Status:** fixed
+**Commit:** `e61215bc` (`test(plugin): reconcile fail-closed owner outputs`)
+**Files modified:**
+
+- `test/orchestrators/plugin/enable-disable.test.ts`
+- `test/orchestrators/plugin/install-flow-ledger.test.ts`
+- `test/orchestrators/plugin/reinstall-flow.test.ts`
+- `test/orchestrators/plugin/update-flow.test.ts`
+- `test/orchestrators/reconcile/apply.test.ts`
+
+Twenty-six owner cases now require `[redacted path]` at public presentation
+boundaries: one enable case, seven install cases, six reinstall cases, nine
+update cases, and three apply cases. The exact whole notification and entry
+assertions remain intact. Assertions over raw orchestrated discovery warnings
+are unchanged, and later independent staging-warning lines remain byte-for-byte
+equal to the presented output.
+
+The discovery loop used `test:coverage:direct:all` after every batch until no
+new owner appeared. The final all-pair run passes and merges 309 LCOV records.
+Every changed pair also passes 100% direct coverage: enable/disable has 350/350
+branches, 76/76 functions, and 3,352/3,352 lines; install-flow-ledger has
+102/102, 23/23, and 1,310/1,310; reinstall-flow has 95/95, 21/21, and 756/756;
+update-flow has 230/230, 51/51, and 1,545/1,545; reconcile/apply has 410/410,
+137/137, and 2,568/2,568. Fallow guard and audit, the required fixers, and the
+normal commit hook pass.
+
+The old pre-`d3f53c6d` implementation still fails these exact expectations
+because it presents the detailed duplicate-source suffix rather than the
+binding fail-closed value. These checks ran in the existing Session A
+worktree because `workflow.use_worktrees` was false for the fixer. The parent
+workflow owns the fresh full `npm run check` gate.
 
 Iteration 16 reconciles the behavioral contract with iteration 15's binding
 fail-closed rule. A diagnostic containing multiple same-quote fields now
