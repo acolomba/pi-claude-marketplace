@@ -1,27 +1,73 @@
 ---
 phase: 04-dependency-resolver-residue
-fixed_at: 2026-10-28T17:36:45Z
+fixed_at: 2026-10-29T03:40:37Z
 review_path: .planning/phases/04-dependency-resolver-residue/04-REVIEW.md
-iteration: 1
-findings_in_scope: 2
-fixed: 2
+iteration: 2
+findings_in_scope: 1
+fixed: 1
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 04: Code review fix report
 
-**Fixed at:** 2026-10-28T17:36:45Z
+**Fixed at:** 2026-10-29T03:40:37Z
 **Source review:** .planning/phases/04-dependency-resolver-residue/04-REVIEW.md
-**Iteration:** 1
+**Iteration:** 2
 
 ## Summary
 
-- Findings in scope: 2
-- Fixed: 2
+- Findings in scope: 1
+- Fixed: 1
 - Skipped: 0
 
-## Fixed issues
+## Iteration 2 fixed issue
+
+### WR-01: The settle module says move notices and warnings are discarded after it began forwarding them
+
+**Status:** fixed
+**Commit:** `782b1d70`
+**File modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts`
+
+**Applied fix:** Replaced the stale module contract with the current step-order contract.
+Closure slices contribute their MCP configuration notices. Dependency moves contribute their MCP
+configuration notices and staging warnings on success and failure. The comment also records that
+the move row owns its package note, which `runDependencyMove` filters from the forwarded staging
+warnings.
+
+CodeGraph identified the callers but marked the integrated sources stale. Direct source tracing
+confirmed that `runStep` captures the move diagnostics, `runDependencySteps` folds them in step
+order, `settlePlanned` projects them into the settlement, and `materializeLatestVersion` keeps them
+on update outcomes. The `runDependencyMove` owner retains the package note on the dependency row.
+No behavior or test changed.
+
+## Iteration 2 verification
+
+All checks ran in the existing isolated owner worktree:
+
+`/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710`
+
+Branch: `agent-reverify-a`. Node: `v26.12.1`. The owner set
+`workflow.use_worktrees=false`, so this fixer created no nested worktree and did not stage the
+configuration or STATE changes.
+
+- Re-read the changed section and checked `git diff --check`.
+- Focused Prettier and fresh ESLint checks passed for `dependency-settle.ts`.
+- `fallow guard` reported the expected orchestrator boundary.
+- `fallow audit --base HEAD --format json --quiet` passed with no dead-code, complexity, or
+  duplication findings.
+- The required focused pre-commit run passed every fixer and linter.
+- The normal commit hook passed `npm run check:commit`, including project-aware type checking,
+  ESLint, static checks, feature validation, unpaired unit tests, and direct coverage for the staged
+  build input. No hook was bypassed.
+- The first commit-helper attempt stopped at its 30-second wrapper timeout during the hook. After
+  confirming that no Git or hook process and no index lock remained, the fixer's recovery patch
+  restored the owner's unstaged STATE and configuration changes. The foreground commit retry passed
+  the complete hook.
+
+No source or test file was added. This report is intentionally uncommitted for the owning workflow.
+
+## Prior iteration 1 fixed issues
 
 ### CR-01: Foreign agent-index ownership refuses after an earlier move commits
 
@@ -54,7 +100,7 @@ The logic-change status retains the fixer workflow's human-review flag. Automate
 
 **Applied fix:** Removed the obsolete sentence that said apply did not render rollback partials. The comment still describes failed undo steps and omission when all undo steps finish. Traced the current `applyDependencyInstalls` failure path through `installFailedOutcomes` and read the existing rollback-rendering assertions. No test pins the removed sentence, so no test change was needed.
 
-## Verification
+## Prior iteration 1 verification
 
 All checks ran in the existing isolated owner worktree:
 
@@ -77,4 +123,4 @@ No new source files were created. This report is intentionally uncommitted for t
 ---
 
 _Fixer: gsd-code-fixer_
-_Iteration: 1_
+_Iteration: 2_
