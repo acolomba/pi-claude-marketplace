@@ -162,6 +162,15 @@ void ({
   reason: "already installed",
 } satisfies PluginEnableFailedOutcome);
 void ({
+  kind: "plugin-enable-failed",
+  scope: "project",
+  marketplace: "official",
+  plugin: "formatter",
+  reason: "rollback partial",
+  cause: new Error("staging failed"),
+  rollbackPartials: [{ phase: "skills", cause: new Error("undo failed") }],
+} satisfies PluginEnableFailedOutcome);
+void ({
   kind: "plugin-disabled",
   scope: "user",
   marketplace: "official",

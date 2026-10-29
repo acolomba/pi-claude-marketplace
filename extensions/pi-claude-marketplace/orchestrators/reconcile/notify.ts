@@ -1241,7 +1241,10 @@ function failedRowCause(outcome: PerEntryOutcome): { cause?: Error } {
     return { cause: outcome.cause };
   }
 
-  if (outcome.kind === "plugin-install-failed" && outcome.cause !== undefined) {
+  if (
+    (outcome.kind === "plugin-install-failed" || outcome.kind === "plugin-enable-failed") &&
+    outcome.cause !== undefined
+  ) {
     return { cause: outcome.cause };
   }
 
@@ -1249,14 +1252,17 @@ function failedRowCause(outcome: PerEntryOutcome): { cause?: Error } {
 }
 
 /**
- * MIM-03 / D-PL6-05: the undo steps a failed install could not finish, so its
+ * MIM-03 / D-PL6-05: the undo steps a failed install or enable could not finish, so its
  * reconcile row shows the per-phase rows the standalone install shows. The
  * phase causes arrive redacted from apply.ts (D-PL6-12).
  */
 function failedRowRollback(outcome: PerEntryOutcome): {
   rollbackPartial?: readonly { readonly phase: string; readonly cause?: Error }[];
 } {
-  const partials = outcome.kind === "plugin-install-failed" ? outcome.rollbackPartials : undefined;
+  const partials =
+    outcome.kind === "plugin-install-failed" || outcome.kind === "plugin-enable-failed"
+      ? outcome.rollbackPartials
+      : undefined;
   return partials !== undefined && partials.length > 0 ? { rollbackPartial: partials } : {};
 }
 
@@ -1271,8 +1277,8 @@ function failedRowReasons(
   return reasonAsContent(outcome.reason);
 }
 
-/** The `(failed)` row of a failed reconcile install, uninstall, enable or disable. */
-function failedRowFromOutcome(
+/** Builds the `(failed)` row of a reconcile install, uninstall, enable or disable. */
+export function failedRowFromOutcome(
   outcome: Extract<
     PerEntryOutcome,
     {
@@ -1289,7 +1295,7 @@ function failedRowFromOutcome(
     name: outcome.plugin,
     reasons: failedRowReasons(outcome),
     // D-05-16 / RESV-06 / MIM-03: a refused uninstall, a dependency-cascade
-    // install failure, and an install that left rollback partials carry a
+    // install failure, and an install or enable that left rollback partials carry a
     // cause onto this row; the last also carries its phases.
     ...failedRowCause(outcome),
     ...failedRowRollback(outcome),

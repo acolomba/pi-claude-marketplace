@@ -3689,6 +3689,79 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
+  test("a failed enable reports its rollback phases and leaks while keeping the record disabled", async (t) => {
+    // arrange
+    const { cwd, denyWrites, project, restoreWrites } = await createHermeticScopes(
+      t,
+      "enable-rollback-partial",
+    );
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean" },
+    });
+    const readOnly = path.join(marketplaceRoot, "plugins", "hello", "skills", "tool", "read-only");
+    await writeUnder(path.join(readOnly, "data.txt"), "data\n");
+    await denyWrites(readOnly);
+    const leakedDirectory = path.join(
+      project.extensionRoot,
+      "resources",
+      "skills",
+      "hello-tool",
+      "read-only",
+    );
+    restoreWrites(leakedDirectory);
+    await mkdir(project.mcpAdapterJsonPath, { recursive: true });
+    const adapterReadError = await redactedReadErrorMessage(project.mcpAdapterJsonPath);
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "hello@mp": {} },
+      }),
+    );
+    const disabled = pluginRecord({
+      enabled: false,
+      pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+      supported: ["skills"],
+    });
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: { hello: disabled },
+        }),
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● mp [project]\n  ⊘ hello (failed) {rollback partial}\n" +
+          `    cause: ${adapterReadError} -> ${adapterReadError}\n` +
+          "    leaked: hello-tool\n    [skills] (rollback failed)\n" +
+          "      cause: EACCES: permission denied, unlink 'data.txt'\n\n" +
+          "Reconcile: 1 failure",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await recordFor(project, "mp", "hello"), disabled);
+    assert.equal(await readFile(path.join(leakedDirectory, "data.txt"), "utf8"), "data\n");
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
   test("ENBL-07: an enable whose marketplace clone is gone reports source missing and changes no record", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "enable-failed");
@@ -9640,6 +9713,65 @@ describe("applyReconcile catalog convergence", () => {
     ]);
     const widget = await recordFor(project, "mp", "widget");
     assert.deepStrictEqual([widget?.version, widget?.enabled], ["1.0.0", false]);
+    verifyBoundary();
+  });
+
+  test("a failed enable after a catalog move keeps its rollback details on the failed move row", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "move-enable-rollback",
+      {
+        ...coShippedSeed({ enabled: false, dependencyDisabled: true }),
+        trees: { widget: { skill: "clean", command: true }, zcore: { skill: "clean" } },
+        supported: { widget: ["skills", "commands"], zcore: ["skills"] },
+      },
+    );
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    const readOnly = path.join(marketplaceRoot, "plugins", "widget", "skills", "tool", "read-only");
+    const leakedDirectory = path.join(
+      project.extensionRoot,
+      "resources",
+      "skills",
+      "widget-tool",
+      "read-only",
+    );
+    const commandFile = path.join(marketplaceRoot, "plugins", "widget", "commands", "deploy.md");
+    await writeUnder(path.join(readOnly, "data.txt"), "data\n");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    try {
+      await chmod(readOnly, 0o555);
+      await chmod(commandFile, 0o000);
+      await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+    } finally {
+      await chmod(readOnly, 0o755);
+      if (await pathExists(leakedDirectory)) {
+        await chmod(leakedDirectory, 0o755);
+      }
+    }
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● mp [project]\n" +
+          "  ● zcore v1.0.0 → v2.0.0 (updated)\n" +
+          "  ⊘ widget v1.0.0 → v1.1.0 (failed) {rollback partial}\n" +
+          '    cause: command "widget:deploy" of plugin "widget" could not be staged -> ' +
+          'command "widget:deploy" of plugin "widget" could not be staged -> ' +
+          "EACCES: permission denied, open 'deploy.md'\n" +
+          "    leaked: widget-tool\n    [skills] (rollback failed)\n" +
+          "      cause: EACCES: permission denied, unlink 'data.txt'\n\n" +
+          "Reconcile: 1 failure, 1 success\n\n/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    const widget = await recordFor(project, "mp", "widget");
+    assert.deepStrictEqual([widget?.version, widget?.enabled], ["1.0.0", false]);
+    assert.equal(await readFile(path.join(leakedDirectory, "data.txt"), "utf8"), "data\n");
     verifyBoundary();
   });
 
