@@ -21,11 +21,27 @@ import {
  * an unredacted one.
  */
 export function redactAbsolutePaths(text: string): string {
-  const absolutePath = /(?<![\w:/\\])(?:[A-Za-z]:[\\/]|\\\\\?\\|\/)[\w./\\~-]+[\\/][\w./\\~-]+/g;
-  return text.replace(absolutePath, (match) => {
-    const lastSeparator = Math.max(match.lastIndexOf("/"), match.lastIndexOf("\\"));
-    return lastSeparator < 0 ? match : match.slice(lastSeparator + 1);
-  });
+  const quoted = text.replace(
+    /(['"])((?:[A-Za-z]:[\\/]|\\\\|\/).*?)\1/gs,
+    (match: string, quote: string, candidate: string) =>
+      /^(?:[A-Za-z]:[\\/]|\\\\|\/).*[/\\][^/\\]+$/s.test(candidate)
+        ? quote + pathBasename(candidate) + quote
+        : match,
+  );
+  const absolutePath =
+    /(?<![\w:/\\])(?:[A-Za-z]:[\\/]|\\\\(?:\?\\)?|\/)[\w./\\~-]+[\\/][\w./\\~-]+/g;
+  return quoted.replace(absolutePath, (match) => pathBasename(match));
+}
+
+/** Takes the last path segment for either filesystem convention. */
+function pathBasename(filePath: string): string {
+  const lastSeparator = Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"));
+  return lastSeparator < 0 ? filePath : filePath.slice(lastSeparator + 1);
+}
+
+/** Redacts a structured leak without guessing where spaces end its path. */
+function redactedLeak(leak: string): string {
+  return /^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(leak) ? pathBasename(leak) : redactAbsolutePaths(leak);
 }
 
 /**
@@ -90,7 +106,7 @@ export function redactCauseChain(error: unknown): Error | undefined {
       link instanceof ManualRecoveryError
         ? new ManualRecoveryError(
             message,
-            link.leaks.map((leak) => redactAbsolutePaths(leak)),
+            link.leaks.map((leak) => redactedLeak(leak)),
             options,
           )
         : new Error(message, options);

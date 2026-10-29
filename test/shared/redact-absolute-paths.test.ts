@@ -39,6 +39,56 @@ describe("redactAbsolutePaths", () => {
       expected: "invalid configs/local.json detail",
     },
     {
+      name: "redacts a quoted POSIX path containing spaces",
+      input: "unlink '/private dir/secret.json'",
+      expected: "unlink 'secret.json'",
+    },
+    {
+      name: "redacts the whole quoted POSIX path with a spaced intermediate directory",
+      input: "unlink '/Users/Jane Doe/private/plugin/secret.json'",
+      expected: "unlink 'secret.json'",
+    },
+    {
+      name: "keeps the Unicode basename of a quoted path",
+      input: 'read "/資料/秘密 フォルダ/設定 文書.json"',
+      expected: 'read "設定 文書.json"',
+    },
+    {
+      name: "finds a quoted path after an apostrophe in prose",
+      input: "can't unlink '/private dir/secret.json'",
+      expected: "can't unlink 'secret.json'",
+    },
+    {
+      name: "redacts an ordinary UNC path",
+      input: String.raw`unlink \\server\private\secret.json`,
+      expected: "unlink secret.json",
+    },
+    {
+      name: "redacts a quoted UNC path containing spaces and Unicode",
+      input: String.raw`unlink '\\server\private share\秘密\secret file.json'`,
+      expected: "unlink 'secret file.json'",
+    },
+    {
+      name: "redacts a quoted extended UNC path containing spaces",
+      input: String.raw`unlink '\\?\UNC\server\private share\secret file.json'`,
+      expected: "unlink 'secret file.json'",
+    },
+    {
+      name: "redacts a quoted Windows path containing an apostrophe",
+      input: String.raw`read "C:\Users\Jane's files\秘密\secret file.json"`,
+      expected: 'read "secret file.json"',
+    },
+    {
+      name: "preserves quoted URLs and single-segment JSON pointers",
+      input: 'invalid "/schemaVersion" at "https://example.test/a/b" or "file:///a/b"',
+      expected: 'invalid "/schemaVersion" at "https://example.test/a/b" or "file:///a/b"',
+    },
+    {
+      name: "preserves non-path prose and quoted relative paths",
+      input: 'read "private files/config.json" after the user says "try again"',
+      expected: 'read "private files/config.json" after the user says "try again"',
+    },
+    {
       name: "preserves a single-segment JSON pointer",
       input: "invalid /schemaVersion detail",
       expected: "invalid /schemaVersion detail",
@@ -81,6 +131,35 @@ describe("redactAbsolutePaths", () => {
 });
 
 describe("redactCauseChain", () => {
+  test("redacts every quoted cause and structured leaked path containing spaces or UNC prefixes", () => {
+    // arrange
+    const leaks = [
+      "/private dir/秘密/skill one",
+      String.raw`\\server\private share\skill two`,
+      "relative-skill",
+    ];
+    const failure = new ManualRecoveryError("read '/private dir/秘密/config.json'", leaks, {
+      cause: new Error(String.raw`copy '\\server\private share\stage.json'`, {
+        cause: new Error('unlink "/Users/Jane Doe/秘密/data.txt"'),
+      }),
+    });
+
+    // act
+    const rebuilt = redactCauseChain(failure);
+
+    // assert
+    assert.deepStrictEqual(
+      rebuilt,
+      new ManualRecoveryError("read 'config.json'", ["skill one", "skill two", "relative-skill"], {
+        cause: new Error("copy 'stage.json'", { cause: new Error('unlink "data.txt"') }),
+      }),
+    );
+    assert.equal(
+      causeChainTrailer(rebuilt),
+      "cause: read 'config.json' -> copy 'stage.json' -> unlink \"data.txt\"",
+    );
+  });
+
   for (const { name, input } of [
     { name: "undefined", input: undefined },
     { name: "null", input: null },

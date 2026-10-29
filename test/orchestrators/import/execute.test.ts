@@ -61,6 +61,7 @@ import {
   FetchedUrlCause,
   InstallMarketplaceAddError,
   InvalidGitHubBaseUrlError,
+  ManualRecoveryError,
   PluginShapeError,
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -2237,6 +2238,61 @@ test("REC-06: names a rollback the failed install could not finish as rollback p
         "  ⊘ broken (failed) {rollback partial}\n" +
         `    cause: ${failure.message}\n` +
         "    [skills] (rollback failed)\n\n" +
+        "Import: 1 failure, 1 success",
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+});
+
+test("redacts spaced and UNC paths in every import failure link and leaked resource", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "redacted-spaced-paths");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const privateSkill = "/private dir/秘密/skill one";
+  const networkSkill = String.raw`\\server\private share\skill two`;
+  const failure = new Error("stage '/Users/Jane Doe/plugin.json'", {
+    cause: new ManualRecoveryError(
+      "undo '/private dir/秘密/skill one'",
+      [privateSkill, networkSkill],
+      {
+        cause: new Error(String.raw`read '\\server\private share\secret.json'`),
+      },
+    ),
+  });
+  const undoFailure = new Error("remove '/private dir/秘密/skill one'", {
+    cause: new Error(String.raw`unlink '\\server\private share\data.txt'`),
+  });
+
+  // act
+  await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: () =>
+        Promise.resolve({
+          ...failedInstallOutcome(failure, failure.message),
+          rollbackPartials: [{ phase: "skills", msg: undoFailure.message, cause: undoFailure }],
+        }),
+      loadSettings: () => Promise.resolve(settingsForMp("broken")),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation has failed.\n\n● mp [user] (added)\n" +
+        "  ⊘ broken (failed) {rollback partial}\n" +
+        "    cause: stage 'plugin.json' -> undo 'skill one' -> read 'secret.json'\n" +
+        "    leaked: skill one\n    leaked: skill two\n" +
+        "    [skills] (rollback failed)\n" +
+        "      cause: remove 'skill one' -> unlink 'data.txt'\n\n" +
         "Import: 1 failure, 1 success",
       severity: "error",
     },

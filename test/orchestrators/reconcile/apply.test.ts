@@ -3693,7 +3693,7 @@ describe("applyReconcile", () => {
     // arrange
     const { cwd, denyWrites, project, restoreWrites } = await createHermeticScopes(
       t,
-      "enable-rollback-partial",
+      "enable rollback 秘密",
     );
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
       hello: { skill: "clean" },
