@@ -107,7 +107,10 @@ import {
   resolveInstalledMarketplaceTarget,
   resolveInstalledPluginTarget,
 } from "./shared.ts";
-import { surfaceStagingDiagnostics } from "./staging-diagnostics.ts";
+import {
+  surfaceCascadeStagingDiagnostics,
+  surfaceStagingDiagnostics,
+} from "./staging-diagnostics.ts";
 import { composeUpdateCascade } from "./update-cascade.ts";
 import { UPDATE_MATERIALIZATION } from "./update-preflight.ts";
 import { revisionVersionSlot } from "./update-row.ts";
@@ -531,9 +534,9 @@ async function updatePluginsWith(
  * that qualifies it. The header names the target's scope (D-PL1-05).
  *
  * `stagingWarnings` carries both halves (D-PL1-10). The direct update shows
- * only the discovery half; the hygiene half rides the outcome and is not
- * shown (D-141-03, D-19-01), the same property install's standalone arm
- * relies on.
+ * only the root's discovery half (D-141-03, D-19-01). D-PL10-12 is the
+ * dependency exception: a dependency diagnostic shows both halves because
+ * the dependency move is part of the direct update's cascade.
  *
  * D-PL1-14: a `failed` outcome the batch kept renders with `update failed`.
  *
@@ -556,7 +559,15 @@ function surfaceUpdateDiscoveryWarnings(
       { name: right.target.marketplace, scope: right.target.scope },
     ),
   );
-  surfaceStagingDiagnostics(ctx, run, inRowOrder.flatMap(updateStagingDiagnostic));
+  for (const update of inRowOrder) {
+    const { outcome } = update;
+    const dependencyDiagnostics =
+      outcome.partition === "updated" || outcome.partition === "failed"
+        ? (outcome.dependencyStagingDiagnostics ?? [])
+        : [];
+    surfaceCascadeStagingDiagnostics(ctx, run, dependencyDiagnostics);
+    surfaceStagingDiagnostics(ctx, run, updateStagingDiagnostic(update));
+  }
 }
 
 /**
@@ -567,7 +578,6 @@ function updateStagingDiagnostic({ target, outcome }: UpdateCascadeOutcome): Sta
   switch (outcome.partition) {
     case "updated":
       return [
-        ...(outcome.dependencyStagingDiagnostics ?? []),
         {
           plugin: outcome.name,
           scope: target.scope,
@@ -576,10 +586,7 @@ function updateStagingDiagnostic({ target, outcome }: UpdateCascadeOutcome): Sta
         },
       ];
     case "failed":
-      return [
-        ...(outcome.dependencyStagingDiagnostics ?? []),
-        updateFailedDiagnostic(outcome.name, target.scope, outcome),
-      ];
+      return [updateFailedDiagnostic(outcome.name, target.scope, outcome)];
     case "skipped":
     case "unchanged":
       return [];
@@ -736,7 +743,8 @@ function isPhase3aAggregateFailure(
  *
  * D-PL1-14 / D-PL1-22: `failedDiagnostics` holds the failed target's staging
  * diagnostic, which renders after the cascade and before the MCP notices; the
- * targets that succeeded before the abort render none.
+ * targets that succeeded before the abort render none. D-PL10-12 keeps the
+ * failed outcome's dependency diagnostics ahead of that root diagnostic.
  */
 function abortUpdateBatch(
   ctx: NotificationContext,
@@ -751,6 +759,7 @@ function abortUpdateBatch(
     composeCascade(ctx, run, outcomes, cardinality, true);
   }
 
+  surfaceCascadeStagingDiagnostics(ctx, run, failed?.dependencyStagingDiagnostics ?? []);
   surfaceStagingDiagnostics(ctx, run, failedDiagnostics);
   surfaceUpdateMcpConfigNotices(ctx, run, outcomes, failed);
 }

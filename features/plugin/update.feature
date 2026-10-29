@@ -38,18 +38,19 @@ Feature: Plugin update
       | app  | 1.1.0   | lib@^2.0.0   |
       | lib  | 2.0.0   |              |
     Given the published plugin "lib" of the marketplace "tools" has a second skill whose name collides with its first
+    Given the published plugin "lib" of the marketplace "tools" has an agent "helper" that sets a color
     Given the published plugin "lib" of the marketplace "tools" declares the mcp server "lib-server"
     Given the mcp-adapter.json file of the project scope holds a comment
     When the user runs "/claude:plugin update app@tools --scope project"
     Then the command reports these results:
       | kind               | severity | needs reload | summary                             | header                                                           | lines                                                                                                                                  | notices                                                                   |
       | cascade            | warning  | true         | A plugin operation needs attention. |                                                                  |                                                                                                                                        |                                                                           |
-      | diagnostic         | warning  | false        |                                     | Plugin "lib" [project] updated; 1 declared component has a note. | skill source "skill" in "[redacted path]                                                                                               |                                                                           |
+      | diagnostic         | warning  | false        |                                     | Plugin "lib" [project] updated; 1 declared component has a note; 1 staging warning. | skill source "skill" in "[redacted path], [helper] dropped fields: color                                                               |                                                                           |
       | mcp-config-notices | warning  | false        |                                     |                                                                  |                                                                                                                                        | [{"kind":"comments-dropped","scope":"project","file":"mcp-adapter.json"}] |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id        | name      | status  | reasons                                         | scope   | from  | to    | cause chain                                                            | cause truncated | leaks | rollback partial |
       | tools            | project           | app@tools | app       | updated |                                                 | project | 1.0.0 | 1.1.0 |                                                                        |                 |       |                  |
-      | tools            | project           | lib@tools | lib@tools | updated | dependency current copy, requires pi-mcp-adapter | project | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@tools" | false           |       |                  |
+      | tools            | project           | lib@tools | lib@tools | updated | dependency current copy, requires pi-subagents, requires pi-mcp-adapter | project | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@tools" | false           |       |                  |
 
   Scenario: Fetch and update classify an unknown network error alike
     Given the git repository "unknown" holds these plugins:
@@ -696,3 +697,32 @@ Feature: Plugin update
     Then the installation record of the project scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
+
+  Scenario: An update failure after dependency settlement preserves dependency warnings
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.1.0   | lib@^2.0.0   |
+      | lib  | 2.0.0   |              |
+    Given the published plugin "lib" of the marketplace "tools" has a second skill whose name collides with its first
+    Given the published plugin "lib" of the marketplace "tools" has an agent "helper" that sets a color
+    Given the published plugin "app" of the marketplace "tools" adds the skill "extra" over a file in the project scope
+    When the user runs "/claude:plugin update app@tools --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | summary                        | header                                                                                  | lines                                                                    |
+      | cascade    | error    | false        | A plugin operation has failed. |                                                                                         |                                                                          |
+      | diagnostic | warning  | false        |                                | Plugin "lib" [project] updated; 1 declared component has a note; 1 staging warning. | skill source "skill" in "[redacted path], [helper] dropped fields: color |
+    Then the failed update names these repairs:
+      | marketplace name | marketplace scope | id        | name | status | reasons          | scope   | from  | version | repair                                                                                              | cause truncated | leaks | rollback phases |
+      | tools            | project           | app@tools | app  | failed | rollback partial | project | 1.0.0 | 1.1.0   | Plugin "app" failed during physical replace. Run /claude:plugin reinstall app@tools to repair it. | false           |       | skills          |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | app@tools     | 1.0.0   | true    |
+      | demo@fixtures | 1.0.0   | true    |
+      | lib@tools     | 2.0.0   | true    |

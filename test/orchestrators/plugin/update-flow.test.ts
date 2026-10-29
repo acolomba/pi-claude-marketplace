@@ -11721,7 +11721,7 @@ test("D-PL1-14 / D-PL1-22: a direct update whose later target throws in prepare 
   });
 });
 
-test("D-PL1-14: a direct update whose phase-3 commit fails renders its update failed diagnostic after the cascade", async () => {
+test("D-PL10-12: a phase-3 update failure retains dependency diagnostics before the root diagnostic", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-failed-phase3-warnings-");
     try {
@@ -11741,9 +11741,38 @@ test("D-PL1-14: a direct update whose phase-3 commit fails renders its update fa
       await mkdir(locations.skillsTargetDir, { recursive: true });
       await writeFile(path.join(locations.skillsTargetDir, "zzz-tool"), "obstacle");
       const { ctx, run, notifications } = makeCtx();
+      const operations = createPluginUpdateOperations(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+        undefined,
+        {},
+        (args) =>
+          Promise.resolve(
+            args.plugin === "zzz"
+              ? {
+                  kind: "settled",
+                  rows: [],
+                  stagingDiagnostics: [
+                    {
+                      plugin: "zcore",
+                      scope: "project",
+                      verb: "installed",
+                      warnings: [
+                        {
+                          kind: "discovery",
+                          message: `dependency source in "${path.join(cwd, "private", "skill.md")}" was skipped`,
+                        },
+                        { kind: "hygiene", message: "dependency staging kept a fallback" },
+                      ],
+                    },
+                  ],
+                }
+              : { kind: "settled", rows: [] },
+          ),
+      );
 
       // act
-      await updatePlugins({
+      await operations.updatePlugins({
         ctx,
         run,
         scope: "project",
@@ -11779,6 +11808,11 @@ test("D-PL1-14: a direct update whose phase-3 commit fails renders its update fa
           {
             message:
               "● mp [project]\n  ● aaa v1.0.0 → v1.0.1 (updated)\n\nPlugin update: 1 updated\n\n/reload to pick up changes",
+          },
+          {
+            message:
+              'Plugin "zcore" [project] installed; 1 declared component has a note; 1 staging warning.\n\ndependency source in "skill.md" was skipped\ndependency staging kept a fallback',
+            severity: "warning",
           },
           {
             message:
@@ -14552,6 +14586,10 @@ test("UPD-DEP-D1: a named update settles the new version's dependencies in the c
                     kind: "discovery",
                     message: "dependency package install failed",
                   },
+                  {
+                    kind: "hygiene",
+                    message: "dependency staging kept a fallback",
+                  },
                 ],
               },
             ],
@@ -14576,7 +14614,7 @@ test("UPD-DEP-D1: a named update settles the new version's dependencies in the c
         },
         {
           message:
-            'Plugin "zcore" [project] installed; 1 declared component has a note.\n\ndependency package install failed',
+            'Plugin "zcore" [project] installed; 1 declared component has a note; 1 staging warning.\n\ndependency package install failed\ndependency staging kept a fallback',
           severity: "warning",
         },
       ]);
