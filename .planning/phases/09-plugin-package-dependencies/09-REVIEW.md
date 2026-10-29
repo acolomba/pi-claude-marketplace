@@ -1,12 +1,12 @@
 ---
 phase: 09-plugin-package-dependencies
-reviewed: 2026-10-29T06:12:03Z
+reviewed: 2026-10-29T06:39:27Z
 depth: standard
-reviewed_commit: 9b63fb96c21a32a785bb28b2a08b155246f1c4d9
-source_commit: 9b63fb96c21a32a785bb28b2a08b155246f1c4d9
+reviewed_commit: 8021ee98f3228a78df0a0d2431e729388526bb4f
+source_commit: 741516af64bc228527cb3720b23d00e0596ec4e4
 review_scope_complete: true
 re_review: true
-files_reviewed: 56
+files_reviewed: 60
 files_reviewed_list:
   - eslint.config.js
   - extensions/pi-claude-marketplace/domain/package-lockfile.ts
@@ -29,6 +29,8 @@ files_reviewed_list:
   - extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts
   - extensions/pi-claude-marketplace/orchestrators/reconcile/convergence.ts
   - extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts
+  - extensions/pi-claude-marketplace/orchestrators/types.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts
   - extensions/pi-claude-marketplace/persistence/locations.ts
   - extensions/pi-claude-marketplace/platform/package-manager.ts
   - extensions/pi-claude-marketplace/shared/path-safety.ts
@@ -37,6 +39,7 @@ files_reviewed_list:
   - features/lib/npm-registry.ts
   - features/lib/published-marketplace.ts
   - features/plugin/package-dependencies.feature
+  - features/plugin/update.feature
   - features/step_definitions/npm-registry.steps.ts
   - features/step_definitions/plugin/packages.steps.ts
   - features/support/npm-registry.ts
@@ -47,6 +50,7 @@ files_reviewed_list:
   - test/domain/package-lockfile.test.ts
   - test/edge/register.test.ts
   - test/orchestrators/marketplace/background-pass.test.ts
+  - test/orchestrators/marketplace/update.messaging.test.ts
   - test/orchestrators/plugin/dependency-move.test.ts
   - test/orchestrators/plugin/dependency-settle.test.ts
   - test/orchestrators/plugin/install-flow-dependency-ledger.test.ts
@@ -65,15 +69,15 @@ files_reviewed_list:
   - test/shared/redact-absolute-paths.test.ts
   - test/shared/redact-credentials.test.ts
 findings:
-  critical: 1
+  critical: 0
   warning: 0
   info: 0
-  total: 1
-status: issues_found
+  total: 0
+status: clean
 gate:
   command: npm run check
   exit_code: 0
-  source_commit: 9b63fb96c21a32a785bb28b2a08b155246f1c4d9
+  source_commit: 741516af64bc228527cb3720b23d00e0596ec4e4
   node: v26.12.1
   reused: false
   scenarios: 1144
@@ -83,54 +87,34 @@ gate:
 
 # Phase 9: Code Review Report
 
-**Reviewed:** 2026-10-29T06:12:03Z
+**Reviewed:** 2026-10-29T06:39:27Z
 **Depth:** standard, with cross-module traces of the package lifecycle
-**Files Reviewed:** 56
-**Status:** issues_found
+**Files Reviewed:** 60
+**Status:** clean
 
 ## Summary
 
-The complete 56-file Phase 9 scope was reviewed against the merged tree, including the Phase 6 redaction integration, the Phase 8 background-settlement guard, and the Phase 10 dependency-ledger integration. Fifty-one files are byte-identical to the prior complete review; all five files changed by `16e4c849` were read in full and their call paths were traced through settlement, materialization, update composition, and rendering. The seven findings from the preceding review remain closed. The Phase 8 wrapper still calls package settlement exactly once on the live path and zero times after stop, abort, or autoupdate opt-out. The Phase 6 state-path grammar remains narrow and does not hide or leak package diagnostics.
+The complete 56-file Phase 9 scope and the four new ownership-fix files were reviewed against the integrated tree. The final trace covered the dependency closure, first-run and planned settlement, nested and failed moves, materialization, direct update, marketplace update/autoupdate, and both notification surfaces. All reviewed files meet the phase's correctness, security, and maintainability requirements. No issue was found.
 
-The transport half of the latest CR-01 fix works: first-run and planned materialization warnings survive settlement, preserve order, render once, and do not fail the requester or dependency lifecycle. One user-visible ownership blocker remains. The implementation flattens every newly materialized member's warning into the requesting plugin's warning array, so a package failure produced by dependency `zcore` is rendered under `Plugin "widget" ... updated`. That contradicts D-PL10-16's per-member diagnostic contract and the preceding review's explicit requirement that the note appear on the dependency that produced it.
+CR-01 is closed. `saveInstallDependencyPlanClosure` projects each materialized member's warnings into an ordered `{plugin, scope, verb, warnings}` diagnostic. `settleDependencies` and `runDependencySteps` retain that identity across first-run, planned materialization, nested moves, and a move that returns a failure. `materializeLatestVersion` carries dependency diagnostics separately from the requester's own `stagingWarnings`; a refused or failed requester therefore cannot absorb a dependency's warning. Direct update and marketplace update/autoupdate prepend the dependency diagnostics to the requester's diagnostic in row order, with empty entries suppressed by the shared renderer. The public regressions now name `zcore` or `lib`, never `widget` or `app`, while retaining successful requester and dependency lifecycle rows.
 
-The evaluation-scope resolver reported `degraded` because this integrated branch has no reachable task-commit manifest. This review used the prior explicit 52-file Phase 9 scope and added the four current Phase 8/10 integration inputs named in `files_reviewed_list`.
+The seven earlier findings remain closed: process-tree escalation after timeout, disabled-revision package invalidation, locked uninstall cleanup, combined move/enable diagnostics, moved-dependency warning ownership, exact package-runner lint-seam binding, and incremental UTF-8 decoding. Phase 6's narrow state-path redaction still preserves package causes, and Phase 8's stop/abort/opt-out guard still prevents settlement after cancellation without suppressing the live settlement path.
+
+The exact combined gate is green at executable source commit `741516af`: 1,144 Cucumber scenarios, 11,758 steps, and 309 LCOV records. Six focused owner modules and all seven changed direct-coverage pairs pass at 100%; the focused ownership feature passes 1 scenario / 16 steps, and the complete update feature passes 26 scenarios / 380 steps.
 
 ## Narrative Findings (AI reviewer)
 
-- **BLOCKER CR-01:** Fresh dependency package diagnostics are attributed to the requester instead of the dependency.
+No BLOCKER or WARNING findings.
 
 No structural pre-pass payload was supplied.
-
-## Critical Issues
-
-### CR-01: Fresh dependency package diagnostics are attributed to the requester instead of the dependency
-
-**Files:**
-
-- `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-dependency-ledger.ts:583-589`
-- `extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts:170-175`
-- `extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:566-575`
-- `features/plugin/package-dependencies.feature:471-483`
-
-**Issue:** `saveInstallDependencyPlanClosure` uses `flatMap` to turn all member warnings into one unowned `stagingWarnings` array. `dependency-settle.ts` correctly preserves that array through both the first-run and planned-materialization paths, but `settleWarningsFirst` then prepends it to the requesting update's own warnings. `updateStagingDiagnostic` can name only `outcome.name`, so it renders every dependency warning under the requester.
-
-The new behavioral scenario demonstrates the defect rather than preventing it. `zcore` owns the failing package install and has the dependency row at line 483, but line 479 expects `Plugin "widget" [project] updated`. This differs from the established D-PL10-16 behavior in `features/plugin/install.feature`, where a cascade member's package note is rendered under that member's own diagnostic. It also contradicts the preceding CR-01 remediation text, which required the diagnostic to appear exactly once on the dependency.
-
-The warning is no longer lost and is not duplicated. The requester still updates successfully, `zcore` remains installed successfully without its packages, and the registry interaction is correct. The blocker is ownership: direct update, marketplace update/autoupdate, and any other consumer of this settlement cannot tell which newly installed dependency produced each warning after the flattening boundary.
-
-**Fix:** Preserve member identity with each settlement diagnostic instead of flattening member warnings into the requester's `stagingWarnings`. Carry ordered per-member diagnostics (plugin, scope, verb, warnings) alongside the dependency rows through `SettleCascadeRun` and `UpdateDependencySettlement`; render those diagnostics after the corresponding cascade rows; keep the requester's own warnings in its existing outcome array. Change the behavioral regression to expect `Plugin "zcore" [project] installed; ...` exactly once, while retaining the complete `widget` and `zcore` success rows, registry request, records, and no-package assertion.
-
 ## Prior finding closure
 
-All seven prior findings remain closed: timed-out process-tree escalation, disabled-revision package invalidation, locked uninstall cleanup, combined move/enable diagnostics, moved-dependency warning ownership, the exact package-runner lint seam, and incremental UTF-8 decoding.
-
-The current focused evidence is green: 27 dependency-settlement tests, 14 install-ledger tests, both changed direct-coverage pairs at 100%, and the exact new Cucumber scenario at 1 scenario / 16 steps. The exact merged-tree gate at `9b63fb96` passed 1,144 Cucumber scenarios, 11,758 steps, and 309 LCOV records. These checks prove warning transport and lifecycle success, but the behavioral scenario currently encodes the incorrect owner.
+All previous Phase 9 findings and the merged Phase 6/8 integration concerns are closed on the reviewed tree. The structured ownership carrier is consumed by every update path that can produce it, package notes remain exact-once, requester warnings remain separate, failed moves keep their dependency owner, and lifecycle success remains non-blocking.
 
 No source or test file was modified by this review, and no commit was made.
 
 ---
 
-_Reviewed: 2026-10-29T06:12:03Z_
+_Reviewed: 2026-10-29T06:39:27Z_
 _Reviewer: gsd-code-reviewer_
 _Depth: standard_
