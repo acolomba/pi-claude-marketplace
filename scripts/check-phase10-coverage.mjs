@@ -78,6 +78,28 @@ const allowedDispositions = new Set([
   "declined-with-reason",
 ]);
 
+const requiredEvidenceById = new Map([
+  [
+    "XPH02-MOVE-DIAGNOSTICS",
+    [
+      {
+        path: "features/plugin/update.feature",
+        title: "Scenario: Update preserves dependency move warnings and MCP notices",
+      },
+      {
+        path: "features/plugin/package-dependencies.feature",
+        title:
+          "Scenario: A direct update reports a moved dependency package failure only on that dependency",
+      },
+      {
+        path: "features/plugin/package-dependencies.feature",
+        title:
+          "Scenario: A direct update reports a newly installed dependency package failure once",
+      },
+    ],
+  ],
+]);
+
 function fail(message) {
   process.stderr.write(`Phase 10 coverage error: ${message}\n`);
   process.exitCode = 1;
@@ -142,6 +164,23 @@ for (const row of rows) {
   if (!Array.isArray(row.evidence) || row.evidence.length === 0) {
     fail(`${row.id} has no evidence path and title`);
     continue;
+  }
+
+  const requiredEvidence = requiredEvidenceById.get(row.id);
+  if (requiredEvidence !== undefined) {
+    const evidenceKeys = new Set(
+      row.evidence
+        .filter(
+          (evidence) => typeof evidence.path === "string" && typeof evidence.title === "string",
+        )
+        .map((evidence) => `${evidence.path}\0${evidence.title}`),
+    );
+    const hasCompleteEvidence =
+      row.evidence.length === requiredEvidence.length &&
+      requiredEvidence.every((evidence) => evidenceKeys.has(`${evidence.path}\0${evidence.title}`));
+    if (!hasCompleteEvidence) {
+      fail(`${row.id} must bind its complete final diagnostic evidence set`);
+    }
   }
 
   for (const evidence of row.evidence) {
