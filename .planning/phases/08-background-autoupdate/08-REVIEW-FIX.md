@@ -1,10 +1,10 @@
 ---
 phase: 08-background-autoupdate
-fixed_at: 2026-10-28
-review_path: .planning/phases/08-background-autoupdate/08-SECURITY.md
-iteration: 1
-findings_in_scope: 1
-fixed: 1
+fixed_at: 2026-10-29
+review_path: .planning/phases/08-background-autoupdate/08-REVIEW.md
+iteration: 4
+findings_in_scope: 2
+fixed: 2
 skipped: 0
 status: all_fixed
 ---
@@ -91,3 +91,38 @@ The commit changes only `background-pass.ts`, its paired test, the background fe
 Commit `9384204a1b380379f019b2f08e56d2de8f5440b2` changes only the background wait paragraph in `docs/env-vars.md`. It states that cancellation starts after 30 seconds and the command or session keeps waiting until the active step finishes. The canceled step fails cleanly, earlier completed changes remain, background work stops for that runtime, and quit does not wait. The wording was checked against D-PL8-23..25, `background-gate.ts`, and the shutdown handler.
 
 No owner test reads this document. The exact seven-name verification loop and pre-commit command in `08-02-PLAN.md` passed in the assigned `pl-reverify-b-258` worktree. Fallow reported no issues. Normal commit hooks, including Markdown formatting, Markdown lint, and gitlint, passed. The npm hook correctly skipped this documentation-only input. No implementation or test file changed. This minimal fix evidence is left uncommitted for the orchestrator.
+
+## Iteration 4: Post-config halt checks and shutdown contract
+
+**Fixed at:** 2026-10-29. **Source review:** `08-REVIEW.md` at `fe05cac8`.
+**Disposition:** CR-01 and WR-01 fixed. A fresh combined-tree `npm run check`, security recheck, and independent re-review remain with the orchestrator.
+
+### CR-01: Stop or abort during config loading starts no plugin update
+
+**Commit:** `f61d5848` (`fix(autoupdate): stop updates after config reload`).
+**Files:** `extensions/pi-claude-marketplace/orchestrators/marketplace/background-pass.ts`, `test/orchestrators/marketplace/background-pass.test.ts`.
+**Status:** fixed; requires independent verification because this finding changes halt-state logic.
+
+`yieldingPluginUpdate` now rechecks runtime stop and the active gate signal immediately after `loadMergedScopeConfig` settles. A stop returns the ordinary not-run outcome. An abort also latches the halt through `noteStepEnded` and returns the wait-cap-aborted outcome, so later plugin targets remain skipped. The checks run before autoupdate eligibility and before the real plugin update starts.
+
+The two deterministic regressions schedule their action from the plugin step's `beginStep` microtask, after the existing precheck and while the real config read is pending. Before the production fix, the stop case ran the first update and returned `unchanged`; the abort case ran it and returned `updated`. After the fix, neither case calls the update seam or publishes a notice, and the abort case also skips the next target.
+
+### WR-01: Header describes wait-cap cancellation and settlement accurately
+
+**Commit:** `5384e63b` (`docs(autoupdate): correct shutdown wait contract`).
+**File:** `extensions/pi-claude-marketplace/orchestrators/marketplace/background-update.ts`.
+
+The runtime header now states that the 30-second cap starts cancellation of the active step. It also states that shutdown keeps waiting until that step settles. It no longer claims that shutdown itself returns at the cap.
+
+### Iteration 4 verification
+
+Checks ran in the assigned integrated checkout `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710` because `workflow.use_worktrees=false` for the orchestrated fixer.
+
+- The focused RED run failed both new config-read interleavings before the source edit and passed both after it.
+- The complete `background-pass.test.ts` and `background-update.test.ts` owner modules passed.
+- Direct coverage passed at 100% line, function, and branch coverage for both changed source/test pairs.
+- `npm run check:features` passed. The real PTY `features/marketplace/background-update.feature` passed 6 scenarios and 88 steps.
+- Fallow guard reported the expected orchestrator boundaries. `fallow audit --base fe05cac8` reported no issues in the five changed files.
+- The targeted pre-commit fixer run passed. Both commits then passed the normal repository hooks, including `npm run check:commit` and gitlint; no hook was bypassed.
+
+This appendix is left uncommitted for the orchestrator. The orchestrator-owned `STATE.md` and config changes were preserved and excluded from both commits.
