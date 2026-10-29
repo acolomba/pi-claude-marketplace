@@ -61,7 +61,7 @@ All phase behaviors have automated verification.
 - [x] Feedback latency < 120s
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** approved 2026-10-29 (final merged-tree Nyquist audit: 0 gaps; 8 owner modules and 15 focused public scenarios pass at `21a40cdf`)
+**Approval:** approved 2026-10-29 (final-head Nyquist audit: 0 gaps; 8 owner modules and 15 focused public scenarios pass at `1fe61aeb`)
 
 ## Final Merged-Tree Evidence
 
@@ -87,3 +87,12 @@ All phase behaviors have automated verification.
 | Gaps found | 0 |
 | Resolved | 0 |
 | Escalated | 0 |
+
+## Final-Head Evidence
+
+| Check | Result |
+|---|---|
+| Focused owner modules | `node --test test/orchestrators/import/marketplaces.test.ts test/orchestrators/import/execute.test.ts test/orchestrators/reconcile/plan.test.ts test/orchestrators/reconcile/apply.test.ts test/orchestrators/reconcile/apply-outcomes.test.ts test/orchestrators/reconcile/notify.test.ts test/orchestrators/plugin/enable-disable.test.ts test/shared/redact-absolute-paths.test.ts` — 8/8 modules passed |
+| Focused public behavior | The combined title filter in the verification map passed 15/15 scenarios, 177/177 steps, and 16/16 hooks. The first sandboxed attempt reached 0 scenarios because loopback binding returned `EPERM`; the permitted rerun used the same command and passed. |
+| Combined-tree gate | Reused exact `npm run check` evidence at executable head `be0de0c3`: 1,145/1,145 scenarios, 11,777/11,777 steps, and 309 merged direct-coverage records passed. |
+| Runtime and tree | Node v26.12.1; final-head audit at `1fe61aeb`; `git diff --quiet be0de0c3 -- . ':(exclude,glob).planning/**/*.md'` exited 0 and no untracked executable input exists. |
