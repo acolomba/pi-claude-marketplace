@@ -9996,6 +9996,47 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
+  test("a deferred move and enable retains its package warning and MCP notice on one transition", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(t, "deferred-move-notes", {
+      ...coShippedSeed({ enabled: false, dependencyDisabled: true }),
+      trees: { widget: { skill: "clean", mcpServer: true }, zcore: { skill: "clean" } },
+      supported: { widget: ["skills", "mcpServers"], zcore: ["skills"] },
+    });
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    const pluginRoot = path.join(marketplaceRoot, "plugins", "widget");
+    await writeFile(
+      path.join(pluginRoot, "package.json"),
+      JSON.stringify({ dependencies: { "pkd-dep": "1.0.0" } }),
+    );
+    await writeFile(path.join(pluginRoot, "package-lock.json"), '{"lockfileVersion":3}');
+    await writeUnder(project.mcpAdapterJsonPath, '// user note\n{"mcpServers":{}}\n');
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(3);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● zcore v1.0.0 → v2.0.0 (updated)\n" +
+          "  ● widget v1.0.0 → v1.1.0 (updated)\n" +
+          "\nReconcile: 2 successes\n\n/reload to pick up changes",
+      },
+      {
+        message:
+          'Plugin "widget" [project] updated; 1 declared component has a note.\n\n' +
+          'Skipped installing this plugin\'s dependencies: its folder in the marketplace "mp" is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder.',
+        severity: "warning",
+      },
+      COMMENTS_REMOVED_NOTICE,
+    ]);
+    verifyBoundary();
+  });
+
   test("APPLY1-01: a dependent held down by an earlier pass is enabled after the move it waits on lands", async (t) => {
     // arrange
     const { cwd, project } = await seedConvergenceScope(

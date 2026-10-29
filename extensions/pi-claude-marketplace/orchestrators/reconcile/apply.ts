@@ -1879,7 +1879,16 @@ function landedStepRows(
     return enabled;
   }
 
-  return [enabledMoveOutcome(move)];
+  const enables = enabled.filter((outcome) => outcome.kind === "plugin-enabled");
+  const stagingWarnings = enables.flatMap((outcome) => outcome.stagingWarnings ?? []);
+  const mcpConfigNotices = enables.flatMap((outcome) => outcome.mcpConfigNotices ?? []);
+  return [
+    {
+      ...enabledMoveOutcome(move),
+      ...(stagingWarnings.length > 0 && { stagingWarnings }),
+      ...(mcpConfigNotices.length > 0 && { mcpConfigNotices }),
+    },
+  ];
 }
 
 /**

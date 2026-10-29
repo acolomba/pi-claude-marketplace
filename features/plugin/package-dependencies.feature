@@ -350,6 +350,44 @@ Feature: Plugin package dependencies
       | name    | version |
       | pkd-dep | 1.0.0   |
 
+  Scenario: Apply reports a package warning once when a held plugin moves and becomes enabled
+    Given the npm registry serves these packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   | zcore        |
+      | zcore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore@^2.0.0 |
+      | zcore  | 1.0.0   |              |
+    Given the user has run "/claude:plugin apply --scope project", which warned
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore@^2.0.0 |
+      | zcore  | 2.0.0   |              |
+    Given the published plugin "widget" of the marketplace "tools" depends on these npm packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the command reports these results:
+      | kind                      | severity | needs reload | header                                                         | lines                                                                                                                                                                                                                                                   | tally label | tally failures | tally warnings | tally success count |
+      | reconcile-applied-cascade | info     | true         |                                                                |                                                                                                                                                                                                                                                         | Reconcile   | 0              | 0              | 2                   |
+      | diagnostic                | warning  | false        | Plugin "widget" [project] updated; 1 declared component has a note. | Skipped installing this plugin's dependencies: its folder in the marketplace "tools" is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder. |             |                |                |                     |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id           | name   | status  | reasons | scope   | from  | to    |
+      | tools            | project           | zcore@tools  | zcore  | updated |         | project | 1.0.0 | 2.0.0 |
+      | tools            | project           | widget@tools | widget | updated |         | project | 1.0.0 | 1.1.0 |
+    Then the npm registry receives no request
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | widget@tools | 1.1.0   | true    |
+      | zcore@tools  | 2.0.0   | true    |
+
   Scenario: A marketplace update with autoupdate on that moves a plugin whose package install fails reports the warning
     Given the npm registry serves these packages:
       | name    | version |
