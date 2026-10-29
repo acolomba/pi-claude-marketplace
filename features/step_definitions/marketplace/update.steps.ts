@@ -21,6 +21,9 @@ import {
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
+const REDACTED_UNREADABLE_SKILL_COPY_ERROR =
+  "EACCES: permission denied, copyfile '[redacted path]'";
+
 Given(
   "the marketplace {string} update source contains this manifest:",
   async function (this: ScenarioWorld, name: string, text: string) {
@@ -94,7 +97,10 @@ Given(
     this.onRelease(() => rm(scratch, { recursive: true, force: true }));
     const error = await unreadableSkillCopyError(published, plugin, scratch);
     assert.deepStrictEqual([error.code, error.syscall], ["EACCES", "copyfile"]);
-    this.recordErrorMessage("{unreadable skill file copy error}", error.message);
+    this.recordErrorMessage(
+      "{unreadable skill file copy error}",
+      REDACTED_UNREADABLE_SKILL_COPY_ERROR,
+    );
   },
 );
 
