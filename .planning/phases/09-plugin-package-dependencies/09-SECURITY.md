@@ -6,7 +6,7 @@ status: verified
 threats_open: 0
 asvs_level: 1
 created: "2026-10-29"
-audited_commit: 8021ee98f3228a78df0a0d2431e729388526bb4f
+audited_commit: be0de0c3
 ---
 
 # Phase 9 — Security
@@ -106,6 +106,7 @@ All five plan summaries state that no security-relevant surface appeared outside
 | 2026-10-29 | 25 | 25 | 0 | gsd-security-auditor, final L1 merged-tree audit at `1ef2b0ad`; exact full gate 1,143 scenarios / 11,742 steps / 309 LCOV; focused process/FIFO rerun 178/178 |
 | 2026-10-29 | 25 | 25 | 0 | gsd-security-auditor, final post-CR-01 L1 audit at `9b63fb96`; dependency package warnings traverse both settlement paths exactly once and remain redacted/non-blocking; full gate 1,144 scenarios / 11,758 steps / 309 LCOV |
 | 2026-10-29 | 25 | 25 | 0 | gsd-security-auditor, final post-ownership-fix L1 audit at `8021ee98`; structured dependency diagnostics preserve member identity/order through first-run, planned and nested settlement, render exactly once before requester diagnostics, and remain redacted/non-blocking; full gate 1,144 scenarios / 11,758 steps / 309 LCOV |
+| 2026-10-29 | 25 | 25 | 0 | gsd-security-auditor, final-head L1 audit at `be0de0c3`; 21 mitigations and 4 accepted risks verified; exact unchanged-input gate 1,145 scenarios / 11,777 steps / 309 LCOV |
 
 ---
 
@@ -119,4 +120,4 @@ All five plan summaries state that no security-relevant surface appeared outside
 - [x] `threats_open: 0`.
 - [x] `status: verified`.
 
-**Approval:** SECURED — 2026-10-29 at `8021ee98f3228a78df0a0d2431e729388526bb4f`; 21 mitigated, 4 accepted, 0 transferred, and `threats_open: 0`.
+**Approval:** SECURED — 2026-10-29 at executable head `be0de0c3`; 21 mitigated, 4 accepted, 0 transferred, and `threats_open: 0`.
