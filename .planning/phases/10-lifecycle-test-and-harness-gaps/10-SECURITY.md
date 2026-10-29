@@ -77,6 +77,7 @@ The plan-qualified references preserve the seven distinct acceptance rationales.
 | 2026-10-27 | 19 | 19 | 0 | GSD security auditor, ASVS L1 |
 | 2026-10-28 | 19 | 19 | 0 | GSD security re-auditor, ASVS L1 |
 | 2026-10-28 | 19 | 19 | 0 | GSD final post-merge security auditor, ASVS L1 |
+| 2026-10-29 | 19 | 19 | 0 | GSD final integrated security auditor, ASVS L1 |
 
 Evidence was audited at `689b4499`. The coverage checker passed 56/56 rows. The full repository gate exited 0 with 1,119 scenarios, 11,393 steps, and 304 direct LCOV records.
 
@@ -105,6 +106,21 @@ rejected. The integrated `npm run check` passed static checks, 1,131 scenarios,
 11,584 steps, and 309 direct LCOV records. No unregistered or reopened threat
 was found.
 
+The final integrated audit traced the executable tree at `f310906d`. All 12
+mitigations and seven accepted risks remain closed. Ambiguous quoted absolute
+paths now fail closed unless they have exactly one safe matching delimiter.
+The separate Node errno grammar accepts an arrow operation only when it has
+exactly two operands; source, destination, and dual delimiter collisions fail
+closed for `rename`, `copyfile`, `link`, and `symlink`. Cause-chain, cascade,
+apply, install, and public-presentation projections retain that result.
+
+Package-manager timeout escalation remains bounded and terminates POSIX
+process groups or Windows process trees before settlement. The package-manager
+owner passed 41/41, D-PL10-13 passed 1/1, and the strict coverage ledger passed
+56/56. The exact unchanged-tree `npm run check` passed static checks, 1,144
+scenarios, 11,758 steps, and 309 direct LCOV records. No unregistered or
+reopened threat was found.
+
 ---
 
 ## Sign-Off
@@ -114,4 +130,4 @@ was found.
 - [x] `threats_open: 0` confirmed.
 - [x] `status: verified` set in frontmatter.
 
-**Approval:** verified 2026-10-28 after final post-merge audit at `0d36e2a3`.
+**Approval:** verified 2026-10-29 after final integrated audit at `f310906d`.
