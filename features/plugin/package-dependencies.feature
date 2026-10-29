@@ -388,6 +388,105 @@ Feature: Plugin package dependencies
       | widget@tools | 1.1.0   | true    |
       | zcore@tools  | 2.0.0   | true    |
 
+  Scenario: Apply reports a moved dependency package warning only on that dependency
+    Given the npm registry serves these packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | zcore | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install zcore@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   | zcore@^2.0.0 |
+      | zcore  | 2.0.0   |              |
+    Given the published plugin "zcore" of the marketplace "tools" depends on these npm packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | tools       | widget |         |
+      | tools       | zcore  |         |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the command reports these results:
+      | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count | summary                             |
+      | reconcile-applied-cascade | warning  | true         | Reconcile   | 0              | 1              | 1                   | A plugin operation needs attention. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id           | name   | status    | reasons | scope   | version | from  | to    | cause chain                                                               | cause truncated | leaks | rollback partial |
+      | tools            | project           | zcore@tools  | zcore  | updated   |         | project |         | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "widget@tools", Skipped installing this plugin's dependencies: its folder in the marketplace "tools" is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder. | false           |       |                  |
+      | tools            | project           | widget@tools | widget | installed |         | project | 1.0.0   |       |       |                                                                           |                 |       |                  |
+    Then the npm registry receives no request
+
+  Scenario: A direct update reports a moved dependency package failure only on that dependency
+    Given the npm registry serves these packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   | zcore        |
+      | zcore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore@^2.0.0 |
+      | zcore  | 2.0.0   |              |
+    Given the published plugin "zcore" of the marketplace "tools" depends on these npm packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the npm registry answers 404 for the package "pkd-dep"
+    When the user runs "/claude:plugin update widget@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | warning                             |
+      | needs reload | true                                |
+      | summary      | A plugin operation needs attention. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name        | status  | reasons                 | scope   | from  | to    | cause chain                                                                                                            | cause truncated | leaks | rollback partial |
+      | tools            | project           | widget@tools | widget | updated |  | project | 1.0.0 | 1.1.0 |  |  | | |
+      | tools            | project           | zcore@tools | zcore@tools | updated | dependency current copy | project | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "widget@tools", Plugin dependency install failed (npm): no output | false | | |
+    Then the npm registry receives these requests:
+      | method | path                       | status |
+      | GET    | /pkd-dep/-/pkd-dep-1.0.0.tgz | 404    |
+    Then the plugin "zcore" installed in the project scope has no npm packages
+
+  Scenario: A marketplace autoupdate reports a moved dependency package failure only on that dependency
+    Given the npm registry serves these packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   | zcore        |
+      | zcore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore@^2.0.0 |
+      | zcore  | 2.0.0   |              |
+    Given the published plugin "zcore" of the marketplace "tools" depends on these npm packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the npm registry answers 404 for the package "pkd-dep"
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                             | lines                                             |
+      | cascade    | info     | true         |                                                                    |                                                   |
+      | diagnostic | warning  | false        | Plugin "zcore" [project] updated; 1 declared component has a note. | Plugin dependency install failed (npm): no output |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id           | name        | status  | reasons                 | scope   | from  | to    | cause chain                                                                                                            | cause truncated | leaks | rollback partial |
+      | tools            | project           | updated            | zcore@tools | zcore | updated | dependency current copy | project | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "widget@tools" | false | | |
+      | tools            | project           | updated            | widget@tools | widget | updated |  | project | 1.0.0 | 1.1.0 |  |  | | |
+    Then the npm registry receives these requests:
+      | method | path                       | status |
+      | GET    | /pkd-dep/-/pkd-dep-1.0.0.tgz | 404    |
+    Then the plugin "zcore" installed in the project scope has no npm packages
+
   Scenario: A marketplace update with autoupdate on that moves a plugin whose package install fails reports the warning
     Given the npm registry serves these packages:
       | name    | version |
