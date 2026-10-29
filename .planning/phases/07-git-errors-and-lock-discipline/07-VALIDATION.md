@@ -186,6 +186,59 @@ new test was necessary.
 
 ---
 
+## Final-Head Revalidation — 2026-10-29
+
+This final stale-verification pass audited the exact integrated tree after the
+Phase 1 diagnostic-ordering fix. Executable inputs are unchanged from verified
+head `be0de0c3`; `git diff --quiet be0de0c3 -- .
+':(exclude,glob).planning/**/*.md'` exited 0. The exact full gate therefore
+remains reusable: 1,145 scenarios, 11,777 steps, and 309 LCOV records.
+
+### Requirement Matrix
+
+| Requirement | Fresh adversarial proof | Result |
+| ----------- | ----------------------- | ------ |
+| GLK-01 | The complete classifier owner and the update, preflight, fetch, info, and dependency-tag owners passed. The nine public git/add/update/fetch/info feature files passed, preserving each operation's distinct 404/410 rule and framed 5xx behavior. | green |
+| GLK-02 | The complete `update-flow` owner passed after the later Phase 1 diagnostic-carrier change, and `update-rollback.feature` still proves the cascade uses the direct path's truthful reason and cause rather than `{not in manifest}`. | green |
+| GLK-03 | `clone-gc`, dependency bindings, move, plan, and settlement owners passed. The candidate-only test deletes an owned stale key while preserving an unrelated warm key; warm-hit and exact-key race-winner cases prove unowned candidates survive. | green |
+| GLK-04 | The complete update-preflight owner passed, including lock-observed tag copying and second-holder refusal. | green |
+| GLK-05 | Complete fetch and info owners passed, including unpinned materialize-plus-row reads under the lock and pinned/bare unlocked controls. Their public feature files passed. | green |
+| GLK-06 | The complete update-swap owner passed, including controlled-clock same-millisecond overlap and strictly increasing finalize stamps. | green |
+| GLK-07 | Complete fetch, completion, operations, and browse owners passed; fetch public behavior still shows the list version on fresh and skipped rows. | green |
+| GLK-08 | The complete clone-cache owner and release-tag reinstall scenario passed; the warm tag resolves locally without a git-host request. | green |
+
+### Exact-Candidate Ownership Supersession
+
+The reviewed exact-candidate cleanup remains the formal supersession of Plan
+07-02's broad-listing literal. `collectPluginCloneCandidatesLocked` takes a
+fresh scope lock, reloads live state, and can delete only keys positively owned
+by the operation. The fresh owner run includes the discriminating controls:
+an unrelated warm mirror, a warm candidate, and an exact-key promotion race
+winner all survive. A broad directory sweep would fail these tests and
+reintroduce the verified concurrent-cache deletion bug; GLK-03 requires the
+current stronger ownership behavior.
+
+### Commands Executed
+
+| Command | Result |
+| ------- | ------ |
+| `node --test` across classifier, clone cache/GC, dependency bindings/move/plan/settlement/tag probe, update swap/flow/preflight, fetch, info, operations, completion, and browse owners | 16/16 modules passed |
+| `npx cucumber-js` over the nine Phase 7 git/add/update/fetch/info feature files | 99/99 scenarios, 1,164/1,164 steps, 16/16 hooks passed |
+| Exact integrated `npm run check` at unchanged executable head `be0de0c3` | 1,145 scenarios, 11,777 steps, 309 LCOV records passed |
+
+The first sandboxed Cucumber attempt ran zero scenarios because loopback bind
+was denied (`listen EPERM 127.0.0.1`). The identical command passed with only
+the hermetic loopback-fixture permission enabled; no product code ran in the
+failed attempt.
+
+### Gap Disposition
+
+No current coverage gap was found. GLK-01 through GLK-08 and every current
+plan must-have have a behavioral test that can fail. No test or implementation
+file changed, and no issue was escalated.
+
+---
+
 ## Validation Sign-Off
 
 - [x] All tasks have `<automated>` verify or Wave 0 dependencies
@@ -195,7 +248,7 @@ new test was necessary.
 - [x] Feedback latency < 75s
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** revalidated COMPLIANT on the merged tree, 2026-10-29
+**Approval:** revalidated COMPLIANT on the final integrated tree, 2026-10-29
 
 ## Validation Audit 2026-10-28
 
