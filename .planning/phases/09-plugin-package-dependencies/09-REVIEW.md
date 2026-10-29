@@ -1,9 +1,9 @@
 ---
 phase: 09-plugin-package-dependencies
-reviewed: 2026-10-29T06:39:27Z
+reviewed: 2026-10-29T13:50:27Z
 depth: standard
-reviewed_commit: 8021ee98f3228a78df0a0d2431e729388526bb4f
-source_commit: 741516af64bc228527cb3720b23d00e0596ec4e4
+reviewed_commit: 7cad91d06d10aa4b2ebe4c6e91bc20db0142c87f
+source_commit: 7cad91d06d10aa4b2ebe4c6e91bc20db0142c87f
 review_scope_complete: true
 re_review: true
 files_reviewed: 60
@@ -77,36 +77,37 @@ status: clean
 gate:
   command: npm run check
   exit_code: 0
-  source_commit: 741516af64bc228527cb3720b23d00e0596ec4e4
+  source_commit: 7cad91d06d10aa4b2ebe4c6e91bc20db0142c87f
   node: v26.12.1
-  reused: false
-  scenarios: 1144
-  steps: 11758
+  reused: true
+  scenarios: 1145
+  steps: 11777
   coverage_records: 309
 ---
 
 # Phase 9: Code Review Report
 
-**Reviewed:** 2026-10-29T06:39:27Z
+**Reviewed:** 2026-10-29T13:50:27Z
 **Depth:** standard, with cross-module traces of the package lifecycle
 **Files Reviewed:** 60
 **Status:** clean
 
 ## Summary
 
-The complete 56-file Phase 9 scope and the four new ownership-fix files were reviewed against the integrated tree. The final trace covered the dependency closure, first-run and planned settlement, nested and failed moves, materialization, direct update, marketplace update/autoupdate, and both notification surfaces. All reviewed files meet the phase's correctness, security, and maintainability requirements. No issue was found.
+The complete retained 60-file Phase 9 scope was reviewed against the final integrated tree. Forty-nine files are byte-identical to the previous complete clean review; the 11 changed files were read again in full, and the later behavioral fixtures and step definitions on their current call paths were checked as supporting evidence. The final trace covered the dependency closure, first-run and planned settlement, nested and failed moves, materialization, package-runner timeout settlement, direct update, marketplace update/autoupdate, path-safe diagnostics, and both notification surfaces. All reviewed files meet the phase's correctness, security, and maintainability requirements. No issue was found.
 
 CR-01 is closed. `saveInstallDependencyPlanClosure` projects each materialized member's warnings into an ordered `{plugin, scope, verb, warnings}` diagnostic. `settleDependencies` and `runDependencySteps` retain that identity across first-run, planned materialization, nested moves, and a move that returns a failure. `materializeLatestVersion` carries dependency diagnostics separately from the requester's own `stagingWarnings`; a refused or failed requester therefore cannot absorb a dependency's warning. Direct update and marketplace update/autoupdate prepend the dependency diagnostics to the requester's diagnostic in row order, with empty entries suppressed by the shared renderer. The public regressions now name `zcore` or `lib`, never `widget` or `app`, while retaining successful requester and dependency lifecycle rows.
 
-The seven earlier findings remain closed: process-tree escalation after timeout, disabled-revision package invalidation, locked uninstall cleanup, combined move/enable diagnostics, moved-dependency warning ownership, exact package-runner lint-seam binding, and incremental UTF-8 decoding. Phase 6's narrow state-path redaction still preserves package causes, and Phase 8's stop/abort/opt-out guard still prevents settlement after cancellation without suppressing the live settlement path.
+The seven earlier findings remain closed: process-tree escalation after timeout, disabled-revision package invalidation, locked uninstall cleanup, combined move/enable diagnostics, moved-dependency warning ownership, exact package-runner lint-seam binding, and incremental UTF-8 decoding. The final timeout runner keeps its escalation timers referenced after a timed-out parent closes, kills surviving descendants before resolving, and leaves the package work directory alive until the run settles. Phase 6's state-path redaction now fails closed for ambiguous quoted paths while preserving structured package causes, and Phase 8's stop/abort/opt-out guard still prevents settlement after cancellation without suppressing the live settlement path.
 
-The exact combined gate is green at executable source commit `741516af`: 1,144 Cucumber scenarios, 11,758 steps, and 309 LCOV records. Six focused owner modules and all seven changed direct-coverage pairs pass at 100%; the focused ownership feature passes 1 scenario / 16 steps, and the complete update feature passes 26 scenarios / 380 steps.
+The exact combined gate is green at reviewed commit `7cad91d0`: 1,145 Cucumber scenarios, 11,777 steps, and 309 LCOV records. The Phase 9 Nyquist audit is COMPLIANT on that same commit. The current package timeout, dependency-warning ownership, update-diagnostic ordering, and redaction regressions all participate in the combined gate.
 
 ## Narrative Findings (AI reviewer)
 
 No BLOCKER or WARNING findings.
 
 No structural pre-pass payload was supplied.
+
 ## Prior finding closure
 
 All previous Phase 9 findings and the merged Phase 6/8 integration concerns are closed on the reviewed tree. The structured ownership carrier is consumed by every update path that can produce it, package notes remain exact-once, requester warnings remain separate, failed moves keep their dependency owner, and lifecycle success remains non-blocking.
@@ -115,6 +116,6 @@ No source or test file was modified by this review, and no commit was made.
 
 ---
 
-_Reviewed: 2026-10-29T06:39:27Z_
+_Reviewed: 2026-10-29T13:50:27Z_
 _Reviewer: gsd-code-reviewer_
 _Depth: standard_
