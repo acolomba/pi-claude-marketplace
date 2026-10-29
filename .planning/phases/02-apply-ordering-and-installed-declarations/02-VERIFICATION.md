@@ -1,6 +1,6 @@
 ---
 phase: 02-apply-ordering-and-installed-declarations
-verified: 2026-10-29T03:07:04Z
+verified: 2026-10-29T12:34:41Z
 status: passed
 score: 19/19 must-haves verified
 covered_files:
@@ -79,7 +79,7 @@ covered_files:
   - test/orchestrators/reconcile/read-pass.test.ts
   - test/orchestrators/reconcile/types.test.ts
   - test/orchestrators/types.test.ts
-covered_digest: "v4:sha256:405dab478750078bf6e3eb95db3c3be56a20e51f398e395671d865012a058f15"
+covered_digest: "v4:sha256:9d1a185ebd550d71ff9a52687669684252dfbd8df55d436c389447d85e844867"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
@@ -93,7 +93,7 @@ re_verification:
 # Phase 2: Apply Ordering and Installed Declarations Verification Report
 
 **Phase Goal:** `pending` previews exactly what `apply` does, one `apply` settles a missing dependency that needs a moved version, and dependency declarations of an installed plugin come from its installed copy.
-**Verified:** 2026-10-29T03:07:04Z
+**Verified:** 2026-10-29T12:34:41Z
 **Status:** passed
 **Re-verification:** Yes. The prior report passed on an earlier integrated tree; this run rechecked all truths after the final Phase 1-10 merge.
 
@@ -169,15 +169,31 @@ These verdicts resolve the markers with code, tests and recorded decisions; the 
 | Focused RCN-01 interruption, RCN-07 retry, and RCN-07 rollback owner tests | 3/3 named invocations passed, exit 0 |
 | Focused RCN-02 real install-lock, RCN-03 disable-lock, and RCN-05 installed-copy-lock owner tests | 3/3 named invocations passed, exit 0 |
 | Public PENDMOVE/MISSORDER, installed-copy, add, bootstrap, and autoupdate scenarios | 7 scenarios, 113 steps, 16 hooks passed, exit 0 |
-| Final merged `npm run check` at `5787f3ec` | Exit 0: static, integration and unpaired checks passed; Cucumber 1142 scenarios/11734 steps passed; direct coverage merged 309 LCOV records. No build input changed after this gate. |
+| Six concurrency/idempotency backstop owner invocations | 6/6 named tests passed: interrupted move retry, dependency-install lock retry, judgement-disable lock retry, refusal retry, cascade rollback, and installed-copy constraint lock retry. |
+| Seven public Phase 2 scenarios rerun by this verifier | 7 scenarios, 112 steps and 16 hooks passed after the restricted sandbox's expected loopback refusal was rerun with loopback permission. |
+| Exact integrated `npm run check` at executable head `be0de0c3` | Exit 0: static, integration and unpaired checks passed; Cucumber 1145 scenarios/11777 steps passed; direct coverage merged 309 LCOV records. `git diff --quiet be0de0c3 -- . ':(exclude,glob).planning/**/*.md'` exits 0 at this verification head. |
 
 **Probe execution:** No Phase 02 PLAN or SUMMARY declares a probe script.
 
-### Test Quality and Anti-Patterns
+### Test Quality Audit
+
+| Test scope | Linked requirements | Active evidence | Skipped | Circular | Assertion level | Verdict |
+|---|---|---:|---:|---:|---|---|
+| Reconcile apply/convergence/pending/read-pass/notify/verdict owners | RCN-01..04, RCN-07 | 1,387-owner batch plus six named backstops | 0 requirement-linked | 0 | Behavioral: exact rows, state bytes, retries, rollback and ordering | PASS |
+| Installed declaration/index/enable/update-gate owners | RCN-04, RCN-05, RCN-08 | Fresh owner batch and installed-copy named lock test | 0 | 0 | Value + behavioral filesystem and lock assertions | PASS |
+| Marketplace add/bootstrap/update owners and Cucumber | RCN-06, RCN-07 | Seven focused scenarios plus current exact full gate | 0 | 0 | Behavioral: scope, rows, ordering and persisted records | PASS |
+
+**Disabled tests on requirements:** 0. **Circular oracle patterns:** 0; filesystem writes build independent hermetic inputs and expected fixtures rather than capturing system output. **Insufficient assertions:** 0.
+
+### Anti-Patterns
 
 The requirement tests assert exact rows, versions, persisted state, lock failure, retry and rollback effects. The new backstop tests use real production operation factories and temporary scope roots. No linked requirement relies only on a skipped test or a generated oracle. The conditional root-only `t.skip` in `apply.test.ts:2402` is not sole requirement proof. No unreferenced TBD/FIXME/XXX debt marker or stub was found in the modified implementation paths.
 
-The old 02-04 pattern checks and old D-09-14 repeated-row sentence are superseded by recorded decisions. The current decision-coverage query reports **26/26** CONTEXT decisions honored. Nyquist is COMPLIANT at `decf5452`; security is SECURED at `75af0aed` with **19/19 threats closed** and zero open; the final integrated review is CLEAN at `5787f3ec` with zero Critical, Warning, or Info findings.
+The old 02-04 pattern checks and old D-09-14 repeated-row sentence are superseded by recorded decisions. Nyquist is COMPLIANT 8/8 at `91b3fdd8`; security is SECURED at `9faa7074` with **19/19 threats closed** and zero open; the complete final-head review is CLEAN at `33eb4bf7` across 44 files with zero Critical, Warning, or Info findings. No requirement-linked test is disabled, no expected value is generated by the production function under test, and no unreferenced TBD/FIXME/XXX marker exists in the implementation scope.
+
+### Decision Coverage
+
+The current decision-coverage gate reports **26/26** trackable `02-CONTEXT.md` decisions honored by shipped artifacts. No translated decision vanished during execution.
 
 ### Advisory (New Scope, Unevidenced)
 
@@ -193,5 +209,5 @@ No observed implementation or evidence gap blocks the Phase 02 goal. Pending and
 
 ---
 
-_Verified: 2026-10-29T03:07:04Z_
+_Verified: 2026-10-29T12:34:41Z_
 _Verifier: Codex (gsd-verifier)_
