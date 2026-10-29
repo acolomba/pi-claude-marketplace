@@ -132,3 +132,24 @@ Phase 1 threat ID.
   19 unique threats: 13 mitigated and six documented accepted risks.
   Build inputs remain unchanged from the verified source commit.
   Final verdict: SECURED; threats_open: 0.
+- Final merged-tree security re-audit on 2026-10-28 inspected A+B+C source
+  commit `059a1edd` at audit head
+  `8d8b136bfe88d2ee4f5f43271584d7698d978bd5`.
+- Re-verified all 19 unique Phase 1 threats: 13 implementation mitigations
+  and six previously accepted risks. All 19 are closed; blocking open: 0;
+  non-blocking open: 0; unregistered flags: 0.
+- Re-traced staging-warning tags and rendering, absolute-path and credential
+  redaction, forced agent-row containment, failure and rollback routing,
+  per-target candidate ownership, dependency MCP-notice propagation, output
+  transports, and Phase 1 process/network boundaries across the final merged
+  install, cascade, reconcile, update, staging, and presentation changes.
+- D-PL10-13 formally supersedes Plan 01-03's older broad-listing literal:
+  differing-target foreign rows are preserved, while every replaced owned
+  target still passes containment before removal. T-01-05 remains closed.
+- Reused the exact final merged `npm run check` result: exit 0, 1,142
+  scenarios, 11,734 steps, and 309 direct LCOV records. Phase 1 Nyquist status
+  is COMPLIANT.
+- `git diff --stat 059a1edd..8d8b136b -- ':(exclude,glob).planning/**'`
+  produced no output. The auditor modified no implementation, tests, planning
+  records, or state; the orchestrator owns `01-SECURITY.md` persistence.
+- Final merged-tree verdict: SECURED; threats_open: 0.
