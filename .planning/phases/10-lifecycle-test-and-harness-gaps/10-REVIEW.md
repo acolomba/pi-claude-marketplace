@@ -1,6 +1,6 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-reviewed: 2026-10-29T11:31:35Z
+reviewed: 2026-10-29T14:02:48Z
 depth: standard
 files_reviewed: 130
 files_reviewed_list:
@@ -144,18 +144,18 @@ status: clean
 
 # Phase 10: Code Review Report
 
-**Reviewed:** 2026-10-29T11:31:35Z
+**Reviewed:** 2026-10-29T14:02:48Z
 **Depth:** standard
-**Files Reviewed:** 130 (the retained Phase 10 scope plus the final errno deltas)
+**Files Reviewed:** 130 (the retained complete Phase 10 scope plus the final integrated delta)
 **Status:** clean
-**Observed HEAD:** `f310906d`
+**Observed HEAD:** `3fde60a7`
 **Runtime:** Node `v26.12.1`
 
 ## Structural Findings (fallow)
 
-The exact merged full gate's Fallow stage passed. Direct review covered the complete retained scope plus every final implementation, feature, presentation, and owner-test delta through `f310906d`.
+The exact merged full gate's Fallow stage passed. Direct review covered the complete retained scope plus every final implementation, feature, presentation, and owner-test delta through `3fde60a7`.
 
-CodeGraph was used to trace the shared redactor into its cause-chain, cascade, install, apply, and notification-presentation consumers. Its index marked the changed redactor stale, so the current source and all final owner deltas were read directly.
+CodeGraph was used to trace the shared redactor into its cause-chain, cascade, install, apply, and notification-presentation consumers, and to trace the final update-diagnostic change through the update flow and staging-diagnostic renderers. Where the index marked changed files stale, the current source and affected callers were read directly. Fallow's final security advisory gate passed; its only delta candidate was a test-only sandbox path join with static scenario input, not a production vulnerability.
 
 ## Narrative Findings (AI reviewer)
 
@@ -164,6 +164,8 @@ CodeGraph was used to trace the shared redactor into its cause-chain, cascade, i
 The retained complete scope and all final deltas were re-reviewed. The Node errno branch now recognizes `rename`, `copyfile`, `link`, and `symlink` as two-field operations only when splitting yields exactly two operands. A separator-like byte sequence in the source, destination, or both therefore produces more than two fields and fails closed for the complete quoted field. The utility matrix covers all four operations across POSIX, drive, and UNC paths; exact cause-chain and public-presentation regressions confirm that the fail-closed result survives both projection layers.
 
 The generic quoted-path grammar remains fail closed: an absent or surplus same-quote closer elides the remainder, and the only basename-preserving case requires one safe, unambiguous closer. The Cucumber token is now an independent public expectation while its setup still proves a real `EACCES` `copyfile` failure. The three reconciled owners retain exact `deepStrictEqual` whole-result or full-message assertions; no assertion was weakened. Package-manager timeout settlement, the strict 56-row evidence checker, D-PL10-13's superseding ownership contract, and the integrated Phase 8/9 behavior are unchanged from their verified implementations.
+
+The final integrated delta correctly preserves dependency discovery and hygiene diagnostics in both normal and phase-3-abort update paths before the root discovery-only diagnostic, with MCP notices remaining last. The strengthened Cucumber result selection identifies the cascade result explicitly instead of allowing a trailing diagnostic result to mask it. The associated owner and public scenarios exercise both the successful and failed update paths without weakening prior assertions.
 
 All reviewed files meet quality standards. No issues found.
 
@@ -183,12 +185,13 @@ All reviewed files meet quality standards. No issues found.
 - Final focused owners and all changed direct pairs passed at 100% line, function, and branch coverage; direct-all merged 309 LCOV records.
 - Direct focused runs passed the shared redactor at 100% line, branch, and function coverage and the notification-presentation owner without failure.
 - Package-manager owner and direct coverage evidence remain green on the byte-identical package-manager source.
-- Exact post-fix `npm run check`: passed `1144` scenarios / `11758` steps / `309` LCOV records, including the errno-separator regressions.
+- Phase 10 Nyquist validation: `COMPLIANT` at `3fde60a7`, with `56/56` evidence rows valid.
+- Exact final integrated `npm run check`: passed `1145` scenarios / `11777` steps / `309` LCOV records.
 
 Only this report was changed by the reviewer. The pre-existing `.planning/STATE.md` modification remains owner-controlled; no implementation, test, state, configuration, or security file was modified by this review, and no commit was created.
 
 ---
 
-_Reviewed: 2026-10-29T11:31:35Z_
+_Reviewed: 2026-10-29T14:02:48Z_
 _Reviewer: Codex (gsd-code-reviewer)_
 _Depth: standard_
