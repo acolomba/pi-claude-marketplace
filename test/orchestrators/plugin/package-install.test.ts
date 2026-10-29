@@ -656,6 +656,40 @@ describe("createPackagesPhase", () => {
     );
   });
 
+  for (const { characters, ending } of [
+    { characters: 498, ending: "😀" },
+    { characters: 499, ending: "" },
+  ]) {
+    test(`keeps whole Unicode characters in a failure note after ${characters} characters`, async (t) => {
+      // arrange
+      const seeded = await seedPlugin(t, {
+        "package.json": PACKAGE_JSON,
+        "package-lock.json": LOCKFILE,
+      });
+      const prefix = "Plugin dependency install failed (npm): ";
+      const padding = "e".repeat(characters - prefix.length);
+      const phase = createPackagesPhase(
+        opsWith(
+          answeringRunner({
+            code: 1,
+            stdout: "",
+            stderr: padding + "😀tail",
+            timedOut: false,
+          }),
+        ),
+      );
+
+      // act
+      await phase.do(seeded.context);
+
+      // assert
+      assert.deepStrictEqual(
+        seeded.context.discoveryWarnings.map((warning) => warning.message),
+        [prefix + padding + ending],
+      );
+    });
+  }
+
   test("leaves the plugin root as it was when the package manager wrote no node_modules", async (t) => {
     // arrange
     const seeded = await seedPlugin(t, {

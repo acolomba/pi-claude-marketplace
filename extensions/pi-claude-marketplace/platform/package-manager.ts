@@ -41,6 +41,7 @@
 import { spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
 import path from "node:path";
+import { StringDecoder } from "node:string_decoder";
 
 /** The slice of Node's `ChildProcess` a run reads. */
 export interface PackageManagerProcess {
@@ -150,8 +151,14 @@ interface CapturedOutput {
   timedOut: boolean;
 }
 
-function appendCapped(captured: string, chunk: Buffer): string {
-  return (captured + chunk.toString("utf8")).slice(0, OUTPUT_LIMIT);
+function appendCapped(captured: string, text: string): string {
+  return (captured + text).slice(0, OUTPUT_LIMIT);
+}
+
+function finishOutput(captured: string, decoder: StringDecoder): string {
+  // Keep the bounded prefix during capture, then drop a high surrogate the
+  // cap separated from its low surrogate.
+  return appendCapped(captured, decoder.end()).replace(/[\uD800-\uDBFF]$/u, "");
 }
 
 // SIGTERM at the timeout, SIGKILL once the grace runs out, and `abandon` one
@@ -190,11 +197,13 @@ function watchProcess(
   stop: (signal: KillSignal) => void,
 ): void {
   const captured: CapturedOutput = { stdout: "", stderr: "", timedOut: false };
+  const stdoutDecoder = new StringDecoder("utf8");
+  const stderrDecoder = new StringDecoder("utf8");
   child.stdout.on("data", (chunk: Buffer) => {
-    captured.stdout = appendCapped(captured.stdout, chunk);
+    captured.stdout = appendCapped(captured.stdout, stdoutDecoder.write(chunk));
   });
   child.stderr.on("data", (chunk: Buffer) => {
-    captured.stderr = appendCapped(captured.stderr, chunk);
+    captured.stderr = appendCapped(captured.stderr, stderrDecoder.write(chunk));
   });
   // Node emits `close` after `error` for a process that cannot start; the
   // first event settles the run and the rest are ignored.
@@ -209,6 +218,8 @@ function watchProcess(
     }
 
     settled = true;
+    captured.stdout = finishOutput(captured.stdout, stdoutDecoder);
+    captured.stderr = finishOutput(captured.stderr, stderrDecoder);
     // A closed parent can leave descendants alive without holding its pipes.
     // Keep the group escalation until the final deadline once timeout starts.
     if (!captured.timedOut) {
