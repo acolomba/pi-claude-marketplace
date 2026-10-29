@@ -1,6 +1,6 @@
 ---
 phase: 06-import-marketplace-planning
-verified: 2026-10-29T04:50:43Z
+verified: 2026-10-29T13:22:43Z
 status: passed
 score: 4/4 must-haves verified
 covered_files:
@@ -62,7 +62,7 @@ covered_files:
   - "test/orchestrators/reconcile/notify.test.ts"
   - "test/orchestrators/reconcile/plan.test.ts"
   - "test/shared/redact-absolute-paths.test.ts"
-covered_digest: "v4:sha256:432a9d19d6ec12505e80a9d9c216e726d19b49e45783e754b1cab2b08d8763fa"
+covered_digest: "v4:sha256:40f00e217f00e52d419c35f68817c57c98bf883d02b1757e40b11287ac7e4927"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
@@ -80,9 +80,9 @@ decision_coverage:
 # Phase 6: Import Marketplace Planning Verification Report
 
 **Phase Goal:** `import` registers marketplaces as Claude Code does and reports partial rollbacks with install's detail.
-**Verified:** 2026-10-29T04:50:43Z
+**Verified:** 2026-10-29T13:22:43Z
 **Status:** passed
-**Re-verification:** Yes — final verification on the integrated Phase 1-10 tree after CR-01 closure.
+**Re-verification:** Yes — final-head refresh on the integrated Phase 1-10 tree.
 
 ## Goal Achievement
 
@@ -90,8 +90,8 @@ decision_coverage:
 
 | # | Truth | Status | Evidence |
 |---|---|---|---|
-| 1 | A settings marketplace whose source the scope records under another name follows the current Claude Code parity decision (MIM-01). | VERIFIED | `recordsSourceUnderAnotherName` and `recordReusedMarketplace` in `import/execute.ts` reuse the recorded source without add/clone, fail each plugin under the absent settings name as marketplace-not-added, and install or declare nothing for that name. This is D-PL6-17/D-PL6-18, which supersedes the original Plan 06-03 alias rewrite. The focused D-PL6-17 owner test passed, and public scenarios at `import.feature:742-908` cover its variants. |
-| 2 | Every supported unreferenced `extraKnownMarketplaces` entry is planned and reported, while the official fallback remains reference-driven (MIM-02). | VERIFIED | `planMarketplaceSources` walks referenced names first, then `Object.keys(extraKnownMarketplaces)` in settings order. The post-pass declares successful additions. The focused MIM-02 owner test passed; `import.feature:702-740` exercises the public add/declaration and `:1003-1018` the unmappable diagnostic. |
+| 1 | A settings marketplace whose source the scope records under another name follows the current Claude Code parity decision (MIM-01). | VERIFIED | `recordsSourceUnderAnotherName` and `recordReusedMarketplace` in `import/execute.ts` reuse the recorded source without add/clone, fail each plugin under the absent settings name as marketplace-not-added, and install or declare nothing for that name. This is D-PL6-17/D-PL6-18, which supersedes the original Plan 06-03 alias rewrite. A same-name source change follows D-PL6-19 through `settleRecordedMarketplace` and `replaceRecorded`, while missing paths, another record's source, and the official fallback remain fail-closed. Fresh owner and public parity tests passed. |
+| 2 | Every supported unreferenced `extraKnownMarketplaces` entry is planned and reported, while the official fallback remains reference-driven (MIM-02). | VERIFIED | `planMarketplaceSources` walks referenced names first, then `Object.keys(extraKnownMarketplaces)` in settings order. The post-pass declares successful additions, and D-PL6-19 also re-adds a same-name unreferenced entry whose recorded source changed. Fresh owner proof passed; `import.feature:702-740` exercises public add/declaration and `:1003-1018` the unmappable diagnostic. |
 | 3 | Partial rollbacks during `import` and `apply` show install's per-phase detail, including dependency rows, with causes and leaks redacted (MIM-03). | VERIFIED | Install/enable failures carry `rollbackPartials`; import's `dispatchFailedOutcome`/`partialMember` and apply's `installFailedOutcomes`/`dependencyRollbackOutcome` turn them into redacted root and dependency rows. The focused MIM-03 apply test passed. Public scenarios at `import.feature:1039-1178`, `apply.feature:324-432`, and `install-rollback.feature:60-83` exercise the runtime paths. |
 | 4 | The import enable outcome carries each companion fact once without changing its rendered markers (MIM-04). | VERIFIED | `enableSignals` omits staged facts; `enableOnePlannedPlugin` writes them only to required `declares*`; `installedRow` reconstructs the optional inputs passed to `enabledRowFromOutcome`. The focused IMP-05 owner test passed with exact outcome and rendered-row assertions. |
 
@@ -99,7 +99,7 @@ decision_coverage:
 
 ### Advisory (New Scope, Unevidenced)
 
-None. The final complete review found no new blocker, warning, or informational finding.
+None. The final-head complete review found no new blocker, warning, or informational finding.
 
 ### Required Artifacts
 
@@ -111,7 +111,7 @@ None. The final complete review found no new blocker, warning, or informational 
 | `shared/redact-absolute-paths.ts` | Redact runtime paths before returned diagnostics and transports | VERIFIED | Exact state, errno, held-lock, and compromised-lock grammars are bounded and exercised. |
 | Feature harness and Phase 6 feature files | Drive public behavior with real rollback failures and exact rows | VERIFIED | The EACCES fixture, teardown restore, token projection, complete row assertions, and post-command state/config assertions are active. |
 
-Two old literal artifact probes are false after safe refactors: Plan 06-01 searches for a token literal now imported as `READ_ONLY_SKILL_REMOVAL_ERROR_TOKEN`; Plan 06-02 searches `install-flow.ts` for `handleCascadeThrow`, now in the wired `install-flow-results.ts` split. All remaining 17 artifact probes pass.
+Two old literal artifact probes are false after safe refactors: Plan 06-01 searches for a token literal now imported as `READ_ONLY_SKILL_REMOVAL_ERROR_TOKEN`; Plan 06-02 searches `install-flow.ts` for `handleCascadeThrow`, now in the wired `install-flow-results.ts` split. `install-flow-ledger.ts` and `install-flow-dependency-ledger.ts` both call the exported `handleCaughtInstallFailure`, which selects `handleCascadeThrow`. All remaining 17 artifact probes pass.
 
 ### Key Link Verification
 
@@ -139,13 +139,13 @@ All 11 PLAN-declared key-link probes pass.
 
 | Behavior | Command | Result | Status |
 |---|---|---|---|
-| MIM-01 D-PL6-17 source reuse | Focused D-PL6-17 owner test | 1/1 pass | PASS |
-| MIM-02 unreferenced extra | Focused MIM-02 execute owner test | 1/1 pass | PASS |
-| MIM-03 redacted partial rollback | Focused MIM-03 apply owner test | 1/1 pass | PASS |
-| MIM-04 single-sourced companion facts | Focused IMP-05 enable owner test | 1/1 pass | PASS |
-| CR-01 diagnostic closure | Focused lock-race test plus held/compromised redactor cases | Both commands pass; no unique path suffix reaches result/output | PASS |
+| MIM-01 plus D-PL6-17/18/19 current parity | Focused `execute.test.ts` selection covering source reuse, settings-declared reuse, and in-place re-add | Owner module passed, exit 0 | PASS |
+| MIM-02 unreferenced extra | Same focused execute owner selection | Owner module passed, exit 0 | PASS |
+| MIM-03 redacted partial rollback | Focused `apply.test.ts` selection for root and dependency rollback partials | Owner module passed, exit 0 | PASS |
+| MIM-04 single-sourced companion facts | Focused execute selection for all three `declares*` facts | Owner module passed, exit 0 | PASS |
+| Public behavior across MIM-01..03 | Four focused Cucumber scenarios covering unreferenced add, other-name reuse, import rollback, and apply dependency rollback | 4/4 scenarios, 48/48 steps, 16/16 hooks passed | PASS |
 
-The exact combined gate ran after the final source/test fix at `2072cdcd`, Node v26.12.1: `npm run check` exited 0 with 1,143/1,143 scenarios, 11,742/11,742 steps, and 309 merged direct-coverage records. `git diff --exit-code 2072cdcd -- . ':(exclude,glob).planning/**/*.md'` is empty here; later commits are planning-only.
+The final-head Nyquist audit also passed eight owner modules and 15 public scenarios / 177 steps / 16 hooks. The exact combined gate at executable head `be0de0c3`, Node v26.12.1, exited 0 with 1,145/1,145 scenarios, 11,777/11,777 steps, and 309 merged direct-coverage records. `git diff --quiet be0de0c3 -- . ':(exclude,glob).planning/**/*.md'` is empty at this verification head; later commits are planning-only.
 
 ### Probe Execution
 
@@ -164,7 +164,7 @@ No orphaned Phase 6 requirement appears in `REQUIREMENTS.md`.
 
 ### Decision Coverage
 
-All 20 trackable `06-CONTEXT.md` decisions are honored. D-PL6-17/18 supersede the original alias literal, D-PL6-19 supersedes the mismatch-failure literal, and D-PL6-20 adds leaked-resource disclosure without reopening path exposure.
+All 20 trackable `06-CONTEXT.md` decisions are honored. D-PL6-17/18 supersede the original alias literal, D-PL6-19 supersedes the mismatch-failure literal, and D-PL6-20 adds leaked-resource disclosure without reopening path exposure. The automated decision-coverage gate reports 20/20 honored.
 
 ### Test Quality Audit
 
@@ -183,8 +183,9 @@ No `TBD`, `FIXME`, `XXX`, `TODO`, `HACK`, or `PLACEHOLDER` marker appears in the
 
 ### Final Security and Review Gates
 
-- Security: SECURED, 14/14 threats closed, 11/11 mitigations verified, 3/3 accepted risks logged, `threats_open: 0`.
-- Code review: CLEAN, 0 Critical / 0 Warning / 0 Info over the complete 39-file scope.
+- Nyquist: COMPLIANT, MIM-01..04, 0 gaps (`d08f3751`).
+- Security: SECURED, 14/14 threats closed, 11/11 mitigations verified, 3/3 accepted risks logged, `threats_open: 0` (`dfbc0bed`).
+- Code review: CLEAN, 0 Critical / 0 Warning / 0 Info over the complete 39-file scope (`b78e7e3e`).
 - CR-01: closed by `2d258ae7` and `b58cdd6e`; state/read/write/errno/held-lock/compromised-lock diagnostics redact complete POSIX, drive, UNC, and extended paths before returned data or TUI/print/JSON/RPC output.
 
 ### Human Verification Required
@@ -197,5 +198,5 @@ No failed truth, missing/stub artifact, broken link, blocker anti-pattern, behav
 
 ---
 
-_Verified: 2026-10-29T04:50:43Z_
+_Verified: 2026-10-29T13:22:43Z_
 _Verifier: gsd-verifier_
