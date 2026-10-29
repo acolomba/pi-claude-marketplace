@@ -1363,6 +1363,32 @@ describe("presentNotification", () => {
     });
   });
 
+  test("fails closed for separator-adjacent quotes in a presented prune cause", () => {
+    // arrange
+    const message = {
+      kind: "prune-committed-warning",
+      scope: "project",
+      cause: new Error(String.raw`open "\\server\private\"cache\secret.json"`),
+    } satisfies PruneCommittedWarningMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        needsApply: false,
+        noOp: false,
+      },
+      scope: "project",
+      cause: { causeChain: ['open "[redacted path]'], truncated: false },
+    });
+  });
+
   test("presents a prune warning whose cause is absent with no cause member", () => {
     // arrange
     const message = { kind: "prune-committed-warning", scope: "user" };

@@ -73,42 +73,19 @@ function isQuotedPathBoundary(character: string | undefined): boolean {
 }
 
 const REDACTED_PATH = "[redacted path]";
-function quotedPathEnd(text: string, quote: string, fromIndex: number): number | undefined {
-  const delimiter = text.indexOf(quote, fromIndex);
-  if (
-    delimiter < 0 ||
-    !isQuotedPathBoundary(text[delimiter + 1]) ||
-    text.includes(quote, delimiter + 1) ||
-    /[/\\]/u.test(text.slice(delimiter + 1))
-  ) {
-    return undefined;
-  }
-
-  return delimiter;
-}
-
 function isQuotedAbsolutePathCandidate(candidate: string): boolean {
   return /^(?:[A-Za-z]:[\\/]|\\\\|\/).*[/\\][^/\\]+$/s.test(candidate);
 }
 
 function redactQuotedAbsolutePaths(text: string): string {
-  const opening = /(['"])(?:[A-Za-z]:[\\/]|\\\\|\/)/g;
+  const opening = /(['"])(?!\/[^/\\\r\n'"]+\1)(?:[A-Za-z]:[\\/]|\\\\|\/)/g;
   let redacted = "";
   let copiedThrough = 0;
   let match = opening.exec(text);
   while (match !== null) {
     const quote = text.charAt(match.index);
-    const delimiter = quotedPathEnd(text, quote, opening.lastIndex);
-    if (delimiter === undefined) {
-      const firstQuote = text.indexOf(quote, opening.lastIndex);
-      const candidateEnd = firstQuote < 0 ? text.length : firstQuote;
-      const candidate = text.slice(match.index + 1, candidateEnd);
-      if (!isQuotedAbsolutePathCandidate(candidate)) {
-        opening.lastIndex = match.index + 1;
-        match = opening.exec(text);
-        continue;
-      }
-
+    const delimiter = text.indexOf(quote, opening.lastIndex);
+    if (delimiter < 0 || text.includes(quote, delimiter + 1)) {
       redacted += text.slice(copiedThrough, match.index) + quote + REDACTED_PATH;
       copiedThrough = text.length;
       opening.lastIndex = copiedThrough;
@@ -119,8 +96,15 @@ function redactQuotedAbsolutePaths(text: string): string {
     const end = delimiter;
     const candidate = text.slice(match.index + 1, end);
     if (isQuotedAbsolutePathCandidate(candidate)) {
-      redacted += text.slice(copiedThrough, match.index) + quote + pathBasename(candidate) + quote;
-      copiedThrough = end + quote.length;
+      if (isQuotedPathBoundary(text[delimiter + 1]) && !/[/\\]/u.test(text.slice(delimiter + 1))) {
+        redacted +=
+          text.slice(copiedThrough, match.index) + quote + pathBasename(candidate) + quote;
+        copiedThrough = end + quote.length;
+      } else {
+        redacted += text.slice(copiedThrough, match.index) + quote + REDACTED_PATH;
+        copiedThrough = text.length;
+      }
+
       opening.lastIndex = copiedThrough;
     } else {
       opening.lastIndex = match.index + 1;

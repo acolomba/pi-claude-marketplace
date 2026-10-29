@@ -45,6 +45,60 @@ const EMBEDDED_QUOTE_BOUNDARY_CASES = [
   ),
 );
 
+const SEPARATOR_ADJACENT_QUOTE_CASES = [
+  { platform: "POSIX", root: "/", separator: "/" },
+  { platform: "drive", root: "C:\\", separator: "\\" },
+  { platform: "UNC", root: "\\\\server\\share\\", separator: "\\" },
+].flatMap(({ platform, root, separator }) =>
+  [
+    { quoteName: "single quote", quote: "'" },
+    { quoteName: "double quote", quote: '"' },
+  ].flatMap(({ quoteName, quote }) =>
+    [
+      { positionName: "root", componentCount: 0 },
+      { positionName: "first directory separator", componentCount: 1 },
+      { positionName: "nested directory separator", componentCount: 2 },
+    ].map(({ positionName, componentCount }) => ({
+      platform,
+      root,
+      separator,
+      quoteName,
+      quote,
+      positionName,
+      componentCount,
+    })),
+  ),
+);
+
+function registerSeparatorAdjacentQuoteCases(): void {
+  for (const {
+    platform,
+    root,
+    separator,
+    quoteName,
+    quote,
+    positionName,
+    componentCount,
+  } of SEPARATOR_ADJACENT_QUOTE_CASES) {
+    test(`fails closed for a ${platform} path with a ${quoteName} after its ${positionName}`, () => {
+      // arrange
+      const directories = ["private", "cache"];
+      const prefix =
+        root +
+        directories.slice(0, componentCount).join(separator) +
+        (componentCount === 0 ? "" : separator);
+      const suffix = directories.slice(componentCount).join(separator) + separator + "secret.json";
+      const input = `open ${quote}${prefix}${quote}${suffix}${quote}`;
+
+      // act
+      const text = redactAbsolutePaths(input);
+
+      // assert
+      assert.strictEqual(text, `open ${quote}[redacted path]`);
+    });
+  }
+}
+
 describe("redactAbsolutePaths", () => {
   test("exports absolute-path redaction from its named owner", () => {
     assert.equal(typeof redactAbsolutePaths, "function");
@@ -328,6 +382,11 @@ describe("redactAbsolutePaths", () => {
       expected: 'invalid "/schemaVersion"',
     },
     {
+      name: "preserves a quoted drive root with no basename",
+      input: String.raw`invalid "C:\"`,
+      expected: String.raw`invalid "C:\"`,
+    },
+    {
       name: "preserves quoted URLs and single-segment JSON pointers",
       input: 'invalid "/schemaVersion" at "https://example.test/a/b" or "file:///a/b"',
       expected: 'invalid "/schemaVersion" at "https://example.test/a/b" or "file:///a/b"',
@@ -548,6 +607,8 @@ describe("redactAbsolutePaths", () => {
     });
   }
 
+  registerSeparatorAdjacentQuoteCases();
+
   test("bounds an unclosed path before a later quoted value and URL", () => {
     // arrange
     const input =
@@ -741,6 +802,19 @@ describe("redactCauseChain", () => {
 
     // assert
     assert.strictEqual(trailer, "cause: open '[redacted path] -> open '[redacted path]");
+  });
+
+  test("fails closed for separator-adjacent quotes across a cause chain", () => {
+    // arrange
+    const failure = new Error("open '/tmp/'private/secret.json'", {
+      cause: new Error(String.raw`open "C:\private\"cache\secret.json"`),
+    });
+
+    // act
+    const trailer = causeChainTrailer(redactCauseChain(failure));
+
+    // assert
+    assert.strictEqual(trailer, "cause: open '[redacted path] -> open \"[redacted path]");
   });
 
   test("redacts every quoted cause and structured leaked path containing spaces or UNC prefixes", () => {
