@@ -1,6 +1,6 @@
 ---
 phase: 03-dependency-cascade-rows-and-status
-verified: 2026-10-29T03:23:39Z
+verified: 2026-10-29T12:48:40Z
 status: passed
 score: 8/8 must-haves verified
 covered_files:
@@ -36,6 +36,7 @@ covered_files:
   - "extensions/pi-claude-marketplace/orchestrators/plugin/constraint-fold.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts"
+  - "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-cascade-context.ts"
@@ -48,7 +49,9 @@ covered_files:
   - "extensions/pi-claude-marketplace/orchestrators/plugin/list-candidate-version.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/list-installed-row.ts"
+  - "extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts"
+  - "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts"
   - "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts"
   - "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts"
   - "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"
@@ -56,6 +59,8 @@ covered_files:
   - "features/plugin/fetch.feature"
   - "features/plugin/install-dependencies.feature"
   - "features/plugin/install.feature"
+  - "features/plugin/list.feature"
+  - "features/plugin/staging-warnings.feature"
   - "features/plugin/update-dependencies.feature"
   - "features/plugin/update.feature"
   - "features/step_definitions/command.steps.ts"
@@ -70,6 +75,7 @@ covered_files:
   - "test/orchestrators/plugin/constraint-fold.test.ts"
   - "test/orchestrators/plugin/dependency-move.test.ts"
   - "test/orchestrators/plugin/dependency-plan.test.ts"
+  - "test/orchestrators/plugin/dependency-settle.test.ts"
   - "test/orchestrators/plugin/install-cascade.messaging.test.ts"
   - "test/orchestrators/plugin/install-cascade.test.ts"
   - "test/orchestrators/plugin/install-flow-cascade-context.test.ts"
@@ -79,10 +85,13 @@ covered_files:
   - "test/orchestrators/plugin/install-flow-results.test.ts"
   - "test/orchestrators/plugin/install-flow.test.ts"
   - "test/orchestrators/plugin/install-outcome.test.ts"
+  - "test/orchestrators/plugin/materialize-latest.test.ts"
+  - "test/orchestrators/plugin/plugin-state-classifier.test.ts"
+  - "test/orchestrators/plugin/update-flow.test.ts"
   - "test/orchestrators/reconcile/apply-outcomes.test.ts"
   - "test/orchestrators/reconcile/apply.test.ts"
   - "test/orchestrators/reconcile/notify.test.ts"
-covered_digest: "v4:sha256:da8240a3f433311a654baeffc4c4b3c1f428a957c630f77bee67aff21ae2bcfa"
+covered_digest: "v4:sha256:08d3b1c7eee86ea6babc831ace26a539743fdbecf967fab38b2a074583274a7e"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
@@ -96,13 +105,15 @@ re_verification:
 # Phase 3: Dependency Cascade Rows and Status Verification Report
 
 **Phase Goal:** Cascade rows and refusals name every member and declarer the way Claude Code does, and a plugin degraded by its dependency says so.
-**Verified:** 2026-10-29T03:23:39Z
+**Verified:** 2026-10-29T12:48:40Z
 **Status:** passed
-**Re-verification:** Yes — final A+B+C merged-tree convergence at `44c919a3`.
+**Re-verification:** Yes — final integrated-tree refresh at `af6c4f95`.
 
 ## Goal Achievement
 
 The five roadmap success criteria and CAS-01..07 reduce to eight distinct observable truths. The verdict below comes from current source, wiring, and executable behavior, not SUMMARY claims.
+
+The final Phase 10 diagnostic carrier remains compatible with these truths. `update-flow.ts` renders `dependencyStagingDiagnostics` through the cascade/both-halves renderer before root discovery-only and MCP diagnostics on both the normal and abort paths. The D-PL10-12 owner tests passed, so later diagnostic transport does not merge, suppress, or reassign Phase 3 cascade rows.
 
 ### Observable Truths
 
@@ -143,6 +154,7 @@ The mechanical artifact query passed 22/23 declared artifacts. Its single miss i
 | Directory range declarations | Pin refusal | `rangeRequirers` → `DirectoryPinRange` → `assertDirectoryPinSatisfied` | ✓ WIRED | Declarers and bounded fields reach the thrown refusal; named owner test passed. |
 | Move planning | Version-in-range hint | `declaredBy` → `installedUnsatisfiedCause` | ✓ WIRED | Root declaration and update-block condition gate the hint; owner and acceptance tests passed. |
 | Candidate lookup | Git list row | `resolveListCandidate` → `classifyInstalledRecord` | ✓ WIRED | Exact fetch/list scenario passed. |
+| Dependency diagnostics | Update warning transport | `dependencyStagingDiagnostics` → cascade/both-halves renderer | ✓ WIRED | D-PL10-12 update and materialization owner checks passed; diagnostics remain separate from cascade rows and causes. |
 
 ### Data-Flow Trace (Level 4)
 
@@ -156,12 +168,10 @@ The mechanical artifact query passed 22/23 declared artifacts. Its single miss i
 
 | Behavior | Command | Result | Status |
 | --- | --- | --- | --- |
-| Complete failure rows | Named `node --test` CAS-01 messaging case | 1/1 passed | ✓ PASS |
-| Member-owned partial status | Named messaging owner case plus exact install/list/info Cucumber scenario | 1/1 owner test; 1 scenario, 13 steps passed | ✓ PASS |
-| Directory declarers | Named D-PL3-08 cascade-owner pattern | 1/1 passed | ✓ PASS |
-| Offline hint and bounded rendering | Named CAS-06 and high-surrogate owner cases | 2/2 passed | ✓ PASS |
-| Invalid root, offline hint, and git-list upgrade | Exact Cucumber expression | 3 scenarios, 39 steps passed | ✓ PASS |
-| Final integrated gate | `npm run check` at unchanged build-input tree | 1,142 scenarios, 11,734 steps, 309 direct-coverage records; exit 0 | ✓ PASS, reused |
+| CAS-01..07 owner behaviors | Focused `node --test --test-name-pattern` across nine owner modules | 9 files passed; 0 failed | ✓ PASS |
+| Public cascade/refusal/list behaviors | Exact focused Cucumber expression | 8 scenarios, 99 steps, 2 hooks passed | ✓ PASS |
+| D-PL10-12 carrier compatibility | Named update-flow and materialize-latest owner tests | 2 invocations passed; 0 failed | ✓ PASS |
+| Final integrated gate | Exact reusable `npm run check` result on unchanged build inputs | 1,145 scenarios, 11,777 steps, 309 direct-coverage records; exit 0 | ✓ PASS, reused |
 
 The first local Cucumber attempt was sandbox-denied at the loopback listener (`EPERM`, zero scenarios). The identical scenario was rerun with local-listener permission and passed; this was an environment restriction, not a product failure.
 
@@ -187,14 +197,14 @@ REQUIREMENTS.md maps exactly CAS-01..07 to Phase 3, every ID is claimed by a pla
 
 | Gate | Final merged-tree result |
 | --- | --- |
-| Nyquist | COMPLIANT at `5c42ac88`: 9 owner modules, 15 scenarios, 178 steps; CAS-01..07 all mapped. |
-| Security | SECURED in `c99a6fce`: 15/15 threats disposed, 10 mitigations, 5 accepted risks, `threats_open: 0`. |
-| Code review | CLEAN on the final integrated scope at `44c919a3`: 37 files, 0 Critical, 0 Warning, 0 Info. |
-| Full project | Exact `npm run check` on the unchanged merged build inputs: 1,142 scenarios, 11,734 steps, 309 LCOV records. |
+| Nyquist | COMPLIANT at `98c25440`; CAS-01..07 all mapped with direct behavioral evidence. |
+| Security | SECURED at `af6c4f95`: 15/15 threats disposed and `threats_open: 0`. |
+| Code review | CLEAN at `068006e5` across the complete 48-file integrated scope: 0 Critical, 0 Warning, 0 Info. |
+| Full project | Exact reusable `npm run check` on unchanged build inputs from `be0de0c3`: 1,145 scenarios, 11,777 steps, 309 LCOV records. `git diff --quiet be0de0c3 -- . ':(exclude,glob).planning/**/*.md'` returned 0. |
 
 ### Anti-Patterns Found
 
-No unreferenced `TBD`, `FIXME`, or `XXX` marker exists in the 37-file integrated review scope. The one conditional `t.skip` is a pre-existing root-only filesystem capability guard in an unrelated reconcile test, and the string throw is intentional negative test input with a scoped lint explanation; neither weakens a Phase 3 assertion. No committed `.only`, unconditional skip/todo, placeholder implementation, or unsafe TypeScript suppression was found.
+No unreferenced `TBD`, `FIXME`, or `XXX` marker exists in the 48-file integrated review scope. No committed `.only`, unconditional skip/todo, placeholder implementation, circular expected-value generation, or weak-only Phase 3 oracle was found.
 
 ### Human Verification Required
 
@@ -202,9 +212,9 @@ None. Every runtime, state-transition, ordering, and formatting truth has determ
 
 ### Gaps Summary
 
-No gap remains. Phase 3 achieves its goal on the final merged tree: cascade failures account for every member, directory-pin refusals account for every in-scope declarer, member degradation remains member-owned, and all bounded refusal/list behaviors match the current recorded decisions.
+No gap remains. Phase 3 achieves its goal on the final integrated tree: cascade failures account for every member, directory-pin refusals account for every in-scope declarer, member degradation remains member-owned, and all bounded refusal/list behaviors match the current recorded decisions. D-PL3-06 and D-PL3-07 are formal parity divergences; D-PL3-10 records the later user reversal to Claude-compatible refusal rendering. The Phase 10 D-PL10-12 diagnostic carrier preserves those decisions without changing row ownership.
 
 ---
 
-_Verified: 2026-10-29T03:23:39Z_
+_Verified: 2026-10-29T12:48:40Z_
 _Verifier: gsd-verifier_
