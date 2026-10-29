@@ -1,25 +1,47 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-fixed_at: 2026-10-28T22:43:54Z
-review_path: .planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md
-iteration: 4
-findings_in_scope: 3
-fixed: 3
+fixed_at: 2026-10-29T07:05:43Z
+review_path: .planning/phases/10-lifecycle-test-and-harness-gaps/10-VALIDATION.md
+iteration: 5
+findings_in_scope: 1
+fixed: 1
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 10: Code Review Fix Report
 
-**Fixed at:** 2026-10-28T22:43:54Z
-**Source review:** `.planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md`
-**Iteration:** 4
+**Fixed at:** 2026-10-29T07:05:43Z
+**Source validation:** `.planning/phases/10-lifecycle-test-and-harness-gaps/10-VALIDATION.md`
+**Iteration:** 5
 
-All three integrated findings are closed. The two shared PTY blockers were
-fixed on the Phase 8 branch and consumed through the normal Session B merge.
-The remaining Phase 10 checker warning was fixed on the integrated tree.
+The Phase 10 Nyquist evidence-binding gap is closed. The three integrated
+review findings fixed in iteration 4 remain closed.
 
-## Fixed Issues
+## Fixed Issue
+
+### VAL-01: The move-diagnostics row cited evidence before the final ownership fixes
+
+**Status:** fixed
+**Commit:** `1c758fd3` — `test(coverage): bind final move diagnostics`
+**Files modified:**
+
+- `.planning/phases/10-lifecycle-test-and-harness-gaps/10-COVERAGE.md`
+- `scripts/check-phase10-coverage.mjs`
+
+The `XPH02-MOVE-DIAGNOSTICS` row now pins `741516af`, where the update warning
+is owned by dependency `lib`, and binds all three final diagnostic scenarios.
+The checker requires that row's exact three-scenario evidence set while
+retaining its existing path, title, commit-existence, and committed-content
+checks.
+
+The RED proof showed that the old row passed 56/56 while its pinned scenario
+still named root `app`. It also showed that a repinned row missing the newly
+installed-dependency scenario still passed. After the fix, the missing-title
+mutation fails the complete-set rule and the stale-commit mutation fails both
+added titles against the cited commit.
+
+## Prior Review Fixes
 
 ### CR-01: The wait-cap scenario exercises the hosted-download timeout, not the background gate
 
@@ -83,6 +105,9 @@ with Node `v26.12.1`.
 | Distinct `alpha`/`beta` PTY scenario | Passed: 1 scenario, 19 steps |
 | Phase 10 coverage ledger | Passed: 56/56 rows |
 | Negative commit-binding mutation | Rejected the context path absent from commit `7e2a3ca7`; mutation restored exactly |
+| Final move-diagnostics scenarios | Passed: 3 scenarios, 48 steps |
+| Missing final scenario mutation | Rejected by the `XPH02-MOVE-DIAGNOSTICS` complete-set rule |
+| Stale ownership commit mutation | Rejected both added scenario titles at `291b2df1` |
 | `node --check` | Passed for `scripts/check-phase10-coverage.mjs` |
 | Prettier and ESLint | Passed for the checker |
 | Fallow guard and audit | Passed; no introduced findings |
@@ -96,6 +121,6 @@ clean re-review.
 
 ---
 
-_Fixed: 2026-10-28T22:43:54Z_
+_Fixed: 2026-10-29T07:05:43Z_
 _Fixer: the agent (gsd-code-fixer)_
-_Iteration: 4_
+_Iteration: 5_
