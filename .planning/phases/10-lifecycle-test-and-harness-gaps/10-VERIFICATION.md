@@ -1,9 +1,11 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-verified: 2026-10-28T23:35:00Z
+verified: 2026-10-29T11:38:11Z
 status: passed
 score: 28/28 must-haves verified
 covered_files:
+  - .agents/skills/cucumber/rules/layout.md
+  - .agents/skills/cucumber/rules/world-and-stand-ins.md
   - .planning/phases/10-lifecycle-test-and-harness-gaps/10-01-PLAN.md
   - .planning/phases/10-lifecycle-test-and-harness-gaps/10-01-SUMMARY.md
   - .planning/phases/10-lifecycle-test-and-harness-gaps/10-02-PLAN.md
@@ -24,51 +26,25 @@ covered_files:
   - .planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md
   - .planning/phases/10-lifecycle-test-and-harness-gaps/10-SECURITY.md
   - .planning/phases/10-lifecycle-test-and-harness-gaps/10-VALIDATION.md
-  - extensions/pi-claude-marketplace/bridges/agents/stage.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/background-gate.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/background-pass.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/background-update.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-cascade-context.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-dependency-ledger.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts
-  - extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts
-  - extensions/pi-claude-marketplace/platform/package-manager.ts
-  - features/lib/git-clones.ts
-  - features/lib/pi-tui-pty.py
-  - features/lib/pi-tui.ts
-  - features/lib/run-tokens.ts
-  - features/marketplace/background-update.feature
-  - features/plugin/apply.feature
-  - features/plugin/install-dependencies.feature
-  - features/plugin/install.feature
-  - features/plugin/reinstall.feature
-  - features/plugin/update.feature
-  - scripts/check-phase10-coverage.mjs
-  - test/architecture/pi-tui-notices.test.ts
-  - test/bridges/agents/stage.test.ts
-  - test/orchestrators/marketplace/background-pass.test.ts
-  - test/orchestrators/plugin/dependency-plan.test.ts
-  - test/orchestrators/plugin/install-flow-cascade-context.test.ts
-  - test/orchestrators/plugin/install-flow-dependency-ledger.test.ts
-  - test/orchestrators/plugin/install-flow-ledger.test.ts
-  - test/orchestrators/plugin/install-flow-planning.test.ts
-  - test/orchestrators/plugin/marketplace-seed.ts
-  - test/orchestrators/reconcile/apply.test.ts
-  - test/platform/package-manager.test.ts
-  - .agents/skills/cucumber/rules/layout.md
-  - .agents/skills/cucumber/rules/world-and-stand-ins.md
   - .pre-commit-config.yaml
+  - extensions/pi-claude-marketplace/bridges/agents/stage.ts
   - extensions/pi-claude-marketplace/orchestrators/import/execute.ts
   - extensions/pi-claude-marketplace/orchestrators/import/marketplaces.ts
   - extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/background-gate.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/background-pass.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/background-update.ts
   - extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-cascade-context.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-dependency-ledger.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts
@@ -76,72 +52,135 @@ covered_files:
   - extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts
   - extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts
+  - extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts
   - extensions/pi-claude-marketplace/orchestrators/reconcile/read-pass.ts
   - extensions/pi-claude-marketplace/orchestrators/types.ts
   - extensions/pi-claude-marketplace/platform/hosted-manifest-fetch.ts
+  - extensions/pi-claude-marketplace/platform/package-manager.ts
   - extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts
   - extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts
+  - features/lib/git-clones.ts
   - features/lib/https-git-host/server.ts
+  - features/lib/pi-tui-pty.py
+  - features/lib/pi-tui.ts
   - features/lib/plugin-completions.ts
+  - features/lib/run-tokens.ts
   - features/marketplace/add.feature
+  - features/marketplace/background-update.feature
   - features/marketplace/failed-add.feature
   - features/marketplace/market-alias.feature
   - features/marketplace/update.feature
   - features/marketplace/usage-errors.feature
+  - features/plugin/apply.feature
   - features/plugin/enable.feature
   - features/plugin/fetch.feature
   - features/plugin/git-source-update.feature
   - features/plugin/git-source.feature
   - features/plugin/import.feature
+  - features/plugin/install-dependencies.feature
   - features/plugin/install-rollback.feature
+  - features/plugin/install.feature
   - features/plugin/list-filters.feature
   - features/plugin/list.feature
   - features/plugin/package-dependencies.feature
   - features/plugin/prune.feature
+  - features/plugin/reinstall.feature
+  - features/plugin/staging-warnings.feature
   - features/plugin/update-dependencies.feature
+  - features/plugin/update.feature
   - features/step_definitions/command.steps.ts
   - features/step_definitions/completion.steps.ts
   - features/step_definitions/config.steps.ts
   - features/step_definitions/git-host.steps.ts
   - features/step_definitions/marketplace/background-update.steps.ts
   - features/step_definitions/marketplace/checkout.steps.ts
+  - features/step_definitions/marketplace/update.steps.ts
   - features/step_definitions/mcp-configuration.steps.ts
   - features/step_definitions/plugin/installation.steps.ts
   - features/step_definitions/plugin/update.steps.ts
   - features/support/world.ts
   - scripts/check-features.mjs
+  - scripts/check-phase10-coverage.mjs
   - test/architecture/gate-targets.ts
   - test/architecture/hooks-lifecycle.test.ts
   - test/architecture/https-git-host-server.test.ts
   - test/architecture/no-test-only-production-surface.test.ts
   - test/architecture/partial-vocabulary-guard.test.ts
+  - test/architecture/pi-tui-notices.test.ts
   - test/architecture/workflows-marker-coverage.test.ts
+  - test/bridges/agents/stage.test.ts
   - test/e2e/_rpc.ts
   - test/edge/handlers/plugin/browse.test.ts
   - test/orchestrators/import/execute.test.ts
   - test/orchestrators/marketplace/add.test.ts
+  - test/orchestrators/marketplace/background-pass.test.ts
   - test/orchestrators/marketplace/update.test.ts
   - test/orchestrators/plugin/dependency-bindings.test.ts
   - test/orchestrators/plugin/dependency-move.test.ts
+  - test/orchestrators/plugin/dependency-plan.test.ts
   - test/orchestrators/plugin/dependency-settle.test.ts
+  - test/orchestrators/plugin/enable-disable.test.ts
   - test/orchestrators/plugin/fetch.test.ts
   - test/orchestrators/plugin/install-cascade.messaging.test.ts
   - test/orchestrators/plugin/install-cascade.test.ts
+  - test/orchestrators/plugin/install-flow-cascade-context.test.ts
+  - test/orchestrators/plugin/install-flow-dependency-ledger.test.ts
   - test/orchestrators/plugin/install-flow-fixture.ts
+  - test/orchestrators/plugin/install-flow-ledger.test.ts
+  - test/orchestrators/plugin/install-flow-planning.test.ts
   - test/orchestrators/plugin/install-flow.test.ts
   - test/orchestrators/plugin/install.messaging.test.ts
+  - test/orchestrators/plugin/marketplace-seed.ts
   - test/orchestrators/plugin/materialize-latest.test.ts
   - test/orchestrators/plugin/package-install.test.ts
   - test/orchestrators/plugin/reinstall-flow.test.ts
   - test/orchestrators/plugin/update-flow.test.ts
   - test/orchestrators/plugin/update-swap.test.ts
   - test/orchestrators/reconcile/apply-outcomes.test.ts
+  - test/orchestrators/reconcile/apply.test.ts
   - test/orchestrators/reconcile/read-pass.test.ts
   - test/platform/hosted-manifest-fetch.test.ts
+  - test/platform/package-manager.test.ts
   - test/shared/git-failure-classifiers.test.ts
-covered_digest: "v4:sha256:4d18b0d396faf47ea54e7f10d5ef0612788d58e4cb256697b85ff32b6bd0b81c"
+  - test/shared/notification-present.test.ts
+  - test/shared/redact-absolute-paths.test.ts
+covered_digest: "v4:sha256:fcaa98a4da92a9a7303399c1305673c3e314f352816e1d24cbea68b051959854"
 behavior_unverified: 0
 overrides_applied: 0
+decision_coverage:
+  honored: 3
+  total: 33
+  not_honored:
+    - D-PL10-01
+    - D-PL10-02
+    - D-PL10-03
+    - D-PL10-04
+    - D-PL10-05
+    - D-PL10-06
+    - D-PL10-07
+    - D-PL10-08
+    - D-PL10-09
+    - D-PL10-10
+    - D-PL10-12
+    - D-PL10-13
+    - D-PL10-14
+    - D-PL10-15
+    - D-PL10-16
+    - D-PL10-17
+    - D-PL10-18
+    - D-PL10-19
+    - D-PL10-20
+    - D-PL10-21
+    - D-PL10-22
+    - D-PL10-23
+    - D-PL10-24
+    - D-PL10-26
+    - D-PL10-27
+    - D-PL10-28
+    - D-PL10-30
+    - D-PL10-31
+    - D-PL10-32
+    - D-PL10-33
 re_verification:
   previous_status: passed
   previous_score: 28/28
@@ -153,9 +192,9 @@ re_verification:
 # Phase 10: Lifecycle Test and Harness Gaps Verification Report
 
 **Phase Goal:** Every behavior lifecycle-coverage left without a scenario or unit case has one, and the harness items are fixed.
-**Verified:** 2026-10-28T23:35:00Z
+**Verified:** 2026-10-29T11:38:11Z
 **Status:** passed
-**Re-verification:** Yes — after integration of the Phase 2/5/8 corrections and final Phase 10 checker fix.
+**Re-verification:** Yes — final verification on the integrated Phase 1-10 tree after all Phase 10 review-fix iterations.
 
 ## Goal Achievement
 
@@ -163,39 +202,39 @@ re_verification:
 
 | # | Observable truth | Status | Current-tree evidence |
 |---|---|---|---|
-| 1 | Each LCTEST-01 item has a scenario or owner case, with a concrete unit-only reason where needed | ✓ VERIFIED | The canonical ledger contains all 56 expected IDs and passes the strict checker. Its dispositions are 35 scenarios, 14 unit-with-reason, six fixed, and one declined-with-reason. Each unit-only row names an owner test and a harness-boundary reason. |
-| 2 | Each LCHARN-01 item is fixed or explicitly declined | ✓ VERIFIED | Clone/staging projection, data/symlink projection, run-token rejection, rules order, revisions, list fixture, and browse barrier are fixed. The network preload is explicitly declined because it cannot govern Git/credential-helper subprocesses; the existing hermetic controls are named. |
-| 3 | No fixture builds a marketplace record without its manifest | ✓ VERIFIED | `seedMarketplaceRecord` validates contained names and writes plugin and marketplace manifests before returning the record. Install/reinstall conflict fixtures cite the shared manifest-first helper, and the 56-row checker binds both owner titles to their commits. |
-| 4 | Root-ledger, plan-step, and mid-walk failures list every resolved non-installed member | ✓ VERIFIED | Current split owners carry ordered resolved keys through `install-flow-cascade-context.ts`, `install-flow-planning.ts`, and `install-flow-dependency-ledger.ts` to `composeUnmaterializedRows`. The four-scenario focused run included all three routes and passed 53/53 steps. |
-| 5 | Apply missing-dependency partial rollback includes per-phase detail | ✓ VERIFIED | `installFailedOutcomes` splits dependency/requested partials, redacts each phase, and feeds the rendered outcome. The exact MIM-05 scenario passed in the 4-scenario/53-step run. |
-| 6 | Every XPH-01 residue is fixed or has a discriminating scenario/owner case | ✓ VERIFIED | The ledger accounts for all 13 items. The integrated wait-cap scenario holds a streaming Git request, observes the 30–35 second abort, and keeps dependency settlement/reporting inside the abort scope. The distinct alpha/beta notice scenario plus direct oracle tests rejects separate-notice false positives. |
-| 7 | Every XPH-02 residue is fixed and user-visible changes have scenarios | ✓ VERIFIED | The ledger accounts for all nine items: occupied-agent behavior, network parity, dependency diagnostics, foreign index, root redaction, typed refusal, package note, invalid manifest, and yarn/pnpm parity. Current build evidence passes all scenarios. |
+| 1 | Each LCTEST-01 item has a scenario or owner case, with a concrete unit-only reason where needed | ✓ VERIFIED | Strict ledger contains all 56 unique IDs. Its 18 LCTEST rows are scenario-backed or name a discriminating owner and concrete public-harness limit. |
+| 2 | Each LCHARN-01 item is fixed or explicitly declined | ✓ VERIFIED | Ten LCHARN rows bind clone/data/run-token/rules/revision/list/browse corrections; the Node-only preload is explicitly declined because it cannot govern Git or credential-helper subprocesses. |
+| 3 | No fixture builds a marketplace record without its manifest | ✓ VERIFIED | `seedMarketplaceRecord` validates containment and writes plugin and marketplace manifests before returning; both conflict owners are ledger-bound. |
+| 4 | Root-ledger, plan-step, and mid-walk failures list every resolved non-installed member | ✓ VERIFIED | Ordered keys flow from walk/plan/ledger into the shared composer. Three distinct scenarios are exact-commit-bound and passed in the full gate. |
+| 5 | Apply missing-dependency partial rollback includes per-phase detail | ✓ VERIFIED | Typed `rollbackPartials` are split, cause-redacted, projected, and asserted by the exact MIM-05 scenario. |
+| 6 | Every XPH-01 residue is fixed or has a discriminating scenario/owner case | ✓ VERIFIED | All 13 rows are bound. Phase 8 supplies held-Git cancellation and distinct alpha/beta notice proof; process-tree cleanup has real-child proof and a precise unit-only rationale. |
+| 7 | Every XPH-02 residue is fixed and user-visible changes have scenarios | ✓ VERIFIED | Nine rows bind occupied-agent behavior, network parity, move diagnostics, foreign-index preservation, redaction, typed refusal, package notes, invalid-manifest guidance, and yarn/pnpm parity. |
 
 ### Plan-Specific Must-Haves
 
 | Plan | Truth | Status | Evidence |
 |---|---|---|---|
-| 10-01 | Clone/data projections are complete and unknown tokens fail closed | ✓ VERIFIED | `git-clones.ts`, installation steps, and `run-tokens.ts`; bound ledger rows pass. |
-| 10-01 | Browse synchronization uses events | ✓ VERIFIED | The browse owner waits on `requestRender`; ledger title and commit are current. |
-| 10-01 | Marketplace test records are manifest-first | ✓ VERIFIED | `marketplace-seed.ts` writes plugin and marketplace manifests before returning a record. |
-| 10-02 | Real PTY TUI proves autoupdate, dedupe, and bounded shutdown | ✓ VERIFIED | PTY driver is hermetic and process-group bounded. CR-01 and CR-02 focused scenarios passed after their fixes. |
-| 10-02 | RPC remains a negative control | ✓ VERIFIED | Background-update feature retains the RPC unchanged-state scenario; integrated Cucumber gate passed. |
-| 10-02 | Completion/result comparisons are complete | ✓ VERIFIED | World teardown and exact table comparisons reject unconsumed or partial results; integrated gate passed. |
-| 10-03 | All three CAS routes list every missing resolved member | ✓ VERIFIED | Three named exact-row scenarios passed in the focused run. |
-| 10-03 | Member order comes from the failed walk or plan | ✓ VERIFIED | `resolvedKeys`, cascade phase keys, and `resolvedPlanMemberKeys` are captured before projection and preserved into row composition. |
-| 10-03 | Failed member package notes remain attached | ✓ VERIFIED | Member outcomes retain discovery/package notes and the exact install scenario is ledger-bound and green. |
-| 10-04 | Apply rollback detail and add-time tagged warnings appear | ✓ VERIFIED | Apply rollback data flow is direct; named rollback scenario passed and add warning scenario is active in the green gate. |
-| 10-04 | Apply/load repair source changes through marketplace add | ✓ VERIFIED | Reconcile replacement uses existing add orchestration; exact source-repair scenarios and owners are active in the green gate. |
-| 10-04 | Import repairs the owning local layer and reports once | ✓ VERIFIED | Import owner-layer scenario and exact result comparison are bound in the ledger and green. |
-| 10-05 | Update/reinstall retain warnings, notices, foreign index, and source frames | ✓ VERIFIED | Current typed outcomes and exact feature cases are present and passed in the integrated gate. |
-| 10-05 | Root/member errors redact and classify consistently | ✓ VERIFIED | Shared redaction/classification reaches install, update, and fetch; exact redaction and network cases are active. |
-| 10-05 | Lockfile-only and post-clone failure decisions hold | ✓ VERIFIED | Yarn/pnpm and invalid-manifest scenarios are current, commit-bound, and green. |
-| 10-06 | Every reachable LCTEST-01 behavior has a discriminating case | ✓ VERIFIED | Strict ledger checker passes 56/56 and the integrated Cucumber gate passes 1,131 scenarios/11,584 steps. |
-| 10-06 | Unit-only items have a harness reason and owner case | ✓ VERIFIED | All 14 unit-only rows contain a concrete reason and current named owner evidence. |
-| 10-06 | No-op apply is byte-for-byte write-free | ✓ VERIFIED | Feature records raw state/config and compares them after apply; current ledger binding and integrated gate are green. |
-| 10-07 | Process-tree kill has real-child proof and a precise unit-only rationale | ✓ VERIFIED | Owner starts a descendant that ignores SIGTERM and rejects its late output; public 60-second timeout explains why a scenario would require a forbidden test seam. |
-| 10-07 | Every backlog bullet maps to evidence or the declined network guard | ✓ VERIFIED | The checker enforces the exact 56-ID set, dispositions, current path/title, commit existence, and exact committed content. Independent run: 56/56. |
-| 10-07 | Combined tree passes `npm run check` | ✓ VERIFIED | At `28915add`: static checks green, 1,131 scenarios, 11,584 steps, 309 direct LCOV records. Later changes are checker and planning/review records, not npm build inputs. |
+| 10-01 | Clone/data projections are complete and unknown tokens fail closed | ✓ VERIFIED | Bound implementations and scenarios are present; checker validates their cited commits. |
+| 10-01 | Browse synchronization uses events | ✓ VERIFIED | Owner waits on the render request rather than a fixed delay. |
+| 10-01 | Marketplace test records are manifest-first | ✓ VERIFIED | Seeder writes contained plugin and marketplace manifests before return. |
+| 10-02 | Real PTY TUI proves autoupdate, aggregate notice, and bounded shutdown | ✓ VERIFIED | Hermetic PTY, held-Git wait-cap, and distinct alpha/beta cases are active in the 1,144-scenario gate. |
+| 10-02 | RPC remains a negative control | ✓ VERIFIED | Unchanged-state RPC scenario remains bound and green. |
+| 10-02 | Completion/result comparisons are complete | ✓ VERIFIED | World teardown rejects unconsumed results and comparisons use complete sets. |
+| 10-03 | All three CAS routes list every missing resolved member | ✓ VERIFIED | Three exact scenarios are bound to committed feature content. |
+| 10-03 | Member order comes from the failed walk or plan | ✓ VERIFIED | Typed keys are captured before information loss and carried into messaging. |
+| 10-03 | Failed member package notes remain attached | ✓ VERIFIED | Typed outcomes retain package notes; exact feature evidence is active. |
+| 10-04 | Apply rollback detail and add-time tagged warnings appear | ✓ VERIFIED | Typed rollback/warning projections are scenario-backed. |
+| 10-04 | Apply/load repair source changes through marketplace add | ✓ VERIFIED | Reconcile reuses the validated locked add path and exact source-repair cases. |
+| 10-04 | Import repairs the owning local layer and reports once | ✓ VERIFIED | Local-layer owner and complete-result scenario are commit-bound. |
+| 10-05 | Update/reinstall retain warnings, notices, foreign index, and source frames | ✓ VERIFIED | Typed outcomes and exact user-visible scenarios remain green. |
+| 10-05 | Root/member errors redact and classify consistently | ✓ VERIFIED | Shared classification/redaction reaches install, update, fetch, cause-chain, cascade, and presentation consumers. |
+| 10-05 | Lockfile-only and post-clone failure decisions hold | ✓ VERIFIED | Yarn/pnpm and invalid-manifest cases are exact-commit-bound and green. |
+| 10-06 | Every reachable LCTEST-01 behavior has a discriminating case | ✓ VERIFIED | Checker passes all 56 rows and Cucumber passes 1,144 scenarios/11,758 steps. |
+| 10-06 | Unit-only items have a harness reason and owner case | ✓ VERIFIED | All 14 unit-only rows include a concrete reason and current named owner evidence. |
+| 10-06 | No-op apply is byte-for-byte write-free | ✓ VERIFIED | Scenario snapshots raw config/state bytes and compares them after apply. |
+| 10-07 | Process-tree kill has real-child proof and precise unit-only rationale | ✓ VERIFIED | Independent real-child case passed 1/1; public 60-second timeout explains why a scenario would require a forbidden seam. |
+| 10-07 | Every backlog bullet maps to evidence or the declined network guard | ✓ VERIFIED | Checker passed 56/56; negative missing-title and stale-commit mutations were rejected. |
+| 10-07 | Combined tree passes `npm run check` | ✓ VERIFIED | Exact gate at executable tree `f310906d`: static green, 1,144 scenarios, 11,758 steps, 309 LCOV. `f310906d..62ef68b7` changes only Phase 10 review/security records. |
 
 **Score:** 28/28 truths verified (0 present-but-behavior-unverified).
 
@@ -203,103 +242,96 @@ re_verification:
 
 | Gate | Result | Evidence |
 |---|---|---|
-| Nyquist | COMPLIANT | `10-VALIDATION.md`; 56/56 ledger and current evidence binding. |
-| Full repository gate | PASS | Integrated `npm run check` at `28915add`: 1,131 scenarios, 11,584 steps, 309 direct LCOV records. Not rerun because subsequent files are outside npm build inputs. |
-| Code review | CLEAN | `10-REVIEW.md` at `0d36e2a3`: 106 files, 0 Critical / 0 Warning / 0 Info. |
-| Security | SECURED | `10-SECURITY.md` at `acce5c95`: 19/19 closed, 12/12 mitigations, 7/7 accepted risks, `threats_open: 0`. |
+| Nyquist | COMPLIANT | `10-VALIDATION.md`: 28/28 behaviorally green; 56/56 exact rows; missing-title and stale-commit mutations rejected. |
+| Full repository gate | PASS | Exact unchanged executable tree `f310906d`: 1,144 scenarios, 11,758 steps, 309 LCOV. Later commits `af2e7d81` and `62ef68b7` modify only Phase 10 review/security records. |
+| Code review | CLEAN | Complete retained 130-file review at `f310906d`: 0 Critical / 0 Warning / 0 Info. |
+| Security | SECURED | Final audit at `f310906d`: 19/19 closed, 12/12 mitigations, 7/7 accepted risks, `threats_open: 0`. |
 
-## Required Artifacts and Key Links
+## Required Artifacts
 
-| Artifact or link | Status | Evidence |
-|---|---|---|
-| Coverage ledger → checker → cited commits | ✓ VERIFIED/WIRED | 56/56; argument-array `git show commit:path`; negative mutation rejected. |
-| Cascade lookup/planning → failure messages | ✓ VERIFIED/WIRED | Ordered keys reach `composeUnmaterializedRows`; exact scenarios pass. |
-| Apply transaction → user result | ✓ VERIFIED/WIRED | `rollbackPartials` → redaction → requested/dependency outcomes; exact scenario passes. |
-| Background gate → Git/dependency work | ✓ VERIFIED/WIRED | Gate-owned signal scopes refresh, update, settlement, and cleanup; real held-Git PTY proof. |
-| Distinct updates → aggregate TUI notice | ✓ VERIFIED/WIRED | Alpha/beta scenario and direct oracle reject separate notices. |
-| Fixture manifests → marketplace record | ✓ VERIFIED/FLOWING | Manifests are written before the record is returned to real loaders/owners. |
-| Package timeout → process tree cleanup | ✓ VERIFIED/WIRED | Real child/grandchild discriminator plus platform group/tree termination owners. |
+The artifact query does not parse this project's scalar PLAN artifact syntax and returned `0/0`; each declared artifact was checked directly at all applicable levels.
 
-### Data-Flow Trace (Level 4)
+| Artifact | Expected | Status | Details |
+|---|---|---|---|
+| Harness projections and PTY/completion support | Complete, contained, fail-closed harness | ✓ VERIFIED | Files exist, are substantive, are consumed by steps/world ownership, and run in the full gate. |
+| Manifest-first seeder | Record cannot precede manifests | ✓ VERIFIED | Writes contained manifests before return; install/reinstall owners import it. |
+| CAS/apply/update/reinstall production paths | Typed lifecycle facts reach presentation | ✓ VERIFIED | Split modules carry typed values into shared outcome/messaging paths; exact scenarios exercise results. |
+| `10-COVERAGE.md` and strict checker | Exhaustive exact-commit binding | ✓ VERIFIED | 56 IDs; allowed dispositions; current/cited-commit path/title checks; exact XPH02 three-title set. |
+| Final redaction and timeout owners | Fail-closed output and settled process tree | ✓ VERIFIED | Focused tests pass through cause-chain/presentation and real process/timer boundaries. |
+
+## Key Link Verification
+
+| From | To | Via | Status | Details |
+|---|---|---|---|---|
+| Seeder | install/reinstall conflict owners | manifest-first returned record | ✓ WIRED | Imported by current fixtures; manifests exist before record use. |
+| CAS walk/plan/ledger | failure messaging | typed ordered key carriers | ✓ WIRED | No catch-path rewalk or rendered-string parsing. |
+| Apply install result | rendered outcome | rollback split and cause redaction | ✓ WIRED | Exact MIM-05 scenario owns visible detail. |
+| Background gate | Git/update/settlement cleanup | gate-owned abort signal | ✓ WIRED | Held-Git case observes cancellation before settlement. |
+| Distinct updates | one TUI notice | aggregate projection | ✓ WIRED | Alpha/beta case and direct oracle reject separate notices. |
+| Shared redactor | cause-chain/presentation | redaction projection | ✓ WIRED | Exact errno collision tests pass at both boundaries. |
+| Package timeout | process-tree completion | retained grace/deadline handles | ✓ WIRED | Parent-close, unreferenced-handle, and real-child cases settle after escalation. |
+
+## Data-Flow Trace (Level 4)
 
 | Value | Source | Destination | Status |
 |---|---|---|---|
-| CAS unresolved members | walk/plan/ledger resolved-key arrays | shared composer → notification rows | ✓ FLOWING |
-| Apply rollback phases | install result `rollbackPartials` | redacted outcomes → rendered row | ✓ FLOWING |
-| Background cancellation | gate-owned `AbortController` | Git, plugin update, settlement, cleanup | ✓ FLOWING |
-| Aggregate notice | distinct marketplace/plugin updates | notification aggregation → PTY screen | ✓ FLOWING |
+| CAS unresolved members | walk/plan/ledger arrays | shared composer → notification rows | ✓ FLOWING |
+| Apply rollback phases | install `rollbackPartials` | redacted outcomes → rendered rows | ✓ FLOWING |
+| Background cancellation | gate `AbortController` | Git, update, settlement, cleanup | ✓ FLOWING |
+| Aggregate notice | distinct marketplace updates | aggregation → PTY screen | ✓ FLOWING |
+| Absolute-path cause | runtime error chain | redactor → text/JSON/RPC | ✓ FLOWING |
+| Timeout state | child lifecycle/timers | settled run → caller cleanup | ✓ FLOWING |
 
 ## Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |---|---|---|---|
 | Strict evidence ledger | `node scripts/check-phase10-coverage.mjs` | 56/56 rows valid | ✓ PASS |
-| CAS-08 three routes plus MIM-05 | focused `npx cucumber-js --name ...` | 4 scenarios, 53 steps, all passed | ✓ PASS |
-| Root commit handoff across current split | two exact `node --test --test-name-pattern ...` owners | 2 passed, no skip/todo | ✓ PASS |
-| TUI aggregate-notice oracle | `node --test test/architecture/pi-tui-notices.test.ts` | passed, no skip/todo | ✓ PASS |
-| Full integrated behavior | `npm run check` at `28915add` | static green; 1,131 scenarios; 11,584 steps; 309 LCOV | ✓ PASS (reused) |
+| Evidence mutations | in-memory missing-title set plus stale `git show` checks | Missing title rejected; both final titles absent at stale commit | ✓ PASS |
+| D-PL10-13 ownership | exact `node --test --test-name-pattern 'D-PL10-13'` owner | 1 passed, 0 skipped/todo | ✓ PASS |
+| Package tree/settlement | three exact package-manager owner cases | 3 passed, 0 skipped/todo | ✓ PASS |
+| Final errno cardinality | exact cause-chain and presentation cases | 2 passed, 0 skipped/todo | ✓ PASS |
+| Full integrated behavior | `npm run check` at `f310906d` | Static green; 1,144 scenarios; 11,758 steps; 309 LCOV | ✓ PASS (reused on byte-identical executable inputs) |
 
 ## Probe Execution
 
-No plan declares a separate `probe-*.sh`; the executable coverage checker and focused behavioral commands are the phase's runnable verification surfaces.
+No plan or summary declares a `probe-*.sh`. The strict checker and focused behavioral commands are the phase's executable verification surfaces.
 
 ## Requirements Coverage
 
 | Requirement | Plans | Status | Evidence |
 |---|---|---|---|
 | TST-01 | 02, 06, 07 | ✓ SATISFIED | Every lifecycle item is scenario-backed or has a concrete unit-only reason and owner. |
-| TST-02 | 01, 02, 07 | ✓ SATISFIED | Harness fixes and explicit network-guard decline are complete. |
-| TST-03 | 01, 07 | ✓ SATISFIED | Manifest-first helper and conflict owners are commit-bound. |
-| CAS-08 | 03, 07 | ✓ SATISFIED | Three exact failure-route scenarios pass. |
-| MIM-05 | 04, 07 | ✓ SATISFIED | Exact partial-rollback scenario passes. |
-| XPH-01 | 02, 04, 05, 06, 07 | ✓ SATISFIED | Thirteen rows, including repaired wait-cap and notice oracle. |
-| XPH-02 | 03, 05, 07 | ✓ SATISFIED | Nine rows and scenarios for visible changes. |
+| TST-02 | 01, 02, 07 | ✓ SATISFIED | Harness fixes and explicit network-preload decline are complete. |
+| TST-03 | 01, 07 | ✓ SATISFIED | Manifest-first helper and both conflict owners are commit-bound. |
+| CAS-08 | 03, 07 | ✓ SATISFIED | Three distinct routes are exact-commit-bound and green. |
+| MIM-05 | 04, 07 | ✓ SATISFIED | Exact partial-rollback scenario is active and green. |
+| XPH-01 | 02, 04, 05, 06, 07 | ✓ SATISFIED | Thirteen rows include wait-cap, aggregate-notice, and process-tree proof. |
+| XPH-02 | 03, 05, 07 | ✓ SATISFIED | Nine rows include the required three-title move-diagnostics binding. |
 
 No Phase 10 requirement is orphaned from the seven plans.
 
 ## Decision Coverage
 
-| Decision | Status | Verification |
-|---|---|---|
-| D-PL10-01 | HONORED | CAS/XPH work landed before the later split; current owners retain it. |
-| D-PL10-02 | HONORED | Disjoint ownership and normal commit history are recorded. |
-| D-PL10-03 | HONORED | Visible behaviors have Cucumber scenarios and hermetic fixtures. |
-| D-PL10-04 | HONORED | Shared row builder serves all three CAS routes. |
-| D-PL10-05 | HONORED | Root-ledger unresolved members reach messaging. |
-| D-PL10-06 | HONORED | Plan-step members are carried in order without duplicate moved rows. |
-| D-PL10-07 | HONORED | Mid-walk keys survive the thrown lookup with the root cause. |
-| D-PL10-08 | HONORED | One exact scenario exists per route. |
-| D-PL10-09 | HONORED | Apply renders redacted per-phase rollback detail. |
-| D-PL10-10 | HONORED | Occupied-agent cascade matches the typed direct path. |
-| D-PL10-11 | HONORED | Fetch/update unknown failures share classification. |
-| D-PL10-12 | HONORED | Dependency warnings and MCP notices are retained. |
-| D-PL10-13 | HONORED (superseding) | Foreign rows with a different target are preserved; staged-target containment refusal remains. This formally supersedes the older Plan 01-03 literal. Restoring it would violate current WRN-05/XPH-02 behavior. |
-| D-PL10-14 | HONORED | Install root causes are redacted; documented lock recovery remains. |
-| D-PL10-15 | HONORED | Commit-time occupied-agent refusal is typed and basename-only. |
-| D-PL10-16 | HONORED | Cascade member package notes remain attached. |
-| D-PL10-17 | HONORED | Invalid post-clone manifests have no retry suggestion. |
-| D-PL10-18 | HONORED | Yarn/pnpm-only declarations remain installed with the note. |
-| D-PL10-19 | HONORED | Add-time hygiene warnings use the tagged channel. |
-| D-PL10-20 | HONORED | Import marketplace subject and citation are corrected. |
-| D-PL10-21 | HONORED | Apply revision and reinstall URL frame have scenarios. |
-| D-PL10-22 | HONORED | Completion after `market` is TUI-driven. |
-| D-PL10-23 | HONORED | Apply/autoapply source repair reuses marketplace add. |
-| D-PL10-24 | HONORED | Recorded official fallback is current. |
-| D-PL10-25 | HONORED | Import rewrites only the owning stale local declaration. |
-| D-PL10-26 | HONORED | Python PTY uses real cap, hermetic home, and bounded teardown. |
-| D-PL10-27 | HONORED by fallback | A public 60-second scenario would need a forbidden seam; real-child owner is discriminating and the reason is recorded. |
-| D-PL10-28 | HONORED | Reachable lifecycle gaps have exact scenarios. |
-| D-PL10-29 | HONORED by fallback | Credential negative path remains owner-only with the declared Device Flow reason. |
-| D-PL10-30 | HONORED | Cache, tokens, raw cascade, and rollback owners are current. |
-| D-PL10-31 | HONORED | All enumerated harness corrections are present. |
-| D-PL10-32 | HONORED | Network preload decline names the subprocess limitation and controls. |
-| D-PL10-33 | HONORED | Shared manifest-first seeder serves conflict owners. |
+All 33 Phase 10 decisions are directly traced by the ledger, implementation, focused owners, and exact scenarios. The substring heuristic reports 3/33 because it searches shipped text for context wording; this warning-only result does not supersede direct evidence.
 
-The substring decision gate reported 3/33 because it searches implementation text for context wording. It is warning-only. The direct trace above, exact ledger, focused tests, clean review, and integrated gate establish all 33 decisions.
+D-PL10-13 formally supersedes the older Plan 01-03 broad-listing literal. Current behavior preserves a foreign agents-index row when its generated name is staged for a different target while retaining the staged-target containment refusal. The exact current owner passed 1/1. Restoring the older literal would reintroduce the verified WRN-05/XPH-02 deletion defect.
 
-## Test Quality and Anti-Patterns
+## Test Quality Audit
 
-No skipped/todo/only cases, unreferenced `TBD`/`FIXME`/`XXX` markers, or placeholders were found in the requirement-linked checker, features, owners, and split production files. Exact tables, owner assertions, real process/network fixtures, and the integrated gate provide behavioral proof; the checker is not used as an assertion-strength oracle.
+| Test surface | Linked requirements | Active proof | Disabled | Circular | Assertion level | Verdict |
+|---|---|---|---:|---|---|---|
+| Strict checker | All seven | 56/56 plus two negative mutations | 0 | No | Exact set/path/title/commit | ✓ SUFFICIENT |
+| Phase 10 Cucumber | User-visible requirements | 1,144 scenarios | 0 linked | No | Complete row/file/state behavior | ✓ SUFFICIENT |
+| Lifecycle owner suites | CAS-08, MIM-05, XPH-01/02 | Direct pairs at 100% | 0 linked | No | Value and behavioral | ✓ SUFFICIENT |
+| Redaction owners | XPH-02, T-10-04/07/08 | Utility, cause-chain, presentation | 0 | No | Fail-closed behavioral | ✓ SUFFICIENT |
+| Package owner | XPH-01, T-10-11 | Real descendant plus timer settlement | 0 | No | Process/ordering behavioral | ✓ SUFFICIENT |
+
+Disabled-test scan found no linked skip/todo/only/pending case. Apparent `.pending` matches are ordinary promise fields; empty callbacks/arrays occur only in deliberate test controls.
+
+## Anti-Patterns Found
+
+No unreferenced `TBD`, `FIXME`, `XXX`, cleanup marker, placeholder, or production empty implementation appears in the final executable deltas. Complete review and Fallow passed on the same executable tree.
 
 ## Advisory (New Scope, Unevidenced)
 
@@ -307,13 +339,13 @@ None.
 
 ## Human Verification Required
 
-None. Every runtime state, ordering, cancellation, cleanup, and visible-output truth has automated behavioral proof. The seven plans contain no deferred human-check block.
+None. Every runtime state, ordering, cancellation, cleanup, and visible-output truth has discriminating automated proof. The plans contain no deferred `<human-check>` block.
 
 ## Gaps Summary
 
-No gap, regression, deferred item, or behavior-unverified truth remains. Integrated Phase 8 fixes close both shared PTY findings, and the checker binds all 56 rows to exact committed evidence. D-PL10-13 is recognized as superseding the older Plan 01-03 literal without weakening WRN-05 or NFR-10.
+No gap, regression, deferred item, advisory, or behavior-unverified truth remains. Phase 8/9 integration is present on the same tree; quote parsing is fail closed, errno arrow grammar is cardinality-strict, timeout settlement is bounded, and evidence is exact-commit-bound.
 
 ---
 
-_Verified: 2026-10-28T23:35:00Z_
-_Verifier: gsd-verifier_
+_Verified: 2026-10-29T11:38:11Z_
+_Verifier: the agent (gsd-verifier)_
