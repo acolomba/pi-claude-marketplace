@@ -1,6 +1,6 @@
 ---
 phase: 08-background-autoupdate
-audited: "2026-10-28"
+audited: "2026-10-29"
 status: verified
 verdict: SECURED
 asvs_level: 1
@@ -17,10 +17,10 @@ threats_open_nonblocking: 0
 
 SECURED: all 15 declared mitigations are verified, and all six accepted dispositions have distinct recorded entries. SEC-08-01 / T-08-17 is closed by the distinct-name behavioral scenario, its recorded mutant failure, and the existing exact-entry owner assertion.
 
-Audited planning HEAD: `9b27a80989251bba7c4be9050783cd4b09e74050`.
-Current combined implementation/test HEAD: `4412c2cb989acc1f02fd88348970d77450c5d291`.
-The diff after 4412c2cb contains only planning Markdown. The integrated review at
-9b27a809 is clean, with zero critical, warning, or informational findings.
+Audited integrated HEAD: `c12e9a1ff820c579c8ac93810ea672eeb51ad681`.
+The final merged-tree audit includes the later Phase 9/10 changes and the Phase 6
+path-redactor changes. The exact combined gate is green with 1,143 scenarios,
+11,742 steps, and 309 LCOV records.
 
 The four PLAN threat registers contain 21 authored rows: 15 mitigate and six accept dispositions, with 18 distinct threat IDs. Repeated T-08-SC rows retain their plan qualification. Severity totals are one high, 11 medium, and nine low. There are no critical threats or transfer dispositions.
 
@@ -153,6 +153,7 @@ The current LCOV artifact was inspected:
 | 2026-10-28 at 0b5d3d5b, including this accepted-risk log | 21 | 14/15 | 6 | 0 | 1 |
 | 2026-10-28 final recheck at c571a4cb | 21 | 15/15 | 6 | 0 | 0 |
 | 2026-10-28 final integrated recheck at 9b27a809 | 21 | 15/15 | 6 | 0 | 0 |
+| 2026-10-29 final merged-tree ASVS L1 re-audit at c12e9a1f | 21 | 15/15 | 6 | 0 | 0 |
 
 - [x] All 21 authored rows retained, including four plan-qualified supply-chain sentinels.
 - [x] Every accepted disposition has a distinct recorded entry.
@@ -160,4 +161,4 @@ The current LCOV artifact was inspected:
 - [x] Implementation files remained read-only during the audit.
 - [x] T-08-17 behavioral-proof gap resolved and reverified.
 
-Approval: SECURED at `9b27a80989251bba7c4be9050783cd4b09e74050`, with combined implementation/test inputs at `4412c2cb989acc1f02fd88348970d77450c5d291`. All 21 authored rows are closed; threats_open is zero.
+Approval: SECURED at `c12e9a1ff820c579c8ac93810ea672eeb51ad681`. An independent 11-module adversarial run passed; T-08-17 remains closed by the distinct-name aggregate PTY oracle and exact-entry owner assertion, and wait-cap coverage reaches streamed-git abort and dependency settlement. All 21 authored rows are closed; threats_open is zero.
