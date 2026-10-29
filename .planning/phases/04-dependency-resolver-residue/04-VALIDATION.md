@@ -84,3 +84,32 @@ regression, a reintroduced `range` field on `no-matching-tag`, or a missing
 `rollbackPartials` outcome. Since the merge commit, only planning Markdown has
 changed; the final full-gate result is reusable for this audit under the local
 verification policy.
+
+## Final-head audit (2026-10-29)
+
+The final integrated tree remains Nyquist-compliant. The audit started from the
+assumption that later warning-channel and resolver integrations had broken a
+Phase 4 handoff; fresh owner and public behavior runs disproved that hypothesis.
+
+| Requirement | Fresh adversarial proof | Result |
+|-------------|-------------------------|--------|
+| RSV-01 | Dependency-plan, install-outcome, planning, cascade-context, ledger, and public git-request assertions still pin the previewed SHA and exactly one fetch. | green |
+| RSV-02 | The deferring-plan owner still refuses a bad fresh dependency before scheduling a move. | green |
+| RSV-03 | The exact four-walk, six-judge untried-pair case still pins the recorded greedy-search limit. | green |
+| RSV-04 | Target-check, update-swap, preview/planning owners and three public scenarios still prove that the occupied target refuses before a move or dependency install mutates state. | green |
+| RSV-05 | Release/tag/cascade owners retain the range-free no-match arm, and the split dependency-ledger/results owners retain the exact rollback-partial outcome. | green |
+
+Fresh focused evidence:
+
+- `node --test` over 13 current owner modules passed 13/13 modules, including
+  the Phase 11 split planning, cascade-context, dependency-ledger, ledger, and
+  results owners.
+- The four discriminating Phase 4 Cucumber scenarios passed 4/4 scenarios,
+  57/57 steps, and 16/16 hooks. The sandboxed attempt could not bind the
+  loopback fixture (`listen EPERM`); the permitted rerun passed unchanged.
+- `git diff --quiet be0de0c3 -- . ':(exclude,glob).planning/**/*.md'` exited
+  0. The exact full `npm run check` result at that unchanged executable head is
+  therefore reusable: 1,145 scenarios, 11,777 steps, and 309 LCOV records.
+
+No test, fixture, or implementation gap was found. RSV-01 through RSV-05 are
+COMPLIANT with zero resolved, escalated, skipped, or remaining gaps.
