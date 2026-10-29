@@ -1,9 +1,10 @@
 ---
 phase: 08-background-autoupdate
-reviewed: 2026-10-28T21:55:54Z
+reviewed: 2026-10-29T05:17:56Z
 depth: standard
-files_reviewed: 38
+files_reviewed: 39
 files_reviewed_list:
+  - docs/env-vars.md
   - extensions/pi-claude-marketplace/orchestrators/marketplace/background-gate.ts
   - extensions/pi-claude-marketplace/orchestrators/marketplace/background-pass.ts
   - extensions/pi-claude-marketplace/orchestrators/marketplace/background-update.ts
@@ -43,104 +44,124 @@ files_reviewed_list:
   - features/lib/https-git-host/server.ts
   - features/step_definitions/git-host.steps.ts
 findings:
-  critical: 0
-  warning: 0
+  critical: 1
+  warning: 1
   info: 0
-  total: 0
-status: clean
+  total: 2
+status: issues_found
 ---
 
 # Phase 8: Code Review Report
 
-**Reviewed:** 2026-10-28T21:55:54Z
+**Reviewed:** 2026-10-29T05:17:56Z
 **Depth:** standard
-**Files Reviewed:** 38
-**Status:** clean
+**Files Reviewed:** 39
+**Status:** issues_found
 
 ## Narrative Findings (AI reviewer)
 
-No actionable findings remain. The final re-review at `2fab7ba3` inspected
-commit `4412c2cb`, its real-cascade regression tests, the streaming git fixture,
-the PTY scenario, and affected gate, marketplace-update, and dependency-install
-callers. The previously reviewed remainder is unchanged. All reviewed files
-meet quality standards.
+The integrated-tree re-review traced the TUI scheduler, foreground gate,
+marketplace cascade, dependency settlement, plugin-update runner, notification
+resolver/transports, real PTY host, and behavioral oracles. The three previous
+blockers remain closed: dependency settlement rechecks halt/config state after
+its yield; the wait-cap scenario holds a streamed git response until the gate's
+30-second abort; and the distinct alpha/beta scenario plus exact owner assertion
+detect split notices.
 
-## Blocker closures
+One separate stop/abort race remains in the plugin-update yield. The current
+documentation also correctly describes abort-then-settle, but the scheduler's
+source header still states the superseded bounded-total-wait behavior.
 
-### CR-02: Dependency settlement bypassed the background boundary — resolved
+## Critical Issues
 
-The background pass now supplies a dependency wrapper that checks halted state
-before yielding. After acquiring a fresh gate step, it reads current
-configuration and checks stopped/aborted state and autoupdate eligibility before
-invoking the installer.
+### CR-01: A stop or abort during the config reload still starts the plugin update
 
-Eligible settlement receives the fresh gate signal through the async abort
-scope. The wrapper records abort in `finally` without releasing the gate; the
-enclosing marketplace operation retains ownership until its cascade and
-reporting settle. Results and errors continue through existing reporting paths.
+**File:** `extensions/pi-claude-marketplace/orchestrators/marketplace/background-pass.ts:334-339`
 
-Seven real-cascade cases cover stopped and aborted passes, opt-out, fresh signal
-ownership, foreground cancellation and settlement order, stop during a yield,
-and held-scope-lock refusal followed by a later successful pass. The cancellation
-case verifies dependency settlement, then marketplace settlement, then the
-foreground command. The command-level regression also proves cancellation leaves
-no unexpected dependency installation; removing the wrapper produced an extra
-`dep@tools` record.
+**Issue:** `yieldingPluginUpdate` checks `halt.isHalted()` before awaiting
+`loadMergedScopeConfig`, then invokes the real plugin update without checking
+again. A reload/new/resume/fork shutdown can set `isStopped()` while that async
+read is pending; when the read resolves, the stale runtime still mutates plugin
+state. The gate's 30-second timer can likewise abort `signal` during the read,
+but the code still invokes `runPluginStep`; a local or otherwise successfully
+settling update can be retained and reported, and the abort is not latched until
+after that update returns. This violates the stopped-runtime boundary and the
+rule that an aborted pass starts no further work. The dependency-settlement
+wrapper already performs the required post-read `halt.isHalted() ||
+signal.aborted` check at lines 229-234.
 
-### CR-03: The PTY scenario exercised hosted timeout — resolved
+**Fix:** Recheck both states immediately after the awaited config read, latch an
+aborted signal before returning, and add deterministic stop-during-read and
+abort-during-read owner cases. A gate double can queue the stop/abort from the
+plugin step's `beginStep`, placing it after the precheck and before config I/O
+settles.
 
-The replacement scenario holds a git response body. An unfinished git packet
-receives one byte per second, preventing the independent HTTP idle timeout from
-ending the request before the gate's 30-second deadline.
+```typescript
+const config = await loadMergedScopeConfig(locationsFor(scope, cwd));
+if (halt.isStopped()) {
+  return skippedOutcome(plugin, NOT_RUN_NOTE);
+}
+if (signal.aborted) {
+  halt.noteStepEnded(signal);
+  return skippedOutcome(plugin, ABORTED_NOTE);
+}
+if (halt.isHalted()) {
+  return skippedOutcome(plugin, NOT_RUN_NOTE);
+}
+if (!isAutoupdateOn(config, marketplace)) {
+  return autoupdateOffOutcome(plugin);
+}
+```
 
-The scenario verifies a pending request and no foreground result during the
-initial interval, then requires output after 30 seconds within a five-second
-cleanup margin. It checks the dropped request, absence of an update notice, and
-unchanged installed records. Removing cancellation times out awaiting foreground
-output; bypassing the foreground gate fails the early blocking assertion.
+The regressions must assert that `updatePlugin` is never called, no update row
+or notice is emitted, and an abort prevents later targets from running.
 
-The heartbeat is unreferenced and cleared on response close. Scenario release
-stops the PTY process group and disarms the repository; host shutdown closes
-connections and sandbox teardown removes fixture files.
+## Warnings
 
-## Prior finding dispositions
+### WR-01: The scheduler header misstates abort-then-settle as a bounded total wait
 
-| Finding | Final disposition |
+**File:** `extensions/pi-claude-marketplace/orchestrators/marketplace/background-update.ts:10-14`
+
+**Issue:** The comment says a non-quit shutdown "waits at most the gate's wait
+cap." The gate actually aborts the active signal at 30 seconds and deliberately
+keeps waiting until `endStep`; `docs/env-vars.md:201` now records that behavior
+correctly. This false lifecycle contract can cause a future caller or maintainer
+to release state-lock ownership early or write another incorrect timing oracle.
+
+**Fix:** State that the gate begins cancellation at the wait cap and shutdown
+continues waiting for the step to settle.
+
+```typescript
+// At the gate's wait cap, cancellation of the active step begins; shutdown
+// continues waiting until that step settles.
+```
+
+## Prior blocker dispositions
+
+| Finding | Current disposition |
 | --- | --- |
-| Original CR-01 / SEC-08-01 | Resolved by distinct alpha/beta aggregation, split-notice mutation evidence, and an exact-entry owner assertion. |
-| WR-01 | Resolved by RPC quiet-window collection; TUI parsing reports distinct visible texts, not event counts. |
-| WR-02 | Resolved by synchronous scheduling and deferred-pass owner coverage; RPC is a TUI-only negative control. |
-| WR-03 | Resolved: completed updates are reported before early failure while preserving the original error. |
-| WR-04 | Resolved for plugin updates and dependency settlement eligibility. |
-| IN-01 | Resolved: resolver documentation attaches correctly. |
-| IN-02 | Resolved: halted passes do not read later scopes. |
-| IN-03 | Resolved: environment-lifetime comments are accurate. |
-| IN-04 | Superseded by D-PL8-23 through D-PL8-25, with dependency signal propagation corrected. |
-| CR-02 | Resolved by the gated dependency wrapper and real-cascade regressions. |
-| CR-03 | Resolved by streaming git I/O, blocking/order assertions, and cancellation/bypass mutations. |
+| Dependency settlement after stop/abort/opt-out | Closed. The wrapper yields into a fresh gate/abort scope, reloads merged config, and rechecks stopped, aborted, and autoupdate state before invoking the installer. |
+| PTY wait-cap oracle reached hosted timeout | Closed. The fixture streams an unfinished git response with heartbeats; the scenario observes initial foreground blocking, the gate's 30-second abort, dropped request, unchanged installs, and no notice. |
+| Aggregate-notice oracle accepted split notices | Closed. The alpha/beta scenario requires one combined visible notice, and the exact notification-entry owner test prevents same-text event-count ambiguity. |
 
-Current decisions remain respected: TUI-only scheduling, official-name defaults
-with explicit configuration precedence, invalid-config fail-closed behavior,
-bare-name notice deduplication, and cancellation at the wait cap followed by
-operation settlement. Quit retains its recorded immediate-return exception.
+## Validation context
 
-The same-name and distinct-name notice scenarios remain intact. Synchronized
-terminal redraw bytes cannot establish identical-event counts; the complementary
-exact-entry owner assertion and distinct-name mutation proof remain sufficient.
-
-## Validation evidence
-
-- Fresh `npm run check` at `4412c2cb` passed 1,125 scenarios, 11,486 steps,
-  and 309 LCOV records on Node `v26.12.1`.
-- Supplied focused evidence: 36 background-pass owner tests, 236 adjacent tests,
-  eight host tests, and six PTY scenarios with 88 steps. The changed production
-  pair reached 100% direct coverage; Fallow and hooks passed.
-- The reviewer reran four focused modules successfully.
-- The non-planning diff from `4412c2cb` to `2fab7ba3` is empty, so the full gate
-  applies to the reviewed build inputs.
-- Review was read-only.
+- Nyquist validation is COMPLIANT.
+- The supplied integrated full gate passed 1,143 scenarios, 11,742 steps, and
+  309 merged LCOV records; the real PTY feature passed six scenarios and 88
+  steps. Passing tests do not cover CR-01's stop/abort-during-config-read
+  interleaving.
+- The Phase 8 core implementation and behavioral files are byte-identical to
+  the prior complete review. This pass re-read the current gate/pass/scheduler
+  and behavioral path, reviewed the merged-tree deltas, and traced the later
+  package/dependency/redaction changes through the background call chain.
+- Later `apply.ts` and absolute-path-redactor changes do not replace the
+  background pass's plugin-yield guard. Notice fields still pass through the
+  credential-redacting resolver and the per-install wire schema remains closed.
+- Review was read-only except for this report.
 
 ---
 
+_Reviewed: 2026-10-29T05:17:56Z_
 _Reviewer: Codex (gsd-code-reviewer)_
 _Depth: standard_
