@@ -1,6 +1,6 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-reviewed: 2026-10-29T09:45:18Z
+reviewed: 2026-10-29T10:05:34Z
 depth: standard
 files_reviewed: 126
 files_reviewed_list:
@@ -131,80 +131,67 @@ files_reviewed_list:
   - test/shared/git-failure-classifiers.test.ts
   - test/shared/redact-absolute-paths.test.ts
 findings:
-  critical: 2
+  critical: 1
   warning: 0
   info: 0
-  total: 2
+  total: 1
 status: issues_found
 ---
 
 # Phase 10: Code Review Report
 
-**Reviewed:** 2026-10-29T09:45:18Z
+**Reviewed:** 2026-10-29T10:05:34Z
 **Depth:** standard
-**Files Reviewed:** 126 (the retained Phase 10 scope plus the iteration-13 deltas)
+**Files Reviewed:** 126 (the retained Phase 10 scope plus the iteration-14 deltas)
 **Status:** issues_found
-**Observed HEAD:** `e8c1039a`
+**Observed HEAD:** `89b1a356`
 **Runtime:** Node `v26.12.1`
 
 ## Structural Findings (fallow)
 
-The exact merged full gate's Fallow stage passed. The iteration-13 fixer also reported a clean Fallow guard and audit for its three changed files. Direct review covered the complete retained scope and the iteration-13 source and test deltas.
+The exact merged full gate's Fallow stage passed. The iteration-14 fixer also reported a clean Fallow guard and health check for its three changed files. Direct review covered the complete retained scope and the iteration-14 source and test deltas.
 
-CodeGraph was used before direct file reads. Its index did not include every newest changed owner, so all closure and requirement evidence was verified against the current source.
+CodeGraph was used to trace the shared redactor into its cause-chain, cascade, install, apply, and notification-presentation consumers. Its index marked the changed redactor stale, so the current source was read directly.
 
 ## Narrative Findings (AI reviewer)
 
 ### Summary
 
-The complete 126-file scope was re-reviewed. The 123 files unchanged from the complete prior review remain byte-identical. The three source and test files changed by `6be0b878` and `4a62b923` were read against their full owners and traced through the cause-chain and notification-presentation callers. The strict Phase 10 checker still passes 56/56, binds XPH02 to the exact three required scenario titles at `741516af`, and retains its negative-mutation checks. D-PL10-13 remains the formal supersession of the older Plan 01-03 literal. The Phase 6, 8, and 9 integration evidence and 28-truth mapping remain present.
+The complete 126-file scope was re-reviewed. The 123 files unchanged from the complete prior review are byte-identical; the three files changed by `98433651` were read in full and traced through their public consumers. The strict Phase 10 checker passes 56/56, and the D-PL10-13 exact owner passes 1/1 with no skip or todo. The package-manager settlement, Phase 8/9 integration, evidence-binding, and D-PL10-13 supersession evidence remain unchanged.
 
-The package-manager settlement fix remains sound on the reviewed paths. Iteration 13 closes the submitted marker-collision and later-quote-preselection cases: unmatched marker-bearing fields elide their entire remainder, and quote candidates are classified in order. The generic quote classifier still violates that fail-closed contract in two adjacent malformed inputs. An unclosed absolute path whose first embedded quote is followed by a boundary is accepted as closed and exposes the rest of the path. A correctly closed path followed by arbitrary slash-bearing prose and an unmatched quote is extended through the prose and rebuilt from the prose basename. Both defects reach `redactCauseChain` and public notification presentation.
+Iteration 14 simplifies the generic quoted-path grammar and correctly fails closed for its submitted embedded, surplus, and unmatched quote matrices. One adjacent same-quote chain still violates the binding policy: an embedded quote is accepted as the absolute field's delimiter when later quotes form a balanced value. That exposes the remaining absolute-path suffix through the utility, cause-chain, and notification consumers.
 
 ## Critical Issues
 
-### CR-01: An embedded quote can falsely close an unmatched path and expose its suffix
+### CR-01: A balanced later value makes an embedded path quote look unambiguous
 
 **Classification:** BLOCKER
-**File:** `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts:103-149,164-194`
+**File:** `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts:76-106`
 
-**Issue:** `quotedPathEnd()` sees the only matching quote in an unmatched field, computes `balancedAfter=true`, and accepts it as the closing delimiter even when a path separator remains later in the message. For example, `open '/tmp/O' Brien/private/secret.json` becomes `open 'O' Brien/private/secret.json`; the supposedly fail-closed unmatched field exposes `Brien/private/secret.json`. The double-quoted, drive, and UNC forms reproduce, and `redactCauseChain()` retains the exposed suffix. The iteration-13 marker check does not help because the input needs no `failed;` or `;see=` marker. The owner tests cover an unmatched path with spaces but not an unmatched path with an embedded matching quote.
+**Issue:** `quotedPathEnd()` takes the first matching quote as `delimiter`. When another quote exists, it accepts that first quote whenever `hasResolvedQuoteChain()` can pair the later quotes. The later chain being balanced does not prove that the first quote closed the absolute field: it can be an embedded filename character followed by a separate balanced value. For example, `open '/tmp/O' Brien/private/secret.json 'x'` becomes `open 'O' Brien/private/secret.json 'x'`, exposing `Brien/private/secret.json`. The drive, UNC, double-quoted, and `redactCauseChain()` forms reproduce. This contradicts the binding fail-closed rule because the same-quote chain has two valid interpretations. The reconciled matrices cover an embedded quote by itself and a closed path followed by a balanced value, but not their collision, so a plausible leaking implementation still passes all owner tests.
 
-**Fix:** A quote candidate cannot close an unmatched field merely because the suffix quote set is locally balanced. When a later separator remains and no trustworthy final delimiter exists, return `undefined` so the whole remainder becomes `[redacted path]`. Add POSIX, drive, and UNC cases for single- and double-quoted unmatched paths with one or more embedded matching quotes through the utility, cause-chain, and public-presentation boundaries.
-
-### CR-02: Arbitrary slash-bearing prose plus an unmatched quote is treated as path content
-
-**Classification:** BLOCKER
-**File:** `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts:81-149,181-185`
-
-**Issue:** Candidate-local classification still uses the last separator before the final matching quote. With an already closed path followed by arbitrary slash-bearing prose and one unmatched quote, the first real closing quote is classified as a continuation and the unmatched quote is accepted as the path delimiter. `open '/tmp/private/file.json' help/guide '` becomes `open 'guide '`, and `open '/tmp/private/file.json' value 'rel/path' help/guide '` has the same result. The output silently discards the real basename and most of the diagnostic instead of applying the documented ambiguity fail-closed rule. Single- and double-quoted causes reproduce through `redactCauseChain()`, so public presentation emits the corrupted message. The submitted cases use the two recognized `failed; see` / `docs/errors` strings and do not cover arbitrary slash-bearing prose.
-
-**Fix:** When an earlier candidate can close a complete absolute path but a later unmatched quote makes the remainder ambiguous, do not extend the candidate through arbitrary slash-bearing prose. Return `undefined` and apply `[redacted path]`, or preserve the earlier local close only when a structural caller supplies that boundary. Add platform and quote-form controls for arbitrary slash-bearing prose, with and without a balanced relative value before the final unmatched quote, through utility, cause-chain, and public presentation.
+**Fix:** Treat a first quote plus a later balanced same-quote value as ambiguous whenever the intervening text can still be absolute-path continuation, and return `undefined` so the whole remainder becomes `[redacted path]`. If the generic string grammar cannot distinguish that collision from slash-bearing prose, apply the approved security-first policy and fail closed for both. Add POSIX, drive, UNC, single-quoted, double-quoted, cause-chain, and public-presentation cases combining an embedded quote with a later balanced quoted value.
 
 ### Prior finding closure
 
-- The submitted marker-collision cases pass and no raw marker suffix survives. CR-01 covers an unmatched path with an embedded matching quote and no marker text.
-- The submitted candidate-local cases pass. CR-02 covers arbitrary slash-bearing prose rather than the two recognized local suffix strings.
-- The original early parent-close settlement and the replacement unreferenced-timer liveness defect are closed by `1b77dd7b`.
+- Iteration 14 closes the submitted unmatched embedded-quote and arbitrary slash-prose cases by full elision.
+- Marker-like suffixes inside path components preserve no raw suffix.
+- The original early parent-close settlement and the replacement unreferenced-timer liveness defect remain closed by `1b77dd7b`.
 - The earlier PTY wait-cap, aggregate-notice oracle, and evidence-binding findings remain closed.
 
 ### Verification record
 
 - `node scripts/check-phase10-coverage.mjs`: `56/56` rows valid.
-- D-PL10-13 exact owner: passed, 1/1 with no skip or todo.
-- Redaction and notification-presentation focused owners: passed 306/306; both direct pairs passed at 100% line, function, and branch coverage.
-- Direct adversarial probes reproduced CR-01 for POSIX, drive, UNC, single-quoted, and double-quoted unmatched paths with an embedded matching quote; `redactCauseChain` retained each directory suffix.
-- Direct adversarial probes reproduced CR-02 with arbitrary `help/guide` prose both directly and after a balanced relative quoted value; `redactCauseChain` returned `guide` instead of failing closed.
-- Package-install cleanup owner and direct coverage: passed.
-- Package-manager owner module: passed 41/41 outside the process-restricted sandbox.
-- Package-manager direct coverage: passed at 100% line, function, and branch coverage.
-- Standalone no-ambient-handle process probe: exited 0 and emitted the complete timed-out result.
-- Exact post-fix `npm run check`: passed `1144` scenarios / `11758` steps / `309` LCOV records. The gate does not include either adversarial boundary above.
+- D-PL10-13 exact owner: passed 1/1 with no skip or todo.
+- Iteration-14 focused owners: passed 265 redactor tests and 48 presentation tests; both direct pairs passed 100% line, function, and branch coverage.
+- Direct adversarial probes reproduced CR-01 for POSIX, drive, UNC, single-quoted, and double-quoted inputs; `redactCauseChain()` retained the exposed suffix.
+- Package-manager owner and direct coverage evidence remain green on the byte-identical package-manager source.
+- Exact post-fix `npm run check`: passed `1144` scenarios / `11758` steps / `309` LCOV records. The gate lacks the embedded-quote-plus-balanced-value collision.
 
 Only this report was changed. No implementation, test, state, or configuration file was modified, and no commit was created.
 
 ---
 
-_Reviewed: 2026-10-29T09:45:18Z_
+_Reviewed: 2026-10-29T10:05:34Z_
 _Reviewer: Codex (gsd-code-reviewer)_
 _Depth: standard_
