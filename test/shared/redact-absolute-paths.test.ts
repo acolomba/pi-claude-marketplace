@@ -70,6 +70,40 @@ const SEPARATOR_ADJACENT_QUOTE_CASES = [
   ),
 );
 
+const ERRNO_ARROW_SEPARATOR = "' -> '";
+const ERRNO_ARROW_SEPARATOR_CASES = ["rename", "copyfile", "link", "symlink"].flatMap((operation) =>
+  [
+    { platform: "POSIX", root: "/tmp/private", separator: "/" },
+    { platform: "drive", root: "C:\\private", separator: "\\" },
+    { platform: "UNC", root: "\\\\server\\private", separator: "\\" },
+  ].flatMap(({ platform, root, separator }) => {
+    const source = `${root}${separator}source.json`;
+    const destination = `${root}${separator}destination.json`;
+    return [
+      {
+        operation,
+        platform,
+        location: "source",
+        field: `${source}${ERRNO_ARROW_SEPARATOR}source-tail${ERRNO_ARROW_SEPARATOR}${destination}`,
+      },
+      {
+        operation,
+        platform,
+        location: "destination",
+        field: `${source}${ERRNO_ARROW_SEPARATOR}${destination}${ERRNO_ARROW_SEPARATOR}destination-tail`,
+      },
+      {
+        operation,
+        platform,
+        location: "both paths",
+        field:
+          `${source}${ERRNO_ARROW_SEPARATOR}source-tail${ERRNO_ARROW_SEPARATOR}` +
+          `${destination}${ERRNO_ARROW_SEPARATOR}destination-tail`,
+      },
+    ];
+  }),
+);
+
 function registerSeparatorAdjacentQuoteCases(): void {
   for (const {
     platform,
@@ -99,10 +133,27 @@ function registerSeparatorAdjacentQuoteCases(): void {
   }
 }
 
+function registerErrnoArrowSeparatorCases(): void {
+  for (const { operation, platform, location, field } of ERRNO_ARROW_SEPARATOR_CASES) {
+    test(`fails closed for a ${platform} ${operation} diagnostic with a separator in the ${location}`, () => {
+      // arrange
+      const input = `ENOENT: no such file or directory, ${operation} '${field}'`;
+
+      // act
+      const text = redactAbsolutePaths(input);
+
+      // assert
+      assert.strictEqual(text, `ENOENT: no such file or directory, ${operation} '[redacted path]'`);
+    });
+  }
+}
+
 describe("redactAbsolutePaths", () => {
   test("exports absolute-path redaction from its named owner", () => {
     assert.equal(typeof redactAbsolutePaths, "function");
   });
+
+  registerErrnoArrowSeparatorCases();
 
   for (const { name, input, expected } of [
     {
@@ -815,6 +866,22 @@ describe("redactCauseChain", () => {
 
     // assert
     assert.strictEqual(trailer, "cause: open '[redacted path] -> open \"[redacted path]");
+  });
+
+  test("fails closed for an errno arrow separator inside a cause path", () => {
+    // arrange
+    const failure = new Error(
+      "ENOENT: no such file or directory, rename '/tmp/source' -> 'source-tail' -> '/tmp/destination'",
+    );
+
+    // act
+    const trailer = causeChainTrailer(redactCauseChain(failure));
+
+    // assert
+    assert.strictEqual(
+      trailer,
+      "cause: ENOENT: no such file or directory, rename '[redacted path]'",
+    );
   });
 
   test("redacts every quoted cause and structured leaked path containing spaces or UNC prefixes", () => {

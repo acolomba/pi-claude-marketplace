@@ -5,6 +5,8 @@ import {
   ManualRecoveryError,
 } from "./errors.ts";
 
+const REDACTED_PATH = "[redacted path]";
+
 /**
  * Collapses absolute paths in diagnostic text to their basenames.
  *
@@ -47,9 +49,12 @@ export function redactAbsolutePaths(text: string): string {
     /(\bE[A-Z0-9]+: [^,\r\n]+, [a-z][a-z0-9_]* )'.+'$/s,
     (match: string, prefix: string) => {
       const field = match.slice(prefix.length + 1, -1);
-      const paths = /, (?:rename|copyfile|link|symlink) $/.test(prefix)
-        ? field.split("' -> '")
-        : [field];
+      const arrowOperation = /, (?:rename|copyfile|link|symlink) $/.test(prefix);
+      const paths = arrowOperation ? field.split("' -> '") : [field];
+      if (arrowOperation && paths.length !== 2) {
+        return `${prefix}'${REDACTED_PATH}'`;
+      }
+
       return (
         prefix +
         "'" +
@@ -72,7 +77,6 @@ function isQuotedPathBoundary(character: string | undefined): boolean {
   return character === undefined || /[\s,;:.)\]}]/u.test(character);
 }
 
-const REDACTED_PATH = "[redacted path]";
 function isQuotedAbsolutePathCandidate(candidate: string): boolean {
   return /^(?:[A-Za-z]:[\\/]|\\\\|\/).*[/\\][^/\\]+$/s.test(candidate);
 }
