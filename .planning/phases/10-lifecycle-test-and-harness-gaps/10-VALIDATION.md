@@ -1,8 +1,8 @@
 ---
 phase: "10"
 slug: "lifecycle-test-and-harness-gaps"
-status: gaps_found
-nyquist_compliant: false
+status: validated
+nyquist_compliant: true
 wave_0_complete: true
 created: "2026-10-27"
 ---
@@ -13,13 +13,13 @@ created: "2026-10-27"
 
 ## Test Infrastructure
 
-| Property | Value |
-|----------|-------|
-| **Framework** | Node `node:test`, Cucumber, direct coverage |
-| **Config file** | `package.json`, `cucumber.json` |
-| **Quick run command** | `node --test <owner-test>` or `npx cucumber-js --name '<scenario>'` |
-| **Full suite command** | `npm run check` |
-| **Estimated runtime** | ~600 seconds |
+| Property               | Value                                                               |
+| ---------------------- | ------------------------------------------------------------------- |
+| **Framework**          | Node `node:test`, Cucumber, direct coverage                         |
+| **Config file**        | `package.json`, `cucumber.json`                                     |
+| **Quick run command**  | `node --test <owner-test>` or `npx cucumber-js --name '<scenario>'` |
+| **Full suite command** | `npm run check`                                                     |
+| **Estimated runtime**  | ~600 seconds                                                        |
 
 ## Sampling Rate
 
@@ -32,15 +32,15 @@ created: "2026-10-27"
 
 The planner must give every task an exact owner-test or scenario command and an observable failing direction. Each requirement is covered by at least one automated task:
 
-| Requirement | Primary automated proof |
-|-------------|-------------------------|
-| TST-01 | Named Cucumber scenarios or discriminating unit cases with a recorded harness limit |
-| TST-02 | Harness owner tests plus `npm run check:features` |
-| TST-03 | Install/reinstall owner tests for a record-plus-manifest seeder |
-| CAS-08 | Three named install-dependency scenarios plus direct coverage |
-| MIM-05 | Apply partial-rollback scenario plus direct coverage |
-| XPH-01 | TUI, completion, reinstall, reconcile, and import scenarios |
-| XPH-02 | A named scenario for each user-visible correction and focused unit parity cases |
+| Requirement | Primary automated proof                                                             |
+| ----------- | ----------------------------------------------------------------------------------- |
+| TST-01      | Named Cucumber scenarios or discriminating unit cases with a recorded harness limit |
+| TST-02      | Harness owner tests plus `npm run check:features`                                   |
+| TST-03      | Install/reinstall owner tests for a record-plus-manifest seeder                     |
+| CAS-08      | Three named install-dependency scenarios plus direct coverage                       |
+| MIM-05      | Apply partial-rollback scenario plus direct coverage                                |
+| XPH-01      | TUI, completion, reinstall, reconcile, and import scenarios                         |
+| XPH-02      | A named scenario for each user-visible correction and focused unit parity cases     |
 
 ## Wave 0 Requirements
 
@@ -67,11 +67,11 @@ None planned. Any unreachable behavior must carry a concrete harness-limit reaso
 
 ## Validation Audit 2026-10-28
 
-| Metric | Count |
-|---|---|
-| Gaps found | 1 |
-| Resolved | 1 |
-| Escalated | 0 |
+| Metric     | Count |
+| ---------- | ----- |
+| Gaps found | 1     |
+| Resolved   | 1     |
+| Escalated  | 0     |
 
 The integrated Phase 11 tree had renamed the owner case cited by
 `LCTEST-SKIP-CACHE`. The case still asserted both no completion-cache
@@ -85,11 +85,11 @@ focused marketplace-add and real-child process-tree owner cases (1/1 each), and
 
 ## Post-Split Validation Audit 2026-10-28
 
-| Metric | Count |
-|---|---|
-| Gaps found | 2 |
-| Resolved | 2 |
-| Escalated | 0 |
+| Metric     | Count |
+| ---------- | ----- |
+| Gaps found | 2     |
+| Resolved   | 2     |
+| Escalated  | 0     |
 
 Plan 11-06 moved the PI-6 marketplace-fixture case into the ledger pair and
 split the `rootCommit` hand-off proof between planning selection and ledger
@@ -102,11 +102,11 @@ focused post-split cases pass without changing implementation.
 
 ## Post-Review-Fix Validation Audit 2026-10-28
 
-| Metric | Count |
-|---|---|
-| Gaps found | 0 |
-| Resolved | 0 |
-| Escalated | 0 |
+| Metric     | Count |
+| ---------- | ----- |
+| Gaps found | 0     |
+| Resolved   | 0     |
+| Escalated  | 0     |
 
 The final install-flow boundary keeps all 56 Phase 10 evidence rows valid. The
 relocated PI-6 and `rootCommit` owner cases pass. The three CAS-08 scenarios
@@ -120,11 +120,11 @@ unverified.
 
 ## Stale-Verification Validation Audit 2026-10-28
 
-| Metric | Count |
-|---|---|
-| Gaps found | 1 |
-| Resolved | 1 |
-| Escalated | 0 |
+| Metric              | Count |
+| ------------------- | ----- |
+| Gaps found          | 1     |
+| Resolved            | 1     |
+| Escalated           | 0     |
 | Evidence rows valid | 56/56 |
 
 The post-split coverage ledger still cited the removed ledger-owner title for
@@ -144,47 +144,49 @@ install root, planning leaf, and ledger leaf remains 100% for lines, branches,
 and functions. TST-03 is covered by the focused manifest-first install and
 reinstall fixture owners. No production or test source changed.
 
-## Final Integrated Convergence Audit 2026-10-29
+## Final Post-Fix Validation Audit 2026-10-29
 
-| Metric                           | Count |
-| -------------------------------- | ----- |
-| Gaps found                       | 1     |
-| Resolved                         | 0     |
-| Escalated                        | 1     |
-| Evidence rows structurally valid | 56/56 |
-| Must-haves behaviorally green    | 28/28 |
+| Metric                        | Count |
+| ----------------------------- | ----- |
+| Prior gaps                    | 1     |
+| Resolved                      | 1     |
+| Escalated                     | 0     |
+| Evidence rows valid           | 56/56 |
+| Unique expected IDs           | 56/56 |
+| Must-haves behaviorally green | 28/28 |
 
-The integrated implementation and behavioral tests are green, but one exact
-evidence pin is semantically stale. `XPH02-MOVE-DIAGNOSTICS` cites commit
-`291b2df1`. At that commit, the scenario titled `Update preserves dependency
-move warnings and MCP notices` attributed the dependency warning to the root
-plugin `app`. Phase 9 later fixed the carrier to retain the producing
-dependency and changed the same scenario to require `lib` at `741516af`; it
-also added direct-update package-failure scenarios at `16e4c849` and
-`db79c003`. The checker passes because it verifies that the unchanged title is
-present at the cited commit, not that the committed assertion contains the
-final owner contract.
-
-Keep the existing row and ID, but update its exact evidence commit to
-`741516af` and bind all three current behavioral titles:
+The final evidence-binding gap is closed. `XPH02-MOVE-DIAGNOSTICS` now pins
+commit `741516af` and binds exactly these three current behavioral titles:
 
 - `features/plugin/update.feature` — `Scenario: Update preserves dependency move warnings and MCP notices`
 - `features/plugin/package-dependencies.feature` — `Scenario: A direct update reports a moved dependency package failure only on that dependency`
 - `features/plugin/package-dependencies.feature` — `Scenario: A direct update reports a newly installed dependency package failure once`
 
-No implementation or test failure was found. The focused final audit passed:
+The strict checker passed 56/56 rows. Independent in-memory mutations proved
+that the new rule can fail: deleting the newly-installed-dependency title was
+rejected by the complete-evidence-set check, and repinning the row to
+`291b2df1` was rejected because both package-dependency titles are absent at
+that commit. No tracked coverage artifact was modified for these probes.
 
-- `node scripts/check-phase10-coverage.mjs`: 56/56 rows structurally valid.
-- Focused Cucumber: 9/9 scenarios and 139/139 steps, covering all three
-  CAS-08 routes, MIM-05, both repaired Phase 8 PTY oracles, and the final
-  Phase 9 warning-owner behaviors.
-- Focused owners: 10/10 passed with no skips or todos, including D-PL10-13,
-  both manifest-first fixtures, the real process-tree child, Phase 6 lock-path
-  redaction, and the Phase 8 config-read stop/abort races.
-- Direct coverage: all 11 selected final Phase 6/8/9 source-test pairs passed
-  100% line, branch, and function thresholds.
-- The owner-provided exact full gate remains green on this unchanged build
-  tree: 1,144 scenarios, 11,758 steps, and 309 merged LCOV records.
+The exhaustive ledger contains 56 unique IDs: 10 `LCHARN`, 18 `LCTEST`, 13
+`XPH01`, nine `XPH02`, two manifest-first `PHANTOM`, three `CAS08`, and one
+`MIM05`. Its dispositions remain 35 scenarios, 14 unit-with-reason, six fixed,
+and one declined-with-reason. The seven roadmap truths and 21 plan-specific
+truths remain verified, for 28/28 must-haves.
+
+Fresh focused execution passed:
+
+- all three final move-diagnostic scenarios: 3/3 scenarios and 48/48 steps;
+- the D-PL10-13 owner: 1/1 test, with no skip or todo;
+- `node scripts/check-phase10-coverage.mjs`: 56/56 exact rows valid.
+
+The exact full `npm run check` result at executable source commit `741516af`
+remains reusable: 1,144 scenarios, 11,758 steps, and 309 merged LCOV records.
+Only the standalone Phase 10 checker and planning Markdown changed afterward;
+no runtime, test, feature, dependency, configuration, or npm gate input
+changed.
 
 D-PL10-13 remains the formal superseding decision over the older Plan 01-03
-literal. Its focused owner case passed; no older behavior should be restored.
+literal. Its current owner proof passed, so the superseded broad behavior must
+not be restored. Phase 10 is Nyquist-compliant with no remaining validation
+gap or implementation escalation.
