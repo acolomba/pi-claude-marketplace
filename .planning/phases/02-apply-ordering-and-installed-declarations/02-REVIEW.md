@@ -1,6 +1,6 @@
 ---
 phase: 02-apply-ordering-and-installed-declarations
-reviewed: 2026-10-28T17:19:33Z
+reviewed: 2026-10-29T03:00:51Z
 depth: standard
 files_reviewed: 44
 files_reviewed_list:
@@ -58,7 +58,7 @@ status: clean
 
 # Phase 2: Code Review Report
 
-**Reviewed:** 2026-10-28T17:19:33Z
+**Reviewed:** 2026-10-29T03:00:51Z
 **Depth:** standard
 **Files Reviewed:** 44
 **Status:** clean
@@ -67,71 +67,79 @@ status: clean
 
 ## Summary
 
-Final re-review of branch HEAD `fdf127dc`, with implementation/test HEAD
-`9692623df10a567019acdb7a24e5e3229a72cc80`. No Critical, Warning, or Info
-findings remain.
+Final merged-tree review of branch HEAD
+`decf5452204d25c664e7e9a251647c8bc498edab`. No Critical, Warning, or Info
+findings remain. All reviewed files meet the Phase 2 quality and correctness
+requirements.
 
-The review covers the implementation/test commits since `67a589aa`, retaining
-the prior review of unchanged source and inspecting the later locking,
-fast-path, retry, rollback, and regression-test changes with their relevant
-callers. Phase 2 plans, summaries, and CONTEXT are unchanged from the earlier
-review; current VALIDATION and SECURITY were also consulted. Recorded decisions
-remain authoritative.
+The complete 44-file Phase 2 scope was reassessed against RCN-01 through
+RCN-08. The last clean Phase 2 review (`fdf127dc`) is an ancestor of the merged
+HEAD. Nine files in this scope changed afterward; their complete diffs and
+affected call paths were reviewed again. The remaining 35 files are
+content-identical to that clean review and retain its disposition.
 
-## Previous finding dispositions
+## Integrated regression assessment
 
-| Finding | Disposition | Evidence |
-|---|---|---|
-| CR-01: Pending/load reject source changes that apply repairs | Resolved | Pending applies the shared source-repair policy to its initial plan and every replan. The pending renderer suppresses only replacement markers paired with an add in the same scope. Other mismatch diagnostics remain failures. Ordinary replacement and official fallback scenarios cover pending, load, and apply. |
-| CR-02: Hosted URL replacement fails with stale clone | Resolved | Hosted sources use the existing managed-directory set-aside, restore-on-failure, and discard-after-save flow. Tests cover hosted-to-hosted, hosted-to-git, failed-save restoration, preserved installed records, and apply/import behavior. |
-
-## Final regression assessment
-
-- Installed declaration reads with a potential distinct holder run inside
-  `withExistingScopeLock`. This prevents a cooperating same-scope uninstall or
-  clone cleanup from removing the copy during the declaration walk. Acquisition,
-  compromise, and release failures reject the gate. The lock is released before
-  tag probing and candidate resolution, avoiding nested acquisition there.
-- The no-holder fast path excludes exactly the target and requester records
-  excluded by `collectHolders`. Every other installed record still requires the
-  locked declaration walk. The fast path continues through the normal fold, so
-  requester ranges and excluded versions remain effective.
-- `efb65789` is forward-restored by `33f1ce71`: both project- and user-scope
-  candidate-version failure expectations are restored. The final
-  `features/plugin/state-lock.feature` has no net change against the pre-change
-  version. The fast path restores the corresponding sole-record behavior.
-- The real dependency-install lock test calls
-  `createDependencyInstallOperation`, the same production composition used by
-  apply. It verifies a typed held-lock failure, byte-identical state after the
-  refusal, successful retry after release, the installed record, and no direct
-  notifications.
-- The apply read-failure backstop checks that the committed dependency move
-  survives, the missing dependency remains absent after the failure, and the
-  next apply installs it without reporting the move again.
-- The missing-dependency rollback case checks that the failed root and its
-  earlier cascade member leave neither installation records nor the member's
-  staged skill.
-- The new fixtures use temporary scope roots and the existing hermetic
-  environment helpers. Lock acquisition and release are explicitly sequenced.
-  No additional authorization or containment bypass was found in these changes.
+- `pending` and `apply` derive their scope plan through the same toggle verdict,
+  move settlement, missing-dependency split, and dependency-first cascade
+  helpers. `movesAfterInstalls` and `stepsAfterInstalls` place moves that depend
+  on a missing install after that install in both the preview and execution.
+  The fresh post-move read makes a dependency required only by the moved version
+  install in the same apply, and the following read enables only the records
+  that were waiting for that install.
+- Declaration walks use each installed record's copy when its resolved source
+  is a pinned clone. `readInstalledCopyDeclaration` admits that copy only under
+  its owning clone root, rejects symlink and boundary escapes, and converts an
+  unreadable or malformed own manifest into the explicit unusable arm. The
+  convergence planner, pending preview, and final apply judgement all preserve
+  that failure rather than treating it as an empty declaration.
+- Project and user state stay isolated by `locationsFor(scope, cwd)`, per-scope
+  locks, and `(scope, marketplace)` keys in pending's recorded-marketplace map.
+  A failure in one scope becomes its own structured row and does not redirect
+  reads, installs, or writes into the other scope.
+- Config-driven disable is applied before the dependency consequence-disable
+  step. The verdict is recomputed after planned toggles, so dependents are held
+  down in the same run and the consequence marker is not stamped onto a record
+  the user already disabled.
+- Marketplace add and bootstrap commit the marketplace before invoking the
+  shared missing-dependency step. Autoupdate uses the same step and selects
+  only declarations rooted in the updated marketplace while suppressing rows
+  already reported by the update cascade. Failed installs retain the same
+  narrowed reason and recovery rows as direct apply.
+- Later Phase 6 changes preserve enable failure cause and rollback details on
+  ordinary reconcile rows and on the single failed-move row used by a deferred
+  move plus enable. Successful deferred moves carry the enable's staging
+  warnings and MCP rewrite notices without duplicating the transition.
+- Later Phase 7/9 update-preflight changes thread exact clone candidates into
+  every git and marketplace-tag materialization path. They do not bypass the
+  Phase 2 installed-copy lock or constraint fold, and cleanup remains scoped to
+  the owning `ScopedLocations` bundle.
+- The new behavioral scenarios assert full structured output, tally, recovery
+  details, installation record, and absence/presence of the intended
+  declaration. The matching unit cases assert exact text/JSON projections,
+  state rollback, leaked-resource evidence, deferred pin restoration, and
+  post-transition diagnostics. They are discriminating rather than
+  success-only checks.
 
 ## Validation evidence
 
-- The orchestrator supplied the fresh `npm run check` result at `9692623d`,
-  Node `v26.12.1`: exit 0; Cucumber passed 1122 scenarios and 11447 steps;
-  direct coverage merged 309 LCOV records.
-- Independently verified that the source/test diff from `9692623d` to
-  `fdf127dc` is empty. The only dirty file is the orchestrator-owned
-  `02-VERIFICATION.md`.
-- Independently ran targeted lock, no-holder, requester, retry, and rollback
-  cases in `update-constraint-gate.test.ts`, `operations.test.ts`, and
-  `apply.test.ts` using `node --test --test-reporter=spec
-  --test-name-pattern=...`: exit 0; all three reported file results passed.
-- Previously repeated source-repair and hosted-replacement regression checks
-  remain applicable: their implementation and tests are unchanged by the later
-  locking commits.
-- `git diff --check` passed.
-- This final review made no file changes and no commit.
+- The orchestrator supplied a fresh merged-tree `npm run check` at this HEAD:
+  exit 0; Cucumber passed 1142 scenarios and 11734 steps; direct coverage
+  merged 309 LCOV records.
+- The Phase 2 Nyquist audit is COMPLIANT on the merged tree.
+- Independently ran focused current-tree apply and notification cases for
+  failed-enable recovery, deferred move/enable diagnostics, and rollback-phase
+  projection with Node's test runner: both owner modules passed.
+- CodeGraph call-path inspection found no alternate catalog-only declaration
+  read, scope-crossing path, or reordered pending/apply cascade in the reviewed
+  composition.
+- Fallow's repository security advisory pass completed without an enforced
+  gate failure. Its broad path-sink candidates did not establish a Phase 2
+  containment bypass; the reviewed boundaries validate ownership and realpath
+  containment before use.
+- `git diff --check` passed. The only pre-existing dirty file during review was
+  the orchestrator-owned `.planning/STATE.md`; this review changed only
+  `02-REVIEW.md` and made no commit.
 
 ---
 
