@@ -96,3 +96,40 @@ The first Cucumber attempt could not bind `127.0.0.1` in the restricted
 sandbox (`listen EPERM`); no scenarios ran in that attempt. Re-running with
 loopback permission passed. The phase gate (`npm run check`) is owned by the
 execute-phase orchestrator and was not duplicated in this audit.
+
+## Final Merged-Tree Nyquist Audit — 2026-10-28
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+| Public scenarios | 20/20 |
+| Public steps | 248/248 |
+
+The final A+B+C tree keeps discriminating evidence for WRN-01 through WRN-07
+across the post-split install flow. The current owners cover the install
+cascade context and dependency ledger, install failure projection, update
+swap, dependency settlement, apply outcome projection, reconcile
+notifications, and forced agent staging. The focused owner command passed all
+16 selected modules with the D-PL1, WRN, and carrier cases enabled.
+
+`npx cucumber-js features/plugin/staging-warnings.feature` passed all 20
+scenarios and 248 steps. It covers standalone install, update, reinstall and
+enable diagnostics; failed install/update/reinstall diagnostics; marketplace
+and apply cascades; dependency MCP notices on success and refusal; moved
+dependency notices; final-config and later-move failures; package notes; and
+row-order preservation across marketplaces.
+
+Phase 10 decision D-PL10-13 formally supersedes Plan 01-03's older literal for
+a staged generated name whose index row points at another file. The current
+owner proves that force preserves that row and file and reports the hygiene
+warning. D-PL1-15 still proves replacement of a staged row whose own file was
+edited while preserving a hand-named row. The separate NFR-10 case proves
+that force refuses an owned row outside the agents directory and removes
+nothing. Restoring the older literal would contradict the final safety
+decision and is not a validation gap.
+
+The execute-phase orchestrator's exact merged-tree `npm run check` passed all
+static checks, 1,142 scenarios, 11,734 steps, and 309 direct LCOV records at
+merge `059a1edd`. No source or test file changed in this audit.
