@@ -1,10 +1,11 @@
 ---
 phase: 06-import-marketplace-planning
-reviewed: 2026-10-29T00:56:32Z
-reviewed_commit: 7739eeb8759cf62cdbecb926e5dade64cb1bd0dd
-source_commit: 250acaadf15622a66ee80b5e3443ad96be908016
+reviewed: 2026-10-29T04:14:43Z
+reviewed_commit: 59e5075b2edcdddde72cc7c21e69fa3e5e9db49f
 depth: standard
 review_scope_complete: true
+scope_status: degraded
+scope_reason: no-task-commit-rows
 files_reviewed: 38
 files_reviewed_list:
   - .agents/skills/cucumber/rules/features.md
@@ -46,79 +47,77 @@ files_reviewed_list:
   - test/orchestrators/reconcile/plan.test.ts
   - test/shared/redact-absolute-paths.test.ts
 findings:
-  critical: 0
+  critical: 1
   warning: 0
   info: 0
-  total: 0
-status: clean
+  total: 1
+status: issues_found
 ---
 
 # Phase 6: Code Review Report
 
-**Reviewed:** 2026-10-29T00:56:32Z
+**Reviewed:** 2026-10-29T04:14:43Z
 
-**Commit:** `7739eeb8759cf62cdbecb926e5dade64cb1bd0dd`
+**Commit:** `59e5075b2edcdddde72cc7c21e69fa3e5e9db49f`
 
 **Depth:** standard
 
-**Files reviewed:** 38 (79,853 lines), complete
+**Files reviewed:** 38
 
-**Status:** clean
+**Status:** issues_found
 
 ## Summary
 
-Fresh review of the complete current scope found no actionable correctness, security, or test-reliability defect. The three blockers in the preceding review are closed. The previously skipped and superseded findings were reassessed against D-PL6-15 through D-PL6-20; none remains actionable.
+The final merged-tree review found one current information-disclosure blocker. The Phase 6 rollback and structured-error redaction fixes remain closed, but the import read/write diagnostic path bypasses that boundary and sends raw filesystem errors to the user. A malformed production `state.json` therefore exposes its absolute path.
 
-Every file in `files_reviewed_list` was read completely. The primary reviewer read all 15 production files, the three feature files, four feature support/step files, and the Cucumber rules file. A test-only reviewer read the non-overlapping 15 test files in full (58,386 lines). This was a complete current-file review, not only a recheck of previous findings.
-
-The scope includes every file changed by `6680b940`, `a769f58f`, `a04c4756`, and `250acaad`. No scoped file is git-ignored. CodeGraph was consulted first for symbols and call paths; it reported stale indexed source for changed modules, so current direct reads and caller/type searches supplied the review evidence.
+The GSD evaluation-scope resolver returned `degraded` (`no-task-commit-rows`), so this review reused the phase's previously complete 38-file scope, checked the current contents and all later changes within that scope, and traced the diagnostic from `loadState` through the notification boundary. The fresh combined gate remains useful regression evidence, but it cannot establish that an untested disclosure path is safe.
 
 ## Narrative Findings (AI reviewer)
 
-No current BLOCKER or WARNING findings. No informational findings.
+## Critical Issues
 
-## Closure of the preceding review
+### CR-01: Import diagnostics expose absolute scope paths
 
-These IDs refer to the 2026-10-28 review at `bd310b53`.
+**Classification:** BLOCKER
 
-| Finding | Current evidence and disposition |
-|---|---|
-| CR-01 — unchanged add loses an import failure | Closed by `6680b940`. The unchanged branch in `orchestrators/import/execute.ts:1404` compares the returned canonical name. A different name enters `recordReusedMarketplace` (`execute.ts:1638`), blocks the requested marketplace, and records each plugin as marketplace-not-added. The failed requested-name header survives grouping and contributes to the error tally. Same-name plugin imports retain their skipped marketplace header; unreferenced reuse stays silent. Complete unit and feature assertions cover two names for one newly added source, exact failure/header/tally output, canonical-only config declarations, and absence of a wrong-name installation. |
-| CR-02 — apply drops failed-enable recovery details | Closed by `a769f58f`. `orchestrators/reconcile/apply.ts:1073` carries rebuilt causes and rollback phases into the failed-enable outcome. `apply-outcomes.ts:325` and `notify.ts:1281` preserve these fields through the shared failed-row projection. Failed moves use that same projection at `apply.ts:1778`, retaining version/commit metadata while carrying redacted recovery details. The enable ledger returns failure without persisting enabled state; exact TUI/JSON regressions check cause, rollback phase, leaked resource, and the unchanged disabled record for failed enable and failed move. |
-| CR-03 — quoted and UNC paths disclose directories | Closed by `a04c4756` and the `250acaad` follow-up. `shared/redact-absolute-paths.ts:23` handles complete quoted paths and Node errno fields before generic prose matching. `redactCauseChain` (`:112`) rebuilds nested causes and structured ManualRecoveryError leaks; `redactedRollbackPartials` (`:145`) removes raw ledger messages. Import (`execute.ts:2252`) and apply (`apply.ts:637`, `:1074`) use these boundaries before rendering. Current tests cover spaces, Unicode, ordinary/extended UNC and Windows paths, O'Brien, O' Brien, actual one- and two-path Node syscalls, and literal `' -> '` inside an open path. Exact import/apply TUI and JSON assertions cover nested causes, rollback causes, and basename-only leak projections. |
-| SEC-06-01 — apostrophe-space terminates an errno path | Closed by `250acaad`. Node errno paths retain internal apostrophes before basename extraction. Two-path splitting applies only to rename, copyfile, link, and symlink; open retains its entire single path. The independently owned final security report records 131 passing diagnostic/projection assertions and 14/14 closed threats. |
+**File:** `extensions/pi-claude-marketplace/orchestrators/import/execute.ts:1822-1828,1971-1980`
 
-## Earlier finding dispositions under current decisions
+**Issue:** Both expected import diagnostic catches interpolate `errorMessage(err)` directly into a user-visible diagnostic. Production `loadState` errors include the full `state.json` path (for example, `state.json at /home/alice/project/.pi/pi-claude-marketplace/state.json is not valid JSON`). `surfaceImportDiagnostics` then emits that string unchanged. The post-pass write catch has the same defect for Node filesystem errors. This bypasses the redaction boundary used by Phase 6's failed import/apply rows and contradicts T-06-10's claim that import failure causes do not expose paths.
 
-These IDs refer to the superseded 2026-10-27 review.
+A read-only reproduction at the reviewed commit injected the exact production `loadState` error grammar and observed both of these public values:
 
-| Previous finding | Current assessment |
-|---|---|
-| CR-01 — config naming | Closed. `configNamesByRecorded` uses the planner's one-to-one source claims; the post-pass preserves an existing config alias and its layer for a recorded marketplace. D-PL6-17 separately forbids installing or declaring a plugin under an absent settings name. Current scenarios assert both behaviors. |
-| WR-01 — settings also declares the recorded name | Superseded by D-PL6-18. The old settings-name exclusion is absent from implementation/types; source reuse remains silent even when settings also declares the recorded name. Plugins naming an absent marketplace still fail under D-PL6-17. |
-| WR-02 — claim-conflict prose | Superseded by D-PL6-17/18 source reuse and D-PL6-19 source replacement. The former prose path is not a current defect; ambiguous claims still cannot rewrite config identity. |
-| IN-01 — previously skipped unreferenced mismatch reporting | Superseded by D-PL6-19. Eligible same-name source changes take the actual re-add path and shared failure bookkeeping. A missing local source or a source already recorded under another name preserves the record; official fallback mismatch retains its specified behavior. A replacement manifest with a different name fails closed. |
-| IN-02 — shared dependency detail deduplication | Closed. Import and apply retain one detailed failure per scoped dependency. Apply suppresses a repeated dependency row only after a prior row carries rollback phases, so a bare failure cannot suppress the first detailed row. Full scenarios assert shared-dependency outcomes. |
-| IN-03 — previously skipped ordering | Closed by D-PL6-15. The requested/dependency failure pair uses `compareByNameThenScope`, with exact scenario assertions. |
-| IN-04 — previously skipped enable projection | No actionable defect. Optional degradation fields are copied consistently; staged component facts travel through required `declares*` members and are reconstructed at the row boundary. Repetition alone is not a robustness finding. |
-| IN-05 — error-token matching | Closed under D-PL6-16. Arbitrary-directory matching is restricted to the read-only skill removal token. Other error tokens require the exact or path-cut form. Exact unit assertions independently enforce redaction. |
-| D-PL6-20 — leaked skill identity | Current import/apply projections retain the skill directory basename in structured leaks while rebuilding nested recovery causes. Their checks cover both text and JSON output. |
+```text
+diagnostic.message = Cannot read project scope state: state.json at /tmp/private-user/.pi/pi-claude-marketplace/state.json is not valid JSON: bad input
+notification = 1 import diagnostic surfaced. ... /tmp/private-user/.pi/pi-claude-marketplace/state.json ...
+```
 
-## Verification evidence
+The owner test at `test/orchestrators/import/execute.test.ts:3829-3893` supplies the already-sanitized text `state.json is unreadable`, so it cannot fail when the production path leaks.
 
-- Reused the passing session `npm run check` at source commit `250acaadf15622a66ee80b5e3443ad96be908016`, Node v26.12.1, exit 0: all static checks, 1,125/1,125 Cucumber scenarios, 11,467/11,467 steps, and 309 direct-coverage records.
-- Reviewed HEAD is `7739eeb8759cf62cdbecb926e5dade64cb1bd0dd`. Its only difference from that source commit is `06-SECURITY.md`. `git diff --exit-code 250acaad -- . ':(exclude,glob).planning/**/*.md'` was empty and exited 0; there were no untracked inputs. Node remains v26.12.1. The local-verification gate-reuse rule therefore applies.
-- The independently owned final `06-SECURITY.md` reports SECURED at the same source: 14/14 threats closed (11 mitigated, 3 accepted risks), including 131 read-only audit assertions.
-- Read all four fix-commit file sets and verified they are contained in the 38-file scope. Reviewed current AGENTS, applicable review/TypeScript/unit/Cucumber rules, REVIEW-FIX, SECURITY, VALIDATION, and D-PL6-15 through D-PL6-20.
-- The optional `fallow review --base d98660a7 --brief` orientation attempt could not create its temporary base worktree in the sandbox (exit 2). No structural pre-pass findings were supplied. The passing full gate already includes the required fallow checks; this review does not claim a successful fresh structural comparison.
-- No source or test file was modified and no full suite was rerun. Report frontmatter/scope consistency and `git diff --check` were checked before handoff.
+**Fix:** Sanitize every caught filesystem error before building the diagnostic. Reuse a single boundary helper that understands the unquoted `loadState` forms as well as Node's quoted errno forms; a bare call to the current generic matcher is insufficient for a scope path containing spaces. Add a production-shaped regression using a case-owned root whose name contains spaces, assert the complete returned diagnostic and emitted notification, and assert that neither contains the root. Apply the same projection to the post-pass write catch.
 
-## Limits
+For example:
 
-This is standard-depth review with targeted caller, type, state, and output tracing, not an exhaustive concurrency or platform audit. UNC cases use diagnostic strings and structured leak values; no Windows filesystem run was performed. Full apostrophe/space handling follows Node errno grammar; arbitrary free-form prose retains conservative boundaries. The special Cucumber error token can match either full or basename paths, so its scenario alone is not proof of redaction; the exact unit projections provide that check.
+```ts
+const cause = redactImportFilesystemError(err);
+pushDiagnostic(
+  result,
+  scopePlan.scope,
+  "settings-read-error",
+  `Cannot read ${scopePlan.scope} scope state: ${cause}`,
+);
+```
+
+`redactImportFilesystemError` should reduce `Failed to read <path>: ...`, `state.json at <path> ...`, and quoted Node errno fields to basename-only text. It should preserve the rest of the error.
+
+## Verification Evidence
+
+- Nyquist: COMPLIANT for MIM-01 through MIM-04; 8 owner modules and 15 public scenarios / 177 steps passed.
+- Combined merged-tree gate: 1,142 scenarios, 11,734 steps, 309 direct-coverage records.
+- Reproduction: a direct `importClaudeSettings` call with an exact production-shaped `loadState` failure exposed `/tmp/private-user/.pi/pi-claude-marketplace/state.json` in the returned diagnostic and the TUI notification.
+- No source or test file was modified by this reviewer.
 
 ---
 
+_Reviewed: 2026-10-29T04:14:43Z_
 _Reviewer: gsd-code-reviewer_
-
 _Depth: standard_
