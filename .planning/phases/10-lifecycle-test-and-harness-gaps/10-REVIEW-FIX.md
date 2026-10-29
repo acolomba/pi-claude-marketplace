@@ -1,8 +1,8 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-fixed_at: 2026-10-29T08:19:30Z
+fixed_at: 2026-10-29T08:37:17Z
 review_path: .planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md
-iteration: 9
+iteration: 10
 findings_in_scope: 1
 fixed: 1
 skipped: 0
@@ -11,12 +11,45 @@ status: all_fixed
 
 # Phase 10: Code Review Fix Report
 
-**Fixed at:** 2026-10-29T08:19:30Z
+**Fixed at:** 2026-10-29T08:37:17Z
 **Source review:** `.planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md`
-**Iteration:** 9
+**Iteration:** 10
 
-Iteration 9 fixes the remaining quoted-value boundary finding. The package
+Iteration 10 fixes the remaining multi-quote disclosure. The package
 manager settlement fix and the earlier integration fixes remain closed.
+
+## Iteration 10 Fix
+
+### CR-01: The quote-role heuristic exposes valid multi-quote paths
+
+**Status:** fixed: requires human verification
+**Commit:** `893e91b2` (`fix(redaction): parse quoted path boundaries`)
+**Files modified:**
+
+- `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`
+- `test/shared/redact-absolute-paths.test.ts`
+- `test/shared/notification-present.test.ts`
+
+The parser collects matching quote positions once. A backward finite-state
+pass records whether each suffix is balanced when it starts inside or outside
+a separate quoted value. The forward pass keeps scanning when an apparent
+delimiter leaves an unmatched closing quote and a path separator remains.
+This rule keeps embedded quote characters inside the path. It still stops
+before balanced quoted diagnostic values. An unclosed quoted path is redacted
+through the end of the message instead of exposing a suffix after an embedded
+quote.
+
+The RED run failed 17 cases: 15 utility cases, one cause-chain case, and one
+public-presentation case. The final utility matrix contains 72 combinations:
+three platform forms, two quote types, three embedded-quote counts, and four
+trailing-whitespace states. It retains the 33 later-value cases from iteration
+9. The GREEN owner run passes all 207 focused tests. Both direct pairs pass
+100% line, function, and branch coverage.
+
+Type checking and Fallow guard and audit pass. The pre-commit fixers and the
+normal commit hook pass, including `npm run check:commit`. These checks ran in
+the existing Session A worktree with Node `v26.12.1` because
+`workflow.use_worktrees` was false for the fixer.
 
 ## Iteration 9 Fix
 
@@ -290,6 +323,6 @@ re-review, and goal verification on the unchanged integrated tree.
 
 ---
 
-_Fixed: 2026-10-29T08:19:30Z_
+_Fixed: 2026-10-29T08:37:17Z_
 _Fixer: the agent (gsd-code-fixer)_
-_Iteration: 9_
+_Iteration: 10_
