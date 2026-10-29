@@ -103,11 +103,7 @@ function quotedPathEnd(text: string, quote: string, fromIndex: number): number {
       continue;
     }
 
-    const nextCharacter = text[currentQuote + 1];
-    const continues =
-      (nextCharacter === " " || nextCharacter === "\t") &&
-      !balancedFromClosed[index + 1] &&
-      finalSeparator > currentQuote;
+    const continues = !balancedFromClosed[index + 1] && finalSeparator > currentQuote;
     if (!continues) {
       return currentQuote;
     }

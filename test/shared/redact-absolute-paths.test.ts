@@ -12,6 +12,39 @@ import {
   splitDependencyPartials,
 } from "../../extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts";
 
+const EMBEDDED_QUOTE_BOUNDARY_CASES = [
+  { platform: "POSIX", root: "/tmp", separator: "/" },
+  { platform: "drive", root: String.raw`C:\private`, separator: "\\" },
+  { platform: "UNC", root: String.raw`\\server\private`, separator: "\\" },
+].flatMap(({ platform, root, separator }) =>
+  [
+    { quoteName: "single quote", quote: "'" },
+    { quoteName: "double quote", quote: '"' },
+  ].flatMap(({ quoteName, quote }) =>
+    [
+      { boundaryName: "space", boundary: " " },
+      { boundaryName: "tab", boundary: "\t" },
+      { boundaryName: "line break", boundary: "\n" },
+      { boundaryName: "Unicode space", boundary: "\u00a0" },
+      { boundaryName: "comma", boundary: "," },
+      { boundaryName: "semicolon", boundary: ";" },
+      { boundaryName: "colon", boundary: ":" },
+      { boundaryName: "dot", boundary: "." },
+      { boundaryName: "closing parenthesis", boundary: ")" },
+      { boundaryName: "closing bracket", boundary: "]" },
+      { boundaryName: "closing brace", boundary: "}" },
+    ].map(({ boundaryName, boundary }) => ({
+      platform,
+      root,
+      separator,
+      quoteName,
+      quote,
+      boundaryName,
+      boundary,
+    })),
+  ),
+);
+
 describe("redactAbsolutePaths", () => {
   test("exports absolute-path redaction from its named owner", () => {
     assert.equal(typeof redactAbsolutePaths, "function");
@@ -313,6 +346,35 @@ describe("redactAbsolutePaths", () => {
     }
   }
 
+  for (const {
+    platform,
+    root,
+    separator,
+    quoteName,
+    quote,
+    boundaryName,
+    boundary,
+  } of EMBEDDED_QUOTE_BOUNDARY_CASES) {
+    test(`redacts a ${platform} path whose embedded ${quoteName} precedes a ${boundaryName}`, () => {
+      // arrange
+      const absolutePath =
+        root +
+        separator +
+        `O${quote}${boundary}Brien` +
+        separator +
+        "秘密" +
+        separator +
+        "secret.json";
+      const input = `open ${quote}${absolutePath}${quote}`;
+
+      // act
+      const text = redactAbsolutePaths(input);
+
+      // assert
+      assert.strictEqual(text, `open ${quote}secret.json${quote}`);
+    });
+  }
+
   test("repeated redaction is idempotent", () => {
     const input = String.raw`from /srv/private/a.json to C:\Users\alice\b.json`;
 
@@ -408,6 +470,19 @@ describe("redactCauseChain", () => {
       trailer,
       "cause: open 'secret.json' -> open \"secret.json\" -> open 'secret.json '",
     );
+  });
+
+  test("redacts embedded quotes before Unicode space and punctuation in a cause chain", () => {
+    // arrange
+    const failure = new Error("open '/tmp/O'\u00a0Brien/秘密/secret.json'", {
+      cause: new Error('open "C:\\private\\O",Brien\\秘密\\secret.json"'),
+    });
+
+    // act
+    const trailer = causeChainTrailer(redactCauseChain(failure));
+
+    // assert
+    assert.strictEqual(trailer, "cause: open 'secret.json' -> open \"secret.json\"");
   });
 
   test("redacts every quoted cause and structured leaked path containing spaces or UNC prefixes", () => {

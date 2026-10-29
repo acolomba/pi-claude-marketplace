@@ -1176,6 +1176,32 @@ describe("presentNotification", () => {
     });
   });
 
+  test("redacts embedded quotes before Unicode space in a presented prune cause", () => {
+    // arrange
+    const message = {
+      kind: "prune-committed-warning",
+      scope: "project",
+      cause: new Error("open '/tmp/O'\u00a0Brien/秘密/secret.json'"),
+    } satisfies PruneCommittedWarningMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        needsApply: false,
+        noOp: false,
+      },
+      scope: "project",
+      cause: { causeChain: ["open 'secret.json'"], truncated: false },
+    });
+  });
+
   test("presents a prune warning whose cause is absent with no cause member", () => {
     // arrange
     const message = { kind: "prune-committed-warning", scope: "user" };
