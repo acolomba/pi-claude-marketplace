@@ -1,6 +1,6 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-reviewed: 2026-10-29T07:18:19Z
+reviewed: 2026-10-29T07:45:51Z
 depth: standard
 files_reviewed: 126
 files_reviewed_list:
@@ -140,16 +140,16 @@ status: issues_found
 
 # Phase 10: Code Review Report
 
-**Reviewed:** 2026-10-29T07:18:19Z
+**Reviewed:** 2026-10-29T07:45:51Z
 **Depth:** standard
 **Files Reviewed:** 126 (the retained Phase 10 scope plus all final Phase 6, 8, 9, and checker deltas)
 **Status:** issues_found
-**Observed HEAD:** `b89197ef`
+**Observed HEAD:** `d4985207`
 **Runtime:** Node `v26.12.1`
 
 ## Structural Findings (fallow)
 
-The merged full gate's Fallow stage passed. A fresh `fallow review --base a82101b4 --brief` could not create its temporary comparison worktree, so it supplied no new structural result. Direct review covered the complete retained scope and every final delta instead.
+The reported merged full gate's Fallow stage passed. A fresh `fallow guard` accepted all five final changed files. Direct review covered the complete retained scope and both final fixes.
 
 CodeGraph was used before direct file reads. Its index did not include every newest changed owner, so all closure and requirement evidence was verified against the current source.
 
@@ -157,47 +157,49 @@ CodeGraph was used before direct file reads. Its index did not include every new
 
 ### Summary
 
-The strict Phase 10 evidence contract remains sound: all 56 rows validate, all 28 must-haves are represented, XPH02 is bound to exactly the three required scenario titles at `741516af`, and the checker rejects absent titles and evidence commits that do not contain the title. D-PL10-13 remains the formal supersession of the older Plan 01-03 literal. The final Phase 8 stop/abort and PTY-oracle repairs remain closed, and Phase 9's structured dependency diagnostics retain their member ownership through direct update, marketplace update, and apply.
+The complete 126-file scope was re-reviewed. The 121 files unchanged from the complete `b89197ef` review are byte-identical; the five files changed by `d93cd43a` and `bb50b890` were read in full and traced through their callers. The strict Phase 10 checker still passes 56/56, binds XPH02 to the exact three required scenario titles at `741516af`, and retains its negative-mutation checks. The exact D-PL10-13 owner passes, so that decision remains the formal supersession of the older Plan 01-03 literal. The Phase 6, 8, and 9 integration evidence and the 28-truth mapping remain present.
 
-Two final integrated deltas nevertheless contain reproducible blockers: one leaks an absolute-path suffix, and one lets a timed-out package-manager run return while its descendant process is still alive.
+The final fixes are not clean. CR-01's exact leak is closed, but its new quote scanner corrupts valid diagnostics when ordinary prose between two quoted values contains a slash. CR-02 keeps the promise pending through escalation, but its unreferenced escalation timers can now leave that promise permanently unsettled once the parent and descendant handles close. The platform owner and direct-coverage pair fail on the submitted tree, so the reported full-gate result cannot be accepted for these inputs.
 
 ## Critical Issues
 
-### CR-01: An apostrophe followed by whitespace terminates a quoted path early and leaks the remaining path
+### CR-01: The quote-continuation heuristic consumes unrelated prose that contains a path separator
 
-**File:** `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts:67`
+**File:** `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts:75-89`
 
-**Issue:** The generic quoted-path expression accepts any matching quote followed by whitespace as the closing delimiter. An apostrophe inside a valid filename therefore closes the match early when the next filename character is a space. On the current tree,
-`redactAbsolutePaths("unlink '/tmp/O' Brien/秘密/secret.json'")` returns
-`unlink 'O' Brien/秘密/secret.json'`: only `/tmp/O` is reduced, while the remaining private path segments are disclosed. The special Node errno parser does not protect generic causes and rollback messages that pass through this branch.
+**Issue:** `continuesQuotedPath()` treats any slash or backslash before the next matching quote as proof that the first quote belongs inside the path. That includes unrelated diagnostic prose. For POSIX, drive, and UNC inputs such as `open '/tmp/private/file.json' failed; see docs/errors 'E_READ'`, the current implementation returns `open 'errors 'E_READ'`. It drops the actual basename and most of the error text. The exact apostrophe-space leak is fixed, but the scanner is not conservative across the platform grammars it accepts. The fix also has no exact Cucumber case that would fail if this user-visible redaction behavior regressed; the existing install scenario uses a different path shape.
 
-**Fix:** Parse the final quoted path delimiter from the diagnostic boundary instead of accepting the first quote followed by whitespace. Preserve embedded quotes while a later path separator and closing quote remain. Add an owner regression for the exact apostrophe-space case and exercise it through `redactCauseChain` or a user-visible import/apply diagnostic.
+**Fix:** Recognize a continuation only when the text immediately after the ambiguous quote is syntactically a path component that reaches a separator before prose, rather than searching the whole interval for any separator. Add POSIX, drive, and UNC negative controls with a closed path followed by slash-bearing prose, retain the exact apostrophe-space positive cases, and add a command-surface Cucumber regression for the exact disclosure fix.
 
-### CR-02: A timed-out package-manager run resolves before its surviving process group is killed
+### CR-02: Unreferenced escalation timers can leave a timed-out package-manager run unsettled forever
 
-**File:** `extensions/pi-claude-marketplace/platform/package-manager.ts:215-229`
+**File:** `extensions/pi-claude-marketplace/platform/package-manager.ts:164-185`
 
-**Issue:** Once the timeout has fired, a `close` event from the direct parent calls `settle()` and resolves the run immediately. The code deliberately leaves the SIGKILL timer active for descendants, but the caller has already resumed. `runInstallStage()` then removes the work directory in its `finally` block while the descendant package-manager process can still be writing to it. The existing test at `test/platform/package-manager.test.ts:444-475` demonstrates this ordering by awaiting `pending` before advancing the grace timers that mark the descendant stopped. This violates the module's own contract that a timed-out run settles after SIGKILL plus its grace and permits package network/file activity to continue after the command reports timeout.
+**Issue:** After the timeout, a parent `close` deliberately no longer settles the promise. Settlement then depends on the grace and final-deadline timers, but both are unreferenced. If the parent closes on SIGTERM and the descendant either uses independent stdio or dies on SIGKILL, no referenced child or pipe handle remains to keep Node alive, and a pending Promise does not keep the event loop alive. A standalone run exits with Node's `Detected unsettled top-level await` warning and status 13 instead of resolving. On the submitted tree, both `node --test test/platform/package-manager.test.ts` and `npm run test:coverage:direct -- extensions/pi-claude-marketplace/platform/package-manager.ts` fail at the file wrapper. This also means `runInstallStage()` cannot reach its promised cleanup deterministically.
 
-**Fix:** Separate "parent closed" from "run settled" after `captured.timedOut` becomes true. Record the close code/output, but resolve only after the process-group escalation completes (or the final deadline fires). Add an assertion that the returned promise remains pending after parent close and until the descendant has received SIGKILL, then keep the existing never-closes deadline case.
+**Fix:** Keep the post-timeout grace and final-deadline timers referenced until `settle()` cancels them; only the initial timeout may rely on the live child handle. Add a child-process regression that runs with no ambient referenced handle and requires the promise to resolve after group escalation. Then require the platform owner module and its direct source-test coverage pair to pass in isolation before reusing any full-gate claim.
 
 ### Prior finding closure
 
-- The earlier Phase 10 PTY wait-cap blocker remains closed: the scenario holds the Git smart-HTTP request through the gate's 30-second cap and proves abort/cleanup before foreground continuation.
-- The earlier aggregate-notice oracle blocker remains closed: distinct `alpha` and `beta` notices must appear in one combined redraw, and direct oracle tests reject separate notices.
-- The earlier evidence-binding warning remains closed: the checker validates current paths and titles, verifies each commit, and reads every title from `git show commit:path`. Its current XPH02 rule also requires the exact three-title set.
+- The original apostrophe-space suffix disclosure is closed for the exact POSIX utility and cause-chain cases; CR-01 above is a new correctness regression in the scanner introduced by that fix.
+- The original early parent-close settlement is closed; CR-02 above is the replacement liveness defect created by relying exclusively on unreferenced timers.
+- The earlier PTY wait-cap, aggregate-notice oracle, and evidence-binding findings remain closed.
 
 ### Verification record
 
 - `node scripts/check-phase10-coverage.mjs`: `56/56` rows valid.
-- Integrated full gate evidence at executable commit `741516af`: static checks, `1144` scenarios / `11758` steps, and `309` direct-LCOV records passed.
-- Direct redaction reproduction on `b89197ef`: `unlink 'O' Brien/秘密/secret.json'` (suffix leak confirmed).
-- The package-runner owner test explicitly resolves the run before advancing the timers that kill the surviving descendant, confirming CR-02's ordering.
+- D-PL10-13 exact owner: passed, 1/1 with no skip or todo.
+- Redaction owner tests and direct coverage: passed; adversarial POSIX, drive, and UNC prose probes reproduced CR-01.
+- Package-install cleanup owner and direct coverage: passed.
+- Package-manager owner module: failed on the current tree.
+- Package-manager direct coverage: failed on the current tree.
+- Standalone no-ambient-handle process probe: exited 13 with unsettled top-level await, reproducing CR-02.
+- The supplied aggregate-gate claim was `1144` scenarios / `11758` steps / `309` LCOV records, but a required direct pair is red on the same submitted source and therefore invalidates that claim as a final verdict.
 
 Only this report was changed. No implementation, test, state, or configuration file was modified, and no commit was created.
 
 ---
 
-_Reviewed: 2026-10-29T07:18:19Z_
+_Reviewed: 2026-10-29T07:45:51Z_
 _Reviewer: Codex (gsd-code-reviewer)_
 _Depth: standard_
