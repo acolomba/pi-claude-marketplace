@@ -3,6 +3,7 @@ phase: 01-staging-warning-channels
 plan: 08
 subsystem: staging-warnings
 status: complete
+requirements-completed: [WRN-06]
 tags: [warnings, update, dependencies, mcp, notices, phase-gate]
 requires:
   - "01-03: AGIDX-01 forced agents commit (phase gate scope)"

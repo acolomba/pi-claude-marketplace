@@ -3,6 +3,7 @@ phase: 06-import-marketplace-planning
 plan: 03
 subsystem: orchestrators
 status: complete
+requirements-completed: [MIM-01, MIM-02]
 tags: [mim-01, mim-02, import, reconcile, source-claim]
 requires: []
 provides:

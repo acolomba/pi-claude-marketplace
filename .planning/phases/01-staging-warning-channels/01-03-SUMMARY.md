@@ -3,6 +3,7 @@ phase: 01-staging-warning-channels
 plan: 03
 subsystem: agents-bridge
 status: complete
+requirements-completed: [WRN-05]
 tags: [agents, agents-index, reinstall, force, nfr-10]
 requires:
   - "01-01: tagged agents prepare warnings in the same source and test file"

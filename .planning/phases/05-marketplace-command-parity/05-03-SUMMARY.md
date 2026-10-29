@@ -3,6 +3,7 @@ phase: 05-marketplace-command-parity
 plan: 03
 subsystem: domain/source
 status: complete
+requirements-completed: [MKT-05]
 tags: [source-parsing, marketplace, hosted-catalog, parity]
 requires: []
 provides:

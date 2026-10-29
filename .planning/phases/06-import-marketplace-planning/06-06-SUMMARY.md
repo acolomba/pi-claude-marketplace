@@ -3,6 +3,7 @@ phase: 06-import-marketplace-planning
 plan: 06
 subsystem: orchestrators
 status: complete
+requirements-completed: [MIM-04]
 tags: [mim-04, import, enable, outcome-shape, phase-gate]
 requires:
   - phase: 06-import-marketplace-planning

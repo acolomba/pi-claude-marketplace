@@ -3,6 +3,7 @@ phase: 06-import-marketplace-planning
 plan: 01
 subsystem: cucumber harness
 status: complete
+requirements-completed: [MIM-03]
 tags: [cucumber, rollback, run-tokens, MIM-03]
 requires: []
 provides:

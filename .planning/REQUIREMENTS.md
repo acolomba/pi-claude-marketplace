@@ -202,4 +202,4 @@ None.
 | CLN-03 | Phase 11 | Complete |
 | CLN-04 | Phase 11 | Complete |
 
-**Coverage:** 60 requirements, 60 mapped, 0 unmapped.
+**Coverage:** 64 requirements, 64 mapped, 0 unmapped.

@@ -4,6 +4,7 @@ plan: 03
 subsystem: plugin-update-swap
 tags: [update, reinstall, converge, st-9, concurrency, intent-mark]
 status: complete
+requirements-completed: [GLK-06]
 
 requires: []
 provides:

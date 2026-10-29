@@ -3,6 +3,7 @@ phase: 01-staging-warning-channels
 plan: 01
 subsystem: staging-warnings
 status: complete
+requirements-completed: [WRN-03]
 tags: [warnings, bridges, install, update, reinstall, diagnostics, cucumber]
 requires: []
 provides:
