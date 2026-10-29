@@ -1,8 +1,8 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-fixed_at: 2026-10-29T10:58:53Z
+fixed_at: 2026-10-29T11:09:57Z
 review_path: .planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md
-iteration: 18
+iteration: 19
 findings_in_scope: 1
 fixed: 1
 skipped: 0
@@ -11,9 +11,49 @@ status: all_fixed
 
 # Phase 10: Code Review Fix Report
 
-**Fixed at:** 2026-10-29T10:58:53Z
+**Fixed at:** 2026-10-29T11:09:57Z
 **Source review:** `.planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md`
-**Iteration:** 18
+**Iteration:** 19
+
+Iteration 19 makes the exact Node errno arrow grammar cardinality-strict.
+`rename`, `copyfile`, `link`, and `symlink` diagnostics may expose basenames
+only when their quoted field contains exactly one `"' -> '"` separator. Any
+other cardinality fails closed over the whole quoted field.
+
+## Iteration 19 Fix
+
+### CR-01: An errno arrow delimiter inside a filename leaks relative fragments
+
+**Status:** fixed: requires human verification
+**Commit:** `299a7a64` (`fix(redaction): validate errno arrow cardinality`)
+**Files modified:**
+
+- `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`
+- `test/shared/redact-absolute-paths.test.ts`
+- `test/shared/notification-present.test.ts`
+
+The exact errno branch now classifies arrow operations before splitting their
+quoted field. Exactly two fields may continue through absolute-path basename
+mapping. Zero, two, or more separators instead produce one stable quoted
+`[redacted path]` value while retaining the errno and operation prefix. The
+single-path errno behavior and valid two-field arrow diagnostics are
+unchanged.
+
+The RED run failed 38 decisive cases: a 36-row matrix covering all four arrow
+operations, POSIX, drive, and UNC paths, and injected delimiters in the source,
+destination, or both fields, plus one cause-chain case and one public
+notification case. The GREEN owners pass 379 tests: 328 redactor tests and 51
+notification-presentation tests. Direct coverage is complete for both pairs:
+the redactor has 62/62 branches, 21/21 functions, and 237/237 lines;
+notification presentation has 45/45 branches, 11/11 functions, and 308/308
+lines. Project-aware TypeScript checking, Fallow guard and changed-file audit,
+the required fixers, and the normal commit hook pass. Prettier normalized only
+the new test tables on the first fixer pass; the formatted files then passed
+the focused owners and both direct pairs again before the hook-checked commit.
+
+These checks ran in the existing Session A worktree because
+`workflow.use_worktrees` was false for the fixer. The parent workflow owns the
+fresh full `npm run check` gate.
 
 Iteration 18 closes the separator-adjacent embedded-quote bypass. Once the
 quoted-path opener has established an absolute field, zero or multiple
