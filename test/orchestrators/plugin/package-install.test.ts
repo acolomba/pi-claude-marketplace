@@ -561,6 +561,58 @@ describe("createPackagesPhase", () => {
     );
   });
 
+  test("keeps the package-manager work dir until a timed-out run settles", async (t) => {
+    // arrange
+    const seeded = await seedPlugin(t, {
+      "package.json": PACKAGE_JSON,
+      "package-lock.json": LOCKFILE,
+    });
+    let releaseRun = (): void => {
+      assert.fail("the package-manager run did not start");
+    };
+
+    let markStarted = (): void => undefined;
+    const runBlocked = new Promise<void>((resolve) => {
+      releaseRun = resolve;
+    });
+    const runStarted = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const phase = createPackagesPhase(
+      opsWith(async (request) => {
+        markStarted();
+        await runBlocked;
+        assert.deepStrictEqual(await sortedEntries(request.cwd), [
+          "package-lock.json",
+          "package.json",
+        ]);
+        return { code: null, stdout: "", stderr: "", timedOut: true };
+      }),
+    );
+    let completed = false;
+
+    // act
+    const pending = phase.do(seeded.context);
+    void pending.then(() => {
+      completed = true;
+    });
+    await runStarted;
+    await Promise.resolve();
+    const completedBeforeSettlement = completed;
+    const workDirBeforeSettlement = await sortedEntries(seeded.workDir);
+    releaseRun();
+    await pending;
+
+    // assert
+    assert.strictEqual(completedBeforeSettlement, false);
+    assert.deepStrictEqual(workDirBeforeSettlement, ["package-lock.json", "package.json"]);
+    assert.deepStrictEqual(
+      seeded.context.discoveryWarnings.map((warning) => warning.message),
+      ["Plugin dependency install failed (npm): timed out after 60 seconds"],
+    );
+    assert.deepStrictEqual(await sortedEntries(path.dirname(seeded.workDir)), []);
+  });
+
   for (const { situation, run, note } of [
     {
       situation: "the output on stdout",

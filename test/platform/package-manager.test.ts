@@ -336,7 +336,7 @@ test("keeps the first 65536 characters of each stream", async () => {
   assert.strictEqual(run.stdout, "x".repeat(65_536));
 });
 
-test("stops a process that outlives the timeout with SIGTERM and reports it timed out", async (t) => {
+test("finishes the escalation after a timed-out process closes on SIGTERM", async (t) => {
   // arrange
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const control = createPackageManagerProcess();
@@ -345,12 +345,13 @@ test("stops a process that outlives the timeout with SIGTERM and reports it time
   // act
   const pending = runPackageManager(request);
   t.mock.timers.tick(TIMEOUT_MS);
-  const kills = control.kills();
   control.close(null);
+  t.mock.timers.tick(KILL_GRACE_MS);
+  t.mock.timers.tick(KILL_GRACE_MS);
   const run = await pending;
 
   // assert
-  assert.deepStrictEqual(kills, ["SIGTERM"]);
+  assert.deepStrictEqual(control.kills(), ["SIGTERM", "SIGKILL"]);
   assert.deepStrictEqual(run, { code: null, stdout: "", stderr: "", timedOut: true });
 });
 
@@ -366,6 +367,7 @@ test("sends SIGKILL when the process ignores SIGTERM for the grace period", asyn
   t.mock.timers.tick(KILL_GRACE_MS);
   const kills = control.kills();
   control.close(null);
+  t.mock.timers.tick(KILL_GRACE_MS);
   const run = await pending;
 
   // assert
@@ -419,6 +421,8 @@ test("keeps a running process's run open when a signal cannot be sent to it", as
   t.mock.timers.tick(TIMEOUT_MS);
   control.fail(new Error("kill EPERM"));
   control.close(null);
+  t.mock.timers.tick(KILL_GRACE_MS);
+  t.mock.timers.tick(KILL_GRACE_MS);
   const run = await pending;
 
   // assert
@@ -447,6 +451,7 @@ test("kills a surviving group after its timed-out parent closes", async (t) => {
   const control = createPackageManagerProcess(42);
   const groupSignals: GroupSignal[] = [];
   let descendantRunning = true;
+  let settled = false;
   const runPackageManager = runnerFor(control, {
     ...linuxHost(),
     signalGroup: (pid, signal) => {
@@ -459,14 +464,22 @@ test("kills a surviving group after its timed-out parent closes", async (t) => {
 
   // act
   const pending = runPackageManager(request);
+  void pending.then(() => {
+    settled = true;
+  });
   t.mock.timers.tick(TIMEOUT_MS);
   control.close(null);
+  await Promise.resolve();
+  const settledBeforeSigkill = settled;
+  t.mock.timers.tick(KILL_GRACE_MS);
+  await Promise.resolve();
+  const settledAfterSigkill = settled;
+  t.mock.timers.tick(KILL_GRACE_MS);
   const run = await pending;
-  t.mock.timers.tick(KILL_GRACE_MS);
-  t.mock.timers.tick(KILL_GRACE_MS);
-  t.mock.timers.tick(TIMEOUT_MS);
 
   // assert
+  assert.strictEqual(settledBeforeSigkill, false);
+  assert.strictEqual(settledAfterSigkill, false);
   assert.deepStrictEqual(run, { code: null, stdout: "", stderr: "", timedOut: true });
   assert.strictEqual(descendantRunning, false);
   assert.deepStrictEqual(groupSignals, [
@@ -732,6 +745,17 @@ const IDLE_PARENT = [
   "setInterval(() => {}, 1_000);",
 ].join("\n");
 
+const SILENT_GRANDCHILD = [
+  'process.on("SIGTERM", () => {});',
+  "setInterval(() => {}, 1_000);",
+].join("\n");
+
+const EXITING_PARENT = [
+  'const { spawn } = require("node:child_process");',
+  `spawn(process.execPath, ["-e", ${JSON.stringify(SILENT_GRANDCHILD)}], { stdio: "ignore" });`,
+  "setInterval(() => {}, 1_000);",
+].join("\n");
+
 test("D-PL9-19: stops the whole process tree of a package manager that outlives the timeout", async () => {
   // arrange
   const timeoutMs = 2_000;
@@ -756,6 +780,32 @@ test("D-PL9-19: stops the whole process tree of a package manager that outlives 
   assert.deepStrictEqual(run, { code: null, stdout: "started\n", stderr: "", timedOut: true });
 });
 
+test("waits for SIGKILL after a timed-out parent closes ahead of its descendant", async () => {
+  // arrange
+  const timeoutMs = 300;
+  const killGraceMs = 400;
+  const runPackageManager = createPackageManagerRunner({
+    spawn: NODE_PACKAGE_MANAGER_SPAWN,
+    timeoutMs,
+    killGraceMs,
+    env: {},
+    host: NODE_PACKAGE_MANAGER_HOST,
+  });
+  const startedAt = Date.now();
+
+  // act
+  const run = await runPackageManager({
+    command: process.execPath,
+    args: ["-e", EXITING_PARENT],
+    cwd: process.cwd(),
+  });
+  const elapsedMs = Date.now() - startedAt;
+
+  // assert
+  assert.strictEqual(elapsedMs >= timeoutMs + 2 * killGraceMs - 100, true);
+  assert.deepStrictEqual(run, { code: null, stdout: "", stderr: "", timedOut: true });
+});
+
 test("D-PL9-19: sends SIGTERM and then SIGKILL to the process group on POSIX and never to the process alone", async (t) => {
   // arrange
   t.mock.timers.enable({ apis: ["setTimeout"] });
@@ -768,6 +818,7 @@ test("D-PL9-19: sends SIGTERM and then SIGKILL to the process group on POSIX and
   t.mock.timers.tick(TIMEOUT_MS);
   t.mock.timers.tick(KILL_GRACE_MS);
   control.close(null);
+  t.mock.timers.tick(KILL_GRACE_MS);
   const run = await pending;
 
   // assert
@@ -795,6 +846,7 @@ test("D-PL9-19: signals the process alone when its process group cannot be signa
   t.mock.timers.tick(TIMEOUT_MS);
   t.mock.timers.tick(KILL_GRACE_MS);
   control.close(null);
+  t.mock.timers.tick(KILL_GRACE_MS);
   const run = await pending;
 
   // assert
@@ -815,6 +867,7 @@ for (const pid of [undefined, 0, 1]) {
     t.mock.timers.tick(TIMEOUT_MS);
     t.mock.timers.tick(KILL_GRACE_MS);
     control.close(null);
+    t.mock.timers.tick(KILL_GRACE_MS);
     await pending;
 
     // assert
@@ -901,6 +954,7 @@ for (const { situation, env, taskkill } of [
     t.mock.timers.tick(TIMEOUT_MS);
     t.mock.timers.tick(KILL_GRACE_MS);
     windows.control.close(null);
+    t.mock.timers.tick(KILL_GRACE_MS);
     const run = await windows.pending;
 
     // assert

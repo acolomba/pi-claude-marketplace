@@ -205,12 +205,12 @@ function watchProcess(
   child.stderr.on("data", (chunk: Buffer) => {
     captured.stderr = appendCapped(captured.stderr, stderrDecoder.write(chunk));
   });
-  // Node emits `close` after `error` for a process that cannot start; the
-  // first event settles the run and the rest are ignored.
+  // Node emits `close` after `error` for a process that cannot start. A close
+  // after timeout waits for the process-group escalation before it settles.
   let settled = false;
+  let closeCode: number | null = null;
   const stopTimers = startKillTimers(stop, options, captured, () => {
-    stopTimers();
-    settle(null);
+    settle(closeCode);
   });
   function settle(code: number | null, error?: Error): void {
     if (settled) {
@@ -220,11 +220,7 @@ function watchProcess(
     settled = true;
     captured.stdout = finishOutput(captured.stdout, stdoutDecoder);
     captured.stderr = finishOutput(captured.stderr, stderrDecoder);
-    // A closed parent can leave descendants alive without holding its pipes.
-    // Keep the group escalation until the final deadline once timeout starts.
-    if (!captured.timedOut) {
-      stopTimers();
-    }
+    stopTimers();
 
     resolve({ code, ...captured, ...(error === undefined ? {} : { error }) });
   }
@@ -238,7 +234,10 @@ function watchProcess(
     }
   });
   child.on("close", (code: number | null) => {
-    settle(code);
+    closeCode = code;
+    if (!captured.timedOut) {
+      settle(code);
+    }
   });
 }
 
@@ -405,8 +404,8 @@ function runPackageManager(
 
 /**
  * Binds the launcher, timeout, kill grace, environment, and host. Creating the
- * runner starts nothing; each call starts one process and resolves once it
- * has closed or failed to start.
+ * runner starts nothing; each call resolves after the process closes, its
+ * timeout escalation completes, or it fails to start.
  */
 export function createPackageManagerRunner(
   options: PackageManagerRunnerOptions,
