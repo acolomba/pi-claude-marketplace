@@ -243,29 +243,49 @@ describe("redactAbsolutePaths", () => {
       expected: 'read "private files/config.json" after the user says "try again"',
     },
     {
-      name: "redacts an absolute path with no closing quote through the unquoted fallback",
+      name: "fails closed for an absolute path with no closing quote",
       input: "read '/tmp/private/secret.json",
-      expected: "read 'secret.json",
+      expected: "read '[redacted path]",
     },
     {
-      name: "redacts an unclosed path with an embedded apostrophe",
+      name: "fails closed for an unclosed path with an embedded apostrophe",
       input: "read '/tmp/O'Brien/private/secret.json",
-      expected: "read 'secret.json",
+      expected: "read '[redacted path]",
     },
     {
-      name: "bounds an unclosed POSIX path before slash-bearing prose",
+      name: "fails closed for an unclosed POSIX path before slash-bearing prose",
       input: "open '/tmp/private/file.json failed; see docs/errors",
-      expected: "open 'file.json failed; see docs/errors",
+      expected: "open '[redacted path] failed; see docs/errors",
     },
     {
-      name: "bounds an unclosed drive path before slash-bearing prose",
+      name: "fails closed for an unclosed drive path before slash-bearing prose",
       input: String.raw`open 'C:\private\file.json failed; see docs/errors`,
-      expected: "open 'file.json failed; see docs/errors",
+      expected: "open '[redacted path] failed; see docs/errors",
     },
     {
-      name: "bounds an unclosed UNC path before slash-bearing prose",
+      name: "fails closed for an unclosed UNC path before slash-bearing prose",
       input: String.raw`open '\\server\private\file.json failed; see docs/errors`,
-      expected: "open 'file.json failed; see docs/errors",
+      expected: "open '[redacted path] failed; see docs/errors",
+    },
+    {
+      name: "fails closed for an unclosed path with internal spaces",
+      input: "open '/tmp/O Brien/private/secret.json",
+      expected: "open '[redacted path]",
+    },
+    {
+      name: "fails closed for an unclosed drive path with Unicode spaces",
+      input: "open 'C:\\private\\O\u00a0Brien\\secret.json",
+      expected: "open '[redacted path]",
+    },
+    {
+      name: "keeps a recognized no-space diagnostic suffix after an unclosed path",
+      input: "open '/tmp/private/file.json;see=docs/errors",
+      expected: "open '[redacted path];see=docs/errors",
+    },
+    {
+      name: "keeps the earliest recognized suffix after an unclosed path",
+      input: "open '/tmp/private/file.json;see=docs/errors failed; later",
+      expected: "open '[redacted path];see=docs/errors failed; later",
     },
     {
       name: "preserves a single-segment JSON pointer",
@@ -402,7 +422,7 @@ describe("redactAbsolutePaths", () => {
     // assert
     assert.strictEqual(
       text,
-      "open 'file.json failed; value 'x' docs/errors https://example.test/docs/errors",
+      "open '[redacted path] failed; value 'x' docs/errors https://example.test/docs/errors",
     );
   });
 
@@ -516,7 +536,7 @@ describe("redactCauseChain", () => {
     assert.strictEqual(trailer, "cause: open 'secret.json' -> open \"secret.json\"");
   });
 
-  test("bounds unclosed cause paths before slash-bearing prose", () => {
+  test("fails closed for unclosed cause paths before slash-bearing prose", () => {
     // arrange
     const failure = new Error("open '/tmp/private/file.json failed; see docs/errors", {
       cause: new Error("open 'C:\\private\\file.json failed; value 'x' docs/errors"),
@@ -528,9 +548,21 @@ describe("redactCauseChain", () => {
     // assert
     assert.strictEqual(
       trailer,
-      "cause: open 'file.json failed; see docs/errors -> " +
-        "open 'file.json failed; value 'x' docs/errors",
+      "cause: open '[redacted path] failed; see docs/errors -> " +
+        "open '[redacted path] failed; value 'x' docs/errors",
     );
+  });
+
+  test("fails closed for an unclosed cause path with internal spaces", () => {
+    // arrange
+    const failure = new Error("open '/tmp/O Brien/private/secret.json");
+
+    // act
+    const trailer = causeChainTrailer(redactCauseChain(failure));
+
+    // assert
+    assert.strictEqual(trailer, "cause: open '[redacted path]");
+    assert.doesNotMatch(trailer, /O Brien|private|secret\.json/u);
   });
 
   test("redacts every quoted cause and structured leaked path containing spaces or UNC prefixes", () => {

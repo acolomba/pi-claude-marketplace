@@ -72,6 +72,9 @@ function isQuotedPathBoundary(character: string | undefined): boolean {
   return character === undefined || /[\s,;:.)\]}]/u.test(character);
 }
 
+const REDACTED_PATH = "[redacted path]";
+const UNCLOSED_PATH_SUFFIXES = [" failed; ", ";see="] as const;
+
 function quotedPathEnd(text: string, quote: string, fromIndex: number): number | undefined {
   const quoteIndices: number[] = [];
   let quoteIndex = text.indexOf(quote, fromIndex);
@@ -112,14 +115,16 @@ function quotedPathEnd(text: string, quote: string, fromIndex: number): number |
   return undefined;
 }
 
-function unclosedQuotedPathEnd(text: string, fromIndex: number): number {
-  for (let index = fromIndex; index < text.length; index++) {
-    if (/\s/u.test(text.charAt(index))) {
-      return index;
+function unclosedQuotedPathSuffix(text: string, fromIndex: number): number | undefined {
+  let suffixIndex: number | undefined;
+  for (const delimiter of UNCLOSED_PATH_SUFFIXES) {
+    const candidate = text.indexOf(delimiter, fromIndex);
+    if (candidate >= 0 && (suffixIndex === undefined || candidate < suffixIndex)) {
+      suffixIndex = candidate;
     }
   }
 
-  return text.length;
+  return suffixIndex;
 }
 
 function redactQuotedAbsolutePaths(text: string): string {
@@ -130,13 +135,20 @@ function redactQuotedAbsolutePaths(text: string): string {
   while (match !== null) {
     const quote = text.charAt(match.index);
     const delimiter = quotedPathEnd(text, quote, opening.lastIndex);
-    const end = delimiter ?? unclosedQuotedPathEnd(text, opening.lastIndex);
+    const suffix = unclosedQuotedPathSuffix(text, opening.lastIndex);
+    if (delimiter === undefined || (suffix !== undefined && suffix < delimiter)) {
+      redacted += text.slice(copiedThrough, match.index) + quote + REDACTED_PATH;
+      copiedThrough = suffix ?? text.length;
+      opening.lastIndex = copiedThrough;
+      match = opening.exec(text);
+      continue;
+    }
+
+    const end = delimiter;
     const candidate = text.slice(match.index + 1, end);
     if (/^(?:[A-Za-z]:[\\/]|\\\\|\/).*[/\\][^/\\]+$/s.test(candidate)) {
-      const closingQuote = delimiter === undefined ? "" : quote;
-      redacted +=
-        text.slice(copiedThrough, match.index) + quote + pathBasename(candidate) + closingQuote;
-      copiedThrough = end + closingQuote.length;
+      redacted += text.slice(copiedThrough, match.index) + quote + pathBasename(candidate) + quote;
+      copiedThrough = end + quote.length;
       opening.lastIndex = copiedThrough;
     } else {
       opening.lastIndex = match.index + 1;

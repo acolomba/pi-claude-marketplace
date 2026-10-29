@@ -1202,7 +1202,7 @@ describe("presentNotification", () => {
     });
   });
 
-  test("bounds an unclosed path before prose in a presented prune cause", () => {
+  test("fails closed for an unclosed path before prose in a presented prune cause", () => {
     // arrange
     const message = {
       kind: "prune-committed-warning",
@@ -1225,9 +1225,35 @@ describe("presentNotification", () => {
       },
       scope: "project",
       cause: {
-        causeChain: ["open 'file.json failed; see docs/errors"],
+        causeChain: ["open '[redacted path] failed; see docs/errors"],
         truncated: false,
       },
+    });
+  });
+
+  test("fails closed for an unclosed spaced path in a presented prune cause", () => {
+    // arrange
+    const message = {
+      kind: "prune-committed-warning",
+      scope: "project",
+      cause: new Error("open '/tmp/O Brien/private/secret.json"),
+    } satisfies PruneCommittedWarningMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        needsApply: false,
+        noOp: false,
+      },
+      scope: "project",
+      cause: { causeChain: ["open '[redacted path]"], truncated: false },
     });
   });
 
