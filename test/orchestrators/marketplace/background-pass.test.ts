@@ -351,6 +351,30 @@ function recordingGate(begun: AbortSignal[]): BackgroundGate {
   };
 }
 
+/** Runs an action after the plugin step's halt check, while its config read is pending. */
+function actDuringPluginConfigRead(
+  gate: BackgroundGate,
+  action: (signal: AbortSignal) => void,
+): BackgroundGate {
+  let begun = 0;
+  return {
+    ...gate,
+    beginStep: async () => {
+      const signal = await gate.beginStep();
+      begun += 1;
+      if (begun === 2) {
+        queueMicrotask(() => {
+          queueMicrotask(() => {
+            action(signal);
+          });
+        });
+      }
+
+      return signal;
+    },
+  };
+}
+
 /** Starts a command that waits for the step in flight past the cap, so the gate aborts the step. */
 function capTheStepInFlight(t: TestContext, gate: BackgroundGate, commands: Promise<void>[]): void {
   commands.push(gate.runForeground(() => Promise.resolve()));
@@ -1046,6 +1070,108 @@ test("D-PL8-22: a runtime stopped during an update skips the further plugin upda
   assert.deepStrictEqual(outcomes, [expectedOutcome]);
   assert.deepStrictEqual(log, []);
   assert.deepStrictEqual(updatedTargets(calls), ["alpha [project]"]);
+});
+
+test("a runtime stopped during the plugin config read starts no plugin update", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-pass-config-stop-");
+  await seedMarketplace(cwd, "project", "alpha", true);
+  let stopped = false;
+  const gate = actDuringPluginConfigRead(createBackgroundGate(), () => {
+    stopped = true;
+  });
+  const log: string[] = [];
+  const outcomes: PluginUpdateOutcome[] = [];
+  const { capture, deps } = createPassUnderTest({
+    gate,
+    log,
+    scripts: new Map([
+      [
+        "alpha",
+        async (opts: UpdateMarketplaceOptions): Promise<void> => {
+          const pluginUpdate = requirePluginUpdate(opts);
+          outcomes.push(await pluginUpdate("one", "alpha", "project"));
+          outcomes.push(await pluginUpdate("two", "alpha", "project"));
+        },
+      ],
+    ]),
+  });
+  const pass = createBackgroundPass(deps);
+  const expectedOutcome: PluginUpdateSkippedOutcome = {
+    partition: "skipped",
+    name: "one",
+    notes: ["the background update stopped before this update ran"],
+    reasons: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  };
+
+  // act
+  await pass({ ctx: sessionContext(cwd, "rpc"), isStopped: () => stopped });
+
+  // assert
+  assert.deepStrictEqual(outcomes, [expectedOutcome, { ...expectedOutcome, name: "two" }]);
+  assert.deepStrictEqual(log, []);
+  assert.deepStrictEqual(capture.entries, []);
+});
+
+test("a plugin step aborted during the config read starts no update and halts later targets", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { cwd } = await createHermeticEnvironment(t, "background-pass-config-abort-");
+  await seedMarketplace(cwd, "project", "alpha", true);
+  const gate = createBackgroundGate(WAIT_CAP_MS);
+  const commands: Promise<void>[] = [];
+  const observedGate = actDuringPluginConfigRead(gate, () => {
+    capTheStepInFlight(t, gate, commands);
+  });
+  const log: string[] = [];
+  const outcomes: PluginUpdateOutcome[] = [];
+  const { capture, deps } = createPassUnderTest({
+    gate: observedGate,
+    log,
+    outcomes: new Map([["one", updatedOutcome("one", "1.1.0")]]),
+    scripts: new Map([
+      [
+        "alpha",
+        async (opts: UpdateMarketplaceOptions): Promise<void> => {
+          const pluginUpdate = requirePluginUpdate(opts);
+          outcomes.push(await pluginUpdate("one", "alpha", "project"));
+          outcomes.push(await pluginUpdate("two", "alpha", "project"));
+        },
+      ],
+    ]),
+  });
+  const pass = createBackgroundPass(deps);
+
+  // act
+  await pass({ ctx: sessionContext(cwd, "rpc"), isStopped: () => false });
+  await Promise.all(commands);
+
+  // assert
+  assert.deepStrictEqual(outcomes, [
+    {
+      partition: "skipped",
+      name: "one",
+      notes: ["the update ran past the background wait cap and was stopped"],
+      reasons: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    },
+    {
+      partition: "skipped",
+      name: "two",
+      notes: ["the background update stopped before this update ran"],
+      reasons: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    },
+  ]);
+  assert.deepStrictEqual(log, []);
+  assert.deepStrictEqual(capture.entries, []);
 });
 
 test("D-PL8-25: runs each marketplace refresh and each plugin update in its own step's abort scope", async (t) => {

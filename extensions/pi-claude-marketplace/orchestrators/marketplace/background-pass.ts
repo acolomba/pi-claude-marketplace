@@ -332,6 +332,15 @@ function yieldingPluginUpdate(args: YieldingPluginUpdateArgs): PluginUpdateFn {
     }
 
     const config = await loadMergedScopeConfig(locationsFor(scope, cwd));
+    if (halt.isStopped()) {
+      return skippedOutcome(plugin, NOT_RUN_NOTE);
+    }
+
+    if (signal.aborted) {
+      halt.noteStepEnded(signal);
+      return skippedOutcome(plugin, ABORTED_NOTE);
+    }
+
     if (!isAutoupdateOn(config, marketplace)) {
       return autoupdateOffOutcome(plugin);
     }
