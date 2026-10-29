@@ -1257,7 +1257,7 @@ describe("presentNotification", () => {
     });
   });
 
-  test("keeps a closed path before unmatched quotes in a presented prune cause", () => {
+  test("fails closed for a path before unmatched quotes in a presented prune cause", () => {
     // arrange
     const message = {
       kind: "prune-committed-warning",
@@ -1280,9 +1280,35 @@ describe("presentNotification", () => {
       },
       scope: "project",
       cause: {
-        causeChain: ["open 'file.json' docs/errors 'x/y' tail 'unclosed"],
+        causeChain: ["open '[redacted path]"],
         truncated: false,
       },
+    });
+  });
+
+  test("fails closed when a later quoted value resembles a local path delimiter", () => {
+    // arrange
+    const message = {
+      kind: "prune-committed-warning",
+      scope: "project",
+      cause: new Error("open '/tmp/private/file.json' value 'x/y' docs/errors '"),
+    } satisfies PruneCommittedWarningMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        needsApply: false,
+        noOp: false,
+      },
+      scope: "project",
+      cause: { causeChain: ["open '[redacted path]"], truncated: false },
     });
   });
 

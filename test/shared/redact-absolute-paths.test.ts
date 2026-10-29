@@ -113,34 +113,64 @@ describe("redactAbsolutePaths", () => {
       expected: "open 'file.json' failed; see docs/errors 'E_READ'",
     },
     {
-      name: "keeps a closed POSIX path before a bare unmatched quote",
+      name: "fails closed for a POSIX path before a bare unmatched quote",
       input: "open '/tmp/private/file.json' docs/errors '",
-      expected: "open 'file.json' docs/errors '",
+      expected: "open '[redacted path]",
     },
     {
-      name: "keeps a closed drive path before an unmatched quoted token",
+      name: "fails closed for a drive path before an unmatched quoted token",
       input: String.raw`open 'C:\private\file.json' docs/errors 'unclosed`,
-      expected: "open 'file.json' docs/errors 'unclosed",
+      expected: "open '[redacted path]",
     },
     {
-      name: "keeps a closed UNC path before a relative value and unmatched quote",
+      name: "fails closed for a UNC path before a relative value and unmatched quote",
       input: String.raw`open '\\server\private\file.json' docs/errors 'x/y' tail 'unclosed`,
-      expected: "open 'file.json' docs/errors 'x/y' tail 'unclosed",
+      expected: "open '[redacted path]",
     },
     {
-      name: "keeps a double-quoted POSIX path before a bare unmatched quote",
+      name: "fails closed for a double-quoted POSIX path before a bare unmatched quote",
       input: 'open "/tmp/private/file.json" docs/errors "',
-      expected: 'open "file.json" docs/errors "',
+      expected: 'open "[redacted path]',
     },
     {
-      name: "keeps a double-quoted drive path before an unmatched quoted token",
+      name: "fails closed for a double-quoted drive path before an unmatched quoted token",
       input: String.raw`open "C:\private\file.json" docs/errors "unclosed`,
-      expected: 'open "file.json" docs/errors "unclosed',
+      expected: 'open "[redacted path]',
     },
     {
-      name: "keeps a double-quoted UNC path before a relative value and unmatched quote",
+      name: "fails closed for a double-quoted UNC path before a relative value and unmatched quote",
       input: String.raw`open "\\server\private\file.json" docs/errors "x/y" tail "unclosed`,
-      expected: 'open "file.json" docs/errors "x/y" tail "unclosed',
+      expected: 'open "[redacted path]',
+    },
+    {
+      name: "fails closed before a later relative value and local suffix",
+      input: "open '/tmp/private/file.json' value 'x/y' docs/errors '",
+      expected: "open '[redacted path]",
+    },
+    {
+      name: "fails closed for a drive path before a later relative value and local suffix",
+      input: String.raw`open 'C:\private\file.json' value 'x/y' failed; see '`,
+      expected: "open '[redacted path]",
+    },
+    {
+      name: "fails closed for a UNC path before a later relative value and local suffix",
+      input: String.raw`open '\\server\private\file.json' value 'x/y' docs/errors '`,
+      expected: "open '[redacted path]",
+    },
+    {
+      name: "fails closed when a POSIX path contains a local suffix",
+      input: "open '/tmp/O' docs/errors /private/secret.json'",
+      expected: "open '[redacted path]",
+    },
+    {
+      name: "fails closed when a drive path contains a local suffix",
+      input: String.raw`open "C:\private\O" failed; see \hidden\secret.json"`,
+      expected: 'open "[redacted path]',
+    },
+    {
+      name: "fails closed when a UNC path contains a local suffix",
+      input: String.raw`open "\\server\private\O" docs/errors \hidden\secret.json"`,
+      expected: 'open "[redacted path]',
     },
     {
       name: "stops a drive path before later slash-bearing prose",
@@ -603,7 +633,7 @@ describe("redactCauseChain", () => {
     assert.doesNotMatch(trailer, /O Brien|private|secret\.json/u);
   });
 
-  test("keeps a closed cause path before later unmatched quoted fragments", () => {
+  test("fails closed for a cause path before later unmatched quoted fragments", () => {
     // arrange
     const failure = new Error("open '/tmp/private/file.json' docs/errors '", {
       cause: new Error("open 'C:\\private\\file.json' docs/errors 'x/y' tail 'unclosed"),
@@ -613,11 +643,20 @@ describe("redactCauseChain", () => {
     const trailer = causeChainTrailer(redactCauseChain(failure));
 
     // assert
-    assert.strictEqual(
-      trailer,
-      "cause: open 'file.json' docs/errors ' -> " +
-        "open 'file.json' docs/errors 'x/y' tail 'unclosed",
-    );
+    assert.strictEqual(trailer, "cause: open '[redacted path] -> open '[redacted path]");
+  });
+
+  test("fails closed when later quoted fragments resemble path delimiters", () => {
+    // arrange
+    const failure = new Error("open '/tmp/private/file.json' value 'x/y' docs/errors '", {
+      cause: new Error("open 'C:\\private\\O' docs/errors \\hidden\\secret.json'"),
+    });
+
+    // act
+    const trailer = causeChainTrailer(redactCauseChain(failure));
+
+    // assert
+    assert.strictEqual(trailer, "cause: open '[redacted path] -> open '[redacted path]");
   });
 
   test("redacts every quoted cause and structured leaked path containing spaces or UNC prefixes", () => {
