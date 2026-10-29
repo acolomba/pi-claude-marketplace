@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Autoupdate marketplaces now update in the background, plugins get their npm or bun packages, and marketplace, import, dependency, and `apply` behavior moves closer to Claude Code. (#NNN)
+- Autoupdate marketplaces now update in the background, plugins get their npm or bun packages, and marketplace, import, dependency, and `apply` behavior moves closer to Claude Code. (#290)
 
   - After your first message in the terminal UI, Pi updates the plugins of each autoupdate marketplace in the background. One notice names them and asks for `/reload`. `DISABLE_AUTOUPDATER` and Claude Code's other opt-out variables turn this off.
   - Claude Code's official marketplaces now have autoupdate on by default. A config file that Pi cannot read turns autoupdate off for its whole scope.

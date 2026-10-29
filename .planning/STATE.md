@@ -6,7 +6,7 @@ status: Awaiting next milestone
 stopped_at: Phase 11 complete — all phases complete
 last_updated: "2026-10-29T15:38:02.091Z"
 last_activity: 2026-10-29
-last_activity_desc: Milestone plugin-lifecycle completed and archived
+last_activity_desc: Milestone plugin-lifecycle shipped as PR #290
 state_head: 9694856225de1b51168c6acffeff962209409a1c
 progress:
   total_phases: 11
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 Phase: Milestone plugin-lifecycle complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-29 — Milestone plugin-lifecycle completed and archived
+Last activity: 2026-10-29 — Milestone plugin-lifecycle shipped as PR #290
 
 ### mcp-4 closeout
 
