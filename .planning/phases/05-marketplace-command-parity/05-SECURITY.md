@@ -113,8 +113,16 @@ The final security recheck at `b49106b3` verified CR-01 and CR-02 against implem
 | 2026-10-28 | 29 | 18 of 19 | 10, mapped above | 0 | 1 |
 | 2026-10-28, final recheck at c99c6832 | 29 | 19 of 19 | 10, verified in persisted log | 0 | 0 |
 | 2026-10-28, final recheck at b49106b3 | 29 | 19 of 19 | 10, verified in persisted log | 0 | 0 |
+| 2026-10-29, final merged recheck at 38a18b81 | 29 | 19 of 19 | 10, verified in persisted log | 0 | 0 |
 
 No blocking or non-blocking threat remains. `threats_open: 0` is confirmed at block_on high. The additional accepted DNS residual does not increase the authored-row count.
+
+The final merged audit re-traced hosted-fetch SSRF and IPv4-in-IPv6 metadata
+refusals, redirects, userinfo masking, size and timeout limits, containment and
+rollback, reserved-name checks, notification/wire ID redaction, network-free
+info/list/remove behavior, loopback fixture isolation, and architecture
+chokepoints. Nyquist MKT-01..08 is COMPLIANT and the exact merged gate passed
+1,142 scenarios, 11,734 steps, and 309 LCOV records. No control regressed.
 
 ## Sign-Off
 
