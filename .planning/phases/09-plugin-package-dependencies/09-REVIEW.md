@@ -1,14 +1,37 @@
 ---
 phase: 09-plugin-package-dependencies
-reviewed: 2026-10-27T05:26:57Z
+reviewed: 2026-10-29T01:15:37Z
 depth: standard
-files_reviewed: 21
+reviewed_commit: 64b397f9154bbd4f342ea89b0b6103a597b9cd6f
+source_commit: 250acaadf15622a66ee80b5e3443ad96be908016
+review_scope_complete: true
+re_review: true
+files_reviewed: 49
 files_reviewed_list:
   - eslint.config.js
+  - extensions/pi-claude-marketplace/domain/package-lockfile.ts
+  - extensions/pi-claude-marketplace/domain/plugin-resolver.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/staging-diagnostics.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts
+  - extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts
+  - extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts
+  - extensions/pi-claude-marketplace/orchestrators/reconcile/convergence.ts
+  - extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts
+  - extensions/pi-claude-marketplace/persistence/locations.ts
   - extensions/pi-claude-marketplace/platform/package-manager.ts
+  - extensions/pi-claude-marketplace/shared/path-safety.ts
+  - extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts
+  - extensions/pi-claude-marketplace/shared/redact-credentials.ts
   - features/lib/npm-registry.ts
   - features/lib/published-marketplace.ts
   - features/plugin/package-dependencies.feature
@@ -19,281 +42,177 @@ files_reviewed_list:
   - rule-packs/architecture.json
   - test/architecture/gate-targets.ts
   - test/architecture/no-shell-out.test.ts
+  - test/domain/package-lockfile.test.ts
+  - test/orchestrators/plugin/dependency-move.test.ts
+  - test/orchestrators/plugin/dependency-settle.test.ts
   - test/orchestrators/plugin/install-flow.test.ts
   - test/orchestrators/plugin/install-outcome.test.ts
   - test/orchestrators/plugin/materialize-latest.test.ts
   - test/orchestrators/plugin/package-install.test.ts
+  - test/orchestrators/plugin/uninstall.test.ts
   - test/orchestrators/plugin/update-flow.test.ts
+  - test/orchestrators/reconcile/apply-outcomes.test.ts
+  - test/orchestrators/reconcile/apply.test.ts
+  - test/orchestrators/reconcile/notify.test.ts
   - test/platform/package-manager.test.ts
+  - test/shared/redact-absolute-paths.test.ts
+  - test/shared/redact-credentials.test.ts
 findings:
-  critical: 2
-  warning: 5
-  info: 8
-  total: 15
+  critical: 5
+  warning: 2
+  info: 0
+  total: 7
 status: issues_found
-fixed_at: 2026-10-27
-fix_status: partial
-fixed: 6
-skipped: 9
+gate:
+  command: npm run check
+  exit_code: 0
+  source_commit: 250acaadf15622a66ee80b5e3443ad96be908016
+  node: v26.12.1
+  reused: true
+  scenarios: 1125
+  steps: 11467
+  coverage_records: 309
 ---
 
 # Phase 9: Code Review Report
 
-**Reviewed:** 2026-10-27T05:26:57Z
-**Depth:** standard (scoped to `git diff d98660a7..HEAD`; callers of the two new hooks traced)
-**Files Reviewed:** 21
-**Status:** issues_found
+**Depth:** standard, with cross-module traces of the package lifecycle.
+**Status:** issues_found — 5 BLOCKER and 2 WARNING findings.
+**Reviewed tree:** `64b397f9`; executable inputs match `250acaad`.
 
-## Summary
+## Narrative Findings (AI reviewer)
 
-The new process module and the package step are mostly careful. The spawn has no shell, the work dir is isolated and contained, the install ledger's `do` cannot throw, and the undo removes only what `do` created. The unit tests cover the lockfile table, the refusals, the failure notes, the move, and the restore well.
+This is a fresh review of the current implementation, not a check that the old fixes landed. Its scope is the union of the original 21 review files, all eight stale-verification moved files, and the current callers, sanitizer, redactors, and tests listed above. Findings below describe current behavior. Historical finding IDs appear only in the disposition table and do not contribute to the new counts.
 
-The defects are at the seams where the step joins the existing update runner:
+### Critical Issues
 
-1. Reinstall uses `policy.skipSameRevision` to decide whether to force the install. Reinstall can move to a new revision (REI-04), so it keeps the old version's `node_modules`. No command repairs this afterwards.
-2. The update hook reports a failure only through the `updated` outcome's `notes`. The `apply` catalog move (and autoapply at load) and the dependency moves drop `notes`, so on those paths a failed package install produces no warning at all, which breaks PKD-02.
+### CR-01: BLOCKER — Closing the timed-out parent cancels the process-tree kill
 
-Smaller issues:
+**File:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-c-369/extensions/pi-claude-marketplace/platform/package-manager.ts:205-224`
+**Related:** `startKillTimers`, lines 168-182.
 
-- The 60-second limit depends on the child's `close` event.
-- Path redaction removes the folder that the D-PL9-03 note exists to name.
-- Uninstall leaves `node_modules` behind, so a later install skips the package step and keeps stale modules.
-- Raw multi-line package-manager output goes straight into a diagnostic line.
-- The package ops are hard-wired at both production call sites, so no test reaches the contained path through the ledger or the runner. A test there would have caught CR-01.
+**Issue:** After the timeout sends SIGTERM, any direct-child `close` settles the promise and calls `stopTimers()`. That cancels the pending process-group SIGKILL even when descendants remain. A descendant that ignores SIGTERM and has closed or redirected its standard streams does not keep the parent's captured pipes open, so the parent closes while that descendant continues running. The package step then removes its work directory under a live process. This violates D-PL9-19's whole-process-tree timeout guarantee; the earlier fix only covers descendants that keep the captured pipes open.
 
-I checked the upstream 2.1.310 binary for parity. Its install path also returns the yarn/pnpm and `bun.lockb` refusals before any listing check, and it also drops the parked `previous-node_modules` when a restore fails. So neither of those is reported as a divergence.
+**Evidence:** A narrow real-process reproduction used the production runner with a 500 ms timeout and 150 ms kill grace. A shell parent started a same-group descendant with redirected streams and SIGTERM ignored. The result was `timedOut: true`, but the descendant was still alive 400 ms after the runner returned, beyond both grace periods. The reproduction explicitly killed the survivor. No repository inputs changed.
 
-## Critical Issues
+**Fix:** Separate promise settlement from timeout cleanup. Once a timeout has begun, keep the group-kill escalation alive even if the direct child closes, or complete the group kill before settling. Preserve the final bounded deadline and clear resources after escalation. Add a real-process or controlled process-boundary case where the parent closes on SIGTERM while a descendant ignores it without holding stdout/stderr. The production fix belongs in `platform/package-manager.ts` and its paired test.
 
-### CR-01: Reinstall that moves to a new version keeps the old version's node_modules
+### CR-02: BLOCKER — Updating a disabled plugin preserves the previous revision's packages
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts:488-507` (with `materialize-latest.ts:103-115`, `reinstall-flow.ts:207-211,400`)
+**File:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-c-369/extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts:329-331`
+**Related:** `package-install.ts:597-605`, `update-preflight.ts:797-818,833-838,1208-1236`, `materialize-latest.ts:104-105`, `enable-disable.ts:429-441`.
 
-**Issue:** `installUpdatedPackages` passes `target.policy.skipSameRevision` as `force`. The doc comment assumes that a policy with `skipSameRevision: false` "re-materializes the recorded revision". That is wrong for reinstall. Reinstall runs the same `materializeLatestVersion` runner, and that runner installs the version the marketplace offers now (reinstall-flow header: "a reinstall installs the version the marketplace offers now and records it (REI-04, D-18-08)").
+**Issue:** An unconstrained path plugin in a cloned marketplace uses the same root across revisions. Installing v1 creates v1's `node_modules`; disabling it retains that directory. Updating while disabled refreshes the record to v2 at the same root and returns a finished preflight outcome, before the update package hook. Enabling then calls the install ledger, whose package phase always uses `force: false`. Because `node_modules` exists, it skips v2's lockfile and enables v2 code with v1 packages. A later update sees the recorded v2 revision as current, and same-revision reinstall also skips the old packages.
 
-Some plugin roots are shared across revisions: a path-in-clone plugin of a git marketplace (`sources/<mp>/plugins/x`), or an unpinned git mirror (`plugin-clones/<urlhash12>`). For those, take this sequence:
+This differs from the accepted D-PL9-06 unchanged-copy skip: the clone and recorded revision changed, and the user already ran the plugin update that the decision names as the repair.
 
-1. `marketplace update` brings in a new lockfile.
-2. `reinstall` returns `partition: "updated"` for the new version.
-3. `detectInstall(..., force=false)` sees the existing `node_modules` and returns `SKIP`.
+**Evidence:** The resolver's unpinned path arm reads in place (`domain/plugin-resolver.ts:508-522`). The disabled refresh retains that path and clears an absent SHA; no SHA change means no clone cleanup. An independent narrow checkout reproduction with the installed isomorphic-git changed the manifest from `1.0.0` to `2.0.0` while ignored `node_modules` remained at `1.0.0`. Its temporary repository was removed.
 
-The plugin's hooks and MCP servers now run the new code against the packages of the old lockfile. Nothing repairs it:
+**Fix:** Preserve the need to refresh packages across a disabled revision change. Invalidate step-owned old modules on that transition, or record package revision/lockfile identity and consume the mismatch during enable. Unchanged enables must remain offline. Cover install v1 → disable → update to v2 in the same contained root → enable, asserting both package version and registry requests.
 
-- `update` reports the plugin up to date (PKGDEP-02 retry is deferred).
-- A second `reinstall` skips again.
-- See WR-03 for uninstall plus install.
+### CR-03: BLOCKER — Uninstall can delete packages from a concurrent successful install
 
-This contradicts D-PL9-06, which allows the skip only for "an unchanged clone".
+**File:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-c-369/extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts:1104-1115`
+**Related:** `package-install.ts:660-681` and the install ledger's presence-based skip.
 
-**Fix:** Decide `force` from the move itself, not from the policy:
-```ts
-// materialize-latest.ts (both call sites)
-const swapped = await swapPluginUpdate(args, preflight, policy);
-const move = preflightMove(preflight);
-const revisionChanged =
-  move.toCommit !== move.fromCommit || move.toVersion !== move.fromVersion;
-return installUpdatedPackages(DEFAULT_PACKAGE_INSTALL_OPS, swapped, {
-  locations: args.locations,
-  pluginRoot: preflight.installable.pluginRoot,
-  force: revisionChanged,
-});
-```
-Then drop `policy` from `UpdatedPackagesTarget`. Add a cucumber scenario: "Reinstalling a plugin after its marketplace moved it to a new lockfile installs the new packages". It must fail on the current code.
+**Issue:** `removeUnusedPackages` reads state and removes the marked directory outside the scope lock. A valid interleaving is:
 
-**Resolution:** fixed in `05c6c9c3` (fix(plugin): install the new packages when a reinstall moves a plugin). `materializeLatestVersion` now passes `force: revisionMoved(move)` (commit or version changed) and `UpdatedPackagesTarget` lost `policy` (now `PackageStepTarget`). Unit cases drive every policy through the runner with a contained plugin; the new scenario "Reinstalling a plugin after its marketplace moved it to a new lockfile installs the new packages" failed before the fix (no request for `pkd-dep-2.0.0.tgz`).
+1. Uninstall commits removal of the last record.
+2. Its cleanup reads state and finds the plugin root unused.
+3. Another process installs from that root under the scope lock. It sees the old `node_modules`, skips the package step, and saves its new record.
+4. The first cleanup renames and deletes that directory using its stale state result.
 
-### CR-02: A package-install failure during `apply`'s catalog move or a dependency move produces no warning
+The second command reports a successful installed plugin whose packages have just been removed. The state-lock protocol does not serialize this cleanup, so fail-fast locking elsewhere does not prevent the race. D-PL9-22 explicitly preserves packages while another installation uses the folder. The neighboring clone GC now acquires a fresh scope lock; the comment claiming equivalent unlocked behavior is stale.
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts:101-115`; dropped at `orchestrators/reconcile/notify.ts:423-445` (`convergedMoveOutcomes`), `orchestrators/reconcile/apply.ts:1745-1764` (`grownMoveOutcomes`), `orchestrators/plugin/dependency-move.ts:216-228` (`moveRow`)
+**Fix:** Acquire a fresh scope lock after the uninstall transaction, then read current references and remove packages inside that same critical section. A held lock can retain the current best-effort cleanup behavior. Add a deterministic interleaving test proving cleanup cannot remove packages that a newly saved installation uses.
 
-**Issue:** D-PL9-14 sends the update hook's note only into `outcome.notes`. Only two consumers render `notes` on an `updated` outcome:
+### CR-04: BLOCKER — Apply drops package warnings when it combines a move and an enable
 
-- `update-flow.ts::surfaceUpdateDiscoveryWarnings`, for a direct `update`
-- `reinstall-flow.ts:426`
+**File:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-c-369/extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts:1869-1882`
+**Related:** `apply.ts:1052-1062,1835-1840,2424-2429`; `reconcile/notify.ts:524-536`.
 
-Every other caller of `materializeLatestVersion` turns the outcome into rows and never reads `notes`:
+**Issue:** A dependency-held record with its own revision move can be updated while disabled and enabled in the same apply cascade. The enable result correctly carries `stagingWarnings` and `mcpConfigNotices`. For the nonwaiting, revision-changed arm, `landedStepRows` discards those results and returns only `enabledMoveOutcome(move)`, which has neither field. Final emission only reads the retained outcomes. If this enable's package installation fails or is refused, the plugin is enabled without a package warning. An MCP config notice produced by that enable is lost too.
 
-- `apply`'s converge path through `convergePluginWith` → `convergedMoveOutcomes` / `grownMoveOutcomes`. This also covers autoapply at load (AAP-D1).
-- Dependency moves during `update` and `install` cascades, through `runDependencyMove` → `moveRow`.
+The path is reachable through the deferred enables built by `convergence.ts` and paired with moves in `cascadeSteps`. APPLY1-D1's single net transition row does not require discarding diagnostics. The current package-warning tests cover plain converge and backfill moves, not this combined move-and-enable arm.
 
-On those paths npm runs (D-PL9-10 names `apply` explicitly), and a failure leaves the plugin moved without its packages. The user sees nothing. PKD-02 requires "installs with a warning", and D-PL9-09 says the row "is the one place the user learns it". No test or scenario covers `apply` or a dependency move with a lockfile.
+**Fix:** Transfer the enable's staging warnings and MCP notices to the consolidated move outcome while preserving the one-row transition policy. Add a composed apply scenario for a deferred revision move whose enable produces a package warning, and a test asserting retained MCP notices and exactly one transition row.
 
-**Fix:** Carry the package note on these paths. Either:
+### CR-05: BLOCKER — A moved dependency's package warning is emitted twice
 
-- add the note to the converged/backfilled outcome and to `UpdateDependencyRow`, and render it the way `surfaceDiscoveryWarnings` does; or
-- return it in a dedicated field (for example `packageNote`) that the apply and cascade composers must handle.
+**File:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-c-369/extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts:245-255`
+**Related:** `dependency-move.ts:276,339-344`; `dependency-settle.ts:145-158,231`; `materialize-latest.ts:176-183,248-257`; `update-flow.ts:565-575`.
 
-Add a cucumber scenario: "`/claude:plugin apply` that moves a plugin whose package install fails reports the warning".
+**Issue:** `withPackageNote` still places a package warning on the moved dependency's row cause. The same outcome now also carries that note as a discovery staging warning, and `runDependencyMove` forwards it. The dependency settle accumulates those warnings; `materializeLatestVersion` merges them into the requesting plugin's outcome; the direct update emits them in that plugin's diagnostic. Consequently, updating plugin A when it moves dependency B and B's package step fails shows B's warning on B's row and again beneath A's diagnostic header. Marketplace update cascades use the same merged outcome. D-PL1-26 requires one placement for a package note.
 
-**Resolution:** fixed in `adb28310` (fix(plugin): report package notes from apply and dependency moves). The updated outcome also carries the note as `packageNote`; `convergedMoveOutcomes` and `grownMoveOutcomes` lift it to `postCommitWarnings`, which `surfacePostCommitWarnings` now prints for converged and backfilled outcomes too; `moveRow` puts it on the moved dependency row's cause line (after any range disclosure) at warning severity. No reason token; `notify-reasons.ts` and `notification-types.ts` untouched. New scenario "Apply that moves a plugin whose package install fails reports the warning" failed before the fix (no diagnostic result). Residue: `marketplace update` with autoupdate renders update rows through `orchestrators/marketplace/update.messaging.ts` and still drops `notes`/`packageNote`.
+**Evidence:** The complete call chain carries the same string through both branches. The tests prove the branches independently: `dependency-move.test.ts:459-488` checks the row cause, `dependency-settle.test.ts:383-406` checks forwarded warnings, and `materialize-latest.test.ts:637-668` checks merging them into the parent outcome. No current composed update case asserts the complete notification set for a moved dependency's package note.
 
-## Warnings
+**Fix:** Give a dependency's package warning one owner and one output placement. Prefer carrying the dependency identity with its diagnostic and removing the legacy row-cause copy when that diagnostic is rendered. Preserve visibility on install/apply paths that currently depend on the row. Add a scenario that updates A, moves B, fails B's package install, and asserts exactly one warning attributed to B.
 
-### WR-01: The 60-second limit holds only if the child's stdio closes
+### Warnings
 
-**File:** `extensions/pi-claude-marketplace/platform/package-manager.ts:99-116,134-149`
+### WR-01: WARNING — The package-manager import exception permits every matching basename
 
-**Issue:** The run settles only on `error` or `close`. `close` fires only after the child's stdio pipes close. The ladder ends with one `SIGKILL` to the direct child, and nothing settles the run after that. Two cases break the limit:
+**File:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-c-369/eslint.config.js:530-533`
 
-- A launcher shim that spawns the real npm as a child with inherited stdio (Volta-style shims) dies on the signal, while the grandchild keeps both pipes open.
-- With the sanitizer deferred (D-PL9-08), git dependencies are allowed, so npm can have `git` children still running.
+**Issue:** The restricted-path target `**/!(package-install).ts` exempts every file named `package-install.ts`, regardless of directory. `PACKAGE_INSTALL_SEAM` appears only in the error message. A future `edge/package-install.ts` or unrelated orchestrator with that basename can import the process runner directly and bypass the required sanitizer/containment seam without violating this gate. The child-process whitelist does not catch this because that file imports the sanctioned runner rather than `node:child_process` itself. This is the prior IN-03, still present; skipping an Info item in the old fix pass did not make the gate enforce its stated contract.
 
-In either case the install, and the state lock it holds, waits for the grandchild, not for 65 seconds. Also, Node emits `error` for a `kill()` that fails while the process is still running. That settles the run early, and `finally` then deletes the work dir under a live npm.
+**Fix:** Express an exception for the exact `orchestrators/plugin/package-install.ts` path. Add a focused negative control for an equally named file in another directory.
 
-**Fix:**
-- Spawn with `detached: true` and signal the process group (`process.kill(-child.pid, sig)`).
-- Also settle on `exit`, or on a hard deadline after the SIGKILL grace, whichever comes first.
-- Settle on `error` only when no `pid` was assigned (a spawn failure), not when a kill fails.
+### WR-02: WARNING — Separate decoding of output chunks corrupts UTF-8 diagnostics
 
-**Resolution:** fixed in `fb837d45` (fix(plugin): bound a package install even when its process never closes). The run settles one kill grace after SIGKILL whether or not `close` arrives, and `error` settles it only when the process has no `pid` (never started). The caller's work-dir removal stays best effort and a timed-out run moves nothing. Process-group signalling (`detached: true`) was not added.
+**File:** `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-c-369/extensions/pi-claude-marketplace/platform/package-manager.ts:153-154`
 
-### WR-02: Path redaction removes the folder that the D-PL9-03 note exists to name
+**Issue:** Each Buffer is converted to UTF-8 independently. Streams may split a multibyte character anywhere, so a valid package-manager message can become replacement characters before it reaches warning normalization or path redaction. This is the prior IN-04 and remains a current robustness defect.
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts:263-268`; rendered through `orchestrators/plugin/shared.ts:1822`
+**Evidence:** A narrow injected runner emitted the bytes of `café` in two chunks, split between `0xc3` and `0xa9`. Captured stderr was `caf��`. This did not depend on output limits or invalid input.
 
-**Issue:** The outside-root note says "its folder `<abs path>` is outside … run "npm ci …" in that folder". Every surface (`surfaceDiscoveryWarnings`) passes notes through `redactAbsolutePaths`, which reduces the path to its basename. The user actually sees "its folder pkp is outside …" (`package-dependencies.feature:97` pins exactly this). The note cannot tell the user where to run the command, which is its only purpose under D-PL9-03.
+**Fix:** Use a StringDecoder per stream, or request UTF-8 decoding on the streams, while keeping bounded capture. Flush decoder state at completion. Avoid cutting a surrogate pair when limiting the final note. Add a chunk-boundary case with valid multibyte output.
 
-**Fix:** Name the folder in a form that survives redaction and is still usable, such as `~`-relative or `<marketplace>/<relative plugin path>`. Or route this note through a channel that is not redacted (the folder is the user's own, not an internal path). Update the scenario to assert the usable form.
+## Scope and verification
 
-**Resolution:** fixed in `869eff2a` (fix(plugin): name the marketplace in the local-folder package note). The note now reads "its folder in the marketplace \"<name>\" is outside ..." and contains no absolute path; the scenario asserts the new text.
+The original 21 files and the resolver's eight moved files are all included. The two additional moved source files not in the old list are `dependency-move.ts` and `reconcile/apply.ts`. Current extracted consumers were traced through the lifecycle and notification boundaries; the sanitizer and shared redactors were read directly. CodeGraph was used first for orientation, followed by current direct source reads. No structural pre-pass payload was supplied.
 
-### WR-03: Uninstall leaves node_modules, so a later install skips the step and keeps stale modules
+The file list records the review's file universe, not a claim that every unrelated historical test in each large suite was re-audited. Standard review covered the Phase 9 behavior, current changed seams, their setup and assertions, and the associated callers. The test-only helper fully read the install-flow, materialize-latest, package-install, dependency-move, package-manager, sanitizer and redactor tests. It reviewed these relevant sections of the larger existing suites:
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts:281-284`
-
-**Issue:** Uninstall never removes the `node_modules` that the package step wrote into a shared clone root (only `package-install.ts` names `node_modules`). Take this sequence:
-
-1. Install v1.
-2. Uninstall.
-3. `marketplace update` brings in a v2 lockfile.
-4. Install again. `hasNodeModules && !force` returns `SKIP`.
-
-The plugin now runs v2 code against v1 packages. Uncertain choice 5 in 09-CONTEXT says such a stale `node_modules` "is only refreshed by the plugin's update", but `update` reports the plugin up to date. CR-01 shows reinstall also skips. So no command ever refreshes it.
-
-**Fix:** Do one of the following:
-- Record the lockfile digest that the installed `node_modules` came from, for example a `.pi-claude-marketplace-lock` marker inside `node_modules`, and force when it differs.
-- Remove the step-created `node_modules` on uninstall when the root is inside the extension root.
-
-At minimum, correct the recorded mitigation.
-
-**Resolution:** skipped: out of this fix pass's scope (recorded follow-up).
-
-### WR-04: Raw multi-line package-manager output goes straight into a diagnostic line
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts:334-341`
-
-**Issue:** `failureDetail` uses `run.stderr.trim()` as the note body. That text can be up to 500 characters of npm output: several lines, often beginning with `npm warn …` lines before the actual error. Any control characters npm prints, or relays from a registry error body, pass through too. The lockfile's `resolved` hosts are not restricted, because the sanitizer is deferred. The text becomes one `lines` entry of a warning diagnostic, so embedded newlines break the row grammar in the TUI. The only scenario uses `loglevel=silent` (`features/lib/npm-registry.ts:267`), so it sees "no output" and never exercises this path.
-
-**Fix:** Normalise the detail before building the note:
-1. Strip ANSI and C0 control characters.
-2. Drop leading `npm warn` lines.
-3. Remove the `npm error`/`npm ERR!` prefixes. The upstream `npm pack` path does this with `/^npm (ERR!|error) ?/`.
-4. Join the remaining lines with `"; "`.
-
-Add a unit case with multi-line stderr.
-
-**Resolution:** fixed in `eba851ee` (fix(plugin): compact package manager output in the failure note). Escape sequences and control characters are stripped, `npm warn` lines are dropped when anything else was printed, `npm error`/`npm ERR!` prefixes are removed, and lines are joined with "; " before the 500-character cut.
-
-### WR-05: Package ops are hard-wired at both production call sites, so the contained path is never tested through the ledger or the runner
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1527`, `extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts:104,112`
-
-**Issue:** Both call sites bind `DEFAULT_PACKAGE_INSTALL_OPS` directly, and neither `runInstallLedger` nor `materializeLatestVersion` takes the ops as a parameter. This is against the CONVENTIONS rule on dependency injection over hard-wired dependencies. As a result:
-
-- The new ledger and runner tests (`install-outcome.test.ts`, `materialize-latest.test.ts`) can only use outside-root plugins. A contained plugin would spawn the real `npm`.
-- No test proves that the packages phase's undo runs when `statePhase` fails inside the real ledger.
-- No test proves which `force` value each policy produces at the runner. That test would have caught CR-01.
-
-**Fix:** Add an optional `packageInstallOps` to the ledger's existing injection seam (next to `transaction`) and to `ThreePhaseArgs`, defaulting to `DEFAULT_PACKAGE_INSTALL_OPS`. Then add contained-root tests:
-- ledger state-phase failure removes the created `node_modules`;
-- `update`, `converge`, `reinstall`, and `rematerialize` each pass the expected force.
-
-**Resolution:** fixed in `a5ec61b8` (refactor(plugin): inject the package step's ports into ledger and runner). `InstallLedgerTransaction.packageInstallOps` and an optional third parameter of `materializeLatestVersion` default to `DEFAULT_PACKAGE_INSTALL_OPS`. New cases: a state-phase failure removes the node_modules a contained plugin's packages phase created; the runner's force per policy (extended in `05c6c9c3`).
-
-## Info
-
-### IN-01: A failed restore deletes the parked node_modules
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts:371-375,419`
-
-**Issue:** The restore failure is ignored, and then `finally` runs `rm(workDir)`, which deletes `previous-node_modules` with it. The plugin is left with no modules at all. The comment says "running update again repeats the install", but update of an up-to-date plugin does not. This matches upstream (`vSs` + `rl(s)` in 2.1.310), so it is recorded here, not counted as a defect.
-
-**Fix:** If the restore fails, leave the work dir in place (skip the `rm`) and name it in the note.
-
-**Resolution:** skipped: Info finding, out of this fix pass's scope (recorded follow-up).
-
-### IN-02: A plugin root that cannot be listed produces a dependency warning for a plugin with no package.json
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts:231-241,435-436`
-
-**Issue:** Any `readdir` error other than ENOENT becomes "Skipped installing this plugin's dependencies: EACCES …", even when the plugin ships no `package.json`. The changed assertion in `update-flow.test.ts:8345-8348` accepts that extra warning. Upstream only logs this case at debug level.
-
-**Fix:** Treat an unreadable root as a quiet skip, or report it only when the bridge phases have not already failed on the same root.
-
-**Resolution:** skipped: Info finding, out of this fix pass's scope (recorded follow-up).
-
-### IN-03: The BLOCK C zone exempts by basename, not by the seam path
-
-**File:** `eslint.config.js:521`
-
-**Issue:** `**/!(package-install).ts` exempts every file named `package-install.ts` in any folder. `PACKAGE_INSTALL_SEAM` appears only in the message.
-
-**Fix:** Express the exemption with the exact path, for example with `except`, or narrow the target glob.
-
-**Resolution:** skipped: Info finding, out of this fix pass's scope (recorded follow-up).
-
-### IN-04: Captured output can garble multi-byte characters
-
-**File:** `extensions/pi-claude-marketplace/platform/package-manager.ts:92-94`; `package-install.ts:183,327`
-
-**Issue:** Each chunk is decoded separately, so a UTF-8 sequence split across two chunks becomes U+FFFD. Separately, `.slice(0, 500)` can cut a surrogate pair in half.
-
-**Fix:** Use `setEncoding("utf8")` (a StringDecoder) on the streams. Truncate by code point.
-
-**Resolution:** skipped: Info finding, out of this fix pass's scope (recorded follow-up).
-
-### IN-05: The diagnostic header calls the package note a "declared component"
-
-**File:** `features/plugin/package-dependencies.feature:51,97,115` (header from `orchestrators/plugin/shared.ts:1823-1826`)
-
-**Issue:** The header reads "Plugin "pkp" installed; 1 declared component has a note." A package-install failure is not a declared component. The wording carries over from the reused channel (D-PL9-14), and PKGDEP-04 is filed for the row reason.
-
-**Fix:** Address it together with PKGDEP-04.
-
-**Resolution:** skipped: Info finding, out of this fix pass's scope (recorded follow-up).
-
-### IN-06: A rolled-back install cascade leaves the node_modules its members created
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts:454-473`
-
-**Issue:** The phase's undo runs only inside the inner ledger. When a later member of the outer cascade fails, `cascadeUnstagePlugin` undoes the members that completed but does not remove their `node_modules`. The modules stay in the clone, and the next install skips the step because of them.
-
-**Fix:** Expose the created path on the ledger summary so the cascade undo can remove it.
-
-**Resolution:** skipped: Info finding, out of this fix pass's scope (recorded follow-up).
-
-### IN-07: The timeout note uses the constant, not the runner's timeout
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts:335-337`
-
-**Issue:** The note reads "timed out after 60 seconds" from `PACKAGE_INSTALL_TIMEOUT_MS`. An injected runner with a different timeout would report the wrong number.
-
-**Fix:** Carry `timeoutMs` on `PackageManagerRun`, or on the ops.
-
-**Resolution:** skipped: Info finding, out of this fix pass's scope (recorded follow-up).
-
-### IN-08: An update that drops its dependencies keeps the old node_modules
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts:276-303`
-
-**Issue:** A forced run whose new version has no `package.json`, no listed packages, or no lockfile returns `SKIP`. The previous version's `node_modules` stays in a shared root.
-
-**Fix:** When `force` is set and the detection is `skip` but `node_modules` exists, remove a `node_modules` that the step created (see the marker in WR-03).
-
-**Resolution:** skipped: Info finding, out of this fix pass's scope (recorded follow-up).
+| Test file | Inspected lines |
+| --- | --- |
+| install-outcome.test.ts | 1-310, 1198-1218, 3150-3304 |
+| update-flow.test.ts | 1-430, 595-710, 8345-8470, 8570-8675, 11420-11560, 11900-11990 |
+| uninstall.test.ts | 1-230, 5760-5910, 6491-6515, 7821-8014 |
+| reconcile/apply.test.ts | 1-665, 8641-8735, 10270-10415 |
+| reconcile/apply-outcomes.test.ts | 1-80, 1290-1440 |
+| reconcile/notify.test.ts | 1-180, 1979-1995, 2110-2205, 2410-2478 |
+| dependency-settle.test.ts | 1-430 |
+
+The existing full gate is reused under the local-verification skill: `npm run check` exited 0 on Node v26.12.1 at exact executable inputs `250acaad`, with static checks green, 1125/1125 scenarios, 11467/11467 steps, and 309 coverage records. The parent observed that run directly through exec; no standalone log was saved. It completed before the 2026-10-29T00:41:06Z security audit. The review confirmed an empty `git diff 250acaad -- . ':(exclude,glob).planning/**/*.md'` and no untracked executable inputs before writing this report. No full-suite rerun was performed.
+
+Additional evidence consists of the bounded process-tree reproduction, split-UTF-8 capture reproduction, and the helper's ignored-node_modules checkout reproduction described above. A direct assertion also confirmed that the final `250acaad` redactor preserves the errno text and reduces both apostrophe-containing rename paths to their basenames. Other findings are direct source/call-chain proofs, not claimed end-to-end executions.
+
+## Prior findings and recorded decisions
+
+| Prior item | Current assessment |
+| --- | --- |
+| CR-01: reinstall revision force | The direct enabled reinstall fix remains: `revisionMoved` compares commit and version. CR-02 above is a different disabled-update/enable bypass. |
+| CR-02: apply/dependency warning loss | Ordinary converge/backfill and dependency row propagation remain wired. Current combination defects are CR-04 and CR-05 above. Marketplace/autoupdate package notes now use the shared staging diagnostic (D-PL1-26), so the old deferred cascade gap is obsolete. |
+| WR-01: wait forever for close | The final deadline now bounds settlement. D-PL9-19 process-group escalation has the separate surviving-descendant bug in CR-01. |
+| WR-02: unusable redacted folder note | Fixed: the outside-root note identifies the marketplace and command without an absolute path. |
+| WR-03: uninstall leaves all modules | Sequential marked-module cleanup works, preserves unmarked trees and other recorded users, and reaches prune/apply uninstall. CR-03 is its unsynchronized concurrent-use check. |
+| WR-04: multiline/control output | Fixed for subprocess stdout/stderr: control/ANSI removal, prefix cleanup and one-line joining precede the note cap. UTF-8 chunk decoding remains WR-02 above. |
+| WR-05: hard-wired package ports | Fixed: contained-root ledger rollback and policy-force cases can inject the package runner. |
+| IN-01: failed restore discards parked modules | Still follows the recorded D-PL9-04 upstream swap/finally policy. A restore failure can lose the parked copy; this remains a known recovery limitation, not a newly discovered divergence. |
+| IN-02: unreadable root warns before finding package.json | Still reports the actual read refusal. No additional behavioral defect established beyond the recorded warning policy. |
+| IN-03 / IN-04 | Still current defects, classified as WR-01 / WR-02 above rather than silently treated as fixed. |
+| IN-05: “declared component” header | Still the chosen D-PL9-14 / D-PL1-26 shared diagnostic vocabulary; no independent style finding. |
+| IN-06: outer cascade rollback leaves package cache | The inner phase undo removes only its newly created tree; successful earlier members can leave a contained cache after outer rollback. This remains a recorded lifecycle follow-up, not proof that an installed plugin is currently broken. |
+| IN-07: injected timeout differs from displayed constant | Production bindings still use the displayed 60 seconds; a different injected test runner is not a production defect. |
+| IN-08: revision dropping all dependencies retains modules | The no-list/no-lockfile skip remains D-PL9-02/06 behavior. No separate active runtime failure was established from unused retained packages. |
+
+D-PL9-08 is no longer a sanitizer deferral: registry-only rewritten inputs, integrity checks, supported lockfile checks, and npm's disabled-git argument are present. File symlinks fail the regular-file checks; source roots pass the existing containment guard before a package run. The documented lstat/read race, failed-restore policy, external-manager behavior and inherited user environment were considered as residual boundaries. They do not erase the concrete current findings above. This report makes no new upstream parity claim and does not treat the old SECURITY.md's stale “sanitizer not ported” statement as source truth.
+
+Only this review artifact was changed. No source or test file was edited, no acceptance decision was rewritten, and no commit was made.
 
 ---
 
-_Reviewed: 2026-10-27T05:26:57Z_
-_Reviewer: Claude (gsd-code-reviewer)_
+_Reviewed: 2026-10-29T01:15:37Z_
+_Reviewer: gsd-code-reviewer_
 _Depth: standard_
