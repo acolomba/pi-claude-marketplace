@@ -1,6 +1,6 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-reviewed: 2026-10-29T08:12:52Z
+reviewed: 2026-10-29T08:25:52Z
 depth: standard
 files_reviewed: 126
 files_reviewed_list:
@@ -140,16 +140,16 @@ status: issues_found
 
 # Phase 10: Code Review Report
 
-**Reviewed:** 2026-10-29T08:12:52Z
+**Reviewed:** 2026-10-29T08:25:52Z
 **Depth:** standard
-**Files Reviewed:** 126 (the retained Phase 10 scope plus the iteration-8 deltas)
+**Files Reviewed:** 126 (the retained Phase 10 scope plus the iteration-9 deltas)
 **Status:** issues_found
-**Observed HEAD:** `c4e4aa95`
+**Observed HEAD:** `ef1baf84`
 **Runtime:** Node `v26.12.1`
 
 ## Structural Findings (fallow)
 
-The exact merged full gate's Fallow stage passed. The iteration-8 fixer also reported a clean Fallow guard and audit for its three changed files. Direct review covered the complete retained scope and the iteration-8 source and test deltas.
+The exact merged full gate's Fallow stage passed. The iteration-9 fixer also reported a clean Fallow guard and audit for its three changed files. Direct review covered the complete retained scope and the iteration-9 source and test deltas.
 
 CodeGraph was used before direct file reads. Its index did not include every newest changed owner, so all closure and requirement evidence was verified against the current source.
 
@@ -157,23 +157,23 @@ CodeGraph was used before direct file reads. Its index did not include every new
 
 ### Summary
 
-The complete 126-file scope was re-reviewed. The 123 files unchanged from the complete prior review remain byte-identical. The three source and test files changed by `442ffb14` were read against their full owners and traced through the cause-chain and notification-presentation callers. The strict Phase 10 checker still passes 56/56, binds XPH02 to the exact three required scenario titles at `741516af`, and retains its negative-mutation checks. D-PL10-13 remains the formal supersession of the older Plan 01-03 literal. The Phase 6, 8, and 9 integration evidence and 28-truth mapping remain present.
+The complete 126-file scope was re-reviewed. The 123 files unchanged from the complete prior review remain byte-identical. The three source and test files changed by `c6a1fab2` were read against their full owners and traced through the cause-chain and notification-presentation callers. The strict Phase 10 checker still passes 56/56, binds XPH02 to the exact three required scenario titles at `741516af`, and retains its negative-mutation checks. D-PL10-13 remains the formal supersession of the older Plan 01-03 literal. The Phase 6, 8, and 9 integration evidence and 28-truth mapping remain present.
 
-The package-manager settlement fix remains sound on the reviewed paths. The iteration-8 redaction fix closes the submitted multi-word apostrophe case and the exact `E_READ` negative control. It does not actually identify whether the next quote opens or closes a quoted value. An unrelated quoted value that begins with a character accepted by `isQuotedPathBoundary()` still makes the scanner consume slash-bearing prose as part of the absolute path.
+The package-manager settlement fix remains sound on the reviewed paths. The iteration-9 redaction fix closes the complete submitted matrix of later punctuation- and whitespace-prefixed quoted values. The continuation grammar still assumes the first ambiguous apostrophe is the only apostrophe inside the path and that a real path continuation ends in non-whitespace. Valid POSIX path components can contain multiple apostrophes and can end in whitespace, so those inputs still expose directory components through every boundary that uses the shared redactor.
 
 ## Critical Issues
 
-### CR-01: The quote-role heuristic still consumes valid slash-bearing prose
+### CR-01: The quote-role heuristic still exposes valid multi-quote paths
 
-**File:** `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts:75-89`
+**File:** `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts:75-93`
 
-**Issue:** `continuesQuotedPath()` decides that `nextQuote` closes the candidate by testing only the character after that quote. An opening quote also passes that test when its quoted value starts with whitespace or one of the accepted punctuation characters. For example, `open '/tmp/private/file.json' docs/errors '.hidden'` becomes `open 'errors '.hidden'`; the same corruption occurs with `':E_READ'` and `' E_READ'`. The behavior reaches `redactCauseChain` and public notification presentation because both use this shared helper. The new `E_READ` negative controls pass only because `E` is not a boundary character, so they do not discriminate the quote role that the implementation claims to recognize.
+**Issue:** `continuesQuotedPath()` only examines the text through the immediately next matching quote, and rejects a continuation whose last character is whitespace. A valid path with another embedded apostrophe therefore stops at the first one: `open '/tmp/O' Brien's files/秘密/secret.json'` becomes `open 'O' Brien's files/秘密/secret.json'`, exposing `Brien's files/秘密/` instead of collapsing the absolute path to `secret.json`. A valid quoted path with a trailing-space basename, such as `open '/tmp/O' Mary Jane/秘密/secret.json '`, similarly exposes `Mary Jane/秘密/`. The same behavior reproduces through `redactCauseChain`; public notification presentation serializes that rebuilt chain. Double-quoted paths have the equivalent defect. The 35-case iteration-9 matrix varies the *later value* after a correctly closed path, but does not cover multiple embedded matching quotes or a trailing-whitespace path, so its assertions cannot detect this disclosure.
 
-**Fix:** Do not classify a quote as a closing delimiter from its following character alone. Parse a continuation with a rule that distinguishes the candidate's closing delimiter from the opening delimiter of a later quoted value, and fail conservatively when that role is ambiguous. Add POSIX, drive, and UNC negative controls whose unrelated quoted value begins with punctuation or whitespace. Exercise the same boundary through `redactCauseChain` and public notification presentation.
+**Fix:** Replace the next-quote lookahead with a parser that evaluates the complete quoted candidate and chooses a delimiter without assuming a path contains at most one embedded matching quote or ends in non-whitespace. When the grammar is genuinely ambiguous, prefer redacting the larger candidate so directory names cannot escape. Add POSIX, drive, and UNC positive controls with two embedded matching quotes, trailing whitespace, and the double-quoted equivalents, then exercise the same inputs through `redactCauseChain` and public notification presentation while retaining the later-value matrix.
 
 ### Prior finding closure
 
-- The multi-word apostrophe disclosure is closed for the submitted `O' Mary Jane/秘密` case. CR-01 remains open because the replacement quote-role test still consumes valid immediate slash-bearing prose.
+- The later punctuation/whitespace quoted-value corruption is closed for the submitted 35-case matrix. CR-01 remains open for valid paths with multiple embedded matching quotes or trailing whitespace.
 - The original early parent-close settlement and the replacement unreferenced-timer liveness defect are closed by `1b77dd7b`.
 - The earlier PTY wait-cap, aggregate-notice oracle, and evidence-binding findings remain closed.
 
@@ -181,18 +181,18 @@ The package-manager settlement fix remains sound on the reviewed paths. The iter
 
 - `node scripts/check-phase10-coverage.mjs`: `56/56` rows valid.
 - D-PL10-13 exact owner: passed, 1/1 with no skip or todo.
-- Redaction and notification-presentation owners: passed 97/97; both direct pairs passed at 100% line, function, and branch coverage.
-- Direct adversarial probes reproduced CR-01 for `'.hidden'`, `':E_READ'`, and `' E_READ'` immediately after slash-bearing prose.
+- Redaction and notification-presentation owners: passed 132/132; both direct pairs passed at 100% line, function, and branch coverage.
+- Direct adversarial probes reproduced CR-01 for a multi-apostrophe path, a trailing-whitespace path, and the double-quoted equivalent; the same leaks reproduce through `redactCauseChain`.
 - Package-install cleanup owner and direct coverage: passed.
 - Package-manager owner module: passed 41/41 outside the process-restricted sandbox.
 - Package-manager direct coverage: passed at 100% line, function, and branch coverage.
 - Standalone no-ambient-handle process probe: exited 0 and emitted the complete timed-out result.
-- Exact post-fix `npm run check`: passed `1144` scenarios / `11758` steps / `309` LCOV records. The gate does not include the remaining quote-role boundary above, so it does not close CR-01.
+- Exact post-fix `npm run check`: passed `1144` scenarios / `11758` steps / `309` LCOV records. The gate does not include the remaining valid quoted-path shapes above, so it does not close CR-01.
 
 Only this report was changed. No implementation, test, state, or configuration file was modified, and no commit was created.
 
 ---
 
-_Reviewed: 2026-10-29T08:12:52Z_
+_Reviewed: 2026-10-29T08:25:52Z_
 _Reviewer: Codex (gsd-code-reviewer)_
 _Depth: standard_
