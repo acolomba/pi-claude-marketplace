@@ -1,8 +1,8 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-fixed_at: 2026-10-29T11:17:11Z
+fixed_at: 2026-10-29T11:25:04Z
 review_path: .planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md
-iteration: 20
+iteration: 21
 findings_in_scope: 1
 fixed: 1
 skipped: 0
@@ -11,9 +11,40 @@ status: all_fixed
 
 # Phase 10: Code Review Fix Report
 
-**Fixed at:** 2026-10-29T11:17:11Z
+**Fixed at:** 2026-10-29T11:25:04Z
 **Source review:** `.planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md`
-**Iteration:** 20
+**Iteration:** 21
+
+Iteration 21 reconciles the final three direct-owner expectations with the
+strict single-path arrow-operation output. Only the exact expected cause and
+message literals changed.
+
+## Iteration 21 Fix
+
+### CR-01: Direct owners retain a basename for malformed copyfile diagnostics
+
+**Status:** fixed
+**Commit:** `430e7883` (`test(plugin): reconcile strict errno causes`)
+**Files modified:**
+
+- `test/orchestrators/plugin/dependency-settle.test.ts`
+- `test/orchestrators/plugin/dependency-move.test.ts`
+- `test/orchestrators/plugin/install-cascade.messaging.test.ts`
+
+One dependency-settle row, one failed dependency-move cause, and one rendered
+install-cascade cause chain now require `copyfile '[redacted path]'` instead of
+`copyfile 'notes.md'`. Their complete result, row, cause, and message
+assertions remain unchanged; no helper, fixture, or assertion shape changed.
+
+All three owner suites pass. Each direct pair remains at 100%: dependency
+settle has 53/53 branches, 10/10 functions, and 311/311 lines; dependency move
+has 80/80 branches, 16/16 functions, and 425/425 lines; install-cascade
+messaging has 103/103 branches, 22/22 functions, and 730/730 lines. The all-pair
+direct run passes and merges 309 LCOV records. Fallow guard and the changed-file
+audit report no issue; the required fixers and the normal commit hook also
+pass. These checks ran in the existing Session A worktree because
+`workflow.use_worktrees` was false for the fixer. The parent workflow owns the
+fresh full `npm run check` gate.
 
 Iteration 20 reconciles the behavioral semantic fixture with iteration 19's
 strict errno output. The unreadable-skill copy placeholder now expands to the
