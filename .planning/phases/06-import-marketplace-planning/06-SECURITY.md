@@ -6,8 +6,8 @@ threats_open: 0
 asvs_level: 1
 block_on: high
 register_authored_at_plan_time: true
-audited_at: 2072cdcde7231f811c810a3e03d27db3b8e16f67
-source_commit: 2072cdcde7231f811c810a3e03d27db3b8e16f67
+audited_at: be0de0c3
+source_commit: be0de0c3
 base: d98660a7
 created: 2026-10-27
 updated: 2026-10-29
@@ -99,6 +99,7 @@ These notes come from reading the review-fix changes. None of them is a missing 
 | 2026-10-29 | 14 | 14 | 0 | Final merged-tree ASVS L1 re-audit at `59e5075b`; 11/11 mitigations verified, 3/3 accepted risks logged, no unregistered flags; exact green gate reused (1,142 scenarios, 11,734 steps, 309 LCOV records) |
 | 2026-10-29 | 14 | 14 | 0 | Post-CR-01 merged-tree ASVS L1 re-audit at `0ea56531`; diagnostic disclosure closed by `2d258ae7`; returned data and all transports receive redacted text; fresh gate green (1,143 scenarios, 11,742 steps, 309 LCOV records) |
 | 2026-10-29 | 14 | 14 | 0 | Final post-iteration-4 ASVS L1 re-audit at `2072cdcd`; `2d258ae7` plus `b58cdd6e` close all production diagnostic grammars, including held/compromised lock paths across POSIX, drive, and UNC forms; fresh gate green (1,143 scenarios, 11,742 steps, 309 LCOV records) |
+| 2026-10-29 | 14 | 14 | 0 | Final-head ASVS L1 re-audit at `be0de0c3`; 11 mitigations and 3 accepted risks verified; exact unchanged-input gate green (1,145 scenarios, 11,777 steps, 309 LCOV records) |
 
 ---
 
@@ -109,4 +110,4 @@ These notes come from reading the review-fix changes. None of them is a missing 
 - [x] `threats_open: 0` is confirmed.
 - [x] `status: verified` is set in frontmatter.
 
-**Approval:** SECURED 2026-10-29 at `2072cdcde7231f811c810a3e03d27db3b8e16f67`.
+**Approval:** SECURED 2026-10-29 at executable head `be0de0c3`.
