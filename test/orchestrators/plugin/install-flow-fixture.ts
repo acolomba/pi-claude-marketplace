@@ -1,7 +1,6 @@
 // Test support for the install-flow source pairs.
 
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 
 import {
@@ -74,6 +73,7 @@ export function createInstallMissingDependency(
 }
 
 export interface InstallTestOwner {
+  readonly root: string;
   readonly completionCache: CompletionCache;
   readonly hooksRouting: InstallHooksRouting;
   readonly hooksRuntime: HooksRuntime;
@@ -117,7 +117,7 @@ export function makeCtx(loaded?: Partial<SoftDepStatus>): {
 }
 
 export async function withHermeticHome<T>(fn: (owner: InstallTestOwner) => Promise<T>): Promise<T> {
-  return withHermeticEnvironment("install-", () => {
+  return withHermeticEnvironment("install-", (environment) => {
     const hooksRuntime = createHooksRuntime();
     const hooksRouting = createHooksRouting(hooksRuntime, { readHooksJson });
     const completionCache = createCompletionCache();
@@ -127,6 +127,7 @@ export async function withHermeticHome<T>(fn: (owner: InstallTestOwner) => Promi
       withLockedStateTransaction: REAL_INSTALL_TRANSACTION.withLockedStateTransaction,
     };
     return fn({
+      root: environment.root,
       completionCache,
       hooksRouting,
       hooksRuntime,
@@ -281,9 +282,10 @@ export async function publishCatalog(
 }
 
 export async function seedCatalogScope(
+  root: string,
   plugins: Readonly<Record<string, CatalogPlugin>>,
 ): Promise<{ readonly cwd: string; readonly marketplaceRoot: string }> {
-  const cwd = await mkdtemp(path.join(tmpdir(), "install-upd-dep-"));
+  const cwd = await mkdtemp(path.join(root, "install-upd-dep-"));
   const marketplaceRoot = path.join(cwd, "mp-src");
   await publishCatalog(marketplaceRoot, plugins);
   const locations = locationsFor("project", cwd);
@@ -384,7 +386,9 @@ export async function installGitAppAfterDependencyMove(owner: InstallTestOwner):
   readonly cwd: string;
   readonly install: Awaited<ReturnType<typeof installAppCountingResolves>>;
 }> {
-  const { cwd, marketplaceRoot } = await seedCatalogScope({ lib: { version: "1.2.0" } });
+  const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
+    lib: { version: "1.2.0" },
+  });
   const initial = makeCtx();
   await owner.installPlugin({
     ctx: initial.ctx,

@@ -223,7 +223,7 @@ test("/claude:plugin import --scope project narrows writes to project scope", as
   });
 });
 
-test("/claude:plugin import reports source mismatches and skips dependent plugins", async () => {
+test("/claude:plugin import replaces a recorded marketplace whose settings source changed", async () => {
   await withImportFixture(async ({ cwd }) => {
     // arrange
     const { command, ctx, notifications } = registerImportCommand(cwd, fixtureGitOps());
@@ -238,15 +238,17 @@ test("/claude:plugin import reports source mismatches and skips dependent plugin
 
     // assert
     const projectState = await loadState(locationsFor("project", cwd).extensionRoot);
-    assert.equal(
-      projectState.marketplaces["directory-marketplace"]?.plugins["local-plugin"],
+    assert.strictEqual(
+      projectState.marketplaces["directory-marketplace"]?.plugins["local-plugin"]?.resolvedSource,
+      path.join(cwd, "directory-marketplace", "plugins", "local-plugin"),
+    );
+    assert.strictEqual(
+      projectState.marketplaces["directory-marketplace"]?.plugins["mismatch-placeholder"],
       undefined,
     );
 
     const messages = notifications.map((notification) => notification.message).join("\n");
-    // The source-mismatch cascade renders a FAILED marketplace header with a
-    // FAILED folded child (not skipped); the child has no [scope] bracket.
-    assert.match(messages, /⊘ directory-marketplace \[project\] \(failed\)/);
-    assert.match(messages, / {2}⊘ local-plugin \(failed\) \{source mismatch\}/);
+    assert.match(messages, /● directory-marketplace \[project\] \(added\)/);
+    assert.match(messages, / {2}● local-plugin v1\.0\.0 \(installed\)/);
   });
 });

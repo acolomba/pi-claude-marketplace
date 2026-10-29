@@ -109,7 +109,9 @@ for (const orchestrated of [false, true]) {
   test(`keeps dependency MCP notices when the final config is invalid in ${orchestrated ? "an orchestrated" : "a standalone"} install`, async () => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd, marketplaceRoot } = await seedCatalogScope({ aaa: { version: "1.0.0" } });
+      const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
+        aaa: { version: "1.0.0" },
+      });
       try {
         const initial = makeCtx();
         const installed = await owner.installPlugin({
@@ -6764,8 +6766,8 @@ function failAfterSkillsWithUndoFault(
 }
 
 test("REC-06: a missing-dependency install whose own ledger cannot finish an undo reports the rollback partial", async () => {
-  await withHermeticHome(async ({ installMissingDependency, transactionControl }) => {
-    const { cwd } = await seedCatalogScope({ widget: { version: "1.0.0" } });
+  await withHermeticHome(async ({ installMissingDependency, transactionControl, root }) => {
+    const { cwd } = await seedCatalogScope(root, { widget: { version: "1.0.0" } });
     const undoError = new Error("skills undo failed");
     const restore = failAfterSkillsWithUndoFault(transactionControl, undoError);
     try {
@@ -15635,9 +15637,9 @@ for (const { title, file, partial, manifest, memberRow } of [
   },
 ]) {
   test(title, async () => {
-    await withHermeticHome(async ({ installPlugin }) => {
+    await withHermeticHome(async ({ installPlugin, root }) => {
       // arrange
-      const { cwd, marketplaceRoot } = await seedCatalogScope({
+      const { cwd, marketplaceRoot } = await seedCatalogScope(root, {
         app: { version: "1.0.0", dependencies: ["lib"] },
         lib: { version: "1.0.0" },
       });
@@ -15786,9 +15788,9 @@ test("D-PL10-16: a cascade dependency reports its discovery note under its own h
 });
 
 test("reports install diagnostics in row order when the root sorts after its dependency", async (t) => {
-  await withHermeticHome(async ({ installPlugin }) => {
+  await withHermeticHome(async ({ installPlugin, root }) => {
     // arrange
-    const { cwd, marketplaceRoot } = await seedCatalogScope({
+    const { cwd, marketplaceRoot } = await seedCatalogScope(root, {
       zroot: { version: "1.0.0", dependencies: ["aaa"] },
       aaa: { version: "1.0.0" },
     });
@@ -18813,7 +18815,9 @@ for (const rootFails of [false, true]) {
   test(`dependency planning re-enters the ledger with a ${rootFails ? "failing" : "successful"} root`, async () => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd, marketplaceRoot } = await seedCatalogScope({ lib: { version: "1.0.0" } });
+      const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
+        lib: { version: "1.0.0" },
+      });
       try {
         const dependency = makeCtx();
         assert.strictEqual(

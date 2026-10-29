@@ -8,6 +8,7 @@ import path from "node:path";
 
 import { Given } from "@cucumber/cucumber";
 
+import { redactAbsolutePaths } from "../../../extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts";
 import { runCommand, runCommandPayloads } from "../../lib/pi-commands.ts";
 import {
   invalidateManifest,
@@ -20,9 +21,6 @@ import {
 } from "../../lib/published-marketplace.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
-
-const REDACTED_UNREADABLE_SKILL_COPY_ERROR =
-  "EACCES: permission denied, copyfile '[redacted path]'";
 
 Given(
   "the marketplace {string} update source contains this manifest:",
@@ -99,7 +97,7 @@ Given(
     assert.deepStrictEqual([error.code, error.syscall], ["EACCES", "copyfile"]);
     this.recordErrorMessage(
       "{unreadable skill file copy error}",
-      REDACTED_UNREADABLE_SKILL_COPY_ERROR,
+      redactAbsolutePaths(error.message),
     );
   },
 );

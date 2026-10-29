@@ -38,9 +38,10 @@ const FILE_CAPABILITIES = { removalOps: { rm: () => Promise.resolve() } };
 
 async function catalog(
   t: TestContext,
-  plugins: Parameters<typeof seedCatalogScope>[0],
+  root: string,
+  plugins: Parameters<typeof seedCatalogScope>[1],
 ): Promise<Awaited<ReturnType<typeof seedCatalogScope>>> {
-  const seeded = await seedCatalogScope(plugins);
+  const seeded = await seedCatalogScope(root, plugins);
   t.after(() => rm(seeded.cwd, { recursive: true, force: true }));
   return seeded;
 }
@@ -99,7 +100,7 @@ describe("missing dependency transaction", () => {
   test("installs a dependency closure, then skips its recorded root", async (t) => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd } = await catalog(t, {
+      const { cwd } = await catalog(t, owner.root, {
         dep: { version: "1.0.0", dependencies: ["leaf"] },
         leaf: { version: "1.0.0" },
       });
@@ -153,7 +154,7 @@ describe("missing dependency transaction", () => {
   test("marks a foreign declarer as a cross-marketplace refusal", async (t) => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd } = await catalog(t, { dep: { version: "1.0.0" } });
+      const { cwd } = await catalog(t, owner.root, { dep: { version: "1.0.0" } });
       const install = createInstallMissingDependencyLedger(
         owner.transaction,
         owner.hooksRouting,
@@ -177,7 +178,7 @@ describe("missing dependency transaction", () => {
   test("carries root requirers and discovery warnings", async (t) => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd, marketplaceRoot } = await catalog(t, { dep: { version: "1.0.0" } });
+      const { cwd, marketplaceRoot } = await catalog(t, owner.root, { dep: { version: "1.0.0" } });
       await writeFile(
         path.join(marketplaceRoot, "plugins", "dep", "skills", "tool", "SKILL.md"),
         "---\nname: [unterminated\n---\n",
@@ -208,7 +209,7 @@ describe("missing dependency transaction", () => {
   test("projects a missing member as the failed closure subject", async (t) => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd } = await catalog(t, {
+      const { cwd } = await catalog(t, owner.root, {
         dep: { version: "1.0.0", dependencies: ["absent"] },
       });
       const install = createInstallMissingDependencyLedger(
@@ -231,7 +232,7 @@ describe("missing dependency transaction", () => {
   test("projects a member ledger marketplace absence", async (t) => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd } = await catalog(t, { dep: { version: "1.0.0" } });
+      const { cwd } = await catalog(t, owner.root, { dep: { version: "1.0.0" } });
       owner.transactionControl.runPhases = (phases, context) => {
         Object.assign(context as object, { marketplaceAbsent: true });
         return Promise.resolve({ ok: phases.length === 0, rollbackPartials: [], leaks: [] });
@@ -259,7 +260,7 @@ describe("dependency planning operations", () => {
   test("prepares graph ports and previews the root without writing", async (t) => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd } = await catalog(t, {
+      const { cwd } = await catalog(t, owner.root, {
         app: { version: "1.0.0", dependencies: ["dep"] },
         dep: { version: "1.0.0" },
       });
@@ -305,7 +306,7 @@ describe("dependency planning operations", () => {
   test("runs initial and materialized closure slices", async (t) => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd, marketplaceRoot } = await catalog(t, {
+      const { cwd, marketplaceRoot } = await catalog(t, owner.root, {
         app: { version: "1.0.0", dependencies: ["dep"] },
         dep: { version: "1.0.0" },
       });
@@ -361,7 +362,7 @@ describe("dependency planning operations", () => {
   test("reads a prepared root candidate in planning and cascade lookup", async (t) => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd, marketplaceRoot } = await catalog(t, { app: { version: "1.0.0" } });
+      const { cwd, marketplaceRoot } = await catalog(t, owner.root, { app: { version: "1.0.0" } });
       const installed = makeCtx();
       assert.strictEqual(
         (
@@ -415,7 +416,7 @@ describe("dependency planning operations", () => {
   test("surfaces an undefined settlement as marketplace absence", async (t) => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd } = await catalog(t, {
+      const { cwd } = await catalog(t, owner.root, {
         app: { version: "1.0.0", dependencies: ["dep"] },
         dep: { version: "1.0.0" },
       });
@@ -442,7 +443,7 @@ describe("dependency planning operations", () => {
   test("returns a refusal when cascade resolution names its subject", async (t) => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd } = await catalog(t, {
+      const { cwd } = await catalog(t, owner.root, {
         app: { version: "1.0.0", dependencies: ["absent"] },
       });
       const args = planning(owner, cwd);
@@ -463,7 +464,7 @@ describe("dependency planning operations", () => {
   test("returns a plan when a recorded dependency must move", async (t) => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd, marketplaceRoot } = await catalog(t, { dep: { version: "1.0.0" } });
+      const { cwd, marketplaceRoot } = await catalog(t, owner.root, { dep: { version: "1.0.0" } });
       const seeded = makeCtx();
       const installed = await owner.installPlugin({
         ctx: seeded.ctx,
@@ -496,7 +497,7 @@ describe("dependency planning operations", () => {
   test("rethrows a lock failure before a cascade subject exists", async (t) => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd } = await catalog(t, { app: { version: "1.0.0" } });
+      const { cwd } = await catalog(t, owner.root, { app: { version: "1.0.0" } });
       const args = planning(owner, cwd);
       const lockError = new Error("lock stopped");
 

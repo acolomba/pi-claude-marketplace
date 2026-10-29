@@ -179,7 +179,9 @@ for (const { title, catalog } of FRESH_GIT_DEPENDENCY_CASES) {
   test(`D-PL4-01: ${title}`, async () => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd, marketplaceRoot } = await seedCatalogScope({ lib: { version: "1.2.0" } });
+      const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
+        lib: { version: "1.2.0" },
+      });
       await installed(owner, cwd, "lib");
       await publishCatalog(marketplaceRoot, catalog);
       const repository = await offerGitPlugin(marketplaceRoot, "util");
@@ -224,7 +226,7 @@ test("D-PL4-01: a moved git root keeps the commit selected by its preview", asyn
 test("UPD-DEP-D1: installing refuses a plugin whose installed dependency no release moves inside its range", async () => {
   await withHermeticHome(async (owner) => {
     // arrange
-    const { cwd } = await seedCatalogScope({
+    const { cwd } = await seedCatalogScope(owner.root, {
       app: { version: "1.0.0", dependencies: ["lib@^2.0.0"] },
       lib: { version: "1.2.0" },
     });
@@ -263,7 +265,9 @@ test("UPD-DEP-D1: installing refuses a plugin whose installed dependency no rele
 test("removes clones from a refused git preview without touching other cache entries", async (t) => {
   await withHermeticHome(async (owner) => {
     // arrange
-    const { cwd, marketplaceRoot } = await seedCatalogScope({ lib: { version: "1.2.0" } });
+    const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
+      lib: { version: "1.2.0" },
+    });
     t.after(async () => {
       await rm(cwd, { recursive: true, force: true });
     });
@@ -316,7 +320,7 @@ test("removes clones from a refused git preview without touching other cache ent
 test("removes a ruled-out clone after resolver backtracking", async (t) => {
   await withHermeticHome(async (owner) => {
     // arrange
-    const { cwd, marketplaceRoot } = await seedCatalogScope({
+    const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
       fff: { version: "2.0.0" },
       yyy: { version: "1.0.0" },
     });
@@ -393,7 +397,7 @@ for (const orchestrated of [false, true]) {
   test(`UPD-DEP-D1: a dependency move that fails fails the ${orchestrated ? "orchestrated" : "standalone"} install`, async () => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd, marketplaceRoot } = await seedCatalogScope({
+      const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
         lib: { version: "1.2.0", mcp: true },
       });
       await installed(owner, cwd, "lib");
@@ -454,7 +458,9 @@ for (const orchestrated of [false, true]) {
 test("UPD-DEP-D1: installing refuses a plugin pi supports only in part before its dependency moves", async () => {
   await withHermeticHome(async (owner) => {
     // arrange
-    const { cwd, marketplaceRoot } = await seedCatalogScope({ lib: { version: "1.2.0" } });
+    const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
+      lib: { version: "1.2.0" },
+    });
     await installed(owner, cwd, "lib");
     await publishCatalog(marketplaceRoot, {
       app: { version: "1.0.0", dependencies: ["lib@^2.0.0"], experimental: { themes: "./t" } },
@@ -492,7 +498,9 @@ test("UPD-DEP-D1: installing refuses a plugin pi supports only in part before it
 test("UPD-DEP-D1: installing moves a dependency whose new version installs a dependency of its own", async () => {
   await withHermeticHome(async (owner) => {
     // arrange
-    const { cwd, marketplaceRoot } = await seedCatalogScope({ aaa: { version: "1.0.0" } });
+    const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
+      aaa: { version: "1.0.0" },
+    });
     await installed(owner, cwd, "aaa");
     await publishCatalog(marketplaceRoot, {
       app: { version: "1.0.0", dependencies: ["aaa@^2.0.0"] },
@@ -539,7 +547,9 @@ for (const orchestrated of [false, true]) {
   test(`keeps dependency-step MCP notices after a successful ${orchestrated ? "orchestrated" : "standalone"} install`, async (t) => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd, marketplaceRoot } = await seedCatalogScope({ aaa: { version: "1.0.0" } });
+      const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
+        aaa: { version: "1.0.0" },
+      });
       t.after(async () => {
         await rm(cwd, { recursive: true, force: true });
       });
@@ -586,7 +596,9 @@ for (const orchestrated of [false, true]) {
   test(`keeps dependency-step MCP notices when a later move fails in a ${orchestrated ? "orchestrated" : "standalone"} install`, async (t) => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd, marketplaceRoot } = await seedCatalogScope({ aaa: { version: "1.0.0" } });
+      const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
+        aaa: { version: "1.0.0" },
+      });
       t.after(async () => {
         await rm(cwd, { recursive: true, force: true });
       });
@@ -635,7 +647,9 @@ for (const orchestrated of [false, true]) {
 test("UPD-DEP-D1 / MISS-01: an install whose later step installs missing dependencies moves a dependency without installing what its new version needs", async () => {
   await withHermeticHome(async (owner) => {
     // arrange
-    const { cwd, marketplaceRoot } = await seedCatalogScope({ aaa: { version: "1.0.0" } });
+    const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
+      aaa: { version: "1.0.0" },
+    });
     await installed(owner, cwd, "aaa");
     await publishCatalog(marketplaceRoot, {
       app: { version: "1.0.0", dependencies: ["aaa@^2.0.0"] },
@@ -674,7 +688,7 @@ describe("createUpdateDependencyResolver", () => {
   test("installs a dependency the new version needs and reports its row", async () => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd, marketplaceRoot } = await seedCatalogScope({
+      const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
         widget: { version: "1.0.0" },
         zcore: { version: "1.0.0" },
       });
@@ -722,7 +736,7 @@ describe("createUpdateDependencyResolver", () => {
   test("D-PL1-16: reports the MCP config notices of the dependency it installs", async () => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd, marketplaceRoot } = await seedCatalogScope({
+      const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
         widget: { version: "1.0.0" },
         zcore: { version: "1.0.0" },
       });
@@ -775,7 +789,7 @@ describe("createUpdateDependencyResolver", () => {
   test("WR-C: refuses a version whose names another plugin owns before it installs any dependency", async () => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd, marketplaceRoot } = await seedCatalogScope({
+      const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
         widget: { version: "1.0.0" },
         other: { version: "1.0.0" },
         zcore: { version: "1.0.0" },
@@ -830,7 +844,9 @@ describe("createUpdateDependencyResolver", () => {
   test("D-PL4-04: refuses a version whose agent target a user's file holds before it installs any dependency", async () => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd, marketplaceRoot } = await seedCatalogScope({ widget: { version: "1.0.0" } });
+      const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
+        widget: { version: "1.0.0" },
+      });
       await installed(owner, cwd, "widget");
       await publishCatalog(marketplaceRoot, {
         widget: { version: "1.1.0", dependencies: ["zcore"] },
@@ -868,7 +884,7 @@ describe("createUpdateDependencyResolver", () => {
   test("enables a disabled dependency the new version needs and declares it enabled", async () => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd, marketplaceRoot } = await seedCatalogScope({
+      const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
         widget: { version: "1.0.0" },
         zcore: { version: "1.0.0" },
       });
@@ -913,7 +929,7 @@ describe("createUpdateDependencyResolver", () => {
   test("moves an out-of-range dependency first, then settles the closure again", async () => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd, marketplaceRoot } = await seedCatalogScope({
+      const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
         widget: { version: "1.0.0", dependencies: ["zcore"] },
         zcore: { version: "1.0.0" },
       });
@@ -952,7 +968,9 @@ describe("createUpdateDependencyResolver", () => {
   test("refuses a closure whose dependency no marketplace offers and changes nothing", async () => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd, marketplaceRoot } = await seedCatalogScope({ widget: { version: "1.0.0" } });
+      const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
+        widget: { version: "1.0.0" },
+      });
       await installed(owner, cwd, "widget");
       await publishCatalog(marketplaceRoot, {
         widget: { version: "1.1.0", dependencies: ["absent"] },
@@ -984,7 +1002,7 @@ describe("createUpdateDependencyResolver", () => {
   test("refuses a move that would need the plugin being updated moved again", async () => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd, marketplaceRoot } = await seedCatalogScope({
+      const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
         widget: { version: "1.0.0", dependencies: ["zcore"] },
         zcore: { version: "1.0.0" },
       });
@@ -1023,7 +1041,9 @@ describe("createUpdateDependencyResolver", () => {
   test("rethrows a failure no dependency caused", async () => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd, marketplaceRoot } = await seedCatalogScope({ widget: { version: "1.0.0" } });
+      const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
+        widget: { version: "1.0.0" },
+      });
       await installed(owner, cwd, "widget");
       await publishCatalog(marketplaceRoot, { widget: { version: "1.1.0" } });
       const held = await lockScope(cwd);
@@ -1048,7 +1068,7 @@ describe("createUpdateDependencyResolver", () => {
   test("reports a dependency whose marketplace a member's ledger finds missing as the update's own failure", async () => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd, marketplaceRoot } = await seedCatalogScope({
+      const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
         widget: { version: "1.0.0" },
         zcore: { version: "1.0.0" },
       });
@@ -1089,7 +1109,7 @@ describe("createUpdateDependencyResolver", () => {
   test("threads the update's collaborators into the dependency installs", async () => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd, marketplaceRoot } = await seedCatalogScope({
+      const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
         widget: { version: "1.0.0" },
         zcore: { version: "1.0.0" },
       });
