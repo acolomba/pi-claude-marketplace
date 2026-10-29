@@ -1,23 +1,40 @@
 ---
 phase: 07-git-errors-and-lock-discipline
-reviewed: 2026-10-28T20:35:13Z
-reviewed_commit: c7e660ac
+reviewed: 2026-10-29T05:00:42Z
+reviewed_commit: d183d481a6b5d86c20208bc63a616e22b5c9430e
 depth: standard
-files_reviewed: 25
+files_reviewed: 42
 files_reviewed_list:
+  - extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts
+  - extensions/pi-claude-marketplace/orchestrators/edge-deps.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-cascade-context.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-dependency-ledger.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/list-installed-row.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts
+  - extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts
+  - features/lib/published-marketplace.ts
+  - features/step_definitions/marketplace/update.steps.ts
   - test/orchestrators/plugin/clone-cache.test.ts
   - test/orchestrators/plugin/clone-gc.test.ts
   - test/orchestrators/plugin/dependency-bindings.test.ts
@@ -40,104 +57,103 @@ status: clean
 
 # Phase 7: Code Review Report
 
-**Reviewed:** 2026-10-28T20:35:13Z
-**Reviewed commit:** `c7e660ac`
+**Reviewed:** 2026-10-29T05:00:42Z
+**Reviewed commit:** `d183d481a6b5d86c20208bc63a616e22b5c9430e`
 **Depth:** standard
-**Files Reviewed:** 25
+**Files Reviewed:** 42
 **Status:** clean
 
 ## Summary
 
-The iteration-5 repair closes the remaining same-key ownership defect. Move
-judgment now contributes only the recorded old clone key as a possible
-superseded entry. A prepared key enters the attempt set only when a cache
-writer reports an atomic `renamed` promotion. Warm hits and exact-key
-race-lost promotions therefore remain unowned and survive a refused move.
+The complete current Phase 7 implementation and its ownership-focused test
+scope were reviewed on the integrated Phase 1-10 tree. The review traced the
+shared git classifier, scope-lock boundaries, state rechecks, clone promotion
+and cleanup ownership, dependency-plan terminal sweeps, offline tag fallback,
+monotonic update stamps, fetch/list row parity, and error-redaction/output
+boundaries. It also checked later Phase 8-10 changes in the Phase 7 owners,
+including dependency warning propagation, locked package cleanup, apply
+recovery detail, and the shared cause-chain redactor.
 
-The complete clone-ownership protocol was rechecked together with the narrow
-repair. Root previews, fresh-member previews, and every move candidate share
-one attempt set; install and planned update flows sweep it from terminal
-`finally` paths; the collector takes one fresh scope lock, re-reads live state,
-routes every delete through `pluginCloneDir`, and cannot mask the primary
-result or error. All reviewed files meet the required quality standard. No
-issues found.
+The exact-candidate ownership model is the controlling design. It formally
+supersedes Plan 07-02's broad clone-directory listing: restoring the broad
+listing would let one operation delete an unrelated clone warmed concurrently.
+Current cleanup targets only keys the operation can prove it owns, then
+rechecks live state while holding the scope lock.
+
+All reviewed files meet the required quality standard. No reproducible current
+issue was found.
 
 ## Narrative Findings (AI reviewer)
 
 No Critical, Warning, or Info findings.
 
-## Ownership Finding Closure
+## Prior Finding Closure
 
-- **Distinct concurrent cache deletion — closed.** Cleanup accepts an exact
-  candidate set and never targets an unrelated key. The deterministic
-  concurrent-mirror control leaves the unrelated entry on disk while removing
-  the unreferenced owned key.
-- **Refused and backtracked preview leaks — closed.** The pinned clone,
-  per-commit copy, unpinned mirror, and marketplace-tag materializers report a
-  key only after promotion returns `renamed`. Root, fresh-member, and move
-  preflights forward the same callback. Refused plans sweep created preview
-  keys, and resolver backtracking removes the rejected tag clone while keeping
-  the landed clone.
-- **Warm and exact-key race reclamation — closed.** `supersededCloneKeys`
-  derives only the current record's old root. The two iteration-5 negatives
-  run the production pinned materializer and production locked collector. The
-  warm case pre-creates the exact key; the race case installs the exact winner
-  between checkout and promotion. Both rule the candidate out and prove its
-  manifest remains. Reinstating the previous prepared-root insertion would
-  make both fail with `ENOENT` after the collector deleted that key.
+- **Classifier consolidation and output safety — closed.** Git transport,
+  HTTP, missing-ref, pin, and unknown-host failures pass through the shared
+  classifier. Unknown git failures use the deliberate network fallback, while
+  filesystem errno values remain available to caller-specific local ladders.
+  Fetch captures list-candidate read failures separately as unavailable rows.
+  Raw causes stay on the internal cause chain and are redacted at the output
+  boundary.
+- **Lock discipline and TOCTOU — closed.** Unpinned fetch and info operations
+  perform materialization and their dependent row read under the same scope
+  lock. Marketplace refresh during plugin update, state transitions, cleanup,
+  and later package-removal work use the required lock boundary without a
+  nested acquisition. Lost-lock paths do not present a successful mutation.
+- **Clone cleanup ownership — closed.** A materializer reports a key only
+  after its atomic promotion returns `renamed`; warm hits and exact-key race
+  losers never become owned. The recorded old key is eligible only as a
+  superseded key. Terminal sweeps take a fresh scope lock, reload live state,
+  route targets through `pluginCloneDir`, and cannot replace the operation's
+  primary result.
+- **Concurrent-cache safety — closed.** The deterministic controls preserve
+  unrelated warm clones, warm exact-key hits, exact-key race winners, landed
+  clones, and clones that another record references. Refused, backtracked, and
+  failed plans remove only fresh keys created by that attempt.
+- **Tag and network policy — closed.** Tag constraint resolution copies the
+  chosen commit into the scope cache, reuses a warm sha-pinned copy offline,
+  and reaches tag-list network seams only when the constraint requires it.
+  Fetch and list derive rows through the same candidate rule.
+- **Monotonic update state — closed.** Both update intent and completion write
+  a replacement stamp through `nextUpdateStamp`; ordinary same-millisecond
+  races therefore cannot retain the observed prior value.
+- **Test-oracle defects — closed.** The ownership tests exercise production
+  materializers and the production locked collector. Their negative controls
+  prove that restoring broad enumeration or inserting an unowned prepared key
+  deletes the protected clone and fails the test.
 
-## Protocol Evidence
+## Superseding Decision
 
-- The recorded old key remains eligible by entering `cloneCandidates` during
-  move judgment. On refusal, the collector's live-state recheck retains it;
-  after a successful replacement, the state no longer references it and the
-  same collector removes it.
-- A genuinely created rejected key remains eligible through
-  `onCloneCreated`. The refused-root and backtracking integration controls
-  prove cleanup of the rejected keys, while landed, live, shared, warm, and
-  distinct concurrent keys remain.
-- Install creates the set before root preview and sweeps after `installAgain`.
-  Planned update creates it before graph planning and sweeps on success,
-  refusal, and thrown-plan paths. Step failure and invalid-base propagation
-  tests also execute the final sweep.
-- `collectPluginCloneCandidatesLocked` acquires one fresh non-nested scope
-  lock. Its state reload happens under that lock, and every deletion target is
-  resolved through the containment chokepoint before `rm`.
-- `planCloneSweep` catches lock, read, and cleanup failures and records them
-  through the debug path, so cleanup cannot replace a command's primary
-  outcome.
-- `DependencyMoveContext` types the injected clone-cache and constraint-gate
-  seams from `PreparePluginUpdateOptions`; `moveArgs` forwards them together
-  with the attempt set. The focused production-seam tests prove the callback
-  reaches the real materializer, and the direct typecheck is green.
+The reviewed exact-candidate ownership repair supersedes the older Plan 07-02
+broad-listing literal. The broad listing is historical plan text, not a current
+acceptance requirement. GLK-01 through GLK-08 and the roadmap requirements are
+satisfied by the current exact-key protocol; this review does not request or
+permit reintroducing broad enumeration.
 
 ## Accepted and Deferred Scope
 
-The recorded Phase 7 accepted and deferred items remain unchanged and were not
-reclassified as findings. In particular, the broader cross-process candidate
-window between preflight and finalize, the separately owned unlocked
-`previewInstall` paths, unlocked marketplace-source deletes, mirror tag-fetch
-behavior, apply's dropped cause, raw update-path causes, and the Phase 3
-notification comment remain deferred by `07-CONTEXT.md`. The iteration-5
-repair neither expands nor relies on those behaviors.
+The recorded Phase 7 accepted and deferred items remain unchanged and are not
+current findings: the broader cross-process preflight/finalize window, the
+separately owned unlocked `previewInstall` paths, unlocked marketplace-source
+deletes, mirror tag-fetch behavior, apply's historical dropped cause, raw
+update-path causes, and the Phase 3 notification comment. None was changed by
+the integrated-tree deltas reviewed here.
 
 ## Review Evidence
 
-- Focused owner module:
-  `node --test test/orchestrators/plugin/dependency-move.test.ts` passed.
-- Focused ownership names for the old key, warm hit, and exact-key race passed.
-- Direct typecheck: `npx tsc --noEmit --incremental false --pretty false`
-  passed with no diagnostics.
-- Owner full combined gate at the reviewed implementation: all static checks
-  passed; 1126 Cucumber scenarios / 11509 steps passed; the merged direct run
-  produced 309 LCOV records.
-- The changed source/test pair has 100% direct line, function, and branch
-  coverage. The complete owner module passed 29/29 during the repair.
-- Validation is COMPLIANT. Security is SECURED with 31/31 rows and
-  `threats_open: 0`.
+- Phase 7 Nyquist validation is **COMPLIANT** for GLK-01 through GLK-08.
+- The fresh integrated full gate is green: 1143 Cucumber scenarios, 11742
+  steps, and 309 LCOV records.
+- Focused validation covers 14 Phase 7 owner modules; the Phase 7 integration
+  slice is green at 99 scenarios / 1164 steps.
+- Direct coverage remains 100% for every source/test pair in the combined
+  gate.
+- The later integrated deltas preserve the ownership callback, exact-candidate
+  collector, lock boundary, and redaction boundary rather than bypassing them.
 
 ---
 
-_Reviewed: 2026-10-28T20:35:13Z_
+_Reviewed: 2026-10-29T05:00:42Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
