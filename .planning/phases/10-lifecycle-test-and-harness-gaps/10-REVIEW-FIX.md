@@ -1,8 +1,8 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-fixed_at: 2026-10-29T09:38:24Z
+fixed_at: 2026-10-29T09:58:44Z
 review_path: .planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md
-iteration: 13
+iteration: 14
 findings_in_scope: 2
 fixed: 2
 skipped: 0
@@ -11,9 +11,65 @@ status: all_fixed
 
 # Phase 10: Code Review Fix Report
 
-**Fixed at:** 2026-10-29T09:38:24Z
+**Fixed at:** 2026-10-29T09:58:44Z
 **Source review:** `.planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md`
-**Iteration:** 13
+**Iteration:** 14
+
+Iteration 14 replaces the accumulated generic quote heuristics with one
+fail-closed rule. Outside the exact Node filesystem-diagnostic grammar, the
+redactor preserves a basename only when the absolute field has one local
+closing quote and every later same-quote fragment is a resolved pair.
+Embedded, surplus, and unmatched same-quote ambiguity replaces the entire
+remaining field with `[redacted path]`.
+
+## Iteration 14 Fixes
+
+### CR-01: An unmatched path with an embedded quote leaks a raw suffix
+
+**Status:** fixed: requires human verification
+**Commit:** `98433651` (`fix(redaction): fail closed on quote ambiguity`)
+**Files modified:**
+
+- `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`
+- `test/shared/redact-absolute-paths.test.ts`
+- `test/shared/notification-present.test.ts`
+
+The generic quoted-path scanner now accepts only the first locally valid
+closing quote. If an embedded matching quote makes that candidate ambiguous,
+or any later same-quote chain is unresolved, the scanner returns no delimiter
+and the caller elides the whole remainder. It no longer walks forward to a
+later quote and exposes a path suffix. The separate exact Node errno grammar,
+state-lock messages, and unquoted-path redaction are unchanged.
+
+### CR-02: A later relative value can be substituted for an ambiguous path
+
+**Status:** fixed: requires human verification
+**Commit:** `98433651` (`fix(redaction): fail closed on quote ambiguity`)
+**Files modified:**
+
+- `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`
+- `test/shared/redact-absolute-paths.test.ts`
+- `test/shared/notification-present.test.ts`
+
+Later same-quote text must now form complete opening and closing pairs at
+valid boundaries. A relative value, slash-bearing prose, surplus quote, or
+unmatched quote cannot become the absolute field's closer or basename. The
+older embedded-quote expectations now explicitly require whole-remainder
+redaction. The matrix covers POSIX, drive, and UNC forms; both quote kinds;
+zero, one, and multiple embedded quotes; boundary punctuation; cause chains;
+and public notification presentation.
+
+The decisive RED run failed seven cases. The GREEN owner runs pass 265
+redactor tests and 48 presentation tests. Both direct source-test pairs pass
+100% line, function, and branch coverage. Project-aware TypeScript checking,
+Fallow guard and health, the required fixers, and the normal commit hook pass.
+The first hook run rejected one conditional in the data matrix for crossing
+the test suite's cognitive-complexity threshold; explicit per-row expected
+functions removed that branch, and the full hook passed on retry.
+
+These checks ran in the existing Session A worktree because
+`workflow.use_worktrees` was false for the fixer. The parent workflow owns the
+fresh full `npm run check` gate.
 
 Iteration 13 removes raw suffix recovery from unmatched quoted fields and
 evaluates known diagnostic suffixes only at the current quote candidate. An
@@ -504,6 +560,6 @@ re-review, and goal verification on the unchanged integrated tree.
 
 ---
 
-_Fixed: 2026-10-29T09:38:24Z_
+_Fixed: 2026-10-29T09:58:44Z_
 _Fixer: the agent (gsd-code-fixer)_
-_Iteration: 13_
+_Iteration: 14_
