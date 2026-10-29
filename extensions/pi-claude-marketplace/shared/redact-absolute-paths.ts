@@ -72,41 +72,48 @@ function isQuotedPathBoundary(character: string | undefined): boolean {
   return character === undefined || /[\s,;:.)\]}]/u.test(character);
 }
 
-function continuesQuotedPath(text: string, quote: string, quoteIndex: number): boolean {
-  const nextCharacter = text[quoteIndex + 1];
-  if (nextCharacter !== " " && nextCharacter !== "\t") {
-    return false;
-  }
-
-  const nextQuote = text.indexOf(quote, quoteIndex + 1);
-  if (nextQuote < 0 || !isQuotedPathBoundary(text[nextQuote + 1])) {
-    return false;
-  }
-
-  const continuation = text.slice(quoteIndex + 1, nextQuote);
-  const lastCharacter = continuation.at(-1);
-  return (
-    !/['"\r\n]/u.test(continuation) &&
-    /[/\\]/u.test(continuation) &&
-    lastCharacter !== undefined &&
-    !/\s/u.test(lastCharacter)
-  );
-}
-
-function quotedPathEnd(text: string, quote: string, fromIndex: number): number | undefined {
+function quotedPathEnd(text: string, quote: string, fromIndex: number): number {
+  const quoteIndices: number[] = [];
   let quoteIndex = text.indexOf(quote, fromIndex);
   while (quoteIndex >= 0) {
-    if (
-      isQuotedPathBoundary(text[quoteIndex + 1]) &&
-      !continuesQuotedPath(text, quote, quoteIndex)
-    ) {
-      return quoteIndex;
-    }
-
+    quoteIndices.push(quoteIndex);
     quoteIndex = text.indexOf(quote, quoteIndex + 1);
   }
 
-  return undefined;
+  const balancedFromClosed = new Array<boolean>(quoteIndices.length + 1).fill(false);
+  const balancedFromOpen = new Array<boolean>(quoteIndices.length + 1).fill(false);
+  balancedFromClosed[quoteIndices.length] = true;
+  for (const [reverseIndex, currentQuote] of [...quoteIndices].reverse().entries()) {
+    const index = quoteIndices.length - reverseIndex - 1;
+    const canOpen = isQuotedPathBoundary(text[currentQuote - 1]);
+    const canClose = isQuotedPathBoundary(text[currentQuote + 1]);
+    const balancedClosedAfter = balancedFromClosed[index + 1] === true;
+    const balancedOpenAfter = balancedFromOpen[index + 1] === true;
+    balancedFromClosed[index] = canOpen ? balancedOpenAfter : !canClose && balancedClosedAfter;
+    balancedFromOpen[index] = canClose ? balancedClosedAfter : balancedOpenAfter;
+  }
+
+  const finalQuote = quoteIndices.at(-1) ?? text.length;
+  const finalSeparator = Math.max(
+    text.lastIndexOf("/", finalQuote),
+    text.lastIndexOf("\\", finalQuote),
+  );
+  for (const [index, currentQuote] of quoteIndices.entries()) {
+    if (!isQuotedPathBoundary(text[currentQuote + 1])) {
+      continue;
+    }
+
+    const nextCharacter = text[currentQuote + 1];
+    const continues =
+      (nextCharacter === " " || nextCharacter === "\t") &&
+      !balancedFromClosed[index + 1] &&
+      finalSeparator > currentQuote;
+    if (!continues) {
+      return currentQuote;
+    }
+  }
+
+  return text.length;
 }
 
 function redactQuotedAbsolutePaths(text: string): string {
@@ -117,16 +124,12 @@ function redactQuotedAbsolutePaths(text: string): string {
   while (match !== null) {
     const quote = text.charAt(match.index);
     const end = quotedPathEnd(text, quote, opening.lastIndex);
-    if (end === undefined) {
-      opening.lastIndex = match.index + 1;
-      match = opening.exec(text);
-      continue;
-    }
-
     const candidate = text.slice(match.index + 1, end);
     if (/^(?:[A-Za-z]:[\\/]|\\\\|\/).*[/\\][^/\\]+$/s.test(candidate)) {
-      redacted += text.slice(copiedThrough, match.index) + quote + pathBasename(candidate) + quote;
-      copiedThrough = end + 1;
+      const closingQuote = end < text.length ? quote : "";
+      redacted +=
+        text.slice(copiedThrough, match.index) + quote + pathBasename(candidate) + closingQuote;
+      copiedThrough = end + closingQuote.length;
       opening.lastIndex = copiedThrough;
     } else {
       opening.lastIndex = match.index + 1;

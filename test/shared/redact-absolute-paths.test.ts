@@ -215,6 +215,11 @@ describe("redactAbsolutePaths", () => {
       expected: "read 'secret.json",
     },
     {
+      name: "redacts an unclosed path with an embedded apostrophe",
+      input: "read '/tmp/O'Brien/private/secret.json",
+      expected: "read 'secret.json",
+    },
+    {
       name: "preserves a single-segment JSON pointer",
       input: "invalid /schemaVersion detail",
       expected: "invalid /schemaVersion detail",
@@ -265,6 +270,46 @@ describe("redactAbsolutePaths", () => {
         // assert
         assert.strictEqual(text, `open 'file.json' docs/errors '${quotedValue}'`);
       });
+    }
+  }
+
+  for (const { platform, root, separator } of [
+    { platform: "POSIX", root: "/tmp", separator: "/" },
+    { platform: "drive", root: String.raw`C:\private`, separator: "\\" },
+    { platform: "UNC", root: String.raw`\\server\private`, separator: "\\" },
+  ] as const) {
+    for (const { quoteName, quote } of [
+      { quoteName: "single quotes", quote: "'" },
+      { quoteName: "double quotes", quote: '"' },
+    ] as const) {
+      for (const { embeddedQuotes, component } of [
+        { embeddedQuotes: "no embedded quote", component: "private files" },
+        { embeddedQuotes: "one embedded quote", component: `O${quote} Brien` },
+        {
+          embeddedQuotes: "multiple embedded quotes",
+          component: `O${quote} Brien${quote}s files`,
+        },
+      ] as const) {
+        for (const { trailingName, trailingWhitespace } of [
+          { trailingName: "no trailing whitespace", trailingWhitespace: "" },
+          { trailingName: "a trailing space", trailingWhitespace: " " },
+          { trailingName: "a trailing tab", trailingWhitespace: "\t" },
+          { trailingName: "a trailing Unicode space", trailingWhitespace: "\u00a0" },
+        ] as const) {
+          test(`redacts a ${platform} path in ${quoteName} with ${embeddedQuotes} and ${trailingName}`, () => {
+            // arrange
+            const absolutePath =
+              root + separator + component + separator + "秘密" + separator + "secret.json";
+            const input = `open ${quote}${absolutePath}${trailingWhitespace}${quote}`;
+
+            // act
+            const text = redactAbsolutePaths(input);
+
+            // assert
+            assert.strictEqual(text, `open ${quote}secret.json${trailingWhitespace}${quote}`);
+          });
+        }
+      }
     }
   }
 
@@ -344,6 +389,24 @@ describe("redactCauseChain", () => {
       "cause: open 'file.json' docs/errors '.hidden' -> " +
         "open 'file.json' docs/errors ':E_READ' -> " +
         "open 'file.json' docs/errors ' E_READ'",
+    );
+  });
+
+  test("redacts multi-quote and trailing-space paths across a cause chain", () => {
+    // arrange
+    const failure = new Error("open '/tmp/O' Brien's files/秘密/secret.json'", {
+      cause: new Error('open "C:\\private\\O" Brien"s files\\秘密\\secret.json"', {
+        cause: new Error("open '\\\\server\\private\\O' Mary Jane\\秘密\\secret.json '"),
+      }),
+    });
+
+    // act
+    const trailer = causeChainTrailer(redactCauseChain(failure));
+
+    // assert
+    assert.strictEqual(
+      trailer,
+      "cause: open 'secret.json' -> open \"secret.json\" -> open 'secret.json '",
     );
   });
 
