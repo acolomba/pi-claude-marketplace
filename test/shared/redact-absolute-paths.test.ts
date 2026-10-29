@@ -285,17 +285,17 @@ describe("redactAbsolutePaths", () => {
     {
       name: "fails closed for an unclosed POSIX path before slash-bearing prose",
       input: "open '/tmp/private/file.json failed; see docs/errors",
-      expected: "open '[redacted path] failed; see docs/errors",
+      expected: "open '[redacted path]",
     },
     {
       name: "fails closed for an unclosed drive path before slash-bearing prose",
       input: String.raw`open 'C:\private\file.json failed; see docs/errors`,
-      expected: "open '[redacted path] failed; see docs/errors",
+      expected: "open '[redacted path]",
     },
     {
       name: "fails closed for an unclosed UNC path before slash-bearing prose",
       input: String.raw`open '\\server\private\file.json failed; see docs/errors`,
-      expected: "open '[redacted path] failed; see docs/errors",
+      expected: "open '[redacted path]",
     },
     {
       name: "fails closed for an unclosed path with internal spaces",
@@ -308,14 +308,29 @@ describe("redactAbsolutePaths", () => {
       expected: "open '[redacted path]",
     },
     {
-      name: "keeps a recognized no-space diagnostic suffix after an unclosed path",
+      name: "elides a delimiter-like suffix after an unclosed path",
       input: "open '/tmp/private/file.json;see=docs/errors",
-      expected: "open '[redacted path];see=docs/errors",
+      expected: "open '[redacted path]",
     },
     {
-      name: "keeps the earliest recognized suffix after an unclosed path",
+      name: "elides every delimiter-like suffix after an unclosed path",
       input: "open '/tmp/private/file.json;see=docs/errors failed; later",
-      expected: "open '[redacted path];see=docs/errors failed; later",
+      expected: "open '[redacted path]",
+    },
+    {
+      name: "does not trust a failed delimiter inside an unclosed path",
+      input: "open '/tmp/private failed; hidden/secret.json",
+      expected: "open '[redacted path]",
+    },
+    {
+      name: "does not trust a no-space delimiter inside an unclosed drive path",
+      input: String.raw`open 'C:\private;see=hidden\secret.json`,
+      expected: "open '[redacted path]",
+    },
+    {
+      name: "fails closed for a UNC path whose component contains a no-space delimiter",
+      input: String.raw`open '\\server\private;see=hidden\secret.json' docs/errors 'x'`,
+      expected: "open '[redacted path]",
     },
     {
       name: "preserves a single-segment JSON pointer",
@@ -450,10 +465,7 @@ describe("redactAbsolutePaths", () => {
     const text = redactAbsolutePaths(input);
 
     // assert
-    assert.strictEqual(
-      text,
-      "open '[redacted path] failed; value 'x' docs/errors https://example.test/docs/errors",
-    );
+    assert.strictEqual(text, "open '[redacted path]");
   });
 
   test("repeated redaction is idempotent", () => {
@@ -576,11 +588,7 @@ describe("redactCauseChain", () => {
     const trailer = causeChainTrailer(redactCauseChain(failure));
 
     // assert
-    assert.strictEqual(
-      trailer,
-      "cause: open '[redacted path] failed; see docs/errors -> " +
-        "open '[redacted path] failed; value 'x' docs/errors",
-    );
+    assert.strictEqual(trailer, "cause: open '[redacted path] -> open '[redacted path]");
   });
 
   test("fails closed for an unclosed cause path with internal spaces", () => {

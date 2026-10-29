@@ -74,7 +74,7 @@ function isQuotedPathBoundary(character: string | undefined): boolean {
 
 const REDACTED_PATH = "[redacted path]";
 const CLOSED_PATH_SUFFIXES = [" failed; see ", " docs/errors "] as const;
-const UNCLOSED_PATH_SUFFIXES = [" failed; ", ";see="] as const;
+const UNMATCHED_PATH_MARKERS = [" failed; ", ";see="] as const;
 
 function locallyClosedQuotedPathEnd(
   text: string,
@@ -128,16 +128,16 @@ function quotedPathEnd(text: string, quote: string, fromIndex: number): number |
   return undefined;
 }
 
-function unclosedQuotedPathSuffix(text: string, fromIndex: number): number | undefined {
-  let suffixIndex: number | undefined;
-  for (const delimiter of UNCLOSED_PATH_SUFFIXES) {
-    const candidate = text.indexOf(delimiter, fromIndex);
-    if (candidate >= 0 && (suffixIndex === undefined || candidate < suffixIndex)) {
-      suffixIndex = candidate;
+function unmatchedPathMarker(text: string, fromIndex: number): number | undefined {
+  let markerIndex: number | undefined;
+  for (const marker of UNMATCHED_PATH_MARKERS) {
+    const candidate = text.indexOf(marker, fromIndex);
+    if (candidate >= 0 && (markerIndex === undefined || candidate < markerIndex)) {
+      markerIndex = candidate;
     }
   }
 
-  return suffixIndex;
+  return markerIndex;
 }
 
 function redactQuotedAbsolutePaths(text: string): string {
@@ -152,10 +152,10 @@ function redactQuotedAbsolutePaths(text: string): string {
     const delimiter =
       locallyClosedQuotedPathEnd(text, quote, opening.lastIndex) ??
       quotedPathEnd(text, quote, opening.lastIndex);
-    const suffix = unclosedQuotedPathSuffix(text, opening.lastIndex);
-    if (delimiter === undefined || (suffix !== undefined && suffix < delimiter)) {
+    const marker = unmatchedPathMarker(text, opening.lastIndex);
+    if (delimiter === undefined || (marker !== undefined && marker < delimiter)) {
       redacted += text.slice(copiedThrough, match.index) + quote + REDACTED_PATH;
-      copiedThrough = suffix ?? text.length;
+      copiedThrough = text.length;
       opening.lastIndex = copiedThrough;
       match = opening.exec(text);
       continue;

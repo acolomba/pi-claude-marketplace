@@ -1202,7 +1202,7 @@ describe("presentNotification", () => {
     });
   });
 
-  test("fails closed for an unclosed path before prose in a presented prune cause", () => {
+  test("elides prose after an unclosed path in a presented prune cause", () => {
     // arrange
     const message = {
       kind: "prune-committed-warning",
@@ -1225,7 +1225,7 @@ describe("presentNotification", () => {
       },
       scope: "project",
       cause: {
-        causeChain: ["open '[redacted path] failed; see docs/errors"],
+        causeChain: ["open '[redacted path]"],
         truncated: false,
       },
     });
