@@ -1,7 +1,7 @@
 ---
 phase: 07-git-errors-and-lock-discipline
-reviewed: 2026-10-29T05:00:42Z
-reviewed_commit: d183d481a6b5d86c20208bc63a616e22b5c9430e
+reviewed: 2026-10-29T13:29:35Z
+reviewed_commit: 9bf40a1b691f79866733df7b3acd39d45a00d72e
 depth: standard
 files_reviewed: 42
 files_reviewed_list:
@@ -57,22 +57,22 @@ status: clean
 
 # Phase 7: Code Review Report
 
-**Reviewed:** 2026-10-29T05:00:42Z
-**Reviewed commit:** `d183d481a6b5d86c20208bc63a616e22b5c9430e`
+**Reviewed:** 2026-10-29T13:29:35Z
+**Reviewed commit:** `9bf40a1b691f79866733df7b3acd39d45a00d72e`
 **Depth:** standard
 **Files Reviewed:** 42
 **Status:** clean
 
 ## Summary
 
-The complete current Phase 7 implementation and its ownership-focused test
-scope were reviewed on the integrated Phase 1-10 tree. The review traced the
-shared git classifier, scope-lock boundaries, state rechecks, clone promotion
-and cleanup ownership, dependency-plan terminal sweeps, offline tag fallback,
-monotonic update stamps, fetch/list row parity, and error-redaction/output
-boundaries. It also checked later Phase 8-10 changes in the Phase 7 owners,
-including dependency warning propagation, locked package cleanup, apply
-recovery detail, and the shared cause-chain redactor.
+The complete retained 42-file Phase 7 implementation and its ownership-focused
+test scope were reviewed on the final integrated Phase 1-10 tree. The review
+traced the shared git classifier, scope-lock boundaries, state rechecks, clone
+promotion and cleanup ownership, dependency-plan terminal sweeps, offline tag
+fallback, monotonic update stamps, fetch/list row parity, and
+error-redaction/output boundaries. It also checked later Phase 8-10 changes in
+the Phase 7 owners, including dependency warning propagation, locked package
+cleanup, apply recovery detail, and the shared cause-chain redactor.
 
 The exact-candidate ownership model is the controlling design. It formally
 supersedes Plan 07-02's broad clone-directory listing: restoring the broad
@@ -122,6 +122,12 @@ No Critical, Warning, or Info findings.
   materializers and the production locked collector. Their negative controls
   prove that restoring broad enumeration or inserting an unowned prepared key
   deletes the protected clone and fails the test.
+- **Integrated dependency diagnostics — closed.** The final-head settlement
+  carrier retains each moved or freshly installed dependency's identity,
+  ordering, and warnings through successful and refused update paths. A fresh
+  install-cascade member deliberately carries its discovery half under
+  D-PL10-16; moved dependencies retain both halves under D-PL10-12. The code
+  does not collapse those two distinct contracts.
 
 ## Superseding Decision
 
@@ -143,9 +149,9 @@ the integrated-tree deltas reviewed here.
 ## Review Evidence
 
 - Phase 7 Nyquist validation is **COMPLIANT** for GLK-01 through GLK-08.
-- The fresh integrated full gate is green: 1143 Cucumber scenarios, 11742
-  steps, and 309 LCOV records.
-- Focused validation covers 14 Phase 7 owner modules; the Phase 7 integration
+- The exact reusable integrated full gate is green: 1145 Cucumber scenarios,
+  11777 steps, and 309 LCOV records.
+- Focused validation covers 16 Phase 7 owner modules; the Phase 7 integration
   slice is green at 99 scenarios / 1164 steps.
 - Direct coverage remains 100% for every source/test pair in the combined
   gate.
@@ -154,6 +160,6 @@ the integrated-tree deltas reviewed here.
 
 ---
 
-_Reviewed: 2026-10-29T05:00:42Z_
+_Reviewed: 2026-10-29T13:29:35Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
