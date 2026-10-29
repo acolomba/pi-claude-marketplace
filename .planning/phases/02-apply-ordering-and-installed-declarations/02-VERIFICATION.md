@@ -1,11 +1,9 @@
 ---
 phase: 02-apply-ordering-and-installed-declarations
-verified: 2026-10-28T17:40:00Z
+verified: 2026-10-29T03:07:04Z
 status: passed
 score: 19/19 must-haves verified
 covered_files:
-  - .planning/REQUIREMENTS.md
-  - .planning/ROADMAP.md
   - .planning/phases/02-apply-ordering-and-installed-declarations/02-01-PLAN.md
   - .planning/phases/02-apply-ordering-and-installed-declarations/02-01-SUMMARY.md
   - .planning/phases/02-apply-ordering-and-installed-declarations/02-02-PLAN.md
@@ -18,11 +16,6 @@ covered_files:
   - .planning/phases/02-apply-ordering-and-installed-declarations/02-05-SUMMARY.md
   - .planning/phases/02-apply-ordering-and-installed-declarations/02-06-PLAN.md
   - .planning/phases/02-apply-ordering-and-installed-declarations/02-06-SUMMARY.md
-  - .planning/phases/02-apply-ordering-and-installed-declarations/02-CONTEXT.md
-  - .planning/phases/02-apply-ordering-and-installed-declarations/02-REVIEW-FIX.md
-  - .planning/phases/02-apply-ordering-and-installed-declarations/02-REVIEW.md
-  - .planning/phases/02-apply-ordering-and-installed-declarations/02-SECURITY.md
-  - .planning/phases/02-apply-ordering-and-installed-declarations/02-VALIDATION.md
   - extensions/pi-claude-marketplace/edge/handlers/marketplace/add.ts
   - extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts
   - extensions/pi-claude-marketplace/edge/handlers/plugin/bootstrap.ts
@@ -86,30 +79,23 @@ covered_files:
   - test/orchestrators/reconcile/read-pass.test.ts
   - test/orchestrators/reconcile/types.test.ts
   - test/orchestrators/types.test.ts
-covered_digest: "v4:sha256:6fc1b55376ace3726bc2cd54bda9a066d78b6ecdef163463f43f58f9514c1bf9"
+covered_digest: "v4:sha256:405dab478750078bf6e3eb95db3c3be56a20e51f398e395671d865012a058f15"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
-  previous_status: human_needed
-  previous_score: 14/19
+  previous_status: passed
+  previous_score: 19/19
   gaps_closed: []
   gaps_remaining: []
   regressions: []
-deferred:
-  - truth: "Phase 2 BACKLOG entries are marked closed with their dispositions."
-    addressed_in: "Phase 11"
-    evidence: "Phase 11 SC4 / CLN-04 closes every milestone BACKLOG entry with its disposition."
-  - truth: "D-PL2-11 and D-PL2-15 final PROJECT.md documentation is reconciled."
-    addressed_in: "Phase 11"
-    evidence: "Phase 11 SC3 / CLN-03 reconciles project decisions and shipped behavior."
 ---
 
 # Phase 2: Apply Ordering and Installed Declarations Verification Report
 
 **Phase Goal:** `pending` previews exactly what `apply` does, one `apply` settles a missing dependency that needs a moved version, and dependency declarations of an installed plugin come from its installed copy.
-**Verified:** 2026-10-28T17:40:00Z
+**Verified:** 2026-10-29T03:07:04Z
 **Status:** passed
-**Re-verification:** Yes. The previous report was `human_needed` because five PLAN backstops lacked direct evidence; current source and tests close them.
+**Re-verification:** Yes. The prior report passed on an earlier integrated tree; this run rechecked all truths after the final Phase 1-10 merge.
 
 ## Goal Achievement
 
@@ -117,10 +103,10 @@ deferred:
 
 | # | Observable truth | Status | Code and behavioral evidence |
 |---|---|---|---|
-| 1 | PENDMOVE-01 and MISSORDER-01: pending/apply row parity and empty second apply | VERIFIED | `pending.ts` and `apply.ts` share the convergence deferral and after-install order. `apply.feature:1483,1537` asserts exact row order and settled records; the named D-PL2-01 one-run and D-08 second-apply tests pass. |
-| 2 | Config removal disables its dependent in the same apply | VERIFIED | `apply.feature:1049` asserts orphan uninstalled and keeper disabled with remedy. `apply.ts:2018` judges final state; the full Cucumber gate passed. |
+| 1 | PENDMOVE-01 and MISSORDER-01: pending/apply row parity and empty second apply | VERIFIED | `pending.ts` and `apply.ts` share the convergence deferral and after-install order. `apply.feature:1508,1562` asserts exact row order and settled records; the named D-PL2-01 one-run and D-08 second-apply tests pass. |
+| 2 | Config removal disables its dependent in the same apply | VERIFIED | `apply.feature:1074` asserts orphan uninstalled and keeper disabled with remedy. `apply.ts:2018` judges final state; the full Cucumber gate passed. |
 | 3 | STALE-DECLARER-01 has a decision ID and matching code/tests | VERIFIED | D-PL2-05 in `02-CONTEXT.md:145`; first-unreadable returns in `dependency-index.ts:479,510` and `dependency-verdict.ts:600`; four walk tests pass. |
-| 4 | Enable and update preflight read installed declarations | VERIFIED | `enable-disable.ts:679` calls `readInstalledRecordDeclarations`; `update-constraint-gate.ts:95` locks the installed-detail walk. `enable.feature:202` and `update-dependencies.feature:329` distinguish installed copy from changed catalog. |
+| 4 | Enable and update preflight read installed declarations | VERIFIED | `enable-disable.ts:679` calls `readInstalledRecordDeclarations`; `update-constraint-gate.ts:95` locks the installed-detail walk. `enable.feature:202` and `update-dependencies.feature:378` distinguish installed copy from changed catalog. |
 | 5 | Add, bootstrap and autoupdate settle missing dependencies; refusal rows and containment match decisions | VERIFIED | `index.ts:105` composes one scope-install seam; add/bootstrap/update handlers forward it. `add.ts:1619` and `update.ts:821` select the marketplace. `dependency-declaration-read.ts:418-493` admits one owning root and bounds manifest reads. Scenarios and direct tests pass. |
 
 ### Requirements Coverage
@@ -130,7 +116,7 @@ deferred:
 | RCN-01 | 02-01, 02-03 | SATISFIED | PENDMOVE-01 scenario, shared planner, second-apply test; interrupted-move retry test at `apply.test.ts:8888` now proves the backstop. |
 | RCN-02 | 02-01, 02-03 | SATISFIED | MISSORDER-01 scenario and D-PL2-01 unit case; `operations.test.ts:358` proves real dependency-install lock failure and retry. |
 | RCN-03 | 02-03 | SATISFIED | Keeper/orphan same-apply scenario; `enable-disable.test.ts:5050` proves the exact disable operation's lock failure and retry. |
-| RCN-04 | 02-01, 02-02 | SATISFIED | D-PL2-05 and first-unreadable tests; final BACKLOG mark is Phase 11's CLN-04 task. |
+| RCN-04 | 02-01, 02-02 | SATISFIED | D-PL2-05 and first-unreadable tests; `BACKLOG.md` now marks STALE-DECLARER-01 closed and `PROJECT.md` records D-PL2-05. |
 | RCN-05 | 02-02 | SATISFIED | Installed-first reader, enable/update scenarios; `update-constraint-gate.ts:95` locks a possible holder walk and `update-constraint-gate.test.ts:959` proves held-lock refusal followed by installed-copy retry. |
 | RCN-06 | 02-05, 02-06 | SATISFIED | Add/bootstrap/autoupdate seam wiring and behavioral scenarios; scope selection is preserved. |
 | RCN-07 | 02-03, 02-05 | SATISFIED | D-PL2-11 first-refusal failed/disabled pair; D-09-14 silent already-down row; `apply.test.ts:10672` proves earlier MISS-01 cascade member rollback. |
@@ -168,7 +154,7 @@ These verdicts resolve the markers with code, tests and recorded decisions; the 
 | Plan | Automated artifacts | Automated links | Final assessment |
 |---|---|---|---|
 | 02-01 | 4/4 | 3/3 | Substantive, imported and exercised |
-| 02-02 | 5/5 | 2/2 | Substantive, imported and exercised |
+| 02-02 | 5/5 | 1/2 literal patterns | Manual trace resolves the stale second pattern: `update-constraint-gate.ts:95` wraps `buildInstalledScopeDeclarationDetail` in `withExistingScopeLock`, retaining the installed-copy walk while adding the RCN-05 concurrency guarantee. |
 | 02-03 | 4/4 | 2/2 | Substantive, imported and exercised |
 | 02-04 | 0/3 literal patterns | 0/2 literal patterns | Manual trace verifies D-PL2-23 replaced `installedCopyOwnerRoot` with `installedCopyReadOptions`; `dependency-index.ts:411,447` and `convergence.ts:478` pass its single `ownerRoot` to `readInstalledCopyDeclaration`. D-PL2-17 superseded blanket symlink refusal. The stale checker patterns do not indicate stubs or missing wiring. |
 | 02-05 | 7/7 | 3/3 | Substantive, imported and exercised |
@@ -180,12 +166,10 @@ These verdicts resolve the markers with code, tests and recorded decisions; the 
 
 | Check | Result |
 |---|---|
-| Named RCN-01 interrupted-move retry | 1 pass, exit 0 |
-| Named RCN-02 real dependency-install lock/retry | 1 pass, exit 0 |
-| Named RCN-03 orchestrated disable lock/retry | 1 pass, exit 0 |
-| Named RCN-05 installed-copy lock/retry | 1 pass, exit 0 |
-| Named RCN-07 MISS-01 cascade rollback | 1 pass, exit 0 |
-| Combined `npm run check` at implementation/test commit `9692623d`, Node v26.12.1 | Exit 0: static, integration and unpaired checks passed; Cucumber 1122 scenarios/11447 steps passed; direct coverage merged 309 LCOV records. `git diff 9692623d HEAD -- . ':(exclude,glob).planning/**/*.md'` is empty; the only dirty file before this report rewrite was this report. |
+| Focused RCN-01 interruption, RCN-07 retry, and RCN-07 rollback owner tests | 3/3 named invocations passed, exit 0 |
+| Focused RCN-02 real install-lock, RCN-03 disable-lock, and RCN-05 installed-copy-lock owner tests | 3/3 named invocations passed, exit 0 |
+| Public PENDMOVE/MISSORDER, installed-copy, add, bootstrap, and autoupdate scenarios | 7 scenarios, 113 steps, 16 hooks passed, exit 0 |
+| Final merged `npm run check` at `5787f3ec` | Exit 0: static, integration and unpaired checks passed; Cucumber 1142 scenarios/11734 steps passed; direct coverage merged 309 LCOV records. No build input changed after this gate. |
 
 **Probe execution:** No Phase 02 PLAN or SUMMARY declares a probe script.
 
@@ -193,11 +177,11 @@ These verdicts resolve the markers with code, tests and recorded decisions; the 
 
 The requirement tests assert exact rows, versions, persisted state, lock failure, retry and rollback effects. The new backstop tests use real production operation factories and temporary scope roots. No linked requirement relies only on a skipped test or a generated oracle. The conditional root-only `t.skip` in `apply.test.ts:2402` is not sole requirement proof. No unreferenced TBD/FIXME/XXX debt marker or stub was found in the modified implementation paths.
 
-The old 02-04 pattern checks and old D-09-14 repeated-row sentence are superseded by recorded decisions. The current decision-coverage query reports **26/26** CONTEXT decisions honored. Current `02-SECURITY.md` records **19/19 threats closed** and zero open. The clean `02-REVIEW.md` records zero Critical, Warning or Info findings.
+The old 02-04 pattern checks and old D-09-14 repeated-row sentence are superseded by recorded decisions. The current decision-coverage query reports **26/26** CONTEXT decisions honored. Nyquist is COMPLIANT at `decf5452`; security is SECURED at `75af0aed` with **19/19 threats closed** and zero open; the final integrated review is CLEAN at `5787f3ec` with zero Critical, Warning, or Info findings.
 
-### Deferred Items
+### Advisory (New Scope, Unevidenced)
 
-Phase 11 SC4 carries the final BACKLOG closure marks; Phase 11 SC3 carries the final project decision/documentation reconciliation. Those later milestone records are informational and do not weaken any Phase 02 behavior.
+None. The final integrated review covered 44 files and is clean at zero Critical, Warning, and Info findings; no new-scope unevidenced concern arose in this re-verification.
 
 ### Human Verification Required
 
@@ -209,5 +193,5 @@ No observed implementation or evidence gap blocks the Phase 02 goal. Pending and
 
 ---
 
-_Verified: 2026-10-28T17:40:00Z_
+_Verified: 2026-10-29T03:07:04Z_
 _Verifier: Codex (gsd-verifier)_
