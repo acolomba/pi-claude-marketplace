@@ -1,6 +1,6 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-verified: 2026-10-29T11:38:11Z
+verified: 2026-10-29T14:05:34Z
 status: passed
 score: 28/28 must-haves verified
 covered_files:
@@ -144,43 +144,12 @@ covered_files:
   - test/shared/git-failure-classifiers.test.ts
   - test/shared/notification-present.test.ts
   - test/shared/redact-absolute-paths.test.ts
-covered_digest: "v4:sha256:fcaa98a4da92a9a7303399c1305673c3e314f352816e1d24cbea68b051959854"
+covered_digest: "v4:sha256:b46bf25d7b71ff50236b906e9df4f9a9de8dc8e9ba728547f8f1cab8875c07d6"
 behavior_unverified: 0
 overrides_applied: 0
 decision_coverage:
-  honored: 3
+  honored: 33
   total: 33
-  not_honored:
-    - D-PL10-01
-    - D-PL10-02
-    - D-PL10-03
-    - D-PL10-04
-    - D-PL10-05
-    - D-PL10-06
-    - D-PL10-07
-    - D-PL10-08
-    - D-PL10-09
-    - D-PL10-10
-    - D-PL10-12
-    - D-PL10-13
-    - D-PL10-14
-    - D-PL10-15
-    - D-PL10-16
-    - D-PL10-17
-    - D-PL10-18
-    - D-PL10-19
-    - D-PL10-20
-    - D-PL10-21
-    - D-PL10-22
-    - D-PL10-23
-    - D-PL10-24
-    - D-PL10-26
-    - D-PL10-27
-    - D-PL10-28
-    - D-PL10-30
-    - D-PL10-31
-    - D-PL10-32
-    - D-PL10-33
 re_verification:
   previous_status: passed
   previous_score: 28/28
@@ -192,7 +161,7 @@ re_verification:
 # Phase 10: Lifecycle Test and Harness Gaps Verification Report
 
 **Phase Goal:** Every behavior lifecycle-coverage left without a scenario or unit case has one, and the harness items are fixed.
-**Verified:** 2026-10-29T11:38:11Z
+**Verified:** 2026-10-29T14:05:34Z
 **Status:** passed
 **Re-verification:** Yes — final verification on the integrated Phase 1-10 tree after all Phase 10 review-fix iterations.
 
@@ -217,7 +186,7 @@ re_verification:
 | 10-01 | Clone/data projections are complete and unknown tokens fail closed | ✓ VERIFIED | Bound implementations and scenarios are present; checker validates their cited commits. |
 | 10-01 | Browse synchronization uses events | ✓ VERIFIED | Owner waits on the render request rather than a fixed delay. |
 | 10-01 | Marketplace test records are manifest-first | ✓ VERIFIED | Seeder writes contained plugin and marketplace manifests before return. |
-| 10-02 | Real PTY TUI proves autoupdate, aggregate notice, and bounded shutdown | ✓ VERIFIED | Hermetic PTY, held-Git wait-cap, and distinct alpha/beta cases are active in the 1,144-scenario gate. |
+| 10-02 | Real PTY TUI proves autoupdate, aggregate notice, and bounded shutdown | ✓ VERIFIED | Hermetic PTY, held-Git wait-cap, and distinct alpha/beta cases are active in the 1,145-scenario gate. |
 | 10-02 | RPC remains a negative control | ✓ VERIFIED | Unchanged-state RPC scenario remains bound and green. |
 | 10-02 | Completion/result comparisons are complete | ✓ VERIFIED | World teardown rejects unconsumed results and comparisons use complete sets. |
 | 10-03 | All three CAS routes list every missing resolved member | ✓ VERIFIED | Three exact scenarios are bound to committed feature content. |
@@ -229,12 +198,12 @@ re_verification:
 | 10-05 | Update/reinstall retain warnings, notices, foreign index, and source frames | ✓ VERIFIED | Typed outcomes and exact user-visible scenarios remain green. |
 | 10-05 | Root/member errors redact and classify consistently | ✓ VERIFIED | Shared classification/redaction reaches install, update, fetch, cause-chain, cascade, and presentation consumers. |
 | 10-05 | Lockfile-only and post-clone failure decisions hold | ✓ VERIFIED | Yarn/pnpm and invalid-manifest cases are exact-commit-bound and green. |
-| 10-06 | Every reachable LCTEST-01 behavior has a discriminating case | ✓ VERIFIED | Checker passes all 56 rows and Cucumber passes 1,144 scenarios/11,758 steps. |
+| 10-06 | Every reachable LCTEST-01 behavior has a discriminating case | ✓ VERIFIED | Checker passes all 56 rows and Cucumber passes 1,145 scenarios/11,777 steps. |
 | 10-06 | Unit-only items have a harness reason and owner case | ✓ VERIFIED | All 14 unit-only rows include a concrete reason and current named owner evidence. |
 | 10-06 | No-op apply is byte-for-byte write-free | ✓ VERIFIED | Scenario snapshots raw config/state bytes and compares them after apply. |
 | 10-07 | Process-tree kill has real-child proof and precise unit-only rationale | ✓ VERIFIED | Independent real-child case passed 1/1; public 60-second timeout explains why a scenario would require a forbidden seam. |
 | 10-07 | Every backlog bullet maps to evidence or the declined network guard | ✓ VERIFIED | Checker passed 56/56; negative missing-title and stale-commit mutations were rejected. |
-| 10-07 | Combined tree passes `npm run check` | ✓ VERIFIED | Exact gate at executable tree `f310906d`: static green, 1,144 scenarios, 11,758 steps, 309 LCOV. `f310906d..62ef68b7` changes only Phase 10 review/security records. |
+| 10-07 | Combined tree passes `npm run check` | ✓ VERIFIED | Exact gate at executable tree `be0de0c3`: static green, 1,145 scenarios, 11,777 steps, 309 LCOV. The current tree has no executable diff from that commit. |
 
 **Score:** 28/28 truths verified (0 present-but-behavior-unverified).
 
@@ -243,9 +212,9 @@ re_verification:
 | Gate | Result | Evidence |
 |---|---|---|
 | Nyquist | COMPLIANT | `10-VALIDATION.md`: 28/28 behaviorally green; 56/56 exact rows; missing-title and stale-commit mutations rejected. |
-| Full repository gate | PASS | Exact unchanged executable tree `f310906d`: 1,144 scenarios, 11,758 steps, 309 LCOV. Later commits `af2e7d81` and `62ef68b7` modify only Phase 10 review/security records. |
-| Code review | CLEAN | Complete retained 130-file review at `f310906d`: 0 Critical / 0 Warning / 0 Info. |
-| Security | SECURED | Final audit at `f310906d`: 19/19 closed, 12/12 mitigations, 7/7 accepted risks, `threats_open: 0`. |
+| Full repository gate | PASS | Exact unchanged executable tree `be0de0c3`: 1,145 scenarios, 11,777 steps, 309 LCOV. Current HEAD differs only in planning records. |
+| Code review | CLEAN | Complete retained/current 130-file review at `3fde60a7`: 0 Critical / 0 Warning / 0 Info. |
+| Security | SECURED | Final audit at `3fde60a7`: 19/19 closed, 12/12 mitigations, 7/7 accepted risks, `threats_open: 0`. |
 
 ## Required Artifacts
 
@@ -291,7 +260,8 @@ The artifact query does not parse this project's scalar PLAN artifact syntax and
 | D-PL10-13 ownership | exact `node --test --test-name-pattern 'D-PL10-13'` owner | 1 passed, 0 skipped/todo | ✓ PASS |
 | Package tree/settlement | three exact package-manager owner cases | 3 passed, 0 skipped/todo | ✓ PASS |
 | Final errno cardinality | exact cause-chain and presentation cases | 2 passed, 0 skipped/todo | ✓ PASS |
-| Full integrated behavior | `npm run check` at `f310906d` | Static green; 1,144 scenarios; 11,758 steps; 309 LCOV | ✓ PASS (reused on byte-identical executable inputs) |
+| Direct-update diagnostic ordering | exact `D-PL10-12` owner plus `D-PL10-13` ownership owner | 2 passed, 0 skipped/todo | ✓ PASS |
+| Full integrated behavior | `npm run check` at `be0de0c3` | Static green; 1,145 scenarios; 11,777 steps; 309 LCOV | ✓ PASS (reused on byte-identical executable inputs) |
 
 ## Probe Execution
 
@@ -313,7 +283,7 @@ No Phase 10 requirement is orphaned from the seven plans.
 
 ## Decision Coverage
 
-All 33 Phase 10 decisions are directly traced by the ledger, implementation, focused owners, and exact scenarios. The substring heuristic reports 3/33 because it searches shipped text for context wording; this warning-only result does not supersede direct evidence.
+All 33 Phase 10 decisions are directly traced by the ledger, implementation, focused owners, and exact scenarios.
 
 D-PL10-13 formally supersedes the older Plan 01-03 broad-listing literal. Current behavior preserves a foreign agents-index row when its generated name is staged for a different target while retaining the staged-target containment refusal. The exact current owner passed 1/1. Restoring the older literal would reintroduce the verified WRN-05/XPH-02 deletion defect.
 
@@ -322,7 +292,7 @@ D-PL10-13 formally supersedes the older Plan 01-03 broad-listing literal. Curren
 | Test surface | Linked requirements | Active proof | Disabled | Circular | Assertion level | Verdict |
 |---|---|---|---:|---|---|---|
 | Strict checker | All seven | 56/56 plus two negative mutations | 0 | No | Exact set/path/title/commit | ✓ SUFFICIENT |
-| Phase 10 Cucumber | User-visible requirements | 1,144 scenarios | 0 linked | No | Complete row/file/state behavior | ✓ SUFFICIENT |
+| Phase 10 Cucumber | User-visible requirements | 1,145 scenarios | 0 linked | No | Complete row/file/state behavior | ✓ SUFFICIENT |
 | Lifecycle owner suites | CAS-08, MIM-05, XPH-01/02 | Direct pairs at 100% | 0 linked | No | Value and behavioral | ✓ SUFFICIENT |
 | Redaction owners | XPH-02, T-10-04/07/08 | Utility, cause-chain, presentation | 0 | No | Fail-closed behavioral | ✓ SUFFICIENT |
 | Package owner | XPH-01, T-10-11 | Real descendant plus timer settlement | 0 | No | Process/ordering behavioral | ✓ SUFFICIENT |
@@ -343,9 +313,9 @@ None. Every runtime state, ordering, cancellation, cleanup, and visible-output t
 
 ## Gaps Summary
 
-No gap, regression, deferred item, advisory, or behavior-unverified truth remains. Phase 8/9 integration is present on the same tree; quote parsing is fail closed, errno arrow grammar is cardinality-strict, timeout settlement is bounded, and evidence is exact-commit-bound.
+No gap, regression, deferred item, advisory, or behavior-unverified truth remains. The only post-`f310906d` executable delta is the direct-update D-PL10-12 diagnostic-ordering closure; its exact owner and public scenario preserve dependency discovery/hygiene output before the root diagnostic, including phase-3a abort. Phase 8/9 integration is present on the same tree; quote parsing is fail closed, errno arrow grammar is cardinality-strict, timeout settlement is bounded, and evidence is exact-commit-bound.
 
 ---
 
-_Verified: 2026-10-29T11:38:11Z_
+_Verified: 2026-10-29T14:05:34Z_
 _Verifier: the agent (gsd-verifier)_
