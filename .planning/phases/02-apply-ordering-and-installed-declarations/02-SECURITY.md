@@ -82,10 +82,23 @@ None. All six plan summaries report no security surface outside their registered
 | Audit Date | Threats Total | Closed | Open | Run By |
 |------------|---------------|--------|------|--------|
 | 2026-10-28 | 19 | 19 | 0 | GSD security auditor, ASVS L1 |
+| 2026-10-28 | 19 | 19 | 0 | GSD final merged-tree security auditor, ASVS L1 |
 
 The audit verified 12 mitigation rows and recorded the seven PLAN-authorized accepted risks. Counts preserve all six plan-qualified `T-02-SC` occurrences; the deduplicated register contains 14 IDs.
 
 The recheck at `9692623d` verified the installed-declaration lock boundary and the no-potential-holder fast path. Lock acquisition, compromise, and release failures reject the operation; the lock is released before tag probes and candidate resolution. Regression coverage proves held-lock refusal followed by retry, requester and excluded-version folding, and missing-dependency retry after lock release. The full gate passed with 1,122 scenarios, 11,447 steps, and 309 LCOV records.
+
+The final merged-tree recheck at `decf5452` verified all 19 plan-qualified
+Phase 2 threats: 12 implementation mitigations and seven documented accepted
+risks. The audit re-traced bounded reconcile fixpoints; fail-closed catalog and
+installed-copy declaration reads; owning-root and linked-manifest containment;
+fixed diagnostics; post-install judgment and outcome ordering; marketplace-add
+and autoupdate scope boundaries; the update-constraint lock lifecycle; and the
+shared install ledger's authorization, rollback, credential, redaction, and
+warm-cache network behavior. All six summary threat flags remain registered.
+Nyquist is COMPLIANT 8/8, and the exact integrated full gate passed 1,142
+scenarios, 11,734 steps, and 309 LCOV records. No new or reopened threat was
+found; `threats_open` remains 0.
 
 ---
 
