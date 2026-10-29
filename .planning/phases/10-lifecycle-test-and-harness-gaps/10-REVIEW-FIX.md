@@ -1,8 +1,8 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-fixed_at: 2026-10-29T10:42:11Z
+fixed_at: 2026-10-29T10:58:53Z
 review_path: .planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md
-iteration: 17
+iteration: 18
 findings_in_scope: 1
 fixed: 1
 skipped: 0
@@ -11,9 +11,58 @@ status: all_fixed
 
 # Phase 10: Code Review Fix Report
 
-**Fixed at:** 2026-10-29T10:42:11Z
+**Fixed at:** 2026-10-29T10:58:53Z
 **Source review:** `.planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md`
-**Iteration:** 17
+**Iteration:** 18
+
+Iteration 18 closes the separator-adjacent embedded-quote bypass. Once the
+quoted-path opener has established an absolute field, zero or multiple
+remaining matching quotes now fail closed without validating the prefix
+before the first quote. Exactly one remaining quote is still required to
+close a validated absolute-path candidate at a safe boundary.
+
+## Iteration 18 Fix
+
+### CR-01: A separator-adjacent quote bypasses ambiguity redaction
+
+**Status:** fixed: requires human verification
+**Commit:** `ce393caa` (`fix(redaction): fail closed after path separators`)
+**Files modified:**
+
+- `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`
+- `test/shared/redact-absolute-paths.test.ts`
+- `test/shared/notification-present.test.ts`
+
+The ambiguous branch no longer derives or validates a candidate ending at the
+first matching quote. If the remainder contains zero or more than one matching
+quote, it unconditionally replaces the entire remainder with
+`[redacted path]`. The exactly-one path still requires the complete candidate
+and its following boundary to be safe before preserving the basename. A
+narrow opener exclusion continues to distinguish a quoted single-segment JSON
+pointer from an absolute path. Exact Node errno diagnostics, state-lock rows,
+and unquoted redaction are unchanged.
+
+The RED run failed 20 decisive cases: an 18-row POSIX, drive, and UNC matrix
+covering single and double quotes immediately after the root, first directory
+separator, and nested directory separator, plus one cause-chain case and one
+public-notification case. The GREEN owners pass 341 tests: 291 redactor tests
+and 50 notification-presentation tests. Direct coverage is complete for both
+pairs: the redactor has 59/59 branches, 21/21 functions, and 235/235 lines;
+notification presentation has 45/45 branches, 11/11 functions, and 308/308
+lines. Project-aware TypeScript checking, Fallow guard and audit, the required
+fixers, and the normal commit hook pass.
+
+The first commit attempt exposed one statement-spacing lint error and a new
+cognitive-complexity error from the nested matrix loops. The second attempt
+showed that a remaining test-only complexity warning also gates the repository
+hook. Moving the data-driven registration loop to a small top-level helper
+removed the added complexity without merging cases or weakening assertions;
+Fallow then reported no issues in the changed-file audit, and the complete
+hook passed.
+
+These checks ran in the existing Session A worktree because
+`workflow.use_worktrees` was false for the fixer. The parent workflow owns the
+fresh full `npm run check` gate.
 
 Iteration 17 reconciles the direct owner tests with the same binding
 fail-closed contract. Internal discovery warnings still retain their detailed
