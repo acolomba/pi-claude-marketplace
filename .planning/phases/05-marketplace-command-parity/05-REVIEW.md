@@ -1,8 +1,8 @@
 ---
 phase: 05-marketplace-command-parity
-reviewed: 2026-10-29T04:00:31Z
+reviewed: 2026-10-29T13:06:26Z
 depth: standard
-files_reviewed: 35
+files_reviewed: 45
 files_reviewed_list:
   - eslint.config.js
   - rule-packs/architecture.json
@@ -14,11 +14,15 @@ files_reviewed_list:
   - extensions/pi-claude-marketplace/edge/completions/provider.ts
   - extensions/pi-claude-marketplace/edge/handlers/plugin/help.ts
   - extensions/pi-claude-marketplace/edge/router.ts
+  - extensions/pi-claude-marketplace/orchestrators/import/execute.ts
   - extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/background-pass.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/background-update.ts
   - extensions/pi-claude-marketplace/orchestrators/marketplace/hosted-catalog.ts
   - extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts
   - extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts
   - extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts
   - extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-declaration-read.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
@@ -29,16 +33,22 @@ files_reviewed_list:
   - extensions/pi-claude-marketplace/shared/notification-json.ts
   - extensions/pi-claude-marketplace/shared/notification-present.ts
   - extensions/pi-claude-marketplace/shared/notification-types.ts
+  - extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts
   - features/lib/https-git-host/server.ts
   - features/lib/published-marketplace.ts
   - features/marketplace/info.feature
   - features/step_definitions/marketplace/info.steps.ts
+  - features/step_definitions/marketplace/update.steps.ts
   - features/support/pi-process.ts
   - features/support/world.ts
+  - test/orchestrators/import/execute.test.ts
+  - test/orchestrators/marketplace/background-pass.test.ts
+  - test/orchestrators/marketplace/info.test.ts
+  - test/orchestrators/marketplace/update.messaging.test.ts
   - test/platform/hosted-manifest-fetch.test.ts
   - test/shared/notification-json.test.ts
   - test/shared/notification-present.test.ts
-  - test/orchestrators/marketplace/info.test.ts
+  - test/shared/redact-absolute-paths.test.ts
 findings:
   critical: 0
   warning: 0
@@ -49,107 +59,59 @@ status: clean
 
 # Phase 5: Code Review Report
 
-**Reviewed:** 2026-10-29T04:00:31Z
+**Reviewed:** 2026-10-29T13:06:26Z
 **Depth:** standard
-**Files Reviewed:** 35
+**Files Reviewed:** 45
 **Status:** clean
 
 ## Narrative Findings (AI reviewer)
 
-No actionable findings remain on the merged tree at `38a18b81`. The review
-covers MKT-01 through MKT-08: hosted catalog fetching and refresh, source
-classification and shorthand parsing, the `market` alias, reserved-name
-controls, add repair and rollback, remove reporting and its exhaustive dropped
-axis fold, marketplace row identities, list/info network isolation, and
-credential-safe presentation.
+No actionable finding remains on the final integrated tree. The complete
+retained Phase 5 scope covers MKT-01 through MKT-08: reserved marketplace
+names, hosted-catalog fetch/add/update/remove/info, the `market` alias,
+first-delimiter shorthand parsing, bare marketplace row identities, add repair
+and rollback, the accepted remove-report boundary, and the exhaustive dropped
+axis fold.
 
-The evaluation-scope resolver returned `status: degraded`, source
-`phase-range`, reason `no-reachable-task-commits`; its fallback union spans
-later milestone phases and is not a valid Phase 5 boundary. This review
-therefore uses the workflow handoff's explicit Phase 5 ownership and the exact
-35-file scope preserved by the prior Phase 5 review. Against that reviewed
-baseline (`b49106b3`), only `eslint.config.js` and the HTTPS git-host test
-stand-in changed. The current pass read both diffs and their affected paths;
-the Phase 5 production modules remain byte-identical to the clean baseline.
+The prior complete clean scope at `38a18b81` contains 35 files. Thirty-four of
+those files remain byte-identical. This final-head review re-read the changed
+`notification-present` owner and added ten later files whose current behavior
+can affect Phase 5's import, background-autoupdate, cascade-diagnostic, or
+redaction paths. The later changes preserve the Phase 5 contracts:
 
-The ESLint change preserves the hosted-fetch network chokepoints while making
-the layer-direction zones apply to every extension module. The git-host change
-adds an independently selected `hold-git-body` fixture arm; it does not alter
-catalog-file serving, redirect handling, request reset, or credential behavior.
+- background autoupdate rechecks stop/abort state after its config read and
+  still routes hosted refresh through the existing marketplace update seam;
+- cascade staging diagnostics retain dependency-before-root ordering without
+  changing marketplace row construction or hosted refresh classification;
+- import diagnostics and presented causes now pass through the common
+  fail-closed absolute-path redactor, while marketplace names and URL
+  credentials still use the established presentation redactors;
+- the new owner cases discriminate stop/abort timing, dependency diagnostic
+  order, import path disclosure, and ambiguous quoted-path handling.
+
+The quick anti-pattern scan found no new debug artifact, unchecked test skip,
+unsafe assertion, or unjustified suppression. Fallow's architecture guard
+reported no boundary violation in the added production files. Its security
+candidate list contains no verified Phase 5 bypass; the dynamic expressions in
+`domain/name.ts` are built from fixed project constants, and hosted fetch stays
+the sole Phase 5 network chokepoint.
+
 All reviewed files meet quality standards. No issues found.
-
-## Blocker closure
-
-### CR-01: Embedded metadata addresses — resolved
-
-Commit `cd7fdcf5` makes dotted IPv4 and all four supported IPv4-in-IPv6
-prefixes call the same complete four-octet refusal predicate. It includes
-`100.100.100.200`, `168.63.129.16`, and `192.0.0.192`, together with the
-existing local/private ranges.
-
-The regression matrix checks all three dotted addresses and all twelve
-embedded forms, asserting refusal before a second request. Public-address
-positive controls cover compatible, mapped, translated, and NAT64 forms.
-DNS-name handling remains within the explicitly accepted D-PL5-31 boundary.
-
-### CR-02: Successful marketplace-info name disclosure — resolved
-
-Commit `3a8c7e1c` masks stored marketplace names for path, GitHub, and URL
-sources while retaining URL masking. Individual and cascade presentations
-use the same helper. Copies preserve the other message fields, and unchanged
-blocks retain their original object identity.
-
-An independent frozen-input probe passed sixteen combinations of source,
-name, URL credentials, and individual/cascade output. It verified masking,
-identity, field preservation, and absence of input mutation.
-
-The prior PluginInfo redactor remains intact. Its marketplace-subject marker
-survives presentation, preserving bare marketplace IDs and qualified plugin
-IDs while remaining absent from serialized output.
-
-The healthy-manifest Cucumber scenario exercises the real command. Its
-stored-name fixture writes only the scenario sandbox's state file.
-Per-scenario reset removes that state, and run teardown removes the sandbox.
-The synthetic credential requires no external account or network access.
-
-## Prior finding dispositions
-
-| Finding | Final disposition |
-| --- | --- |
-| WR-01 malformed hosted URL | Resolved by parser and fetch-boundary validation. |
-| WR-02 legacy `.json` git source migration | Resolved; stored URL and legacy string sources retain git semantics. |
-| WR-03 redirect host classification | Literal-address cases resolved, including CR-01; DNS residual remains accepted by D-PL5-31. |
-| WR-04 network port lint coverage | Resolved by shared selectors and import/fetch restrictions. |
-| WR-05 hosted failure cause and credentials | Resolved by typed failures and presentation masking. |
-| IN-01 empty URL authority | Resolved by parser refusal. |
-| IN-02 write errno wording | Accepted by D-PL5-18. |
-| IN-03 hosted marker in git tree | Resolved; hosted leftovers refuse `.git`. |
-| IN-04 redirect userinfo classification | Resolved by masked refusal before the next request. |
-| IN-05 exact `market` completion | Accepted by D-PL5-11. |
-| IN-06 hosted relative entry | Resolved on D-PL5-32 surfaces; explicit exceptions remain accepted. |
-| IN-07 repair baseline | Accepted by D-PL5-17; current autoupdate behavior supersedes the old blanket cascade-skipping description. |
-| T-05-17 name masking | Failed-info masking remains covered by `c99c6832`; successful-info masking is covered by `3a8c7e1c`. |
 
 ## Validation evidence
 
-- The parent's fresh merged-tree `npm run check` exited 0 at the reviewed
-  build inputs: 1,142 Cucumber scenarios, 11,734 steps, and 309 merged LCOV
-  records.
-- The reviewer independently ran the 13-module Phase 5 owner batch at
-  `38a18b81`: name and source parsing, router and completions, hosted fetch and
-  catalog lifecycle, marketplace shared/update/remove/info, the shared plugin
-  fold, JSON rendering, and presentation redaction. All 13 modules passed.
-- The Phase 5 validation pass separately records `marketplace/add` at 198/198
-  and the focused behavioral set at 16 scenarios / 140 steps.
-- The independent frozen-input presentation probe passed all sixteen cases.
-- CodeGraph traced the add/update/remove/info, hosted-fetch, row-id, and
-  presentation paths. Fallow guard found no boundary violation in the Phase 5
-  modules. Fallow security's dynamic-regex candidates in `domain/name.ts` are
-  constant-built patterns, not attacker-built expressions; its other
-  candidates fall outside this phase scope.
-- This review changed only this report and made no commit.
+- Phase 5 Nyquist is COMPLIANT for MKT-01 through MKT-08 at `826ea409`.
+- Fresh owner proof passed all 13 retained modules; the marketplace-add owner
+  passed 198/198 after the permitted local Unix-socket rerun.
+- Fresh public proof passed 18/18 scenarios, 156/156 steps, and 16/16 hooks.
+- `git diff --quiet be0de0c3 -- . ':(exclude,glob).planning/**/*.md'`
+  confirms unchanged executable inputs. The exact reusable full gate is green:
+  1,145 scenarios, 11,777 steps, and 309 LCOV records.
+- This review changed only `05-REVIEW.md`; the orchestrator's dirty
+  `.planning/STATE.md` was preserved.
 
 ---
 
+_Reviewed: 2026-10-29T13:06:26Z_
 _Reviewer: Codex (gsd-code-reviewer)_
 _Depth: standard_
