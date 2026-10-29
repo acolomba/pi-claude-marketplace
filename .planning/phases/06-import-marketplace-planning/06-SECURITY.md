@@ -6,8 +6,8 @@ threats_open: 0
 asvs_level: 1
 block_on: high
 register_authored_at_plan_time: true
-audited_at: 250acaadf15622a66ee80b5e3443ad96be908016
-source_commit: 250acaadf15622a66ee80b5e3443ad96be908016
+audited_at: 59e5075b2edcdddde72cc7c21e69fa3e5e9db49f
+source_commit: 59e5075b2edcdddde72cc7c21e69fa3e5e9db49f
 base: d98660a7
 created: 2026-10-27
 updated: 2026-10-29
@@ -15,7 +15,7 @@ updated: 2026-10-29
 
 # Phase 6 - Security
 
-> Final threat verification for import marketplace planning (milestone `plugin-lifecycle`). Every mitigation below was rechecked at `250acaadf15622a66ee80b5e3443ad96be908016`, after the review fixes and the SEC-06-01 follow-up.
+> Final threat verification for import marketplace planning (milestone `plugin-lifecycle`). Every mitigation below was rechecked on the final merged tree at `59e5075b2edcdddde72cc7c21e69fa3e5e9db49f`, after the review fixes and the SEC-06-01 follow-up.
 
 **Verdict:** SECURED — 14/14 threats closed; 11 mitigated and 3 documented accepted risks.
 
@@ -96,6 +96,7 @@ These notes come from reading the review-fix changes. None of them is a missing 
 | 2026-10-27 | 14 | 14 | 0 | GSD security auditor, ASVS level 1 (boundary placement checked for T-06-04, T-06-05, T-06-08, T-06-10, T-06-11) |
 | 2026-10-29 | 14 | 12 | 2 | Fresh re-audit at `a04c4756`; SEC-06-01 opened T-06-10/T-06-11 |
 | 2026-10-29 | 14 | 14 | 0 | Final independent re-audit at `250acaad`; 131 diagnostic/projection assertions |
+| 2026-10-29 | 14 | 14 | 0 | Final merged-tree ASVS L1 re-audit at `59e5075b`; 11/11 mitigations verified, 3/3 accepted risks logged, no unregistered flags; exact green gate reused (1,142 scenarios, 11,734 steps, 309 LCOV records) |
 
 ---
 
@@ -106,4 +107,4 @@ These notes come from reading the review-fix changes. None of them is a missing 
 - [x] `threats_open: 0` is confirmed.
 - [x] `status: verified` is set in frontmatter.
 
-**Approval:** SECURED 2026-10-29 at `250acaadf15622a66ee80b5e3443ad96be908016`.
+**Approval:** SECURED 2026-10-29 at `59e5075b2edcdddde72cc7c21e69fa3e5e9db49f`.
