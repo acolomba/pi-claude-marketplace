@@ -6,15 +6,16 @@ verdict: secured
 threats_total: 31
 threats_closed: 31
 threats_open: 0
-audited: 2026-10-28
+audited: 2026-10-29
 diff_base: cc459a82
-audited_commit: a67cb7f488ff905872d1ae9a64363ff479d452a4
+audited_commit: d183d481a6b5d86c20208bc63a616e22b5c9430e
 ---
 
 # Phase 07 security audit
 
-Verdict: SECURED. A fresh audit after Phases 8-11 confirmed that every threat in the
-plans' `<threat_model>` registers remains closed. No threat is open at any severity.
+Verdict: SECURED. A final audit on the integrated Phase 1-10 tree confirmed that every
+threat in the plans' `<threat_model>` registers remains closed. No threat is open at
+any severity.
 
 ## Threat verification
 
@@ -71,3 +72,14 @@ T-07-05, T-07-07, T-07-08, T-07-19, T-07-20 and T-07-SC, as above.
 - **R3, low:** the pinned arm of `fetch` and `info --fetch` takes no lock (D-PL7-07). A locked GC can still delete an unreferenced pinned clone during the read. The worst case is a mislabeled status row.
 - **R4, informational:** a lock lost mid-body in the preflight's locked steps and in `info --fetch`'s probe maps only `StateLockHeldError`.
 - **R5, informational:** the new frame surfaces have no surface-level userinfo test. They rely on the serializer's tests.
+
+## Final integrated audit trail
+
+2026-10-29 — Final merged-tree ASVS L1 re-audit at `d183d481`: 31/31
+Phase 7 threat rows closed; 16/16 mitigations verified, 15/15 accepted risks
+logged, no transfers or unregistered flags, and `threats_open: 0`. The
+exact-candidate collector is the formal safe supersession of Plan 07-02's
+broad-listing literal: it locks, reloads live state, and deletes only
+operation-owned still-unreferenced keys. A focused 11-module adversarial run
+passed; the fresh full gate remains green with 1,143 scenarios, 11,742 steps,
+and 309 LCOV records.
