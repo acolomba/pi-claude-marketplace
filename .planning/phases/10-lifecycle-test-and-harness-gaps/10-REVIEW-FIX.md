@@ -1,24 +1,73 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-fixed_at: 2026-10-29T07:05:43Z
-review_path: .planning/phases/10-lifecycle-test-and-harness-gaps/10-VALIDATION.md
-iteration: 5
-findings_in_scope: 1
-fixed: 1
+fixed_at: 2026-10-29T07:35:25Z
+review_path: .planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md
+iteration: 6
+findings_in_scope: 2
+fixed: 2
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 10: Code Review Fix Report
 
-**Fixed at:** 2026-10-29T07:05:43Z
-**Source validation:** `.planning/phases/10-lifecycle-test-and-harness-gaps/10-VALIDATION.md`
-**Iteration:** 5
+**Fixed at:** 2026-10-29T07:35:25Z
+**Source review:** `.planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md`
+**Iteration:** 6
 
-The Phase 10 Nyquist evidence-binding gap is closed. The three integrated
-review findings fixed in iteration 4 remain closed.
+Both final integrated review findings are fixed. The earlier evidence-binding
+and integrated review fixes remain closed.
 
-## Fixed Issue
+## Final Integrated Review Fixes
+
+### CR-01: An apostrophe followed by whitespace terminates a quoted path early
+
+**Status:** fixed: requires human verification
+**Commit:** `d93cd43a` (`fix(redaction): retain paths across apostrophes`)
+**Files modified:**
+
+- `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`
+- `test/shared/redact-absolute-paths.test.ts`
+
+The quoted-path branch now scans for the final diagnostic delimiter. It keeps
+an apostrophe followed by a space inside the candidate when a later matching
+quote closes a continued path. The scanner retains the existing handling for
+Node errno messages, two-path diagnostics, state locks, POSIX paths, drive
+paths, UNC paths, URLs, JSON pointers, and relative prose.
+
+The RED owner cases showed that
+`unlink '/tmp/O' Brien/秘密/secret.json'` leaked
+`Brien/秘密/secret.json`. The GREEN cases require the complete output
+`unlink 'secret.json'`, assert that the unique suffix is absent from a rebuilt
+cause chain, and cover the unmatched-quote fallback. The complete owner module
+passes 48 tests and the direct source-test pair passes 100% line, function,
+and branch coverage.
+
+### CR-02: A timed-out package-manager run resolves before its process group stops
+
+**Status:** fixed: requires human verification
+**Commit:** `bb50b890` (`fix(packages): await timeout escalation`)
+**Files modified:**
+
+- `extensions/pi-claude-marketplace/platform/package-manager.ts`
+- `test/platform/package-manager.test.ts`
+- `test/orchestrators/plugin/package-install.test.ts`
+
+The runner now records a timed-out parent's close code without resolving the
+run. It completes the existing SIGTERM and SIGKILL ladder, then resolves at the
+existing final deadline. Normal close and launch-error paths still settle at
+once. The deadline also gives asynchronous Windows `taskkill /T /F` its bounded
+completion window before the caller can remove the work directory.
+
+The RED fake settled immediately after parent close. The RED real-child case
+also returned near the 300 ms timeout while a descendant that ignored SIGTERM
+was still alive. The GREEN fake remains pending after parent close and after
+SIGKILL until the final deadline. The real POSIX case returns only after the
+300 ms timeout and two 400 ms grace intervals. The package-install owner case
+proves that its work directory remains present until the runner settles and is
+removed afterward.
+
+## Earlier Validation Fix
 
 ### VAL-01: The move-diagnostics row cited evidence before the final ownership fixes
 
@@ -115,12 +164,30 @@ with Node `v26.12.1`.
 | Commit hook, including `npm run check:commit` | Passed |
 | `git diff --check` | Passed |
 
-The checker and ledger change does not alter production, unit-test, or
-behavioral-test inputs. The orchestrator owns the final combined-tree gate and
-clean re-review.
+Final integrated review verification:
+
+| Check | Result |
+| --- | --- |
+| CR-01 focused RED | Failed on the exact utility and cause-chain suffix leak |
+| CR-01 owner tests | Passed: 48 tests |
+| CR-01 direct coverage | Passed: 100% line, function, and branch coverage |
+| CR-02 focused RED | Failed: promise settled before SIGKILL; real run returned before the two-grace bound |
+| CR-02 platform owner tests | Passed: 40 tests, including the real parent and descendant |
+| CR-02 package-install cleanup owner | Passed: work directory retained until runner settlement |
+| CR-02 direct coverage | Passed for both changed source-test pairs at 100% |
+| `npm run check:features` | Passed |
+| Fallow guard | Passed for all changed source and test files |
+| Fallow audit | Passed with no findings |
+| Required pre-commit fixers | Passed for both commits |
+| Commit hooks | Passed, including `npm run check:commit`, for both commits |
+
+These checks ran in the existing Session A worktree with Node `v26.12.1`.
+
+The orchestrator owns the final combined-tree gate, security recheck, clean
+re-review, and goal verification on the unchanged integrated tree.
 
 ---
 
-_Fixed: 2026-10-29T07:05:43Z_
+_Fixed: 2026-10-29T07:35:25Z_
 _Fixer: the agent (gsd-code-fixer)_
-_Iteration: 5_
+_Iteration: 6_
