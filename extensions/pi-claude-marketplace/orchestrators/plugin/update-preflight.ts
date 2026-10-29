@@ -43,6 +43,7 @@ import {
   resolvePluginPin,
 } from "./clone-cache.ts";
 import { admitResolvedVersion, evaluateCatalogConstraint } from "./constraint-fold.ts";
+import { DEFAULT_PACKAGE_INSTALL_OPS, removeInstalledPackages } from "./package-install.ts";
 import {
   isRecordedCandidate,
   isSameRevision,
@@ -792,6 +793,19 @@ async function refreshDisabledRecord(
       );
       if (next.projection === current) {
         return false;
+      }
+
+      // A disabled update saves its new pin without running the package step.
+      // Invalidate our old packages under the lock so enable reads the new lockfile.
+      if (
+        record.resolvedSource === preflight.installable.pluginRoot &&
+        (record.version !== preflight.toVersion || record.resolvedSha !== preflight.resolvedSha)
+      ) {
+        await removeInstalledPackages(
+          DEFAULT_PACKAGE_INSTALL_OPS,
+          options.locations,
+          record.resolvedSource,
+        );
       }
 
       record.version = preflight.toVersion;

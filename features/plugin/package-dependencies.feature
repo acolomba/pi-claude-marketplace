@@ -181,6 +181,72 @@ Feature: Plugin package dependencies
       | name    | version |
       | pkd-dep | 2.0.0   |
 
+  Scenario: Enabling a plugin updated while disabled installs the new revision's packages
+    Given the npm registry serves these packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+      | pkd-dep | 2.0.0   |
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | pkp  | 1.0.0   |
+    Given the published plugin "pkp" of the marketplace "tools" depends on these npm packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install pkp@tools --scope project"
+    Given the user has run "/claude:plugin disable pkp@tools --scope project"
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | pkp  | 2.0.0   |
+    Given the published plugin "pkp" of the marketplace "tools" depends on these npm packages:
+      | name    | version |
+      | pkd-dep | 2.0.0   |
+    Given the user has run "/claude:plugin update pkp@tools --scope project"
+    When the user runs "/claude:plugin enable pkp@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status    | reasons | scope   | version |
+      | tools            | project           | pkp@tools | pkp  | installed |         | project | 2.0.0   |
+    Then the npm registry receives these requests:
+      | method | path                       | status |
+      | GET    | /pkd-dep/-/pkd-dep-2.0.0.tgz | 200    |
+    Then the plugin "pkp" installed in the project scope has these npm packages:
+      | name    | version |
+      | pkd-dep | 2.0.0   |
+
+  Scenario: Enabling an unchanged disabled plugin keeps its packages and makes no npm request
+    Given the npm registry serves these packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | pkp  | 1.0.0   |
+    Given the published plugin "pkp" of the marketplace "tools" depends on these npm packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install pkp@tools --scope project"
+    Given the user has run "/claude:plugin disable pkp@tools --scope project"
+    Given the user has run "/claude:plugin update pkp@tools --scope project"
+    Given the npm cache is empty
+    When the user runs "/claude:plugin enable pkp@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status    | reasons | scope   | version |
+      | tools            | project           | pkp@tools | pkp  | installed |         | project | 1.0.0   |
+    Then the npm registry receives no request
+    Then the plugin "pkp" installed in the project scope has these npm packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+
   Scenario: Reinstalling a plugin whose packages are installed makes no npm request
     Given the npm registry serves these packages:
       | name    | version |
