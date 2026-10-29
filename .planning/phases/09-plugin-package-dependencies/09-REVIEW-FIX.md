@@ -1,8 +1,8 @@
 ---
 phase: 09-plugin-package-dependencies
-fixed_at: 2026-10-29T06:03:44Z
+fixed_at: 2026-10-29T06:27:50Z
 review_path: .planning/phases/09-plugin-package-dependencies/09-REVIEW.md
-iteration: 3
+iteration: 4
 findings_in_scope: 1
 fixed: 1
 skipped: 0
@@ -13,7 +13,39 @@ security_recheck_required: false
 
 # Phase 9: Code Review Fix Report
 
-## Iteration 3
+## Iteration 4
+
+**Fixed at:** 2026-10-29T06:27:50Z
+**Source review:** `09-REVIEW.md`, reviewed tree `cc02c791`.
+**Summary:** The remaining ownership defect in CR-01 was fixed. No finding was skipped.
+
+### CR-01: Fresh dependency package diagnostics disappear during update settlement
+
+**Status:** fixed: requires human verification
+**Commit:** `db79c003` — `fix(packages): preserve dependency warning ownership`
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/types.ts`, `extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-dependency-ledger.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts`, their paired tests, and `features/plugin/package-dependencies.feature`.
+
+The settlement now carries ordered dependency diagnostics with the member's plugin, scope, verb, and warnings. A first-run closure records each materialized member separately. Planned moves keep their own warning identity and retain diagnostics from nested dependency materialization. Materialization attaches these diagnostics to the requester outcome without merging them into the requester's `stagingWarnings`. Direct update and marketplace update render the dependency diagnostics before the requester's own diagnostic, so each warning keeps one owner and appears once.
+
+**RED:** The closure ledger exposed only flat warnings. Both first-run and planned settlement dropped a structured diagnostic. Materialization merged the dependency warning into the requester. The direct Cucumber scenario therefore named `widget` for `zcore`'s package failure.
+
+**GREEN:** Unit oracles cover first-run closure ownership, planned closure and move transport, nested move diagnostics, requester-warning separation, direct rendering, marketplace rendering, and failed-move ownership. The exact direct-update scenario reports one `zcore` installed diagnostic after the cascade, reports no `widget` diagnostic for that warning, and retains successful requester and dependency lifecycle rows.
+
+### Iteration 4 Verification
+
+Checks ran in the existing isolated worktree `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710`, branch `agent-reverify-a`, on Linux with Node v26.12.1. No additional worktree was created because `workflow.use_worktrees` is false.
+
+- Six focused owner modules passed: dependency move, dependency settlement, install dependency ledger, materialize latest, direct update flow, and marketplace update messaging.
+- Direct coverage passed at 100% for every changed source/test pair, including the update-swap type carrier.
+- The exact Cucumber regression passed one scenario and 16 steps through the real direct-update command and loopback package registry.
+- TypeScript passed with `tsc --noEmit --incremental false`; focused ESLint, Prettier, `check:features`, Fallow guard, and the changed-code Fallow audit passed.
+- Repository fixers passed. The normal commit hook passed `npm run check:commit`; no hook was bypassed.
+
+The fixer did not run the full combined-tree `npm run check` gate. The parent workflow must run that gate before completing Phase 9. This report remains uncommitted for the parent workflow.
+
+The automated regressions prove structured ownership, ordering, exact-once rendering, requester-warning separation, and lifecycle success. Human review remains requested because this is a logic correction across the dependency closure, settlement, update outcome, and two notification surfaces.
+
+## Prior Iteration 3 Report
 
 **Fixed at:** 2026-10-29T06:03:44Z
 **Source review:** `09-REVIEW.md`, reviewed tree `0c989c42`.
@@ -166,4 +198,4 @@ Native execution covered Linux/POSIX. Windows process-tree and launcher behavior
 ---
 
 _Fixer: gsd-code-fixer_
-_Iteration: 3_
+_Iteration: 4_
