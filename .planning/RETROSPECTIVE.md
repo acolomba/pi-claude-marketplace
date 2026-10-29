@@ -2,6 +2,49 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: plugin-lifecycle -- Marketplace and Plugin Lifecycle Backlog
+
+**Completed:** 2026-10-29 on `features/plugin-lifecycle-p11` (not yet pushed, no npm release)
+**Phases:** 11 | **Plans:** 80 | **Tasks:** 121 | **Requirements:** 64/64 | **Audit:** `tech_debt`, no blockers (integration 12/12, flows 10/10)
+
+### What Was Built
+
+- Closed the marketplace and plugin lifecycle backlog across warning transport, pending/apply ordering, dependency cascades and resolver pins, marketplace/import parity, git failures and locking, background autoupdate, and package dependency installation.
+- Added or tightened lifecycle behavior proofs, ending with 1,146 Cucumber scenarios, 11,787 steps, 16 hooks, and 309 direct-coverage records on the exact executable tree.
+- Split the install flow into directly covered planning, ledger, cascade-context, result, and dependency-ledger owners while preserving the public composition root.
+
+### What Worked
+
+- **Concurrent phase and verification sessions with file ownership.** Disjoint phase artifacts combined cleanly, and the final stale-report refresh ran in separate sessions without shared-file conflicts.
+- **One exact-tree repository gate reused by all verifiers.** This kept the evidence identical while avoiding eight redundant full-suite runs.
+- **Artifact-first closeout.** The open-artifact audit exposed a real cold-cache git-root dependency gap; the repair added both an owner test and a public Cucumber scenario before the milestone was archived.
+
+### What Was Inefficient
+
+- **Later integration work made eight phase reports stale.** The milestone needed a final concurrent verifier sweep even though the implementation was already green.
+- **GSD's named-milestone audit prefix did not match completion's lookup.** The generated `vplugin-lifecycle-MILESTONE-AUDIT.md` had to be renamed before the dry run would archive it.
+- **The completion tool generated one accomplishment per plan.** The closeout record needed a hand-written delivery summary and a collapsed raw list.
+
+### Patterns Established
+
+- **Preview a cold git root before the filesystem-only dependency walk.** Reuse the pinned preview through a cache-only clone probe so dependency discovery does not cause a second network clone.
+- **Treat the final manager state as a dynamic gate.** Every phase must return `passed` on the exact closeout tree; a historical passed frontmatter value is not enough.
+- **Dry-run milestone archival before `--confirm`.** The move list catches generated-filename mismatches while every source artifact is still in place.
+
+### Key Lessons
+
+1. A marketplace entry that omits dependencies does not prove the root has none; a cold git root's own manifest must be materialized before closure planning.
+2. Shared exact-tree evidence is safe to reuse only while HEAD and build inputs remain unchanged; verifier sessions should fail closed on worktree or HEAD drift.
+3. Named milestones need both audit and completion workflows tested against the same artifact naming convention.
+
+### Cost Observations
+
+- Model mix: Codex orchestrator with specialized verifier and integration-checker sessions; exact per-model percentages were not recorded.
+- Timeline: 2026-10-26 -> 2026-10-29.
+- Notable: 80 plans and 121 tasks converged into one final gate; eight stale verification reports were refreshed in three concurrent batches.
+
+---
+
 ## Milestone: lifecycle-coverage -- Plugin Lifecycle Behavioral Tests
 
 **Completed:** 2026-10-25 on `claude/plugin-lifecycle-coverage-b1d431` (not yet pushed, no npm release)
@@ -1052,6 +1095,8 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | v1.20 | 12 | Dependency provenance in records, upstream parity research, and a final clean-tree gate |
 | mcp-4 | 8 | Conformance against the real adapter's code; sequential executors in one worktree; a debt phase after a `tech_debt` audit; scoped re-verification at close |
 | json-output | 9 | Byte corpus captured before the first renderer change; one presentation model behind mode-selected text and JSON strategies; end-of-milestone tech-debt phases instead of carried items |
+| lifecycle-coverage | 30 | Command-complete Cucumber coverage against real headless Pi; many parallel sessions with explicit file ownership; read-only load plus explicit apply |
+| plugin-lifecycle | 11 | Parallel backlog closure followed by shared test/cleanup sweeps; one exact-tree gate reused by concurrent verifiers; dry-run archive validation |
 
 ### Cumulative Quality
 
@@ -1068,6 +1113,8 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | v1.20 | 7760 + 63 int | Full `npm run check` green in a clean checkout; 100% aggregate production coverage; one deferred live credential UAT subcase |
 | mcp-4 | not recorded | Full `npm run check` green with both peer roots (pi-mcp-adapter 5.2.0, pi-subagents 0.74.0); fallow audit `pass` with 0 introduced groups; all review ledgers `open: 0` |
 | json-output | 10,228 (corpus run) | 3,149-record text corpus and output catalog byte-identical apart from ledgered exceptions; wire schema validated against all 260 catalog examples; real headless Pi at 0.87.1 and the 0.86.1 floor |
+| lifecycle-coverage | 825 scenarios | Every plugin lifecycle verb driven through a real headless Pi; path, GitHub, URL, and git-subdir source coverage |
+| plugin-lifecycle | 1,146 scenarios / 11,787 steps | 16 hooks and 309 direct-coverage records; all 64 requirements and 11 phase verifications current on the closeout tree |
 
 ### Top Lessons (Verified Across Milestones)
 

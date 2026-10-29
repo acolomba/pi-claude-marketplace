@@ -2,39 +2,38 @@
 gsd_state_version: "1.0"
 milestone: plugin-lifecycle
 milestone_name: Marketplace and Plugin Lifecycle Backlog
-current_phase: 11
-status: completed
+status: Awaiting next milestone
 stopped_at: Phase 11 complete — all phases complete
-last_updated: "2026-10-29T14:24:55.998Z"
+last_updated: "2026-10-29T15:38:02.091Z"
 last_activity: 2026-10-29
-last_activity_desc: Phase 11 complete
-state_head: 94c6fe3faba163b448e11599006826127eea5dc7
+last_activity_desc: Milestone plugin-lifecycle completed and archived
+state_head: 9694856225de1b51168c6acffeff962209409a1c
 progress:
   total_phases: 11
   completed_phases: 11
   total_plans: 80
   completed_plans: 80
   percent: 100
+current_phase: 11
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-22 at the lifecycle-coverage start)
+See: `.planning/PROJECT.md` (updated 2026-10-29 after plugin-lifecycle completion)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 11
+**Current focus:** Planning the next milestone
 
 ## Current Position
 
-Phase: 11
-Plan: Not started
-Status: All phases complete
-Last activity: 2026-10-29 — Phase 11 complete
-
+Phase: Milestone plugin-lifecycle complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-10-29 — Milestone plugin-lifecycle completed and archived
 
 ### mcp-4 closeout
 
@@ -269,12 +268,9 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- lifecycle-coverage is archived under `.planning/milestones/lifecycle-coverage-*`
-  on `claude/plugin-lifecycle-coverage-b1d431`; nothing is pushed. Next: offer
-  the version bump, then open the PR (squash).
-- Follow-ups recorded at close: BACKLOG APPLY1-01 (one-run convergence for a
-  co-shipped dependent), APPLYTHROW-01 (rows dropped when apply throws).
-- Start the next milestone with /new-gsd-milestone.
+
+- Start the next milestone with $gsd-new-milestone
+
 
 ## Performance Metrics
 
