@@ -1,6 +1,6 @@
 ---
 phase: 04-dependency-resolver-residue
-verified: 2026-10-29T12:59:35Z
+verified: 2026-10-29T15:27:26Z
 status: passed
 score: 4/4 must-haves verified
 covered_files:
@@ -78,7 +78,7 @@ covered_files:
   - "test/orchestrators/plugin/update-flow.test.ts"
   - "test/orchestrators/plugin/update-swap.test.ts"
   - "test/orchestrators/reconcile/apply.test.ts"
-covered_digest: "v4:sha256:6d20fc5430910c17bd98d38b83f94637df5855ec581297bc82efb8266b83a28d"
+covered_digest: "v4:sha256:f346c555cec1f88d38a583bf3d5b4f24d9bd5c0ef7e65cd0ce9d917f7a262ca6"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
@@ -96,9 +96,9 @@ decision_coverage:
 # Phase 4: Dependency Resolver Residue Verification Report
 
 **Phase Goal:** The dependency resolver installs the commit it previewed, refuses before any move lands, and its completeness and `apply` behavior are decided against Claude Code.
-**Verified:** 2026-10-29T12:59:35Z
+**Verified:** 2026-10-29T15:27:26Z
 **Status:** passed
-**Re-verification:** Yes -- final-head refresh after Phase 1 diagnostic integration.
+**Re-verification:** Yes -- refresh after the milestone-close cold git-root dependency repair.
 
 ## Goal Achievement
 
@@ -106,7 +106,7 @@ decision_coverage:
 
 | # | Truth | Status | Evidence |
 |---|---|---|---|
-| 1 | A fresh unpinned git dependency resolves once and installs the previewed commit (RSV-01). | VERIFIED | `previewFresh` stores the commit by member key; `schedule` attaches `previewedCommit`; `planInstallMoves` carries `rootCommit`; both ledger builders call `memberLedgerPin`, which maps it to `sourcePin` without inventing a version. `probeInstallClone` takes the pinned path. Focused owner tests and the exact public one-fetch scenario passed. |
+| 1 | A fresh unpinned git dependency resolves once and installs the previewed commit (RSV-01). | VERIFIED | `previewFresh` stores the commit by member key; `schedule` attaches `previewedCommit`; `planInstallMoves` carries `rootCommit`; both ledger builders call `memberLedgerPin`, which maps it to `sourcePin` without inventing a version. The cold-root repair now previews a git root before the filesystem-only dependency walk when its marketplace entry omits dependencies, then passes the same commit and a cache-only clone probe to the root ledger. The focused cold-root owner test and public scenario passed, and each asserts one clone plus the dependency record. |
 | 2 | RSV-02 and RSV-03 have recorded decisions and matching code/tests. | VERIFIED | `dependency-plan.ts` documents and enforces D-PL4-02's preview-before-write rule under deferral and D-PL4-03's finite first-involved-pick rule-out limit. The named refusal and untried-pair tests passed. Decision coverage is 7/7. |
 | 3 | An update whose agent target is occupied refuses before an earlier move or dependency install lands (RSV-04). | VERIFIED | `assertAgentTargetsFree` is read-only and checks foreign claims plus occupied targets. `assertUpdateNamesFree` runs it after the PI-6 name check; `judgeDependencyMove`, update planning, and install preview call the preflight before mutation. Named owners passed, and three public scenarios preserved versions, records, and the user's file. |
 | 4 | The `no-matching-tag` range and `rollbackPartials` declaration are settled (RSV-05). | VERIFIED | `SelectedReleaseTag` and `DependencyTagProbeResult` use a range-free no-match arm; `toMemberConstraintOutcome` constructs failure ranges from `declared`. The split `InstallMissingDependencyOutcome` failed arm declares `rollbackPartials`, and failure projection carries it. Named no-match and rollback-partial owners passed. |
@@ -120,8 +120,8 @@ decision_coverage:
 | `bridges/agents/{target-check,index-mutation,stage}.ts` | Shared write-free ownership/occupied-target rule | VERIFIED | Present, substantive, exported, and called from update/install preflight. |
 | `dependency-plan.ts` | Preview pin map, finite greedy decision, early refusal, redaction | VERIFIED | Present and wired through planning; discriminating D-PL4-01/02/03 owners passed. |
 | `release-tag.ts`, `dependency-tag-probe.ts`, `install-cascade.ts` | Range-free no-match answer and declared-range failure | VERIFIED | Types and decoder agree; exact no-match owners passed. |
-| Split `install-flow-*.ts` owners | Root commit, member pin, deferred rule, rollback-partial flow | VERIFIED (moved) | Mechanical Plan 04-02/04-05 probes still name pre-split `install-flow.ts`; direct inspection verifies the contracts in `install-flow-planning.ts`, `install-flow-cascade-context.ts`, `install-flow-ledger.ts`, `install-flow-dependency-ledger.ts`, and `install-flow-results.ts`. |
-| Phase 4 unit and Cucumber tests | Behavior proof of pinning, ordering, preservation, and failure shape | VERIFIED | Active, non-circular value/behavior assertions; fresh named runs passed. |
+| Split `install-flow-*.ts` owners | Root commit, member pin, deferred rule, rollback-partial flow | VERIFIED (moved) | Mechanical Plan 04-02/04-04/04-05 probes still name pre-split `install-flow.ts`; direct inspection verifies the contracts in `install-flow-planning.ts`, `install-flow-cascade-context.ts`, `install-flow-ledger.ts`, `install-flow-dependency-ledger.ts`, and `install-flow-results.ts`. The current cold-root path stays inside those owners. |
+| Phase 4 unit and Cucumber tests | Behavior proof of pinning, ordering, preservation, and failure shape | VERIFIED | Active, non-circular value/behavior assertions. Fresh named runs passed, including the new cold git-root owner and public scenario. |
 
 ### Key Link Verification
 
@@ -149,12 +149,13 @@ link ends in a static fallback or mock-generated expected value.
 | Range-free no-match and rollback partial projection | Named no-match/rollback owners across release-tag, tag probe, cascade, and results | 4 owner modules passed | PASS |
 | Public one-fetch behavior | Exact RSV-01 Cucumber scenario | 1 scenario, 14 steps, 16 hooks passed | PASS |
 | Public refusal-before-write behavior | Exact three RSV-04 Cucumber scenarios | 3 scenarios, 43 steps, 16 hooks passed | PASS |
-| Combined tree | Reused exact `npm run check` at executable head `be0de0c3` | exit 0; 1,145 scenarios, 11,777 steps, 309 LCOV | PASS |
+| Cold git-root manifest dependency behavior | Named owner plus exact public scenario | 1 owner passed; 1 scenario, 10 steps, 16 hooks passed | PASS |
+| Combined tree | Reused exact `npm run check` at executable head `1f950382` | exit 0; 1,146 scenarios, 11,787 steps, 16 hooks, 309 LCOV | PASS |
 
-The initial Cucumber attempt was blocked by sandbox `listen EPERM` on the loopback
-fixture. The permitted unsandboxed rerun passed unchanged. `git diff --quiet be0de0c3
--- . ':(exclude,glob).planning/**/*.md'` exits 0, so the exact full gate is reusable
-under the local-verification policy. Node is `v26.12.1`.
+The focused Cucumber attempt was blocked by sandbox `listen EPERM` on the loopback
+fixture. The permitted unsandboxed rerun passed unchanged. The orchestrator ran the
+exact full gate on committed head `1f950382`; this verifier changed only this planning
+report after that gate. Node is `v26.12.1`.
 
 ### Probe Execution
 
@@ -181,7 +182,7 @@ to Phase 4, and every ID is claimed by a plan.
 | agent target preflight / update | RSV-04 | yes | 0 | no | behavioral / filesystem and state bytes | PASS |
 | release tag / cascade | RSV-05 | yes | 0 | no | exact discriminated value | PASS |
 | missing-dependency result | RSV-05 | yes | 0 | no | exact rollback-partial outcome | PASS |
-| Cucumber install/update | RSV-01, RSV-04 | 4 scenarios | 0 | no | public behavioral | PASS |
+| Cucumber install/update | RSV-01, RSV-04 | 5 scenarios | 0 | no | public behavioral | PASS |
 
 Disabled requirement tests: 0. Circular expected-value generation: 0.
 Insufficient assertions: 0.
@@ -208,9 +209,10 @@ ordering, cleanup, and refusal invariant has active owner-level behavior proof.
 ### Gaps Summary
 
 None. All four roadmap truths, RSV-01..05, current split artifacts, and key links
-are verified on the final integrated executable tree.
+are verified on the final integrated executable tree. The cold git-root repair closes
+the own-manifest gap without changing the Phase 4 decisions or refusal ordering.
 
 ---
 
-_Verified: 2026-10-29T12:59:35Z_
+_Verified: 2026-10-29T15:27:26Z_
 _Verifier: gsd-verifier_

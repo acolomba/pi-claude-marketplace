@@ -1,13 +1,11 @@
 ---
 phase: 05-marketplace-command-parity
-verified: 2026-10-29T13:10:53.787Z
+verified: 2026-10-29T15:29:39Z
 status: passed
 score: 5/5 must-haves verified
 covered_files:
   - .agents/skills/cucumber/rules/features.md
   - .agents/skills/cucumber/rules/world-and-stand-ins.md
-  - .planning/REQUIREMENTS.md
-  - .planning/ROADMAP.md
   - .planning/phases/05-marketplace-command-parity/05-01-PLAN.md
   - .planning/phases/05-marketplace-command-parity/05-01-SUMMARY.md
   - .planning/phases/05-marketplace-command-parity/05-02-PLAN.md
@@ -26,11 +24,6 @@ covered_files:
   - .planning/phases/05-marketplace-command-parity/05-08-SUMMARY.md
   - .planning/phases/05-marketplace-command-parity/05-09-PLAN.md
   - .planning/phases/05-marketplace-command-parity/05-09-SUMMARY.md
-  - .planning/phases/05-marketplace-command-parity/05-CONTEXT.md
-  - .planning/phases/05-marketplace-command-parity/05-REVIEW-FIX.md
-  - .planning/phases/05-marketplace-command-parity/05-REVIEW.md
-  - .planning/phases/05-marketplace-command-parity/05-SECURITY.md
-  - .planning/phases/05-marketplace-command-parity/05-VALIDATION.md
   - AGENTS.md
   - docs/json-output.md
   - eslint.config.js
@@ -135,7 +128,7 @@ covered_files:
   - test/shared/errors.test.ts
   - test/shared/notification-json.test.ts
   - test/shared/notification-present.test.ts
-covered_digest: "v4:sha256:c0a6cf7b4ebf097ae43f293875926ab907fd86a172e6453f32b3343e5f707191"
+covered_digest: "v4:sha256:33518f2975f61914c438cbf6ae5390a31256a3d7e6e380340458a5829a8daea5"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
@@ -149,9 +142,9 @@ re_verification:
 # Phase 5: Marketplace Command Parity Verification Report
 
 **Phase Goal:** The marketplace commands match Claude Code on reserved names, hosted manifests, the `market` alias, shorthand parsing, row ids, and remove reporting.
-**Verified:** 2026-10-29T13:10:53.787Z
+**Verified:** 2026-10-29T15:29:39Z
 **Status:** passed
-**Re-verification:** Yes; final verification on the integrated Phase 1-10 tree at `adc17f94`.
+**Re-verification:** Yes; milestone-close refresh on the canonical integrated tree at `1f950382`.
 
 ## Goal Achievement
 
@@ -232,8 +225,7 @@ No Phase 05 requirement is orphaned: all eight appear in PLAN frontmatter, `.pla
 
 | Check | Result |
 | --- | --- |
-| Fresh merged-tree `npm run check` at the current build inputs | Exit 0: 1,145 Cucumber scenarios, 11,777 steps, 309 merged LCOV records. Static checks, integration tests, behavioral tests, and every direct source/test pair passed. |
-| Current HEAD `adc17f94` against gate input `be0de0c3` | `git diff --quiet be0de0c3 -- . ':(exclude,glob).planning/**/*.md'` exits 0. Later commits changed planning Markdown only, so the exact full-gate result applies under the repository's local-verification reuse rule. |
+| Exact-tree `npm run check` at canonical HEAD `1f950382` | Exit 0: 1,146 Cucumber scenarios, 11,787 steps, 16 hooks, and 309 direct LCOV records. Static checks, integration tests, behavioral tests, and every direct source/test pair passed on this exact tree. |
 | Independent focused owner spot-check | A named Node test command covering reserved-name refusal, hosted add/update, alias completions, missing-clone repair, and the six-axis removal fold exited 0; four owner modules passed in 3.4 s. |
 | Independent focused behavioral spot-check | Seven exact Cucumber scenarios covering the alias, first-delimiter shorthand, hosted refresh, official reserved-name exemption, accepted remove behavior, EISDIR classification, and credential-safe marketplace-info ID passed: 7 scenarios / 67 steps / 16 hooks. The first sandboxed attempt reached no scenario because loopback bind was denied; the identical command passed with the hermetic fixture's socket permission. |
 | Phase validation | Commit `826ea409` records `05-VALIDATION.md` as COMPLIANT and Nyquist complete for MKT-01 through MKT-08. |
@@ -275,5 +267,5 @@ None. All five roadmap outcomes and MKT-01 through MKT-08 hold on the integrated
 
 ---
 
-_Verified: 2026-10-29T13:10:53.787Z_
+_Verified: 2026-10-29T15:29:39Z_
 _Verifier: Codex (gsd-verifier)_

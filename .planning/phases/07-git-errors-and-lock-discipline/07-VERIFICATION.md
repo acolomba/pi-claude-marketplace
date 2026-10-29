@@ -1,6 +1,6 @@
 ---
 phase: 07-git-errors-and-lock-discipline
-verified: 2026-10-29T13:32:14Z
+verified: 2026-10-29T15:29:14Z
 status: passed
 score: 4/4 roadmap success criteria verified (8/8 requirements satisfied)
 covered_files:
@@ -24,7 +24,9 @@ covered_files:
   - ".planning/phases/07-git-errors-and-lock-discipline/07-09-SUMMARY.md"
   - ".planning/phases/07-git-errors-and-lock-discipline/07-10-PLAN.md"
   - ".planning/phases/07-git-errors-and-lock-discipline/07-10-SUMMARY.md"
+  - ".planning/phases/07-git-errors-and-lock-discipline/deferred-items.md"
   - "docs/output-catalog.md"
+  - "extensions/pi-claude-marketplace/bridges/skills/stage.ts"
   - "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts"
   - "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts"
   - "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts"
@@ -54,16 +56,20 @@ covered_files:
   - "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts"
   - "extensions/pi-claude-marketplace/platform/git.ts"
   - "extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts"
+  - "extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts"
   - "extensions/pi-claude-marketplace/transaction/with-state-guard.ts"
   - "features/lib/published-marketplace.ts"
   - "features/plugin/fetch.feature"
   - "features/plugin/git-source-update.feature"
   - "features/plugin/git-source.feature"
   - "features/plugin/info.feature"
+  - "features/plugin/install.feature"
   - "features/plugin/update-rollback.feature"
   - "features/plugin/url-marketplace-update.feature"
+  - "features/step_definitions/command.steps.ts"
   - "features/step_definitions/marketplace/update.steps.ts"
   - "test/architecture/catalog-uat/catalog-contract.test.ts"
+  - "test/edge/register.test.ts"
   - "test/orchestrators/edge-deps.test.ts"
   - "test/orchestrators/marketplace/remove.test.ts"
   - "test/orchestrators/marketplace/shared.test.ts"
@@ -86,7 +92,8 @@ covered_files:
   - "test/orchestrators/plugin/update-preflight.test.ts"
   - "test/orchestrators/plugin/update-swap.test.ts"
   - "test/shared/git-failure-classifiers.test.ts"
-covered_digest: "v4:sha256:58099ae5bbf3e501a40eb886b8b18e9e3367376baf9062ef5f8a9e153a1387f9"
+  - "test/shared/redact-absolute-paths.test.ts"
+covered_digest: "v4:sha256:72a09a7b5ba2d1250c6eb2d67e6363109dcf9cc3efd6225f37befc7663730c98"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
@@ -105,9 +112,9 @@ decision_coverage:
 
 **Phase Goal:** One classifier reports every git host failure, and no clone
 read, copy, or cleanup runs outside the state lock.
-**Verified:** 2026-10-29T13:32:14Z
+**Verified:** 2026-10-29T15:29:14Z
 **Status:** passed
-**Re-verification:** Yes — final verification on the integrated Phase 1-10 tree.
+**Re-verification:** Yes — milestone-close refresh after the deferred-record repair.
 
 ## Goal Achievement
 
@@ -138,6 +145,15 @@ is the reviewed stronger implementation of GLK-03. The independent
 candidate-only and exact-key race tests passed; restoring broad listing would
 reintroduce the verified concurrent-cache deletion defect.
 
+### Deferred Record Reconciliation
+
+Both entries in `deferred-items.md` now carry current resolved dispositions.
+The prune registration cases expect three locks and name their roles: the state
+guard, package cleanup lock, and clone cleanup lock. The focused parameterized
+owner passed. The unreadable-skill case now uses strict public-error redaction;
+the focused install scenario passed with `{unreadable skill file copy error}`
+and proved that the result contains no absolute sandbox path.
+
 ### Advisory (New Scope, Unevidenced)
 
 None. No new-scope blocker or advisory was identified.
@@ -153,7 +169,7 @@ None. No new-scope blocker or advisory was identified.
 | `plugin/clone-cache.ts` | Offline tag fallback | VERIFIED | Tracking-ref lookup falls back to local tag peeling and refreshes only on a real cache miss. |
 | `fetch.ts`, `info.ts`, `update-preflight.ts` | Locked read/copy and shared classification | VERIFIED | Unpinned materialize/copy and dependent row reads share the lock; host failures use the shared classifier. |
 | `edge-deps.ts` | Completion uses list's upgrade rule | VERIFIED | Imports and calls `upgradeCandidate`; browse consumes list payloads. |
-| Phase 7 unit/Cucumber evidence | Behavioral enforcement | VERIFIED | Named independent tests passed; the unchanged implementation tree also retains the exact full gate at 1,145 scenarios, 11,777 steps, and 309 LCOV records. |
+| Phase 7 unit/Cucumber evidence | Behavioral enforcement | VERIFIED | Named independent tests passed; the exact current tree passed 1,146 scenarios, 11,787 steps, 16 hooks, and 309 LCOV records. |
 
 ## Key Link Verification
 
@@ -196,11 +212,13 @@ command rows exercised through the real Cucumber command surface.
 | Offline local tag | Named GLK-08 clone-cache test | 1 passed | PASS |
 | User-visible fetch version | Focused Cucumber scenario | 1 scenario, 10 steps passed | PASS |
 | User-visible offline reinstall | Focused Cucumber scenario | 1 scenario, 14 steps passed | PASS |
+| Deferred prune lock count | Named registered-prune owner | Both scope variants passed; three locks asserted | PASS |
+| Deferred unreadable-skill path | Exact install Cucumber scenario | 1 scenario, 11 steps, 16 hooks passed | PASS |
 
-The exact full `npm run check` result is reusable because
-`git diff be0de0c3 -- . ':(exclude,glob).planning/**/*.md'` is empty:
-static checks passed, 1,145 Cucumber scenarios / 11,777 steps passed, and
-direct coverage merged 309 LCOV records under Node v26.12.1.
+The orchestrator ran the exact full `npm run check` on committed head
+`1f950382`: static checks passed, 1,146 Cucumber scenarios / 11,787 steps / 16
+hooks passed, and direct coverage merged 309 LCOV records under Node v26.12.1.
+This verifier changed only this planning report after that gate.
 
 ## Probe Execution
 
@@ -265,9 +283,10 @@ external-service-only truth remains.
 No gaps. All four roadmap success criteria, GLK-01 through GLK-08, and all
 18 trackable decisions are verified on the integrated tree. The
 exact-candidate supersession closes the historical concurrent-cache deletion
-defect without weakening Phase 7's lock discipline.
+defect without weakening Phase 7's lock discipline. Both deferred-item records
+now describe resolved, passing behavior.
 
 ---
 
-_Verified: 2026-10-29T13:32:14Z_
+_Verified: 2026-10-29T15:29:14Z_
 _Verifier: the agent (gsd-verifier)_

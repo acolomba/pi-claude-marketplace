@@ -1,6 +1,6 @@
 ---
 phase: 11-cleanup-split-and-docs
-verified: 2026-10-29T14:23:47Z
+verified: 2026-10-29T15:31:47Z
 status: passed
 score: 30/30 must-haves verified
 covered_files:
@@ -8,6 +8,8 @@ covered_files:
   - .planning/PROJECT.md
   - .planning/REQUIREMENTS.md
   - .planning/codebase/ARCHITECTURE.md
+  - .planning/phases/02-apply-ordering-and-installed-declarations/deferred-items.md
+  - .planning/phases/07-git-errors-and-lock-discipline/deferred-items.md
   - .planning/phases/11-cleanup-split-and-docs/11-01-PLAN.md
   - .planning/phases/11-cleanup-split-and-docs/11-01-SUMMARY.md
   - .planning/phases/11-cleanup-split-and-docs/11-02-PLAN.md
@@ -68,6 +70,7 @@ covered_files:
   - features/plugin/autoapply.feature
   - features/plugin/cross-scope-install.feature
   - features/plugin/git-source-update.feature
+  - features/plugin/install-dependencies.feature
   - features/plugin/reconcile.feature
   - features/plugin/update-dependencies.feature
   - features/plugin/update-rollback.feature
@@ -104,7 +107,7 @@ covered_files:
   - test/orchestrators/types.test.ts
   - test/platform/git.test.ts
   - test/platform/removal-ops-fake.ts
-covered_digest: "v4:sha256:af155ded09aa7f003a8a8cb07813acb19c3af1c3c402b0178be2908ff9a55be3"
+covered_digest: "v4:sha256:a0262eeadcef4dbd6d79538767c4c749c963fac8d003f196ec5fb74030a2ce57"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
@@ -118,13 +121,13 @@ re_verification:
 # Phase 11: Cleanup, Split, and Docs Verification Report
 
 **Phase goal:** The milestone ends with no lifecycle dead code, a split install flow, docs that match behavior, and a backlog with every settled entry closed.
-**Verified tree:** planning HEAD `857b915a1c309f4de26bdbb0a0adf53cd987abb4`; exact executable HEAD `ff8892eb` on `features/plugin-lifecycle-p11`.
+**Verified tree:** exact canonical HEAD `1f9503823c692635266db015989e213232a17783` on `features/plugin-lifecycle-p11`.
 **Status:** passed.
-**Re-verification:** Yes — stale refresh after the integrated Phases 1-10 convergence.
+**Re-verification:** Yes — exact-tree refresh after the cold-cache git-root dependency repair and closeout-record reconciliation.
 
 ## Goal Achievement
 
-The roadmap's four success criteria and all thirteen plans' frontmatter truths were checked against the integrated source, tests, and records rather than accepted from the summaries. Because merged Phases 1-10 changed 25 Phase 11-covered build inputs, the stale refresh rechecked every behavior-bearing Phase 11 contract, reran the split ownership and focused behavior evidence, and used the fresh exact-tree full gate at `ff8892eb`. The planning-only audit commits do not change executable inputs.
+The roadmap's four success criteria and all thirteen plans' frontmatter truths were checked against the current source, tests, documentation, backlog, and deferred-item records rather than accepted from summaries. This refresh rechecked the split ownership contract after the cold-cache git-root repair, reran the focused composition and cold-root owner behaviors, and used the exact-tree full gate at `1f950382`.
 
 ### Observable Truths
 
@@ -144,7 +147,7 @@ The roadmap's four success criteria and all thirteen plans' frontmatter truths w
 | 12 | 11-05 | Recorded decisions match the shipped chokepoints | VERIFIED | D-PL5-07/08, D-PL8-01, D-PL9-10/11 in PROJECT match `platform/hosted-manifest-fetch.ts`, package-manager and rule pack. |
 | 13 | 11-06 | Phase 10's verified CAS-08/XPH-02 tree precedes split | VERIFIED | Dynamic `verification.status` is `passed` 28/28 on the current tree; its implementation is an ancestor of the Phase 11 split. |
 | 14 | 11-06 | Public install root composes paired planning and ledger modules | VERIFIED | `install-flow.ts:29-82` binds five typed operations through `createInstallPlanning` and retains public factories; both leaves have paired owner tests. |
-| 15 | 11-06 | Install, dependency, update, apply, import behavior remains covered after move | VERIFIED | Fresh exact `npm run check` at executable HEAD `ff8892eb` passed 1,145 scenarios, 11,777 steps, 16 hook tests, and 309 direct LCOV pairs. The refreshed Nyquist audit reran all six install-flow owner/direct pairs at 100%. |
+| 15 | 11-06 | Install, dependency, update, apply, import behavior remains covered after move | VERIFIED | Exact-tree `npm run check` at `1f950382` passed 1,146 scenarios, 11,787 steps, 16 hook tests, and 309 direct LCOV pairs. Focused composition and cold-cache git-root owner tests also passed. |
 | 16 | 11-07 | Identical marketplace redeclaration returns unchanged | VERIFIED | `marketplace/add.ts:641` returns `status: "unchanged"`; named add test passed. |
 | 17 | 11-07 | Apply and import consume the unchanged arm without a row | VERIFIED | `reconcile/apply.ts:351` and `import/execute.ts:1404` branch explicitly; both named no-row tests passed. |
 | 18 | 11-07 | Hostile thrown values have behavioral, count-free tests | VERIFIED | Marketplace add owner test uses hostile proxy outcomes; no `prototypeReads` pin remains. |
@@ -152,14 +155,14 @@ The roadmap's four success criteria and all thirteen plans' frontmatter truths w
 | 20 | 11-08 | Two update-preflight literals are wrapped without output change | VERIFIED | Source is wrapped; owner assertions and unchanged-input full gate cover rendered bytes. |
 | 21 | 11-09 | Phase 10 is integrated and verified before closure | VERIFIED | Current dynamic status is `passed`; `10-VERIFICATION.md` is 28/28 with zero open security threats. |
 | 22 | 11-09 | Final docs include Phase 10 behavior and decisions | VERIFIED | CHANGELOG includes lock, argument, list, rollback, info, import; PRD and output catalog include source replacement and network exceptions; PROJECT updates D-PL3-03, D-PL6-03/19. |
-| 23 | 11-09 | Settled backlog entries have dated evidence-linked dispositions | VERIFIED | `BACKLOG.md:4282,4314,4351` closes LCCODE-01, LCDOC-01, UPDDEP-01 on 2026-10-28 with decision, summary, test and verification references. DEPADV-01, WOUT-01 and out-of-scope carried entries remain open. |
+| 23 | 11-09 | Settled backlog entries have dated evidence-linked dispositions | VERIFIED | LCCODE-01, LCDOC-01, and UPDDEP-01 retain dated evidence-linked closures. `BACKLOG.md:4407-4421` now closes GITROOTDEPS-01 on 2026-10-29 with its preview/pin implementation and owner/Cucumber evidence; the originating Phase 2 deferred record and both Phase 7 deferred records are explicitly `resolved`. Unsettled carried entries remain open. |
 | 24 | 11-10 | Deferred-pin failure is injected at factory composition | VERIFIED | `createApplyReconcile` accepts the collaborator at `apply.ts:2442`; named lock-held restore test passed. |
 | 25 | 11-10 | Apply request options contain production data only | VERIFIED | `types.ts:347` has no restore member; negative `@ts-expect-error` fixture at `types.test.ts:188`; production factory defaults to real `restorePin`. |
 | 26 | 11-11 | Ordinary held-lock tests use the shared helper | VERIFIED | Update, fetch, info, reinstall tests import `whileStateLockHeld`; named fetch test passed. |
 | 27 | 11-11 | Distinct lock semantics remain local | VERIFIED | Specialized lost-lock and observation cases retain direct lock handling; ordinary cases use the shared helper. |
 | 28 | 11-12 | Six feature descriptions meet the project rule | VERIFIED | Six identified feature headers use two short description lines; `check:features` passed in the unchanged-input full gate. |
-| 29 | 11-12 | Executable Gherkin remains unchanged | VERIFIED | The description-only edits preserve scenarios, tags, examples, and steps; 1,120 scenarios passed on the final build-input tree. |
-| 30 | Roadmap CLN-02, 11-13, REQUIREMENTS.md | No resulting install-flow module exceeds the 1,959-line / 64-KiB contract | VERIFIED | Current deterministic audit (lines/bytes): root 100/3,293; planning 450/15,767; ledger 1,310/58,962; cascade-context 761/29,228; results 1,044/40,790; dependency-ledger 752/27,889. All are within limits; the three extracted owner tests stay below 64 KiB, no test imports another test owner, and the hook contains no install-flow exclusion. |
+| 29 | 11-12 | Executable Gherkin remains unchanged | VERIFIED | The description-only Phase 11 edits preserve scenarios, tags, examples, and steps; the current expanded suite passes all 1,146 scenarios on the exact canonical tree. |
+| 30 | Roadmap CLN-02, 11-13, REQUIREMENTS.md | No resulting install-flow module exceeds the 1,959-line / 64-KiB contract | VERIFIED | Current deterministic audit (lines/bytes): root 100/3,293; planning 450/15,767; ledger 1,427/63,361; cascade-context 762/29,300; results 1,044/40,790; dependency-ledger 752/27,889. The repaired ledger remains 2,175 bytes below 64 KiB and every module remains below both caps; owner-test separation and the no-exclusion hook contract remain intact. |
 
 **Score:** 30/30 truths verified; 0 present-but-behavior-unverified.
 
@@ -169,11 +172,11 @@ The artifact query does not interpret Plan 11-13's path-only YAML entries, so ea
 
 | Artifact | Exists / substantive | Wiring and owner evidence | Status |
 |---|---|---|---|
-| `install-flow-ledger.ts` | 1,310 lines / 58,962 bytes | Imported by dependency-ledger; owns lock/save/phase ledger/config/hydration/notification order; direct owner pair passes | VERIFIED |
-| `install-flow-cascade-context.ts` | 761 lines / 29,228 bytes | Imported by ledger and dependency-ledger; narrow cascade/add-cleanup/pin inputs; paired owner test passes | VERIFIED |
+| `install-flow-ledger.ts` | 1,427 lines / 63,361 bytes | Imported by dependency-ledger; owns lock/save/phase ledger/config/hydration/notification order and now previews cold git roots before the dependency walk; focused owner behavior passes | VERIFIED |
+| `install-flow-cascade-context.ts` | 762 lines / 29,300 bytes | Imported by ledger and dependency-ledger; narrow cascade/add-cleanup/pin/clone-probe inputs; paired owner coverage passes | VERIFIED |
 | `install-flow-results.ts` | 1,044 lines / 40,790 bytes | Imported by ledger and dependency-ledger; projects typed results without raw filesystem/network authority; paired owner test passes | VERIFIED |
 | `install-flow-dependency-ledger.ts` | 752 lines / 27,889 bytes | Imported by public root; supplies missing-dependency transaction and five planning operations; paired owner test passes | VERIFIED |
-| Three extracted owner tests | 718/22,690; 1,068/33,622; 581/18,072 (lines/bytes) | Each imports its paired production owner and no test module; each direct pair passes at 100% | VERIFIED |
+| Three extracted owner tests | 721/22,911; 1,068/33,622; 581/18,072 (lines/bytes) | Each imports its paired production owner and no test module; each direct pair passes at 100% | VERIFIED |
 | `ApplyReconcileOptions` / factory composition | Request interface has no `restoreDeferredPin`; negative type fixture rejects it | `createApplyReconcile` alone accepts the optional collaborator and defaults to real `restorePin` | VERIFIED |
 | Docs and closure records | CHANGELOG, PRD, output catalog, PROJECT, ARCHITECTURE, BACKLOG, REQUIREMENTS are substantive | Claims match current NFR-5, hosted-fetch, child-process, package, containment, and closure code paths | VERIFIED |
 
@@ -186,11 +189,11 @@ The artifact query does not interpret Plan 11-13's path-only YAML entries, so ea
 | Dependency-ledger | Ledger, cascade-context, results | One-way imports | WIRED | Fallow: dependency-ledger → ledger is one hop; ledger → dependency-ledger is unreachable. No runtime or type-only cycle. |
 | Split owners | Filesystem/network/process authority | Typed capabilities rooted in public/ledger composition | WIRED | Raw-authority scan finds no direct git, fetch, child-process, or unconstrained filesystem seam in extracted owners; architecture tests pass. |
 | Deferred-pin factory | Production restore | Factory-local optional collaborator | WIRED | Default closes over `restorePin(opts, scope, key, before)`; lock-failure owner behavior remains tested. |
-| Backlog | Requirements and summaries | Dated evidence-linked dispositions | WIRED | LCCODE-01, LCDOC-01, and UPDDEP-01 are closed with decision, summary, test, and verification evidence; carried items remain open. |
+| Backlog and deferred records | Requirements, implementation, and tests | Dated evidence-linked dispositions plus explicit source-record resolution | WIRED | LCCODE-01, LCDOC-01, UPDDEP-01, and GITROOTDEPS-01 are closed with implementation/test evidence; Phase 2's originating record and both repaired Phase 7 records say `resolved`; genuinely unsettled items remain open. |
 
 ### Data-Flow Trace (Level 4)
 
-No Phase 11 artifact renders dynamic UI data. Persisted marketplace records flow through the declaration index to disabled-holder consumers; previewed commits flow through the five-operation planning port into ledger state writes; transaction facts flow through result projection into rows, notices, rollback partials, and deferred pins. The production chain ends in typed state and notification owners, not mocks or static fallbacks.
+No Phase 11 artifact renders dynamic UI data. Persisted marketplace records flow through the declaration index to disabled-holder consumers; a cold git root is previewed before the closure walk, its materialized manifest supplies the dependency declaration, and the previewed commit is pinned into the ledger transaction. Transaction facts flow through result projection into rows, notices, rollback partials, and deferred pins. The production chain ends in typed state and notification owners, not mocks or static fallbacks.
 
 ### Behavioral Spot-Checks
 
@@ -202,11 +205,13 @@ No Phase 11 artifact renders dynamic UI data. Persisted marketplace records flow
 | Source/test pairing | `npm run test:corresponding` | Exit 0 | PASS |
 | Dead code, cycles, complexity, duplication | `npm run fallow` | Exit 0, no issues | PASS |
 | Exact split-root behavior | `node --test --test-name-pattern 'composes an explicit environment through dependency planning and ledger persistence' test/orchestrators/plugin/install-flow.test.ts` | 1 passed | PASS |
+| Cold-cache git-root dependency manifest | `node --test --test-name-pattern 'a cold git root installs dependencies declared only in its own manifest' test/orchestrators/plugin/install-flow-ledger.test.ts` | 1 passed | PASS |
+| User-visible cold-root install | `npx cucumber-js --name 'Installing a cold git-source plugin reads dependencies from its own manifest'` | 1 scenario, 10 steps, 16 hooks passed | PASS |
+| Closeout-record audit | `node .codex/gsd-core/bin/gsd-tools.cjs query audit-open` | All artifact types clear; 18 previously acknowledged items remain suppressed | PASS |
 | Disabled-holder filtering | `node --test --test-name-pattern 'dropping disabled holders keeps enabled and load-time-disabled ones' test/orchestrators/plugin/dependency-index.test.ts` | 1 passed | PASS |
 | Truthful marketplace no-op | `node --test --test-name-pattern 'same-source add ... returns unchanged when orchestrated' test/orchestrators/marketplace/add.test.ts` | 1 passed | PASS |
 | Factory-owned deferred-pin restoration | `node --test --test-name-pattern 'a pin restore ... is reported and later steps still run' test/orchestrators/reconcile/apply.test.ts` | 1 passed | PASS |
-| Full combined-tree gate | Fresh exact `npm run check` at executable HEAD `ff8892eb` | Static checks green; 1,145 scenarios; 11,777 steps; 16 hooks; 309 LCOV records | PASS |
-| Planning-only delta | `git diff --name-only ff8892eb -- . ':(exclude,glob).planning/**/*.md'` | Empty | PASS |
+| Full combined-tree gate | Exact `npm run check` at `1f950382` | Static checks green; 1,146 scenarios; 11,787 steps; 16 hooks; 309 LCOV records | PASS |
 
 ### Probe Execution
 
@@ -217,9 +222,9 @@ Not applicable. Phase 11 declares no probe script or PASS-marker probe contract.
 | Requirement | Source plans | Status | Evidence |
 |---|---|---|---|
 | CLN-01 | 11-01..04, 11-07..11 | SATISFIED | Dead seams removed; required version data and typed outcomes remain; shared builders/filter/lock helper present; deferred-pin injection is factory-local; Fallow is clean. |
-| CLN-02 | 11-06, 11-13 | SATISFIED | Six production sources meet both caps; six paired owner suites/direct coverage pass; root API/port stable; no install-flow hook exception. |
+| CLN-02 | 11-06, 11-13 | SATISFIED | Six production sources meet both caps after the cold-root repair (largest: ledger at 1,427 lines / 63,361 bytes); paired ownership and focused behaviors pass; root API/port is stable; no install-flow hook exception. |
 | CLN-03 | 11-05, 11-09, 11-13 | SATISFIED | CHANGELOG, PRD, output catalog, PROJECT, and ARCHITECTURE match the checked network/process/package/containment paths and current split ownership. |
-| CLN-04 | 11-09, 11-13 | SATISFIED | Settled entries have dated evidence-linked closures; REQUIREMENTS marks CLN-01..04 complete. |
+| CLN-04 | 11-09, 11-13 | SATISFIED | Settled entries have dated evidence-linked closures, including GITROOTDEPS-01; Phase 2 and Phase 7 repaired deferred records are explicitly resolved; REQUIREMENTS marks CLN-01..04 complete. |
 | Orphaned IDs | All plans | None | All CLN-01..04 are claimed by plans and traced in REQUIREMENTS. |
 
 ### Anti-Patterns Found
@@ -240,7 +245,7 @@ No unreferenced `TBD`, `FIXME`, or `XXX`, skipped/todo/only requirement test, cr
 
 ### Prior-Phase Regression Status
 
-Dynamic `verification.status` queries on this exact planning HEAD report Phases 1 through 10 as `passed`: P1 5/5, P2 19/19, P3 8/8, P4 4/4, P5 5/5, P6 4/4, P7 4/4 roadmap criteria (8/8 requirements), P8 4/4, P9 8/8, and P10 28/28. This confirms Phase 11 closes the milestone on the same integrated executable tree rather than on an isolated pre-merge snapshot.
+Dynamic `verification.status` queries on exact canonical HEAD `1f950382` report Phases 1 through 10 as `passed`: P1 5/5, P2 19/19, P3 8/8, P4 4/4, P5 5/5, P6 4/4, P7 4/4 roadmap criteria (8/8 requirements), P8 4/4, P9 8/8, and P10 28/28. This confirms Phase 11 closes the milestone on the same integrated tree rather than on an isolated pre-repair snapshot.
 
 ### Decision Coverage
 
@@ -256,9 +261,9 @@ None. This is a cleanup/foundation phase with no new manual UX contract. Every s
 
 ### Gaps Summary
 
-None. All 30 merged roadmap/plan truths, CLN-01 through CLN-04, the security boundaries, and the prior-phase regression statuses are verified on the integrated tree. There are no human-verification items or unresolved prohibitions.
+None. All 30 merged roadmap/plan truths, CLN-01 through CLN-04, the cold-cache git-root repair, closeout records, security boundaries, and prior-phase regression statuses are verified on the exact canonical tree. There are no human-verification items or unresolved prohibitions.
 
 ---
 
-_Verified: 2026-10-29T14:23:47Z_
+_Verified: 2026-10-29T15:31:47Z_
 _Verifier: gsd-verifier_
