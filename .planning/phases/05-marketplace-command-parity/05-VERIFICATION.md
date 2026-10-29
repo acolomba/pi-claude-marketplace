@@ -1,11 +1,13 @@
 ---
 phase: 05-marketplace-command-parity
-verified: 2026-10-28T20:09:50Z
+verified: 2026-10-29T04:05:30Z
 status: passed
 score: 5/5 must-haves verified
 covered_files:
   - .agents/skills/cucumber/rules/features.md
   - .agents/skills/cucumber/rules/world-and-stand-ins.md
+  - .planning/REQUIREMENTS.md
+  - .planning/ROADMAP.md
   - .planning/phases/05-marketplace-command-parity/05-01-PLAN.md
   - .planning/phases/05-marketplace-command-parity/05-01-SUMMARY.md
   - .planning/phases/05-marketplace-command-parity/05-02-PLAN.md
@@ -24,6 +26,11 @@ covered_files:
   - .planning/phases/05-marketplace-command-parity/05-08-SUMMARY.md
   - .planning/phases/05-marketplace-command-parity/05-09-PLAN.md
   - .planning/phases/05-marketplace-command-parity/05-09-SUMMARY.md
+  - .planning/phases/05-marketplace-command-parity/05-CONTEXT.md
+  - .planning/phases/05-marketplace-command-parity/05-REVIEW-FIX.md
+  - .planning/phases/05-marketplace-command-parity/05-REVIEW.md
+  - .planning/phases/05-marketplace-command-parity/05-SECURITY.md
+  - .planning/phases/05-marketplace-command-parity/05-VALIDATION.md
   - AGENTS.md
   - docs/json-output.md
   - eslint.config.js
@@ -128,7 +135,7 @@ covered_files:
   - test/shared/errors.test.ts
   - test/shared/notification-json.test.ts
   - test/shared/notification-present.test.ts
-covered_digest: "v4:sha256:64eb7280c13de71cae08ca7368695e670c523fbd903146303213218a30f8cd73"
+covered_digest: "v4:sha256:b6396a13a7d5d42814fd6024c8fa20f2193cc4750bad7b2c5c301683c61c18e9"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
@@ -142,9 +149,9 @@ re_verification:
 # Phase 5: Marketplace Command Parity Verification Report
 
 **Phase Goal:** The marketplace commands match Claude Code on reserved names, hosted manifests, the `market` alias, shorthand parsing, row ids, and remove reporting.
-**Verified:** 2026-10-28T20:09:50Z
+**Verified:** 2026-10-29T04:05:30Z
 **Status:** passed
-**Re-verification:** Yes; the previous report was stale after accepted decisions and review fixes.
+**Re-verification:** Yes; final verification on the integrated Phase 1-10 tree at `aa5ac5cd`.
 
 ## Goal Achievement
 
@@ -189,6 +196,8 @@ All 61 authored PLAN truths were checked against current source and test evidenc
 | Marketplace subject marker → wire ID and presentation masking | VERIFIED | Builders set `marketplaceSubject: true`; `notification-present.ts` masks info name/URL; `notification-json.ts` emits the bare marketplace ID and qualified plugin ID. |
 | Network and file boundaries | VERIFIED | `rule-packs/architecture.json` admits only sanctioned fetch modules; ESLint BLOCK F restricts hosted port imports; `locations.ts` and `assertPathInside` bound staged and stored paths. |
 
+The mechanical PLAN queries verified 33/34 declared artifacts and 17/18 declared key links. Both misses are metadata defects, not product gaps. Plan 05-04 still searches `add.ts` for the literal class declaration after `ReservedMarketplaceNameError` moved to `shared/errors.ts`; current `add.ts` imports and throws that class. Plan 05-06 uses the symbol name `redeclareRecordedSource` as a `from` path; direct inspection shows the repair enters the shared `addStagedInGuard` body with `previous`, validates the expected name, atomically replaces the checkout, and preserves the recorded plugins.
+
 **Data flow:** Remote HTTPS bytes enter only the bounded fetch port, are validated in staging, then atomically become the stored catalog. Install/list/info/pending read that catalog through the recorded marketplace root. Update re-fetches, validates, and renames only on success. Notification rows come from the resulting live state and pass through presentation redaction and wire serialization. There is no static or hollow output path in these goal flows.
 
 ### Prohibition Checks
@@ -223,14 +232,32 @@ No Phase 05 requirement is orphaned: all eight appear in PLAN frontmatter, `.pla
 
 | Check | Result |
 | --- | --- |
-| Fresh full `npm run check` at implementation/test HEAD `3a8c7e1c`, Node v26.12.1 | Exit 0: 1,124 Cucumber scenarios, 11,462 steps, 309 merged LCOV records. Three final changed direct source/test pairs reached 100% line, function and branch coverage. |
-| Current HEAD `88ca6680` against `3a8c7e1c` | `git diff 3a8c7e1c HEAD -- . ':(exclude,glob).planning/**/*.md'` is empty; later commits changed planning Markdown only. Full-gate result applies to the current build inputs. |
-| Independent focused owner spot-check | `node --test --test-name-pattern='D-PL5-15: a partial failure subtracts every dropped axis|D-PL5-17: re-adding a github marketplace whose checkout is gone|refuses the metadata address 100.100.100.200|PMOD-04: redacts credentials in successful marketplace info names' <four owner modules>` exited 0, four modules passed. |
-| Phase validation | `05-VALIDATION.md` is `validated`, Nyquist compliant; its earlier full-gate count is superseded by the fresh result above. |
-| Security | `05-SECURITY.md`: SECURED, 29/29 threat rows closed, `threats_open: 0`; accepted DNS residual is documented as AR-05-11. |
-| Code review | `05-REVIEW.md`: clean, 0 critical / 0 warning / 0 info. `05-REVIEW-FIX.md` records CR-01 literal metadata and CR-02 successful-info masking fixes. |
+| Fresh merged-tree `npm run check` at the current build inputs | Exit 0: 1,142 Cucumber scenarios, 11,734 steps, 309 merged LCOV records. Static checks, integration tests, behavioral tests, and every direct source/test pair passed. |
+| Current HEAD `aa5ac5cd` against validation HEAD `38a18b81` | `git diff 38a18b81..HEAD -- . ':(exclude,glob).planning/**/*.md'` is empty. Later commits changed planning Markdown only, so the exact full-gate result applies under the repository's local-verification reuse rule. |
+| Independent focused owner spot-check | A named Node test command covering reserved-name refusal, hosted add/update, alias completions, missing-clone repair, and the six-axis removal fold exited 0; four owner modules passed in 3.4 s. |
+| Independent focused behavioral spot-check | Seven exact Cucumber scenarios covering the alias, first-delimiter shorthand, hosted refresh, official reserved-name exemption, accepted remove behavior, EISDIR classification, and credential-safe marketplace-info ID passed: 7 scenarios / 68 steps. The first sandboxed attempt reached no scenario because loopback bind was denied; the identical command passed with the hermetic fixture's socket permission. |
+| Phase validation | Commit `38a18b81` records `05-VALIDATION.md` as `validated` and Nyquist compliant for MKT-01 through MKT-08. |
+| Security | Commit `180d7a5b` records `05-SECURITY.md` as SECURED: 29/29 authored threat rows closed, 19 mitigations verified, `threats_open: 0`; accepted DNS residual AR-05-11 remains explicit. |
+| Code review | Commit `aa5ac5cd` records a complete 35-file review: clean, 0 critical / 0 warning / 0 info. `05-REVIEW-FIX.md` retains CR-01 literal-metadata and CR-02 successful-info masking closure. |
 | Anti-pattern scan | No unreferenced `TBD`, `FIXME`, or `XXX` in the Phase 05 production goal paths. |
 | Probe scripts | None declared in the nine plans or summaries; not applicable. |
+
+### Test Quality Audit
+
+| Evidence surface | Active | Skipped | Circular | Assertion level | Verdict |
+| --- | ---: | ---: | --- | --- | --- |
+| Phase 5 owner tests for name/source, router/completions, hosted fetch/catalog, add/update/remove/info, shared fold, and JSON/presentation | Active | 0 requirement-linked skips | None; filesystem/network stand-ins seed inputs but expected values are independent literals | Value and behavioral | VERIFIED |
+| Phase 5 Cucumber scenarios | Active | 0 requirement-linked pending/undefined scenarios | None; commands run through the public Pi surface against per-scenario local stand-ins | End-to-end behavioral | VERIFIED |
+
+The disabled-test scan found no `skip`, `todo`, `pending`, or equivalent marker in the requirement-linked files. A plausible wrong implementation is discriminated by exact rows, persisted-state assertions, request logs, byte-preservation checks, and failure tokens; no requirement relies on existence-only assertions.
+
+### Decision Coverage
+
+The non-blocking decision-coverage heuristic reports 27/33 decisions honored and misses D-PL5-27 through D-PL5-31 plus D-PL5-33. Direct verification shows these are heuristic substring misses, not vanished decisions: reserved-name refresh/load enforcement is wired through `domain/name.ts`, `add.ts`, `hosted-catalog.ts`, and `update.ts`; the redirect range, five-hop cap, and DNS residual are implemented/documented in `hosted-manifest-fetch.ts` and `05-SECURITY.md`; any-case `.json` classification is implemented at `source.ts:416-438` and covered by the uppercase-hosted scenario. Per the decision gate contract, this warning does not change status.
+
+### Advisory (New Scope, Unevidenced)
+
+None. The final integrated pass found no new-scope concern requiring an advisory.
 
 ### Accepted Boundaries and Advisories
 
@@ -248,5 +275,5 @@ None. All five roadmap outcomes and MKT-01 through MKT-08 hold on the integrated
 
 ---
 
-_Verified: 2026-10-28T20:09:50Z_
+_Verified: 2026-10-29T04:05:30Z_
 _Verifier: Codex (gsd-verifier)_
