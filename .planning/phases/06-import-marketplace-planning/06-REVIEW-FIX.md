@@ -1,8 +1,8 @@
 ---
 phase: 06-import-marketplace-planning
-fixed_at: 2026-10-29T04:23:55Z
+fixed_at: 2026-10-29T04:40:59Z
 review_path: .planning/phases/06-import-marketplace-planning/06-REVIEW.md
-iteration: 3
+iteration: 4
 findings_in_scope: 1
 fixed: 1
 skipped: 0
@@ -11,9 +11,9 @@ status: all_fixed
 
 # Phase 6: Code Review Fix Report
 
-**Fixed at:** 2026-10-29T04:23:55Z
+**Fixed at:** 2026-10-29T04:40:59Z
 **Source review:** .planning/phases/06-import-marketplace-planning/06-REVIEW.md
-**Iteration:** 3
+**Iteration:** 4
 
 ## Summary
 
@@ -23,37 +23,37 @@ status: all_fixed
 
 ## Fixed Issues
 
-### CR-01: Import diagnostics expose absolute scope paths
+### CR-01: A spaced state-lock path still leaks from the config-write diagnostic
 
-**Files modified:** `extensions/pi-claude-marketplace/orchestrators/import/execute.ts`, `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`, `test/orchestrators/import/execute.test.ts`, `test/shared/redact-absolute-paths.test.ts`, `features/plugin/import.feature`, `features/step_definitions/plugin/import.steps.ts`
+**Files modified:** `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`, `test/shared/redact-absolute-paths.test.ts`, `test/orchestrators/import/execute.test.ts`
 
-**Commit:** 2d258ae7
+**Commit:** `b58cdd6e`
 
-**Applied fix:** Import now redacts the filesystem error before it creates a state-read or configuration-write diagnostic. The shared redactor recognizes the unquoted messages that `loadState` produces and keeps the existing quoted Node error handling. The public import scenario drives a real state record with an unsupported schema version and confirms that the result contains no sandbox path.
+**Applied fix:** The shared redactor now recognizes the exact messages from `StateLockHeldError` and `StateLockCompromisedError`. It replaces only their parenthesized absolute `.state-lock` path with the basename. Other parenthesized text remains unchanged.
 
-**RED evidence:** A production-shaped state error under a case-owned path with spaces exposed the complete scope path in the returned diagnostic and TUI notification. The two direct redactor cases showed that the previous matcher removed only the first path segment and left the remaining path visible.
+**RED evidence:** Exact helper cases leaked `private user/.../.state-lock` for both production error messages. A real post-pass lock race under a spaced project root leaked the same suffix in the returned diagnostic and TUI notification.
 
-**GREEN evidence:** The read and write diagnostic cases pass with complete basename-only results and notifications. The shared redactor cases pass for the `state.json at <path>` and `Failed to read <path>` forms. The public scenario passes with 1 scenario and 8 steps. Both changed source/test pairs pass 100% direct coverage.
+**GREEN evidence:** The real lock-race case now returns and emits the complete diagnostic with only `.state-lock`. JSON and RPC cases assert the exact diagnostic payload, require exactly two emitted entries, and scan the complete result and payload arrays for the unique `private user` suffix. Exact helper cases cover held and compromised locks plus the unquoted `Failed to write` grammar.
 
 **Status:** fixed: requires human verification (filesystem diagnostic redaction logic)
 
 ## Verification
 
-Checks ran in the assigned isolated checkout `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710`, branch `agent-reverify-a`, with Node `v26.12.1`. `workflow.use_worktrees` was false, so the fixer created no nested worktree.
+Checks ran in the assigned checkout `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710`, branch `agent-reverify-a`, with `workflow.use_worktrees=false`. No nested worktree was created.
 
-- Owner suites: 153 tests passed.
-- Direct coverage: import execute and shared absolute-path redaction both passed 100% line, function, and branch coverage.
-- Cucumber: the new scenario passed with 1 scenario and 8 steps.
+- Owner suites passed: 114 import execution tests and 45 shared-redactor tests.
+- Both changed source/test pairs passed 100% direct line, function, and branch coverage.
+- The two focused import Cucumber scenarios passed: 2 scenarios and 20 steps.
 - `npm run check:features` passed.
-- Fallow guard found no boundary issue. The changed-code audit found no issue in eight changed files.
-- Required pre-commit fixers passed.
-- The normal commit hook passed `npm run check:commit`. No hook was bypassed.
+- Fallow guard and the changed-code audit found no issue.
+- The required pre-commit fixer pass succeeded.
+- The first normal commit attempt found two blank-line lint errors. After the formatting-only correction, the second normal commit passed `npm run check:commit` and every hook.
 - The combined `npm run check`, security recheck, and complete code re-review remain for the phase owner.
 
 This report remains uncommitted for the phase owner. No source or test change remains uncommitted.
 
 ---
 
-_Fixed: 2026-10-29T04:23:55Z_
+_Fixed: 2026-10-29T04:40:59Z_
 _Fixer: gsd-code-fixer_
-_Iteration: 3_
+_Iteration: 4_
