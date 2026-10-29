@@ -98,3 +98,33 @@ The PLAN prohibitions are resolved against their active contracts. APPLY1-D1 cov
 **Approval:** validated. `npm run check` exited 0 on `67a589aa` with Node `v26.12.1` in this worktree: static checks passed, Cucumber passed 1,120 scenarios and 11,411 steps, and direct coverage merged 309 records. The RCN-03 focused scenario also passed 1 scenario and 15 steps. The full run needed loopback access because the default sandbox denied the Cucumber harness binding to `127.0.0.1`.
 
 The later verification audit found additional PLAN backstops. Their focused checks and compositional call paths are recorded above. The combined tree at `9692623d`, including the dependency-operation lock test, passed `npm run check` with 1,122 Cucumber scenarios, 11,447 steps, and 309 direct coverage records.
+
+## Final Merged-Tree Validation Audit 2026-10-28
+
+| Metric | Count |
+|---|---:|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+| Phase requirements green | 8/8 |
+
+The final A+B+C tree preserves every Phase 2 behavioral proof. Ten focused
+public scenarios passed with 159 steps and 16 hooks. They cover both
+pending/apply order shapes, same-run dependent disablement, installed-copy
+enable and update reads, marketplace-add/bootstrap/autoupdate missing-
+dependency settlement, and the recorded MISS-01 refusal row.
+
+The changed-owner selection passed across `edge/register`, marketplace add,
+plugin operations and update constraint/preflight, and reconcile apply, load,
+notify, pending, and read-pass. The marketplace-add owner required the same
+loopback/process permissions as the repository harness and then passed all
+198 cases; its initial restricted-sandbox process failure was environmental,
+not an assertion failure. The declaration-reader, declaration-index,
+convergence, and final-verdict owners also passed, preserving D-PL2-05's
+fail-closed walks and D-PL2-12/D-PL2-17 containment.
+
+The exact final merged `npm run check` at `059a1edd` remains reusable because
+`git diff --stat 059a1edd..5ed6eb61 -- . ':(exclude,glob).planning/**/*.md'`
+is empty. It passed all static checks, 1,142 Cucumber scenarios, 11,734 steps,
+and 309 direct LCOV records. No production or test file changed during this
+audit; Phase 2 remains Nyquist-compliant.
