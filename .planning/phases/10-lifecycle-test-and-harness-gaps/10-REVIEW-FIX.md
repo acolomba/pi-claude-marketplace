@@ -1,8 +1,8 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-fixed_at: 2026-10-29T07:35:25Z
+fixed_at: 2026-10-29T07:53:51Z
 review_path: .planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md
-iteration: 6
+iteration: 7
 findings_in_scope: 2
 fixed: 2
 skipped: 0
@@ -11,14 +11,61 @@ status: all_fixed
 
 # Phase 10: Code Review Fix Report
 
-**Fixed at:** 2026-10-29T07:35:25Z
+**Fixed at:** 2026-10-29T07:53:51Z
 **Source review:** `.planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md`
-**Iteration:** 6
+**Iteration:** 7
 
-Both final integrated review findings are fixed. The earlier evidence-binding
-and integrated review fixes remain closed.
+Iteration 7 fixes both findings from the final integrated re-review. The
+earlier evidence-binding and integrated review fixes remain closed.
 
-## Final Integrated Review Fixes
+## Iteration 7 Fixes
+
+### CR-01: The quote-continuation heuristic consumes unrelated slash-bearing prose
+
+**Status:** fixed: requires human verification
+**Commit:** `b000050e` (`fix(redaction): bound quoted path continuations`)
+**Files modified:**
+
+- `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`
+- `test/shared/redact-absolute-paths.test.ts`
+- `test/shared/notification-present.test.ts`
+
+A quote followed by whitespace is now treated as an internal path apostrophe
+only when the text immediately after it contains one path component followed
+by a separator. The scanner retains the exact `O' Brien/秘密` continuation
+without searching later prose for an unrelated slash. Exact POSIX, drive, and
+UNC controls preserve the full diagnostic after a closed path. Cause-chain and
+public notification-presentation cases prove that the same boundary reaches
+user-visible diagnostics intact.
+
+The RED owner cases produced `open 'errors 'E_READ'` for all three platform
+forms. The GREEN owners pass 52 redaction tests and 39 notification-presentation
+tests. Both direct source-test pairs pass 100% line, function, and branch
+coverage.
+
+### CR-02: Unreferenced escalation timers can leave a run unsettled forever
+
+**Status:** fixed: requires human verification
+**Commit:** `1b77dd7b` (`fix(packages): retain timeout deadline handles`)
+**Files modified:**
+
+- `extensions/pi-claude-marketplace/platform/package-manager.ts`
+- `test/platform/package-manager.test.ts`
+
+The initial timeout remains unreferenced while the live child keeps the run
+reachable. Once timeout starts escalation, both the grace timer and final
+settlement deadline stay referenced until `settle()` clears them. An isolated
+Node probe supplies a referenced handle only long enough to reach SIGKILL. The
+old code exits with status 13 and an unsettled top-level await; the fixed runner
+reaches its bounded deadline and resolves.
+
+The GREEN platform owner passes 41 tests and its direct pair passes 100% line,
+function, and branch coverage. The package-install cleanup-order case and its
+direct pair also pass, proving the work directory stays available until runner
+settlement and is removed afterward. Fallow guards, pre-commit fixers, and both
+normal commit hooks passed.
+
+## Iteration 6 Review Fixes
 
 ### CR-01: An apostrophe followed by whitespace terminates a quoted path early
 
@@ -188,6 +235,6 @@ re-review, and goal verification on the unchanged integrated tree.
 
 ---
 
-_Fixed: 2026-10-29T07:35:25Z_
+_Fixed: 2026-10-29T07:53:51Z_
 _Fixer: the agent (gsd-code-fixer)_
-_Iteration: 6_
+_Iteration: 7_
