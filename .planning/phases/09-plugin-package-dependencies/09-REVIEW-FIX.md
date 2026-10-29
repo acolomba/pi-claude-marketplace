@@ -54,6 +54,8 @@ Post-uninstall cleanup takes a fresh scope lock. It reads current references and
 **RED:** A deterministic competing install acquired the lock, observed existing packages, and later saved its record. The unlocked cleanup deleted those packages, producing ENOENT in the assertion.
 **GREEN:** Cleanup now retains packages while that competing installation holds the lock. Its newly saved record retains usable packages. All 139 paired tests passed with 100% direct coverage, including held-lock cleanup behavior.
 
+**Combined-gate follow-up:** The parent's full gate exposed two stale lock-count assertions in `test/edge/register.test.ts`. Commit `9c41eb6b` (`test(prune): account for package cleanup lock`) changes only that expectation and its comment. Both registered-prune scope cases failed with `3 !== 2` before the change and passed afterward. They now account for the state guard, package cleanup lock, and clone cleanup lock. Fallow and the normal commit hook passed, including type checking, static checks, and the register pair's 100% direct coverage. The parent must rerun the combined gate on this test correction.
+
 ### CR-04: Retain diagnostics on a combined move and enable
 
 **Status:** fixed: requires human verification
