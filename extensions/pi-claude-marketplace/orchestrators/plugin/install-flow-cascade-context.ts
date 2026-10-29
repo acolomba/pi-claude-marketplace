@@ -147,6 +147,7 @@ export function buildInstallLedgerOptions(
     marketplaceAdd: MarketplaceAddSeam;
     addedMarketplaces: AddedMarketplaces;
     cloneCandidates?: Set<string>;
+    cloneProbe?: InstallLedgerOptions["cloneProbe"];
   },
   removalOps: RemovalOps,
 ): InstallLedgerOptions {
@@ -166,7 +167,7 @@ export function buildInstallLedgerOptions(
     ...(core.pinVersion !== undefined && { pinVersionOverride: core.pinVersion }),
     ...(opts.cloneCacheSeam !== undefined && { cloneCacheSeam: opts.cloneCacheSeam }),
     ...(core.cloneCandidates !== undefined && { cloneCandidates: core.cloneCandidates }),
-    cloneProbe: probeInstallClone,
+    cloneProbe: core.cloneProbe ?? probeInstallClone,
     // D-08-12: the install path's composition root. The ledger options carry the
     // port as a required member, so this assembly point is the one place the real
     // operations enter the install path.

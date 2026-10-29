@@ -12,6 +12,9 @@
   failure. The fix is the same as commit 6071a677 made in
   `test/orchestrators/plugin/operations.test.ts`: pin 2 calls and name both
   locks. WINDOWS.md carries the entry.
+  **Status:** resolved
+  Both parameterized cases now expect three locks and name the state guard,
+  package cleanup lock, and clone cleanup lock. The focused owner test passes.
 
 ## From 07-06
 
@@ -26,3 +29,8 @@
   installed-order autoupdate scenario now fails its plugin on an unreadable
   command file instead of an unreadable skill file. A skills-bridge wrapper
   like the commands one would let a scenario pin the skill case again.
+  **Status:** resolved
+  Strict public-error redaction now replaces the random absolute staging path
+  with `[redacted path]`. The unreadable-skill step records the stable
+  `{unreadable skill file copy error}` token, and the focused install scenario
+  proves that no absolute sandbox path reaches the result.

@@ -11765,6 +11765,80 @@ test("PURL-01/02/09 / VER-01: url-source install materializes a clone, records t
   });
 });
 
+test("a cold git root installs dependencies declared only in its own manifest", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-git-root-dependencies-"));
+    try {
+      // arrange
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const source = {
+        source: "url",
+        url: "https://example.com/org/repo",
+        sha: GIT_SOURCE_SHA,
+      };
+      await seedGitSourceMarketplace({
+        cwd,
+        marketplaceRoot,
+        marketplaceName: "mp",
+        pluginName: "app",
+        source,
+        fixtureRepoDir,
+      });
+      await writeFile(
+        path.join(fixtureRepoDir, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "app", version: "1.0.0", dependencies: ["lib"] }),
+      );
+      const dependencyRoot = path.join(marketplaceRoot, "plugins", "lib");
+      await mkdir(path.join(dependencyRoot, ".claude-plugin"), { recursive: true });
+      await writeFile(
+        path.join(dependencyRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "lib", version: "1.0.0" }),
+      );
+      await mkdir(path.join(dependencyRoot, "skills", "lib-skill"), { recursive: true });
+      await writeFile(
+        path.join(dependencyRoot, "skills", "lib-skill", "SKILL.md"),
+        "---\nname: lib-skill\n---\n\nLibrary skill.\n",
+      );
+      await writeFile(
+        path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+        JSON.stringify({
+          name: "mp",
+          plugins: [
+            { name: "app", source },
+            { name: "lib", source: "./plugins/lib", version: "1.0.0" },
+          ],
+        }),
+      );
+      const git = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "app",
+        pinVersionOverride: "1.0.0",
+        cloneCacheSeam: seamWith(git.gitOps),
+      });
+
+      // assert
+      assert.strictEqual(outcome.status, "installed");
+      const state = await loadState(locationsFor("project", cwd).extensionRoot);
+      assert.deepStrictEqual(Object.keys(state.marketplaces.mp?.plugins ?? {}).sort(), [
+        "app",
+        "lib",
+      ]);
+      assert.strictEqual(git.state.cloneCalls.length, 1);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("PURL-04: a second install of the same url+sha does NOT clone again (dedup)", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-dedup-"));

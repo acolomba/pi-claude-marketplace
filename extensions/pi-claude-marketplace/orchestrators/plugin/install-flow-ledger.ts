@@ -5,20 +5,26 @@
 // clone probing, declared enablement, disable cascade, outcome projection,
 // locking, and exact notification behavior.
 
+import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
+import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
+import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
+import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { cascadeUnstagePlugin, crossScopeFlag, foldUnstageNotices } from "../marketplace/shared.ts";
 
 import { carryUnsavedAdds } from "./carried-marketplace-adds.ts";
+import { makePresenceProbe } from "./git-source-probe.ts";
 import { CASCADE_CONTEXT, composeCascadeMemberRows } from "./install-cascade.messaging.ts";
 import { runInstallCascade, runInstallCascadeOrPlanMoves } from "./install-cascade.ts";
 import { resolveInstallDeclaredEnabled } from "./install-declared-enabled.ts";
@@ -49,8 +55,12 @@ import {
   writeOrchestratedDeclarations,
   writeReEnabledCascadeMemberConfigEntries,
 } from "./install-flow-results.ts";
-import { installedPluginOutcome } from "./install-outcome.ts";
-import { loadTargetLayers, writeAdoptingConfigEntries } from "./shared.ts";
+import { installedPluginOutcome, previewInstall } from "./install-outcome.ts";
+import {
+  loadTargetLayers,
+  resolveInstallMarketplaceSource,
+  writeAdoptingConfigEntries,
+} from "./shared.ts";
 import { surfaceDiscoveryWarnings } from "./staging-diagnostics.ts";
 
 import type { CarriedAdd } from "./carried-marketplace-adds.ts";
@@ -65,7 +75,7 @@ import type {
 } from "./install-cascade.ts";
 import type { InstallCloneCacheSeam } from "./install-clone-probe.ts";
 import type { InstallHooksRouting } from "./install-disable-cascade.ts";
-import type { CascadeFailureSink } from "./install-flow-cascade-context.ts";
+import type { CascadeFailureSink, InstallAdds } from "./install-flow-cascade-context.ts";
 import type { HydratableMember, InstallTransactionOutcome } from "./install-flow-results.ts";
 import type {
   InstallFailureCapture,
@@ -75,6 +85,7 @@ import type {
 } from "./install-outcome.ts";
 import type { InstallMsg } from "./install.messaging.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
+import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
@@ -275,6 +286,95 @@ export interface InstallTransaction {
 /** Filesystem capability acquired by the public install composition root. */
 export interface InstallFileCapabilities {
   readonly removalOps: RemovalOps;
+}
+
+/** Whether a cold git root can declare dependencies that its entry omits. */
+async function needsRootDeclarationPreview(
+  state: ExtensionState,
+  locations: ReturnType<typeof locationsFor>,
+  opts: Pick<InstallPluginOptions, "scope" | "cwd" | "marketplace" | "plugin">,
+): Promise<boolean> {
+  const recorded = ownValue(state.marketplaces, opts.marketplace);
+  const fallback =
+    recorded === undefined
+      ? await resolveInstallMarketplaceSource({
+          targetScope: opts.scope,
+          cwd: opts.cwd,
+          marketplace: opts.marketplace,
+          targetState: state,
+        })
+      : undefined;
+  const record = recorded ?? fallback?.sourceRecord;
+  if (record === undefined) {
+    return false;
+  }
+
+  const manifest = await loadMarketplaceManifest(record.manifestPath);
+  const declared = lookupDeclaredPlugin(manifest, opts.plugin);
+  if (declared.kind === "absent" || declared.entry.dependencies !== undefined) {
+    return false;
+  }
+
+  const source = parsePluginSource(declared.entry.source);
+  if (source.kind !== "url" && source.kind !== "git-subdir" && source.kind !== "github") {
+    return false;
+  }
+
+  return (await makePresenceProbe(locations)(source)).kind === "not-cached";
+}
+
+/** Reads the clone that the root preview just materialized without another network call. */
+function previewedRootCloneProbe(
+  resolvedSha: string,
+): NonNullable<InstallLedgerOptions["cloneProbe"]> {
+  return async ({ source, locations }) => {
+    const result = await makePresenceProbe(locations)({ ...source, sha: resolvedSha });
+    return { result, resolvedSha };
+  };
+}
+
+interface RootDeclarationPreview {
+  readonly commit: string;
+  readonly cloneProbe: NonNullable<InstallLedgerOptions["cloneProbe"]>;
+}
+
+/** Materializes a cold root before the filesystem-only dependency walk. */
+async function prepareRootDeclarationPreview(args: {
+  readonly state: ExtensionState;
+  readonly locations: ReturnType<typeof locationsFor>;
+  readonly opts: InstallPluginOptions;
+  readonly env: ClaudeEnv;
+  readonly adds: Pick<InstallAdds, "marketplaceAdd" | "addedMarketplaces">;
+  readonly removalOps: RemovalOps;
+}): Promise<RootDeclarationPreview | undefined> {
+  if (!(await needsRootDeclarationPreview(args.state, args.locations, args.opts))) {
+    return undefined;
+  }
+
+  // needsRootDeclarationPreview found a git entry in a recorded marketplace,
+  // so previewInstall resolves a commit instead of the marketplace-absent arm.
+  const commit = await previewInstall(
+    args.state,
+    args.locations,
+    buildInstallLedgerOptions(
+      args.opts,
+      args.env,
+      {
+        scope: args.opts.scope,
+        cwd: args.opts.cwd,
+        marketplace: args.opts.marketplace,
+        plugin: args.opts.plugin,
+        ...(args.opts.pinVersionOverride !== undefined && {
+          pinVersion: args.opts.pinVersionOverride,
+        }),
+        marketplaceAdd: args.adds.marketplaceAdd,
+        addedMarketplaces: args.adds.addedMarketplaces,
+      },
+      args.removalOps,
+    ),
+  );
+  assert.ok(commit !== undefined, "a cold git root preview must resolve a commit");
+  return { commit, cloneProbe: previewedRootCloneProbe(commit) };
 }
 
 /**
@@ -679,6 +779,18 @@ async function installPluginWithTransaction(
           return { kind: "promoted", promotion };
         }
 
+        // GITROOTDEPS-01: the dependency walk reads only materialized plugin
+        // roots. Preview a cold git root when its marketplace entry omits the
+        // dependency field, so its own manifest can answer the walk.
+        const rootPreview = await prepareRootDeclarationPreview({
+          state,
+          locations,
+          opts,
+          env,
+          adds,
+          removalOps: fileCapabilities.removalOps,
+        });
+
         // RESV-01: the cascade, not a single ledger call. It drives the
         // guard-free `runInstallLedger` once per closure member under THIS
         // closure's lock -- the lock-acquiring `installPlugin` entry point is
@@ -724,6 +836,7 @@ async function installPluginWithTransaction(
           // plugin's version string.
           ledgerOptionsFor: (member) => {
             const isRoot = member.key === rootKey;
+            const memberPin = memberLedgerPin(member);
             const pinVersion =
               member.pin === undefined && isRoot ? opts.pinVersionOverride : undefined;
             return buildInstallLedgerOptions(
@@ -734,7 +847,11 @@ async function installPluginWithTransaction(
                 cwd,
                 marketplace: member.marketplace,
                 plugin: member.name,
-                ...memberLedgerPin(member),
+                ...memberPin,
+                ...(memberPin.sourcePin === undefined &&
+                  isRoot &&
+                  rootPreview !== undefined && { sourcePin: rootPreview.commit }),
+                ...(isRoot && rootPreview !== undefined && { cloneProbe: rootPreview.cloneProbe }),
                 ...(member.directoryPin !== undefined && { directoryPin: member.directoryPin }),
                 ...(pinVersion !== undefined && { pinVersion }),
                 // D-04-01: the root is the one member the closure walk never

@@ -11,6 +11,7 @@ import {
   materializePluginCommitCopy,
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
+import { probeInstallClone } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts";
 import {
   authorizeMissingDependency,
   buildInstallLedgerOptions,
@@ -123,6 +124,7 @@ test("builds member ledger options from shared and member inputs", () => {
       marketplaceAdd: DEFAULT_MARKETPLACE_ADD,
       addedMarketplaces: [],
       cloneCandidates,
+      cloneProbe: probeInstallClone,
     },
     REMOVAL_OPS,
   );
@@ -140,6 +142,7 @@ test("builds member ledger options from shared and member inputs", () => {
   assert.strictEqual(options.authMemo, authMemo);
   assert.strictEqual(options.cloneCacheSeam, cloneCacheSeam);
   assert.strictEqual(options.cloneCandidates, cloneCandidates);
+  assert.strictEqual(options.cloneProbe, probeInstallClone);
   assert.strictEqual(options.removalOps, REMOVAL_OPS);
 });
 

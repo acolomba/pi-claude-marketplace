@@ -4412,6 +4412,11 @@ plugin installed on a cold cache installs without the dependencies its own
 `plugin.json` declares. Claude Code reads the installed manifest. Details:
 `.planning/phases/02-apply-ordering-and-installed-declarations/deferred-items.md`.
 
+**CLOSED 2026-10-29** by the plugin-lifecycle milestone. Disposition: fixed.
+The install previews the requested plugin before the dependency walk and pins
+the ledger to the previewed commit. The owner test and Cucumber scenario cover
+a cold pinned git root whose marketplace entry declares no dependencies.
+
 ## PROTOSRC-01: `list` and `info` show `{unsupported source}` for a `__proto__` plugin
 
 Deferred by plugin-lifecycle Phase 3 (03-02, CONTEXT Deferred Ideas).

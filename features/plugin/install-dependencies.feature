@@ -26,6 +26,28 @@ Feature: Plugin install dependencies
       | /skill:app-skill | A skill of app 1.0.0. |
       | /skill:lib-skill | A skill of lib 1.2.0. |
 
+  Scenario: Installing a cold git-source plugin reads dependencies from its own manifest
+    Given the git repository "app" holds these plugins:
+      | name | version | path | dependencies |
+      | app  | 1.0.0   |      | lib          |
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | app  | url         | app        | true   |
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status    | reasons                 | scope   | version |
+      | tools            | project           | app@tools | app       | installed |                         | project | 1.0.0   |
+      | tools            | project           | lib@tools | lib@tools | installed |                         | project | 1.0.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | app@tools | 1.0.0   | true    |
+      | lib@tools | 1.0.0   | true    |
+
   Scenario: Installing a dependency with malformed frontmatter warns while its requester stays installed
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
