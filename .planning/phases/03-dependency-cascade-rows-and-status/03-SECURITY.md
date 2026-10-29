@@ -73,6 +73,15 @@ These are the plan-time dispositions from the six Phase 3 threat models. The aud
 | Audit Date | Threats Total | Closed | Open | Run By |
 |------------|---------------|--------|------|--------|
 | 2026-10-28 | 15 | 15 | 0 | GSD security auditor |
+| 2026-10-28 | 15 | 15 | 0 | GSD final merged-tree security auditor |
+
+The final merged-tree audit at `5c42ac88` reverified all 15 threats: 10
+mitigations and five accepted risks. Typed installed and partially-installed
+identities, degradation signals, same-ledger authentication, cause/path/rollback
+redaction, transaction rollback ordering, and bounded package-process notes
+remain intact. All Phase 3 summary flags are registered. Nyquist CAS-01..07 is
+COMPLIANT, and the exact integrated full gate passed 1,142 scenarios, 11,734
+steps, and 309 LCOV records. No threat reopened; `threats_open` remains 0.
 
 ---
 
