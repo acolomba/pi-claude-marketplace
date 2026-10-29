@@ -237,6 +237,37 @@ describe("redactAbsolutePaths", () => {
     });
   }
 
+  for (const { platform, absolutePath } of [
+    { platform: "POSIX", absolutePath: "/tmp/private/file.json" },
+    { platform: "drive", absolutePath: String.raw`C:\private\file.json` },
+    { platform: "UNC", absolutePath: String.raw`\\server\private\file.json` },
+  ] as const) {
+    for (const { boundary, quotedValue } of [
+      { boundary: "space", quotedValue: " hidden" },
+      { boundary: "tab", quotedValue: "\thidden" },
+      { boundary: "line break", quotedValue: "\nhidden" },
+      { boundary: "Unicode space", quotedValue: "\u00a0hidden" },
+      { boundary: "comma", quotedValue: ",hidden" },
+      { boundary: "semicolon", quotedValue: ";hidden" },
+      { boundary: "colon", quotedValue: ":E_READ" },
+      { boundary: "dot", quotedValue: ".hidden" },
+      { boundary: "closing parenthesis", quotedValue: ")hidden" },
+      { boundary: "closing bracket", quotedValue: "]hidden" },
+      { boundary: "closing brace", quotedValue: "}hidden" },
+    ] as const) {
+      test(`stops a ${platform} path before slash-bearing prose and a ${boundary} quoted value`, () => {
+        // arrange
+        const input = `open '${absolutePath}' docs/errors '${quotedValue}'`;
+
+        // act
+        const text = redactAbsolutePaths(input);
+
+        // assert
+        assert.strictEqual(text, `open 'file.json' docs/errors '${quotedValue}'`);
+      });
+    }
+  }
+
   test("repeated redaction is idempotent", () => {
     const input = String.raw`from /srv/private/a.json to C:\Users\alice\b.json`;
 
@@ -293,6 +324,26 @@ describe("redactCauseChain", () => {
     assert.strictEqual(
       trailer,
       "cause: unlink 'secret.json' -> open 'file.json' docs/errors 'E_READ'",
+    );
+  });
+
+  test("keeps slash-bearing prose before punctuation-prefixed quoted values", () => {
+    // arrange
+    const failure = new Error("open '/tmp/private/file.json' docs/errors '.hidden'", {
+      cause: new Error("open 'C:\\private\\file.json' docs/errors ':E_READ'", {
+        cause: new Error("open '\\\\server\\private\\file.json' docs/errors ' E_READ'"),
+      }),
+    });
+
+    // act
+    const trailer = causeChainTrailer(redactCauseChain(failure));
+
+    // assert
+    assert.strictEqual(
+      trailer,
+      "cause: open 'file.json' docs/errors '.hidden' -> " +
+        "open 'file.json' docs/errors ':E_READ' -> " +
+        "open 'file.json' docs/errors ' E_READ'",
     );
   });
 

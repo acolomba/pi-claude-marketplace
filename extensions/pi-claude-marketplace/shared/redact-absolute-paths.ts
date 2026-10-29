@@ -84,7 +84,13 @@ function continuesQuotedPath(text: string, quote: string, quoteIndex: number): b
   }
 
   const continuation = text.slice(quoteIndex + 1, nextQuote);
-  return /^[ \t][^'"\r\n]*[/\\]/u.test(continuation);
+  const lastCharacter = continuation.at(-1);
+  return (
+    !/['"\r\n]/u.test(continuation) &&
+    /[/\\]/u.test(continuation) &&
+    lastCharacter !== undefined &&
+    !/\s/u.test(lastCharacter)
+  );
 }
 
 function quotedPathEnd(text: string, quote: string, fromIndex: number): number | undefined {
