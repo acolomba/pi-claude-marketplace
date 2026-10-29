@@ -5,7 +5,7 @@ status: validated
 nyquist_compliant: true
 wave_0_complete: true
 created: "2026-10-26"
-updated: "2026-10-28"
+updated: "2026-10-29"
 ---
 
 # Phase 5 — Validation
@@ -32,6 +32,29 @@ The final merged-tree owner audit at `b1dd3f15` passed all 13 modules in its foc
 The focused behavioral audit passed 16/16 scenarios and 140/140 steps. It exercised the alias, embedded-`@` shorthand, hosted add/update and redirect refusal, the reserved-name exemption and official bootstrap, marketplace-subject bare ids, credential masking, the accepted remove report, EISDIR classification, and the outline variants selected by those behaviors.
 
 The parent's fresh final-tree `npm run check`, after the Phase 4 comment-only correction, exited 0: 1,142 Cucumber scenarios, 11,734 steps, and 309 merged LCOV records. Subsequent inputs through `b1dd3f15` are planning Markdown only, so the local-verification gate rule permits reuse of that passing combined-tree result for this validation update.
+
+## Final-head refresh
+
+The final integrated refresh at `ec28daf4` remains COMPLIANT for MKT-01
+through MKT-08 with no validation gap. A fresh 13-module owner batch passed for
+name and source parsing, router and completions, hosted fetch and catalog
+lifecycle, marketplace shared/update/remove/info, the shared plugin fold, JSON
+rendering, and presentation redaction. The marketplace-add owner required the
+test harness's permitted local Unix-socket access and then passed 198/198
+tests.
+
+Fresh public proof passed 18/18 scenarios, 156/156 steps, and 16/16 hooks. The
+selection exercised the market alias and completions, first-delimiter `@`
+shorthand, hosted add and uppercase suffix classification, hosted refresh and
+refused-refresh preservation, reserved-name refusal and the Anthropic
+exemption, healthy and invalid info-name masking, the accepted remove report,
+EISDIR classification, and official bootstrap.
+
+`git diff --quiet be0de0c3 -- . ':(exclude,glob).planning/**/*.md'` exited 0,
+and there are no untracked inputs. The exact same-session combined-tree gate
+therefore remains reusable under the local-verification policy: `npm run
+check`, exit 0, Node `v26.12.1`, 1,145 scenarios, 11,777 steps, and 309 merged
+LCOV records.
 
 ## Decision boundaries
 
