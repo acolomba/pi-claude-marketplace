@@ -11399,9 +11399,7 @@ for (const mode of ["json", "rpc"]) {
               severity: "warning",
               needsReload: false,
               header: 'Plugin "hello" [project] updated; 1 declared component has a note.',
-              lines: [
-                'skill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
-              ],
+              lines: ['skill source "hello-foo" in "[redacted path]'],
             },
           },
         ]);
@@ -11443,7 +11441,7 @@ test("D-141-03: a standalone updatePlugins run surfaces the skills discovery war
         },
         {
           message:
-            'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -11519,7 +11517,7 @@ test("D-PL1-10: an updateSinglePlugin cascade emits no notification and carries 
           },
           {
             message:
-              'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+              'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "[redacted path]',
             severity: "warning",
           },
         ]);
@@ -11565,12 +11563,12 @@ test("D-141-03: a bulk update surfaces one diagnostic per updated plugin", async
         },
         {
           message:
-            'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "[redacted path]',
           severity: "warning",
         },
         {
           message:
-            'Plugin "world" [project] updated; 1 declared component has a note.\n\nskill source "world-foo" in "skills" elides to generated name "world-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "world" [project] updated; 1 declared component has a note.\n\nskill source "world-foo" in "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -11618,12 +11616,12 @@ test("D-PL1-07: a bare update renders the diagnostics in the row order of the ma
         },
         {
           message:
-            'Plugin "world" [user] updated; 1 declared component has a note.\n\nskill source "world-foo" in "skills" elides to generated name "world-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "world" [user] updated; 1 declared component has a note.\n\nskill source "world-foo" in "[redacted path]',
           severity: "warning",
         },
         {
           message:
-            'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -11713,7 +11711,7 @@ test("D-PL1-14 / D-PL1-22: a direct update whose later target throws in prepare 
         },
         {
           message:
-            'Plugin "zzz" [project] update failed; 1 declared component has a note.\n\nskill source "zzz-foo" in "skills" elides to generated name "zzz-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "zzz" [project] update failed; 1 declared component has a note.\n\nskill source "zzz-foo" in "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -11784,7 +11782,7 @@ test("D-PL1-14: a direct update whose phase-3 commit fails renders its update fa
           },
           {
             message:
-              'Plugin "zzz" [project] update failed; 1 declared component has a note.\n\nskill source "zzz-foo" in "skills" elides to generated name "zzz-foo", already produced by skill source "foo"; ignoring duplicate.',
+              'Plugin "zzz" [project] update failed; 1 declared component has a note.\n\nskill source "zzz-foo" in "[redacted path]',
             severity: "warning",
           },
         ],
@@ -11856,7 +11854,7 @@ test("D-PL1-14: a failed outcome a direct update keeps renders its update failed
         },
         {
           message:
-            'Plugin "hello" [project] update failed; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" [project] update failed; 1 declared component has a note.\n\nskill source "hello-foo" in "[redacted path]',
           severity: "warning",
         },
       ]);

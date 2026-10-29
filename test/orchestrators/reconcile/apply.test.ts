@@ -8096,7 +8096,7 @@ describe("applyReconcile", () => {
         message:
           'Plugin "hello" [project] enabled; 1 declared component has a note.\n' +
           "\n" +
-          'skill source "tool" in "skills" elides to generated name "hello-tool", already produced by skill source "hello-tool"; ignoring duplicate.',
+          'skill source "tool" in "[redacted path]',
         severity: "warning",
       },
       COMMENTS_REMOVED_NOTICE,
@@ -8944,7 +8944,7 @@ describe("applyReconcile catalog convergence", () => {
         message:
           'Plugin "widget" [project] updated; 1 declared component has a note.\n' +
           "\n" +
-          'skill source "widget-tool" in "skills" elides to generated name "widget-tool", already produced by skill source "tool"; ignoring duplicate.',
+          'skill source "widget-tool" in "[redacted path]',
         severity: "warning",
       },
     ]);
@@ -8980,7 +8980,7 @@ describe("applyReconcile catalog convergence", () => {
         message:
           'Plugin "widget" [project] updated; 1 declared component has a note; 1 staging warning.\n' +
           "\n" +
-          'skill source "widget-tool" in "skills" elides to generated name "widget-tool", already produced by skill source "tool"; ignoring duplicate.\n' +
+          'skill source "widget-tool" in "[redacted path]\n' +
           '[bot0] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["widget:bot0"].tools (e.g. read,bash,mcp:<server>) in Pi settings.',
         severity: "warning",
       },

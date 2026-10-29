@@ -1471,7 +1471,7 @@ test("PDEF-01 / D-PL1-02: a standalone install reports a later duplicate agent a
         },
         {
           message:
-            'Plugin "hello" [project] installed; 1 declared component has a note.\n\nagent source "shared" at "shared-later.md" duplicates generated name "pi-claude-marketplace-hello-shared" already produced by agent source "shared" at "shared-first.md"; keeping first discovered source.',
+            'Plugin "hello" [project] installed; 1 declared component has a note.\n\nagent source "shared" at "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -1562,7 +1562,7 @@ test("D-PL1-13: a standalone install that fails in its mcp phase reports the age
         },
         {
           message:
-            'Plugin "hello" [project] install failed; 1 declared component has a note.\n\nagent source "shared" at "shared-later.md" duplicates generated name "pi-claude-marketplace-hello-shared" already produced by agent source "shared" at "shared-first.md"; keeping first discovered source.',
+            'Plugin "hello" [project] install failed; 1 declared component has a note.\n\nagent source "shared" at "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -12548,7 +12548,7 @@ test("D-141-03: a standalone install surfaces a command discovery warning as a s
         },
         {
           message:
-            'Plugin "hello" [project] installed; 1 declared component has a note.\n\ncommand source "tools/lint" in "commands" elides to generated name "hello:tools:lint", already produced by command source "hello-tools/lint"; ignoring duplicate.',
+            'Plugin "hello" [project] installed; 1 declared component has a note.\n\ncommand source "tools/lint" in "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -12636,9 +12636,7 @@ for (const mode of ["json", "rpc"]) {
               severity: "warning",
               needsReload: false,
               header: 'Plugin "hello" [project] installed; 1 declared component has a note.',
-              lines: [
-                'command source "tools/lint" in "commands" elides to generated name "hello:tools:lint", already produced by command source "hello-tools/lint"; ignoring duplicate.',
-              ],
+              lines: ['command source "tools/lint" in "[redacted path]'],
             },
           },
         ]);
@@ -15703,7 +15701,7 @@ test("D-PL10-16: a cascade dependency reports its discovery note under its own h
         },
         {
           message:
-            'Plugin "some-other-plugin" [project] installed; 1 declared component has a note.\n\nskill source "tool" in "skills" elides to generated name "some-other-plugin-tool", already produced by skill source "some-other-plugin-tool"; ignoring duplicate.',
+            'Plugin "some-other-plugin" [project] installed; 1 declared component has a note.\n\nskill source "tool" in "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -15750,12 +15748,12 @@ test("reports install diagnostics in row order when the root sorts after its dep
       },
       {
         message:
-          'Plugin "aaa" [project] installed; 1 declared component has a note.\n\nskill source "tool" in "skills" elides to generated name "aaa-tool", already produced by skill source "aaa-tool"; ignoring duplicate.',
+          'Plugin "aaa" [project] installed; 1 declared component has a note.\n\nskill source "tool" in "[redacted path]',
         severity: "warning",
       },
       {
         message:
-          'Plugin "zroot" [project] installed; 1 declared component has a note.\n\nskill source "zroot-tool" in "skills" elides to generated name "zroot-tool", already produced by skill source "tool"; ignoring duplicate.',
+          'Plugin "zroot" [project] installed; 1 declared component has a note.\n\nskill source "zroot-tool" in "[redacted path]',
         severity: "warning",
       },
     ]);
