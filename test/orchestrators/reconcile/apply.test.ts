@@ -3689,11 +3689,10 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("a failed enable reports its rollback phases and leaks while keeping the record disabled", async (t) => {
-    // arrange
+  async function quotedEnableFailure(t: TestContext) {
     const { cwd, denyWrites, project, restoreWrites } = await createHermeticScopes(
       t,
-      "enable rollback 秘密",
+      "enable rollback 秘密 O' Brien",
     );
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
       hello: { skill: "clean" },
@@ -3737,8 +3736,15 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const { gitOps, clonedUrls } = createOfflineGitOps();
+    return { cwd, project, leakedDirectory, disabled, adapterReadError, gitOps, clonedUrls };
+  }
+
+  test("a failed enable reports its rollback phases and leaks while keeping the record disabled", async (t) => {
+    // arrange
+    const { cwd, project, leakedDirectory, disabled, adapterReadError, gitOps, clonedUrls } =
+      await quotedEnableFailure(t);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
     await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
@@ -3760,6 +3766,68 @@ describe("applyReconcile", () => {
     assert.equal(await readFile(path.join(leakedDirectory, "data.txt"), "utf8"), "data\n");
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
+  });
+
+  test("redacts quoted paths in apply JSON cause arrays and leaks", async (t) => {
+    // arrange
+    const { cwd, project, disabled, adapterReadError, gitOps, clonedUrls } =
+      await quotedEnableFailure(t);
+    const capture = createJsonCapture();
+    const ctx = {
+      mode: "json",
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+    // act
+    await applyReconcile({ ctx, run, cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+          kind: "reconcile-applied-cascade",
+          severity: "error",
+          needsReload: false,
+          summary: "A plugin operation has failed.",
+          tally: { label: "Reconcile", failures: 1, warnings: 0 },
+          marketplaces: [
+            {
+              name: "mp",
+              scope: "project",
+              plugins: [
+                {
+                  name: "hello",
+                  id: "hello@mp",
+                  scope: "project",
+                  status: "failed",
+                  reasons: ["rollback partial"],
+                  cause: { causeChain: [adapterReadError, adapterReadError], truncated: false },
+                  leaks: ["hello-tool"],
+                  rollbackPartial: [
+                    {
+                      phase: "skills",
+                      cause: {
+                        causeChain: ["EACCES: permission denied, unlink 'data.txt'"],
+                        truncated: false,
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ]);
+    assert.deepStrictEqual(await recordFor(project, "mp", "hello"), disabled);
+    assert.deepStrictEqual(clonedUrls(), []);
+    capture.assertValid();
   });
 
   test("ENBL-07: an enable whose marketplace clone is gone reports source missing and changes no record", async (t) => {

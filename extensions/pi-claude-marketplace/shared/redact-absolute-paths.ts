@@ -21,8 +21,30 @@ import {
  * an unredacted one.
  */
 export function redactAbsolutePaths(text: string): string {
-  const quoted = text.replace(
-    /(['"])((?:[A-Za-z]:[\\/]|\\\\|\/).*?)\1/gs,
+  // Node errno messages end with one quoted path or two separated by "' -> '".
+  // Their paths can contain unescaped quotes followed by spaces or punctuation.
+  const diagnostic = text.replace(
+    /(\bE[A-Z0-9]+: [^,\r\n]+, [a-z][a-z0-9_]* )'.+'$/s,
+    (match: string, prefix: string) => {
+      const field = match.slice(prefix.length + 1, -1);
+      const paths = /, (?:rename|copyfile|link|symlink) $/.test(prefix)
+        ? field.split("' -> '")
+        : [field];
+      return (
+        prefix +
+        "'" +
+        paths
+          .map((filePath) =>
+            /^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(filePath) ? pathBasename(filePath) : filePath,
+          )
+          .join("' -> '") +
+        "'"
+      );
+    },
+  );
+  // An embedded quote is part of the path until a diagnostic boundary follows it.
+  const quoted = diagnostic.replace(
+    /(['"])((?:[A-Za-z]:[\\/]|\\\\|\/).*?)\1(?=$|[\s,;:.)\]}])/gs,
     (match: string, quote: string, candidate: string) =>
       /^(?:[A-Za-z]:[\\/]|\\\\|\/).*[/\\][^/\\]+$/s.test(candidate)
         ? quote + pathBasename(candidate) + quote

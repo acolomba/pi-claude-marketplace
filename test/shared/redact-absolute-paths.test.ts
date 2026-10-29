@@ -39,6 +39,52 @@ describe("redactAbsolutePaths", () => {
       expected: "invalid configs/local.json detail",
     },
     {
+      name: "redacts a filesystem diagnostic with an apostrophe before a space",
+      input: "ENOENT: no such file or directory, open '/tmp/O' Brien/秘密/secret.json'",
+      expected: "ENOENT: no such file or directory, open 'secret.json'",
+    },
+    {
+      name: "keeps separate filesystem rename paths with internal quotes",
+      input:
+        "ENOENT: no such file or directory, rename '/tmp/O' Brien/a.json' -> '/tmp/D' Angelo/b.json'",
+      expected: "ENOENT: no such file or directory, rename 'a.json' -> 'b.json'",
+    },
+    {
+      name: "keeps a rename separator inside an open diagnostic path",
+      input: "ENOENT: no such file or directory, open '/tmp/private' -> 'dir/secret.json'",
+      expected: "ENOENT: no such file or directory, open 'secret.json'",
+    },
+    {
+      name: "preserves relative paths in filesystem diagnostics",
+      input: "ENOENT: no such file or directory, open 'private files/O' Brien/config.json'",
+      expected: "ENOENT: no such file or directory, open 'private files/O' Brien/config.json'",
+    },
+    {
+      name: "redacts a single-quoted path with an internal apostrophe",
+      input: "open '/tmp/O'Brien/private dir/秘密/secret.json'",
+      expected: "open 'secret.json'",
+    },
+    {
+      name: "keeps separate quoted paths with internal apostrophes",
+      input: "rename '/tmp/O'Brien/a.json' -> '/tmp/D'Angelo/b.json'",
+      expected: "rename 'a.json' -> 'b.json'",
+    },
+    {
+      name: "redacts double-quoted paths with internal double quotes",
+      input: 'read "/tmp/a"b/private/secret.json", then "/tmp/c"d/other.json"',
+      expected: 'read "secret.json", then "other.json"',
+    },
+    {
+      name: "keeps a quoted basename containing an apostrophe",
+      input: "can't open '/tmp/O'Brien/secret's file.json' today",
+      expected: "can't open 'secret's file.json' today",
+    },
+    {
+      name: "keeps punctuation and unrelated quoted values after a path",
+      input: "read '/tmp/O'Brien/a.json'); use 'relative/file' or 'https://example.test/a/b'",
+      expected: "read 'a.json'); use 'relative/file' or 'https://example.test/a/b'",
+    },
+    {
       name: "redacts a quoted POSIX path containing spaces",
       input: "unlink '/private dir/secret.json'",
       expected: "unlink 'secret.json'",

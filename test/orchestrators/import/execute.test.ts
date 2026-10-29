@@ -2245,29 +2245,31 @@ test("REC-06: names a rollback the failed install could not finish as rollback p
   verifyBoundary();
 });
 
-test("redacts spaced and UNC paths in every import failure link and leaked resource", async (t) => {
-  // arrange
-  const { cwd } = await createHermeticScopes(t, "redacted-spaced-paths");
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-  const privateSkill = "/private dir/秘密/skill one";
+async function quotedImportFailure(t: TestContext) {
+  const { cwd } = await createHermeticScopes(t, "redacted 秘密 O' Brien");
+  const privateSkill = path.join(cwd, "private dir", "skill one");
+  const missingFile = path.join(cwd, "private dir", "secret.json");
+  const readFailure = await readFile(missingFile).catch((error: unknown) => {
+    assert.ok(error instanceof Error);
+    return error;
+  });
+  assert.ok(readFailure instanceof Error);
+  const readMessage = "ENOENT: no such file or directory, open 'secret.json'";
   const networkSkill = String.raw`\\server\private share\skill two`;
-  const failure = new Error("stage '/Users/Jane Doe/plugin.json'", {
+  const failure = new Error(readFailure.message, {
     cause: new ManualRecoveryError(
-      "undo '/private dir/秘密/skill one'",
+      `EACCES: permission denied, unlink '${privateSkill}'`,
       [privateSkill, networkSkill],
       {
-        cause: new Error(String.raw`read '\\server\private share\secret.json'`),
+        cause: readFailure,
       },
     ),
   });
-  const undoFailure = new Error("remove '/private dir/秘密/skill one'", {
-    cause: new Error(String.raw`unlink '\\server\private share\data.txt'`),
+  const undoFailure = new Error(`EACCES: permission denied, unlink '${privateSkill}'`, {
+    cause: readFailure,
   });
 
-  // act
-  await importClaudeSettings({
-    ctx,
-    run: runWithNothingLoaded(),
+  const options = {
     cwd,
     deps: collaborators({
       addMarketplace: () => Promise.resolve(addedOutcome("mp")),
@@ -2281,7 +2283,17 @@ test("redacts spaced and UNC paths in every import failure link and leaked resou
     }),
     hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user"],
-  });
+  } satisfies Omit<TestImportOptions, "ctx" | "run">;
+  return { options, readMessage };
+}
+
+test("redacts quoted paths in every import failure link and leaked resource", async (t) => {
+  // arrange
+  const { options, readMessage } = await quotedImportFailure(t);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await importClaudeSettings({ ...options, ctx, run: runWithNothingLoaded() });
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -2289,15 +2301,81 @@ test("redacts spaced and UNC paths in every import failure link and leaked resou
       message:
         "A plugin operation has failed.\n\n● mp [user] (added)\n" +
         "  ⊘ broken (failed) {rollback partial}\n" +
-        "    cause: stage 'plugin.json' -> undo 'skill one' -> read 'secret.json'\n" +
+        `    cause: ${readMessage} -> EACCES: permission denied, unlink 'skill one' -> ${readMessage}\n` +
         "    leaked: skill one\n    leaked: skill two\n" +
         "    [skills] (rollback failed)\n" +
-        "      cause: remove 'skill one' -> unlink 'data.txt'\n\n" +
+        `      cause: EACCES: permission denied, unlink 'skill one' -> ${readMessage}\n\n` +
         "Import: 1 failure, 1 success",
       severity: "error",
     },
   ]);
   verifyBoundary();
+});
+
+test("redacts quoted paths in import JSON cause arrays and leaks", async (t) => {
+  // arrange
+  const { options, readMessage } = await quotedImportFailure(t);
+  const capture = createJsonCapture();
+  const ctx = mock<ImportClaudeSettingsOptions["ctx"]>({ exactParams: true, name: "context" });
+  when(() => ctx.mode)
+    .thenReturn("json")
+    .once();
+  const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+  // act
+  await importClaudeSettings({ ...options, ctx, run });
+
+  // assert
+  assert.deepStrictEqual(capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+        kind: "cascade",
+        severity: "error",
+        needsReload: false,
+        summary: "A plugin operation has failed.",
+        tally: { label: "Import", failures: 1, warnings: 0, success: { count: 1 } },
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            status: "added",
+            plugins: [
+              {
+                name: "broken",
+                id: "broken@mp",
+                scope: "user",
+                status: "failed",
+                reasons: ["rollback partial"],
+                cause: {
+                  causeChain: [
+                    readMessage,
+                    "EACCES: permission denied, unlink 'skill one'",
+                    readMessage,
+                  ],
+                  truncated: false,
+                },
+                leaks: ["skill one", "skill two"],
+                rollbackPartial: [
+                  {
+                    phase: "skills",
+                    cause: {
+                      causeChain: ["EACCES: permission denied, unlink 'skill one'", readMessage],
+                      truncated: false,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ]);
+  capture.assertValid();
+  verify(ctx);
 });
 
 test("D-PL6-12: shows a rollback phase cause with each absolute path cut to its last segment", async (t) => {
