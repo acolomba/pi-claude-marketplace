@@ -133,3 +133,54 @@ decision and is not a validation gap.
 The execute-phase orchestrator's exact merged-tree `npm run check` passed all
 static checks, 1,142 scenarios, 11,734 steps, and 309 direct LCOV records at
 merge `059a1edd`. No source or test file changed in this audit.
+
+## Final Integrated Stale-Verification Re-audit — 2026-10-29
+
+**Verdict:** COMPLIANT. All seven Phase 1 requirements have discriminating
+automated coverage on integrated HEAD `9eedb66b114ac07c44c59f86f39fdc66260edec4`.
+No validation gap was found, and this audit changed no source, test, fixture,
+configuration, or runtime input.
+
+| Requirement | Final integrated evidence | Status |
+|---|---|---|
+| WRN-01 | The enable scenario checks the complete row and diagnostic. Eight `D-PL1-12` owner cases distinguish standalone, hygiene-only, failed, dependency-member, orchestrated, clean, disable, and save-failure outcomes. | FILLED |
+| WRN-02 | Marketplace-update and apply scenarios check discovery-only and mixed discovery/hygiene diagnostics, failure headers, row order, and scope. The current `staging-diagnostics`, marketplace messaging, apply projection, notification, and apply owners passed. | FILLED |
+| WRN-03 | Constructor, partition, producer-tag, and renderer owner cases passed. The integrated full gate's typecheck accepted both `@ts-expect-error` barriers, so a hygiene warning still cannot enter the discovery channel or discovery-only renderer. | FILLED |
+| WRN-04 | The install, update, and reinstall failure scenarios check the failed row followed by the warning diagnostic. The current split install-flow ledger owner, install capture, candidate report, swap, update, materialize, and reinstall owners passed. | FILLED |
+| WRN-05 | `D-PL1-15` proves that force replaces the staged row it owns and preserves a hand-named row and file. `D-PL10-13` proves the superseding rule: a staged-name row aimed at another file is preserved with that file. | FILLED |
+| WRN-06 | Public scenarios cover installed dependency notices on success and refusal, moved-dependency notices, final-config failure, later-move failure, and row order. Dependency-settle, materialize-latest, install planning, and update owners passed. | FILLED |
+| WRN-07 | Four update-swap cases cover all before/after inventory combinations, including hooks-only false. Two reinstall-record cases prove both boolean mappings, and reinstall-flow cases prove one cache drop and no cache-deferral note. | FILLED |
+
+### Fresh commands
+
+| Scope | Command | Result |
+|---|---|---|
+| Public behavior | `npx cucumber-js features/plugin/staging-warnings.feature` | exit 0; 20 scenarios, 248 steps passed |
+| Focused owners | `node --test --test-name-pattern 'D-PL1|WRN-0'` over the 18 current Phase 1 owner modules | exit 0; 104 tests passed |
+| Full integrated gate | `npm run check` | reused on unchanged executable inputs at the same HEAD: exit 0; 1,144 scenarios, 11,758 steps, 309 merged LCOV records |
+
+The focused owner set includes the post-split install ledger and dependency
+ledger, `staging-diagnostics.ts`, the moved marketplace messaging and
+dependency-settlement owners, update swap/materialization/flow, reconcile
+projection and notification, and the forced agents commit. Node was
+`v26.12.1`. The only dirty file during the audit was the execute-phase
+orchestrator's `.planning/STATE.md`; `git diff` reported no executable-input
+change and no untracked file.
+
+The final diagnostic scenarios intentionally expect fail-closed path output.
+Ambiguous diagnostic suffixes now stop at `[redacted path]`; the 20-scenario
+run proves those exact public bytes. Phase 10 decision D-PL10-13 supersedes
+Plan 01-03's older staged-name-only literal. Reintroducing that literal would
+delete a foreign file, so the current preservation behavior is the WRN-05
+proof used here.
+
+### Gap disposition
+
+| Disposition | Count |
+|---|---:|
+| FILLED | 7 |
+| ESCALATED | 0 |
+| SKIP | 0 |
+
+No new test was needed because every adversarial behavior remains exercised
+by a test that can fail and did pass on the final integrated tree.
