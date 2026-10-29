@@ -91,3 +91,39 @@ All phase behaviors have automated verification.
 | Gaps found | 1 |
 | Resolved | 1 |
 | Escalated | 0 |
+
+## Final Merged-Tree Validation Audit 2026-10-28
+
+The final A+B+C integration leaves no Phase 3 Nyquist gap. The prior verification
+became stale because later fixes touched the cascade and dependency-move owners,
+so this audit exercised those owners again on the merged tree instead of relying
+on the earlier phase-local result.
+
+| Requirement | Adversarial behavior exercised | Result |
+|---|---|---|
+| CAS-01 | Root-ledger, mid-walk catalog, and dependency-plan failures name every resolved member that did not install. | green |
+| CAS-02 | A listed invalid root reports the invalid-manifest cause while an unlisted invalid root reports not in manifest. | green |
+| CAS-03 | A partial or degraded dependency keeps its own status/warning without demoting the requester across install, list, and info. | green |
+| CAS-04 | A fetched git-source plugin remains visibly upgradable until update. | green |
+| CAS-05 | Directory-pin refusals name both declarers and bound the rendered version fields. | green |
+| CAS-06 | An offline git dependency move names the update that would search for an in-range version. | green |
+| CAS-07 | Long installed and offered versions are cut at the required UTF-16 boundaries. | green |
+
+### Executed Evidence
+
+| Test set | Command | Result |
+|---|---|---|
+| Phase 3 owner modules | `node --test test/domain/dependency-range.test.ts test/domain/dependency-closure.test.ts test/orchestrators/plugin/constraint-fold.test.ts test/orchestrators/plugin/dependency-move.test.ts test/orchestrators/plugin/dependency-plan.test.ts test/orchestrators/plugin/install-cascade.messaging.test.ts test/orchestrators/plugin/install-cascade.test.ts test/orchestrators/plugin/install-outcome.test.ts test/orchestrators/plugin/install-flow-ledger.test.ts` | 9/9 modules passed |
+| Exact acceptance scenarios | `npx cucumber-js features/plugin/install-dependencies.feature features/plugin/install.feature features/plugin/update.feature features/plugin/fetch.feature --name <CAS-01..07 scenario expression>` | 15/15 scenarios, 178/178 steps passed |
+| Final merged-tree gate | `npm run check` | reused exact build-input-equivalent result: 1,142/1,142 scenarios, 11,734/11,734 steps, 309 direct-coverage records |
+
+The first focused Cucumber attempt executed zero scenarios because the sandbox
+denied its loopback listener (`EPERM` on `127.0.0.1`). The identical command was
+rerun with the required local-listener permission and passed. No assertion was
+changed, no test was skipped, and no source or test file required modification.
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
