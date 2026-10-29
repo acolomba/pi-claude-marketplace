@@ -62,17 +62,76 @@ export function redactAbsolutePaths(text: string): string {
       );
     },
   );
-  // An embedded quote is part of the path until a diagnostic boundary follows it.
-  const quoted = diagnostic.replace(
-    /(['"])((?:[A-Za-z]:[\\/]|\\\\|\/).*?)\1(?=$|[\s,;:.)\]}])/gs,
-    (match: string, quote: string, candidate: string) =>
-      /^(?:[A-Za-z]:[\\/]|\\\\|\/).*[/\\][^/\\]+$/s.test(candidate)
-        ? quote + pathBasename(candidate) + quote
-        : match,
-  );
+  const quoted = redactQuotedAbsolutePaths(diagnostic);
   const absolutePath =
     /(?<![\w:/\\])(?:[A-Za-z]:[\\/]|\\\\(?:\?\\)?|\/)[\w./\\~-]+[\\/][\w./\\~-]+/g;
   return quoted.replace(absolutePath, (match) => pathBasename(match));
+}
+
+function isQuotedPathBoundary(character: string | undefined): boolean {
+  return character === undefined || /[\s,;:.)\]}]/u.test(character);
+}
+
+function continuesQuotedPath(text: string, quote: string, quoteIndex: number): boolean {
+  const nextCharacter = text[quoteIndex + 1];
+  if (nextCharacter !== " " && nextCharacter !== "\t") {
+    return false;
+  }
+
+  const nextQuote = text.indexOf(quote, quoteIndex + 1);
+  if (nextQuote < 0) {
+    return false;
+  }
+
+  const continuation = text.slice(quoteIndex + 1, nextQuote);
+  return (
+    !/[\r\n]/u.test(continuation) && (continuation.includes("/") || continuation.includes("\\"))
+  );
+}
+
+function quotedPathEnd(text: string, quote: string, fromIndex: number): number | undefined {
+  let quoteIndex = text.indexOf(quote, fromIndex);
+  while (quoteIndex >= 0) {
+    if (
+      isQuotedPathBoundary(text[quoteIndex + 1]) &&
+      !continuesQuotedPath(text, quote, quoteIndex)
+    ) {
+      return quoteIndex;
+    }
+
+    quoteIndex = text.indexOf(quote, quoteIndex + 1);
+  }
+
+  return undefined;
+}
+
+function redactQuotedAbsolutePaths(text: string): string {
+  const opening = /(['"])(?:[A-Za-z]:[\\/]|\\\\|\/)/g;
+  let redacted = "";
+  let copiedThrough = 0;
+  let match = opening.exec(text);
+  while (match !== null) {
+    const quote = text.charAt(match.index);
+    const end = quotedPathEnd(text, quote, opening.lastIndex);
+    if (end === undefined) {
+      opening.lastIndex = match.index + 1;
+      match = opening.exec(text);
+      continue;
+    }
+
+    const candidate = text.slice(match.index + 1, end);
+    if (/^(?:[A-Za-z]:[\\/]|\\\\|\/).*[/\\][^/\\]+$/s.test(candidate)) {
+      redacted += text.slice(copiedThrough, match.index) + quote + pathBasename(candidate) + quote;
+      copiedThrough = end + 1;
+      opening.lastIndex = copiedThrough;
+    } else {
+      opening.lastIndex = match.index + 1;
+    }
+
+    match = opening.exec(text);
+  }
+
+  return redacted + text.slice(copiedThrough);
 }
 
 /** Takes the last path segment for either filesystem convention. */

@@ -65,6 +65,11 @@ describe("redactAbsolutePaths", () => {
       expected: "open 'secret.json'",
     },
     {
+      name: "redacts a single-quoted path after an apostrophe followed by a space",
+      input: "unlink '/tmp/O' Brien/秘密/secret.json'",
+      expected: "unlink 'secret.json'",
+    },
+    {
       name: "keeps separate quoted paths with internal apostrophes",
       input: "rename '/tmp/O'Brien/a.json' -> '/tmp/D'Angelo/b.json'",
       expected: "rename 'a.json' -> 'b.json'",
@@ -170,6 +175,11 @@ describe("redactAbsolutePaths", () => {
       expected: 'read "private files/config.json" after the user says "try again"',
     },
     {
+      name: "redacts an absolute path with no closing quote through the unquoted fallback",
+      input: "read '/tmp/private/secret.json",
+      expected: "read 'secret.json",
+    },
+    {
       name: "preserves a single-segment JSON pointer",
       input: "invalid /schemaVersion detail",
       expected: "invalid /schemaVersion detail",
@@ -212,6 +222,18 @@ describe("redactAbsolutePaths", () => {
 });
 
 describe("redactCauseChain", () => {
+  test("redacts the suffix of a quoted cause after an apostrophe followed by a space", () => {
+    // arrange
+    const failure = new Error("unlink '/tmp/O' Brien/秘密/secret.json'");
+
+    // act
+    const trailer = causeChainTrailer(redactCauseChain(failure));
+
+    // assert
+    assert.strictEqual(trailer, "cause: unlink 'secret.json'");
+    assert.doesNotMatch(trailer, /Brien\/秘密\/secret\.json/u);
+  });
+
   test("redacts every quoted cause and structured leaked path containing spaces or UNC prefixes", () => {
     // arrange
     const leaks = [
