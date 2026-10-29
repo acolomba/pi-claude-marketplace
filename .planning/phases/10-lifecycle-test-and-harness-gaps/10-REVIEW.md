@@ -1,8 +1,8 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-reviewed: 2026-10-29T10:05:34Z
+reviewed: 2026-10-29T10:48:24Z
 depth: standard
-files_reviewed: 126
+files_reviewed: 130
 files_reviewed_list:
   - .pre-commit-config.yaml
   - eslint.config.js
@@ -68,6 +68,7 @@ files_reviewed_list:
   - features/plugin/package-dependencies.feature
   - features/plugin/prune.feature
   - features/plugin/reinstall.feature
+  - features/plugin/staging-warnings.feature
   - features/plugin/update-dependencies.feature
   - features/plugin/update.feature
   - features/step_definitions/command.steps.ts
@@ -104,6 +105,7 @@ files_reviewed_list:
   - test/orchestrators/plugin/dependency-bindings.test.ts
   - test/orchestrators/plugin/dependency-move.test.ts
   - test/orchestrators/plugin/dependency-settle.test.ts
+  - test/orchestrators/plugin/enable-disable.test.ts
   - test/orchestrators/plugin/fetch.test.ts
   - test/orchestrators/plugin/install-cascade.messaging.test.ts
   - test/orchestrators/plugin/install-cascade.test.ts
@@ -118,6 +120,7 @@ files_reviewed_list:
   - test/orchestrators/plugin/operations.test.ts
   - test/orchestrators/plugin/package-install.test.ts
   - test/orchestrators/plugin/reinstall-flow.test.ts
+  - test/orchestrators/plugin/reinstall-flow.test.ts
   - test/orchestrators/plugin/uninstall.test.ts
   - test/orchestrators/plugin/update-flow.test.ts
   - test/orchestrators/plugin/update-preflight.test.ts
@@ -129,6 +132,7 @@ files_reviewed_list:
   - test/platform/hosted-manifest-fetch.test.ts
   - test/platform/package-manager.test.ts
   - test/shared/git-failure-classifiers.test.ts
+  - test/shared/notification-present.test.ts
   - test/shared/redact-absolute-paths.test.ts
 findings:
   critical: 1
@@ -140,42 +144,43 @@ status: issues_found
 
 # Phase 10: Code Review Report
 
-**Reviewed:** 2026-10-29T10:05:34Z
+**Reviewed:** 2026-10-29T10:48:24Z
 **Depth:** standard
-**Files Reviewed:** 126 (the retained Phase 10 scope plus the iteration-14 deltas)
+**Files Reviewed:** 130 (the retained Phase 10 scope plus the iteration-15 through iteration-17 deltas)
 **Status:** issues_found
-**Observed HEAD:** `89b1a356`
+**Observed HEAD:** `0312a77c`
 **Runtime:** Node `v26.12.1`
 
 ## Structural Findings (fallow)
 
-The exact merged full gate's Fallow stage passed. The iteration-14 fixer also reported a clean Fallow guard and health check for its three changed files. Direct review covered the complete retained scope and the iteration-14 source and test deltas.
+The exact merged full gate's Fallow stage passed. Iterations 15 through 17 also reported clean Fallow guard/audit results for the final source and expectation deltas. Direct review covered the complete retained scope plus every final implementation, feature, presentation, and owner-test delta.
 
-CodeGraph was used to trace the shared redactor into its cause-chain, cascade, install, apply, and notification-presentation consumers. Its index marked the changed redactor stale, so the current source was read directly.
+CodeGraph was used to trace the shared redactor into its cause-chain, cascade, install, apply, and notification-presentation consumers. Its index marked the changed redactor stale, so the current source and all final owner deltas were read directly.
 
 ## Narrative Findings (AI reviewer)
 
 ### Summary
 
-The complete 126-file scope was re-reviewed. The 123 files unchanged from the complete prior review are byte-identical; the three files changed by `98433651` were read in full and traced through their public consumers. The strict Phase 10 checker passes 56/56, and the D-PL10-13 exact owner passes 1/1 with no skip or todo. The package-manager settlement, Phase 8/9 integration, evidence-binding, and D-PL10-13 supersession evidence remain unchanged.
+The retained complete scope and all final deltas were re-reviewed. The implementation now applies the binding security-first rule for the tested quote chains, and the reconciled Cucumber and owner assertions remain exact deep/full-row comparisons rather than weakened partial assertions. The strict Phase 10 checker passes 56/56, D-PL10-13 passes 1/1, and the exact combined gate passes 1,144 scenarios, 11,758 steps, and 309 direct LCOV records. The package-manager settlement, Phase 8/9 integration, evidence-binding, and D-PL10-13 supersession evidence remain unchanged.
 
-Iteration 14 simplifies the generic quoted-path grammar and correctly fails closed for its submitted embedded, surplus, and unmatched quote matrices. One adjacent same-quote chain still violates the binding policy: an embedded quote is accepted as the absolute field's delimiter when later quotes form a balanced value. That exposes the remaining absolute-path suffix through the utility, cause-chain, and notification consumers.
+One quote position remains outside the final matrices. When the first embedded matching quote occurs immediately after a directory separator, the ambiguity branch validates only the prefix before that quote. That prefix ends in a separator, fails `isQuotedAbsolutePathCandidate()`, and causes the scanner to skip the entire absolute field instead of applying the approved fail-closed marker.
 
 ## Critical Issues
 
-### CR-01: A balanced later value makes an embedded path quote look unambiguous
+### CR-01: An embedded quote after a separator bypasses fail-closed redaction
 
 **Classification:** BLOCKER
-**File:** `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts:76-106`
+**File:** `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts:102-110`
 
-**Issue:** `quotedPathEnd()` takes the first matching quote as `delimiter`. When another quote exists, it accepts that first quote whenever `hasResolvedQuoteChain()` can pair the later quotes. The later chain being balanced does not prove that the first quote closed the absolute field: it can be an embedded filename character followed by a separate balanced value. For example, `open '/tmp/O' Brien/private/secret.json 'x'` becomes `open 'O' Brien/private/secret.json 'x'`, exposing `Brien/private/secret.json`. The drive, UNC, double-quoted, and `redactCauseChain()` forms reproduce. This contradicts the binding fail-closed rule because the same-quote chain has two valid interpretations. The reconciled matrices cover an embedded quote by itself and a closed path followed by a balanced value, but not their collision, so a plausible leaking implementation still passes all owner tests.
+**Issue:** The undefined-delimiter branch slices the candidate only through the first matching quote and requires that short prefix to end in a non-separator path segment. A valid path can have a filename component whose first character is the matching quote. For `open '/tmp/'x/private/secret.json'`, the checked prefix is `/tmp/`, so `isQuotedAbsolutePathCandidate()` rejects it and lines 107-109 resume scanning without redacting anything. The result is the original absolute path unchanged. The drive form `open "C:\\private\\"x\\secret.json"` also remains unchanged; the UNC form exposes `x\\secret.json`. `redactCauseChain()` preserves the same disclosures, so cascade, apply, install, and public notification consumers inherit them. This violates the binding rule: there are multiple same-quote delimiters after an absolute-path opener, so the whole remainder must become `[redacted path]`. The 72-case matrix covers embedded quotes inside a component but not a quote immediately after a separator.
 
-**Fix:** Treat a first quote plus a later balanced same-quote value as ambiguous whenever the intervening text can still be absolute-path continuation, and return `undefined` so the whole remainder becomes `[redacted path]`. If the generic string grammar cannot distinguish that collision from slash-bearing prose, apply the approved security-first policy and fail closed for both. Add POSIX, drive, UNC, single-quoted, double-quoted, cause-chain, and public-presentation cases combining an embedded quote with a later balanced quoted value.
+**Fix:** In the ambiguous branch, do not require the text before the first embedded quote to be a complete basename-bearing path. The opening match already proves an absolute-path prefix; fail closed when the ambiguous remainder establishes an internal separator, including a prefix ending in `/` or `\\`. Preserve the single-segment JSON-pointer exception separately. Add POSIX, drive, UNC, single-quoted, double-quoted, cause-chain, and public-presentation regressions with the embedded quote as the first character after a separator.
 
 ### Prior finding closure
 
-- Iteration 14 closes the submitted unmatched embedded-quote and arbitrary slash-prose cases by full elision.
-- Marker-like suffixes inside path components preserve no raw suffix.
+- Iteration 15 closes the submitted balanced-quote ambiguity by requiring exactly one matching closer.
+- Iterations 16 and 17 keep behavioral and owner expectations exact under the approved over-redaction policy.
+- Marker-like suffixes inside path components preserve no raw suffix in the covered positions.
 - The original early parent-close settlement and the replacement unreferenced-timer liveness defect remain closed by `1b77dd7b`.
 - The earlier PTY wait-cap, aggregate-notice oracle, and evidence-binding findings remain closed.
 
@@ -183,15 +188,15 @@ Iteration 14 simplifies the generic quoted-path grammar and correctly fails clos
 
 - `node scripts/check-phase10-coverage.mjs`: `56/56` rows valid.
 - D-PL10-13 exact owner: passed 1/1 with no skip or todo.
-- Iteration-14 focused owners: passed 265 redactor tests and 48 presentation tests; both direct pairs passed 100% line, function, and branch coverage.
-- Direct adversarial probes reproduced CR-01 for POSIX, drive, UNC, single-quoted, and double-quoted inputs; `redactCauseChain()` retained the exposed suffix.
+- Final focused owners and all changed direct pairs passed at 100% line, function, and branch coverage; direct-all merged 309 LCOV records.
+- Direct adversarial probes reproduced CR-01 for POSIX, drive, UNC, single-quoted, and double-quoted inputs; `redactCauseChain()` retained the same disclosure.
 - Package-manager owner and direct coverage evidence remain green on the byte-identical package-manager source.
-- Exact post-fix `npm run check`: passed `1144` scenarios / `11758` steps / `309` LCOV records. The gate lacks the embedded-quote-plus-balanced-value collision.
+- Exact post-fix `npm run check`: passed `1144` scenarios / `11758` steps / `309` LCOV records. The gate lacks the embedded-quote-after-separator collision.
 
 Only this report was changed. No implementation, test, state, or configuration file was modified, and no commit was created.
 
 ---
 
-_Reviewed: 2026-10-29T10:05:34Z_
+_Reviewed: 2026-10-29T10:48:24Z_
 _Reviewer: Codex (gsd-code-reviewer)_
 _Depth: standard_
