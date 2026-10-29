@@ -1,22 +1,46 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-fixed_at: 2026-10-29T07:53:51Z
+fixed_at: 2026-10-29T08:06:40Z
 review_path: .planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md
-iteration: 7
-findings_in_scope: 2
-fixed: 2
+iteration: 8
+findings_in_scope: 1
+fixed: 1
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 10: Code Review Fix Report
 
-**Fixed at:** 2026-10-29T07:53:51Z
+**Fixed at:** 2026-10-29T08:06:40Z
 **Source review:** `.planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md`
-**Iteration:** 7
+**Iteration:** 8
 
-Iteration 7 fixes both findings from the final integrated re-review. The
-earlier evidence-binding and integrated review fixes remain closed.
+Iteration 8 fixes the remaining quoted-path boundary finding. The package
+manager settlement fix and the earlier integration fixes remain closed.
+
+## Iteration 8 Fix
+
+### CR-01: The quote-continuation heuristic leaks paths and consumes prose
+
+**Status:** fixed: requires human verification
+**Commit:** `442ffb14` (`fix(redaction): disambiguate quoted path boundaries`)
+**Files modified:**
+
+- `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`
+- `test/shared/redact-absolute-paths.test.ts`
+- `test/shared/notification-present.test.ts`
+
+The scanner now treats an apostrophe followed by whitespace as an internal
+path character only when the next matching quote is a valid closing delimiter.
+This keeps multi-word path components such as `O' Mary Jane/秘密` inside the
+redacted span. It also stops at a real closing quote before immediate prose
+such as `docs/errors 'E_READ'`, because that next quote opens `E_READ`.
+
+The RED run failed six cases across the utility, cause-chain, and public
+presentation boundaries. The GREEN owner run passes all 97 focused tests. The
+redaction and notification-presentation direct pairs each pass 100% line,
+function, and branch coverage. Type checking, Fallow guard and audit,
+pre-commit fixers, and the normal commit hook also pass.
 
 ## Iteration 7 Fixes
 
@@ -235,6 +259,6 @@ re-review, and goal verification on the unchanged integrated tree.
 
 ---
 
-_Fixed: 2026-10-29T07:53:51Z_
+_Fixed: 2026-10-29T08:06:40Z_
 _Fixer: the agent (gsd-code-fixer)_
-_Iteration: 7_
+_Iteration: 8_
