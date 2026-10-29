@@ -7,7 +7,7 @@ status: validated
 nyquist_compliant: true
 wave_0_complete: true
 created: "2026-10-26"
-audited: "2026-10-28"
+audited: "2026-10-29"
 ---
 
 # Phase 7 — Validation Strategy
@@ -132,6 +132,60 @@ behavioral seam.
 
 ---
 
+## Final Merged-Tree Revalidation — 2026-10-29
+
+This stale-verification resume audited the integrated Phase 1–10 tree at
+`e92e4c45b48b36867ad75f8d325dd6bb88945c1c`. It re-read all ten Phase 7 plans
+and summaries, CONTEXT, RESEARCH, PATTERNS, the current implementation and
+tests, and the Phase 6 shared cause-chain path redactor. The current evidence
+remains Nyquist-complete; no test or production file was changed.
+
+### Requirement Matrix
+
+| Requirement | Adversarial behavioral proof on the integrated tree                                                                                                                                                                                                                                                                                                                                                                            | Result |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
+| GLK-01      | `git-failure-classifiers.test.ts` exercises the one classifier ladder and fixed-rule wrappers; owner and Cucumber paths cover install, marketplace add/update, direct and cascade update, preflight, fetch, info, and constrained-dependency tag listing with operation-specific 404/410 rules. The Phase 6 redactor regression suite and framed HTTP scenarios prove wire URLs remain intact while local paths are collapsed. | green  |
+| GLK-02      | `update-flow.test.ts` drives typed, errno, HTTP, and fallback failures through the direct and cascade ladder; `update-rollback.feature` proves an autoupdate failure reports the direct path's `unreadable` reason and cause rather than `{not in manifest}`.                                                                                                                                                                  | green  |
+| GLK-03      | `clone-gc.test.ts` proves held-lock refusal, live-record preservation, and candidate-only deletion. `dependency-bindings.test.ts` proves an empty ownership set keeps every warm entry, an owned live clone stays, and a held lock leaves both owned and unrelated entries untouched.                                                                                                                                          | green  |
+| GLK-04      | `update-preflight.test.ts` observes the state lock during marketplace-tag copy and proves a second holder prevents the copy.                                                                                                                                                                                                                                                                                                   | green  |
+| GLK-05      | Fetch and info owner tests observe the lock during unpinned materialize-plus-row reads, cover lock loss/second-holder refusal, and prove pinned and bare reads remain unlocked. Their public Cucumber scenarios pass.                                                                                                                                                                                                          | green  |
+| GLK-06      | Four controlled-clock `update-swap.test.ts` cases prove same-millisecond overlap rejection, finalize-after-mark monotonicity, unparseable prior stamps, and the maximum-Date fallback.                                                                                                                                                                                                                                         | green  |
+| GLK-07      | Fetch owner and Cucumber cases prove successful, failed, and skipped rows use the list version rule; completion drives the shared `upgradeCandidate`; browse continues through the list payload.                                                                                                                                                                                                                               | green  |
+| GLK-08      | `clone-cache.test.ts` proves local tag resolution without network, true cache-miss refresh, non-missing error propagation, and the no-ref arm; the release-tag reinstall scenario observes no git-host request.                                                                                                                                                                                                                | green  |
+
+### Exact-Candidate Ownership Supersession
+
+The reviewed `collectPluginCloneCandidatesLocked` design formally supersedes
+Plan 07-02's older broad-listing literal. Planning records each clone key the
+operation creates through `onCloneCreated`; the post-plan sweep takes a fresh
+scope lock, reloads live state, and deletes only keys in that operation-owned
+candidate set which are still unreferenced. The adversarial candidate test
+would fail under a broad sweep because its unrelated warm clone must survive.
+Restoring broad listing would reintroduce the verified concurrent-cache
+deletion bug and is not required by GLK-03 or the current ROADMAP criteria.
+
+### Commands Executed
+
+| Command                                                                                                                                                                                              | Result                                             |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Focused Phase 7 owner/architecture run across classifier, clone GC/sweep, stamp, offline tag, version, update, preflight, fetch, info, operations, and dependency-tag probe modules                  | 14 test modules passed                             |
+| `node --test test/shared/git-failure-classifiers.test.ts test/shared/redact-absolute-paths.test.ts test/orchestrators/plugin/clone-gc.test.ts test/orchestrators/plugin/dependency-bindings.test.ts` | 4 test modules passed                              |
+| `npx cucumber-js` over the nine current git/add/update/fetch/info feature files                                                                                                                      | 99 scenarios, 1164 steps passed                    |
+| Fresh exact `npm run check` supplied by the integrated-tree phase gate                                                                                                                               | 1143 scenarios, 11742 steps, 309 LCOV pairs passed |
+
+The first sandboxed Cucumber attempt ran zero scenarios because the sandbox
+denied the hermetic loopback git-host bind (`listen EPERM 127.0.0.1`). The
+identical command passed when that local-fixture permission was enabled; this
+was an environment failure, not a product failure.
+
+### Gap Disposition
+
+No current coverage gap was found. Every GLK requirement and plan must-have has
+a behavioral test that can fail. No implementation issue was escalated and no
+new test was necessary.
+
+---
+
 ## Validation Sign-Off
 
 - [x] All tasks have `<automated>` verify or Wave 0 dependencies
@@ -141,9 +195,17 @@ behavioral seam.
 - [x] Feedback latency < 75s
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** revalidated 2026-10-28
+**Approval:** revalidated COMPLIANT on the merged tree, 2026-10-29
 
 ## Validation Audit 2026-10-28
+
+| Metric     | Count |
+| ---------- | ----- |
+| Gaps found | 0     |
+| Resolved   | 0     |
+| Escalated  | 0     |
+
+## Validation Audit 2026-10-29
 
 | Metric     | Count |
 | ---------- | ----- |
