@@ -1,6 +1,6 @@
 ---
 phase: 04-dependency-resolver-residue
-verified: 2026-10-29T03:51:38Z
+verified: 2026-10-29T12:59:35Z
 status: passed
 score: 4/4 must-haves verified
 covered_files:
@@ -22,6 +22,7 @@ covered_files:
   - "extensions/pi-claude-marketplace/bridges/agents/stage.ts"
   - "extensions/pi-claude-marketplace/bridges/agents/target-check.ts"
   - "extensions/pi-claude-marketplace/domain/release-tag.ts"
+  - "extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts"
@@ -39,13 +40,18 @@ covered_files:
   - "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts"
+  - "extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts"
   - "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts"
+  - "extensions/pi-claude-marketplace/orchestrators/types.ts"
   - "extensions/pi-claude-marketplace/shared/errors-bridges.ts"
   - "features/lib/published-marketplace.ts"
+  - "features/plugin/apply.feature"
   - "features/plugin/install-dependencies.feature"
+  - "features/plugin/staging-warnings.feature"
   - "features/plugin/update-dependencies.feature"
+  - "features/plugin/update.feature"
   - "features/step_definitions/plugin/installation.steps.ts"
   - "features/step_definitions/plugin/publishing.steps.ts"
   - "features/support/pi-process.ts"
@@ -54,6 +60,7 @@ covered_files:
   - "test/bridges/agents/stage.test.ts"
   - "test/bridges/agents/target-check.test.ts"
   - "test/domain/release-tag.test.ts"
+  - "test/orchestrators/marketplace/update.messaging.test.ts"
   - "test/orchestrators/plugin/clone-cache.test.ts"
   - "test/orchestrators/plugin/clone-gc.test.ts"
   - "test/orchestrators/plugin/dependency-move.test.ts"
@@ -67,8 +74,11 @@ covered_files:
   - "test/orchestrators/plugin/install-flow-planning.test.ts"
   - "test/orchestrators/plugin/install-outcome.test.ts"
   - "test/orchestrators/plugin/marketplace-tag-probe.test.ts"
+  - "test/orchestrators/plugin/materialize-latest.test.ts"
+  - "test/orchestrators/plugin/update-flow.test.ts"
   - "test/orchestrators/plugin/update-swap.test.ts"
-covered_digest: "v4:sha256:465b46996b3909b4ae0f561561bb7518baba3470b37dbfe7457aaf39d34c3dab"
+  - "test/orchestrators/reconcile/apply.test.ts"
+covered_digest: "v4:sha256:6d20fc5430910c17bd98d38b83f94637df5855ec581297bc82efb8266b83a28d"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
@@ -86,108 +96,101 @@ decision_coverage:
 # Phase 4: Dependency Resolver Residue Verification Report
 
 **Phase Goal:** The dependency resolver installs the commit it previewed, refuses before any move lands, and its completeness and `apply` behavior are decided against Claude Code.
-**Verified:** 2026-10-29
+**Verified:** 2026-10-29T12:59:35Z
 **Status:** passed
-**Re-verification:** Yes -- stale fingerprint refresh after later integration, install-flow splitting, and a completed review/fix loop.
-
-The starting hypothesis was that later integration preserved the files but broke one of the handoffs. The current source and tests falsify that hypothesis. The Phase 11 split moved two Plan 04 artifact patterns out of `install-flow.ts`, so the old path-based artifact probe reports them missing there. Their current owners are substantive and wired: `install-flow-dependency-ledger.ts`, `install-flow-cascade-context.ts`, `install-flow-ledger.ts`, and `install-flow-planning.ts` carry the same contracts through the public install flow.
+**Re-verification:** Yes -- final-head refresh after Phase 1 diagnostic integration.
 
 ## Goal Achievement
 
 ### Observable Truths
 
-| #   | Truth                                                                                              | Status   | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| --- | -------------------------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | A fresh unpinned git dependency resolves once and installs the commit the plan previewed (RSV-01). | VERIFIED | `previewInstall` returns `preflight.resolvedSha`; `previewFresh` maps it by member key; `schedule` attaches `previewedCommit` to materialize/final members and `rootCommit` to the install root. `memberLedgerPin` maps that value to `sourcePin` without inventing `resolvedVersion`; `buildInstallLedgerOptions` maps it to `sourcePinOverride`. The focused planning test passed and asserted one mirror resolve, the expected pin, recorded SHA, and final versions. The public scenario asserts exactly one `info/refs` plus one `git-upload-pack` request. |
-| 2   | RSV-02 and RSV-03 have recorded decisions, and the code and tests match them.                      | VERIFIED | D-PL4-02 remains in `dependency-plan.ts` and `install-flow-ledger.ts`: every fresh member is previewed before `schedule`, including a move-only dependency under `deferMoveDependencies`. D-PL4-03 remains the explicit first-involved-pick/permanent-rule-out search. Focused tests passed for the deferred preview refusal and the deliberately incomplete four-walk search.                                                                                                                                                                                   |
-| 3   | An update whose agent target is occupied refuses before any earlier move lands (RSV-04).           | VERIFIED | `judgeDependencyMove` calls `assertUpdateNamesFree` before returning a candidate. `previewInstall` applies the same target rule to fresh members. Preview and staging now both call `assertAgentNamesUnclaimed` against foreign index rows before target-file checks or writes, including a missing target. The focused parity test passed. Install/update Cucumber regressions assert unchanged versions/config/record bytes, retained index rows, no target files, and unchanged staged skill bytes after a second dependency refuses.                         |
-| 4   | The `no-matching-tag` range and `rollbackPartials` declaration are settled (RSV-05).               | VERIFIED | `SelectedReleaseTag` and `DependencyTagProbeResult` use the range-free `{ kind: "no-matching-tag" }` arm. `toMemberConstraintOutcome` derives the failure range from the member's declared range. `InstallMissingDependencyOutcome` declares `rollbackPartials` in the split dependency-ledger owner, and the catch projects the captured partials. Focused no-match and REC-06 tests passed with complete value assertions.                                                                                                                                     |
+| # | Truth | Status | Evidence |
+|---|---|---|---|
+| 1 | A fresh unpinned git dependency resolves once and installs the previewed commit (RSV-01). | VERIFIED | `previewFresh` stores the commit by member key; `schedule` attaches `previewedCommit`; `planInstallMoves` carries `rootCommit`; both ledger builders call `memberLedgerPin`, which maps it to `sourcePin` without inventing a version. `probeInstallClone` takes the pinned path. Focused owner tests and the exact public one-fetch scenario passed. |
+| 2 | RSV-02 and RSV-03 have recorded decisions and matching code/tests. | VERIFIED | `dependency-plan.ts` documents and enforces D-PL4-02's preview-before-write rule under deferral and D-PL4-03's finite first-involved-pick rule-out limit. The named refusal and untried-pair tests passed. Decision coverage is 7/7. |
+| 3 | An update whose agent target is occupied refuses before an earlier move or dependency install lands (RSV-04). | VERIFIED | `assertAgentTargetsFree` is read-only and checks foreign claims plus occupied targets. `assertUpdateNamesFree` runs it after the PI-6 name check; `judgeDependencyMove`, update planning, and install preview call the preflight before mutation. Named owners passed, and three public scenarios preserved versions, records, and the user's file. |
+| 4 | The `no-matching-tag` range and `rollbackPartials` declaration are settled (RSV-05). | VERIFIED | `SelectedReleaseTag` and `DependencyTagProbeResult` use a range-free no-match arm; `toMemberConstraintOutcome` constructs failure ranges from `declared`. The split `InstallMissingDependencyOutcome` failed arm declares `rollbackPartials`, and failure projection carries it. Named no-match and rollback-partial owners passed. |
 
 **Score:** 4/4 truths verified (0 present but behavior-unverified).
 
-### Decision Conformance
-
-| Decision | Status   | Evidence                                                                                                                                             |
-| -------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D-PL4-01 | VERIFIED | Preview SHA flows by member key through `previewedCommit`/`rootCommit`, both ledger builders, and `sourcePinOverride`; focused pinning tests passed. |
-| D-PL4-02 | VERIFIED | The plan previews move-only fresh dependencies before scheduling even when the caller defers their installation; the refusal test passed.            |
-| D-PL4-03 | VERIFIED | The source documents and implements permanent first-pick rule-outs; the untried-pair test asserts the exact walks and verdict order.                 |
-| D-PL4-04 | VERIFIED | PI-6 and agent-target/foreign-index checks run in the write-free judge/preview paths; the update swap remains names-only for forced reinstall.       |
-| D-PL4-05 | VERIFIED | Probe no-match arms carry no range; the cascade uses the independently declared range.                                                               |
-| D-PL4-06 | VERIFIED | The failed missing-dependency outcome declares and propagates rollback partials.                                                                     |
-| D-PL4-07 | VERIFIED | `unmovable` applies `redactAbsolutePaths`; the focused test asserts basename-only output.                                                            |
-
 ### Required Artifacts
 
-| Artifact                                                          | Expected                                                                     | Status           | Details                                                                                                                                                                        |
-| ----------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `bridges/agents/{target-check,index-mutation,stage}.ts`           | One preview/stage ownership rule and write-free occupied-target check        | VERIFIED         | Present, substantive, and shared through `assertAgentNamesUnclaimed`; both callers use the same foreign partition and typed error.                                             |
-| `dependency-plan.ts`                                              | Greedy decision, preview pin map, early refusal, redaction                   | VERIFIED         | Present and wired from install/update planning; four focused decision tests passed.                                                                                            |
-| `release-tag.ts`, `dependency-tag-probe.ts`, `install-cascade.ts` | Range-free no-match result and declared-range failure                        | VERIFIED         | Types and decoder agree; focused probe/cascade tests passed.                                                                                                                   |
-| `install-flow-*.ts` split owners                                  | Ledger pin, deferred apply contract, root commit, rollback partial type/flow | VERIFIED (moved) | Phase 11 moved the old `install-flow.ts` members into dedicated modules. Current call paths are present and exercised; the old literal artifact patterns are stale, not stubs. |
-| `install-outcome.ts`, `install-clone-probe.ts`                    | Preview SHA and pinned materialization path                                  | VERIFIED         | Preview returns the resolved SHA; ledger pin becomes source SHA; clone probe takes the pinned arm.                                                                             |
-| Phase 4 unit and Cucumber tests                                   | Behavior-level proof of network count, ordering, preservation, and failures  | VERIFIED         | Active tests use whole-value/state assertions; no linked test is skipped, todo, or only.                                                                                       |
+| Artifact | Expected | Status | Details |
+|---|---|---|---|
+| `bridges/agents/{target-check,index-mutation,stage}.ts` | Shared write-free ownership/occupied-target rule | VERIFIED | Present, substantive, exported, and called from update/install preflight. |
+| `dependency-plan.ts` | Preview pin map, finite greedy decision, early refusal, redaction | VERIFIED | Present and wired through planning; discriminating D-PL4-01/02/03 owners passed. |
+| `release-tag.ts`, `dependency-tag-probe.ts`, `install-cascade.ts` | Range-free no-match answer and declared-range failure | VERIFIED | Types and decoder agree; exact no-match owners passed. |
+| Split `install-flow-*.ts` owners | Root commit, member pin, deferred rule, rollback-partial flow | VERIFIED (moved) | Mechanical Plan 04-02/04-05 probes still name pre-split `install-flow.ts`; direct inspection verifies the contracts in `install-flow-planning.ts`, `install-flow-cascade-context.ts`, `install-flow-ledger.ts`, `install-flow-dependency-ledger.ts`, and `install-flow-results.ts`. |
+| Phase 4 unit and Cucumber tests | Behavior proof of pinning, ordering, preservation, and failure shape | VERIFIED | Active, non-circular value/behavior assertions; fresh named runs passed. |
 
 ### Key Link Verification
 
-| From                         | To                    | Via                                                                                | Status | Details                                                                         |
-| ---------------------------- | --------------------- | ---------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------- |
-| `previewInstall`             | `planDependencyGraph` | `prepareInstallDependencyPlan.preview` and `previewInstallDependencyPlanRoot`      | WIRED  | Fresh members and the root return the preflight SHA into the plan.              |
-| `planDependencyGraph`        | install ledger        | `previewedCommit`/`rootCommit` -> `memberLedgerPin` -> `buildInstallLedgerOptions` | WIRED  | Both cascade and final-closure builders use the same helper.                    |
-| ledger pin                   | clone cache           | `sourcePinOverride` -> pinned `probeInstallClone` path                             | WIRED  | Focused tests count one resolve and assert the installed pin/SHA.               |
-| move judge / install preview | agents bridge         | `assertUpdateNamesFree` / `assertAgentTargetsFree`                                 | WIRED  | Refusal occurs during planning, before plan execution.                          |
-| preview agent check          | staging agent check   | shared `assertAgentNamesUnclaimed`                                                 | WIRED  | Missing-file foreign claim produces the same typed refusal in both paths.       |
-| tag probe                    | constraint failure    | `toMemberConstraintOutcome(member, declared, probed)`                              | WIRED  | No-match answer carries no range; the declared range becomes the failure range. |
-| missing-dependency ledger    | user-visible failure  | `capture.rollbackPartials` -> `handleCaughtInstallFailure` -> failed outcome       | WIRED  | REC-06 focused test asserts phase, message, cause, and absent install record.   |
+| From | To | Via | Status | Details |
+|---|---|---|---|---|
+| `previewInstall` | dependency plan | `prepareInstallDependencyPlan` / `previewInstallDependencyPlanRoot` | WIRED | Resolved SHA becomes the preview answer and root commit. |
+| dependency plan | install ledger | `previewedCommit` / `rootCommit` -> `memberLedgerPin` -> `sourcePin` | WIRED | Both cascade and root builders call the same pin helper. |
+| ledger pin | clone cache | `sourcePinOverride` -> pinned clone probe | WIRED | The previewed per-commit copy is reused without a second resolve. |
+| move judge / update plan | agents bridge | `assertUpdateNamesFree` -> `assertAgentTargetsFree` | WIRED | Occupancy refusal happens before the plan executes. |
+| tag probe | constraint failure | `toMemberConstraintOutcome(member, declared, probed)` | WIRED | No-match carries no range; the declared range supplies the failure. |
+| missing-dependency failure | outcome | capture -> `handleCaughtInstallFailure` / result projection | WIRED | Rollback partials survive the split owner boundary. |
 
 ### Data-Flow Trace (Level 4)
 
-No UI component renders dynamic data in this phase. The operational data flows are covered by the key links above and terminate in real state, filesystem, git-request, and failure-outcome assertions rather than static return values or mocks used as expected-value generators.
+This phase has no dynamic UI. Its operational data flows terminate in real state,
+filesystem, git-request, install-record, and failure-outcome assertions. No checked
+link ends in a static fallback or mock-generated expected value.
 
 ### Behavioral Spot-Checks
 
-| Behavior                                                                         | Command                                                                                                                        | Result                                                | Status |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- | ------ |
-| Foreign missing-file claim refuses identically in preview/staging with no writes | `node --test --test-name-pattern 'refuses a foreign index claim with no target file' test/bridges/agents/target-check.test.ts` | 1/1 passed                                            | PASS   |
-| Preview pin, deferred refusal, greedy limit, and path redaction                  | named Phase 4 cases in `test/orchestrators/plugin/dependency-plan.test.ts`                                                     | 4/4 passed                                            | PASS   |
-| Fresh git dependency installs previewed commit with one resolve                  | named D-PL4-01 case in `test/orchestrators/plugin/install-flow-planning.test.ts`                                               | 1/1 passed                                            | PASS   |
-| Failed undo reaches missing-dependency outcome                                   | named REC-06 case in `test/orchestrators/plugin/install-flow-ledger.test.ts`                                                   | 1/1 passed                                            | PASS   |
-| Probe returns a range-free no-match and cascade uses declared range              | named cases in dependency-tag-probe and install-cascade tests                                                                  | 2/2 passed                                            | PASS   |
-| Combined tree                                                                    | `npm run check` at merged build-input commit `1c8be58f`                                                                        | exit 0; 1142 scenarios, 11734 steps, 309 LCOV records | PASS   |
+| Behavior | Command | Result | Status |
+|---|---|---|---|
+| Preview pin, deferred refusal, and greedy limit | Named `D-PL4-01|02|03` owners in dependency-plan/planning/cascade-context | 3 owner modules passed | PASS |
+| Occupied agent target refuses before mutation | Named `D-PL4-04` owners in target-check/update-swap/planning | 3 owner modules passed | PASS |
+| Range-free no-match and rollback partial projection | Named no-match/rollback owners across release-tag, tag probe, cascade, and results | 4 owner modules passed | PASS |
+| Public one-fetch behavior | Exact RSV-01 Cucumber scenario | 1 scenario, 14 steps, 16 hooks passed | PASS |
+| Public refusal-before-write behavior | Exact three RSV-04 Cucumber scenarios | 3 scenarios, 43 steps, 16 hooks passed | PASS |
+| Combined tree | Reused exact `npm run check` at executable head `be0de0c3` | exit 0; 1,145 scenarios, 11,777 steps, 309 LCOV | PASS |
 
-The combined-tree evidence is current for this exact merged HEAD: `npm run check` passed at `1c8be58f` after the comment-only contract fix and final 52-file clean review. There are no later build-input changes and no untracked build inputs. Node was `v26.12.1`.
+The initial Cucumber attempt was blocked by sandbox `listen EPERM` on the loopback
+fixture. The permitted unsandboxed rerun passed unchanged. `git diff --quiet be0de0c3
+-- . ':(exclude,glob).planning/**/*.md'` exits 0, so the exact full gate is reusable
+under the local-verification policy. Node is `v26.12.1`.
 
 ### Probe Execution
 
-N/A -- no Phase 4 plan declares a standalone probe script. The named unit and public Cucumber tests are the executable behavior evidence.
+N/A -- no Phase 4 plan declares a standalone probe script.
 
 ### Requirements Coverage
 
-| Requirement | Source Plans               | Status    | Evidence                                                           |
-| ----------- | -------------------------- | --------- | ------------------------------------------------------------------ |
-| RSV-01      | 04-04, 04-05, 04-06        | SATISFIED | Truth 1; one-resolve unit and public git-request assertions.       |
-| RSV-02      | 04-03, 04-05               | SATISFIED | D-PL4-02 code/docs and focused deferred-preview refusal.           |
-| RSV-03      | 04-03                      | SATISFIED | D-PL4-03 code/docs and exact incomplete-search trace.              |
-| RSV-04      | 04-01, 04-03, 04-05, 04-06 | SATISFIED | Truth 3; bridge parity plus install/update preservation scenarios. |
-| RSV-05      | 04-02                      | SATISFIED | Truth 4; range-free types/decoder and rollback propagation.        |
+| Requirement | Source Plans | Status | Evidence |
+|---|---|---|---|
+| RSV-01 | 04-04, 04-05, 04-06 | SATISFIED | Truth 1; owner pin assertions and one-fetch public request log. |
+| RSV-02 | 04-03, 04-05 | SATISFIED | D-PL4-02 code and focused deferring-plan refusal. |
+| RSV-03 | 04-03 | SATISFIED | D-PL4-03 code and exact incomplete-search trace. |
+| RSV-04 | 04-01, 04-03, 04-05, 04-06 | SATISFIED | Truth 3; read-only preflight and three public preservation scenarios. |
+| RSV-05 | 04-02 | SATISFIED | Truth 4; range-free types/decoder and rollback propagation. |
 
-No orphaned requirement exists: REQUIREMENTS.md maps exactly RSV-01 through RSV-05 to Phase 4, and every ID is claimed by at least one plan.
+No orphaned requirement exists: REQUIREMENTS.md maps exactly RSV-01 through RSV-05
+to Phase 4, and every ID is claimed by a plan.
 
 ### Test Quality Audit
 
-| Test group                            | Linked requirements    | Active evidence                                                                          | Skipped | Circular | Strongest assertion                | Verdict |
-| ------------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------- | ------- | -------- | ---------------------------------- | ------- |
-| dependency plan / install planning    | RSV-01, RSV-02, RSV-03 | Exact plans, calls, pins, SHA, versions, and network-resolve counts                      | 0       | No       | Behavioral / whole value           | PASS    |
-| agent target bridge / update planning | RSV-04                 | Typed errors plus full index/file/state preservation                                     | 0       | No       | Behavioral / bytes and whole state | PASS    |
-| release/tag/cascade                   | RSV-05                 | Exact discriminated unions and declared range                                            | 0       | No       | Whole value                        | PASS    |
-| missing-dependency ledger             | RSV-05                 | Exact rollback-partial object and absent saved record                                    | 0       | No       | Behavioral / whole value           | PASS    |
-| Cucumber install/update scenarios     | RSV-01, RSV-04         | Complete result tables, request log, record bytes, versions, files, index, staged skills | 0       | No       | Public behavioral                  | PASS    |
+| Test group | Linked requirements | Active | Skipped | Circular | Assertion level | Verdict |
+|---|---|---:|---:|---|---|---|
+| dependency plan / install planning | RSV-01, RSV-02, RSV-03 | yes | 0 | no | behavioral / whole value | PASS |
+| agent target preflight / update | RSV-04 | yes | 0 | no | behavioral / filesystem and state bytes | PASS |
+| release tag / cascade | RSV-05 | yes | 0 | no | exact discriminated value | PASS |
+| missing-dependency result | RSV-05 | yes | 0 | no | exact rollback-partial outcome | PASS |
+| Cucumber install/update | RSV-01, RSV-04 | 4 scenarios | 0 | no | public behavioral | PASS |
 
-Disabled requirement tests: 0. Circular expected-value generation: 0. Insufficient assertions: 0.
+Disabled requirement tests: 0. Circular expected-value generation: 0.
+Insufficient assertions: 0.
 
 ### Anti-Patterns Found
 
-No unresolved `TBD`, `FIXME`, or `XXX` marker was found in the covered production files. The fresh code review is clean (0 Critical, 0 Warning, 0 Info), the security audit closed 17/17 threats with `threats_open: 0`, and the combined static/Fallow gate passed. No blocker or new-scope advisory was found.
+No unresolved `TBD`, `FIXME`, or `XXX` marker exists in the checked production
+scope. The final review is CLEAN across 62 files, security is SECURED 17/17 with
+`threats_open: 0`, and no test linked to RSV-01..05 is disabled.
 
 ### Advisory (New Scope, Unevidenced)
 
@@ -199,13 +202,15 @@ All 7 trackable CONTEXT.md decisions are honored by shipped artifacts.
 
 ### Human Verification Required
 
-None. Every user-visible behavior in the phase has a public Cucumber scenario, and every state-transition/order invariant has an active unit or behavioral test.
+None. Every user-visible behavior has a passing public scenario, and every state,
+ordering, cleanup, and refusal invariant has active owner-level behavior proof.
 
 ### Gaps Summary
 
-None. All roadmap success criteria, requirements, decisions, artifacts, and current key links are verified. The Phase 11 file split changes artifact locations but not the Phase 4 contracts.
+None. All four roadmap truths, RSV-01..05, current split artifacts, and key links
+are verified on the final integrated executable tree.
 
 ---
 
-_Verified: 2026-10-29T03:51:38Z_
+_Verified: 2026-10-29T12:59:35Z_
 _Verifier: gsd-verifier_
