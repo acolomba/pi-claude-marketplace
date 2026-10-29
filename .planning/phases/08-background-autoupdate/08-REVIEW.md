@@ -1,7 +1,7 @@
 ---
 phase: 08-background-autoupdate
-reviewed: 2026-10-29T05:35:44Z
-reviewed_commit: c172f9b5cd3458f1fed018fe2eb73afd176f3d78
+reviewed: 2026-10-29T13:40:00Z
+reviewed_commit: ed25c8764eda4ba606ef4923198e9f67464ed5fb
 depth: standard
 files_reviewed: 53
 files_reviewed_list:
@@ -68,24 +68,36 @@ status: clean
 
 # Phase 8: Code Review Report
 
-**Reviewed:** 2026-10-29T05:35:44Z
+**Reviewed:** 2026-10-29T13:40:00Z
 **Depth:** standard
 **Files Reviewed:** 53
 **Status:** clean
 
 ## Narrative Findings (AI reviewer)
 
-The complete Phase 8 scope is clean on the integrated tree. The scope contains
-61 non-`AGENTS.md` covered entries; after the required review filter removes
-the eight Phase 8 planning plans and summaries, 53 source, behavior, test,
-schema, and product-documentation files remain. All 53 are listed above. No
-current BLOCKER or WARNING was found.
+The complete retained Phase 8 scope is clean on the final integrated tree. The
+scope contains 61 non-`AGENTS.md` covered entries; after the required review
+filter removes the eight Phase 8 planning plans and summaries, 53 source,
+behavior, test, schema, and product-documentation files remain. All 53 are
+listed above. No current BLOCKER or WARNING was found.
 
 The evaluation-scope resolver reports a degraded phase range because it cannot
 reach Phase 8 task commits from the integrated history. This review therefore
-uses the explicit covered-file manifest in `08-VERIFICATION.md`, supplemented
-by the exact post-review delta. That delta contains only the stop-race fix, its
-owner regressions, and the corrected scheduler comment.
+retains the explicit 53-file manifest from the prior complete review. An exact
+path-limited comparison from that review's `c172f9b5` source tree through
+`ed25c876` is empty, so every reviewed file is byte-identical to the tree that
+received the prior full standard review. The final-head pass nevertheless
+rechecked the background gate, pass, scheduler, PTY wait-cap oracle, aggregate
+notice oracle, hosted-manifest redirect boundary, and git remote-read boundary.
+
+Fallow's focused security scan raised two candidates, neither of which is a
+finding. The `listRemotes` read joins `.git/config` to a clone directory supplied
+by its containment-enforcing callers; it does not accept a user-selected output
+path. The hosted-manifest fetch deliberately permits the user-selected start
+origin, sends no credentials, and applies the documented HTTPS, userinfo,
+redirect-count, cross-origin protocol, local-address, metadata-address, timeout,
+and body-size checks to server-selected redirects. The same-origin exception is
+an explicit tested contract, not an unchecked redirect.
 
 ## Fixed finding verification
 
@@ -130,21 +142,21 @@ claims that 30 seconds bounds the total shutdown wait.
 
 ## Validation context
 
-- The exact integrated `npm run check` gate passed 1,143 scenarios, 11,742
+- The exact integrated `npm run check` gate passed 1,145 scenarios, 11,777
   steps, and 309 direct-coverage LCOV records on this source/test tree.
+- Phase 8 Nyquist validation is COMPLIANT for AUP-01 through AUP-03 and all four
+  roadmap truths at `ed25c876`.
+- The focused owner/architecture set passed 10/10, and all five direct-coverage
+  pairs passed at 100%.
 - The real PTY feature passed six scenarios and 88 steps.
-- The direct-coverage pairs for `background-pass.ts` and
-  `background-update.ts` pass at 100% on the reviewed commit.
-- Fallow's post-review delta brief reports no dead-code, complexity, or
-  duplication finding. Its two public-contract prompts are satisfied by the
-  unchanged exported function signatures and their inspected `index.ts`
-  consumer.
+- Fallow reports no confirmed dead-code, complexity, duplication, or security
+  finding in the reviewed scope.
 
 All reviewed files meet the Phase 8 correctness, security, and quality
 requirements. No issues found.
 
 ---
 
-_Reviewed: 2026-10-29T05:35:44Z_
+_Reviewed: 2026-10-29T13:40:00Z_
 _Reviewer: Codex (gsd-code-reviewer)_
 _Depth: standard_
