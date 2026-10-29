@@ -1,6 +1,6 @@
 ---
 phase: 01-staging-warning-channels
-audited: 2026-10-28
+audited: 2026-10-29
 status: secured
 asvs_level: 1
 block_on: high
@@ -10,8 +10,8 @@ threats_open: 0
 threats_open_nonblocking: 0
 accepted_risks: 6
 unregistered_flags: 0
-source_commit: 67a589aa043092978351de71ce641e138539fead
-audit_head: 395bd627328a9672489a6523586af09e6f389ab4
+source_commit: be0de0c3
+audit_head: 3bbe718a
 ---
 
 # Phase 1 Security Audit
@@ -53,10 +53,10 @@ to the repository root.
 | T-01-12 | Information disclosure | medium | mitigate | CLOSED | Standalone failure diagnostics use `surfaceStagingDiagnostics`: install at `orchestrators/plugin/install-flow-results.ts:641`, update abort at `orchestrators/plugin/update-flow.ts:750`, and reinstall through `orchestrators/plugin/reinstall-flow.ts:635`. The common renderer selects discovery warnings and redacts paths. Failure scenarios begin at `features/plugin/staging-warnings.feature:65` and assert redacted install/update/reinstall diagnostics. |
 | T-01-13 | Spoofing | low | mitigate | CLOSED | `orchestrators/plugin/install-flow-results.ts:688` routes dependency failures to `handleCascadeThrow`; that function emits the cascade without staging diagnostics. The standalone root diagnostic is after the orchestrated early return at line 613. `test/orchestrators/plugin/install-flow-ledger.test.ts:1499` asserts the entire dependency-failure output contains no diagnostic under the root. |
 | T-01-14 | Information disclosure | low | mitigate | CLOSED | Fresh `CandidateReport` objects are created per direct-update target at `orchestrators/plugin/update-flow.ts:448`, per cascade call at `:844`, per reinstall at `orchestrators/plugin/reinstall-flow.ts:286`, and per post-settlement swap at `orchestrators/plugin/materialize-latest.ts:228`. `test/orchestrators/plugin/update-flow.test.ts:11667` gives both targets warnings and asserts only the failed target's diagnostic renders after abort. |
-| T-01-15 | Information disclosure | medium | mitigate | CLOSED under D-PL1-25 | D-PL1-25 supersedes the original discovery-only cascade requirement. `orchestrators/plugin/staging-diagnostics.ts:67` partitions both channels; line 126 redacts every line before emission. Marketplace rendering calls this at `orchestrators/marketplace/update.messaging.ts:213`, and apply at `orchestrators/reconcile/apply.ts:2427`. `test/orchestrators/plugin/staging-diagnostics.test.ts:423` asserts hygiene-path redaction. Scenarios at `features/plugin/staging-warnings.feature:122` and `:171` assert both channels under one header. |
+| T-01-15 | Information disclosure | medium | mitigate | CLOSED under D-PL1-25 | D-PL1-25 supersedes the original discovery-only cascade requirement. `orchestrators/plugin/staging-diagnostics.ts:67` partitions both channels; line 126 redacts every line before emission. Marketplace rendering calls this at `orchestrators/marketplace/update.messaging.ts:213`, apply at `orchestrators/reconcile/apply.ts:2427`, and direct update dependency outcomes at `orchestrators/plugin/update-flow.ts:562`. `test/orchestrators/plugin/staging-diagnostics.test.ts:423` asserts hygiene-path redaction. Scenarios at `features/plugin/staging-warnings.feature:122`, `:171`, and `:701` assert both channels and direct-update ordering. |
 | T-01-16 | Denial of service | low | accept | CLOSED - documented accepted risk | Existing acceptance: `01-07-PLAN.md:202`, amended for both channels by D-PL1-25. `orchestrators/plugin/staging-diagnostics.ts:72` emits one diagnostic per supplied plugin entry. Tests at `test/orchestrators/plugin/staging-diagnostics.test.ts:298` pin entry order and one combined diagnostic. See accepted-risk log. |
-| T-01-17 | Repudiation | medium | mitigate | CLOSED | The former `saveRootClosure` responsibility is now `saveInstallDependencyPlanClosure`; `orchestrators/plugin/install-flow-dependency-ledger.ts:584` forwards notices. `dependency-settle.ts:227` accumulates them and preserves them on success/failure; `materialize-latest.ts:182` places settlement notices first; `update-flow.ts:615` renders updated and failed outcomes. `shared/notification-types.ts:1300` restricts file notices to kind, scope and fixed filename. `features/plugin/staging-warnings.feature:203` asserts the exact comments-dropped payload. |
-| T-01-18 | Repudiation | medium | mitigate | CLOSED | `package.json:86` chains required checks with `&&`, preserving failure status. The owner reported `npm run check` exit 0 at source commit `67a589aa043092978351de71ce641e138539fead`, Node `v26.12.1`: 1120 scenarios, 11411 steps, 309 direct LCOV records. The audit verified unchanged build inputs against that commit; see audit trail. |
+| T-01-17 | Repudiation | medium | mitigate | CLOSED | The former `saveRootClosure` responsibility is now `saveInstallDependencyPlanClosure`; `orchestrators/plugin/install-flow-dependency-ledger.ts:584` forwards notices. `dependency-settle.ts:227` accumulates them and preserves them on success/failure; `materialize-latest.ts:182` places settlement notices first. Direct update renders dependency diagnostics before root diagnostics on the normal path at `update-flow.ts:562-569` and on phase-3a abort at `:762-764`; owner tests at `test/orchestrators/plugin/update-flow.test.ts:11724-11828` and `:14541-14625` plus public scenarios at `features/plugin/staging-warnings.feature:28-53` and `:701-728` pin both paths. `shared/notification-types.ts:1300` restricts file notices to kind, scope and fixed filename. |
+| T-01-18 | Repudiation | medium | mitigate | CLOSED | `package.json:86` chains required checks with `&&`, preserving failure status. The owner reported `npm run check` exit 0 at executable head `be0de0c3`, Node `v26.12.1`: 1145 scenarios, 11777 steps, 309 direct LCOV records. The audit verified unchanged build inputs against that commit; see audit trail. |
 | T-01-SC | Tampering | high | accept | CLOSED - documented accepted risk | Existing acceptance: all eight plans, first at `01-01-PLAN.md:293`. Phase 1 adds warning-channel and lifecycle-reporting behavior without adding a package dependency. This acceptance is scoped to Phase 1; it does not waive the separate Phase 9 package-install threat model. See accepted-risk log. |
 
 ## Accepted Risks
@@ -153,3 +153,14 @@ Phase 1 threat ID.
   produced no output. The auditor modified no implementation, tests, planning
   records, or state; the orchestrator owns `01-SECURITY.md` persistence.
 - Final merged-tree verdict: SECURED; threats_open: 0.
+- Final post-fix security re-audit on 2026-10-29 verified all 19 threats closed
+  at executable head `be0de0c3`: 13 mitigations and six documented accepted
+  risks, with blocking open: 0 and non-blocking open: 0.
+- D-PL10-12 is now covered on direct update's normal and phase-3a abort paths:
+  dependency discovery and hygiene diagnostics render before the root's
+  discovery-only diagnostic, and the abort path retains the dependency
+  diagnostics before root and MCP output. D-PL10-13 remains the formal
+  supersession of Plan 01-03's older broad-listing literal.
+- Reused the exact post-fix `npm run check` result: exit 0, 1,145 scenarios,
+  11,777 steps, and 309 direct LCOV records. The post-fix complete code review
+  was CLEAN across 43 files. Final verdict: SECURED; threats_open: 0.
