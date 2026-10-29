@@ -9348,7 +9348,7 @@ test("D-PL1-12: a standalone enable shows the root's skipped skill after its row
       {
         severity: "warning",
         message:
-          'Plugin "foo" [user] enabled; 1 declared component has a note.\n\nskill source "s1" in "skills" elides to generated name "foo-s1", already produced by skill source "foo-s1"; ignoring duplicate.',
+          'Plugin "foo" [user] enabled; 1 declared component has a note.\n\nskill source "s1" in "[redacted path]',
       },
       USER_COMMENTS_DROPPED_NOTICE,
     ]);

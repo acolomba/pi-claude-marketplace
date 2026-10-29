@@ -428,7 +428,7 @@ test("CFG-03 / D-06: an unparseable config is reported once, by pending's block 
   verifyBoundary();
 });
 
-test("D-06: a marketplace declared from another source than the one recorded is reported once, by pending's block", async (t) => {
+test("D-PL10-23: a marketplace declared from another source is reported as an actionable replacement", async (t) => {
   // arrange
   const scope = await createLoadScope(t, "source-mismatch");
   await seedInstalled(scope, scope.project, { hello: {} }, ["hello"]);
@@ -446,12 +446,11 @@ test("D-06: a marketplace declared from another source than the one recorded is 
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "A marketplace operation has failed.\n" +
+        "● mp [project] (will add)\n" +
         "\n" +
-        "⊘ mp [project] (failed) {source mismatch}\n" +
+        "Reconcile pending: 1 success\n" +
         "\n" +
-        "Reconcile pending: 1 failure",
-      severity: "error",
+        "/claude:plugin apply to make these changes",
     },
   ]);
   assert.deepStrictEqual(await scopeFiles(scope.project), before);

@@ -561,6 +561,58 @@ describe("createPackagesPhase", () => {
     );
   });
 
+  test("keeps the package-manager work dir until a timed-out run settles", async (t) => {
+    // arrange
+    const seeded = await seedPlugin(t, {
+      "package.json": PACKAGE_JSON,
+      "package-lock.json": LOCKFILE,
+    });
+    let releaseRun = (): void => {
+      assert.fail("the package-manager run did not start");
+    };
+
+    let markStarted = (): void => undefined;
+    const runBlocked = new Promise<void>((resolve) => {
+      releaseRun = resolve;
+    });
+    const runStarted = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const phase = createPackagesPhase(
+      opsWith(async (request) => {
+        markStarted();
+        await runBlocked;
+        assert.deepStrictEqual(await sortedEntries(request.cwd), [
+          "package-lock.json",
+          "package.json",
+        ]);
+        return { code: null, stdout: "", stderr: "", timedOut: true };
+      }),
+    );
+    let completed = false;
+
+    // act
+    const pending = phase.do(seeded.context);
+    void pending.then(() => {
+      completed = true;
+    });
+    await runStarted;
+    await Promise.resolve();
+    const completedBeforeSettlement = completed;
+    const workDirBeforeSettlement = await sortedEntries(seeded.workDir);
+    releaseRun();
+    await pending;
+
+    // assert
+    assert.strictEqual(completedBeforeSettlement, false);
+    assert.deepStrictEqual(workDirBeforeSettlement, ["package-lock.json", "package.json"]);
+    assert.deepStrictEqual(
+      seeded.context.discoveryWarnings.map((warning) => warning.message),
+      ["Plugin dependency install failed (npm): timed out after 60 seconds"],
+    );
+    assert.deepStrictEqual(await sortedEntries(path.dirname(seeded.workDir)), []);
+  });
+
   for (const { situation, run, note } of [
     {
       situation: "the output on stdout",
@@ -655,6 +707,40 @@ describe("createPackagesPhase", () => {
       [prefix + "e".repeat(500 - prefix.length)],
     );
   });
+
+  for (const { characters, ending } of [
+    { characters: 498, ending: "😀" },
+    { characters: 499, ending: "" },
+  ]) {
+    test(`keeps whole Unicode characters in a failure note after ${characters} characters`, async (t) => {
+      // arrange
+      const seeded = await seedPlugin(t, {
+        "package.json": PACKAGE_JSON,
+        "package-lock.json": LOCKFILE,
+      });
+      const prefix = "Plugin dependency install failed (npm): ";
+      const padding = "e".repeat(characters - prefix.length);
+      const phase = createPackagesPhase(
+        opsWith(
+          answeringRunner({
+            code: 1,
+            stdout: "",
+            stderr: padding + "😀tail",
+            timedOut: false,
+          }),
+        ),
+      );
+
+      // act
+      await phase.do(seeded.context);
+
+      // assert
+      assert.deepStrictEqual(
+        seeded.context.discoveryWarnings.map((warning) => warning.message),
+        [prefix + padding + ending],
+      );
+    });
+  }
 
   test("leaves the plugin root as it was when the package manager wrote no node_modules", async (t) => {
     // arrange

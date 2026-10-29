@@ -7,6 +7,40 @@ Feature: Plugin import
   Background:
     Given the marketplace "fixtures" is published as a dir source
 
+  Scenario: Import replaces an existing hosted marketplace from a changed URL
+    Given the marketplace "tools" is published as a hosted source
+    Given the marketplace "tools" is added to the user scope
+    Given the marketplace "replacement" is published as a hosted source
+    Given the marketplace "replacement" publishes this manifest:
+      """
+      { "name": "tools", "plugins": [] }
+      """
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "extraKnownMarketplaces": {
+          "tools": {
+            "source": { "source": "url", "url": "https://{git host}/acme/replacement/marketplace.json" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade |
+      | severity            | info    |
+      | needs reload        | false   |
+      | tally label         | Import  |
+      | tally failures      | 0       |
+      | tally warnings      | 0       |
+      | tally success count | 1       |
+    Then the result lists these marketplaces:
+      | name  | scope | status |
+      | tools | user  | added  |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name  | source                                             |
+      | tools | https://{git host}/acme/replacement/marketplace.json |
+
   Scenario: Importing the user's claude code settings adds their marketplace and installs their enabled plugin
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -82,6 +116,44 @@ Feature: Plugin import
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: Importing two names for one new source reports the plugin under the absent name
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the claude code settings file of the project scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@fixtures": true, "demo@other": true },
+        "extraKnownMarketplaces": {
+          "fixtures": { "directory": "{home}/marketplaces/fixtures" },
+          "other": { "directory": "{home}/marketplaces/fixtures" }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope project"
+    Then the result has these fields:
+      | kind                | cascade                        |
+      | severity            | error                          |
+      | needs reload        | true                           |
+      | summary             | Some operations have failed.   |
+      | tally label         | Import                         |
+      | tally failures      | 2                              |
+      | tally warnings      | 0                              |
+      | tally success count | 2                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name | version | status    | scope   | cause chain                                          | cause truncated | leaks | reasons | rollback partial |
+      | fixtures         | project           | added              | demo@fixtures | demo | 1.0.0   | installed | project |                                                      |                 |       |         |                  |
+      | other            | project           | failed             | demo@other    | demo |         | failed    | project | Marketplace "other" is not added in the project scope. | false           |       |         |                  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
 
   Scenario: Importing leaves out a plugin the claude code settings disable
     Given the marketplace "fixtures" offers these plugins:
@@ -944,6 +1016,25 @@ Feature: Plugin import
       | kind       | severity | needs reload | header                        | lines                                                                                                                                                              |
       | cascade    | info     | false        |                               |                                                                                                                                                                    |
       | diagnostic | warning  | false        | 1 import diagnostic surfaced. | Skipping Claude marketplace "remote" because it has no supported url, github, or directory source (nested file/remote-marketplace.json sources are not importable). |
+
+  Scenario: Importing with an unsupported state version hides the state file path
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    Given the import state of the user scope has an unsupported schema version
+    When the user runs "/claude:plugin import --scope user"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                        | lines                                                                                   |
+      | cascade    | info     | false        |                               |                                                                                         |
+      | diagnostic | warning  | false        | 1 import diagnostic surfaced. | Cannot read user scope state: state.json at state.json has an unsupported schema version |
+    Then the command result contains no absolute sandbox path
 
   Scenario: Importing a plugin whose install rollback cannot finish names the rollback phase
     Given the marketplace "fixtures" offers these plugins:

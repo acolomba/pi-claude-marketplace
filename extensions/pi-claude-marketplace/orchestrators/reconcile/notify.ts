@@ -686,6 +686,18 @@ export async function resolvePendingForceInstalls(
   return keys;
 }
 
+function pendingSourceMismatches(plan: ReconcilePlan): ReconcilePlan["sourceMismatches"] {
+  return plan.sourceMismatches.filter(
+    (mismatch) =>
+      !(
+        mismatch.cause === "source-mismatch" &&
+        plan.marketplacesToAdd.some(
+          (add) => add.scope === mismatch.scope && add.marketplace === mismatch.marketplace,
+        )
+      ),
+  );
+}
+
 /**
  * Pure projection: ReconcilePlan[] -> pending marketplace rows. The rows are
  * typed `MarketplaceRows<PendingMsg>` so the projection's plugin children are
@@ -704,7 +716,8 @@ export async function resolvePendingForceInstalls(
  *                              `plugins` field, NOT pluginsToUninstall (which
  *                              deliberately omits removed-marketplace plugins
  *                              to avoid double-billing the apply cascade).
- *   - sourceMismatches      -> block.status = "failed", reasons:
+ *   - sourceMismatches      -> replacements keep their will-add header;
+ *                              other mismatches set block.status = "failed", reasons:
  *                              ["dangling reference"] for the dangling-reference
  *                              cause (PURL-06), ["source mismatch"] for the
  *                              other three causes
@@ -766,7 +779,7 @@ export function buildReconcilePendingNotification(
   for (const plan of plans) {
     pushMarketplaceActions(byMp, plan, recordedVersions);
 
-    for (const o of plan.sourceMismatches) {
+    for (const o of pendingSourceMismatches(plan)) {
       applySourceMismatch(
         ensureMarketplaceBlock(byMp, o.scope, plannedSourceMismatchSubject(o)),
         o,
@@ -1241,7 +1254,10 @@ function failedRowCause(outcome: PerEntryOutcome): { cause?: Error } {
     return { cause: outcome.cause };
   }
 
-  if (outcome.kind === "plugin-install-failed" && outcome.cause !== undefined) {
+  if (
+    (outcome.kind === "plugin-install-failed" || outcome.kind === "plugin-enable-failed") &&
+    outcome.cause !== undefined
+  ) {
     return { cause: outcome.cause };
   }
 
@@ -1249,14 +1265,17 @@ function failedRowCause(outcome: PerEntryOutcome): { cause?: Error } {
 }
 
 /**
- * MIM-03 / D-PL6-05: the undo steps a failed install could not finish, so its
+ * MIM-03 / D-PL6-05: the undo steps a failed install or enable could not finish, so its
  * reconcile row shows the per-phase rows the standalone install shows. The
  * phase causes arrive redacted from apply.ts (D-PL6-12).
  */
 function failedRowRollback(outcome: PerEntryOutcome): {
   rollbackPartial?: readonly { readonly phase: string; readonly cause?: Error }[];
 } {
-  const partials = outcome.kind === "plugin-install-failed" ? outcome.rollbackPartials : undefined;
+  const partials =
+    outcome.kind === "plugin-install-failed" || outcome.kind === "plugin-enable-failed"
+      ? outcome.rollbackPartials
+      : undefined;
   return partials !== undefined && partials.length > 0 ? { rollbackPartial: partials } : {};
 }
 
@@ -1271,8 +1290,8 @@ function failedRowReasons(
   return reasonAsContent(outcome.reason);
 }
 
-/** The `(failed)` row of a failed reconcile install, uninstall, enable or disable. */
-function failedRowFromOutcome(
+/** Builds the `(failed)` row of a reconcile install, uninstall, enable or disable. */
+export function failedRowFromOutcome(
   outcome: Extract<
     PerEntryOutcome,
     {
@@ -1289,7 +1308,7 @@ function failedRowFromOutcome(
     name: outcome.plugin,
     reasons: failedRowReasons(outcome),
     // D-05-16 / RESV-06 / MIM-03: a refused uninstall, a dependency-cascade
-    // install failure, and an install that left rollback partials carry a
+    // install failure, and an install or enable that left rollback partials carry a
     // cause onto this row; the last also carries its phases.
     ...failedRowCause(outcome),
     ...failedRowRollback(outcome),

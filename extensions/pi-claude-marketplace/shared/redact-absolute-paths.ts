@@ -5,6 +5,8 @@ import {
   ManualRecoveryError,
 } from "./errors.ts";
 
+const REDACTED_PATH = "[redacted path]";
+
 /**
  * Collapses absolute paths in diagnostic text to their basenames.
  *
@@ -21,11 +23,112 @@ import {
  * an unredacted one.
  */
 export function redactAbsolutePaths(text: string): string {
-  const absolutePath = /(?<![\w:/\\])(?:[A-Za-z]:[\\/]|\\\\\?\\|\/)[\w./\\~-]+[\\/][\w./\\~-]+/g;
-  return text.replace(absolutePath, (match) => {
-    const lastSeparator = Math.max(match.lastIndexOf("/"), match.lastIndexOf("\\"));
-    return lastSeparator < 0 ? match : match.slice(lastSeparator + 1);
-  });
+  const stateLock = text
+    .replace(
+      /(Another pi-claude-marketplace operation is in progress for (?:user|project) scope \()((?:[A-Za-z]:[\\/]|\\\\(?:\?\\)?|\/).*?[\\/]\.state-lock)(\)\. Retry after it completes\.)/gs,
+      (_match: string, prefix: string, lockPath: string, suffix: string) =>
+        prefix + pathBasename(lockPath) + suffix,
+    )
+    .replace(
+      /(The (?:user|project) scope state lock \()((?:[A-Za-z]:[\\/]|\\\\(?:\?\\)?|\/).*?[\\/]\.state-lock)(\) was lost before the operation finished\. Run the command again\.)/gs,
+      (_match: string, prefix: string, lockPath: string, suffix: string) =>
+        prefix + pathBasename(lockPath) + suffix,
+    );
+  const unquoted = stateLock
+    .replace(
+      /(\bstate\.json at )((?:[A-Za-z]:[\\/]|\\\\(?:\?\\)?|\/).*?[\\/]state\.json)(?= (?:is not valid JSON|has an unsupported schema version|failed schema validation))/gs,
+      (_match: string, prefix: string, filePath: string) => prefix + pathBasename(filePath),
+    )
+    .replace(
+      /(\bFailed to (?:read|write) )((?:[A-Za-z]:[\\/]|\\\\(?:\?\\)?|\/).*?)(?=: )/gs,
+      (_match: string, prefix: string, filePath: string) => prefix + pathBasename(filePath),
+    );
+  // Node errno messages end with one quoted path or two separated by "' -> '".
+  // Their paths can contain unescaped quotes followed by spaces or punctuation.
+  const diagnostic = unquoted.replace(
+    /(\bE[A-Z0-9]+: [^,\r\n]+, [a-z][a-z0-9_]* )'.+'$/s,
+    (match: string, prefix: string) => {
+      const field = match.slice(prefix.length + 1, -1);
+      const arrowOperation = /, (?:rename|copyfile|link|symlink) $/.test(prefix);
+      const paths = arrowOperation ? field.split("' -> '") : [field];
+      if (arrowOperation && paths.length !== 2) {
+        return `${prefix}'${REDACTED_PATH}'`;
+      }
+
+      return (
+        prefix +
+        "'" +
+        paths
+          .map((filePath) =>
+            /^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(filePath) ? pathBasename(filePath) : filePath,
+          )
+          .join("' -> '") +
+        "'"
+      );
+    },
+  );
+  const quoted = redactQuotedAbsolutePaths(diagnostic);
+  const absolutePath =
+    /(?<![\w:/\\])(?:[A-Za-z]:[\\/]|\\\\(?:\?\\)?|\/)[\w./\\~-]+[\\/][\w./\\~-]+/g;
+  return quoted.replace(absolutePath, (match) => pathBasename(match));
+}
+
+function isQuotedPathBoundary(character: string | undefined): boolean {
+  return character === undefined || /[\s,;:.)\]}]/u.test(character);
+}
+
+function isQuotedAbsolutePathCandidate(candidate: string): boolean {
+  return /^(?:[A-Za-z]:[\\/]|\\\\|\/).*[/\\][^/\\]+$/s.test(candidate);
+}
+
+function redactQuotedAbsolutePaths(text: string): string {
+  const opening = /(['"])(?!\/[^/\\\r\n'"]+\1)(?:[A-Za-z]:[\\/]|\\\\|\/)/g;
+  let redacted = "";
+  let copiedThrough = 0;
+  let match = opening.exec(text);
+  while (match !== null) {
+    const quote = text.charAt(match.index);
+    const delimiter = text.indexOf(quote, opening.lastIndex);
+    if (delimiter < 0 || text.includes(quote, delimiter + 1)) {
+      redacted += text.slice(copiedThrough, match.index) + quote + REDACTED_PATH;
+      copiedThrough = text.length;
+      opening.lastIndex = copiedThrough;
+      match = opening.exec(text);
+      continue;
+    }
+
+    const end = delimiter;
+    const candidate = text.slice(match.index + 1, end);
+    if (isQuotedAbsolutePathCandidate(candidate)) {
+      if (isQuotedPathBoundary(text[delimiter + 1]) && !/[/\\]/u.test(text.slice(delimiter + 1))) {
+        redacted +=
+          text.slice(copiedThrough, match.index) + quote + pathBasename(candidate) + quote;
+        copiedThrough = end + quote.length;
+      } else {
+        redacted += text.slice(copiedThrough, match.index) + quote + REDACTED_PATH;
+        copiedThrough = text.length;
+      }
+
+      opening.lastIndex = copiedThrough;
+    } else {
+      opening.lastIndex = match.index + 1;
+    }
+
+    match = opening.exec(text);
+  }
+
+  return redacted + text.slice(copiedThrough);
+}
+
+/** Takes the last path segment for either filesystem convention. */
+function pathBasename(filePath: string): string {
+  const lastSeparator = Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"));
+  return lastSeparator < 0 ? filePath : filePath.slice(lastSeparator + 1);
+}
+
+/** Redacts a structured leak without guessing where spaces end its path. */
+function redactedLeak(leak: string): string {
+  return /^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(leak) ? pathBasename(leak) : redactAbsolutePaths(leak);
 }
 
 /**
@@ -90,7 +193,7 @@ export function redactCauseChain(error: unknown): Error | undefined {
       link instanceof ManualRecoveryError
         ? new ManualRecoveryError(
             message,
-            link.leaks.map((leak) => redactAbsolutePaths(leak)),
+            link.leaks.map((leak) => redactedLeak(leak)),
             options,
           )
         : new Error(message, options);

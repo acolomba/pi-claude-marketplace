@@ -24,10 +24,10 @@
 // The cascade, the plan and the steps are ports install's flow binds, so
 // this module holds only the order.
 //
-// D-PL1-16: a settle reports the MCP config notices of the dependencies its
-// cascades install, in step order, on both of its arms, so an update can show
-// them ahead of its own. The MCP notices and staging warnings of a dependency
-// move are not reported; that is deferred (D-PL1-16).
+// D-PL1-16 / D-PL10-12: planned steps report closure-slice MCP config notices
+// and dependency-move MCP config notices and staging warnings in step order,
+// on success and failure. A move row owns its package note, so
+// `runDependencyMove` filters that note from the forwarded staging warnings.
 
 import { DependencyCascadeError, rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
 import { mcpConfigNoticesMember } from "../marketplace/shared.ts";
@@ -46,8 +46,11 @@ import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
 import type { CascadePlan, PlannedCascadeMember } from "./install-cascade.ts";
 import type { UpdateDependencySettlement } from "./update-swap.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
-import type { StagingWarning } from "../../shared/staging-warnings.ts";
-import type { MovedDependency, UpdateDependencyRow } from "../types.ts";
+import type {
+  DependencyStagingDiagnostic,
+  MovedDependency,
+  UpdateDependencyRow,
+} from "../types.ts";
 
 /**
  * What one locked run of the closure cascade did. D-PL1-16: `installed`
@@ -59,7 +62,7 @@ export type SettleCascadeRun =
       readonly kind: "installed";
       readonly rows: readonly UpdateDependencyRow[];
       readonly mcpConfigNotices?: readonly McpConfigNotice[];
-      readonly stagingWarnings?: readonly StagingWarning[];
+      readonly stagingDiagnostics?: readonly DependencyStagingDiagnostic[];
     }
   | { readonly kind: "refused"; readonly subject: CascadeFailureSubject };
 
@@ -91,14 +94,14 @@ export type DependencyStepsResult =
       readonly ok: true;
       readonly landed: readonly MovedDependency[];
       readonly mcpConfigNotices?: readonly McpConfigNotice[];
-      readonly stagingWarnings?: readonly StagingWarning[];
+      readonly stagingDiagnostics?: readonly DependencyStagingDiagnostic[];
     }
   | {
       readonly ok: false;
       readonly landed: readonly MovedDependency[];
       readonly cause: Error;
       readonly mcpConfigNotices?: readonly McpConfigNotice[];
-      readonly stagingWarnings?: readonly StagingWarning[];
+      readonly stagingDiagnostics?: readonly DependencyStagingDiagnostic[];
     };
 
 /** The operations an update's settle composes. */
@@ -108,11 +111,8 @@ export interface DependencySettlePorts {
   /** The write-free plan of the whole graph. */
   readonly plan: () => Promise<DependencyPlan>;
   readonly steps: DependencyStepPorts;
-  /**
-   * Notes the clones on disk before the plan, and returns the sweep that
-   * removes the ones the operation left unreferenced. Never throws.
-   */
-  readonly planSweep: () => Promise<() => Promise<void>>;
+  /** Sweeps the exact clone keys collected during this planning attempt. */
+  readonly sweepPlanClones: () => Promise<void>;
 }
 
 /** The error a dependency move that did not land reports. */
@@ -138,7 +138,7 @@ export function movedFromRow(row: UpdateDependencyRow): MovedDependency {
 interface StepRun {
   readonly rows: readonly UpdateDependencyRow[];
   readonly notices: readonly McpConfigNotice[];
-  readonly warnings: readonly StagingWarning[];
+  readonly diagnostics: readonly DependencyStagingDiagnostic[];
   readonly failure?: Error;
 }
 
@@ -149,29 +149,33 @@ async function runStep(step: DependencyPlanStep, ports: DependencyStepPorts): Pr
       ? {
           rows: moved.rows,
           notices: moved.mcpConfigNotices ?? [],
-          warnings: moved.stagingWarnings ?? [],
+          diagnostics: moved.stagingDiagnostics ?? [],
         }
       : {
           rows: moved.rows,
           notices: moved.mcpConfigNotices ?? [],
-          warnings: moved.stagingWarnings ?? [],
+          diagnostics: moved.stagingDiagnostics ?? [],
           failure: failedMoveError(step.move.request),
         };
   }
 
   const run = await ports.materialize(step.members);
   if (run.kind === "installed") {
-    return { rows: run.rows, notices: run.mcpConfigNotices ?? [], warnings: [] };
+    return {
+      rows: run.rows,
+      notices: run.mcpConfigNotices ?? [],
+      diagnostics: run.stagingDiagnostics ?? [],
+    };
   }
 
   const refusal = ports.refusal(run.subject);
-  return { rows: refusal.rows, notices: [], warnings: [], failure: refusal.cause };
+  return { rows: refusal.rows, notices: [], diagnostics: [], failure: refusal.cause };
 }
 
-function warningsMember(warnings: readonly StagingWarning[]): {
-  readonly stagingWarnings?: readonly StagingWarning[];
+function stagingDiagnosticsMember(diagnostics: readonly DependencyStagingDiagnostic[]): {
+  readonly stagingDiagnostics?: readonly DependencyStagingDiagnostic[];
 } {
-  return warnings.length > 0 ? { stagingWarnings: warnings } : {};
+  return diagnostics.length > 0 ? { stagingDiagnostics: diagnostics } : {};
 }
 
 /**
@@ -190,7 +194,7 @@ export async function runDependencySteps(
 ): Promise<DependencyStepsResult> {
   let landed: MovedDependency[] = [];
   let notices: McpConfigNotice[] = [];
-  let warnings: StagingWarning[] = [];
+  let diagnostics: DependencyStagingDiagnostic[] = [];
   for (const step of steps) {
     let run: StepRun;
     try {
@@ -207,7 +211,7 @@ export async function runDependencySteps(
           landed,
           cause: err as Error,
           ...mcpConfigNoticesMember(notices),
-          ...warningsMember(warnings),
+          ...stagingDiagnosticsMember(diagnostics),
         };
       }
 
@@ -216,7 +220,7 @@ export async function runDependencySteps(
         landed: [...landed, movedFromRow(failedMoveRow(step.move.request, err))],
         cause: failedMoveError(step.move.request),
         ...mcpConfigNoticesMember(notices),
-        ...warningsMember(warnings),
+        ...stagingDiagnosticsMember(diagnostics),
       };
     }
 
@@ -225,14 +229,14 @@ export async function runDependencySteps(
       ...run.rows.map(movedFromRow),
     ];
     notices = [...notices, ...run.notices];
-    warnings = [...warnings, ...run.warnings];
+    diagnostics = [...diagnostics, ...run.diagnostics];
     if (run.failure !== undefined) {
       return {
         ok: false,
         landed,
         cause: run.failure,
         ...mcpConfigNoticesMember(notices),
-        ...warningsMember(warnings),
+        ...stagingDiagnosticsMember(diagnostics),
       };
     }
   }
@@ -241,7 +245,7 @@ export async function runDependencySteps(
     ok: true,
     landed,
     ...mcpConfigNoticesMember(notices),
-    ...warningsMember(warnings),
+    ...stagingDiagnosticsMember(diagnostics),
   };
 }
 
@@ -258,27 +262,31 @@ function refused(
  * update's refusal; GHB-03's invalid base override still fails the command.
  */
 async function settlePlanned(ports: DependencySettlePorts): Promise<UpdateDependencySettlement> {
-  let plan: DependencyPlan;
   try {
-    plan = await ports.plan();
-  } catch (err) {
-    rethrowInvalidGitHubBaseUrl(err);
-    return { kind: "refused", rows: [], cause: err as Error };
-  }
+    let plan: DependencyPlan;
+    try {
+      plan = await ports.plan();
+    } catch (err) {
+      rethrowInvalidGitHubBaseUrl(err);
+      return { kind: "refused", rows: [], cause: err as Error };
+    }
 
-  if (!plan.ok) {
-    return refused(ports.steps.refusal, plan.subject);
-  }
+    if (!plan.ok) {
+      return refused(ports.steps.refusal, plan.subject);
+    }
 
-  const final: DependencyPlanStep[] =
-    plan.final.members.length > 0 ? [{ kind: "materialize", members: plan.final.members }] : [];
-  const ran = await runDependencySteps([...plan.steps, ...final], ports.steps);
-  const rows = ran.landed.map((entry) => entry.row);
-  const notices = mcpConfigNoticesMember(ran.mcpConfigNotices ?? []);
-  const warnings = warningsMember(ran.stagingWarnings ?? []);
-  return ran.ok
-    ? { kind: "settled", rows, ...notices, ...warnings }
-    : { kind: "refused", rows, cause: ran.cause, ...notices, ...warnings };
+    const final: DependencyPlanStep[] =
+      plan.final.members.length > 0 ? [{ kind: "materialize", members: plan.final.members }] : [];
+    const ran = await runDependencySteps([...plan.steps, ...final], ports.steps);
+    const rows = ran.landed.map((entry) => entry.row);
+    const notices = mcpConfigNoticesMember(ran.mcpConfigNotices ?? []);
+    const diagnostics = stagingDiagnosticsMember(ran.stagingDiagnostics ?? []);
+    return ran.ok
+      ? { kind: "settled", rows, ...notices, ...diagnostics }
+      : { kind: "refused", rows, cause: ran.cause, ...notices, ...diagnostics };
+  } finally {
+    await ports.sweepPlanClones();
+  }
 }
 
 /** Runs an update's settle in its contracted order. */
@@ -291,6 +299,7 @@ export async function settleDependencies(
       kind: "settled",
       rows: first.rows,
       ...mcpConfigNoticesMember(first.mcpConfigNotices ?? []),
+      ...stagingDiagnosticsMember(first.stagingDiagnostics ?? []),
     };
   }
 
@@ -298,10 +307,5 @@ export async function settleDependencies(
     return refused(ports.steps.refusal, first.subject);
   }
 
-  const sweep = await ports.planSweep();
-  try {
-    return await settlePlanned(ports);
-  } finally {
-    await sweep();
-  }
+  return settlePlanned(ports);
 }

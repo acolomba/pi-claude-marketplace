@@ -13,6 +13,31 @@ Feature: Plugin apply
       | beta  | 1.0.0   |
       | gamma | 1.0.0   |
 
+  Scenario: Apply reports the rollback phases and leaks of a failed enable
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope project"
+    Given the published plugin "demo" of the marketplace "fixtures" has a read-only skill directory
+    Given a directory blocks the mcp-adapter.json file of the project scope
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   | true    |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade      |
+      | severity            | error                          |
+      | needs reload        | false                          |
+      | summary             | A plugin operation has failed. |
+      | tally label         | Reconcile                      |
+      | tally failures      | 1                              |
+      | tally warnings      | 0                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons          | scope   | cause chain                                               | cause truncated | leaks      | rollback partial                                                                                       |
+      | fixtures         | project           | demo@fixtures | demo | failed | rollback partial | project | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | demo-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | false   |
+
   Scenario: Apply installs a plugin that a config declares by hand and reports it
     Given the marketplace "fixtures" is added to the project scope
     Given a config in scope project and layer base, with these plugins:
@@ -69,6 +94,28 @@ Feature: Plugin apply
     Given a config in scope project and layer local, with these marketplaces:
       | name  | source                           | autoupdate |
       | tools | {home}/marketplaces/replacement |            |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind                | cascade           |
+      | severity            | info              |
+      | needs reload        | false             |
+      | needs apply         | true              |
+      | tally label         | Reconcile pending |
+      | tally failures      | 0                 |
+      | tally warnings      | 0                 |
+      | tally success count | 1                 |
+    Then the result lists these marketplaces:
+      | name  | scope   | status   |
+      | tools | project | will add |
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status |
+      | tools            | project           | will add           |
+      | tools            | project           | will add           |
     When the user runs "/claude:plugin apply --scope project"
     Then the result has these fields:
       | kind                | reconcile-applied-cascade |
@@ -116,12 +163,48 @@ Feature: Plugin apply
       | method | path                         | status |
       | GET    | /acme/tools/marketplace.json | 200    |
 
+  Scenario: Apply replaces an existing hosted marketplace from a changed URL
+    Given the marketplace "tools" is published as a hosted source
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "replacement" is published as a hosted source
+    Given the marketplace "replacement" publishes this manifest:
+      """
+      { "name": "tools", "plugins": [] }
+      """
+    Given a config in scope project and layer local, with these marketplaces:
+      | name  | source                                             | autoupdate |
+      | tools | https://{git host}/acme/replacement/marketplace.json |            |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | false                     |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 1                         |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+
   Scenario: The official fallback source is already up to date
     Given the marketplace "claude-plugins-official" is published as a dir source
     Given an earlier version recorded the marketplace "claude-plugins-official" in the project scope
     Given a config in scope project and layer base, with these marketplaces:
       | name                    | source                               | autoupdate |
       | claude-plugins-official | anthropics/claude-plugins-official |            |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+    When the user starts a new pi session
+    Then the session reports no results
     When the user runs "/claude:plugin apply --scope project"
     Then the result has these fields:
       | kind         | reconcile-pending-empty |
@@ -487,10 +570,10 @@ Feature: Plugin apply
     Given the mcp-adapter.json file of the project scope holds a comment
     When the user runs "/claude:plugin apply --scope project"
     Then the command reports these results:
-      | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count | header                                                          | lines                                                                                                                                  | notices                                                                   |
-      | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |                                                                 |                                                                                                                                        |                                                                           |
-      | diagnostic                | warning  | false        |             |                |                |                     | Plugin "lib" [project] updated; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "lib-skill", already produced by skill source "lib-skill"; ignoring duplicate. |                                                                           |
-      | mcp-config-notices        | warning  | false        |             |                |                |                     |                                                                 |                                                                                                                                        | [{"kind":"comments-dropped","scope":"project","file":"mcp-adapter.json"}] |
+      | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count | header                                                           | lines                                                                                                                                  | notices                                                                   |
+      | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |                                                                  |                                                                                                                                        |                                                                           |
+      | diagnostic                | warning  | false        |             |                |                |                     | Plugin "lib" [project] updated; 1 declared component has a note. | skill source "skill" in "[redacted path]                                                                                               |                                                                           |
+      | mcp-config-notices        | warning  | false        |             |                |                |                     |                                                                  |                                                                                                                                        | [{"kind":"comments-dropped","scope":"project","file":"mcp-adapter.json"}] |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id        | name | status  | reasons                 | scope   | from  | to    |
       | tools            | project           | lib@tools | lib  | updated | requires pi-mcp-adapter | project | 1.0.0 | 2.0.0 |

@@ -41,6 +41,7 @@
 import { spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
 import path from "node:path";
+import { StringDecoder } from "node:string_decoder";
 
 /** The slice of Node's `ChildProcess` a run reads. */
 export interface PackageManagerProcess {
@@ -150,13 +151,21 @@ interface CapturedOutput {
   timedOut: boolean;
 }
 
-function appendCapped(captured: string, chunk: Buffer): string {
-  return (captured + chunk.toString("utf8")).slice(0, OUTPUT_LIMIT);
+function appendCapped(captured: string, text: string): string {
+  return (captured + text).slice(0, OUTPUT_LIMIT);
+}
+
+function finishOutput(captured: string, decoder: StringDecoder): string {
+  // Keep the bounded prefix during capture, then drop a high surrogate the
+  // cap separated from its low surrogate.
+  return appendCapped(captured, decoder.end()).replace(/[\uD800-\uDBFF]$/u, "");
 }
 
 // SIGTERM at the timeout, SIGKILL once the grace runs out, and `abandon` one
-// more grace later. Every timer is unref'd so a pending one never keeps the Pi
-// process alive. Returns the function that cancels them all.
+// more grace later. The live child keeps the initial timeout reachable. After
+// timeout, the escalation timers stay referenced until settlement because the
+// parent and its pipes may close before its descendants. Returns the function
+// that cancels them all.
 function startKillTimers(
   stop: (signal: KillSignal) => void,
   options: PackageManagerRunnerOptions,
@@ -171,9 +180,7 @@ function startKillTimers(
     graceTimer = setTimeout(() => {
       stop("SIGKILL");
       deadlineTimer = setTimeout(abandon, options.killGraceMs);
-      deadlineTimer.unref();
     }, options.killGraceMs);
-    graceTimer.unref();
   }, options.timeoutMs);
   timeoutTimer.unref();
   return () => {
@@ -190,17 +197,20 @@ function watchProcess(
   stop: (signal: KillSignal) => void,
 ): void {
   const captured: CapturedOutput = { stdout: "", stderr: "", timedOut: false };
+  const stdoutDecoder = new StringDecoder("utf8");
+  const stderrDecoder = new StringDecoder("utf8");
   child.stdout.on("data", (chunk: Buffer) => {
-    captured.stdout = appendCapped(captured.stdout, chunk);
+    captured.stdout = appendCapped(captured.stdout, stdoutDecoder.write(chunk));
   });
   child.stderr.on("data", (chunk: Buffer) => {
-    captured.stderr = appendCapped(captured.stderr, chunk);
+    captured.stderr = appendCapped(captured.stderr, stderrDecoder.write(chunk));
   });
-  // Node emits `close` after `error` for a process that cannot start; the
-  // first event settles the run and the rest are ignored.
+  // Node emits `close` after `error` for a process that cannot start. A close
+  // after timeout waits for the process-group escalation before it settles.
   let settled = false;
+  let closeCode: number | null = null;
   const stopTimers = startKillTimers(stop, options, captured, () => {
-    settle(null);
+    settle(closeCode);
   });
   function settle(code: number | null, error?: Error): void {
     if (settled) {
@@ -208,7 +218,10 @@ function watchProcess(
     }
 
     settled = true;
+    captured.stdout = finishOutput(captured.stdout, stdoutDecoder);
+    captured.stderr = finishOutput(captured.stderr, stderrDecoder);
     stopTimers();
+
     resolve({ code, ...captured, ...(error === undefined ? {} : { error }) });
   }
 
@@ -221,7 +234,10 @@ function watchProcess(
     }
   });
   child.on("close", (code: number | null) => {
-    settle(code);
+    closeCode = code;
+    if (!captured.timedOut) {
+      settle(code);
+    }
   });
 }
 
@@ -388,8 +404,8 @@ function runPackageManager(
 
 /**
  * Binds the launcher, timeout, kill grace, environment, and host. Creating the
- * runner starts nothing; each call starts one process and resolves once it
- * has closed or failed to start.
+ * runner starts nothing; each call resolves after the process closes, its
+ * timeout escalation completes, or it fails to start.
  */
 export function createPackageManagerRunner(
   options: PackageManagerRunnerOptions,

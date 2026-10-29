@@ -1,130 +1,167 @@
 ---
 phase: 08-background-autoupdate
-verified: 2026-10-27T00:00:00Z
+verified: 2026-10-29T13:42:50Z
 status: passed
 score: 4/4 must-haves verified
 covered_files:
-  - ".planning/phases/08-background-autoupdate/08-01-PLAN.md"
-  - ".planning/phases/08-background-autoupdate/08-01-SUMMARY.md"
-  - ".planning/phases/08-background-autoupdate/08-02-PLAN.md"
-  - ".planning/phases/08-background-autoupdate/08-02-SUMMARY.md"
-  - ".planning/phases/08-background-autoupdate/08-03-PLAN.md"
-  - ".planning/phases/08-background-autoupdate/08-03-SUMMARY.md"
-  - ".planning/phases/08-background-autoupdate/08-04-PLAN.md"
-  - ".planning/phases/08-background-autoupdate/08-04-SUMMARY.md"
-  - "docs/env-vars.md"
-  - "docs/json-output.md"
-  - "docs/output-catalog.md"
-  - "extensions/pi-claude-marketplace/edge/register.ts"
-  - "extensions/pi-claude-marketplace/index.ts"
-  - "extensions/pi-claude-marketplace/orchestrators/marketplace/background-gate.ts"
-  - "extensions/pi-claude-marketplace/orchestrators/marketplace/background-pass.ts"
-  - "extensions/pi-claude-marketplace/orchestrators/marketplace/background-update.ts"
-  - "extensions/pi-claude-marketplace/shared/notification-dispatch.ts"
-  - "extensions/pi-claude-marketplace/shared/notification-grammar.ts"
-  - "extensions/pi-claude-marketplace/shared/notification-json.ts"
-  - "extensions/pi-claude-marketplace/shared/notification-resolve.ts"
-  - "extensions/pi-claude-marketplace/shared/notification-types.ts"
-  - "extensions/pi-claude-marketplace/shared/notification-wire.ts"
-  - "features/marketplace/background-update.feature"
-  - "features/step_definitions/marketplace/background-update.steps.ts"
-  - "schema/claude-plugin.schema.json"
-  - "test/e2e/_rpc.ts"
-covered_digest: "v4:sha256:0804beb8211f26eb518562faa9ce810cbf0c679c79999c5a414cdfb6d1c894da"
+  - .planning/phases/08-background-autoupdate/08-01-PLAN.md
+  - .planning/phases/08-background-autoupdate/08-01-SUMMARY.md
+  - .planning/phases/08-background-autoupdate/08-02-PLAN.md
+  - .planning/phases/08-background-autoupdate/08-02-SUMMARY.md
+  - .planning/phases/08-background-autoupdate/08-03-PLAN.md
+  - .planning/phases/08-background-autoupdate/08-03-SUMMARY.md
+  - .planning/phases/08-background-autoupdate/08-04-PLAN.md
+  - .planning/phases/08-background-autoupdate/08-04-SUMMARY.md
+  - AGENTS.md
+  - docs/env-vars.md
+  - docs/json-output.md
+  - docs/output-catalog.md
+  - extensions/pi-claude-marketplace/domain/official-marketplaces.ts
+  - extensions/pi-claude-marketplace/edge/register.ts
+  - extensions/pi-claude-marketplace/index.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/background-gate.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/background-pass.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/background-update.ts
+  - extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts
+  - extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts
+  - extensions/pi-claude-marketplace/persistence/config-merge.ts
+  - extensions/pi-claude-marketplace/platform/git.ts
+  - extensions/pi-claude-marketplace/platform/hosted-manifest-fetch.ts
+  - extensions/pi-claude-marketplace/shared/notification-dispatch.ts
+  - extensions/pi-claude-marketplace/shared/notification-grammar.ts
+  - extensions/pi-claude-marketplace/shared/notification-json.ts
+  - extensions/pi-claude-marketplace/shared/notification-resolve.ts
+  - extensions/pi-claude-marketplace/shared/notification-run.ts
+  - extensions/pi-claude-marketplace/shared/notification-types.ts
+  - extensions/pi-claude-marketplace/shared/notification-wire.ts
+  - features/lib/https-git-host/server.ts
+  - features/lib/pi-commands.ts
+  - features/lib/pi-tui-pty.py
+  - features/lib/pi-tui.ts
+  - features/lib/result-rows.ts
+  - features/marketplace/background-update.feature
+  - features/step_definitions/git-host.steps.ts
+  - features/step_definitions/marketplace/background-update.steps.ts
+  - features/step_definitions/session.steps.ts
+  - features/support/pi-process.ts
+  - features/support/world.ts
+  - schema/claude-plugin.schema.json
+  - test/architecture/background-update-notice.test.ts
+  - test/architecture/catalog-uat/catalog-wire.test.ts
+  - test/architecture/hermetic-git-environment.test.ts
+  - test/architecture/no-credential-leak.test.ts
+  - test/architecture/pi-tui-notices.test.ts
+  - test/architecture/wire-schema.test.ts
+  - test/domain/official-marketplaces.test.ts
+  - test/e2e/_rpc.ts
+  - test/edge/handlers/marketplace-seed.ts
+  - test/edge/register.test.ts
+  - test/index.test.ts
+  - test/orchestrators/marketplace/background-gate.test.ts
+  - test/orchestrators/marketplace/background-pass.test.ts
+  - test/orchestrators/marketplace/background-update.test.ts
+  - test/orchestrators/marketplace/update.test.ts
+  - test/platform/hermetic-environment.ts
+  - test/shared/notification-dispatch.test.ts
+  - test/shared/notification-grammar.test.ts
+  - test/shared/notification-json.test.ts
+  - test/shared/notification-resolve.test.ts
+  - test/shared/notification-wire.test.ts
+covered_digest: "v4:sha256:ba04c850818c9e6c41b1cf6bacfc7969316b548ab14fe7106b6dc9c11eb05e2f"
 behavior_unverified: 0
 overrides_applied: 0
+re_verification:
+  previous_status: passed
+  previous_score: 4/4
+  gaps_closed: []
+  gaps_remaining: []
+  regressions: []
 ---
 
 # Phase 8: Background Autoupdate Verification Report
 
-**Phase Goal:** A marketplace with autoupdate on is refreshed and its plugins updated in the background after a session starts, as Claude Code does, with one passive notice.
-**Verified:** 2026-10-27
+**Phase goal:** A marketplace with autoupdate on is refreshed and its plugins updated in the background after a session starts, as Claude Code does, with one passive notice.
+**Verified:** 2026-10-29T13:42:50Z
 **Status:** passed
-**Re-verification:** No (initial verification, against HEAD f22e5384 including the review fixes)
+**Re-verification:** Yes; the earlier report predates the current TUI, default, notice, and cancellation decisions.
 
 ## Goal Achievement
 
-### Observable Truths (ROADMAP success criteria)
+### Observable Truths
 
-| # | Truth | Status | Evidence |
-| - | ----- | ------ | -------- |
-| 1 | After a session starts, a marketplace with autoupdate on is refreshed and its plugins updated without a command, after the decided delay | VERIFIED | `index.ts:222-235` registers `pi.on("input", backgroundUpdate.onInput)` and `session_shutdown`. `background-update.ts::onInput` arms once per runtime, only for `tui`/`rpc`, with `Math.floor(random() * maxDelay)` (600000 default) on an unref'd timer. `background-pass.ts` runs the injected `updateMarketplace` (the `marketplace update` code) per autoupdate-on marketplace, project scope first. Cucumber `features/marketplace/background-update.feature` ran green here: 4 scenarios, 88 steps (dir, file, url, github). It sends one plain message and then `list` shows demo 1.10.0, extra 2.0.0, helper 1.1.0 across two scopes. |
-| 2 | A foreground command running at the same time is never refused or corrupted by the background run | VERIFIED | `background-gate.ts` is a real gate. `runForeground` waits for the step in flight, and `beginStep` waits until no command runs, re-checking in a loop. `edge/register.ts:113,166` wraps every `/claude:plugin` command through `runForeground`, and `index.ts:248` passes `backgroundGate.runForeground`. The pass is split into one-step units (the refresh, then each plugin update through `yieldingPluginUpdate`, which does `endStep` then `beginStep`). Review fix WR-04 re-reads the merged config after each yield, so a mid-cascade `noautoupdate` stops the cascade. Gate, pass, and update unit tests: 97/97 pass here. Cross-process contention (another Pi process) is unchanged and recorded as D-PL8-05. |
-| 3 | Defaults and opt-outs match Claude Code, each Pi mapping recorded | VERIFIED | `passEnabled` honors `FORCE_AUTOUPDATE_PLUGINS` > `DISABLE_UPDATES` / `DISABLE_AUTOUPDATER` (truthy) / `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` (non-empty). `maxDelay` honors the Pi-only `PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS` (digits only, at most 2147483647). `isAutoupdateOn` is "config entry true, else off". `docs/env-vars.md` ("Variables that control the background update", lines 189-233) records each variable, the default mapping and its gap for official names, and the settings not read (`autoUpdates`, host pin, hidden toggle). `test/e2e/_rpc.ts` and the hermetic-git-environment test keep the developer's variables out of the suite's Pi (test passes). |
-| 4 | One notice names the updated plugins and `/reload`; a run that changed nothing is silent | VERIFIED | `background-pass.ts` collects `updated` rows and raises one `notifyBackgroundUpdate` after the scope loop, in a `finally` (D-PL8-17) and only when `updated.length > 0` and the runtime is not stopped. `notifyBackgroundUpdate` also returns early on an empty list. `notification-grammar.ts::composeBackgroundUpdateText` produces `Plugin(s) updated: ... · Run /reload to apply`, with names deduplicated by `<name>@<marketplace>`. The JSON/RPC payload (`notification-json.ts`, `notification-wire.ts`) is kind `background-update` with `needsReload: true`. The scenario asserts one result with kind, severity info, needs reload true, and three plugin rows. The wire-schema, json-output-docs, presentation-sink, no-credential-leak, notify-producer-wire-coverage, and background-update-notice gates pass here (597/597 together with `test/edge/register.test.ts`). |
+| # | Roadmap truth | Status | Current evidence |
+| --- | --- | --- | --- |
+| 1 | After a session starts, an opted-in marketplace refreshes and updates installed plugins after the decided delay, without a command. | VERIFIED | `index.ts` registers `input` and `session_shutdown`; `background-update.ts:95-112` arms once on first TUI input and schedules an unref'd timer using the injected random delay. `background-pass.ts:166-173,355-369` selects recorded marketplaces in project-then-user order and invokes the real `updateMarketplace` path. The real PTY scenario in `background-update.feature:11` sends a message and confirms the installed version moved from 1.0.0 to 1.10.0. The RPC negative scenario at `:124` confirms RPC does not arm. |
+| 2 | A concurrent foreground command is neither refused nor corrupted by this process's background run. | VERIFIED | `edge/register.ts` wraps command execution in `runForeground`; `index.ts` supplies the same runtime gate to commands and the background pass. `background-gate.ts` gives commands priority without serializing commands: at 30 seconds it aborts the active signal, then still waits for `endStep`. `background-pass.ts` yields plugin updates and dependency settlement through fresh gate steps and rechecks stop/abort after the asynchronous config read. The named tests `D-PL8-23: at the cap...`, `a runtime stopped during the plugin config read...`, and `a plugin step aborted during the config read...` all pass. The last two prove CR-01's `f61d5848` fix: no plugin update or dependency settlement starts after the race, later targets skip, and no notice is emitted. The real PTY streamed-git scenario proves the command remains blocked before the cap, abort reaches `/info/refs`, dependency settlement does not run, and the command resumes only after settlement. |
+| 3 | Defaults and opt-outs match the recorded Claude Code mapping. | VERIFIED | `official-marketplaces.ts:39-44` applies an explicit value first, then the official-name default, excluding two documented default-off names. `config-merge.ts` gives an explicit local field precedence over base; `background-pass.ts:156-163` refuses background work when either config layer is invalid. `background-update.ts:49-78` implements the opt-outs, FORCE precedence, and validated delay knob. Owner tests cover official/default-off names, explicit values, invalid config, env values, timers, and TUI-only scheduling. `docs/env-vars.md` records the Pi mapping and unsupported upstream settings. |
+| 4 | One passive notice names updated plugins and `/reload`; an unchanged run is silent. | VERIFIED | `background-pass.ts:374-417` collects real `updated` outcomes across both scopes and emits once after the pass, including updates completed before an early error; stopped runtimes emit nothing. `notification-dispatch.ts:268-276` suppresses an empty list. `notification-grammar.ts:1322` deduplicates text by bare plugin name in first-seen order under D-PL8-21. The wire retains one row per updated installation, with load origin, info severity, and `needsReload: true`; `notification-resolve.ts:974` redacts all string fields. Same-name and distinct-name real TUI scenarios at `background-update.feature:30,60` prove visible text and both installed results. `background-pass.test.ts:1409` asserts exactly one notification entry; `:1462,1486` covers unchanged and stopped silence. |
 
-**Score:** 4/4 truths verified. 0 behavior-unverified.
+**Score:** 4/4 roadmap truths verified; 0 behavior-unverified.
 
-### Required Artifacts
+### Current Contract and Historical Plan Text
 
-| Artifact | Status | Details |
-| -------- | ------ | ------- |
-| `orchestrators/marketplace/background-gate.ts` | VERIFIED | 71 lines, exports `createBackgroundGate`/`BackgroundGate`, wired in `index.ts` and `register.ts`. |
-| `orchestrators/marketplace/background-pass.ts` | VERIFIED | 260 lines, wired in `index.ts` with the real `updateMarketplace` and `beginPluginUpdateRun`. |
-| `orchestrators/marketplace/background-update.ts` | VERIFIED | 132 lines, scheduler, env policy, and shutdown handling, wired by reference. |
-| `shared/notification-{types,grammar,resolve,json,wire,dispatch}.ts` | VERIFIED | The `background-update` kind has an arm in every exhaustive consumer. `notifyBackgroundUpdate` is the only emitter. |
-| `schema/claude-plugin.schema.json`, `docs/json-output.md`, `docs/output-catalog.md` | VERIFIED | All describe the new kind. Their gates pass. |
-| `docs/env-vars.md` | VERIFIED | Substantive section, see truth 3. |
-| `test/e2e/_rpc.ts` | VERIFIED | Allowlists the delay variable and keeps the opt-out variables out. |
-| `features/marketplace/background-update.feature` + steps | VERIFIED | Passes 4/4 here. |
-| Paired unit tests (`background-gate/pass/update.test.ts`, `background-update-notice.test.ts`) | VERIFIED | Pass here. |
+The four PLANs contain 19 authored truth statements. Accepted decisions supersede these older literal clauses:
 
-### Key Link Verification
+| Historical clause | Current authority and verified behavior |
+| --- | --- |
+| 08-01 and 08-04 expected RPC to schedule and show a positive notice. | The current D-PL8-02 contract and D-PL8-20 evidence boundary require TUI-only scheduling. Real PTY scenarios prove the positive path; the RPC scenario proves no background update. |
+| 08-01 and 08-02 described default-off except explicit config. | Reversed D-PL8-07 applies official-name default-on at read time, while explicit local/base values win and invalid config fails closed. |
+| 08-03 deduplicated notice text by `<plugin>@<marketplace>`. | D-PL8-21 requires bare plugin-name deduplication. The wire still retains each updated installation. |
+| 08-01's initial known limit allowed an unbounded stalled-step wait. | D-PL8-23 through D-PL8-25 start abort at 30 seconds, propagate it through git, stop later background steps, and retain the gate until settlement. |
 
-| From | To | Status |
-| ---- | -- | ------ |
-| `index.ts` -> `registerClaudePluginCommand` options `runForeground: backgroundGate.runForeground` | `edge/register.ts` handler | WIRED (`return runForeground(() => runCommand(...))`) |
-| `index.ts` -> `pi.on("input"/"session_shutdown")` | `background-update.ts` | WIRED |
-| `background-pass.ts` -> `update.ts::updateMarketplace` (injected) | the marketplace update cascade | WIRED (`deps.updateMarketplace({...})`) |
-| `background-pass.ts` -> `notifyBackgroundUpdate` | `notification-dispatch.ts` -> grammar/json/wire | WIRED |
-| `_rpc.ts::rpcChildEnvironment` -> `PiProcess` -> the scenario's Pi | delay variable | WIRED (the scenario runs with delay 0 and passes) |
+The remaining plan checks hold: once-per-runtime delay and env policy; silent load-origin update reuse; project-first scope order; foreground priority; shutdown and quit behavior; hermetic child environment; notice schema, docs, redaction, and transport. The canonical decision-coverage query reports **18/18 trackable decisions honored** with no missing decision. No PLAN prohibition, backstop truth, probe, or deferred human-check block is declared.
 
-### Data-Flow Trace (Level 4)
+### Required Artifacts, Key Links, and Data Flow
 
-The notice rows come from real `updated` outcomes of `updatePlugin` (name, `fromVersion`, `toVersion`). The scenario checks real versions 1.0.0 -> 1.10.0 / 2.0.0 / 1.1.0 end to end against real marketplaces. FLOWING.
+The canonical PLAN checks pass **19/19 declared artifacts** and **8/8 declared key links** across 08-01 through 08-04.
 
-### Behavioral Spot-Checks
+| Artifact and key link | Status | Proof |
+| --- | --- | --- |
+| `index.ts` → scheduler and command gate | VERIFIED | Registers both Pi listeners, creates one gate/pass/scheduler per runtime, and passes `runForeground` into `registerClaudePluginCommand`. |
+| Scheduler → pass → marketplace update | VERIFIED | First TUI input schedules `pass`; `background-pass.ts` invokes injected `updateMarketplace` with the real plugin runner, missing-dependency installer, silent context, and load-origin run. `index.ts` supplies production implementations. |
+| Gate → plugin and dependency steps → git abort | VERIFIED | `beginStep` supplies a fresh signal; plugin and dependency wrappers run eligible work in `runWithGitAbortSignal`; the enclosing marketplace operation retains the step through cascade settlement. |
+| Merged config and state → selected marketplaces | VERIFIED | `loadState` enumerates recorded marketplaces; `loadMergedScopeConfig` supplies explicit values; `effectiveMarketplaceAutoupdate` supplies the official default; invalid layers suppress selection. |
+| Updated outcomes → one notice → text or JSON wire | VERIFIED | `updated.push` uses real outcome name, scope, marketplace and versions; one `notifyBackgroundUpdate` call follows the pass. Resolve redacts, grammar formats bare-name text, and JSON/wire carry each installation with a closed schema. |
+| Real TUI harness and hermetic environment | VERIFIED | `pi-tui.ts` drives a sandboxed PTY; the host fixture holds a streaming git response for cancellation proof. RPC child env is allowlisted; the TUI driver uses that construction. |
 
-| Behavior | Command | Result |
-| -------- | ------- | ------ |
-| Gate, pass, scheduler, notice byte lock, hermetic env | `node --test test/orchestrators/marketplace/background-{gate,pass,update}.test.ts test/architecture/background-update-notice.test.ts test/architecture/hermetic-git-environment.test.ts` | 97 pass, 0 fail |
-| Wire/doc/catalog/presentation/credential gates + register | `node --test test/architecture/*wire*.test.ts *json-output*.test.ts *catalog*.test.ts *presentation*.test.ts *credential*.test.ts test/edge/register.test.ts` | 597 pass, 0 fail |
-| End to end in a real Pi (RPC) | `npx cucumber-js features/marketplace/background-update.feature` | 4 scenarios, 88 steps, all pass |
+No output in the goal flow ends in a static fixture or hardcoded empty value. The notice comes from completed update outcomes, and the end-to-end feature checks persisted installed versions.
 
-The full `npm run check` was not re-run, per instruction. It last passed at 5c622269, and only docs commits followed.
+### Behavioral Checks
+
+| Check | Result |
+| --- | --- |
+| Exact reusable `npm run check` at executable HEAD `be0de0c3` | Exit 0: **1,145 Cucumber scenarios, 11,777 steps, and 309 merged LCOV records**. `git diff --quiet be0de0c3 -- . ':(exclude,glob).planning/**/*.md'` is still clean at report HEAD `165720c5`. The final Nyquist audit also passed all five audited direct-coverage pairs. |
+| Focused verifier spot-check | Fresh named-test selections passed in `background-gate.test.ts`, `background-pass.test.ts`, and `notification-grammar.test.ts`: 30-second abort-then-settle, official/default-off selection, stop and abort during config read, unchanged-run silence, and D-PL8-21 notice composition. |
+| Real Pi feature | `background-update.feature` has six current scenarios: TUI update, same-name deduplication, distinct-name aggregation, held-git foreground cancellation, RPC negative control, and PTY readiness. The final recorded run passed six scenarios and 88 steps. |
+| Review and security | `08-REVIEW.md` is a complete **53-file CLEAN 0/0/0** final-head review at `5fe4aae9`. `08-SECURITY.md` is **SECURED 21/21** at `165720c5`, with all 15 mitigations verified, all six accepted dispositions recorded, and `threats_open: 0`. |
+| Test-quality and anti-pattern audit | Requirement-linked tests assert independent expected state, exact notice text/cardinality, a recorded split-notice mutant failure, and persisted install outcomes; none is disabled. No `TBD`, `FIXME`, `XXX`, `TODO`, `HACK`, or `PLACEHOLDER` appears in the Phase 8 changed production/test scope. No Phase 08 probe is declared. |
+
+The TUI screen parser observes distinct visible notice texts, not identical event counts. The distinct-name scenario and its recorded split-notice mutant failure prove aggregate visible output; the owner assertion proves exact notification-entry cardinality.
 
 ### Requirements Coverage
 
-| Requirement | Source Plans | Status | Evidence |
-| ----------- | ------------ | ------ | -------- |
-| AUP-01 | 08-01, 08-02, 08-04 | SATISFIED | Truths 1 and 2 |
-| AUP-02 | 08-01, 08-02, 08-04 | SATISFIED | Truth 3 |
-| AUP-03 | 08-03, 08-04 | SATISFIED | Truth 4 |
+| Requirement | Source plans | Status | Evidence |
+| --- | --- | --- | --- |
+| AUP-01 | 08-01, 08-02, 08-04 | SATISFIED | Roadmap truths 1 and 2: TUI scheduling, real refresh/update, foreground gate, dependency wrapper, 30-second abort-then-settle behavior, and real PTY regression. |
+| AUP-02 | 08-01, 08-02, 08-04 | SATISFIED | Roadmap truth 3: official-name default, explicit config precedence, invalid-config fail-closed, env policy, delay bounds, and documented Pi mappings. |
+| AUP-03 | 08-03, 08-04 | SATISFIED | Roadmap truth 4: one aggregate passive notice, bare-name text dedupe, per-install wire rows, redaction, no-op/stopped silence, and real TUI scenarios. |
 
-All three IDs in the PLAN frontmatter appear in REQUIREMENTS.md (lines 93-95, traceability rows 183-185). No orphaned requirement is mapped to Phase 8.
+All **3/3 Phase 08 requirements** appear in PLAN frontmatter, `REQUIREMENTS.md`, and the roadmap. None is orphaned.
 
-### Anti-Patterns Found
+### Advisory
 
-None blocking. No TBD/FIXME/XXX markers in the phase's new modules. The `eslint-disable no-await-in-loop` sites carry justifications. `SILENT_SINK`/`SILENT_CONTEXT` are deliberate silencing seams (D-PL8-06), not stubs.
-
-### Review follow-up
-
-All five Critical/Warning findings of 08-REVIEW.md (CR-01, WR-01..04) are fixed in code at HEAD. WR-03 and WR-04 are confirmed in `background-pass.ts` (the `finally` notice and the config re-read). IN-01..03 are fixed. IN-04 (a stalled fetch also holds `/reload`, new, resume, and fork) is skipped and recorded as a known limit in CONTEXT (D-PL8-03 follows from it). It is not a must-have failure.
-
-### Notes for the parent session (not gaps)
-
-- PLAN 08-04 assigns the PROJECT.md decision rows (D-PL8-01..18, the NFR-5 amendment, the AUTOUP-01 disposition) and the CHANGELOG line to the parent's merge step. `.planning/PROJECT.md` has no D-PL8 rows yet, and `CHANGELOG.md` has no background-update entry. This is by plan design and is not a phase-goal gap, but it must happen before the milestone PR.
-- The real-TUI text path (`ctx.ui.notify` after a random delay of up to ten minutes) is covered by unit tests and the JSON/RPC scenario, not by a live TUI session. This is optional manual confirmation, not a blocker.
+None. `docs/env-vars.md` and the WR-01 contract comment now state the D-PL8-23–25 boundary accurately: cancellation begins after 30 seconds, the command or session continues waiting until the step settles, earlier completed changes remain, the background pass stops for this runtime, and quit does not wait.
 
 ### Human Verification Required
 
-None required.
+None. Runtime state, ordering, cancellation, output, and security behavior have automated owner and real-PTY evidence.
 
-## Gaps Summary
+### Gaps Summary
 
-No gaps. All four roadmap success criteria are backed by code present at HEAD, wired in `index.ts` and `register.ts`, and exercised by passing unit tests and a passing end-to-end cucumber scenario in a real Pi.
+None. The four current roadmap outcomes and AUP-01 through AUP-03 are achieved on the integrated tree.
 
 ---
 
-_Verified: 2026-10-27_
-_Verifier: Claude (gsd-verifier)_
+_Verified: 2026-10-29T13:42:50Z_
+_Verifier: Codex (gsd-verifier)_

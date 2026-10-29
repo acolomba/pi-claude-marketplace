@@ -151,6 +151,42 @@ describe("CASCADE_CONTEXT", () => {
 });
 
 describe("composeCascadeMemberRows", () => {
+  test("a partial dependency reports its unsupported kinds while its dependent stays installed", () => {
+    // arrange
+    const installed = [member({ unsupported: ["outputStyles", "themes", "lspServers"] })];
+
+    // act
+    const rows = composeCascadeMemberRows({
+      scope: "user",
+      rootKey: ROOT_KEY,
+      rootRow: ROOT_ROW,
+      installed,
+      alreadyInstalled: [],
+      probe: PROBE_BOTH_LOADED,
+    });
+
+    // assert
+    assert.deepStrictEqual(rows, [
+      {
+        status: "partially-installed",
+        name: "formatter@tools",
+        dependencies: [],
+        version: "2.1.0",
+        reasons: ["unsupported component", "lsp"],
+        severity: "info",
+        needsReload: true,
+      },
+      {
+        status: "installed",
+        name: "helper",
+        dependencies: [],
+        version: "1.0.0",
+        severity: "info",
+        needsReload: true,
+      },
+    ]);
+  });
+
   test("a plugin that declares nothing renders the single row it always did", () => {
     // arrange
     const rows = composeCascadeMemberRows({
@@ -494,6 +530,141 @@ describe("composeCascadeMemberRows", () => {
 });
 
 describe("composeCascadeMemberRow", () => {
+  for (const { title, signals, reasons, severity } of [
+    {
+      title: "a malformed skill warns without an unloaded companion",
+      signals: { degradedKinds: ["skill"] },
+      reasons: ["malformed skill"],
+      severity: "warning",
+    },
+    {
+      title: "a malformed command warns without an unloaded companion",
+      signals: { degradedKinds: ["command"] },
+      reasons: ["malformed command"],
+      severity: "warning",
+    },
+    {
+      title: "malformed reasons are ordered and deduplicated after orphan rewake",
+      signals: { orphanRewake: true, degradedKinds: ["command", "skill", "command", "skill"] },
+      reasons: ["orphan rewake", "malformed skill", "malformed command"],
+      severity: "warning",
+    },
+    {
+      title: "orphan rewake with no degraded kinds stays informational",
+      signals: { orphanRewake: true, degradedKinds: [] },
+      reasons: ["orphan rewake"],
+      severity: "info",
+    },
+  ] satisfies ReadonlyArray<{
+    title: string;
+    signals: Partial<CascadeInstalledRow>;
+    reasons: readonly string[];
+    severity: "info" | "warning";
+  }>) {
+    test(title, () => {
+      // arrange
+      const installed = member(signals);
+
+      // act
+      const row = composeCascadeMemberRow(installed, PROBE_BOTH_LOADED);
+
+      // assert
+      assert.deepStrictEqual(row, {
+        status: "installed",
+        name: "formatter@tools",
+        dependencies: [],
+        version: "2.1.0",
+        reasons,
+        severity,
+        needsReload: true,
+      });
+    });
+  }
+
+  for (const { title, origin, reasons } of [
+    {
+      title: "a degraded partial dependency preserves its current-copy reason",
+      origin: { fellBackToCurrentCopy: true },
+      reasons: [
+        "dependency current copy",
+        "orphan rewake",
+        "malformed skill",
+        "malformed command",
+        "unsupported component",
+        "lsp",
+      ],
+    },
+    {
+      title: "a degraded partial dependency preserves its re-enable reasons",
+      origin: { reEnabledFromRecord: true },
+      reasons: [
+        "already installed",
+        "dependency enabled",
+        "orphan rewake",
+        "malformed skill",
+        "malformed command",
+        "unsupported component",
+        "lsp",
+      ],
+    },
+  ]) {
+    test(title, () => {
+      // arrange
+      const installed = member({
+        ...origin,
+        orphanRewake: true,
+        degradedKinds: ["command", "skill", "skill"],
+        unsupported: ["outputStyles", "themes", "lspServers"],
+      });
+
+      // act
+      const row = composeCascadeMemberRow(installed, PROBE_BOTH_LOADED);
+
+      // assert
+      assert.deepStrictEqual(row, {
+        status: "partially-installed",
+        name: "formatter@tools",
+        dependencies: [],
+        version: "2.1.0",
+        reasons,
+        severity: "warning",
+        needsReload: true,
+      });
+    });
+  }
+
+  for (const { title, origin, reasons } of [
+    {
+      title: "a partial dependency preserves its current-copy reason and companion warning",
+      origin: { fellBackToCurrentCopy: true },
+      reasons: ["dependency current copy", "unsupported component"],
+    },
+    {
+      title: "a partial dependency preserves its re-enable reasons and companion warning",
+      origin: { reEnabledFromRecord: true },
+      reasons: ["already installed", "dependency enabled", "unsupported component"],
+    },
+  ]) {
+    test(title, () => {
+      // arrange
+      const installed = member({ ...origin, declaresAgents: true, unsupported: ["outputStyles"] });
+
+      // act
+      const row = composeCascadeMemberRow(installed, PROBE_NO_AGENTS);
+
+      // assert
+      assert.deepStrictEqual(row, {
+        status: "partially-installed",
+        name: "formatter@tools",
+        dependencies: ["agents"],
+        version: "2.1.0",
+        reasons,
+        severity: "warning",
+        needsReload: true,
+      });
+    });
+  }
+
   test("UPD-DEP-D1 a member installed from its marketplace's current copy names the fallback", () => {
     // act
     const row = composeCascadeMemberRow(
@@ -1557,7 +1728,7 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ formatter@tools (failed)",
-        "    cause: EACCES: permission denied, copyfile 'notes.md' -> open 'notes.md'",
+        "    cause: EACCES: permission denied, copyfile '[redacted path]' -> open 'notes.md'",
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });

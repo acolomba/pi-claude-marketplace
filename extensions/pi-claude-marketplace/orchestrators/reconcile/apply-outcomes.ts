@@ -319,6 +319,10 @@ export interface PluginEnabledOutcome extends PluginOutcomeBase, EnableDegradati
 export interface PluginEnableFailedOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-enable-failed";
   readonly reason: Reason;
+  /** The redacted failure chain when an enable leaves work to recover manually. */
+  readonly cause?: Error;
+  /** Failed undo steps, with every cause redacted at the apply boundary. */
+  readonly rollbackPartials?: readonly { readonly phase: string; readonly cause?: Error }[];
 }
 
 /**

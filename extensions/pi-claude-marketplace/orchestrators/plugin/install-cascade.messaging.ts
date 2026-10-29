@@ -7,7 +7,12 @@ import {
 } from "../../shared/errors.ts";
 import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import { printable } from "../../shared/notification-mcp.ts";
-import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
+import {
+  companionSeverity,
+  malformedReasonsForKinds,
+  skipSeverity,
+} from "../../shared/notify-reasons.ts";
+import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import {
   redactAbsolutePaths,
   redactCauseChain,
@@ -22,6 +27,7 @@ import type {
   Unmaterialized,
 } from "./install-cascade.ts";
 import type { InstallMsg } from "./install.messaging.ts";
+import type { LedgerDegradationSignals } from "./shared.ts";
 import type { DependencyClosureResult } from "../../domain/dependency-closure.ts";
 import type { SoftDepStatus } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
@@ -29,6 +35,7 @@ import type {
   ContentReason,
   PluginFailedMessage,
   PluginInstalledMessage,
+  PluginPartiallyInstalledMessage,
   PluginSkippedMessage,
   PluginUpdatedMessage,
 } from "../../shared/notification-types.ts";
@@ -123,9 +130,14 @@ export const CASCADE_CONTEXT = {
 } as const satisfies CommandContext<CascadeMemberStatus>;
 
 /** One member the cascade materialized, as the row composer needs to read it. */
-export interface CascadeInstalledRow {
+export interface CascadeInstalledRow extends Pick<
+  LedgerDegradationSignals,
+  "orphanRewake" | "degradedKinds"
+> {
   readonly key: string;
   readonly version: string;
+  /** Unsupported kinds omitted by this member's partial installation. */
+  readonly unsupported?: readonly string[];
   readonly declaresAgents: boolean;
   readonly declaresMcp: boolean;
   readonly declaresWorkflows: boolean;
@@ -222,37 +234,47 @@ function stagedDependencies(member: CascadeInstalledRow): readonly Dependency[] 
 export function composeCascadeMemberRow(
   member: CascadeInstalledRow,
   probe: SoftDepStatus,
-): PluginInstalledMessage {
-  return {
+): PluginInstalledMessage | PluginPartiallyInstalledMessage {
+  // A member either re-enables its record or resolves a fresh copy.
+  const reasons: ContentReason[] = [];
+  if (member.reEnabledFromRecord) {
+    reasons.push("already installed", "dependency enabled");
+  } else if (member.fellBackToCurrentCopy) {
+    reasons.push("dependency current copy");
+  }
+
+  if (member.orphanRewake === true) {
+    reasons.push("orphan rewake");
+  }
+
+  const malformed = malformedReasonsForKinds(member.degradedKinds);
+  reasons.push(...malformed);
+  const row: PluginInstalledMessage = {
     status: "installed",
     name: member.key,
     dependencies: stagedDependencies(member),
     version: member.version,
-    // TAGS-02 / D-07-03: the fallback names itself on the row but never
-    // touches severity -- that stays exactly what `companionSeverity`
-    // computes, so a member with an unloaded companion still reports the
-    // genuine SEV-01 degradation the fallback must not paper over.
-    ...(member.fellBackToCurrentCopy && { reasons: ["dependency current copy"] as const }),
-    // D-08-02: a member re-materialized through its own disabled record
-    // reports both what was already true and what this command is
-    // responsible for, on the same split the promotion row's own
-    // `["already installed", "dependency promoted"]` pair already sets out
-    // -- never alongside the fallback token above, since a member is either
-    // freshly resolved (possibly falling back) or already-installed and
-    // disabled, never both.
-    ...(member.reEnabledFromRecord && {
-      reasons: ["already installed", "dependency enabled"] as const,
-    }),
-    severity: companionSeverity(
-      {
-        declaresAgents: member.declaresAgents,
-        declaresMcp: member.declaresMcp,
-        declaresWorkflows: member.declaresWorkflows,
-      },
-      probe,
-    ),
+    ...(reasons.length > 0 && { reasons }),
+    severity:
+      malformed.length > 0
+        ? "warning"
+        : companionSeverity(
+            {
+              declaresAgents: member.declaresAgents,
+              declaresMcp: member.declaresMcp,
+              declaresWorkflows: member.declaresWorkflows,
+            },
+            probe,
+          ),
     needsReload: true,
   };
+  return member.unsupported === undefined
+    ? row
+    : {
+        ...row,
+        status: "partially-installed",
+        reasons: [...(row.reasons ?? []), ...narrowUnsupportedKinds(member.unsupported)],
+      };
 }
 
 /**

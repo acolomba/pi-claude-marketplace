@@ -136,6 +136,7 @@ const LEGACY_NOTICE: McpConfigNotice = {
   scope: "project",
   file: "mcp.json",
 };
+const PACKAGE_WARNING = discoveryWarning("Plugin dependency install failed (npm): no output");
 const ZCORE: PlannedCascadeMember = {
   kind: "install",
   member: { ...HELPER.member, key: "zcore@mp", name: "zcore" },
@@ -253,7 +254,7 @@ describe("runDependencySteps", () => {
       ]),
       [
         ["helper@mp", "installed", undefined],
-        ["lib@mp", "failed", "EACCES: permission denied, copyfile 'notes.md'"],
+        ["lib@mp", "failed", "EACCES: permission denied, copyfile '[redacted path]'"],
       ],
     );
   });
@@ -380,7 +381,7 @@ describe("runDependencySteps", () => {
     });
   });
 
-  test("D-PL10-12: a moved dependency carries its warnings and MCP notices through the step result", async () => {
+  test("D-PL10-16: a moved dependency keeps its warning owner through the step result", async () => {
     // arrange
     const warning = discoveryWarning("dependency skill collision");
     const ports = stepPorts({
@@ -388,7 +389,14 @@ describe("runDependencySteps", () => {
         Promise.resolve({
           landed: true,
           rows: [updatedRow("lib@mp")],
-          stagingWarnings: [warning],
+          stagingDiagnostics: [
+            {
+              plugin: "lib",
+              scope: "project",
+              verb: "updated",
+              warnings: [warning],
+            },
+          ],
           mcpConfigNotices: [ADAPTER_NOTICE],
         }),
     });
@@ -401,7 +409,50 @@ describe("runDependencySteps", () => {
       ok: true,
       landed: [moved(updatedRow("lib@mp"))],
       mcpConfigNotices: [ADAPTER_NOTICE],
-      stagingWarnings: [warning],
+      stagingDiagnostics: [
+        {
+          plugin: "lib",
+          scope: "project",
+          verb: "updated",
+          warnings: [warning],
+        },
+      ],
+    });
+  });
+
+  test("a materialized closure keeps its dependency warning owner", async () => {
+    // arrange
+    const ports = stepPorts({
+      materialize: (members) =>
+        Promise.resolve({
+          kind: "installed",
+          rows: members.map((entry) => installedRow(entry.member.key)),
+          stagingDiagnostics: [
+            {
+              plugin: "helper",
+              scope: "project",
+              verb: "installed",
+              warnings: [PACKAGE_WARNING],
+            },
+          ],
+        } as SettleCascadeRun),
+    });
+
+    // act
+    const ran = await runDependencySteps([{ kind: "materialize", members: [HELPER] }], ports);
+
+    // assert
+    assert.deepStrictEqual(ran, {
+      ok: true,
+      landed: [moved(installedRow("helper@mp"))],
+      stagingDiagnostics: [
+        {
+          plugin: "helper",
+          scope: "project",
+          verb: "installed",
+          warnings: [PACKAGE_WARNING],
+        },
+      ],
     });
   });
 
@@ -493,12 +544,9 @@ function settlePorts(doubles: {
       return doubles.plan?.() ?? Promise.reject(new Error("no plan scripted"));
     },
     steps,
-    planSweep: () => {
-      calls.push("list clones");
-      return Promise.resolve(() => {
-        calls.push("sweep");
-        return Promise.resolve();
-      });
+    sweepPlanClones: () => {
+      calls.push("sweep");
+      return Promise.resolve();
     },
   };
 }
@@ -543,6 +591,42 @@ describe("settleDependencies", () => {
       kind: "settled",
       rows: [installedRow("zcore@mp")],
       mcpConfigNotices: [ADAPTER_NOTICE],
+    });
+  });
+
+  test("a first run keeps its dependency warning owner in the settlement", async () => {
+    // arrange
+    const ports = settlePorts({
+      firstRun: () =>
+        Promise.resolve({
+          kind: "installed",
+          rows: [installedRow("zcore@mp")],
+          stagingDiagnostics: [
+            {
+              plugin: "zcore",
+              scope: "project",
+              verb: "installed",
+              warnings: [PACKAGE_WARNING],
+            },
+          ],
+        } as SettleCascadeRun),
+    });
+
+    // act
+    const settled = await settleDependencies(ports);
+
+    // assert
+    assert.deepStrictEqual(settled, {
+      kind: "settled",
+      rows: [installedRow("zcore@mp")],
+      stagingDiagnostics: [
+        {
+          plugin: "zcore",
+          scope: "project",
+          verb: "installed",
+          warnings: [PACKAGE_WARNING],
+        },
+      ],
     });
   });
 
@@ -632,7 +716,6 @@ describe("settleDependencies", () => {
     });
     assert.deepStrictEqual(ports.calls, [
       "first run",
-      "list clones",
       "plan",
       "move lib@mp 2.0.0",
       "materialize helper@mp",
@@ -652,16 +735,10 @@ describe("settleDependencies", () => {
 
     // assert
     assert.deepStrictEqual(settled, { kind: "settled", rows: [updatedRow("lib@mp")] });
-    assert.deepStrictEqual(ports.calls, [
-      "first run",
-      "list clones",
-      "plan",
-      "move lib@mp 2.0.0",
-      "sweep",
-    ]);
+    assert.deepStrictEqual(ports.calls, ["first run", "plan", "move lib@mp 2.0.0", "sweep"]);
   });
 
-  test("UPD-DEP-D1: a refused plan changes nothing, refuses with the failing row, and sweeps", async () => {
+  test("UPD-DEP-D1: a refused plan changes nothing and refuses with the failing row", async () => {
     // arrange
     const ports = settlePorts({
       firstRun: () => Promise.resolve({ kind: "planned" }),
@@ -677,13 +754,7 @@ describe("settleDependencies", () => {
       rows: [failedRow("helper@mp", REFUSAL_CAUSE)],
       cause: REFUSAL_CAUSE,
     });
-    assert.deepStrictEqual(ports.calls, [
-      "first run",
-      "list clones",
-      "plan",
-      "refusal member",
-      "sweep",
-    ]);
+    assert.deepStrictEqual(ports.calls, ["first run", "plan", "refusal member", "sweep"]);
   });
 
   test("UPD-DEP-D1: a step that fails refuses the settle with every change that landed, and sweeps", async () => {
@@ -700,16 +771,10 @@ describe("settleDependencies", () => {
 
     // assert
     assert.deepStrictEqual(settled, { kind: "refused", rows: [kept], cause: LIB_DID_NOT_MOVE });
-    assert.deepStrictEqual(ports.calls, [
-      "first run",
-      "list clones",
-      "plan",
-      "move lib@mp 2.0.0",
-      "sweep",
-    ]);
+    assert.deepStrictEqual(ports.calls, ["first run", "plan", "move lib@mp 2.0.0", "sweep"]);
   });
 
-  test("UPD-DEP-D1 / CR-N2: a plan that throws refuses the settle with what it threw, and sweeps", async () => {
+  test("UPD-DEP-D1 / CR-N2: a plan that throws refuses the settle with what it threw", async () => {
     // arrange
     const thrown = new Error("marketplace.json is not valid JSON");
     const ports = settlePorts({
@@ -722,10 +787,10 @@ describe("settleDependencies", () => {
 
     // assert
     assert.deepStrictEqual(settled, { kind: "refused", rows: [], cause: thrown });
-    assert.deepStrictEqual(ports.calls, ["first run", "list clones", "plan", "sweep"]);
+    assert.deepStrictEqual(ports.calls, ["first run", "plan", "sweep"]);
   });
 
-  test("GHB-03: a plan that meets an invalid GitHub base override fails the command, and sweeps", async () => {
+  test("GHB-03: a plan that meets an invalid GitHub base override fails the command", async () => {
     // arrange
     const invalid = new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "query");
     const ports = settlePorts({
@@ -735,6 +800,6 @@ describe("settleDependencies", () => {
 
     // act & assert
     await assert.rejects(settleDependencies(ports), invalid);
-    assert.deepStrictEqual(ports.calls, ["first run", "list clones", "plan", "sweep"]);
+    assert.deepStrictEqual(ports.calls, ["first run", "plan", "sweep"]);
   });
 });

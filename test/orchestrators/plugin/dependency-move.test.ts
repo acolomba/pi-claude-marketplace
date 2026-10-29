@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test } from "node:test";
 
@@ -8,7 +8,9 @@ import {
   createHooksRuntime,
   readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { pluginCloneKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { collectPluginCloneCandidatesLocked } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts";
 import {
   failedMoveRow,
   freshDependencyMoveMemos,
@@ -27,6 +29,8 @@ import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
+
+import { INSTALL_HOST_HEAD, createGitOps, seamWith } from "./install-flow-fixture.ts";
 
 import type { DependencyMoveContext } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts";
 import type {
@@ -120,6 +124,7 @@ async function seedDependency(
       softDeps: runWithNothingLoaded().softDeps,
       policy: UPDATE_POLICY,
       cleanupClones: () => Promise.resolve(),
+      cloneCandidates: new Set(),
       ...freshDependencyMoveMemos(),
     },
   };
@@ -144,6 +149,31 @@ function move(
   overrides: Partial<DependencyMoveRequest> = {},
 ): PlannedDependencyMove {
   return { request: request(overrides), version };
+}
+
+async function pinGitCandidate(
+  context: DependencyMoveContext,
+): Promise<{ readonly candidateRoot: string; readonly sourceRoot: string }> {
+  const state = await loadState(context.locations.extensionRoot);
+  const marketplace = state.marketplaces.mp;
+  assert.ok(marketplace !== undefined);
+  const manifest = JSON.parse(await readFile(marketplace.manifestPath, "utf8")) as {
+    plugins: { name: string; source: unknown }[];
+  };
+  const entry = manifest.plugins.find(({ name }) => name === "zcore");
+  assert.ok(entry !== undefined);
+  entry.source = {
+    source: "url",
+    url: "https://example.com/org/repo",
+    sha: INSTALL_HOST_HEAD,
+  };
+  await writeFile(marketplace.manifestPath, JSON.stringify(manifest));
+  return {
+    candidateRoot: await context.locations.pluginCloneDir(
+      pluginCloneKey("https://example.com/org/repo", INSTALL_HOST_HEAD),
+    ),
+    sourceRoot: path.join(marketplace.marketplaceRoot, "plugins", "zcore"),
+  };
 }
 
 describe("freshDependencyMoveMemos", () => {
@@ -183,6 +213,109 @@ describe("judgeDependencyMove", () => {
       ["1.0.0", "2.0.0", pluginRoot],
     );
     assert.strictEqual(await readFile(context.locations.stateJsonPath, "utf8"), stateBefore);
+  });
+
+  test("carries only the move's cache entries into cleanup ownership", async (t) => {
+    // arrange
+    const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
+    const oldKey = "111111111111-aaaaaaaaaaaa";
+    const state = await loadState(context.locations.extensionRoot);
+    const record = state.marketplaces.mp?.plugins.zcore;
+    assert.ok(record !== undefined);
+    record.resolvedSource = path.join(context.locations.pluginClonesDir, oldKey, "plugin");
+    record.resolvedSha = "a".repeat(40);
+    await saveState(context.locations.extensionRoot, state);
+
+    // act
+    const judgement = await judgeDependencyMove(request(), context);
+
+    // assert
+    assert.deepStrictEqual(judgement.ok && judgement.prepared.cleanupCloneKeys, [oldKey]);
+    assert.deepStrictEqual(context.cloneCandidates, new Set([oldKey]));
+  });
+
+  test("keeps a warm candidate that a ruled-out move did not create", async (t) => {
+    // arrange
+    const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
+    const { candidateRoot, sourceRoot } = await pinGitCandidate(context);
+    await cp(sourceRoot, candidateRoot, { recursive: true });
+    const inner = seamWith(
+      createGitOps({
+        fixtureSourceDir: sourceRoot,
+        head: INSTALL_HOST_HEAD,
+        localRefs: { "refs/heads/main": INSTALL_HOST_HEAD },
+      }).gitOps,
+    );
+    let callbackPassed = false;
+
+    // act
+    const judgement = await judgeDependencyMove(
+      request({ requesters: [], excludedVersions: ["2.0.0"] }),
+      {
+        ...context,
+        cloneCacheSeam: {
+          ...inner,
+          materializePluginClone(args) {
+            callbackPassed = args.onCloneCreated !== undefined;
+            return inner.materializePluginClone(args);
+          },
+        },
+        constraintGate: () => Promise.resolve({ kind: "unconstrained" }),
+      },
+    );
+    await collectPluginCloneCandidatesLocked(context.locations, context.cloneCandidates);
+
+    // assert
+    assert.strictEqual(judgement.ok, false);
+    assert.strictEqual(callbackPassed, true);
+    assert.strictEqual(
+      await readFile(path.join(candidateRoot, ".claude-plugin", "plugin.json"), "utf8"),
+      JSON.stringify({ name: "zcore", version: "2.0.0" }),
+    );
+  });
+
+  test("keeps an exact-key race winner that a ruled-out move did not create", async (t) => {
+    // arrange
+    const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
+    const { candidateRoot, sourceRoot } = await pinGitCandidate(context);
+    const base = createGitOps({
+      fixtureSourceDir: sourceRoot,
+      head: INSTALL_HOST_HEAD,
+      localRefs: { "refs/heads/main": INSTALL_HOST_HEAD },
+    });
+    const inner = seamWith({
+      ...base.gitOps,
+      async checkout(options) {
+        await base.gitOps.checkout(options);
+        await cp(sourceRoot, candidateRoot, { recursive: true });
+      },
+    });
+    let callbackPassed = false;
+
+    // act
+    const judgement = await judgeDependencyMove(
+      request({ requesters: [], excludedVersions: ["2.0.0"] }),
+      {
+        ...context,
+        cloneCacheSeam: {
+          ...inner,
+          materializePluginClone(args) {
+            callbackPassed = args.onCloneCreated !== undefined;
+            return inner.materializePluginClone(args);
+          },
+        },
+        constraintGate: () => Promise.resolve({ kind: "unconstrained" }),
+      },
+    );
+    await collectPluginCloneCandidatesLocked(context.locations, context.cloneCandidates);
+
+    // assert
+    assert.strictEqual(judgement.ok, false);
+    assert.strictEqual(callbackPassed, true);
+    assert.strictEqual(
+      await readFile(path.join(candidateRoot, ".claude-plugin", "plugin.json"), "utf8"),
+      JSON.stringify({ name: "zcore", version: "2.0.0" }),
+    );
   });
 
   test("refuses a move whose catalog version falls outside the requester's range", async (t) => {
@@ -410,7 +543,7 @@ describe("runDependencyMove", () => {
     });
   });
 
-  test("D-PL10-12: carries a moved dependency's staging warnings and MCP notices", async (t) => {
+  test("carries other staging warnings and MCP notices while the dependency row owns its package note", async (t) => {
     // arrange
     t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
     const { context, pluginRoot } = await seedDependency(t, {
@@ -426,6 +559,11 @@ describe("runDependencyMove", () => {
     );
     await mkdir(path.dirname(context.locations.mcpAdapterJsonPath), { recursive: true });
     await writeFile(context.locations.mcpAdapterJsonPath, '// mine\n{"mcpServers":{}}\n');
+    await writeFile(
+      path.join(pluginRoot, "package.json"),
+      JSON.stringify({ dependencies: { "pkd-dep": "1.0.0" } }),
+    );
+    await writeFile(path.join(pluginRoot, "package-lock.json"), '{"lockfileVersion":3}');
 
     // act
     const run = await runDependencyMove(move("2.0.0"), context);
@@ -434,15 +572,63 @@ describe("runDependencyMove", () => {
     assert.deepStrictEqual(
       {
         landed: run.landed,
-        warningKinds: run.stagingWarnings?.map((warning) => warning.kind),
+        diagnostics: run.stagingDiagnostics,
         notices: run.mcpConfigNotices,
       },
       {
         landed: true,
-        warningKinds: ["discovery"],
+        diagnostics: [
+          {
+            plugin: "zcore",
+            scope: "project",
+            verb: "updated",
+            warnings: [
+              {
+                kind: "discovery",
+                message: `skill source "zcore-tool" in "${path.join(pluginRoot, "skills")}" elides to generated name "zcore-tool", already produced by skill source "tool"; ignoring duplicate.`,
+              },
+            ],
+          },
+        ],
         notices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
       },
     );
+  });
+
+  test("keeps a failed dependency move's staging warning under that dependency", async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+    const { context, pluginRoot } = await seedDependency(t, {
+      recorded: "1.0.0",
+      offered: "2.0.0",
+    });
+    const duplicate = path.join(pluginRoot, "skills", "zcore-tool");
+    await mkdir(duplicate, { recursive: true });
+    await writeFile(path.join(duplicate, "SKILL.md"), "---\nname: tool\n---\n");
+    const added = path.join(pluginRoot, "skills", "bar");
+    await mkdir(added, { recursive: true });
+    await writeFile(path.join(added, "SKILL.md"), "---\nname: bar\n---\n");
+    await mkdir(context.locations.skillsTargetDir, { recursive: true });
+    await writeFile(path.join(context.locations.skillsTargetDir, "zcore-bar"), "obstacle");
+
+    // act
+    const run = await runDependencyMove(move("2.0.0"), context);
+
+    // assert
+    assert.strictEqual(run.landed, false);
+    assert.deepStrictEqual(run.stagingDiagnostics, [
+      {
+        plugin: "zcore",
+        scope: "project",
+        verb: "update failed",
+        warnings: [
+          {
+            kind: "discovery",
+            message: `skill source "zcore-tool" in "${path.join(pluginRoot, "skills")}" elides to generated name "zcore-tool", already produced by skill source "tool"; ignoring duplicate.`,
+          },
+        ],
+      },
+    ]);
   });
 
   for (const { situation, requesters, cause } of [
@@ -480,6 +666,7 @@ describe("runDependencyMove", () => {
       );
       assert.ok(row?.status === "updated");
       assert.deepStrictEqual(serializeCauseChain(row.cause), serializeCauseChain(cause()));
+      assert.strictEqual(run.stagingDiagnostics, undefined);
     });
   }
 
@@ -685,7 +872,7 @@ describe("failedMoveRow", () => {
       name: "zcore@mp",
       version: "1.0.0",
       reasons: [],
-      cause: new Error("EACCES: permission denied, copyfile 'notes.md'"),
+      cause: new Error("EACCES: permission denied, copyfile '[redacted path]'"),
       severity: "error",
     });
   });

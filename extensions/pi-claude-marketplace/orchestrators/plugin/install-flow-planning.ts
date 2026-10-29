@@ -117,11 +117,13 @@ interface InstallPlanningLedgerPort {
     readonly caller: DependencyCaller;
     readonly context: DependencyMoveContext;
     readonly root: PlanRoot;
+    readonly cloneCandidates: Set<string>;
   }) => Promise<DependencyPlanPorts>;
   readonly previewRoot: (args: {
     readonly owners: InstallPlanningOwners;
     readonly opts: InstallPluginOptions;
     readonly target: DependencyTarget;
+    readonly cloneCandidates: Set<string>;
   }) => Promise<string | undefined>;
   readonly runCascade: {
     (args: RootCascade & { readonly kind: "initial" }): Promise<SettleCascadeRun | CascadePlan>;
@@ -147,6 +149,7 @@ interface InstallPlanningLedgerPort {
   }) => InstallPluginOutcome;
   readonly projectFailedMoves: (args: {
     readonly opts: InstallPluginOptions;
+    readonly mcpConfigNotices: readonly McpConfigNotice[];
     readonly moved: readonly MovedDependency[];
     readonly cause: Error;
     readonly orchestrated: boolean;
@@ -209,6 +212,8 @@ async function installAfterMoves(
     marketplace: opts.marketplace,
     plugin: opts.plugin,
   };
+  const cloneCandidates = new Set<string>();
+  const sweep = await planCloneSweep(target.locations, cloneCandidates);
   // CR-A / MISS-01: only `apply` installs a moved dependency's new
   // dependencies through a later step of its own.
   const defers = opts.dependencyInstallsFollow === true;
@@ -219,6 +224,7 @@ async function installAfterMoves(
     caller: opts,
     policy: defers ? RECONCILE_MOVE_MATERIALIZATION : INSTALL_MOVE_MATERIALIZATION,
     memos,
+    cloneCandidates,
   });
   const cascade: RootCascade = {
     owners,
@@ -239,9 +245,17 @@ async function installAfterMoves(
     capture: { rollbackPartials: [], version: undefined },
     orchestrated,
   };
-  const sweep = await planCloneSweep(target.locations);
   try {
-    const plan = await planInstallMoves({ ledger, owners, opts, target, root, context, defers });
+    const plan = await planInstallMoves({
+      ledger,
+      owners,
+      opts,
+      target,
+      root,
+      context,
+      defers,
+      cloneCandidates,
+    });
     if ("err" in plan) {
       return ledger.projectCaughtFailure({ ...failure, ...plan });
     }
@@ -252,6 +266,7 @@ async function installAfterMoves(
       const reported = new Set([root.key, ...ran.landed.map((entry) => entry.key)]);
       return ledger.projectFailedMoves({
         opts,
+        mcpConfigNotices: ran.mcpConfigNotices ?? [],
         moved: ran.landed,
         cause: ran.cause,
         orchestrated,
@@ -259,7 +274,12 @@ async function installAfterMoves(
       });
     }
 
-    return await args.installAgain(opts, { moved: ran.landed, carried, planned: plan.final });
+    return await args.installAgain(opts, {
+      moved: ran.landed,
+      carried,
+      planned: plan.final,
+      mcpConfigNotices: ran.mcpConfigNotices ?? [],
+    });
   } finally {
     await sweep();
     await discardCarriedAdds(carried, target.locations);
@@ -295,10 +315,16 @@ async function planInstallMoves(args: {
   readonly root: PlanRoot;
   readonly context: DependencyMoveContext;
   readonly defers: boolean;
+  readonly cloneCandidates: Set<string>;
 }): Promise<InstallPlanResult> {
   const { ledger, owners, opts, target } = args;
   try {
-    const rootCommit = await ledger.previewRoot({ owners, opts, target });
+    const rootCommit = await ledger.previewRoot({
+      owners,
+      opts,
+      target,
+      cloneCandidates: args.cloneCandidates,
+    });
     const ports = await ledger.preparePlan({ ...args, caller: opts });
     const plan = await planDependencyGraph(ports, {
       deferMoveDependencies: args.defers,
@@ -342,12 +368,15 @@ async function settleUpdateDependencies(
   const caller = updateCaller(args, input.notification);
   const memos = tagMemosOf(args, freshDependencyMoveMemos());
   const carried: CarriedAdd[] = [];
+  const cloneCandidates = new Set<string>();
+  const sweep = await planCloneSweep(target.locations, cloneCandidates);
   const context = dependencyMoveContext({
     owners,
     target,
     caller,
     policy: UPDATE_MATERIALIZATION,
     memos,
+    cloneCandidates,
   });
   const cascade: RootCascade = {
     owners,
@@ -362,11 +391,21 @@ async function settleUpdateDependencies(
     return await settleDependencies({
       firstRun: () => ledger.runCascade({ ...cascade, kind: "initial" }),
       plan: async () =>
-        planDependencyGraph(await ledger.preparePlan({ owners, target, caller, context, root }), {
-          deferMoveDependencies: false,
-        }),
+        planDependencyGraph(
+          await ledger.preparePlan({
+            owners,
+            target,
+            caller,
+            context,
+            root,
+            cloneCandidates,
+          }),
+          {
+            deferMoveDependencies: false,
+          },
+        ),
       steps: dependencyStepPorts(ledger, cascade, context),
-      planSweep: () => planCloneSweep(target.locations),
+      sweepPlanClones: sweep,
     });
   } finally {
     await discardCarriedAdds(carried, target.locations);

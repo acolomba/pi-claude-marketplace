@@ -1,15 +1,118 @@
 ---
 phase: 05-marketplace-command-parity
-fixed_at: 2026-10-27T00:00:00Z
+fixed_at: 2026-10-28T19:05:43Z
 review_path: .planning/phases/05-marketplace-command-parity/05-REVIEW.md
-iteration: 1
-findings_in_scope: 12
-fixed: 8
-skipped: 4
-status: partial
+iteration: 2
+findings_in_scope: 2
+fixed: 2
+skipped: 0
+status: all_fixed
 ---
 
 # Phase 05: Code Review Fix Report
+
+## Current iteration: integrated review blockers
+
+**Fixed at:** 2026-10-28T19:05:43Z
+**Reviewed baseline:** `59b5058d`
+**Iteration:** 2
+**Scope:** CR-01 and CR-02 from the integrated Phase 05 review.
+Both fixes are committed. A fresh full gate and re-review remain required;
+`all_fixed` describes this fix pass and does not declare the phase clean.
+REVIEW.md and SECURITY.md were not changed by this pass.
+
+**Where verification ran:** the assigned isolated worktree
+`/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-b-258`,
+branch `agent-reverify-b`, Node `v26.12.1`. Each fix used the normal commit
+hooks, including `npm run check:commit`. No hook was bypassed.
+
+### CR-01: IPv6 embeddings bypass explicit metadata-address refusals
+
+**Commit:** `cd7fdcf5966c412e6dbfb34c9bf8bd5a51daa2ee`
+(`fix(marketplace): refuse embedded metadata redirect addresses`)
+**Files modified:**
+`extensions/pi-claude-marketplace/platform/hosted-manifest-fetch.ts`,
+`test/platform/hosted-manifest-fetch.test.ts`.
+
+**Applied fix:** dotted IPv4 addresses and decoded IPv6 embeddings call the
+same complete four-octet predicate. It combines the existing local/private
+ranges with the three explicit metadata addresses. Public addresses remain
+allowed, including all four supported embedding prefixes. DNS-name handling
+and the accepted D-PL5-31 residual are unchanged.
+
+**Red evidence:** the new 15-case matrix ran before the production edit.
+All three dotted metadata forms passed their refusal assertions. All twelve
+embedded forms failed with `Missing expected rejection`, because the fake
+fetch followed the redirect and returned catalog bytes. The matrix covers
+`100.100.100.200`, `168.63.129.16`, and `192.0.0.192` under IPv4-compatible,
+IPv4-mapped, IPv4-translated, and NAT64 prefixes.
+
+**Green evidence:** `node --test test/platform/hosted-manifest-fetch.test.ts`
+passed all 70 tests. `npm run test:coverage:direct --
+test/platform/hosted-manifest-fetch.test.ts` exited 0 with 100% direct line,
+function, and branch coverage. Fixers, Fallow audit, and normal commit hooks
+passed.
+
+**Behavioral-test boundary:** no new metadata-address Cucumber row was added.
+The existing redirect fixture writes a real Location header; a red run would
+send a request to the real metadata address. The injected-fetch matrix proves
+the refusal without violating the suite's hermeticity rule.
+
+**Status:** fixed: requires human verification (address classification logic).
+
+### CR-02: Successful marketplace info exposes credential-bearing names
+
+**Commit:** `3a8c7e1c6b9af4e0f7c1646e67da622829eb525e`
+(`fix(notifications): mask successful marketplace info names`)
+**Files modified:**
+`extensions/pi-claude-marketplace/shared/notification-present.ts`,
+`test/shared/notification-present.test.ts`,
+`test/shared/notification-json.test.ts`,
+`features/marketplace/info.feature`.
+
+**Applied fix:** `redactMarketplaceInfo` masks the stored name on path,
+GitHub, and URL messages. It preserves URL masking and all other fields,
+including cascade order. The same object is returned only when neither the
+name nor URL changes. The plugin-info redactor and its bare/qualified ID
+semantics remain intact.
+
+**Red evidence:** seven focused owner cases failed before the production
+edit. They cover individual path/GitHub/URL names, unchanged URL identity,
+cascade presentation, and real presentation-to-wire conversion. The healthy
+marketplace-info scenario also failed, showing the synthetic credential as
+the successful result's name. It reuses the stored-name fixture and leaves
+the manifest healthy; no new step or fixture support was needed.
+
+**Green evidence:** `node --test test/shared/notification-present.test.ts
+test/shared/notification-json.test.ts` passed all 175 tests. Direct coverage
+for both pairs exited 0 at 100% line, function, and branch coverage. The
+focused Cucumber expression
+`^Info hides credentials in a stored marketplace name when its manifest is (healthy|invalid)$`
+passed both scenarios and all 15 steps. Fixers, Fallow audit, and normal
+commit hooks passed, including typecheck, lint, and `check:features`.
+
+**Status:** fixed: requires human verification (presentation redaction logic).
+
+### Prior dispositions carried forward
+
+The earlier iteration below is retained as historical evidence. The current
+review's dispositions take precedence where later work changed the outcome.
+
+| Finding | Current disposition |
+| --- | --- |
+| WR-01, IN-01 | Resolved by parser and fetch-boundary validation. |
+| WR-02 | Resolved; legacy `.json` git sources retain git semantics. |
+| WR-03 | Earlier IPv6 range cases resolved; D-PL5-31 accepts the DNS residual. CR-01 closes the separate literal metadata bypass. |
+| WR-04 | Resolved by shared network selectors and import/fetch restrictions. |
+| WR-05, IN-04 | Resolved by typed failure causes and credential masking. |
+| IN-02 | Accepted by D-PL5-18. |
+| IN-03 | Resolved by refusing hosted leftovers that contain `.git`. |
+| IN-05 | Accepted by D-PL5-11. |
+| IN-06 | Resolved on D-PL5-32 surfaces; explicit exceptions remain accepted. |
+| IN-07 | Accepted by D-PL5-17; current autoupdate behavior supersedes the old blanket cascade-skipping description. |
+| T-05-17 | Failed marketplace-info masking remains covered by `c99c6832`; CR-02 covers successful marketplace-info output. |
+
+## Prior iteration: historical record
 
 **Fixed at:** 2026-10-27
 **Source review:** .planning/phases/05-marketplace-command-parity/05-REVIEW.md

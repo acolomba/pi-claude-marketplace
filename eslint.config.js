@@ -177,6 +177,116 @@ const APPEND_ENTRY_SYNTAX_SELECTORS = [
   },
 ];
 
+/** BLOCK C: layer directions and ledger isolation apply even to network seams. */
+const IMPORT_DIRECTION_ZONES = [
+  // D-21-02 Phase 21: edge/ may now import domain/ directly; the
+  // prior cross-zone re-export hack via the retired rendering
+  // layer is gone.
+  {
+    target: "./extensions/pi-claude-marketplace/edge",
+    from: [
+      "./extensions/pi-claude-marketplace/bridges",
+      "./extensions/pi-claude-marketplace/transaction",
+      "./extensions/pi-claude-marketplace/persistence",
+    ],
+    message: "edge/ may only import from orchestrators/, domain/, shared/, platform/.",
+  },
+  {
+    target: "./extensions/pi-claude-marketplace/orchestrators",
+    from: ["./extensions/pi-claude-marketplace/edge"],
+    message: "orchestrators/ MUST NOT import from edge/.",
+  },
+  {
+    target: "./extensions/pi-claude-marketplace/bridges",
+    from: [
+      "./extensions/pi-claude-marketplace/edge",
+      "./extensions/pi-claude-marketplace/orchestrators",
+      "./extensions/pi-claude-marketplace/transaction",
+    ],
+    message:
+      "bridges/ may only import from domain/, persistence/, shared/, platform/. Cross-bridge imports are also forbidden.",
+  },
+  {
+    target: "./extensions/pi-claude-marketplace/domain",
+    from: [
+      "./extensions/pi-claude-marketplace/edge",
+      "./extensions/pi-claude-marketplace/orchestrators",
+      "./extensions/pi-claude-marketplace/bridges",
+      "./extensions/pi-claude-marketplace/transaction",
+      "./extensions/pi-claude-marketplace/persistence",
+    ],
+    message:
+      "domain/ MUST NOT import upward -- pure logic only. shared/ and platform/ are the only sibling imports allowed.",
+  },
+  {
+    target: "./extensions/pi-claude-marketplace/transaction",
+    from: [
+      "./extensions/pi-claude-marketplace/edge",
+      "./extensions/pi-claude-marketplace/orchestrators",
+      "./extensions/pi-claude-marketplace/bridges",
+      "./extensions/pi-claude-marketplace/domain",
+    ],
+    message: "transaction/ may only import from persistence/, shared/, platform/.",
+  },
+  {
+    target: "./extensions/pi-claude-marketplace/persistence",
+    from: [
+      "./extensions/pi-claude-marketplace/edge",
+      "./extensions/pi-claude-marketplace/orchestrators",
+      "./extensions/pi-claude-marketplace/bridges",
+      "./extensions/pi-claude-marketplace/transaction",
+    ],
+    message: "persistence/ may only import from domain/, shared/, platform/.",
+  },
+  {
+    target: "./extensions/pi-claude-marketplace/platform",
+    from: [
+      "./extensions/pi-claude-marketplace/edge",
+      "./extensions/pi-claude-marketplace/orchestrators",
+      "./extensions/pi-claude-marketplace/bridges",
+      "./extensions/pi-claude-marketplace/domain",
+      "./extensions/pi-claude-marketplace/transaction",
+      "./extensions/pi-claude-marketplace/persistence",
+    ],
+    message:
+      "platform/ may only import from shared/. It's the external-system boundary (git, Pi API surface).",
+  },
+  {
+    target: "./extensions/pi-claude-marketplace/shared",
+    from: [
+      "./extensions/pi-claude-marketplace/edge",
+      "./extensions/pi-claude-marketplace/orchestrators",
+      "./extensions/pi-claude-marketplace/bridges",
+      "./extensions/pi-claude-marketplace/domain",
+      "./extensions/pi-claude-marketplace/transaction",
+      "./extensions/pi-claude-marketplace/persistence",
+    ],
+    message: "shared/ may only import from platform/ for Pi API types.",
+  },
+  {
+    target: "./extensions/pi-claude-marketplace/orchestrators/marketplace",
+    from: PLUGIN_LEDGERS,
+    message:
+      "D-v1.0-01-11: orchestrators/marketplace/ must not import a plugin ledger module. Import the leaf row composer (plugin/update-row.ts), a shared type from orchestrators/types.ts, or the injected pluginUpdate seam instead.",
+  },
+  {
+    target: PLUGIN_LEDGERS,
+    from: MARKETPLACE_LEDGERS,
+    message:
+      "D-v1.0-01-11: a plugin ledger must not import a marketplace ledger module. Only orchestrators/marketplace/shared.ts is reachable from a plugin ledger.",
+  },
+  {
+    target: PLUGIN_LEDGERS,
+    from: PLUGIN_LEDGERS,
+    message: "D-v1.0-01-11: plugin ledger modules must not import each other.",
+  },
+  {
+    target: MARKETPLACE_LEDGERS,
+    from: MARKETPLACE_LEDGERS,
+    message: "D-v1.0-01-11: marketplace ledger modules must not import each other.",
+  },
+];
+
 export default tseslint.config(
   {
     ignores: [
@@ -405,130 +515,30 @@ export default tseslint.config(
     rules: { "no-console": "off" },
   },
   {
-    // BLOCK C (D-v1.0-01-11): Import-direction enforcement. The first eight zones map
-    // each layer folder to the sibling folders that MUST NOT import from it
-    // (i.e. they enforce the upward/inward direction of the dep graph). The
-    // next four keep the ledger modules apart, type-only and dynamic imports
-    // included: no orchestrators/marketplace/ file imports a plugin ledger, no
-    // plugin ledger imports a marketplace ledger, and no ledger imports another
-    // ledger of its own kind. Cycle detection reports a cycle only once the
-    // graph is already circular, so these zones stop the first edge. The final
-    // zone lets only PACKAGE_INSTALL_SEAM import platform/package-manager.ts.
+    // BLOCK C: every module, including the package seam, keeps the layer
+    // direction and ledger restrictions.
     files: ["extensions/pi-claude-marketplace/**/*.ts"],
+    rules: {
+      "import-x/no-restricted-paths": [
+        "error",
+        { basePath: import.meta.dirname, zones: IMPORT_DIRECTION_ZONES },
+      ],
+    },
+  },
+  {
+    // Only this exact importer may reach the package runner. Keep all other
+    // direction restrictions when adding the package-runner zone.
+    files: ["extensions/pi-claude-marketplace/**/*.ts"],
+    ignores: [PACKAGE_INSTALL_SEAM.slice(2)],
     rules: {
       "import-x/no-restricted-paths": [
         "error",
         {
           basePath: import.meta.dirname,
           zones: [
-            // D-21-02 Phase 21: edge/ may now import domain/ directly; the
-            // prior cross-zone re-export hack via the retired rendering
-            // layer is gone.
+            ...IMPORT_DIRECTION_ZONES,
             {
-              target: "./extensions/pi-claude-marketplace/edge",
-              from: [
-                "./extensions/pi-claude-marketplace/bridges",
-                "./extensions/pi-claude-marketplace/transaction",
-                "./extensions/pi-claude-marketplace/persistence",
-              ],
-              message: "edge/ may only import from orchestrators/, domain/, shared/, platform/.",
-            },
-            {
-              target: "./extensions/pi-claude-marketplace/orchestrators",
-              from: ["./extensions/pi-claude-marketplace/edge"],
-              message: "orchestrators/ MUST NOT import from edge/.",
-            },
-            {
-              target: "./extensions/pi-claude-marketplace/bridges",
-              from: [
-                "./extensions/pi-claude-marketplace/edge",
-                "./extensions/pi-claude-marketplace/orchestrators",
-                "./extensions/pi-claude-marketplace/transaction",
-              ],
-              message:
-                "bridges/ may only import from domain/, persistence/, shared/, platform/. Cross-bridge imports are also forbidden.",
-            },
-            {
-              target: "./extensions/pi-claude-marketplace/domain",
-              from: [
-                "./extensions/pi-claude-marketplace/edge",
-                "./extensions/pi-claude-marketplace/orchestrators",
-                "./extensions/pi-claude-marketplace/bridges",
-                "./extensions/pi-claude-marketplace/transaction",
-                "./extensions/pi-claude-marketplace/persistence",
-              ],
-              message:
-                "domain/ MUST NOT import upward -- pure logic only. shared/ and platform/ are the only sibling imports allowed.",
-            },
-            {
-              target: "./extensions/pi-claude-marketplace/transaction",
-              from: [
-                "./extensions/pi-claude-marketplace/edge",
-                "./extensions/pi-claude-marketplace/orchestrators",
-                "./extensions/pi-claude-marketplace/bridges",
-                "./extensions/pi-claude-marketplace/domain",
-              ],
-              message: "transaction/ may only import from persistence/, shared/, platform/.",
-            },
-            {
-              target: "./extensions/pi-claude-marketplace/persistence",
-              from: [
-                "./extensions/pi-claude-marketplace/edge",
-                "./extensions/pi-claude-marketplace/orchestrators",
-                "./extensions/pi-claude-marketplace/bridges",
-                "./extensions/pi-claude-marketplace/transaction",
-              ],
-              message: "persistence/ may only import from domain/, shared/, platform/.",
-            },
-            {
-              target: "./extensions/pi-claude-marketplace/platform",
-              from: [
-                "./extensions/pi-claude-marketplace/edge",
-                "./extensions/pi-claude-marketplace/orchestrators",
-                "./extensions/pi-claude-marketplace/bridges",
-                "./extensions/pi-claude-marketplace/domain",
-                "./extensions/pi-claude-marketplace/transaction",
-                "./extensions/pi-claude-marketplace/persistence",
-              ],
-              message:
-                "platform/ may only import from shared/. It's the external-system boundary (git, Pi API surface).",
-            },
-            {
-              target: "./extensions/pi-claude-marketplace/shared",
-              from: [
-                "./extensions/pi-claude-marketplace/edge",
-                "./extensions/pi-claude-marketplace/orchestrators",
-                "./extensions/pi-claude-marketplace/bridges",
-                "./extensions/pi-claude-marketplace/domain",
-                "./extensions/pi-claude-marketplace/transaction",
-                "./extensions/pi-claude-marketplace/persistence",
-              ],
-              message: "shared/ may only import from platform/ for Pi API types.",
-            },
-            {
-              target: "./extensions/pi-claude-marketplace/orchestrators/marketplace",
-              from: PLUGIN_LEDGERS,
-              message:
-                "D-v1.0-01-11: orchestrators/marketplace/ must not import a plugin ledger module. Import the leaf row composer (plugin/update-row.ts), a shared type from orchestrators/types.ts, or the injected pluginUpdate seam instead.",
-            },
-            {
-              target: PLUGIN_LEDGERS,
-              from: MARKETPLACE_LEDGERS,
-              message:
-                "D-v1.0-01-11: a plugin ledger must not import a marketplace ledger module. Only orchestrators/marketplace/shared.ts is reachable from a plugin ledger.",
-            },
-            {
-              target: PLUGIN_LEDGERS,
-              from: PLUGIN_LEDGERS,
-              message: "D-v1.0-01-11: plugin ledger modules must not import each other.",
-            },
-            {
-              target: MARKETPLACE_LEDGERS,
-              from: MARKETPLACE_LEDGERS,
-              message: "D-v1.0-01-11: marketplace ledger modules must not import each other.",
-            },
-            {
-              target: "./extensions/pi-claude-marketplace/**/!(package-install).ts",
+              target: "./extensions/pi-claude-marketplace",
               from: ["./extensions/pi-claude-marketplace/platform/package-manager.ts"],
               message: `D-PL9-10: only ${PACKAGE_INSTALL_SEAM} imports platform/package-manager.ts, the spawn runner of a plugin's own package install.`,
             },

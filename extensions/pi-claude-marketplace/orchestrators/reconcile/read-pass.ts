@@ -83,7 +83,7 @@ const OFFICIAL_CLAUDE_MARKETPLACE_SOURCE = "anthropics/claude-plugins-official";
  * source as a fallback, so that declaration is already current regardless of
  * the source the record carries.
  */
-function withMarketplaceSourceRepairs(
+export function withMarketplaceSourceRepairs(
   merged: MergedConfig,
   state: ExtensionState,
   plan: ReconcilePlan,

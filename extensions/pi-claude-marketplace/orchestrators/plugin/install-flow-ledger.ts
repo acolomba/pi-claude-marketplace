@@ -51,7 +51,7 @@ import {
 } from "./install-flow-results.ts";
 import { installedPluginOutcome } from "./install-outcome.ts";
 import { loadTargetLayers, writeAdoptingConfigEntries } from "./shared.ts";
-import { surfaceDiscoveryWarnings, surfaceStagingDiagnostics } from "./staging-diagnostics.ts";
+import { surfaceDiscoveryWarnings } from "./staging-diagnostics.ts";
 
 import type { CarriedAdd } from "./carried-marketplace-adds.ts";
 import type { DependencyMoveOwners } from "./dependency-bindings.ts";
@@ -80,7 +80,7 @@ import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { ContentReason } from "../../shared/notification-types.ts";
+import type { ContentReason, McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { runPhases } from "../../transaction/phase-ledger.ts";
 import type { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
@@ -415,6 +415,7 @@ export interface InstallAfterPlan {
   readonly moved: readonly MovedDependency[];
   readonly carried: CarriedAdd[];
   readonly planned: PlannedClosure;
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
 }
 
 /** The collaborators dependency planning binds for one install transaction. */
@@ -529,6 +530,7 @@ async function installPluginWithTransaction(
   const { planning, fileCapabilities } = composition;
   const { ctx, run, scope, cwd, marketplace, plugin } = opts;
   const { moved, carried, runCascade } = installRun(afterPlan);
+  const priorNotices = afterPlan?.mcpConfigNotices ?? [];
   const locations = locationsFor(scope, cwd);
   const disableCascade = composeInstallDisableCascade({
     hooksRouting,
@@ -996,6 +998,7 @@ async function installPluginWithTransaction(
       },
     );
   } catch (err) {
+    cascadeFailure.mcpConfigNotices = [...priorNotices, ...cascadeFailure.mcpConfigNotices];
     // Pattern S-1 single chokepoint for user-visible errors: one
     // notify(ctx, run, ...) call carrying a per-variant
     // PluginFailedMessage / PluginUnavailableMessage. Severity derives to
@@ -1043,6 +1046,8 @@ async function installPluginWithTransaction(
   // WB-01 / CFG-03 / T-56-03-04: invalid-config abort. The basename-only
   // message prevents an absolute-path information leak. No state mutation,
   // no write-back -- the closure returned before runInstallLedger ran.
+  let finalOutcome: InstallPluginOutcome;
+  let notices = priorNotices;
   switch (outcome.kind) {
     // UPD-DEP-D1: plan the moves with the lock released, make them, then run
     // the install again with the dependencies in range.
@@ -1064,7 +1069,7 @@ async function installPluginWithTransaction(
       });
 
     case "invalid-config":
-      return failedRowOutcome({
+      finalOutcome = failedRowOutcome({
         ctx,
         run,
         marketplace,
@@ -1075,12 +1080,10 @@ async function installPluginWithTransaction(
         orchestrated,
         moved,
       });
+      break;
 
     case "marketplace-absent": {
       const cause = `Marketplace "${marketplace}" is not added in the ${scope} scope.`;
-      if (opts.notifications?.mode === "orchestrated") {
-        return { status: "failed", error: new Error(cause), cause, ...movedMember(moved) };
-      }
 
       // CMP-4 / SCOPE-01: a bare `{marketplace not added}` row is not actionable when the
       // container lives in the OTHER scope -- the repo-bundled-marketplace case,
@@ -1089,17 +1092,21 @@ async function installPluginWithTransaction(
       // carries. The probe never throws and never blocks the row (see
       // `marketplaceInOtherScope`); a `false` answer adds no field, so the row
       // renders the plain `{marketplace not added}` brace.
-      notify(ctx, run, {
-        kind: "marketplace-not-added",
-        name: marketplace,
-        scope,
-        ...(await crossScopeFlag({ cwd, marketplace, scope })),
-      });
-      return { status: "failed", error: new Error(cause), cause, ...movedMember(moved) };
+      if (!orchestrated) {
+        notify(ctx, run, {
+          kind: "marketplace-not-added",
+          name: marketplace,
+          scope,
+          ...(await crossScopeFlag({ cwd, marketplace, scope })),
+        });
+      }
+
+      finalOutcome = { status: "failed", error: new Error(cause), cause, ...movedMember(moved) };
+      break;
     }
 
     case "refused":
-      return failedRowOutcome({
+      finalOutcome = failedRowOutcome({
         ctx,
         run,
         marketplace,
@@ -1110,9 +1117,10 @@ async function installPluginWithTransaction(
         orchestrated,
         moved,
       });
+      break;
 
     case "declared":
-      return declaredRowOutcome({
+      finalOutcome = declaredRowOutcome({
         ctx,
         run,
         marketplace,
@@ -1121,27 +1129,24 @@ async function installPluginWithTransaction(
         record: outcome.record,
         reason: outcome.reason,
       });
+      break;
 
     // D-04-07: the promotion arm. State was saved and any hooks hydrated inside
     // the lock, and the cascade never ran, so there are no post-commit warnings
     // to collect. The row is the whole report, followed by the MCP config
     // notices of a re-materialization (AFILE-04).
     case "promoted":
-      return withMcpConfigNotices(
+      finalOutcome = promotedRowOutcome({
         ctx,
         run,
+        marketplace,
+        scope,
+        plugin,
+        promotion: outcome.promotion,
         orchestrated,
-        promotedRowOutcome({
-          ctx,
-          run,
-          marketplace,
-          scope,
-          plugin,
-          promotion: outcome.promotion,
-          orchestrated,
-        }),
-        outcome.promotion.mcpConfigNotices,
-      );
+      });
+      notices = [...priorNotices, ...outcome.promotion.mcpConfigNotices];
+      break;
 
     // D-102-02: the ledger succeeded and the disable cascade then failed. The
     // shrunken record was already saved inside the lock, so state.json describes
@@ -1181,13 +1186,9 @@ async function installPluginWithTransaction(
       }
 
       // AFILE-04: the ledger rewrote the file before the disable failed.
-      return withMcpConfigNotices(
-        ctx,
-        run,
-        orchestrated,
-        { status: "failed", error: outcome.cause, cause, ...movedMember(moved) },
-        outcome.mcpConfigNotices,
-      );
+      finalOutcome = { status: "failed", error: outcome.cause, cause, ...movedMember(moved) };
+      notices = [...priorNotices, ...outcome.mcpConfigNotices];
+      break;
     }
 
     case "installed": {
@@ -1258,36 +1259,27 @@ async function installPluginWithTransaction(
           undefined,
           "single",
         );
-        surfaceDiscoveryWarnings(ctx, run, {
-          plugin,
-          scope,
-          verb: "installed",
-          warnings: installCtx.discoveryWarnings,
+        cascadeStagingDiagnostics(outcome.members, scope, {
+          key: rootKey,
+          name: plugin,
+          discoveryWarnings: installCtx.discoveryWarnings,
+        }).forEach((diagnostic) => {
+          surfaceDiscoveryWarnings(ctx, run, diagnostic);
         });
-        surfaceStagingDiagnostics(
-          ctx,
-          run,
-          cascadeStagingDiagnostics(
-            outcome.members.filter((member) => member.key !== rootKey),
-            scope,
-          ),
-        );
       }
 
       // AFILE-04: every cascade member's notices, after the block's own rows.
-      return withMcpConfigNotices(
-        ctx,
-        run,
-        orchestrated,
-        {
-          ...installedPluginOutcome(installCtx, postCommitWarnings, landedDisabled),
-          ...movedMember(landed),
-          ...dependencyInstallsMember(moved, outcome.members, rootKey, run.softDeps),
-        },
-        outcome.mcpConfigNotices,
-      );
+      finalOutcome = {
+        ...installedPluginOutcome(installCtx, postCommitWarnings, landedDisabled),
+        ...movedMember(landed),
+        ...dependencyInstallsMember(moved, outcome.members, rootKey, run.softDeps),
+      };
+      notices = [...priorNotices, ...outcome.mcpConfigNotices];
+      break;
     }
   }
+
+  return withMcpConfigNotices(ctx, run, orchestrated, finalOutcome, notices);
 }
 
 /**

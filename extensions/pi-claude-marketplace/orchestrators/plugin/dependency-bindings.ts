@@ -10,7 +10,7 @@
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 
-import { collectPluginClonesLocked, listUnreferencedPluginClonesLocked } from "./clone-gc.ts";
+import { collectPluginCloneCandidatesLocked } from "./clone-gc.ts";
 import { cascadeFailureCause, composeCascadeFailureMessage } from "./install-cascade.messaging.ts";
 
 import type { DependencyMoveContext, DependencyMoveMemos } from "./dependency-move.ts";
@@ -105,6 +105,7 @@ export function dependencyMoveContext(args: {
   readonly caller: DependencyCaller;
   readonly policy: MaterializationPolicy;
   readonly memos: DependencyMoveMemos;
+  readonly cloneCandidates: Set<string>;
 }): DependencyMoveContext {
   const { owners, caller } = args;
   return {
@@ -115,6 +116,7 @@ export function dependencyMoveContext(args: {
     policy: args.policy,
     softDeps: caller.run.softDeps,
     cleanupClones: leaveClonesToTheSweep,
+    cloneCandidates: args.cloneCandidates,
     ...callerFields(caller),
     ...args.memos,
   };
@@ -150,32 +152,23 @@ export function updateCaller(
 }
 
 /**
- * UPD-DEP-D1 / WR-A / IN-N4: notes the unreferenced clones on disk before a
- * plan, and returns the sweep that removes every other unreferenced clone
- * once the operation ends: those the plan created, and the revisions its
- * moves replaced. A clone that was unreferenced before, such as a mirror
- * `fetch` warmed, stays. D-PL7-05 / D-PL7-13: the listing and the sweep each
- * take a fresh scope lock, so the caller must hold none. IN-N5: when the
- * clones cannot be listed, a held lock included, the sweep removes nothing.
- * The sweep never throws (D-19-01): a failure, a held lock included, is
- * traced, and a later lifecycle operation retries it.
+ * Returns a sweep over the exact cache entries one planning attempt created or
+ * can leave unreferenced. The caller adds candidates while it plans and runs
+ * the sweep after it releases every scope lock. The sweep takes a fresh lock,
+ * rechecks current references, and never throws. An unrelated cache entry is
+ * not a candidate and stays.
  */
-export async function planCloneSweep(locations: ScopedLocations): Promise<() => Promise<void>> {
-  let before: ReadonlySet<string>;
-  try {
-    before = await listUnreferencedPluginClonesLocked(locations);
-  } catch (err) {
-    hookDebugLog(`dependency plan: clone listing failed: ${errorMessage(err)}`, "install");
-    return () => Promise.resolve();
-  }
-
-  return async () => {
+export function planCloneSweep(
+  locations: ScopedLocations,
+  candidates: ReadonlySet<string>,
+): Promise<() => Promise<void>> {
+  return Promise.resolve(async () => {
     try {
-      await collectPluginClonesLocked(locations, before);
+      await collectPluginCloneCandidatesLocked(locations, candidates);
     } catch (err) {
       hookDebugLog(`dependency plan: clone cleanup failed: ${errorMessage(err)}`, "install");
     }
-  };
+  });
 }
 
 /**

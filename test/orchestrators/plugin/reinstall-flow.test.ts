@@ -2733,12 +2733,12 @@ test("D-PL1-14: a bulk reinstall renders each reinstalled and failed plugin's di
         },
         {
           message:
-            'Plugin "aaa" [project] reinstalled; 1 declared component has a note.\n\nskill source "tool" in "skills" elides to generated name "aaa-tool", already produced by skill source "aaa-tool"; ignoring duplicate.',
+            'Plugin "aaa" [project] reinstalled; 1 declared component has a note.\n\nskill source "tool" in "[redacted path]',
           severity: "warning",
         },
         {
           message:
-            'Plugin "zzz" [project] reinstall failed; 1 declared component has a note.\n\nskill source "zzz-tool" in "skills" elides to generated name "zzz-tool", already produced by skill source "tool"; ignoring duplicate.',
+            'Plugin "zzz" [project] reinstall failed; 1 declared component has a note.\n\nskill source "zzz-tool" in "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -6641,9 +6641,7 @@ for (const mode of ["json", "rpc"]) {
               severity: "warning",
               needsReload: false,
               header: 'Plugin "hello" [project] reinstalled; 1 declared component has a note.',
-              lines: [
-                'skill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
-              ],
+              lines: ['skill source "hello-foo" in "[redacted path]'],
             },
           },
         ]);
@@ -6687,7 +6685,7 @@ test("D-141-03: a standalone reinstall surfaces a skills discovery warning after
         },
         {
           message:
-            'Plugin "hello" [project] reinstalled; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" [project] reinstalled; 1 declared component has a note.\n\nskill source "hello-foo" in "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -6741,12 +6739,12 @@ test("D-141-03: a bulk reinstall surfaces one diagnostic per plugin, singular an
         },
         {
           message:
-            'Plugin "hello" [project] reinstalled; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" [project] reinstalled; 1 declared component has a note.\n\nskill source "hello-foo" in "[redacted path]',
           severity: "warning",
         },
         {
           message:
-            'Plugin "world" [project] reinstalled; 2 declared components have notes.\n\nskill source "world-bar" in "skills" elides to generated name "world-bar", already produced by skill source "bar"; ignoring duplicate.\nskill source "world-foo" in "skills" elides to generated name "world-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "world" [project] reinstalled; 2 declared components have notes.\n\nskill source "world-bar" in "[redacted path]\nskill source "world-foo" in "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -6942,7 +6940,8 @@ test("D-141-03: a reinstall carries its discovery warning on notes and drops the
           message: "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n\n/reload to pick up changes",
         },
         {
-          message: `Plugin "hello" [project] reinstalled; 1 declared component has a note.\n\n${elision("skills")}`,
+          message:
+            'Plugin "hello" [project] reinstalled; 1 declared component has a note.\n\nskill source "hello-foo" in "[redacted path]',
           severity: "warning",
         },
       ]);

@@ -11399,9 +11399,7 @@ for (const mode of ["json", "rpc"]) {
               severity: "warning",
               needsReload: false,
               header: 'Plugin "hello" [project] updated; 1 declared component has a note.',
-              lines: [
-                'skill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
-              ],
+              lines: ['skill source "hello-foo" in "[redacted path]'],
             },
           },
         ]);
@@ -11443,7 +11441,7 @@ test("D-141-03: a standalone updatePlugins run surfaces the skills discovery war
         },
         {
           message:
-            'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -11519,7 +11517,7 @@ test("D-PL1-10: an updateSinglePlugin cascade emits no notification and carries 
           },
           {
             message:
-              'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+              'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "[redacted path]',
             severity: "warning",
           },
         ]);
@@ -11565,12 +11563,12 @@ test("D-141-03: a bulk update surfaces one diagnostic per updated plugin", async
         },
         {
           message:
-            'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "[redacted path]',
           severity: "warning",
         },
         {
           message:
-            'Plugin "world" [project] updated; 1 declared component has a note.\n\nskill source "world-foo" in "skills" elides to generated name "world-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "world" [project] updated; 1 declared component has a note.\n\nskill source "world-foo" in "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -11618,12 +11616,12 @@ test("D-PL1-07: a bare update renders the diagnostics in the row order of the ma
         },
         {
           message:
-            'Plugin "world" [user] updated; 1 declared component has a note.\n\nskill source "world-foo" in "skills" elides to generated name "world-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "world" [user] updated; 1 declared component has a note.\n\nskill source "world-foo" in "[redacted path]',
           severity: "warning",
         },
         {
           message:
-            'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -11713,7 +11711,7 @@ test("D-PL1-14 / D-PL1-22: a direct update whose later target throws in prepare 
         },
         {
           message:
-            'Plugin "zzz" [project] update failed; 1 declared component has a note.\n\nskill source "zzz-foo" in "skills" elides to generated name "zzz-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "zzz" [project] update failed; 1 declared component has a note.\n\nskill source "zzz-foo" in "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -11723,7 +11721,7 @@ test("D-PL1-14 / D-PL1-22: a direct update whose later target throws in prepare 
   });
 });
 
-test("D-PL1-14: a direct update whose phase-3 commit fails renders its update failed diagnostic after the cascade", async () => {
+test("D-PL10-12: a phase-3 update failure retains dependency diagnostics before the root diagnostic", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-failed-phase3-warnings-");
     try {
@@ -11743,9 +11741,38 @@ test("D-PL1-14: a direct update whose phase-3 commit fails renders its update fa
       await mkdir(locations.skillsTargetDir, { recursive: true });
       await writeFile(path.join(locations.skillsTargetDir, "zzz-tool"), "obstacle");
       const { ctx, run, notifications } = makeCtx();
+      const operations = createPluginUpdateOperations(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+        undefined,
+        {},
+        (args) =>
+          Promise.resolve(
+            args.plugin === "zzz"
+              ? {
+                  kind: "settled",
+                  rows: [],
+                  stagingDiagnostics: [
+                    {
+                      plugin: "zcore",
+                      scope: "project",
+                      verb: "installed",
+                      warnings: [
+                        {
+                          kind: "discovery",
+                          message: `dependency source in "${path.join(cwd, "private", "skill.md")}" was skipped`,
+                        },
+                        { kind: "hygiene", message: "dependency staging kept a fallback" },
+                      ],
+                    },
+                  ],
+                }
+              : { kind: "settled", rows: [] },
+          ),
+      );
 
       // act
-      await updatePlugins({
+      await operations.updatePlugins({
         ctx,
         run,
         scope: "project",
@@ -11784,7 +11811,12 @@ test("D-PL1-14: a direct update whose phase-3 commit fails renders its update fa
           },
           {
             message:
-              'Plugin "zzz" [project] update failed; 1 declared component has a note.\n\nskill source "zzz-foo" in "skills" elides to generated name "zzz-foo", already produced by skill source "foo"; ignoring duplicate.',
+              'Plugin "zcore" [project] installed; 1 declared component has a note; 1 staging warning.\n\ndependency source in "skill.md" was skipped\ndependency staging kept a fallback',
+            severity: "warning",
+          },
+          {
+            message:
+              'Plugin "zzz" [project] update failed; 1 declared component has a note.\n\nskill source "zzz-foo" in "[redacted path]',
             severity: "warning",
           },
         ],
@@ -11856,7 +11888,7 @@ test("D-PL1-14: a failed outcome a direct update keeps renders its update failed
         },
         {
           message:
-            'Plugin "hello" [project] update failed; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" [project] update failed; 1 declared component has a note.\n\nskill source "hello-foo" in "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -14544,6 +14576,23 @@ test("UPD-DEP-D1: a named update settles the new version's dependencies in the c
                 needsReload: true,
               },
             ],
+            stagingDiagnostics: [
+              {
+                plugin: "zcore",
+                scope: "project",
+                verb: "installed",
+                warnings: [
+                  {
+                    kind: "discovery",
+                    message: "dependency package install failed",
+                  },
+                  {
+                    kind: "hygiene",
+                    message: "dependency staging kept a fallback",
+                  },
+                ],
+              },
+            ],
           });
         },
       );
@@ -14562,6 +14611,11 @@ test("UPD-DEP-D1: a named update settles the new version's dependencies in the c
         {
           message:
             "● mp [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n  ● zcore@mp v1.0.0 (installed)\n\n/reload to pick up changes",
+        },
+        {
+          message:
+            'Plugin "zcore" [project] installed; 1 declared component has a note; 1 staging warning.\n\ndependency package install failed\ndependency staging kept a fallback',
+          severity: "warning",
         },
       ]);
       assert.deepStrictEqual(settled, [["hello", "1.0.1", true, true]]);

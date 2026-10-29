@@ -109,13 +109,14 @@ export class NpmRegistry {
   >();
   // The status each armed package answers, by package name.
   private readonly arms = new Map<string, ArmedStatus>();
+  private readonly beforeResponses = new Map<string, () => Promise<void>>();
   private readonly log: NpmRegistryRequest[] = [];
 
   private constructor(server: Server, address: string) {
     this.server = server;
     this.address = address;
     server.on("request", (request: IncomingMessage, response: ServerResponse) => {
-      this.answer(request, response);
+      void this.answer(request, response);
     });
   }
 
@@ -184,6 +185,15 @@ export class NpmRegistry {
     this.arms.set(name, armed);
   }
 
+  /** Runs an interleaved edit before answering the next request for this package. */
+  beforeNextResponse(name: string, action: () => Promise<void>): void {
+    assert.ok(
+      [...this.tarballs.values()].some((tarball) => tarball.served.name === name),
+      `the npm registry serves no package ${name}`,
+    );
+    this.beforeResponses.set(name, action);
+  }
+
   /** Returns the length of the request log, which opens a window for `requestsSince()`. */
   mark(): number {
     return this.log.length;
@@ -202,13 +212,19 @@ export class NpmRegistry {
     await closed;
   }
 
-  private answer(request: IncomingMessage, response: ServerResponse): void {
+  private async answer(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const method = request.method ?? "";
     const requestPath = request.url ?? "";
     const tarball = method === "GET" ? this.tarballs.get(requestPath) : undefined;
     const status = tarball === undefined ? 404 : (this.arms.get(tarball.served.name) ?? 200);
     this.log.push({ method, path: requestPath, status });
     request.resume();
+    if (tarball !== undefined) {
+      const beforeResponse = this.beforeResponses.get(tarball.served.name);
+      this.beforeResponses.delete(tarball.served.name);
+      await beforeResponse?.();
+    }
+
     if (tarball === undefined || status !== 200) {
       response.writeHead(status, { "content-type": "text/plain" });
       response.end(`${status}\n`);

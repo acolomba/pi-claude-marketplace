@@ -3,10 +3,58 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
+import { ESLint, Linter } from "eslint";
+import importX from "eslint-plugin-import-x";
+
 import { EXTENSION_ROOT_REL, SHELL_OUT_EXEMPT_TARGETS } from "./gate-targets.ts";
 import { REPO_ROOT } from "./source-scan.ts";
 
 const EXTENSION_ROOT = path.join(REPO_ROOT, EXTENSION_ROOT_REL);
+
+for (const { importer, violations } of [
+  { importer: "orchestrators/plugin/package-install.ts", violations: [] },
+  { importer: "edge/package-install.ts", violations: ["import-x/no-restricted-paths"] },
+  {
+    importer: "orchestrators/other/package-install.ts",
+    violations: ["import-x/no-restricted-paths"],
+  },
+  {
+    importer: "orchestrators/plugin/nested/package-install.ts",
+    violations: ["import-x/no-restricted-paths"],
+  },
+  { importer: "package-install.ts", violations: ["import-x/no-restricted-paths"] },
+  { importer: "edge/commands.ts", violations: ["import-x/no-restricted-paths"] },
+]) {
+  test(`the package runner import gate reports ${violations.length} violations for ${importer}`, async () => {
+    // arrange
+    const filename = path.join(EXTENSION_ROOT, importer);
+    const eslint = new ESLint({ cwd: REPO_ROOT });
+    const config = (await eslint.calculateConfigForFile(filename)) as Linter.Config;
+    const restriction = config.rules?.["import-x/no-restricted-paths"];
+    assert.ok(restriction !== undefined);
+    const runner = path.relative(
+      path.dirname(filename),
+      path.join(EXTENSION_ROOT, "platform/package-manager.ts"),
+    );
+
+    // act
+    const messages = new Linter().verify(
+      `import "./${runner.split(path.sep).join("/")}";`,
+      {
+        files: ["**/*.ts"],
+        plugins: { "import-x": importX },
+        rules: { "import-x/no-restricted-paths": restriction },
+      },
+      { filename },
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      messages.map((message) => message.ruleId),
+      violations,
+    );
+  });
+}
 
 /**
  * D-21 supersession defense (W-8). MA-7 (PRD §5.1.1) requires the extension

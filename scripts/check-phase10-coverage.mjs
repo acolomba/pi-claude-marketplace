@@ -78,6 +78,28 @@ const allowedDispositions = new Set([
   "declined-with-reason",
 ]);
 
+const requiredEvidenceById = new Map([
+  [
+    "XPH02-MOVE-DIAGNOSTICS",
+    [
+      {
+        path: "features/plugin/update.feature",
+        title: "Scenario: Update preserves dependency move warnings and MCP notices",
+      },
+      {
+        path: "features/plugin/package-dependencies.feature",
+        title:
+          "Scenario: A direct update reports a moved dependency package failure only on that dependency",
+      },
+      {
+        path: "features/plugin/package-dependencies.feature",
+        title:
+          "Scenario: A direct update reports a newly installed dependency package failure once",
+      },
+    ],
+  ],
+]);
+
 function fail(message) {
   process.stderr.write(`Phase 10 coverage error: ${message}\n`);
   process.exitCode = 1;
@@ -124,6 +146,7 @@ for (const row of rows) {
     fail(`${row.id} has no source bullet description`);
   }
 
+  let commitExists = false;
   if (typeof row.commit !== "string" || !/^[0-9a-f]{8}$/u.test(row.commit)) {
     fail(`${row.id} has no exact eight-hex evidence commit`);
   } else {
@@ -132,6 +155,7 @@ for (const row of rows) {
         cwd: projectRoot,
         stdio: "ignore",
       });
+      commitExists = true;
     } catch {
       fail(`${row.id} cites missing commit ${row.commit}`);
     }
@@ -140,6 +164,23 @@ for (const row of rows) {
   if (!Array.isArray(row.evidence) || row.evidence.length === 0) {
     fail(`${row.id} has no evidence path and title`);
     continue;
+  }
+
+  const requiredEvidence = requiredEvidenceById.get(row.id);
+  if (requiredEvidence !== undefined) {
+    const evidenceKeys = new Set(
+      row.evidence
+        .filter(
+          (evidence) => typeof evidence.path === "string" && typeof evidence.title === "string",
+        )
+        .map((evidence) => `${evidence.path}\0${evidence.title}`),
+    );
+    const hasCompleteEvidence =
+      row.evidence.length === requiredEvidence.length &&
+      requiredEvidence.every((evidence) => evidenceKeys.has(`${evidence.path}\0${evidence.title}`));
+    if (!hasCompleteEvidence) {
+      fail(`${row.id} must bind its complete final diagnostic evidence set`);
+    }
   }
 
   for (const evidence of row.evidence) {
@@ -156,6 +197,24 @@ for (const row of rows) {
 
     if (!readFileSync(absolute, "utf8").includes(evidence.title)) {
       fail(`${row.id} title is absent from ${evidence.path}: ${evidence.title}`);
+    }
+
+    if (commitExists) {
+      let committedEvidence;
+      try {
+        committedEvidence = execFileSync("git", ["show", `${row.commit}:${evidence.path}`], {
+          cwd: projectRoot,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+        });
+      } catch {
+        fail(`${row.id} path is absent at ${row.commit}: ${evidence.path}`);
+        continue;
+      }
+
+      if (!committedEvidence.includes(evidence.title)) {
+        fail(`${row.id} title is absent from ${evidence.path} at ${row.commit}: ${evidence.title}`);
+      }
     }
   }
 

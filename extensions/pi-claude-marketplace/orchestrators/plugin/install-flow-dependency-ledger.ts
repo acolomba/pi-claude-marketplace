@@ -35,6 +35,7 @@ import {
   sharedCascadeOptions,
   trackInstallAdds,
   unwrapCascade,
+  withMcpConfigNotices,
 } from "./install-flow-cascade-context.ts";
 import { collectInstallPostCommitWarnings, hydrateInstalledHooks } from "./install-flow-ledger.ts";
 import {
@@ -168,8 +169,7 @@ export type InstallMissingDependencyOutcome =
       readonly reason?: "cross-marketplace";
       /**
        * REC-06: the undo steps the failed install's own ledger could not
-       * finish. `apply` does not render them yet (LCORCH-01). Omitted when
-       * every undo finished (NREG-01).
+       * finish. Omitted when every undo finished (NREG-01).
        */
       readonly rollbackPartials?: readonly RollbackPartial[];
       /**
@@ -466,6 +466,7 @@ export async function prepareInstallDependencyPlan(args: {
   readonly context: DependencyMoveContext;
   // fallow-ignore-next-line private-type-leak -- The root adapts this operation structurally; its root stays private.
   readonly root: InstallDependencyPlanRoot;
+  readonly cloneCandidates: Set<string>;
 }): Promise<DependencyPlanPorts> {
   const { owners, target, caller, context, root } = args;
   const state = await loadState(target.locations.extensionRoot);
@@ -484,6 +485,7 @@ export async function prepareInstallDependencyPlan(args: {
     cwd: target.cwd,
     adds: trackInstallAdds(owners.transaction, undefined),
     removalOps: owners.fileCapabilities.removalOps,
+    cloneCandidates: args.cloneCandidates,
   });
   const rootAllowedMarketplaces = await loadInstallRootAllowlist(
     recordFor,
@@ -526,6 +528,7 @@ export async function previewInstallDependencyPlanRoot(args: {
   readonly owners: InstallPlanningOwners;
   readonly opts: InstallPluginOptions;
   readonly target: DependencyTarget;
+  readonly cloneCandidates: Set<string>;
 }): Promise<Awaited<ReturnType<typeof previewInstall>>> {
   const { owners, opts, target } = args;
   return previewInstall(
@@ -542,6 +545,7 @@ export async function previewInstallDependencyPlanRoot(args: {
         ...(opts.pinVersionOverride !== undefined && { pinVersion: opts.pinVersionOverride }),
         marketplaceAdd: DEFAULT_MARKETPLACE_ADD,
         addedMarketplaces: [],
+        cloneCandidates: args.cloneCandidates,
       },
       owners.fileCapabilities.removalOps,
     ),
@@ -576,11 +580,24 @@ async function saveInstallDependencyPlanClosure(
     cwd: args.target.cwd,
     members: settled.members,
   });
+  const stagingDiagnostics = settled.members.flatMap((member) =>
+    member.discoveryWarnings === undefined
+      ? []
+      : [
+          {
+            plugin: member.name,
+            scope: args.target.scope,
+            verb: "installed" as const,
+            warnings: member.discoveryWarnings,
+          },
+        ],
+  );
   return {
     kind: "installed",
     rows: settled.members.map((member) =>
       composeCascadeMemberRow(member, args.caller.run.softDeps),
     ),
+    ...(stagingDiagnostics.length > 0 && { stagingDiagnostics }),
     ...installMcpConfigNoticesMember(settled.mcpConfigNotices),
   };
 }
@@ -684,6 +701,7 @@ export function projectCaughtInstallDependencyPlanFailure(
 /** Reports the plan steps that landed before one dependency move failed. */
 export function projectFailedInstallDependencyPlanMoves(args: {
   readonly opts: InstallPluginOptions;
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
   readonly moved: readonly MovedDependency[];
   readonly cause: Error;
   readonly orchestrated: boolean;
@@ -719,10 +737,16 @@ export function projectFailedInstallDependencyPlanMoves(args: {
     );
   }
 
-  return {
-    status: "failed",
-    error: args.cause,
-    cause: formatOrchestratedCause(args.cause),
-    ...movedMember(args.moved),
-  };
+  return withMcpConfigNotices(
+    opts.ctx,
+    opts.run,
+    args.orchestrated,
+    {
+      status: "failed",
+      error: args.cause,
+      cause: formatOrchestratedCause(args.cause),
+      ...movedMember(args.moved),
+    },
+    args.mcpConfigNotices,
+  );
 }

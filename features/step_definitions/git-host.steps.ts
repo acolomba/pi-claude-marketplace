@@ -88,9 +88,9 @@ Given(
 );
 
 Given(
-  "the git host holds the connection for the {git repository}",
+  "the git host holds the response body for the {git repository}",
   async function (this: ScenarioWorld, reference: GitRepositoryReference): Promise<void> {
-    await armRepository(this, reference, { kind: "hold" });
+    await armRepository(this, reference, { kind: "hold-git-body" });
   },
 );
 

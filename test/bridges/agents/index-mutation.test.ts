@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
-  findOwnershipConflicts,
+  assertAgentNamesUnclaimed,
   partitionByOwner,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/index-mutation.ts";
+import { AgentOwnershipConflictError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 
 import type { AgentsIndexEntry } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 
@@ -195,8 +196,62 @@ describe("partitionByOwner", () => {
   });
 });
 
-describe("findOwnershipConflicts", () => {
-  test("returns complete conflicts in incoming generated-name order", () => {
+describe("assertAgentNamesUnclaimed", () => {
+  test("admits incoming names when the index has no foreign claims", () => {
+    // arrange
+    const owner = { marketplace: "catalog", plugin: "acme" };
+
+    // act & assert
+    assert.doesNotThrow(() => {
+      assertAgentNamesUnclaimed(owner, [], ["bot"]);
+    });
+  });
+
+  test("reports every foreign claim in incoming order without index paths or metadata", () => {
+    // arrange
+    const owner = { marketplace: "catalog", plugin: "acme" };
+    const foreign: AgentsIndexEntry = {
+      marketplace: "other",
+      plugin: "acme",
+      sourceAgent: "bot",
+      generatedName: "bot",
+      sourcePath: "/private/bot.md",
+      targetPath: "/private/agents/bot.md",
+      sourceHash: "hash",
+      droppedFields: [],
+      droppedTools: [],
+      warnings: [],
+    };
+
+    // act & assert
+    assert.throws(
+      () => {
+        assertAgentNamesUnclaimed(
+          owner,
+          [
+            foreign,
+            { ...foreign, generatedName: "helper", marketplace: "catalog", plugin: "rival" },
+          ],
+          ["helper", "free", "bot"],
+        );
+      },
+      (error: unknown) => {
+        assert.ok(error instanceof AgentOwnershipConflictError);
+        assert.deepStrictEqual(error.stagingFor, owner);
+        assert.deepStrictEqual(error.conflicts, [
+          { generatedName: "helper", owner: { marketplace: "catalog", plugin: "rival" } },
+          { generatedName: "bot", owner: { marketplace: "other", plugin: "acme" } },
+        ]);
+        assert.strictEqual(
+          error.message,
+          'Refusing to stage agents for catalog/acme: "helper" already owned by catalog/rival; "bot" already owned by other/acme.',
+        );
+        return true;
+      },
+    );
+  });
+
+  test("reports complete conflicts in incoming generated-name order", () => {
     // arrange
     const otherEntries: AgentsIndexEntry[] = [
       {
@@ -289,14 +344,31 @@ describe("findOwnershipConflicts", () => {
       },
     ];
 
-    // act
-    const conflicts = findOwnershipConflicts(otherEntries, nextNames);
-
-    // assert
-    assert.deepStrictEqual(conflicts, expectedConflicts);
+    // act & assert
+    assert.throws(
+      () => {
+        assertAgentNamesUnclaimed(
+          { marketplace: "catalog", plugin: "acme" },
+          otherEntries,
+          nextNames,
+        );
+      },
+      (error: unknown) => {
+        assert.ok(error instanceof AgentOwnershipConflictError);
+        assert.deepStrictEqual(error.stagingFor, { marketplace: "catalog", plugin: "acme" });
+        assert.deepStrictEqual(
+          error.conflicts,
+          expectedConflicts.map((conflict) => ({
+            generatedName: conflict.generatedName,
+            owner: { marketplace: conflict.owner.marketplace, plugin: conflict.owner.plugin },
+          })),
+        );
+        return true;
+      },
+    );
   });
 
-  test("returns no conflicts when incoming names are unclaimed", () => {
+  test("admits incoming names that foreign index rows do not claim", () => {
     // arrange
     const otherEntries: AgentsIndexEntry[] = [
       {
@@ -313,13 +385,15 @@ describe("findOwnershipConflicts", () => {
       },
     ];
     const nextNames = ["new-first-name", "new-second-name"];
-    const expectedConflicts: { generatedName: string; owner: AgentsIndexEntry }[] = [];
 
-    // act
-    const conflicts = findOwnershipConflicts(otherEntries, nextNames);
-
-    // assert
-    assert.deepStrictEqual(conflicts, expectedConflicts);
+    // act & assert
+    assert.doesNotThrow(() => {
+      assertAgentNamesUnclaimed(
+        { marketplace: "catalog", plugin: "acme" },
+        otherEntries,
+        nextNames,
+      );
+    });
   });
 
   test("uses the last repeated owner row for every repeated incoming name", () => {
@@ -387,11 +461,28 @@ describe("findOwnershipConflicts", () => {
       },
     ];
 
-    // act
-    const conflicts = findOwnershipConflicts(otherEntries, nextNames);
-
-    // assert
-    assert.deepStrictEqual(conflicts, expectedConflicts);
+    // act & assert
+    assert.throws(
+      () => {
+        assertAgentNamesUnclaimed(
+          { marketplace: "catalog", plugin: "acme" },
+          otherEntries,
+          nextNames,
+        );
+      },
+      (error: unknown) => {
+        assert.ok(error instanceof AgentOwnershipConflictError);
+        assert.deepStrictEqual(error.stagingFor, { marketplace: "catalog", plugin: "acme" });
+        assert.deepStrictEqual(
+          error.conflicts,
+          expectedConflicts.map((conflict) => ({
+            generatedName: conflict.generatedName,
+            owner: { marketplace: conflict.owner.marketplace, plugin: conflict.owner.plugin },
+          })),
+        );
+        return true;
+      },
+    );
   });
 
   test("detects conflicts only across the non-owner merge boundary", () => {
@@ -444,10 +535,30 @@ describe("findOwnershipConflicts", () => {
     ];
     const partition = partitionByOwner(entries, "target-marketplace", "target-plugin");
 
-    // act
-    const conflicts = findOwnershipConflicts(partition.other, nextNames);
-
-    // assert
-    assert.deepStrictEqual(conflicts, expectedConflicts);
+    // act & assert
+    assert.throws(
+      () => {
+        assertAgentNamesUnclaimed(
+          { marketplace: "target-marketplace", plugin: "target-plugin" },
+          partition.other,
+          nextNames,
+        );
+      },
+      (error: unknown) => {
+        assert.ok(error instanceof AgentOwnershipConflictError);
+        assert.deepStrictEqual(error.stagingFor, {
+          marketplace: "target-marketplace",
+          plugin: "target-plugin",
+        });
+        assert.deepStrictEqual(
+          error.conflicts,
+          expectedConflicts.map((conflict) => ({
+            generatedName: conflict.generatedName,
+            owner: { marketplace: conflict.owner.marketplace, plugin: conflict.owner.plugin },
+          })),
+        );
+        return true;
+      },
+    );
   });
 });

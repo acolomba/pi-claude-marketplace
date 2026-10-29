@@ -1,12 +1,12 @@
 ---
 phase: 07-git-errors-and-lock-discipline
-fixed_at: 2026-10-27T08:58:29Z
+fixed_at: 2026-10-28T16:27:02-04:00
 review_path: .planning/phases/07-git-errors-and-lock-discipline/07-REVIEW.md
-iteration: 2
-findings_in_scope: 4
-fixed: 2
-skipped: 2
-status: partial
+iteration: 5
+findings_in_scope: 1
+fixed: 1
+skipped: 0
+status: all_fixed
 ---
 
 # Phase 7: Code Review Fix Report
@@ -329,6 +329,272 @@ gives.
 
 ______________________________________________________________________
 
-_Fixed: 2026-10-27_
-_Fixer: Claude (gsd-code-fixer)_
-_Iteration: 2_
+## Iteration 3
+
+**Fixed at:** 2026-10-28T14:57:12-04:00
+**Source review:** .planning/phases/07-git-errors-and-lock-discipline/07-REVIEW.md
+**Iteration:** 3
+
+**Summary:**
+
+- Findings in scope: 1
+- Fixed: 1
+- Skipped: 0
+
+### Fixed Issues
+
+#### CR-01: A dependency sweep can delete a clone that a concurrent fetch just completed
+
+**Files modified:**
+`extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts`,
+`test/orchestrators/plugin/clone-gc.test.ts`,
+`test/orchestrators/plugin/dependency-bindings.test.ts`,
+`test/orchestrators/plugin/dependency-move.test.ts`,
+`test/orchestrators/plugin/dependency-plan.test.ts`,
+`test/orchestrators/plugin/dependency-settle.test.ts`
+
+**Commit:** d4436bd3
+**Status:** fixed: requires human verification
+
+**Applied fix:** Dependency move judgment now derives the exact cache keys of
+the recorded clone and the prepared candidate from their contained plugin
+roots. The accepted plan carries those keys on its move. Both install and
+update settlement create the cleanup only after that plan is accepted. The
+cleanup takes a fresh scope lock, derives the current live-key set, and deletes
+only owned candidates that are still unreferenced. It never treats every name
+absent from an earlier directory snapshot as owned. The old unreferenced-list
+API and its misleading two-lock protocol were removed.
+
+This keeps the lock non-reentrant: planning and materialization still acquire
+their own locks, and cleanup acquires one fresh lock only after the steps end.
+Containment is preserved because each candidate delete still routes through
+`locations.pluginCloneDir(key)`. Cleanup failures are still traced and
+swallowed for a later retry.
+
+**Ownership proof:** A path contributes a candidate key only when
+`path.relative(pluginClonesDir, root)` stays inside that cache. The move owns
+the old record root and the prepared candidate root. The planner copies those
+exact keys onto the corresponding move. At cleanup time, the candidate-only
+collector also checks persisted state, so a key shared by any surviving record
+stays. A distinct mirror created by a concurrent fetch is absent from the
+candidate set and cannot become a delete target.
+
+**RED/GREEN evidence:** The new deterministic unit case obtains the sweep,
+makes the replaced clone unreferenced, creates a distinct fetched mirror under
+the real `withExistingScopeLock`, then runs cleanup. Before the fix, the case
+failed because the snapshot-based collector deleted the fetched mirror. After
+the fix, the replaced clone is removed and the fetched mirror remains.
+
+### Verification
+
+All checks ran in the isolated owner worktree
+`/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710`.
+`workflow.use_worktrees=false`, so the fixer created no nested worktree.
+
+- Focused owner tests: all 6 changed source/test modules passed.
+- Direct coverage: all 6 changed source/test pairs passed at 100% line,
+  function, and branch coverage.
+- TypeScript: `npx tsc --noEmit --incremental false` passed. The normal npm
+  script's first isolated-worktree attempt could not write its tsbuildinfo to
+  the read-only dependency tree; it reported no source diagnostic.
+- Fallow audit: PASS with no dead code, complexity, duplication, or diff-risk
+  finding.
+- Pre-commit fixers: passed.
+- Normal commit hooks, including `npm run check:commit`: passed.
+- Cucumber: not added. The Phase 7 context accepts this deterministic
+  concurrency boundary as unit-only, and no reliable public interleaving
+  fixture was introduced.
+- Full combined `npm run check`: not run here; the phase orchestrator must run
+  it on the combined tree before verification.
+
+______________________________________________________________________
+
+______________________________________________________________________
+
+## Iteration 4
+
+**Fixed at:** 2026-10-28T15:55:51-04:00
+**Source review:** .planning/phases/07-git-errors-and-lock-discipline/07-REVIEW.md
+**Iteration:** 4
+
+**Summary:**
+
+- Findings in scope: 1
+- Fixed: 1
+- Skipped: 0
+
+### Fixed Issues
+
+#### CR-01: Planning can leak clones that never become final move keys
+
+**Files modified:**
+`extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-cascade-context.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-dependency-ledger.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts`,
+and their 10 paired test modules under `test/orchestrators/plugin/`.
+
+**Commit:** 967fdb8a
+**Status:** fixed: requires human verification
+
+**Applied fix:** Each dependency-planning attempt now creates one mutable set
+of exact clone-cache keys before any root preview, member preview, or move
+judgment. Clone materializers report a key only when their atomic promotion
+returns `renamed`. A warm-cache hit and a promotion lost to another process do
+not report ownership. Install and update thread this set through root, fresh
+member, and move preflight materialization. A successful move judgment records
+its keys before later exclusion and name checks can rule the candidate out.
+
+Install and update also create the candidate-only sweep before planning and run
+it from an outer `finally`. Cleanup therefore runs after success, refusal, or a
+throw. Planning still takes its own short materialization locks. The sweep then
+takes one fresh lock, re-reads live keys, and deletes only an attempt-owned key
+that is still unreferenced. Deletes continue through `pluginCloneDir`, and a
+cleanup failure is logged and swallowed for a later retry.
+
+**Ownership proof:** The creation callback sits after the atomic rename in all
+four cache writers: pinned clone, commit copy, unpinned mirror, and marketplace
+tag clone. This makes ownership a positive event from the process that created
+the cache entry; it is never inferred from a before-and-after directory diff.
+The one attempt set collects root previews, fresh-member previews, and every
+materializable move candidate, including candidates that resolver backtracking
+later rejects. At cleanup time the existing locked collector still preserves
+landed, shared, and otherwise live keys. A distinct mirror made by a concurrent
+real scope-lock holder was never reported to this attempt and cannot be a
+delete target.
+
+**RED/GREEN evidence:**
+
+- The refused-plan case seeds a warm key, lets a real git root preview create
+  its mirror and commit keys, and creates a distinct mirror under a concurrent
+  real scope-lock holder. Before the fix, the two preview keys leaked. After the
+  fix, only those two keys are removed; the warm and concurrent keys remain.
+- The backtracking case publishes two real tagged candidates. Resolution first
+  materializes version 2.1, rejects it after a transitive range conflict, and
+  lands version 2.0. Before the fix, both exact tag-clone keys remained. After
+  the fix, the rejected 2.1 key is removed and the landed 2.0 key remains.
+- Existing candidate-only negative controls still prove that shared and live
+  keys remain.
+
+### Verification
+
+All checks ran in the isolated owner worktree
+`/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710`.
+`workflow.use_worktrees=false`, so the fixer created no nested worktree.
+
+- Focused owner tests: 10 test modules passed, 10/10, including both new RED
+  cases after the fix.
+- Direct coverage: all 11 changed source/test pairs passed at 100% line,
+  function, and branch coverage.
+- TypeScript: `npm run typecheck -- --incremental false` passed, exit 0.
+- Fallow audit: PASS, exit 0, with no dead-code, complexity, duplication, or
+  diff-risk finding.
+- Required pre-commit fixers: passed. The first normal commit attempt found
+  three lint-only formatting/import-order errors. Those exact errors were
+  corrected, and the second normal commit passed every hook, including
+  `npm run check:commit` and gitlint.
+- A separate full-tree no-cache ESLint invocation produced no diagnostic but
+  did not terminate within its 300-second bound in this worktree. The normal
+  commit hook's lint gate subsequently completed and passed.
+- Cucumber: not added. This changes deterministic cache ownership during an
+  internal planning interleaving and adds no new user-visible command behavior.
+- Full combined `npm run check`: not run here; the phase orchestrator must run
+  it on the combined tree before the final re-review and verifier.
+
+______________________________________________________________________
+
+_Fixed: 2026-10-28_
+_Fixer: the agent (gsd-code-fixer)_
+_Iteration: 4_
+
+______________________________________________________________________
+
+## Iteration 5
+
+**Fixed at:** 2026-10-28T16:27:02-04:00
+**Source review:** .planning/phases/07-git-errors-and-lock-discipline/07-REVIEW.md
+**Iteration:** 5
+
+**Summary:**
+
+- Findings in scope: 1
+- Fixed: 1
+- Skipped: 0
+
+### Fixed Issues
+
+#### CR-01: Move judgment reclaims warm and race-lost candidate clones
+
+**Files modified:**
+`extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts`,
+`test/orchestrators/plugin/dependency-move.test.ts`
+
+**Commit:** 64fb10b1
+**Status:** fixed: requires human verification
+
+**Applied fix:** Move judgment now derives cleanup ownership only from the
+current record's old clone root. A prepared candidate enters the operation's
+candidate set only when a clone-cache writer reports a successful `renamed`
+promotion through `onCloneCreated`. Warm hits and exact-key promotions lost to
+another process no longer become cleanup targets. The existing live-state
+recheck still preserves an old key while its record remains and removes it
+after a successful replacement makes it unreferenced.
+
+The dependency-move context also forwards the existing clone-cache and
+constraint-gate ports. The regression cases use those production ports to run
+the real pinned materializer and isolate the ownership rule without network
+access.
+
+**RED/GREEN evidence:**
+
+- The warm case pre-creates the exact pinned candidate, passes the creation
+  callback through the real materializer, rules the prepared version out, and
+  runs the real locked candidate collector. Before the fix, the collector
+  removed the warm key and the case failed with `ENOENT`.
+- The race case creates the winner's exact key between checkout and atomic
+  promotion. The real materializer returns the race winner without calling the
+  callback. After the same ruled-out verdict and locked sweep, the winner must
+  remain. Before the fix, the case failed with `ENOENT`.
+- After the fix, both focused cases pass. The existing old-key ownership case
+  still proves that a recorded clone remains eligible for cleanup.
+
+### Verification
+
+All checks ran in the isolated owner worktree
+`/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710`.
+`workflow.use_worktrees=false`, so the fixer created no nested worktree.
+
+- Focused RED: 0/2 passed. Both cases failed because the collector deleted the
+  unowned candidate.
+- Focused GREEN: 2/2 passed.
+- Complete owner module: 29/29 tests passed.
+- Direct coverage: the changed source/test pair passed at 100% line, function,
+  and branch coverage.
+- TypeScript: `npx tsc --noEmit --incremental false` passed, exit 0.
+- Fallow audit: PASS, exit 0, with no dead-code, complexity, duplication, or
+  diff-risk finding.
+- Required pre-commit fixers passed. The first normal commit attempt found one
+  import-order error. After that import was reordered, the second normal commit
+  passed every hook, including `npm run check:commit` and gitlint.
+- Cucumber: not added. This is an internal clone-ownership interleaving with a
+  deterministic unit seam and no new user-visible command behavior.
+- Full combined `npm run check`: not run here. The phase orchestrator must run
+  it on the combined tree before the final re-review and verifier.
+
+______________________________________________________________________
+
+_Fixed: 2026-10-28_
+_Fixer: the agent (gsd-code-fixer)_
+_Iteration: 5_

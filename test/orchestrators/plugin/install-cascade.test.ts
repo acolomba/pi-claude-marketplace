@@ -407,6 +407,11 @@ test("a materialized member's outcome carries what its own ledger summary report
     ...barBase,
     version: "1.2.3",
     stagedAgentNames: ["bar-agent"],
+    frontmatterDegradations: [
+      { kind: "command", generatedName: "bar:run", parseError: "invalid YAML" },
+      { kind: "skill", generatedName: "bar-tool", parseError: "invalid YAML" },
+      { kind: "skill", generatedName: "bar-other", parseError: "invalid YAML" },
+    ],
     discoveryWarnings: [
       {
         kind: "discovery",
@@ -415,6 +420,9 @@ test("a materialized member's outcome carries what its own ledger summary report
     ],
     resolved: {
       ...barBase.resolved,
+      state: "partially-available",
+      unsupported: ["outputStyles"],
+      orphanRewake: true,
       pluginRoot: path.join(environment.cwd, "bar-root"),
       hooksConfigPath: "hooks/hooks.json",
     },
@@ -455,6 +463,9 @@ test("a materialized member's outcome carries what its own ledger summary report
       marketplace: MARKETPLACE,
       requiredBy: `foo@${MARKETPLACE}`,
       version: "1.2.3",
+      unsupported: ["outputStyles"],
+      orphanRewake: true,
+      degradedKinds: ["command", "skill"],
       declaresAgents: true,
       declaresMcp: false,
       declaresWorkflows: false,

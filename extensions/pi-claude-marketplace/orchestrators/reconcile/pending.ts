@@ -95,6 +95,7 @@ import {
   type PendingInstallCandidate,
 } from "./notify.ts";
 import { planReconcile } from "./plan.ts";
+import { withMarketplaceSourceRepairs } from "./read-pass.ts";
 import {
   composeLayerMarketplaceCause,
   PENDING_CONTEXT,
@@ -477,19 +478,16 @@ export async function composePendingReport(opts: {
     const view = mergedViewForPlanning(outcome, state);
     // D-08 / D-21: the verdict over the scope as the plan's toggles leave it,
     // as `apply`'s read pass takes it.
-    const firstPlan = planReconcile(view, state, scope, firstVerdict);
+    const planFor = (from: ScopeSatisfactionVerdict): ReconcilePlan =>
+      withMarketplaceSourceRepairs(view, state, planReconcile(view, state, scope, from));
+    const firstPlan = planFor(firstVerdict);
     // eslint-disable-next-line no-await-in-loop -- at most two scopes, one second walk each
     const verdict = await verdictAfterToggles({ state, locations: loc }, firstVerdict, {
       enable: firstPlan.pluginsToEnable,
       disable: firstPlan.pluginsToDisable,
     });
     const planFrom = (from: ScopeSatisfactionVerdict, planned: ReconcilePlan): ReconcilePlan =>
-      withoutDisabledDependents(
-        withPlannedInstallsLanded(planned, from, state, (released) =>
-          planReconcile(view, state, scope, released),
-        ),
-        state,
-      );
+      withoutDisabledDependents(withPlannedInstallsLanded(planned, from, state, planFor), state);
     // APPLY1-01: the moves `apply` makes as one cascade, so a dependent the
     // catalog moves together with the newer dependency it needs is listed as
     // moving, not as held down, as `apply`'s read pass settles it.
@@ -498,12 +496,9 @@ export async function composePendingReport(opts: {
       scope,
       state,
       locations: loc,
-      plan: planFrom(
-        verdict,
-        verdict === firstVerdict ? firstPlan : planReconcile(view, state, scope, verdict),
-      ),
+      plan: planFrom(verdict, verdict === firstVerdict ? firstPlan : planFor(verdict)),
       verdict,
-      replan: (released) => planFrom(released, planReconcile(view, state, scope, released)),
+      replan: (released) => planFrom(released, planFor(released)),
     });
     // APL-02 / D-10 / D-14: the catalog moves `apply` would make once the plan
     // has run, offline (NFR-5).

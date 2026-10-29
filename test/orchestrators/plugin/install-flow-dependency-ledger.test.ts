@@ -76,8 +76,10 @@ function planning(owner: InstallTestOwner, cwd: string) {
   };
   const root = { key: "app@mp", marketplace: "mp", plugin: "app" };
   const memos = freshDependencyMoveMemos();
+  const cloneCandidates = new Set<string>();
   return {
     caller,
+    cloneCandidates,
     memos,
     owners,
     root,
@@ -88,6 +90,7 @@ function planning(owner: InstallTestOwner, cwd: string) {
       caller,
       policy: INSTALL_MOVE_MATERIALIZATION,
       memos,
+      cloneCandidates,
     }),
   };
 }
@@ -289,6 +292,7 @@ describe("dependency planning operations", () => {
           pinVersionOverride: "1.0.0",
         },
         target: args.target,
+        cloneCandidates: args.cloneCandidates,
       });
 
       // assert
@@ -301,10 +305,15 @@ describe("dependency planning operations", () => {
   test("runs initial and materialized closure slices", async (t) => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd } = await catalog(t, {
+      const { cwd, marketplaceRoot } = await catalog(t, {
         app: { version: "1.0.0", dependencies: ["dep"] },
         dep: { version: "1.0.0" },
       });
+      await writeFile(
+        path.join(marketplaceRoot, "plugins", "dep", "package.json"),
+        '{"dependencies":{"pkd-dep":"1.0.0"}}',
+      );
+      await writeFile(path.join(marketplaceRoot, "plugins", "dep", "yarn.lock"), "lockfile");
       const args = planning(owner, cwd);
 
       // act
@@ -324,6 +333,27 @@ describe("dependency planning operations", () => {
 
       // assert
       assert.strictEqual(initial.kind, "installed");
+      assert.deepStrictEqual(
+        initial.kind === "installed"
+          ? "stagingDiagnostics" in initial
+            ? initial.stagingDiagnostics
+            : undefined
+          : undefined,
+        [
+          {
+            plugin: "dep",
+            scope: "project",
+            verb: "installed",
+            warnings: [
+              {
+                kind: "discovery",
+                message:
+                  "The packages it lists were not installed, because it uses a yarn or pnpm lockfile, which plugin installs do not support.",
+              },
+            ],
+          },
+        ],
+      );
       assert.strictEqual(materialized.kind, "installed");
     });
   });
@@ -535,6 +565,7 @@ describe("dependency planning operations", () => {
           plugin: "app",
         },
         moved,
+        mcpConfigNotices: [],
         cause: new Error("move stopped"),
         orchestrated,
         unmaterialized: ["fresh@mp"],

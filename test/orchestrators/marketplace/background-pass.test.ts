@@ -4,7 +4,7 @@
 //
 // Each case seeds real install records and config files in a hermetic Pi
 // environment and runs a real gate. `updateMarketplace` and the plugin update
-// runner are recording doubles: the pass reuses their real bodies unchanged,
+// runner are recording doubles except in the real-cascade dependency cases,
 // so this suite owns only what the pass hands them and when. The context the
 // pass receives refuses every UI read, so any output that leaks to the session
 // fails the case. The `pi` double's entry sink records the one notice a pass
@@ -13,6 +13,7 @@
 // that reach the wait cap drive the real gate with Node's mock timers.
 
 import assert from "node:assert/strict";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
@@ -20,9 +21,15 @@ import test, { type TestContext } from "node:test";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { createBackgroundGate } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/background-gate.ts";
 import { createBackgroundPass } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/background-pass.ts";
+import { updateMarketplace } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import {
+  loadState,
+  saveState,
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { InvalidGitHubBaseUrlError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { withExistingScopeLock } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 import {
   mergeMarketplaceIntoState,
   seedAutoupdateConfig,
@@ -260,6 +267,51 @@ async function seedTwoAutoupdateMarketplaces(cwd: string): Promise<void> {
   await seedMarketplace(cwd, "user", "gamma", true);
 }
 
+async function seedRealCascade(cwd: string): Promise<void> {
+  await seedMarketplace(cwd, "project", "alpha", true);
+  const locations = locationsFor("project", cwd);
+  const state = await loadState(locations.extensionRoot);
+  const marketplace = state.marketplaces.alpha;
+  assert.ok(marketplace);
+  await mkdir(path.dirname(marketplace.manifestPath), { recursive: true });
+  await writeFile(
+    marketplace.manifestPath,
+    JSON.stringify({
+      name: "alpha",
+      owner: { name: "test" },
+      plugins: [{ name: "one", source: "./one" }],
+    }),
+  );
+  await saveState(locations.extensionRoot, {
+    ...state,
+    marketplaces: {
+      ...state.marketplaces,
+      alpha: {
+        ...marketplace,
+        plugins: {
+          one: {
+            version: "1.0.0",
+            resolvedSource: "./one",
+            enabled: true,
+            provenance: "explicit",
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: [],
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
 function updatedTargets(calls: readonly UpdateMarketplaceOptions[]): string[] {
   return calls.map((call) => `${call.name} [${call.scope ?? "no scope"}]`);
 }
@@ -294,6 +346,30 @@ function recordingGate(begun: AbortSignal[]): BackgroundGate {
     beginStep: async () => {
       const signal = await gate.beginStep();
       begun.push(signal);
+      return signal;
+    },
+  };
+}
+
+/** Runs an action after the plugin step's halt check, while its config read is pending. */
+function actDuringPluginConfigRead(
+  gate: BackgroundGate,
+  action: (signal: AbortSignal) => void,
+): BackgroundGate {
+  let begun = 0;
+  return {
+    ...gate,
+    beginStep: async () => {
+      const signal = await gate.beginStep();
+      begun += 1;
+      if (begun === 2) {
+        queueMicrotask(() => {
+          queueMicrotask(() => {
+            action(signal);
+          });
+        });
+      }
+
       return signal;
     },
   };
@@ -344,7 +420,7 @@ test("updates each recorded marketplace whose merged autoupdate is true, project
   );
 });
 
-test("D-PL2-10: hands each autoupdate cascade the missing-dependency step", async (t) => {
+test("D-PL2-10: hands each autoupdate cascade a missing-dependency step", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-dependency-step-");
   await seedMarketplace(cwd, "project", "alpha", true);
@@ -357,9 +433,260 @@ test("D-PL2-10: hands each autoupdate cascade the missing-dependency step", asyn
 
   // assert
   assert.deepStrictEqual(
-    calls.map((call) => call.installMissingDependencies),
-    [missingDependencyStep, missingDependencyStep],
+    calls.map((call) => typeof call.installMissingDependencies),
+    ["function", "function"],
   );
+});
+
+test("a real cascade skips dependency settlement after the runtime stops", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-dependencies-stopped-");
+  await seedRealCascade(cwd);
+  let stopped = false;
+  const log: string[] = [];
+  const { deps } = createPassUnderTest({
+    log,
+    pluginHooks: new Map([
+      [
+        "one",
+        () => {
+          stopped = true;
+        },
+      ],
+    ]),
+  });
+  const pass = createBackgroundPass({
+    ...deps,
+    updateMarketplace,
+    installMissingDependencies: () => {
+      log.push("install dependencies");
+      return Promise.resolve({ rows: [], mcpConfigNotices: [] });
+    },
+  });
+
+  // act
+  await pass({ ctx: sessionContext(cwd), isStopped: () => stopped });
+
+  // assert
+  assert.deepStrictEqual(log, ["update one"]);
+});
+
+test("a real cascade skips dependency settlement after a plugin step is aborted", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-dependencies-aborted-");
+  await seedRealCascade(cwd);
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const gate = createBackgroundGate(WAIT_CAP_MS);
+  const commands: Promise<void>[] = [];
+  const log: string[] = [];
+  const { deps } = createPassUnderTest({
+    gate,
+    log,
+    pluginHooks: new Map([
+      [
+        "one",
+        () => {
+          capTheStepInFlight(t, gate, commands);
+        },
+      ],
+    ]),
+  });
+  const pass = createBackgroundPass({
+    ...deps,
+    updateMarketplace,
+    installMissingDependencies: () => {
+      log.push("install dependencies");
+      return Promise.resolve({ rows: [], mcpConfigNotices: [] });
+    },
+  });
+
+  // act
+  await pass({ ctx: sessionContext(cwd), isStopped: () => false });
+  await Promise.all(commands);
+
+  // assert
+  assert.deepStrictEqual(log, ["update one"]);
+});
+
+test("a real cascade rechecks autoupdate before settling dependencies", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-dependencies-optout-");
+  await seedRealCascade(cwd);
+  const log: string[] = [];
+  const { deps } = createPassUnderTest({});
+  const pass = createBackgroundPass({
+    ...deps,
+    updateMarketplace,
+    beginPluginUpdateRun: () => async (plugin) => {
+      log.push(`update ${plugin}`);
+      await seedAutoupdateConfig(locationsFor("project", cwd), "alpha", false);
+      return unchangedOutcome(plugin);
+    },
+    installMissingDependencies: () => {
+      log.push("install dependencies");
+      return Promise.resolve({ rows: [], mcpConfigNotices: [] });
+    },
+  });
+
+  // act
+  await pass({ ctx: sessionContext(cwd), isStopped: () => false });
+
+  // assert
+  assert.deepStrictEqual(log, ["update one"]);
+});
+
+test("a real cascade settles dependencies in a fresh gate signal's async scope", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-dependencies-signal-");
+  await seedRealCascade(cwd);
+  const begun: AbortSignal[] = [];
+  const scope = new AsyncLocalStorage<AbortSignal>();
+  const dependencyScopes: Array<AbortSignal | undefined> = [];
+  const selections: boolean[] = [];
+  const { deps } = createPassUnderTest({ gate: recordingGate(begun) });
+  const pass = createBackgroundPass({
+    ...deps,
+    updateMarketplace,
+    runWithAbortSignal: (signal, step) => scope.run(signal, step),
+    installMissingDependencies: (request) => {
+      dependencyScopes.push(scope.getStore());
+      selections.push(
+        request.select({ plugin: "dep", marketplace: "other", declarers: ["one@alpha"] }),
+      );
+      return Promise.resolve({ rows: [], mcpConfigNotices: [] });
+    },
+  });
+
+  // act
+  await pass({ ctx: sessionContext(cwd), isStopped: () => false });
+
+  // assert
+  assert.strictEqual(begun.length, 3);
+  assert.deepStrictEqual(dependencyScopes, [begun[2]]);
+  assert.deepStrictEqual(selections, [true]);
+});
+
+test("foreground cancellation reaches dependency settlement and waits for the marketplace to return", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-dependencies-cancel-");
+  await seedRealCascade(cwd);
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const gate = createBackgroundGate(WAIT_CAP_MS);
+  const scope = new AsyncLocalStorage<AbortSignal>();
+  const reached = deferred();
+  const finish = deferred();
+  const log: string[] = [];
+  let dependencySignal: AbortSignal | undefined;
+  const { deps } = createPassUnderTest({ gate });
+  const pass = createBackgroundPass({
+    ...deps,
+    updateMarketplace: async (options) => {
+      await updateMarketplace(options);
+      log.push("marketplace settled");
+    },
+    runWithAbortSignal: (signal, step) => scope.run(signal, step),
+    installMissingDependencies: async () => {
+      dependencySignal = scope.getStore();
+      reached.resolve();
+      await finish.promise;
+      log.push("dependencies settled");
+      return { rows: [], mcpConfigNotices: [] };
+    },
+  });
+
+  // act
+  const passDone = pass({ ctx: sessionContext(cwd), isStopped: () => false });
+  await reached.promise;
+  const command = gate.runForeground(() => {
+    log.push("foreground");
+    return Promise.resolve();
+  });
+  t.mock.timers.tick(WAIT_CAP_MS);
+  const aborted = dependencySignal?.aborted;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const beforeSettlement = [...log];
+  finish.resolve();
+  await Promise.all([passDone, command]);
+
+  // assert
+  assert.strictEqual(aborted, true);
+  assert.deepStrictEqual(beforeSettlement, []);
+  assert.deepStrictEqual(log, ["dependencies settled", "marketplace settled", "foreground"]);
+});
+
+test("a real cascade skips dependencies when a foreground command stops the runtime between steps", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-dependencies-stop-between-");
+  await seedRealCascade(cwd);
+  const gate = createBackgroundGate();
+  const log: string[] = [];
+  let stopped = false;
+  let command = Promise.resolve();
+  const { deps } = createPassUnderTest({
+    gate,
+    log,
+    pluginHooks: new Map([
+      [
+        "one",
+        () => {
+          command = gate.runForeground(() => {
+            stopped = true;
+            return Promise.resolve();
+          });
+        },
+      ],
+    ]),
+  });
+  const pass = createBackgroundPass({
+    ...deps,
+    updateMarketplace,
+    installMissingDependencies: () => {
+      log.push("install dependencies");
+      return Promise.resolve({ rows: [], mcpConfigNotices: [] });
+    },
+  });
+
+  // act
+  await pass({ ctx: sessionContext(cwd), isStopped: () => stopped });
+  await command;
+
+  // assert
+  assert.deepStrictEqual(log, ["update one"]);
+});
+
+test("a held scope lock skips the real cascade cleanly and a later pass can settle dependencies", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-dependencies-scope-lock-");
+  await seedRealCascade(cwd);
+  const log: string[] = [];
+  const { deps, gate } = createPassUnderTest({ log });
+  const pass = createBackgroundPass({
+    ...deps,
+    updateMarketplace,
+    installMissingDependencies: () => {
+      log.push("install dependencies");
+      return Promise.resolve({ rows: [], mcpConfigNotices: [] });
+    },
+  });
+
+  // act
+  await withExistingScopeLock(locationsFor("project", cwd), async () => {
+    await pass({ ctx: sessionContext(cwd), isStopped: () => false });
+    await gate.runForeground(() => {
+      log.push("foreground after lock refusal");
+      return Promise.resolve();
+    });
+  });
+  const whileLocked = [...log];
+  await pass({ ctx: sessionContext(cwd), isStopped: () => false });
+
+  // assert
+  assert.deepStrictEqual(whileLocked, ["foreground after lock refusal"]);
+  assert.deepStrictEqual(log, [
+    "foreground after lock refusal",
+    "update one",
+    "install dependencies",
+  ]);
 });
 
 test("D-PL8-07: updates an official marketplace without a config value and skips a default-off one", async (t) => {
@@ -743,6 +1070,108 @@ test("D-PL8-22: a runtime stopped during an update skips the further plugin upda
   assert.deepStrictEqual(outcomes, [expectedOutcome]);
   assert.deepStrictEqual(log, []);
   assert.deepStrictEqual(updatedTargets(calls), ["alpha [project]"]);
+});
+
+test("a runtime stopped during the plugin config read starts no plugin update", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-pass-config-stop-");
+  await seedMarketplace(cwd, "project", "alpha", true);
+  let stopped = false;
+  const gate = actDuringPluginConfigRead(createBackgroundGate(), () => {
+    stopped = true;
+  });
+  const log: string[] = [];
+  const outcomes: PluginUpdateOutcome[] = [];
+  const { capture, deps } = createPassUnderTest({
+    gate,
+    log,
+    scripts: new Map([
+      [
+        "alpha",
+        async (opts: UpdateMarketplaceOptions): Promise<void> => {
+          const pluginUpdate = requirePluginUpdate(opts);
+          outcomes.push(await pluginUpdate("one", "alpha", "project"));
+          outcomes.push(await pluginUpdate("two", "alpha", "project"));
+        },
+      ],
+    ]),
+  });
+  const pass = createBackgroundPass(deps);
+  const expectedOutcome: PluginUpdateSkippedOutcome = {
+    partition: "skipped",
+    name: "one",
+    notes: ["the background update stopped before this update ran"],
+    reasons: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  };
+
+  // act
+  await pass({ ctx: sessionContext(cwd, "rpc"), isStopped: () => stopped });
+
+  // assert
+  assert.deepStrictEqual(outcomes, [expectedOutcome, { ...expectedOutcome, name: "two" }]);
+  assert.deepStrictEqual(log, []);
+  assert.deepStrictEqual(capture.entries, []);
+});
+
+test("a plugin step aborted during the config read starts no update and halts later targets", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const { cwd } = await createHermeticEnvironment(t, "background-pass-config-abort-");
+  await seedMarketplace(cwd, "project", "alpha", true);
+  const gate = createBackgroundGate(WAIT_CAP_MS);
+  const commands: Promise<void>[] = [];
+  const observedGate = actDuringPluginConfigRead(gate, () => {
+    capTheStepInFlight(t, gate, commands);
+  });
+  const log: string[] = [];
+  const outcomes: PluginUpdateOutcome[] = [];
+  const { capture, deps } = createPassUnderTest({
+    gate: observedGate,
+    log,
+    outcomes: new Map([["one", updatedOutcome("one", "1.1.0")]]),
+    scripts: new Map([
+      [
+        "alpha",
+        async (opts: UpdateMarketplaceOptions): Promise<void> => {
+          const pluginUpdate = requirePluginUpdate(opts);
+          outcomes.push(await pluginUpdate("one", "alpha", "project"));
+          outcomes.push(await pluginUpdate("two", "alpha", "project"));
+        },
+      ],
+    ]),
+  });
+  const pass = createBackgroundPass(deps);
+
+  // act
+  await pass({ ctx: sessionContext(cwd, "rpc"), isStopped: () => false });
+  await Promise.all(commands);
+
+  // assert
+  assert.deepStrictEqual(outcomes, [
+    {
+      partition: "skipped",
+      name: "one",
+      notes: ["the update ran past the background wait cap and was stopped"],
+      reasons: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    },
+    {
+      partition: "skipped",
+      name: "two",
+      notes: ["the background update stopped before this update ran"],
+      reasons: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    },
+  ]);
+  assert.deepStrictEqual(log, []);
+  assert.deepStrictEqual(capture.entries, []);
 });
 
 test("D-PL8-25: runs each marketplace refresh and each plugin update in its own step's abort scope", async (t) => {

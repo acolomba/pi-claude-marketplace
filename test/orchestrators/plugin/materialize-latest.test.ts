@@ -635,7 +635,7 @@ test("D-PL1-16: an updated outcome lists the settle's MCP config notices ahead o
   );
 });
 
-test("D-PL10-12: an updated outcome lists the settle's warnings ahead of the swap's own", async (t) => {
+test("D-PL10-16: an updated outcome keeps dependency diagnostics separate from its own warnings", async (t) => {
   // arrange
   t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
   const { base, pluginRoot } = await seedRecordedPlugin(t, {
@@ -654,17 +654,42 @@ test("D-PL10-12: an updated outcome lists the settle's warnings ahead of the swa
         Promise.resolve({
           kind: "settled",
           rows: [ZCORE_ROW],
-          stagingWarnings: [dependencyWarning],
+          stagingDiagnostics: [
+            {
+              plugin: "zcore",
+              scope: "project",
+              verb: "installed",
+              warnings: [dependencyWarning],
+            },
+          ],
         }),
     },
     UPDATE_POLICY,
   );
 
   // assert
-  assert.deepStrictEqual(outcome.partition === "updated" ? outcome.stagingWarnings : undefined, [
-    dependencyWarning,
-    ownWarning,
-  ]);
+  assert.deepStrictEqual(
+    outcome.partition === "updated"
+      ? {
+          dependency:
+            "dependencyStagingDiagnostics" in outcome
+              ? outcome.dependencyStagingDiagnostics
+              : undefined,
+          own: outcome.stagingWarnings,
+        }
+      : undefined,
+    {
+      dependency: [
+        {
+          plugin: "zcore",
+          scope: "project",
+          verb: "installed",
+          warnings: [dependencyWarning],
+        },
+      ],
+      own: [ownWarning],
+    },
+  );
 });
 
 test("D-PL1-16: a settle that reports notices and no rows keeps its notices and adds no dependency rows", async (t) => {

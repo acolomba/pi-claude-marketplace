@@ -92,7 +92,10 @@ import {
 } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
-import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
+import {
+  withExistingScopeLock,
+  withLockedStateTransaction,
+} from "../../transaction/with-state-guard.ts";
 import {
   AgentsUnstageFailureError,
   cascadeUnstagePlugin,
@@ -1098,8 +1101,8 @@ interface PostUninstallCleanupOptions {
 
 /**
  * D-PL9-22: removes the step's node_modules from a plugin root that no record
- * of the saved state runs from any more. The state is read outside the lock,
- * as the clone GC reads it. A failure is debug-logged only (D-19-01).
+ * of the saved state runs from any more. A fresh scope lock covers both the
+ * reference check and removal. A failure is debug-logged only (D-19-01).
  */
 async function removeUnusedPackages(
   locations: ScopedLocations,
@@ -1107,13 +1110,15 @@ async function removeUnusedPackages(
   pluginRef: string,
 ): Promise<void> {
   try {
-    const state = await loadState(locations.extensionRoot);
-    const inUse = Object.values(state.marketplaces).some((mp) =>
-      Object.values(mp.plugins).some((record) => record.resolvedSource === pluginRoot),
-    );
-    if (!inUse) {
-      await removeInstalledPackages(DEFAULT_PACKAGE_INSTALL_OPS, locations, pluginRoot);
-    }
+    await withExistingScopeLock(locations, async () => {
+      const state = await loadState(locations.extensionRoot);
+      const inUse = Object.values(state.marketplaces).some((mp) =>
+        Object.values(mp.plugins).some((record) => record.resolvedSource === pluginRoot),
+      );
+      if (!inUse) {
+        await removeInstalledPackages(DEFAULT_PACKAGE_INSTALL_OPS, locations, pluginRoot);
+      }
+    });
   } catch (err) {
     hookDebugLog(`uninstall: package removal failed for ${pluginRef}: ${errorMessage(err)}`);
   }

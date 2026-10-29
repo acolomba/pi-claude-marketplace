@@ -3,6 +3,7 @@
 // Typed install outcome, promotion, declaration, and warning projection.
 import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
+import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   errorMessage,
@@ -50,7 +51,7 @@ import type {
   InstallLedgerSummary,
   InstallPluginNotifications,
 } from "./install-outcome.ts";
-import type { StagingDiagnostic } from "./staging-diagnostics.ts";
+import type { surfaceDiscoveryWarnings } from "./staging-diagnostics.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { PluginConfigEntry, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -60,6 +61,7 @@ import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { ContentReason, McpConfigNotice } from "../../shared/notification-types.ts";
+import type { DiscoveryWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { InstallPluginOutcome, MovedDependency, UpdateDependencyRow } from "../types.ts";
 import type { CascadeFailureSink } from "./install-flow-cascade-context.ts";
@@ -805,23 +807,33 @@ export function dependencyInstallsMember(
   return installs.length === 0 ? {} : { dependencyInstalls: installs };
 }
 
-/** D-PL10-16: one per-plugin diagnostic for every member that raised a note. */
+/** Orders root and member diagnostics by the names used in their cascade rows. */
 export function cascadeStagingDiagnostics(
   members: readonly CascadeMemberOutcome[],
   scope: Scope,
-): readonly StagingDiagnostic[] {
-  return members.flatMap((member) =>
-    member.discoveryWarnings === undefined
-      ? []
-      : [
-          {
-            plugin: member.name,
-            scope,
-            verb: "installed" as const,
-            warnings: member.discoveryWarnings,
-          },
-        ],
+  root: {
+    readonly key: string;
+    readonly name: string;
+    readonly discoveryWarnings: readonly DiscoveryWarning[];
+  },
+): ReadonlyArray<Parameters<typeof surfaceDiscoveryWarnings>[2]> {
+  const diagnostics = [
+    { rowName: root.name, plugin: root.name, warnings: root.discoveryWarnings },
+    ...members.flatMap((member) =>
+      member.key === root.key || member.discoveryWarnings === undefined
+        ? []
+        : [{ rowName: member.key, plugin: member.name, warnings: member.discoveryWarnings }],
+    ),
+  ];
+  diagnostics.sort((a, b) =>
+    compareByNameThenScope({ name: a.rowName, scope }, { name: b.rowName, scope }),
   );
+  return diagnostics.map(({ plugin, warnings }) => ({
+    plugin,
+    scope,
+    verb: "installed",
+    warnings,
+  }));
 }
 
 /** UPD-DEP-D1: the outcome member naming the moves, present only when one landed (NREG-01). */

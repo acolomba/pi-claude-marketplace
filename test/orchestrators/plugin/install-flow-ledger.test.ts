@@ -105,6 +105,111 @@ import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 import type { TestContext } from "node:test";
 
+for (const orchestrated of [false, true]) {
+  test(`keeps dependency MCP notices when the final config is invalid in ${orchestrated ? "an orchestrated" : "a standalone"} install`, async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({ aaa: { version: "1.0.0" } });
+      try {
+        const initial = makeCtx();
+        const installed = await owner.installPlugin({
+          ctx: initial.ctx,
+          run: initial.run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "aaa",
+        });
+        assert.strictEqual(installed.status, "installed");
+        await publishCatalog(marketplaceRoot, {
+          app: { version: "1.0.0", dependencies: ["aaa@^2.0.0"] },
+          aaa: { version: "2.0.0", dependencies: ["zzz"] },
+          zzz: { version: "1.0.0", mcp: true },
+        });
+        const locations = locationsFor("project", cwd);
+        await writeFile(locations.mcpAdapterJsonPath, '// mine\n{"mcpServers":{}}\n');
+        const installPlugin = createInstallPlugin(
+          {
+            ...owner.transaction,
+            async withLockedStateTransaction(target, fn) {
+              const state = await loadState(target.extensionRoot);
+              if (state.marketplaces.mp?.plugins.aaa?.version === "2.0.0") {
+                await writeFile(locations.baseConfigJsonPath, "{invalid");
+              }
+
+              return owner.transaction.withLockedStateTransaction(target, fn);
+            },
+          },
+          owner.hooksRouting,
+          owner.completionCache,
+        );
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        const outcome = await installPlugin({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "app",
+          ...(orchestrated && { notifications: { mode: "orchestrated" } }),
+        });
+
+        // assert
+        assert.strictEqual(outcome.status, "failed");
+        assert.deepStrictEqual(outcome.mcpConfigNotices, [
+          { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+        ]);
+        assert.deepStrictEqual(
+          notifications,
+          orchestrated
+            ? []
+            : [
+                {
+                  message:
+                    'A plugin operation has failed.\n\n● mp [project]\n  ⊘ app (failed) {invalid manifest}\n    cause: Config file "claude-plugins.json" failed schema validation.\n  ● zzz@mp v1.0.0 (installed) {requires pi-mcp-adapter}\n  ● aaa@mp v1.0.0 → v2.0.0 (updated) {dependency current copy}\n    cause: constrained to the combined range (^2.0.0) -- required by "app@mp"\n\n/reload to pick up changes',
+                  severity: "error",
+                },
+                {
+                  message:
+                    "MCP config comments removed.\n\nThe project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+                  severity: "warning",
+                },
+              ],
+        );
+        const state = await loadState(locations.extensionRoot);
+        assert.deepStrictEqual(
+          Object.entries(state.marketplaces.mp?.plugins ?? {}).map(([name, record]) => [
+            name,
+            record.version,
+          ]),
+          [
+            ["aaa", "2.0.0"],
+            ["zzz", "1.0.0"],
+          ],
+        );
+        assert.deepStrictEqual(JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")), {
+          mcpServers: {
+            "plugin_zzz_zzz-server_": {
+              command: "node",
+              directTools: "search",
+              toolPrefix: "mcp",
+              env: {
+                CLAUDE_PLUGIN_DATA: path.join(locations.extensionRoot, "data", "mp", "zzz"),
+                CLAUDE_PLUGIN_ROOT: path.join(marketplaceRoot, "plugins", "zzz"),
+              },
+              _piClaudeMarketplace: { marketplace: "mp", plugin: "zzz" },
+            },
+          },
+        });
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 const filesystemPromises = createRequire(import.meta.url)(
   "node:fs/promises",
 ) as typeof import("node:fs/promises");
@@ -1366,7 +1471,7 @@ test("PDEF-01 / D-PL1-02: a standalone install reports a later duplicate agent a
         },
         {
           message:
-            'Plugin "hello" [project] installed; 1 declared component has a note.\n\nagent source "shared" at "shared-later.md" duplicates generated name "pi-claude-marketplace-hello-shared" already produced by agent source "shared" at "shared-first.md"; keeping first discovered source.',
+            'Plugin "hello" [project] installed; 1 declared component has a note.\n\nagent source "shared" at "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -1457,7 +1562,7 @@ test("D-PL1-13: a standalone install that fails in its mcp phase reports the age
         },
         {
           message:
-            'Plugin "hello" [project] install failed; 1 declared component has a note.\n\nagent source "shared" at "shared-later.md" duplicates generated name "pi-claude-marketplace-hello-shared" already produced by agent source "shared" at "shared-first.md"; keeping first discovered source.',
+            'Plugin "hello" [project] install failed; 1 declared component has a note.\n\nagent source "shared" at "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -12443,7 +12548,7 @@ test("D-141-03: a standalone install surfaces a command discovery warning as a s
         },
         {
           message:
-            'Plugin "hello" [project] installed; 1 declared component has a note.\n\ncommand source "tools/lint" in "commands" elides to generated name "hello:tools:lint", already produced by command source "hello-tools/lint"; ignoring duplicate.',
+            'Plugin "hello" [project] installed; 1 declared component has a note.\n\ncommand source "tools/lint" in "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -12531,9 +12636,7 @@ for (const mode of ["json", "rpc"]) {
               severity: "warning",
               needsReload: false,
               header: 'Plugin "hello" [project] installed; 1 declared component has a note.',
-              lines: [
-                'command source "tools/lint" in "commands" elides to generated name "hello:tools:lint", already produced by command source "hello-tools/lint"; ignoring duplicate.',
-              ],
+              lines: ['command source "tools/lint" in "[redacted path]'],
             },
           },
         ]);
@@ -15440,6 +15543,83 @@ test("retry proof: install: state commit race after staged work retries from unc
 // -- which are exactly the failures this surface exists to prevent.
 // ───────────────────────────────────────────────────────────────────────────
 
+for (const { title, file, partial, manifest, memberRow } of [
+  {
+    title: "a dependency with a malformed skill warns while its requesting plugin stays installed",
+    file: "skills/tool/SKILL.md",
+    partial: false,
+    manifest: {},
+    memberRow: "  ● lib@mp v1.0.0 (installed) {malformed skill}",
+  },
+  {
+    title:
+      "a partial dependency with a malformed command reports both reasons and keeps its requester installed",
+    file: "commands/run.md",
+    partial: true,
+    manifest: { outputStyles: ["./styles"] },
+    memberRow: "  ◉ lib@mp v1.0.0 (partially-installed) {malformed command, unsupported component}",
+  },
+]) {
+  test(title, async () => {
+    await withHermeticHome(async ({ installPlugin }) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({
+        app: { version: "1.0.0", dependencies: ["lib"] },
+        lib: { version: "1.0.0" },
+      });
+      try {
+        const pluginRoot = path.join(marketplaceRoot, "plugins", "lib");
+        const target = path.join(pluginRoot, file);
+        await mkdir(path.dirname(target), { recursive: true });
+        await writeFile(target, "---\nname: [unterminated\n---\nBody.\n");
+        await writeFile(
+          path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+          JSON.stringify({ name: "lib", version: "1.0.0", ...manifest }),
+        );
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        const outcome = await installPlugin({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "app",
+          partial,
+        });
+
+        // assert
+        assert.strictEqual(outcome.status, "installed");
+        assert.deepStrictEqual(notifications, [
+          {
+            severity: "warning",
+            message: [
+              "A plugin operation needs attention.",
+              "",
+              "● mp [project]",
+              "  ● app v1.0.0 (installed)",
+              memberRow,
+              "",
+              "/reload to pick up changes",
+            ].join("\n"),
+          },
+        ]);
+        const state = await loadState(locationsFor("project", cwd).extensionRoot);
+        assert.deepStrictEqual(
+          [
+            state.marketplaces.mp?.plugins.app?.enabled,
+            state.marketplaces.mp?.plugins.lib?.enabled,
+          ],
+          [true, true],
+        );
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 test("RESV-01 / RESV-06: a successful cascade renders one row per member", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-resv06-rows-"));
@@ -15521,13 +15701,62 @@ test("D-PL10-16: a cascade dependency reports its discovery note under its own h
         },
         {
           message:
-            'Plugin "some-other-plugin" [project] installed; 1 declared component has a note.\n\nskill source "tool" in "skills" elides to generated name "some-other-plugin-tool", already produced by skill source "some-other-plugin-tool"; ignoring duplicate.',
+            'Plugin "some-other-plugin" [project] installed; 1 declared component has a note.\n\nskill source "tool" in "[redacted path]',
           severity: "warning",
         },
       ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
+  });
+});
+
+test("reports install diagnostics in row order when the root sorts after its dependency", async (t) => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope({
+      zroot: { version: "1.0.0", dependencies: ["aaa"] },
+      aaa: { version: "1.0.0" },
+    });
+    t.after(async () => {
+      await rm(cwd, { recursive: true, force: true });
+    });
+    for (const plugin of ["zroot", "aaa"]) {
+      const duplicate = path.join(marketplaceRoot, "plugins", plugin, "skills", `${plugin}-tool`);
+      await mkdir(duplicate, { recursive: true });
+      await writeFile(path.join(duplicate, "SKILL.md"), `---\nname: ${plugin}-tool\n---\n`);
+    }
+
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    const outcome = await installPlugin({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      marketplace: "mp",
+      plugin: "zroot",
+    });
+
+    // assert
+    assert.strictEqual(outcome.status, "installed");
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n  ● aaa@mp v1.0.0 (installed)\n  ● zroot v1.0.0 (installed)\n\n/reload to pick up changes",
+      },
+      {
+        message:
+          'Plugin "aaa" [project] installed; 1 declared component has a note.\n\nskill source "tool" in "[redacted path]',
+        severity: "warning",
+      },
+      {
+        message:
+          'Plugin "zroot" [project] installed; 1 declared component has a note.\n\nskill source "zroot-tool" in "[redacted path]',
+        severity: "warning",
+      },
+    ]);
   });
 });
 

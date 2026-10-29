@@ -43,6 +43,7 @@ import {
   resolvePluginPin,
 } from "./clone-cache.ts";
 import { admitResolvedVersion, evaluateCatalogConstraint } from "./constraint-fold.ts";
+import { DEFAULT_PACKAGE_INSTALL_OPS, removeInstalledPackages } from "./package-install.ts";
 import {
   isRecordedCandidate,
   isSameRevision,
@@ -198,6 +199,8 @@ export interface PreparePluginUpdateOptions {
   readonly partial?: boolean;
   readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
+  /** Exact clone-cache keys created by the current dependency-planning attempt. */
+  readonly cloneCandidates?: Set<string>;
   /**
    * D-10-02 / D-10-19: the constraint gate is composed through this field,
    * defaulted by `policy.searchReleaseTags` to the real
@@ -321,8 +324,12 @@ function makeUpdateCloneProbe(
     readonly authMemo?: Map<string, AuthAttemptResult>;
   },
   refreshSource: boolean,
+  cloneCandidates: Set<string> | undefined,
 ): UpdateCloneProbe {
   let captured: string | undefined;
+  const onCloneCreated = (key: string): void => {
+    cloneCandidates?.add(key);
+  };
 
   function cloneAuth(cloneUrl: string, kind: GitBackedSource["kind"]): GitAuthBundle {
     return auth.notification === undefined
@@ -340,6 +347,7 @@ function makeUpdateCloneProbe(
         source: gitSource,
         auth: cloneAuth(canonicalCloneUrl(gitSource), gitSource.kind),
         refresh: refreshSource,
+        onCloneCreated,
       }),
     );
     if (result.kind === "materialized") {
@@ -362,6 +370,7 @@ function makeUpdateCloneProbe(
       pin: pin.pin,
       ...(pin.ref !== undefined && { ref: pin.ref }),
       resolveAuth: () => authBundle,
+      onCloneCreated,
     });
     if (gitSource.kind === "git-subdir") {
       const subdir = await resolveGitSubdirRoot(cloneRoot, gitSource.path);
@@ -449,6 +458,7 @@ async function resolveUpdateCandidate(
     readonly locations: ScopedLocations;
     readonly pin?: UpdateTagPin;
     readonly pathPinProbe?: typeof materializeMarketplaceTagClone;
+    readonly cloneCandidates?: Set<string>;
   },
 ): Promise<UpdateCandidateResolution> {
   let pathResolvedSha: string | undefined;
@@ -489,6 +499,7 @@ async function resolveUpdateCandidate(
               marketplaceName: marketplace.name,
               pathSource,
               tagOid: tagPin,
+              onCloneCreated: (key) => options.cloneCandidates?.add(key),
             }),
           );
           if (result.kind === "materialized") {
@@ -794,6 +805,19 @@ async function refreshDisabledRecord(
         return false;
       }
 
+      // A disabled update saves its new pin without running the package step.
+      // Invalidate our old packages under the lock so enable reads the new lockfile.
+      if (
+        record.resolvedSource === preflight.installable.pluginRoot &&
+        (record.version !== preflight.toVersion || record.resolvedSha !== preflight.resolvedSha)
+      ) {
+        await removeInstalledPackages(
+          DEFAULT_PACKAGE_INSTALL_OPS,
+          options.locations,
+          record.resolvedSource,
+        );
+      }
+
       record.version = preflight.toVersion;
       record.resolvedSource = preflight.installable.pluginRoot;
       // WR-01: a re-resolution that produced no pin (a `path` source with no
@@ -899,6 +923,7 @@ async function resolvePinnedUpdateCandidate(
     readonly fromVersion: string;
     readonly partial: boolean;
     readonly locations: ScopedLocations;
+    readonly cloneCandidates?: Set<string>;
   },
   pathPinProbe: typeof materializeMarketplaceTagClone | undefined,
 ): Promise<PinnedUpdateCandidateResolution> {
@@ -1130,6 +1155,7 @@ export async function preparePluginUpdate(
     options.locations,
     auth,
     options.policy.refreshSource,
+    options.cloneCandidates,
   );
   const { candidate, resolvedSha, pin } = await resolvePinnedUpdateCandidate(
     triaged.entry,
@@ -1141,6 +1167,9 @@ export async function preparePluginUpdate(
       fromVersion: triaged.record.version,
       partial: options.partial === true || widensPartialGate(triaged.record),
       locations: options.locations,
+      ...(options.cloneCandidates !== undefined && {
+        cloneCandidates: options.cloneCandidates,
+      }),
     },
     options.pathPinProbe,
   );

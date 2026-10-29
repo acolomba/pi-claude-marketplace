@@ -605,13 +605,72 @@ describe("presentNotification", () => {
     assert.strictEqual(presentation.message, message);
   });
 
-  test("PMOD-04 / D-07 redacts the url block of a marketplace-info cascade", () => {
+  for (const source of [
+    { sourceKind: "path", absPath: "/srv/mp" },
+    { sourceKind: "github", owner: "acme", repo: "mp" },
+    { sourceKind: "url", url: "https://host/mp.git", ref: "main" },
+  ] satisfies readonly MarketplaceInfoMessage["source"][]) {
+    test(`redacts a stored marketplace-info name with a ${source.sourceKind} source`, () => {
+      // arrange
+      const message: MarketplaceInfoMessage = {
+        ...marketplaceInfo(),
+        name: "ghp_0123456789abcdefghijklmnopqrstuvwxyz",
+        source,
+        description: "Tools",
+        allowedMarketplaces: ["other"],
+      };
+
+      // act
+      const presentation = presentNotification(runWithAllLoaded(), message);
+
+      // assert
+      assert.deepStrictEqual(presentation, {
+        kind: "marketplace-info",
+        envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
+        message: {
+          kind: "marketplace-info",
+          name: "***",
+          scope: "user",
+          details: { autoupdate: false },
+          source,
+          description: "Tools",
+          allowedMarketplaces: ["other"],
+        },
+      });
+    });
+  }
+
+  test("preserves marketplace-info when neither its name nor its URL needs redaction", () => {
+    // arrange
+    const message: MarketplaceInfoMessage = {
+      ...marketplaceInfo(),
+      source: { sourceKind: "url", url: "https://host/mp.git", ref: "main" },
+    };
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "marketplace-info",
+      envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
+      message,
+    });
+    assert.ok(presentation.kind === "marketplace-info");
+    assert.strictEqual(presentation.message, message);
+  });
+
+  test("redacts the name and URL of a marketplace-info cascade block", () => {
     // arrange
     const githubBlock = marketplaceInfo();
     const message = {
       kind: "marketplace-info-cascade",
       blocks: [
-        { ...marketplaceInfo(), source: { sourceKind: "url", url: "ssh://git@host/mp.git" } },
+        {
+          ...marketplaceInfo(),
+          name: "ghp_0123456789abcdefghijklmnopqrstuvwxyz",
+          source: { sourceKind: "url", url: "ssh://git@host/mp.git" },
+        },
         githubBlock,
       ],
     } satisfies MarketplaceInfoCascadeMessage;
@@ -628,7 +687,7 @@ describe("presentNotification", () => {
         blocks: [
           {
             kind: "marketplace-info",
-            name: "mp",
+            name: "***",
             scope: "user",
             details: { autoupdate: false },
             source: { sourceKind: "url", url: "ssh://***@host/mp.git" },
@@ -641,13 +700,17 @@ describe("presentNotification", () => {
     assert.strictEqual(presentation.message.blocks[1], githubBlock);
   });
 
-  test("PMOD-04 / D-07 redacts the credentials of plugin-info notes", () => {
+  test("redacts credentials in plugin-info names and notes without changing its subject", () => {
     // arrange
     const message = {
       ...pluginInfo(),
+      marketplaceName: "https://user:secret123@example.com/tools",
       plugin: {
         status: "available",
-        name: "alpha",
+        name: "ghp_0123456789abcdefghijklmnopqrstuvwxyz",
+        marketplaceSubject: true,
+        scope: "user",
+        reasons: ["invalid manifest"],
         componentsResolved: false,
         notes: ["workflow wf: fetch with Bearer abc.def failed", "plain note"],
       },
@@ -662,17 +725,78 @@ describe("presentNotification", () => {
       envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
       message: {
         kind: "plugin-info",
-        marketplaceName: "mp",
+        marketplaceName: "https://***@example.com/tools",
         marketplaceScope: "user",
         marketplaceDetails: { autoupdate: false },
         plugin: {
           status: "available",
-          name: "alpha",
+          name: "***",
+          marketplaceSubject: true,
+          scope: "user",
+          reasons: ["invalid manifest"],
           componentsResolved: false,
           notes: ["workflow wf: fetch with Bearer *** failed", "plain note"],
         },
       },
     });
+  });
+
+  for (const { marketplaceName, name, expectedMarketplaceName, expectedName } of [
+    {
+      marketplaceName: "ghp_0123456789abcdefghijklmnopqrstuvwxyz",
+      name: "alpha",
+      expectedMarketplaceName: "***",
+      expectedName: "alpha",
+    },
+    {
+      marketplaceName: "mp",
+      name: "ghp_0123456789abcdefghijklmnopqrstuvwxyz",
+      expectedMarketplaceName: "mp",
+      expectedName: "***",
+    },
+  ]) {
+    test(`redacts plugin-info names without notes for ${expectedMarketplaceName}/${expectedName}`, () => {
+      // arrange
+      const message: PluginInfoMessage = {
+        ...pluginInfo(),
+        marketplaceName,
+        plugin: { ...pluginInfo().plugin, name },
+      };
+
+      // act
+      const presentation = presentNotification(runWithAllLoaded(), message);
+
+      // assert
+      assert.deepStrictEqual(presentation, {
+        kind: "plugin-info",
+        envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
+        message: {
+          ...message,
+          marketplaceName: expectedMarketplaceName,
+          plugin: { ...message.plugin, name: expectedName },
+        },
+      });
+    });
+  }
+
+  test("preserves a plugin-info message whose names and notes need no redaction", () => {
+    // arrange
+    const message: PluginInfoMessage = {
+      ...pluginInfo(),
+      plugin: { ...pluginInfo().plugin, notes: ["plain note"] },
+    };
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "plugin-info",
+      envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
+      message,
+    });
+    assert.ok(presentation.kind === "plugin-info");
+    assert.strictEqual(presentation.message, message);
   });
 
   test("PMOD-04 / D-07 redacts the plugin-info notes of a plugin-info cascade", () => {
@@ -930,6 +1054,370 @@ describe("presentNotification", () => {
       cause: { causeChain: ["save failed at state.json", "disk full"], truncated: false },
     });
     assert.ok(!Object.values(presentation).some((field) => field instanceof Error));
+  });
+
+  test("fails closed before later quoted diagnostic text", () => {
+    // arrange
+    const message = {
+      kind: "prune-committed-warning",
+      scope: "project",
+      cause: new Error("open '/tmp/private/file.json' failed; see docs/errors 'E_READ'"),
+    } satisfies PruneCommittedWarningMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        needsApply: false,
+        noOp: false,
+      },
+      scope: "project",
+      cause: {
+        causeChain: ["open '[redacted path]"],
+        truncated: false,
+      },
+    });
+  });
+
+  test("fails closed for ambiguous quote boundaries in a presented prune cause", () => {
+    // arrange
+    const message = {
+      kind: "prune-committed-warning",
+      scope: "project",
+      cause: new Error("unlink '/tmp/O' Mary Jane/秘密/secret.json'", {
+        cause: new Error("open '/tmp/private/file.json' docs/errors 'E_READ'"),
+      }),
+    } satisfies PruneCommittedWarningMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        needsApply: false,
+        noOp: false,
+      },
+      scope: "project",
+      cause: { causeChain: ["unlink '[redacted path]", "open '[redacted path]"], truncated: false },
+    });
+  });
+
+  test("fails closed before a punctuation-prefixed quoted value", () => {
+    // arrange
+    const message = {
+      kind: "prune-committed-warning",
+      scope: "project",
+      cause: new Error("open '/tmp/private/file.json' docs/errors '.hidden'"),
+    } satisfies PruneCommittedWarningMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        needsApply: false,
+        noOp: false,
+      },
+      scope: "project",
+      cause: { causeChain: ["open '[redacted path]"], truncated: false },
+    });
+  });
+
+  test("fails closed for multi-quote paths in a presented prune cause", () => {
+    // arrange
+    const message = {
+      kind: "prune-committed-warning",
+      scope: "project",
+      cause: new Error("open '/tmp/O' Brien's files/秘密/secret.json'", {
+        cause: new Error("open '\\\\server\\private\\O' Mary Jane\\秘密\\secret.json '"),
+      }),
+    } satisfies PruneCommittedWarningMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        needsApply: false,
+        noOp: false,
+      },
+      scope: "project",
+      cause: {
+        causeChain: ["open '[redacted path]", "open '[redacted path]"],
+        truncated: false,
+      },
+    });
+  });
+
+  test("fails closed for an embedded quote before Unicode space", () => {
+    // arrange
+    const message = {
+      kind: "prune-committed-warning",
+      scope: "project",
+      cause: new Error("open '/tmp/O'\u00a0Brien/秘密/secret.json'"),
+    } satisfies PruneCommittedWarningMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        needsApply: false,
+        noOp: false,
+      },
+      scope: "project",
+      cause: { causeChain: ["open '[redacted path]"], truncated: false },
+    });
+  });
+
+  test("elides prose after an unclosed path in a presented prune cause", () => {
+    // arrange
+    const message = {
+      kind: "prune-committed-warning",
+      scope: "project",
+      cause: new Error("open '/tmp/private/file.json failed; see docs/errors"),
+    } satisfies PruneCommittedWarningMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        needsApply: false,
+        noOp: false,
+      },
+      scope: "project",
+      cause: {
+        causeChain: ["open '[redacted path]"],
+        truncated: false,
+      },
+    });
+  });
+
+  test("fails closed for an unclosed spaced path in a presented prune cause", () => {
+    // arrange
+    const message = {
+      kind: "prune-committed-warning",
+      scope: "project",
+      cause: new Error("open '/tmp/O Brien/private/secret.json"),
+    } satisfies PruneCommittedWarningMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        needsApply: false,
+        noOp: false,
+      },
+      scope: "project",
+      cause: { causeChain: ["open '[redacted path]"], truncated: false },
+    });
+  });
+
+  test("fails closed for a path before unmatched quotes in a presented prune cause", () => {
+    // arrange
+    const message = {
+      kind: "prune-committed-warning",
+      scope: "project",
+      cause: new Error("open '/tmp/private/file.json' docs/errors 'x/y' tail 'unclosed"),
+    } satisfies PruneCommittedWarningMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        needsApply: false,
+        noOp: false,
+      },
+      scope: "project",
+      cause: {
+        causeChain: ["open '[redacted path]"],
+        truncated: false,
+      },
+    });
+  });
+
+  test("fails closed for ambiguous quote chains in a presented prune cause", () => {
+    // arrange
+    const message = {
+      kind: "prune-committed-warning",
+      scope: "project",
+      cause: new Error("open '/tmp/O' Brien/private/secret.json", {
+        cause: new Error("open '/tmp/private/file.json' help/guide '"),
+      }),
+    } satisfies PruneCommittedWarningMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        needsApply: false,
+        noOp: false,
+      },
+      scope: "project",
+      cause: {
+        causeChain: ["open '[redacted path]", "open '[redacted path]"],
+        truncated: false,
+      },
+    });
+  });
+
+  test("fails closed for an embedded path quote before a balanced value", () => {
+    // arrange
+    const message = {
+      kind: "prune-committed-warning",
+      scope: "project",
+      cause: new Error("open '/tmp/O' Brien/private/secret.json 'x'"),
+    } satisfies PruneCommittedWarningMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        needsApply: false,
+        noOp: false,
+      },
+      scope: "project",
+      cause: { causeChain: ["open '[redacted path]"], truncated: false },
+    });
+  });
+
+  test("fails closed when a later quoted value resembles a local path delimiter", () => {
+    // arrange
+    const message = {
+      kind: "prune-committed-warning",
+      scope: "project",
+      cause: new Error("open '/tmp/private/file.json' value 'x/y' docs/errors '"),
+    } satisfies PruneCommittedWarningMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        needsApply: false,
+        noOp: false,
+      },
+      scope: "project",
+      cause: { causeChain: ["open '[redacted path]"], truncated: false },
+    });
+  });
+
+  test("fails closed for separator-adjacent quotes in a presented prune cause", () => {
+    // arrange
+    const message = {
+      kind: "prune-committed-warning",
+      scope: "project",
+      cause: new Error(String.raw`open "\\server\private\"cache\secret.json"`),
+    } satisfies PruneCommittedWarningMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        needsApply: false,
+        noOp: false,
+      },
+      scope: "project",
+      cause: { causeChain: ['open "[redacted path]'], truncated: false },
+    });
+  });
+
+  test("fails closed for an errno arrow separator in a presented prune cause", () => {
+    // arrange
+    const message = {
+      kind: "prune-committed-warning",
+      scope: "project",
+      cause: new Error(
+        String.raw`ENOENT: no such file or directory, copyfile '\\server\private\source' -> 'source-tail' -> '\\server\private\destination'`,
+      ),
+    } satisfies PruneCommittedWarningMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        needsApply: false,
+        noOp: false,
+      },
+      scope: "project",
+      cause: {
+        causeChain: ["ENOENT: no such file or directory, copyfile '[redacted path]'"],
+        truncated: false,
+      },
+    });
   });
 
   test("presents a prune warning whose cause is absent with no cause member", () => {

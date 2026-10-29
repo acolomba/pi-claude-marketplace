@@ -355,6 +355,62 @@ test("constructs the dependency-install operation without using its owners or st
   verify(completionCache);
 });
 
+test("a missing-dependency install refused by a held scope lock succeeds after release", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "dependency-operation-lock-");
+  await seedHooksDeclaringPlugin({
+    cwd,
+    marketplace: "mp",
+    plugin: "dep",
+    hooksJson: { PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hi" }] }] },
+  });
+  const locations = locationsFor("project", cwd);
+  const before = await readFile(locations.stateJsonPath, "utf8");
+  const installMissingDependency = createDependencyInstallOperation(
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    createCompletionCache(),
+  );
+  const { ctx, run, notifications } = makeCtx();
+  const request = {
+    ctx,
+    run,
+    scope: "project",
+    cwd,
+    marketplace: "mp",
+    plugin: "dep",
+    ranges: [],
+    requiredBy: "app@mp",
+    declarers: ["app@mp"],
+  } as const;
+  const release = await lockfile.lock(locations.extensionRoot, {
+    lockfilePath: locations.stateLockFile,
+    realpath: false,
+    retries: 0,
+    stale: 10_000,
+    update: 2_000,
+  });
+
+  // act
+  const blocked = await installMissingDependency(request);
+  const afterBlocked = await readFile(locations.stateJsonPath, "utf8");
+  await release();
+  const retry = await installMissingDependency(request);
+
+  // assert
+  assert.equal(blocked.status, "failed");
+  if (blocked.status === "failed") {
+    assert.equal(blocked.error.name, "StateLockHeldError");
+  }
+
+  assert.strictEqual(afterBlocked, before);
+  assert.equal(retry.status, "installed");
+  assert.deepStrictEqual(
+    Object.keys((await loadState(locations.extensionRoot)).marketplaces.mp?.plugins ?? {}),
+    ["dep"],
+  );
+  assert.deepStrictEqual(notifications, []);
+});
+
 test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing table without /reload", async (t) => {
   // arrange
   t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 0, 1) });
@@ -573,8 +629,8 @@ test("the composed prune operation removes an orphan in the default user scope",
         "● mp [user]\n  ○ orphan v1.0.0 (uninstalled) {dependency pruned}\n\n/reload to pick up changes",
     },
   ]);
-  // The state guard, then the clone cleanup's own scope lock.
-  assert.strictEqual(lockSpy.mock.callCount(), 2);
+  // The state guard, then separate scope locks for package and clone cleanup.
+  assert.strictEqual(lockSpy.mock.callCount(), 3);
   assert.strictEqual(fetchSpy.mock.callCount(), 0);
 });
 
@@ -628,8 +684,8 @@ test("the composed prune operation removes only the selected project orphan", as
     },
   ]);
   assert.strictEqual(cacheDropSpy.mock.callCount(), 1);
-  // The state guard, then the clone cleanup's own scope lock.
-  assert.strictEqual(lockSpy.mock.callCount(), 2);
+  // The state guard, then separate scope locks for package and clone cleanup.
+  assert.strictEqual(lockSpy.mock.callCount(), 3);
   assert.strictEqual(fetchSpy.mock.callCount(), 0);
 });
 

@@ -1326,6 +1326,14 @@ test("D-PL1-07 / D-PL1-25: a cascade shows the staging warnings of its updated a
       declaresMcp: false,
       constraint: undefined,
       declaresWorkflows: false,
+      dependencyStagingDiagnostics: [
+        {
+          plugin: "zcore",
+          scope: "project",
+          verb: "installed",
+          warnings: [discoveryWarning("dependency package install failed")],
+        },
+      ],
       stagingWarnings: [
         discoveryWarning('command source "c" is duplicated; ignoring duplicate.'),
         hygieneWarning("agents index was corrupt; rebuilt it"),
@@ -1343,6 +1351,12 @@ test("D-PL1-07 / D-PL1-25: a cascade shows the staging warnings of its updated a
       message:
         'Plugin "alpha" [project] update failed; 1 declared component has a note.\n\n' +
         'skill source "a" is duplicated; ignoring duplicate.',
+      severity: "warning",
+    },
+    {
+      message:
+        'Plugin "zcore" [project] installed; 1 declared component has a note.\n\n' +
+        "dependency package install failed",
       severity: "warning",
     },
     {

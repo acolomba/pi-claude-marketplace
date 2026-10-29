@@ -92,6 +92,8 @@ export interface DependencyMoveRequest {
 export interface PlannedDependencyMove {
   readonly request: DependencyMoveRequest;
   readonly version: string;
+  /** Exact cache entries this move materialized or may leave replaced. */
+  readonly cleanupCloneKeys?: readonly string[];
 }
 
 /**
@@ -103,6 +105,8 @@ export interface PlannedCandidate {
   readonly toVersion: string;
   readonly resolvedVersion?: string;
   readonly resolvedSha?: string;
+  /** Exact cache entries the candidate's materialization owns. */
+  readonly cleanupCloneKeys?: readonly string[];
 }
 
 /** GV-01: the version a range reads for a candidate. */
@@ -577,7 +581,13 @@ function schedule<P extends PlannedCandidate>(
       : take(reachable(graph, node.dependsOn, new Set()));
     steps.push(...(needs.length > 0 ? [{ kind: "materialize" as const, members: needs }] : []), {
       kind: "move",
-      move: { request: choice.request, version: choice.prepared.toVersion },
+      move: {
+        request: choice.request,
+        version: choice.prepared.toVersion,
+        ...(choice.prepared.cleanupCloneKeys !== undefined && {
+          cleanupCloneKeys: choice.prepared.cleanupCloneKeys,
+        }),
+      },
     });
   }
 

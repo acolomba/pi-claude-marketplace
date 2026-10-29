@@ -679,27 +679,53 @@ describe("cascade projections", () => {
     });
   });
 
-  test("projects discovery diagnostics only for members that raised them", () => {
+  test("orders root and member diagnostics by their row names and keeps their headers", () => {
     // arrange
     const members = [
       cascadeMember(),
       cascadeMember({
+        key: "zroot@mp",
+        name: "zroot-manifest-name",
+        discoveryWarnings: [{ kind: "discovery", message: "root copy" }],
+      }),
+      cascadeMember({
+        key: "zroot@other",
+        name: "zroot",
+        discoveryWarnings: [{ kind: "discovery", message: "other marketplace" }],
+      }),
+      cascadeMember({
         key: "warned@mp",
-        name: "warned",
+        name: "zzz-manifest-name",
         discoveryWarnings: [{ kind: "discovery", message: "one component skipped" }],
       }),
     ];
 
     // act
-    const diagnostics = cascadeStagingDiagnostics(members, "project");
+    const diagnostics = cascadeStagingDiagnostics(members, "project", {
+      key: "zroot@mp",
+      name: "zroot",
+      discoveryWarnings: [{ kind: "discovery", message: "root note" }],
+    });
 
     // assert
     assert.deepStrictEqual(diagnostics, [
       {
-        plugin: "warned",
+        plugin: "zzz-manifest-name",
         scope: "project",
         verb: "installed",
         warnings: [{ kind: "discovery", message: "one component skipped" }],
+      },
+      {
+        plugin: "zroot",
+        scope: "project",
+        verb: "installed",
+        warnings: [{ kind: "discovery", message: "root note" }],
+      },
+      {
+        plugin: "zroot",
+        scope: "project",
+        verb: "installed",
+        warnings: [{ kind: "discovery", message: "other marketplace" }],
       },
     ]);
   });

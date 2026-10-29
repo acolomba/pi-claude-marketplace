@@ -1,83 +1,50 @@
 ---
 phase: "8"
 slug: "background-autoupdate"
-# status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-10-26"
+updated: "2026-10-29"
 ---
 
-# Phase 8 — Validation Strategy
+# Phase 8 — Validation
 
-> Per-phase validation contract for feedback sampling during execution. Source: `08-RESEARCH.md` § Validation Architecture.
+All four plans and summaries are complete. This stale-verification audit re-read the current merged implementation, the Phase 8 plans and gate artifacts, the later Phase 9-10 changes, and the Phase 6 diagnostic-redaction changes. Current code and tests cover AUP-01 through AUP-03 and the four roadmap truths. The post-phase decisions in 08-04-SUMMARY.md supersede the original RPC and default-off expectations: only TUI arms the pass; official marketplaces default on; the notice deduplicates by bare plugin name; a waiting command or shutdown aborts an in-flight step at the 30-second cap and then waits for that step to settle.
 
----
+## Requirement map
 
-## Test Infrastructure
+| Requirement | Behavioral proof                                                                                                                                                                                                                                                                                                                                                         | Automated command                                                                                                                                                                                                                                                                        | Status |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| AUP-01      | First input arms once in TUI after the injected random delay; RPC, JSON, and print do not arm. The input source is immaterial. A load alone does not update.                                                                                                                                                                                                             | `node --test test/orchestrators/marketplace/background-update.test.ts`; `npx cucumber-js --parallel 1 features/marketplace/background-update.feature`                                                                                                                                    | Green  |
+| AUP-01      | The pass selects merged-config autoupdate marketplaces, project first; it reuses `updateMarketplace` with a silent load-origin run and yields at marketplace, plugin, and dependency-settlement boundaries. A foreground command aborts the current signal at the cap, waits for settlement, blocks the next step, and leaves concurrent foreground commands concurrent. | `node --test test/orchestrators/marketplace/background-pass.test.ts test/orchestrators/marketplace/background-gate.test.ts`; `npx cucumber-js --parallel 1 features/marketplace/background-update.feature`                                                                               | Green  |
+| AUP-02      | Official-name defaults and explicit config precedence, corrupt-config fail-closed behavior, opt-outs with FORCE override, valid/invalid delay knobs including Node's maximum, unref'd timer, and non-quit shutdown settlement.                                                                                                                                           | `node --test test/orchestrators/marketplace/background-pass.test.ts test/orchestrators/marketplace/background-update.test.ts test/architecture/hermetic-git-environment.test.ts`                                                                                                         | Green  |
+| AUP-03      | One passive aggregate info notice names the moved plugin(s) and `/reload`; bare names dedupe while installed rows retain both scopes; no-op and stopped passes are silent. An early failure after a move still notifies.                                                                                                                                                 | `node --test test/orchestrators/marketplace/background-pass.test.ts test/shared/notification-grammar.test.ts test/architecture/background-update-notice.test.ts test/architecture/pi-tui-notices.test.ts`; `npx cucumber-js --parallel 1 features/marketplace/background-update.feature` | Green  |
+| AUP-03      | The load-origin wire payload retains one row per updated install, including duplicate bare names across marketplaces/scopes. Schema, JSON, and text strategies agree. TUI is the positive transport; RPC is an end-to-end negative control under D-PL8-20.                                                                                                               | `node --test test/shared/notification-resolve.test.ts test/shared/notification-json.test.ts test/shared/notification-wire.test.ts`; `npm run check`                                                                                                                                      | Green  |
 
-| Property | Value |
-|----------|-------|
-| **Framework** | `node:test` + `node:assert/strict` + `strong-mock`; `@cucumber/cucumber` |
-| **Config file** | `package.json` scripts; `cucumber.json` |
-| **Quick run command** | `node --test <test-path>`; `npm run test:coverage:direct -- <source>` |
-| **Full suite command** | `npm run check` |
-| **Estimated runtime** | ~75 seconds (full); seconds per owner test |
+## Review-fix backstops
 
----
+- CR-01 and WR-01: the TUI feature updates one plugin in both scopes, checks the single deduplicated notice, and checks both installed versions. The TUI step asserts the exact visible notice array. The RPC message helper retains its quiet-window collection and exact payload-count assertion for the transport it drives.
+- WR-02: the RPC helper asserts no plugin payload arrived in the prompt exchange. The scheduler owner test proves the pass begins after input; the real TUI feature drives the independent session.
+- WR-03: the background-pass owner test moves a plugin, then throws an invalid GitHub base error and still expects one notice. The pass's finally path has direct coverage.
+- WR-04: the pass owner test turns autoupdate off during a yield and proves the next plugin is not updated. It also covers a config layer becoming invalid mid-pass.
+- T-08-17 / SEC-08-01 is closed by a distinct-name behavioral oracle, not by identical screen-write counting. The real PTY scenario updates `alpha` and `beta` across project/user marketplaces and requires exactly `Plugins updated: alpha and beta ...`; the architecture test proves two split notices cannot satisfy that assertion. The same-name scenario separately proves bare-name dedupe while both install rows remain. A mutation that emitted one notice per marketplace/plugin failed the distinct-name scenario.
+- D-PL8-23 through D-PL8-25 have gate, pass, scheduler, and real TUI foreground-command tests. The PTY wait-cap scenario holds the git smart-HTTP `info/refs` response with a streaming heartbeat, so the hosted-manifest fetch's independent ten-second idle timeout cannot end the request. It proves the foreground command is still blocked after one second, completes only at 30-35 seconds, observes the git request as `dropped`, retains the old install rows, emits no update notice, and does not settle the newly declared dependency. Mutations that removed abort propagation or bypassed the foreground wait failed this scenario.
+- No live ten-minute scheduling wait is needed: injected timers prove delay scheduling, and a zero-delay TUI scenario proves transport and lifecycle wiring.
 
-## Sampling Rate
+## Verification result
 
-- **After every task commit:** the owner test(s) via `node --test <path>`, then direct coverage for each touched source pair; the commit hook runs `check:commit`.
-- **After notification-wire changes:** `npm run schema:generate`, then the wire-schema, json-output-docs, and catalog-wire architecture tests.
-- **After every plan wave:** `npm run check:static`.
-- **Before `/gsd-verify-work`:** `npm run check` green on the combined tree.
-- **Max feedback latency:** 120 seconds.
+The final-head focused owner and architecture command passed all 10 requested test files. Direct coverage passed for the five audited source/test pairs: `background-gate.ts`, `background-pass.ts`, `background-update.ts`, `notification-grammar.ts`, and `notification-dispatch.ts`. `npx cucumber-js --parallel 1 features/marketplace/background-update.feature` passed 6 scenarios and 88 steps, including PTY-backed TUI updates, same-name dedupe, the distinct-name aggregate oracle, streamed-git wait-cap cancellation before dependency settlement, and the RPC negative control. The sandboxed first attempt could not bind its hermetic loopback server (`listen EPERM`); the permitted identical rerun passed.
 
----
+The exact full `npm run check` on integrated executable head `be0de0c3` exited 0: 1,145 scenarios, 11,777 steps, and 309 merged LCOV records. `git diff --quiet be0de0c3 -- . ':(exclude,glob).planning/**/*.md'` exits 0 on this audit tree, so the local-verification rule permits reusing that combined-tree result. This audit changes only this validation artifact.
 
-## Per-Task Verification Map
+## Sign-off
 
-| Requirement | Behavior | Test Type | Automated Command | File Exists | Status |
-|-------------|----------|-----------|-------------------|-------------|--------|
-| AUP-01 | arms on first `input` in tui/rpc only; once per runtime; delay `floor(random()*max)`; unref'd | unit | `node --test test/orchestrators/marketplace/background-update.test.ts` | ❌ W0 | ⬜ pending |
-| AUP-01 | pass selects marketplaces with merged autoupdate true, project first, reuses `updateMarketplace` with a silent load run | unit | same | ❌ W0 | ⬜ pending |
-| AUP-01 | gate: a command waits for the in-flight step and blocks new steps; pass yields between plugins | unit | background gate test | ❌ W0 | ⬜ pending |
-| AUP-01 | `/claude:plugin` handler runs inside `runForeground` | unit | `node --test test/edge/register.test.ts` | ✅ | ⬜ pending |
-| AUP-01 | shutdown cancels timer, awaits step except on quit, no throw escapes, stopped runtime never notifies | unit | background-update test | ❌ W0 | ⬜ pending |
-| AUP-01 | `index.ts` registers `input` + `session_shutdown`, passes the gate | unit | `node --test test/index.test.ts` | ✅ | ⬜ pending |
-| AUP-01/03 | end to end: delay 0, plain message, one `background-update` entry naming the plugin | behavioral | `npx cucumber-js --name '<scenario title>'` | ❌ W0 | ⬜ pending |
-| AUP-02 | opt-out variables, FORCE override, delay parse incl. > 2147483647 | unit | background-update (policy) test | ❌ W0 | ⬜ pending |
-| AUP-03 | text for 1 / 2 / 3+ names, dedupe, severity info | unit | `node --test test/shared/notification-grammar.test.ts` | ✅ | ⬜ pending |
-| AUP-03 | wire payload `needsReload: true`, load origin, schema | unit + architecture | `node --test test/shared/notification-json.test.ts test/shared/notification-wire.test.ts`; `npm run test:unpaired` | ✅ | ⬜ pending |
-| AUP-03 | nothing updated → silent | unit | background-update test | ❌ W0 | ⬜ pending |
+- [x] Every roadmap truth and AUP requirement has behavioral automated evidence.
+- [x] All critical/warning review fixes have deterministic backstops.
+- [x] Wire, docs, redaction, and transport checks are included.
+- [x] The aggregate-notice oracle distinguishes split notices from terminal redraws.
+- [x] The real wait-cap path reaches the gate's streamed git abort, not the hosted-fetch timeout.
+- [x] No unresolved validation gap or missing Wave 0 fixture remains.
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
-
----
-
-## Wave 0 Requirements
-
-- [ ] new owner tests for each new `orchestrators/marketplace/background-*.ts` module
-- [ ] `features/marketplace/background-update.feature` + steps + world helper + `test/e2e/_rpc.ts` env key + hermetic-git-environment case + `result-rows.ts` row field
-
----
-
-## Manual-Only Verifications
-
-| Behavior | Requirement | Why Manual | Test Instructions |
-|----------|-------------|------------|-------------------|
-| 10-minute real-time delay in a TUI session | AUP-01 | wall-clock wait; covered by unit tests with injected timer | run Pi in TUI with an autoupdate-on marketplace, send a message, wait ≤10 min |
-
----
-
-## Validation Sign-Off
-
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 120s
-- [ ] `nyquist_compliant: true` set in frontmatter
-
-**Approval:** pending
+**Approval:** validated; Nyquist compliant.

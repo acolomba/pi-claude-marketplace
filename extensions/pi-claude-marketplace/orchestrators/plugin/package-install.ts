@@ -229,8 +229,12 @@ function listsPackages(manifest: Readonly<Record<string, unknown>>): boolean {
   return LISTING_FIELDS.some((field) => listsSomething(manifest[field]));
 }
 
+function boundedNote(note: string): string {
+  return note.slice(0, NOTE_LIMIT).replace(/[\uD800-\uDBFF]$/u, "");
+}
+
 function skippedNote(reason: string): string {
-  return `${SKIPPED_PREFIX}${reason}.`.slice(0, NOTE_LIMIT);
+  return boundedNote(`${SKIPPED_PREFIX}${reason}.`);
 }
 
 // lstat then read leaves a narrow window in which the file could be swapped;
@@ -372,7 +376,7 @@ async function detectInstall(target: PackageStepTarget): Promise<Detection> {
 }
 
 function failedNote(command: string, detail: string): string {
-  return `Plugin dependency install failed (${command}): ${detail}`.slice(0, NOTE_LIMIT);
+  return boundedNote(`Plugin dependency install failed (${command}): ${detail}`);
 }
 
 function runFailed(run: PackageManagerRun): boolean {
