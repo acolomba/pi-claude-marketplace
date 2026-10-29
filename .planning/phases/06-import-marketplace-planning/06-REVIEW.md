@@ -1,12 +1,11 @@
 ---
 phase: 06-import-marketplace-planning
-reviewed: 2026-10-29T04:14:43Z
-reviewed_commit: 59e5075b2edcdddde72cc7c21e69fa3e5e9db49f
+reviewed: 2026-10-29T04:32:49Z
+reviewed_commit: f5f89da1ce874804434cf904d1354fadf06ac498
 depth: standard
 review_scope_complete: true
-scope_status: degraded
-scope_reason: no-task-commit-rows
-files_reviewed: 38
+scope_status: explicit
+files_reviewed: 39
 files_reviewed_list:
   - .agents/skills/cucumber/rules/features.md
   - extensions/pi-claude-marketplace/orchestrators/import/execute.ts
@@ -30,6 +29,7 @@ files_reviewed_list:
   - features/plugin/apply.feature
   - features/plugin/import.feature
   - features/plugin/install-rollback.feature
+  - features/step_definitions/plugin/import.steps.ts
   - features/step_definitions/plugin/publishing.steps.ts
   - test/orchestrators/import/execute.test.ts
   - test/orchestrators/import/marketplaces.test.ts
@@ -56,68 +56,99 @@ status: issues_found
 
 # Phase 6: Code Review Report
 
-**Reviewed:** 2026-10-29T04:14:43Z
+**Reviewed:** 2026-10-29T04:32:49Z
 
-**Commit:** `59e5075b2edcdddde72cc7c21e69fa3e5e9db49f`
+**Commit:** `f5f89da1ce874804434cf904d1354fadf06ac498`
 
 **Depth:** standard
 
-**Files reviewed:** 38
+**Files reviewed:** 39
 
 **Status:** issues_found
 
 ## Summary
 
-The final merged-tree review found one current information-disclosure blocker. The Phase 6 rollback and structured-error redaction fixes remain closed, but the import read/write diagnostic path bypasses that boundary and sends raw filesystem errors to the user. A malformed production `state.json` therefore exposes its absolute path.
+The post-fix review found that CR-01 is closed for the three newly recognized
+unquoted state-error grammars and for quoted Node errno diagnostics, but remains
+open for a production write-back failure. A state-lock error embeds its path in
+parentheses. When the scope root contains a space, the generic fallback redacts
+only the prefix and leaves the rest of the path visible in the returned
+diagnostic and every notification transport.
 
-The GSD evaluation-scope resolver returned `degraded` (`no-task-commit-rows`), so this review reused the phase's previously complete 38-file scope, checked the current contents and all later changes within that scope, and traced the diagnostic from `loadState` through the notification boundary. The fresh combined gate remains useful regression evidence, but it cannot establish that an untested disclosure path is safe.
+The explicit scope is the preceding complete 38-file Phase 6 scope plus the new
+import step module. Files outside commit `2d258ae7` are byte-identical to the
+complete preceding review; all six changed files and the downstream diagnostic
+transport were rechecked against their current contents. The fresh combined
+gate passed 1,143 scenarios, 11,742 steps, and 309 direct-coverage records, but
+the new write regression exercises a quoted, no-space `EEXIST` message and
+cannot detect this production grammar.
 
 ## Narrative Findings (AI reviewer)
 
 ## Critical Issues
 
-### CR-01: Import diagnostics expose absolute scope paths
+### CR-01: A spaced state-lock path still leaks from the config-write diagnostic
 
 **Classification:** BLOCKER
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/import/execute.ts:1822-1828,1971-1980`
+**Files:**
 
-**Issue:** Both expected import diagnostic catches interpolate `errorMessage(err)` directly into a user-visible diagnostic. Production `loadState` errors include the full `state.json` path (for example, `state.json at /home/alice/project/.pi/pi-claude-marketplace/state.json is not valid JSON`). `surfaceImportDiagnostics` then emits that string unchanged. The post-pass write catch has the same defect for Node filesystem errors. This bypasses the redaction boundary used by Phase 6's failed import/apply rows and contradicts T-06-10's claim that import failure causes do not expose paths.
+- `extensions/pi-claude-marketplace/orchestrators/import/execute.ts:1971-1980`
+- `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts:23-64`
+- `test/orchestrators/import/execute.test.ts:4462-4530`
+- `test/shared/redact-absolute-paths.test.ts:92-102`
 
-A read-only reproduction at the reviewed commit injected the exact production `loadState` error grammar and observed both of these public values:
+**Issue:** The fixed write catch correctly calls `redactAbsolutePaths`, but the
+catch explicitly includes lock contention and wraps the whole
+`withLockedStateTransaction`. That transaction can throw `StateLockHeldError`
+or `StateLockCompromisedError`; both production messages put `lockPath` inside
+parentheses rather than quotes or a `Failed to read/write` prefix. The new
+special cases do not match that grammar, and the fallback character class
+excludes spaces.
+
+A direct reproduction with the production message shape gives:
 
 ```text
-diagnostic.message = Cannot read project scope state: state.json at /tmp/private-user/.pi/pi-claude-marketplace/state.json is not valid JSON: bad input
-notification = 1 import diagnostic surfaced. ... /tmp/private-user/.pi/pi-claude-marketplace/state.json ...
+input:  Another pi-claude-marketplace operation is in progress for project scope (/tmp/private user/.pi/pi-claude-marketplace/.state-lock). Retry after it completes.
+output: Another pi-claude-marketplace operation is in progress for project scope (private user/.pi/pi-claude-marketplace/.state-lock). Retry after it completes.
 ```
 
-The owner test at `test/orchestrators/import/execute.test.ts:3829-3893` supplies the already-sanitized text `state.json is unreadable`, so it cannot fail when the production path leaks.
+The leading `/tmp/` is gone, but the unique parent directory and the rest of the
+scope path remain. `pushDiagnostic` retains that output in the returned
+`ClaudeImportExecutionResult`; `surfaceImportDiagnostics` forwards the same
+line to `notifyDiagnostic`, so TUI/print and JSON/RPC expose it too.
 
-**Fix:** Sanitize every caught filesystem error before building the diagnostic. Reuse a single boundary helper that understands the unquoted `loadState` forms as well as Node's quoted errno forms; a bare call to the current generic matcher is insufficient for a scope path containing spaces. Add a production-shaped regression using a case-owned root whose name contains spaces, assert the complete returned diagnostic and emitted notification, and assert that neither contains the root. Apply the same projection to the post-pass write catch.
+The new write regression does not gate this case. It creates a no-space root
+and induces a quoted `EEXIST ... mkdir '<path>'` error, which the pre-existing
+quoted-path matcher already understands. Its two negative assertions search
+for the complete original `project.scopeRoot`; they still pass when only the
+first segment is removed and the sensitive suffix remains. The shared helper
+cases cover spaced `state.json at ...` and `Failed to read ...`, but not the
+parenthesized state-lock grammar or an exact `Failed to write ...` case.
 
-For example:
-
-```ts
-const cause = redactImportFilesystemError(err);
-pushDiagnostic(
-  result,
-  scopePlan.scope,
-  "settings-read-error",
-  `Cannot read ${scopePlan.scope} scope state: ${cause}`,
-);
-```
-
-`redactImportFilesystemError` should reduce `Failed to read <path>: ...`, `state.json at <path> ...`, and quoted Node errno fields to basename-only text. It should preserve the rest of the error.
+**Fix:** Redact the structured `lockPath` before the error becomes a diagnostic,
+or extend the shared redactor with a bounded state-lock-message grammar that
+collapses the complete parenthesized path to `.state-lock`. Add a post-pass
+write regression that forces a real held or compromised lock under a
+case-owned scope root containing spaces. Assert the complete returned
+diagnostic and every emitted transport payload, and assert that unique parent
+segments such as `private user` are absent rather than checking only for the
+original full root. Add the exact production message to the shared redactor
+table as well.
 
 ## Verification Evidence
 
-- Nyquist: COMPLIANT for MIM-01 through MIM-04; 8 owner modules and 15 public scenarios / 177 steps passed.
-- Combined merged-tree gate: 1,142 scenarios, 11,734 steps, 309 direct-coverage records.
-- Reproduction: a direct `importClaudeSettings` call with an exact production-shaped `loadState` failure exposed `/tmp/private-user/.pi/pi-claude-marketplace/state.json` in the returned diagnostic and the TUI notification.
-- No source or test file was modified by this reviewer.
+- Commit `2d258ae7` changed six files; all six and the full current Phase 6
+  scope were included in this review.
+- Fresh combined gate: 1,143/1,143 scenarios, 11,742/11,742 steps, 309 merged
+  direct-coverage records.
+- Direct read-only reproduction of `redactAbsolutePaths` with the production
+  `StateLockHeldError` message preserved `private user/.pi/.../.state-lock`.
+- No source, test, state, security, or configuration file was modified by this
+  reviewer.
 
 ---
 
-_Reviewed: 2026-10-29T04:14:43Z_
+_Reviewed: 2026-10-29T04:32:49Z_
 _Reviewer: gsd-code-reviewer_
 _Depth: standard_
