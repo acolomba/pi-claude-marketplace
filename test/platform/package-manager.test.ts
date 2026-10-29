@@ -372,6 +372,40 @@ test("signals nothing after the process closed", async (t) => {
   assert.deepStrictEqual(control.kills(), []);
 });
 
+test("kills a surviving group after its timed-out parent closes", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const control = createPackageManagerProcess(42);
+  const groupSignals: GroupSignal[] = [];
+  let descendantRunning = true;
+  const runPackageManager = runnerFor(control, {
+    ...linuxHost(),
+    signalGroup: (pid, signal) => {
+      groupSignals.push([pid, signal]);
+      if (signal === "SIGKILL") {
+        descendantRunning = false;
+      }
+    },
+  });
+
+  // act
+  const pending = runPackageManager(request);
+  t.mock.timers.tick(TIMEOUT_MS);
+  control.close(null);
+  const run = await pending;
+  t.mock.timers.tick(KILL_GRACE_MS);
+  t.mock.timers.tick(KILL_GRACE_MS);
+  t.mock.timers.tick(TIMEOUT_MS);
+
+  // assert
+  assert.deepStrictEqual(run, { code: null, stdout: "", stderr: "", timedOut: true });
+  assert.strictEqual(descendantRunning, false);
+  assert.deepStrictEqual(groupSignals, [
+    [42, "SIGTERM"],
+    [42, "SIGKILL"],
+  ]);
+});
+
 test("runs a real child process and captures its exit code and output", async () => {
   // arrange
   const runPackageManager = createPackageManagerRunner({

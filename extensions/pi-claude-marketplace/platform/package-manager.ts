@@ -200,6 +200,7 @@ function watchProcess(
   // first event settles the run and the rest are ignored.
   let settled = false;
   const stopTimers = startKillTimers(stop, options, captured, () => {
+    stopTimers();
     settle(null);
   });
   function settle(code: number | null, error?: Error): void {
@@ -208,7 +209,12 @@ function watchProcess(
     }
 
     settled = true;
-    stopTimers();
+    // A closed parent can leave descendants alive without holding its pipes.
+    // Keep the group escalation until the final deadline once timeout starts.
+    if (!captured.timedOut) {
+      stopTimers();
+    }
+
     resolve({ code, ...captured, ...(error === undefined ? {} : { error }) });
   }
 
