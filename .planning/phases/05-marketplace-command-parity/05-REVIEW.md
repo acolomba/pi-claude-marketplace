@@ -1,6 +1,6 @@
 ---
 phase: 05-marketplace-command-parity
-reviewed: 2026-10-28T19:15:40Z
+reviewed: 2026-10-29T04:00:31Z
 depth: standard
 files_reviewed: 35
 files_reviewed_list:
@@ -49,21 +49,33 @@ status: clean
 
 # Phase 5: Code Review Report
 
-**Reviewed:** 2026-10-28T19:15:40Z
+**Reviewed:** 2026-10-29T04:00:31Z
 **Depth:** standard
 **Files Reviewed:** 35
 **Status:** clean
 
 ## Narrative Findings (AI reviewer)
 
-No actionable findings remain. The integrated Phase 05 review and the final
-re-review at `baab1bf6` cover hosted catalog fetching, source parsing and
-migration, network restrictions, source repair and rollback, reserved-name
-controls, resource removal, notification identities, credential masking, and
-test isolation.
+No actionable findings remain on the merged tree at `38a18b81`. The review
+covers MKT-01 through MKT-08: hosted catalog fetching and refresh, source
+classification and shorthand parsing, the `market` alias, reserved-name
+controls, add repair and rollback, remove reporting and its exhaustive dropped
+axis fold, marketplace row identities, list/info network isolation, and
+credential-safe presentation.
 
-The final pass inspected both blocker-fix commits, their tests, and affected
-callers. The remainder of the previously reviewed integrated source is unchanged.
+The evaluation-scope resolver returned `status: degraded`, source
+`phase-range`, reason `no-reachable-task-commits`; its fallback union spans
+later milestone phases and is not a valid Phase 5 boundary. This review
+therefore uses the workflow handoff's explicit Phase 5 ownership and the exact
+35-file scope preserved by the prior Phase 5 review. Against that reviewed
+baseline (`b49106b3`), only `eslint.config.js` and the HTTPS git-host test
+stand-in changed. The current pass read both diffs and their affected paths;
+the Phase 5 production modules remain byte-identical to the clean baseline.
+
+The ESLint change preserves the hosted-fetch network chokepoints while making
+the layer-direction zones apply to every extension module. The git-host change
+adds an independently selected `hold-git-body` fixture arm; it does not alter
+catalog-file serving, redirect handling, request reset, or credential behavior.
 All reviewed files meet quality standards. No issues found.
 
 ## Blocker closure
@@ -120,18 +132,22 @@ The synthetic credential requires no external account or network access.
 
 ## Validation evidence
 
-- The orchestrator's fresh `npm run check` at `3a8c7e1c` exited 0 on
-  Node `v26.12.1`: 1,124 Cucumber scenarios, 11,462 steps, and 309 merged
-  LCOV records. All three changed direct pairs reached 100% coverage;
-  Fallow and normal commit hooks passed.
-- The reviewer independently ran the hosted-manifest-fetch,
-  notification-present, and notification-json owner suites together.
-  All three modules passed, exit 0.
+- The parent's fresh merged-tree `npm run check` exited 0 at the reviewed
+  build inputs: 1,142 Cucumber scenarios, 11,734 steps, and 309 merged LCOV
+  records.
+- The reviewer independently ran the 13-module Phase 5 owner batch at
+  `38a18b81`: name and source parsing, router and completions, hosted fetch and
+  catalog lifecycle, marketplace shared/update/remove/info, the shared plugin
+  fold, JSON rendering, and presentation redaction. All 13 modules passed.
+- The Phase 5 validation pass separately records `marketplace/add` at 198/198
+  and the focused behavioral set at 16 scenarios / 140 steps.
 - The independent frozen-input presentation probe passed all sixteen cases.
-- `git diff 3a8c7e1c..HEAD -- . ':(exclude,glob).planning/**/*.md'`
-  was empty, and the worktree was clean. The full-gate evidence therefore
-  applies to the reviewed build inputs at `baab1bf6`.
-- This review made no filesystem changes and no commits.
+- CodeGraph traced the add/update/remove/info, hosted-fetch, row-id, and
+  presentation paths. Fallow guard found no boundary violation in the Phase 5
+  modules. Fallow security's dynamic-regex candidates in `domain/name.ts` are
+  constant-built patterns, not attacker-built expressions; its other
+  candidates fall outside this phase scope.
+- This review changed only this report and made no commit.
 
 ---
 
