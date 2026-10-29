@@ -1,6 +1,6 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-reviewed: 2026-10-29T08:01:32Z
+reviewed: 2026-10-29T08:12:52Z
 depth: standard
 files_reviewed: 126
 files_reviewed_list:
@@ -140,16 +140,16 @@ status: issues_found
 
 # Phase 10: Code Review Report
 
-**Reviewed:** 2026-10-29T08:01:32Z
+**Reviewed:** 2026-10-29T08:12:52Z
 **Depth:** standard
-**Files Reviewed:** 126 (the retained Phase 10 scope plus the iteration-7 deltas)
+**Files Reviewed:** 126 (the retained Phase 10 scope plus the iteration-8 deltas)
 **Status:** issues_found
-**Observed HEAD:** `a4ae3380`
+**Observed HEAD:** `c4e4aa95`
 **Runtime:** Node `v26.12.1`
 
 ## Structural Findings (fallow)
 
-The exact merged full gate's Fallow stage passed. A fresh `fallow guard` accepted all five iteration-7 source and test files. Direct review covered the complete retained scope and both iteration-7 fixes.
+The exact merged full gate's Fallow stage passed. The iteration-8 fixer also reported a clean Fallow guard and audit for its three changed files. Direct review covered the complete retained scope and the iteration-8 source and test deltas.
 
 CodeGraph was used before direct file reads. Its index did not include every newest changed owner, so all closure and requirement evidence was verified against the current source.
 
@@ -157,23 +157,23 @@ CodeGraph was used before direct file reads. Its index did not include every new
 
 ### Summary
 
-The complete 126-file scope was re-reviewed. The 121 files unchanged from the complete prior review remain byte-identical; the five source and test files changed by `b000050e` and `1b77dd7b` were read in full and traced through their callers. The strict Phase 10 checker still passes 56/56, binds XPH02 to the exact three required scenario titles at `741516af`, and retains its negative-mutation checks. D-PL10-13 remains the formal supersession of the older Plan 01-03 literal. The Phase 6, 8, and 9 integration evidence and 28-truth mapping remain present.
+The complete 126-file scope was re-reviewed. The 123 files unchanged from the complete prior review remain byte-identical. The three source and test files changed by `442ffb14` were read against their full owners and traced through the cause-chain and notification-presentation callers. The strict Phase 10 checker still passes 56/56, binds XPH02 to the exact three required scenario titles at `741516af`, and retains its negative-mutation checks. D-PL10-13 remains the formal supersession of the older Plan 01-03 literal. The Phase 6, 8, and 9 integration evidence and 28-truth mapping remain present.
 
-The package-manager settlement fix is sound on the reviewed paths: its owner passes 41/41 outside the process-restricted sandbox, its direct pair reaches 100%, and the no-ambient-handle probe exits 0 with the complete `timedOut` result. The redaction fix is not complete. Its one-token continuation heuristic both leaves absolute suffixes visible for valid multi-word path components and still consumes ordinary slash-bearing prose when that prose begins immediately after the closing quote.
+The package-manager settlement fix remains sound on the reviewed paths. The iteration-8 redaction fix closes the submitted multi-word apostrophe case and the exact `E_READ` negative control. It does not actually identify whether the next quote opens or closes a quoted value. An unrelated quoted value that begins with a character accepted by `isQuotedPathBoundary()` still makes the scanner consume slash-bearing prose as part of the absolute path.
 
 ## Critical Issues
 
-### CR-01: The quote-continuation heuristic still leaks valid paths and consumes valid prose
+### CR-01: The quote-role heuristic still consumes valid slash-bearing prose
 
 **File:** `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts:75-89`
 
-**Issue:** `continuesQuotedPath()` accepts only one non-whitespace token between an ambiguous apostrophe and the next separator. That closes the exact `O' Brien/` case but fails on equally valid path components such as `O' Mary Jane/`: `unlink '/tmp/O' Mary Jane/秘密/secret.json'` becomes `unlink 'O' Mary Jane/秘密/secret.json'`, exposing the absolute-path suffix and defeating the Phase 6/10 diagnostic-redaction contract. The same heuristic still cannot distinguish a continuation from prose when slash-bearing prose is the first token after a real closing quote. For POSIX, drive, and UNC inputs such as `open '/tmp/private/file.json' docs/errors 'E_READ'`, the current result is `open 'errors 'E_READ'`, dropping the real basename and corrupting the message. The added negative controls put `failed; see` before `docs/errors`, so they do not exercise the ambiguous boundary.
+**Issue:** `continuesQuotedPath()` decides that `nextQuote` closes the candidate by testing only the character after that quote. An opening quote also passes that test when its quoted value starts with whitespace or one of the accepted punctuation characters. For example, `open '/tmp/private/file.json' docs/errors '.hidden'` becomes `open 'errors '.hidden'`; the same corruption occurs with `':E_READ'` and `' E_READ'`. The behavior reaches `redactCauseChain` and public notification presentation because both use this shared helper. The new `E_READ` negative controls pass only because `E` is not a boundary character, so they do not discriminate the quote role that the implementation claims to recognize.
 
-**Fix:** Replace the one-token heuristic with a deterministic grammar that does not infer arbitrary quoted-path extent from the next slash. Prefer the structured/known diagnostic forms already handled above this scanner; for the remaining generic form, parse and redact the path span without requiring path components to contain no whitespace, and fail conservatively when the closing delimiter is ambiguous. Add positive controls for multi-word components after an apostrophe and POSIX/drive/UNC negative controls where slash-bearing prose is the first token after the closing quote. Exercise the same cases through `redactCauseChain` and the public notification presentation boundary.
+**Fix:** Do not classify a quote as a closing delimiter from its following character alone. Parse a continuation with a rule that distinguishes the candidate's closing delimiter from the opening delimiter of a later quoted value, and fail conservatively when that role is ambiguous. Add POSIX, drive, and UNC negative controls whose unrelated quoted value begins with punctuation or whitespace. Exercise the same boundary through `redactCauseChain` and public notification presentation.
 
 ### Prior finding closure
 
-- The original apostrophe-space suffix disclosure is closed only for the exact single-token `O' Brien/` shape; CR-01 remains open for valid multi-word components and immediate slash-bearing prose.
+- The multi-word apostrophe disclosure is closed for the submitted `O' Mary Jane/秘密` case. CR-01 remains open because the replacement quote-role test still consumes valid immediate slash-bearing prose.
 - The original early parent-close settlement and the replacement unreferenced-timer liveness defect are closed by `1b77dd7b`.
 - The earlier PTY wait-cap, aggregate-notice oracle, and evidence-binding findings remain closed.
 
@@ -181,17 +181,18 @@ The package-manager settlement fix is sound on the reviewed paths: its owner pas
 
 - `node scripts/check-phase10-coverage.mjs`: `56/56` rows valid.
 - D-PL10-13 exact owner: passed, 1/1 with no skip or todo.
-- Redaction owner tests and direct coverage: passed; direct adversarial probes reproduced both CR-01 failure modes.
+- Redaction and notification-presentation owners: passed 97/97; both direct pairs passed at 100% line, function, and branch coverage.
+- Direct adversarial probes reproduced CR-01 for `'.hidden'`, `':E_READ'`, and `' E_READ'` immediately after slash-bearing prose.
 - Package-install cleanup owner and direct coverage: passed.
 - Package-manager owner module: passed 41/41 outside the process-restricted sandbox.
 - Package-manager direct coverage: passed at 100% line, function, and branch coverage.
 - Standalone no-ambient-handle process probe: exited 0 and emitted the complete timed-out result.
-- Exact post-fix `npm run check`: passed `1144` scenarios / `11758` steps / `309` LCOV records. The gate does not include the two unrepresented redaction boundaries above, so it does not close CR-01.
+- Exact post-fix `npm run check`: passed `1144` scenarios / `11758` steps / `309` LCOV records. The gate does not include the remaining quote-role boundary above, so it does not close CR-01.
 
 Only this report was changed. No implementation, test, state, or configuration file was modified, and no commit was created.
 
 ---
 
-_Reviewed: 2026-10-29T08:01:32Z_
+_Reviewed: 2026-10-29T08:12:52Z_
 _Reviewer: Codex (gsd-code-reviewer)_
 _Depth: standard_
