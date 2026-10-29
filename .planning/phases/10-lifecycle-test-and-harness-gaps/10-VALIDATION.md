@@ -190,3 +190,46 @@ D-PL10-13 remains the formal superseding decision over the older Plan 01-03
 literal. Its current owner proof passed, so the superseded broad behavior must
 not be restored. Phase 10 is Nyquist-compliant with no remaining validation
 gap or implementation escalation.
+
+## Final Integrated Stale-Verification Audit 2026-10-29
+
+| Metric                        | Count |
+| ----------------------------- | ----- |
+| Requirements mapped           | 7/7   |
+| Roadmap truths verified        | 7/7   |
+| Plan-specific truths verified  | 21/21 |
+| Evidence rows valid            | 56/56 |
+| Gaps found                     | 0     |
+| Resolved                       | 0     |
+| Escalated                      | 0     |
+
+The final integrated tree still gives every Phase 10 requirement an exact
+behavioral owner. The exhaustive ledger contains 18 `LCTEST` rows for TST-01,
+10 `LCHARN` rows for TST-02, two manifest-first `PHANTOM` rows for TST-03,
+three `CAS08` rows, one `MIM05` row, 13 `XPH01` rows, and nine `XPH02` rows.
+Its dispositions remain 35 scenarios, 14 discriminating unit cases with a
+concrete harness reason, six fixed harness items, and one declined network
+guard with a concrete process-boundary reason. The strict checker passed all
+56 rows on the current checkout and revalidated each cited title against its
+exact evidence commit.
+
+Fresh public-surface execution passed nine selected scenarios and 133 steps:
+the three distinct CAS-08 failure routes, MIM-05 rollback detail, TUI
+autoupdate, aggregate notice, held-Git cancellation, byte-stable no-op apply,
+and dependency-move warning/MCP-notice retention. Fresh owner execution also
+passed six discriminating cases: both manifest-first conflict fixtures,
+D-PL10-13 foreign-row preservation, the real-descendant process-tree kill,
+early-parent-close settlement, and settlement without an ambient referenced
+handle. No selected test was skipped or marked todo.
+
+The first sandboxed Cucumber and process-group attempts were refused before
+behavior ran (`listen EPERM` and process-group signalling). The identical
+commands passed after receiving the required local loopback/process-group
+permissions; these were harness-environment denials, not product failures.
+
+The exact full `npm run check` result at executable commit `be0de0c3` remains
+reusable: 1,145 scenarios, 11,777 steps, and 309 merged LCOV records. The
+executable diff from `be0de0c3` to current HEAD `d2b892ab` is empty; intervening
+commits modify only planning Markdown. Phase 10 therefore remains
+Nyquist-compliant with 28/28 truths behaviorally green, zero remaining gaps,
+and no implementation escalation.
