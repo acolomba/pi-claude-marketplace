@@ -4,7 +4,7 @@ slug: "marketplace-command-parity"
 status: verified
 threats_open: 0
 asvs_level: 1
-created: "2026-10-28"
+created: "2026-10-29"
 ---
 
 # Phase 5 — Security
@@ -114,6 +114,7 @@ The final security recheck at `b49106b3` verified CR-01 and CR-02 against implem
 | 2026-10-28, final recheck at c99c6832 | 29 | 19 of 19 | 10, verified in persisted log | 0 | 0 |
 | 2026-10-28, final recheck at b49106b3 | 29 | 19 of 19 | 10, verified in persisted log | 0 | 0 |
 | 2026-10-29, final merged recheck at 38a18b81 | 29 | 19 of 19 | 10, verified in persisted log | 0 | 0 |
+| 2026-10-29, final-head recheck at be0de0c3 | 29 | 19 of 19 | 10, verified in persisted log | 0 | 0 |
 
 No blocking or non-blocking threat remains. `threats_open: 0` is confirmed at block_on high. The additional accepted DNS residual does not increase the authored-row count.
 
@@ -124,6 +125,15 @@ info/list/remove behavior, loopback fixture isolation, and architecture
 chokepoints. Nyquist MKT-01..08 is COMPLIANT and the exact merged gate passed
 1,142 scenarios, 11,734 steps, and 309 LCOV records. No control regressed.
 
+The final-head audit at executable head `be0de0c3` reverified all 29 authored
+rows: 19 mitigations and ten documented accepted dispositions. Alias routing,
+the six-axis fold, hosted-source validation, reserved-name controls, SSRF and
+IPv4-in-IPv6 refusal, redirect/userinfo/body limits, atomic refresh/removal,
+and info-name wire redaction remain intact. D-PL5-31's DNS residual remains
+explicitly accepted under AR-05-11. Nyquist MKT-01..08 is COMPLIANT. The
+unchanged-input full gate is green with 1,145 scenarios, 11,777 steps, and 309
+LCOV records. No unregistered flag or open threat remains.
+
 ## Sign-Off
 
 - [x] Every authored threat has a disposition.
@@ -133,4 +143,4 @@ chokepoints. Nyquist MKT-01..08 is COMPLIANT and the exact merged gate passed
 - [x] T-05-17 mitigation verified.
 - [x] Persisted artifact rechecked and final status recorded.
 
-**Approval:** verified 2026-10-28; SECURED at `b49106b3b846ee13847d89eec8479bd40366f5c7`, with implementation/test inputs at `3a8c7e1c6b9af4e0f7c1646e67da622829eb525e`.
+**Approval:** verified 2026-10-29; SECURED at executable head `be0de0c3`.
