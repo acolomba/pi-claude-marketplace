@@ -10,8 +10,8 @@ accepted_risks: 4
 asvs_level: 1
 block_on: high
 register_authored_at_plan_time: true
-created: "2026-10-28"
-audited_commit: "fa0ee994cbe20779421a2d6001696b89eaac4fb1"
+created: "2026-10-29"
+audited_commit: "be0de0c3"
 ---
 
 # Phase 4 — Security
@@ -188,6 +188,7 @@ to T-04-14, T-04-15, T-04-16, and T-04-SC. No unmapped threat flag was found.
 |------------|---------------|--------|------|---------------|--------|
 | 2026-10-28 | 17 | 13 | 4 | 0 | gsd-security-auditor; provisional read-only audit before accepted-risk log persistence |
 | 2026-10-28 | 17 | 17 | 0 | 0 | gsd-security-auditor; saved accepted-risk log verified against original PLAN dispositions |
+| 2026-10-29 | 17 | 17 | 0 | 0 | gsd-security-auditor; final-head audit |
 
 ### Security Audit
 
@@ -207,6 +208,14 @@ to T-04-14, T-04-15, T-04-16, and T-04-SC. No unmapped threat flag was found.
   containment remain intact. Nyquist RSV-01..05 is COMPLIANT; the exact merged
   gate passed 1,142 scenarios, 11,734 steps, and 309 LCOV records. No threat
   reopened and `threats_open` remains 0.
+- Final-head audit at executable head `be0de0c3` reverified all 17 threats:
+  13 mitigations and four documented accepted risks. Occupied-agent ordering,
+  names-only forced reinstall, rollback partials, cause redaction, resolver
+  termination, keyed preview-SHA handoff, tag precedence, warm-cache pinning,
+  fixture containment, and loopback request oracles remain intact. Nyquist
+  RSV-01..05 is COMPLIANT. The unchanged-input full gate is green with 1,145
+  scenarios, 11,777 steps, and 309 LCOV records. No unregistered flag or open
+  threat remains.
 
 ## Sign-Off
 
@@ -217,4 +226,4 @@ to T-04-14, T-04-15, T-04-16, and T-04-SC. No unmapped threat flag was found.
 - [x] Saved Accepted Risks Log rechecked by the auditor.
 - [x] `status: verified` set after that recheck.
 
-**Approval:** verified 2026-10-28.
+**Approval:** verified 2026-10-29.
