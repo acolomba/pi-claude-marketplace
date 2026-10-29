@@ -66,3 +66,21 @@ All phase behaviors have automated verification.
 | RSV-05 | No-match tag probe has no range; declared ranges and rollback partials reach failure outcomes | `node --test test/orchestrators/plugin/dependency-tag-probe.test.ts test/orchestrators/plugin/marketplace-tag-probe.test.ts test/orchestrators/plugin/install-cascade.test.ts test/orchestrators/plugin/install-flow-cascade-context.test.ts test/orchestrators/plugin/install-flow-results.test.ts` | green |
 
 The focused unit runs passed all 11 selected modules. The four Phase 4 Cucumber scenarios passed: 4 scenarios, 57 steps. They cover one git fetch, occupied second dependency move, occupied fresh dependency before a move, and occupied direct update before dependency install. The first sandbox run could not bind the loopback git fixture (`listen EPERM`); the permitted rerun passed. No test or fixture change was needed.
+
+## Final merged-tree audit (2026-10-28)
+
+The Phase 4 validation map remains Nyquist-compliant on the final integrated tree.
+The audit found no uncovered RSV behavior and required no test or fixture change.
+
+| Evidence | Final result |
+|----------|--------------|
+| Eleven focused owner modules covering resolver preview/apply, move preflight, tag probing, cascade planning, dependency ledger pins, install outcomes, and update swap | 11 passed, 0 failed |
+| RSV-01 one-fetch scenario plus the three RSV-04 occupied-agent refusal scenarios | 4 scenarios passed, 57 steps passed |
+| Final integrated `npm run check` supplied by the phase owner on the same build inputs | 1,142 scenarios, 11,734 steps, 309 LCOV records |
+
+RSV-01 through RSV-05 therefore remain covered by behavioral assertions that can
+fail on duplicate resolution, a post-mutation refusal, a contradictory-plan
+regression, a reintroduced `range` field on `no-matching-tag`, or a missing
+`rollbackPartials` outcome. Since the merge commit, only planning Markdown has
+changed; the final full-gate result is reusable for this audit under the local
+verification policy.
