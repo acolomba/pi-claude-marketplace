@@ -1,8 +1,8 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-fixed_at: 2026-10-29T09:18:29Z
+fixed_at: 2026-10-29T09:38:24Z
 review_path: .planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md
-iteration: 12
+iteration: 13
 findings_in_scope: 2
 fixed: 2
 skipped: 0
@@ -11,9 +11,67 @@ status: all_fixed
 
 # Phase 10: Code Review Fix Report
 
-**Fixed at:** 2026-10-29T09:18:29Z
+**Fixed at:** 2026-10-29T09:38:24Z
 **Source review:** `.planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md`
-**Iteration:** 12
+**Iteration:** 13
+
+Iteration 13 removes raw suffix recovery from unmatched quoted fields and
+evaluates known diagnostic suffixes only at the current quote candidate. An
+ambiguous field now fails closed over its entire remainder; a later quoted
+value cannot be selected as an earlier absolute path's delimiter.
+
+## Iteration 13 Fixes
+
+### CR-01: Fail-closed marker recovery preserves attacker-controlled suffixes
+
+**Status:** fixed: requires human verification
+**Commit:** `6be0b878` (`fix(redaction): fail closed on path markers`)
+**Files modified:**
+
+- `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`
+- `test/shared/redact-absolute-paths.test.ts`
+- `test/shared/notification-present.test.ts`
+
+Marker-like text can still identify an ambiguous unmatched field, but the
+redactor no longer copies any raw suffix after that marker. It replaces the
+whole ambiguous remainder with the stable `[redacted path]` placeholder. This
+prevents ` failed; `, `;see=`, or future text inside an attacker-controlled
+POSIX, drive, or UNC path from exposing the remainder through utility,
+cause-chain, or public-presentation boundaries.
+
+The RED run failed 11 focused cases. The GREEN focused owners passed 298
+tests, and both direct source-test pairs passed 100% line, function, and branch
+coverage. Type checking, Fallow guard and audit, the required fixers, and the
+normal commit hook passed.
+
+### CR-02: A global quote search can select a later relative value
+
+**Status:** fixed: requires human verification
+**Commit:** `4a62b923` (`fix(redaction): localize quoted path closure`)
+**Files modified:**
+
+- `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`
+- `test/shared/redact-absolute-paths.test.ts`
+- `test/shared/notification-present.test.ts`
+
+The redactor deleted the global known-suffix search. It now scans matching
+quotes in order and classifies only the current candidate's immediate suffix.
+If a separate quoted value opened earlier or the local balance is still
+ambiguous, the scan returns no delimiter and the caller fails closed. It never
+preselects a later relative quoted value or consumes intervening values.
+
+The RED run failed eight focused cases: six utility cases across POSIX, drive,
+UNC, both quote forms, embedded delimiter text, and later relative values,
+plus one cause-chain and one public-presentation case. The final GREEN focused
+owners passed 306 tests. Both direct pairs passed 100% line, function, and
+branch coverage. Project-aware TypeScript checking and Fallow guard and audit
+passed. The first normal commit hook requested one statement-separation blank
+line; after that mechanical correction, the complete hook passed, including
+`npm run check:commit`.
+
+These checks ran in the existing Session A worktree because
+`workflow.use_worktrees` was false for the fixer. The parent workflow owns the
+fresh full `npm run check` gate.
 
 Iteration 12 fails closed when an unmatched path field has no trustworthy
 extent. It also makes known closed-path diagnostics locally monotonic, so
@@ -446,6 +504,6 @@ re-review, and goal verification on the unchanged integrated tree.
 
 ---
 
-_Fixed: 2026-10-29T09:18:29Z_
+_Fixed: 2026-10-29T09:38:24Z_
 _Fixer: the agent (gsd-code-fixer)_
-_Iteration: 12_
+_Iteration: 13_
