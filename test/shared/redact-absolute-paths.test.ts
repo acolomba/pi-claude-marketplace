@@ -101,6 +101,30 @@ describe("redactAbsolutePaths", () => {
       expected: "Failed to read state.json: EACCES",
     },
     {
+      name: "redacts an unquoted failed-write path containing spaces",
+      input:
+        "Failed to write /tmp/private user/.pi/pi-claude-marketplace/claude-plugins.json: EACCES",
+      expected: "Failed to write claude-plugins.json: EACCES",
+    },
+    {
+      name: "redacts a held state-lock path containing spaces",
+      input:
+        "Another pi-claude-marketplace operation is in progress for project scope " +
+        "(/tmp/private user/.pi/pi-claude-marketplace/.state-lock). Retry after it completes.",
+      expected:
+        "Another pi-claude-marketplace operation is in progress for project scope " +
+        "(.state-lock). Retry after it completes.",
+    },
+    {
+      name: "redacts a compromised state-lock path containing spaces",
+      input:
+        "The user scope state lock (/tmp/private user/.pi/agent/pi-claude-marketplace/.state-lock) " +
+        "was lost before the operation finished. Run the command again.",
+      expected:
+        "The user scope state lock (.state-lock) was lost before the operation finished. " +
+        "Run the command again.",
+    },
+    {
       name: "redacts the whole quoted POSIX path with a spaced intermediate directory",
       input: "unlink '/Users/Jane Doe/private/plugin/secret.json'",
       expected: "unlink 'secret.json'",

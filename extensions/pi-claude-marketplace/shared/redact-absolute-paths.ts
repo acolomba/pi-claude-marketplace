@@ -21,7 +21,18 @@ import {
  * an unredacted one.
  */
 export function redactAbsolutePaths(text: string): string {
-  const unquoted = text
+  const stateLock = text
+    .replace(
+      /(Another pi-claude-marketplace operation is in progress for (?:user|project) scope \()((?:[A-Za-z]:[\\/]|\\\\(?:\?\\)?|\/).*?[\\/]\.state-lock)(\)\. Retry after it completes\.)/gs,
+      (_match: string, prefix: string, lockPath: string, suffix: string) =>
+        prefix + pathBasename(lockPath) + suffix,
+    )
+    .replace(
+      /(The (?:user|project) scope state lock \()((?:[A-Za-z]:[\\/]|\\\\(?:\?\\)?|\/).*?[\\/]\.state-lock)(\) was lost before the operation finished\. Run the command again\.)/gs,
+      (_match: string, prefix: string, lockPath: string, suffix: string) =>
+        prefix + pathBasename(lockPath) + suffix,
+    );
+  const unquoted = stateLock
     .replace(
       /(\bstate\.json at )((?:[A-Za-z]:[\\/]|\\\\(?:\?\\)?|\/).*?[\\/]state\.json)(?= (?:is not valid JSON|has an unsupported schema version|failed schema validation))/gs,
       (_match: string, prefix: string, filePath: string) => prefix + pathBasename(filePath),
