@@ -7,8 +7,8 @@ threats_open: 0
 asvs_level: 1
 block_on: high
 register_authored_at_plan_time: true
-audited_at: 0f40fd4d8c7ad7eb740979605a658d2e67a6fb93
-created: "2026-10-28"
+audited_at: be0de0c3
+created: "2026-10-29"
 ---
 
 # Phase 3 — Security
@@ -74,6 +74,7 @@ These are the plan-time dispositions from the six Phase 3 threat models. The aud
 |------------|---------------|--------|------|--------|
 | 2026-10-28 | 15 | 15 | 0 | GSD security auditor |
 | 2026-10-28 | 15 | 15 | 0 | GSD final merged-tree security auditor |
+| 2026-10-29 | 15 | 15 | 0 | GSD final-head security auditor |
 
 The final merged-tree audit at `5c42ac88` reverified all 15 threats: 10
 mitigations and five accepted risks. Typed installed and partially-installed
@@ -82,6 +83,14 @@ redaction, transaction rollback ordering, and bounded package-process notes
 remain intact. All Phase 3 summary flags are registered. Nyquist CAS-01..07 is
 COMPLIANT, and the exact integrated full gate passed 1,142 scenarios, 11,734
 steps, and 309 LCOV records. No threat reopened; `threats_open` remains 0.
+
+The final-head audit at executable head `be0de0c3` again verified all 15
+threats: 10 mitigations and five documented accepted risks. It rechecked
+version truncation, printable invalid-root handling, prototype-key refusal,
+cascade exclusions and redaction, directory-pin requirer selection, hint
+gating, and the D-PL3-06/D-PL3-07 records. Nyquist CAS-01..07 remains
+COMPLIANT. The unchanged-input full gate is green with 1,145 scenarios, 11,777
+steps, and 309 LCOV records. No unregistered flag or open threat remains.
 
 ---
 
@@ -92,4 +101,4 @@ steps, and 309 LCOV records. No threat reopened; `threats_open` remains 0.
 - [x] `threats_open: 0` confirmed
 - [x] `status: verified` set in frontmatter
 
-**Approval:** verified 2026-10-28
+**Approval:** verified 2026-10-29
