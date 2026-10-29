@@ -3836,8 +3836,11 @@ test("installs every plugin in orchestrated mode and never opts in to the defaul
 
 test("abandons only the scope whose state cannot be read and records why", async (t) => {
   // arrange
-  const { cwd } = await createHermeticScopes(t, "state-unreadable");
+  const { cwd, user } = await createHermeticScopes(t, "state unreadable");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+  const stateFailure = new Error(
+    `state.json at ${user.stateJsonPath} is not valid JSON: bad input`,
+  );
   const expectedResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
     addedMarketplaces: [added("mp-project", "project")],
@@ -3845,7 +3848,8 @@ test("abandons only the scope whose state cannot be read and records why", async
     diagnostics: [
       {
         code: "settings-read-error",
-        message: "Cannot read user scope state: state.json is unreadable",
+        message:
+          "Cannot read user scope state: state.json at state.json is not valid JSON: bad input",
         scope: "user",
         severity: "warning",
       },
@@ -3869,9 +3873,7 @@ test("abandons only the scope whose state cannot be read and records why", async
           }),
         ),
       loadState: (scope) =>
-        scope === "user"
-          ? Promise.reject(new Error("state.json is unreadable"))
-          : Promise.resolve(recordedState([])),
+        scope === "user" ? Promise.reject(stateFailure) : Promise.resolve(recordedState([])),
     }),
     hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user", "project"],
@@ -3888,10 +3890,13 @@ test("abandons only the scope whose state cannot be read and records why", async
     },
     {
       message:
-        "1 import diagnostic surfaced.\n\nCannot read user scope state: state.json is unreadable",
+        "1 import diagnostic surfaced.\n\n" +
+        "Cannot read user scope state: state.json at state.json is not valid JSON: bad input",
       severity: "warning",
     },
   ]);
+  assert.strictEqual(JSON.stringify(importResult).includes(user.scopeRoot), false);
+  assert.strictEqual(JSON.stringify(notifications).includes(user.scopeRoot), false);
   verifyBoundary();
 });
 
@@ -4469,7 +4474,7 @@ test("records a diagnostic and keeps the result when the batched config write fa
 
   const writeFailureMessage =
     "Failed to write project scope claude-plugins.json batched post-pass: " +
-    `EEXIST: file already exists, mkdir '${project.extensionRoot}'`;
+    "EEXIST: file already exists, mkdir 'pi-claude-marketplace'";
   const expectedResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
     addedMarketplaces: [added("mp", "project")],
@@ -4520,6 +4525,8 @@ test("records a diagnostic and keeps the result when the batched config write fa
       severity: "warning",
     },
   ]);
+  assert.strictEqual(JSON.stringify(importResult).includes(project.scopeRoot), false);
+  assert.strictEqual(JSON.stringify(notifications).includes(project.scopeRoot), false);
   verifyBoundary();
 });
 

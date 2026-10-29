@@ -1824,7 +1824,7 @@ async function executeScopedPlan(
       result,
       scopePlan.scope,
       "settings-read-error",
-      `Cannot read ${scopePlan.scope} scope state: ${errorMessage(err)}`,
+      `Cannot read ${scopePlan.scope} scope state: ${redactAbsolutePaths(errorMessage(err))}`,
     );
     return;
   }
@@ -1976,7 +1976,7 @@ async function writeBatchedConfigForScope(
       result,
       scope,
       "settings-write-error",
-      `Failed to write ${scope} scope claude-plugins.json batched post-pass: ${errorMessage(err)}`,
+      `Failed to write ${scope} scope claude-plugins.json batched post-pass: ${redactAbsolutePaths(errorMessage(err))}`,
     );
   }
 }

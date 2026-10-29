@@ -1017,6 +1017,25 @@ Feature: Plugin import
       | cascade    | info     | false        |                               |                                                                                                                                                                    |
       | diagnostic | warning  | false        | 1 import diagnostic surfaced. | Skipping Claude marketplace "remote" because it has no supported url, github, or directory source (nested file/remote-marketplace.json sources are not importable). |
 
+  Scenario: Importing with an unsupported state version hides the state file path
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    Given the import state of the user scope has an unsupported schema version
+    When the user runs "/claude:plugin import --scope user"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                        | lines                                                                                   |
+      | cascade    | info     | false        |                               |                                                                                         |
+      | diagnostic | warning  | false        | 1 import diagnostic surfaced. | Cannot read user scope state: state.json at state.json has an unsupported schema version |
+    Then the command result contains no absolute sandbox path
+
   Scenario: Importing a plugin whose install rollback cannot finish names the rollback phase
     Given the marketplace "fixtures" offers these plugins:
       | name | version |

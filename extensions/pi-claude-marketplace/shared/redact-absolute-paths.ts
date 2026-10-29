@@ -21,9 +21,18 @@ import {
  * an unredacted one.
  */
 export function redactAbsolutePaths(text: string): string {
+  const unquoted = text
+    .replace(
+      /(\bstate\.json at )((?:[A-Za-z]:[\\/]|\\\\(?:\?\\)?|\/).*?[\\/]state\.json)(?= (?:is not valid JSON|has an unsupported schema version|failed schema validation))/gs,
+      (_match: string, prefix: string, filePath: string) => prefix + pathBasename(filePath),
+    )
+    .replace(
+      /(\bFailed to (?:read|write) )((?:[A-Za-z]:[\\/]|\\\\(?:\?\\)?|\/).*?)(?=: )/gs,
+      (_match: string, prefix: string, filePath: string) => prefix + pathBasename(filePath),
+    );
   // Node errno messages end with one quoted path or two separated by "' -> '".
   // Their paths can contain unescaped quotes followed by spaces or punctuation.
-  const diagnostic = text.replace(
+  const diagnostic = unquoted.replace(
     /(\bE[A-Z0-9]+: [^,\r\n]+, [a-z][a-z0-9_]* )'.+'$/s,
     (match: string, prefix: string) => {
       const field = match.slice(prefix.length + 1, -1);

@@ -90,6 +90,17 @@ describe("redactAbsolutePaths", () => {
       expected: "unlink 'secret.json'",
     },
     {
+      name: "redacts an unquoted state path containing spaces",
+      input:
+        "state.json at /tmp/private user/.pi/pi-claude-marketplace/state.json is not valid JSON: bad input",
+      expected: "state.json at state.json is not valid JSON: bad input",
+    },
+    {
+      name: "redacts an unquoted failed-read path containing spaces",
+      input: "Failed to read /tmp/private user/.pi/pi-claude-marketplace/state.json: EACCES",
+      expected: "Failed to read state.json: EACCES",
+    },
+    {
       name: "redacts the whole quoted POSIX path with a spaced intermediate directory",
       input: "unlink '/Users/Jane Doe/private/plugin/secret.json'",
       expected: "unlink 'secret.json'",
