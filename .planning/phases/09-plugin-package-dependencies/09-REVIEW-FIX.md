@@ -1,17 +1,51 @@
 ---
 phase: 09-plugin-package-dependencies
-fixed_at: 2026-10-29T01:55:00Z
+fixed_at: 2026-10-29T06:03:44Z
 review_path: .planning/phases/09-plugin-package-dependencies/09-REVIEW.md
-iteration: 2
-findings_in_scope: 7
-fixed: 7
+iteration: 3
+findings_in_scope: 1
+fixed: 1
 skipped: 0
 status: all_fixed
 human_verification_required: true
-security_recheck_required: true
+security_recheck_required: false
 ---
 
 # Phase 9: Code Review Fix Report
+
+## Iteration 3
+
+**Fixed at:** 2026-10-29T06:03:44Z
+**Source review:** `09-REVIEW.md`, reviewed tree `0c989c42`.
+**Summary:** The one current finding was fixed. No finding was skipped.
+
+### CR-01: Fresh dependency package diagnostics disappear during update settlement
+
+**Status:** fixed: requires human verification
+**Commit:** `16e4c849` — `fix(packages): preserve dependency package diagnostics`
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-dependency-ledger.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts`, `test/orchestrators/plugin/install-flow-dependency-ledger.test.ts`, `test/orchestrators/plugin/dependency-settle.test.ts`, `features/plugin/package-dependencies.feature`.
+
+The closure projection now gathers each materialized member's discovery warnings in member order. The step runner and the first-run settlement carry those warnings into the update result. Existing move ownership remains unchanged, so a requester's forwarded warning is not duplicated.
+
+**RED:** A materialized step dropped a scripted package diagnostic, a successful first run dropped the same diagnostic, and the real closure projection dropped a dependency member's package warning. The public direct-update scenario installed the dependency and updated its requester but emitted no diagnostic.
+
+**GREEN:** Both settlement paths retain the warning. The closure projection retains a real member discovery warning. The direct update emits one diagnostic after its cascade while the requester update and dependency install succeed; the failed package fetch appears once and the dependency remains installed without `node_modules`.
+
+### Iteration 3 Verification
+
+Checks ran in the existing isolated worktree `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710`, branch `agent-reverify-a`, on Linux with Node v26.12.1. No additional worktree was created because `workflow.use_worktrees` is false.
+
+- Focused owner tests passed: 27 dependency-settlement tests and 14 install-ledger tests.
+- Direct coverage passed for both changed source/test pairs at 100%.
+- The exact Cucumber regression passed one scenario and 16 steps using the real update command and loopback registry.
+- TypeScript passed with `tsc --noEmit --incremental false`; ESLint, Prettier, `check:features`, Fallow guard, and Fallow audit passed.
+- Repository fixers passed. The normal commit hook passed `npm run check:commit`; no hook was bypassed.
+
+The fixer did not run the full combined-tree `npm run check` gate. The parent workflow must run that gate before completing Phase 9. This report remains uncommitted for the parent workflow.
+
+The automated regressions prove warning transport, ordering, exact-once rendering, and lifecycle success. Human review remains requested because this is a logic correction across the install closure and update settlement ownership boundary.
+
+## Prior Iteration 2 Report
 
 **Iteration:** 2
 **Source review:** `09-REVIEW.md`, reviewed tree `64b397f9`.
@@ -132,4 +166,4 @@ Native execution covered Linux/POSIX. Windows process-tree and launcher behavior
 ---
 
 _Fixer: gsd-code-fixer_
-_Iteration: 2_
+_Iteration: 3_
