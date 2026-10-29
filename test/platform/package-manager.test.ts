@@ -756,6 +756,65 @@ const EXITING_PARENT = [
   "setInterval(() => {}, 1_000);",
 ].join("\n");
 
+function runIsolatedTimeoutProbe(): Promise<{
+  readonly code: number | null;
+  readonly stderr: string;
+  readonly stdout: string;
+}> {
+  const moduleUrl = new URL(
+    "../../extensions/pi-claude-marketplace/platform/package-manager.ts",
+    import.meta.url,
+  ).href;
+  const script = `
+    const { createPackageManagerRunner } = await import(${JSON.stringify(moduleUrl)});
+    const listeners = { close: [], error: [] };
+    const child = {
+      pid: 42,
+      stdout: { on() {} },
+      stderr: { on() {} },
+      kill() { return true; },
+      on(event, listener) { listeners[event].push(listener); },
+    };
+    const runPackageManager = createPackageManagerRunner({
+      spawn: () => child,
+      timeoutMs: 20,
+      killGraceMs: 50,
+      env: {},
+      host: {
+        platform: "linux",
+        execPath: process.execPath,
+        isFile: () => Promise.resolve(false),
+        signalGroup: (_pid, signal) => {
+          if (signal === "SIGTERM") {
+            for (const listener of listeners.close) listener(null);
+          }
+        },
+      },
+    });
+    setTimeout(() => {}, 80);
+    const run = await runPackageManager({ command: "npm", args: ["ci"], cwd: "/work" });
+    process.stdout.write(JSON.stringify(run));
+  `;
+
+  return new Promise((resolve, reject) => {
+    const probe = spawn(process.execPath, ["--input-type=module", "--eval", script], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    probe.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    probe.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    probe.on("error", reject);
+    probe.on("close", (code) => {
+      resolve({ code, stderr, stdout });
+    });
+  });
+}
+
 test("D-PL9-19: stops the whole process tree of a package manager that outlives the timeout", async () => {
   // arrange
   const timeoutMs = 2_000;
@@ -804,6 +863,18 @@ test("waits for SIGKILL after a timed-out parent closes ahead of its descendant"
   // assert
   assert.strictEqual(elapsedMs >= timeoutMs + 2 * killGraceMs - 100, true);
   assert.deepStrictEqual(run, { code: null, stdout: "", stderr: "", timedOut: true });
+});
+
+test("settles a timed-out run without an ambient referenced handle", async () => {
+  // act
+  const probe = await runIsolatedTimeoutProbe();
+
+  // assert
+  assert.deepStrictEqual(probe, {
+    code: 0,
+    stderr: "",
+    stdout: JSON.stringify({ code: null, stdout: "", stderr: "", timedOut: true }),
+  });
 });
 
 test("D-PL9-19: sends SIGTERM and then SIGKILL to the process group on POSIX and never to the process alone", async (t) => {

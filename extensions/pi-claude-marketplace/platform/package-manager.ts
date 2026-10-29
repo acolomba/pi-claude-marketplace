@@ -162,8 +162,10 @@ function finishOutput(captured: string, decoder: StringDecoder): string {
 }
 
 // SIGTERM at the timeout, SIGKILL once the grace runs out, and `abandon` one
-// more grace later. Every timer is unref'd so a pending one never keeps the Pi
-// process alive. Returns the function that cancels them all.
+// more grace later. The live child keeps the initial timeout reachable. After
+// timeout, the escalation timers stay referenced until settlement because the
+// parent and its pipes may close before its descendants. Returns the function
+// that cancels them all.
 function startKillTimers(
   stop: (signal: KillSignal) => void,
   options: PackageManagerRunnerOptions,
@@ -178,9 +180,7 @@ function startKillTimers(
     graceTimer = setTimeout(() => {
       stop("SIGKILL");
       deadlineTimer = setTimeout(abandon, options.killGraceMs);
-      deadlineTimer.unref();
     }, options.killGraceMs);
-    graceTimer.unref();
   }, options.timeoutMs);
   timeoutTimer.unref();
   return () => {
