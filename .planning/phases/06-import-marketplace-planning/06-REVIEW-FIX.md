@@ -1,90 +1,59 @@
 ---
 phase: 06-import-marketplace-planning
-fixed_at: 2026-10-29T00:09:33Z
+fixed_at: 2026-10-29T04:23:55Z
 review_path: .planning/phases/06-import-marketplace-planning/06-REVIEW.md
-iteration: 2
-findings_in_scope: 3
-fixed: 3
+iteration: 3
+findings_in_scope: 1
+fixed: 1
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 6: Code Review Fix Report
 
-**Fixed at:** 2026-10-29T00:09:33Z
+**Fixed at:** 2026-10-29T04:23:55Z
 **Source review:** .planning/phases/06-import-marketplace-planning/06-REVIEW.md
-**Iteration:** 2
+**Iteration:** 3
 
 ## Summary
 
-All three critical findings in the current review are fixed in separate commits. This report supersedes iteration 1, whose finding IDs referred to the earlier review.
-
-- Findings in scope: 3
-- Fixed: 3
+- Findings in scope: 1
+- Fixed: 1
 - Skipped: 0
 
 ## Fixed Issues
 
-### CR-01: An unchanged marketplace add can make an import failure disappear
+### CR-01: Import diagnostics expose absolute scope paths
 
-**Files modified:** `extensions/pi-claude-marketplace/orchestrators/import/execute.ts`, `test/orchestrators/import/execute.test.ts`, `features/plugin/import.feature`
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/import/execute.ts`, `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`, `test/orchestrators/import/execute.test.ts`, `test/shared/redact-absolute-paths.test.ts`, `features/plugin/import.feature`, `features/step_definitions/plugin/import.steps.ts`
 
-**Commit:** 6680b940
+**Commit:** 2d258ae7
 
-**Applied fix:** Import checks the canonical name returned by an unchanged add. A different name enters the existing source-reuse disposition: the absent settings name is blocked, and its plugins report `marketplace-not-added`. An unchanged add with the requested name retains a skipped marketplace header when it has planned plugins. An unchanged add without plugins retains its empty output. Existing reuse semantics, including the failed marketplace and plugin each contributing to the tally, remain unchanged.
+**Applied fix:** Import now redacts the filesystem error before it creates a state-read or configuration-write diagnostic. The shared redactor recognizes the unquoted messages that `loadState` produces and keeps the existing quoted Node error handling. The public import scenario drives a real state record with an unsupported schema version and confirms that the result contains no sandbox path.
 
-**RED evidence:** The empty-state real-add/install regression returned `unexpected-failure` for the second name. Its Cucumber scenario reported severity `info` and zero failures. A second unit case lost the header after a same-name unchanged add.
+**RED evidence:** A production-shaped state error under a case-owned path with spaces exposed the complete scope path in the returned diagnostic and TUI notification. The two direct redactor cases showed that the previous matcher removed only the first path segment and left the remaining path visible.
 
-**GREEN evidence:** Both new unit cases and the existing no-plugin unchanged case pass. The real scenario asserts every plugin row, error severity, two failures, two successes, and complete config and install declarations. Only the canonical marketplace and successful plugin are declared. The execute source/test pair passes 100% direct coverage.
+**GREEN evidence:** The read and write diagnostic cases pass with complete basename-only results and notifications. The shared redactor cases pass for the `state.json at <path>` and `Failed to read <path>` forms. The public scenario passes with 1 scenario and 8 steps. Both changed source/test pairs pass 100% direct coverage.
 
-**Status:** fixed: requires human verification (marketplace disposition and header logic)
-
-### CR-02: Apply hides rollback phases and leaked artifacts after a failed enable
-
-**Files modified:** `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts`, `extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts`, `extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts`, their three paired tests, and `features/plugin/apply.feature`
-
-**Commit:** a769f58f
-
-**Applied fix:** A failed enable with rollback partials carries its redacted error chain and redacted phase causes through the apply outcome. The shared failed-row projection preserves the cause, leaked-resource names, and phase rows. A failed enable after a catalog move uses that same projection, retaining the move's version fields and the failure's MCP notices. Failure rows without rollback partials keep their existing behavior. The toggle failure builder's type now names its two actual variants. The replaced reason filter and its unused constant/import were removed.
-
-**RED evidence:** The real read-only skill undo plus blocked MCP config produced only `{rollback partial}`. The apply unit case, notification projection case, and Cucumber scenario failed on the missing cause, phase, and leaked skill.
-
-**GREEN evidence:** The real apply case and Cucumber scenario show the complete recovery detail and retain the disabled installation record. The unit case also confirms the leaked file remains. A second real unit case covers an enable after a catalog move, including retained version and disabled state. The apply, apply-outcomes, and notify source/test pairs pass 100% direct coverage.
-
-**Status:** fixed: requires human verification (failure propagation and move-row projection)
-
-### CR-03: Path redaction misses whitespace-containing paths and standard UNC paths
-
-**Files modified:** `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`, `test/shared/redact-absolute-paths.test.ts`, `test/orchestrators/import/execute.test.ts`, `test/orchestrators/reconcile/apply.test.ts`
-
-**Commit:** a04c4756
-
-**Applied fix:** Redaction recognizes complete quoted filesystem paths before applying the existing bare-path matcher. Quoted paths can contain spaces and Unicode. The bare-path matcher recognizes ordinary UNC prefixes as well as extended UNC prefixes. A quote starts a path only when followed by an absolute-path prefix, so an apostrophe earlier in prose does not hide the path. Structured manual-recovery leaks use their known absolute-path boundaries to select the basename. URLs, single-segment JSON pointers, relative paths, and non-path prose retain their exclusions.
-
-**RED evidence:** Eight helper cases failed on the reviewed source. The composed import case exposed absolute paths at every cause link and in both leaked-resource entries. A real apply rollback under a temporary root containing spaces and Unicode exposed the root in the main cause, phase cause, and leak. An additional apostrophe-boundary regression failed before that boundary was tightened.
-
-**GREEN evidence:** All 31 redactor tests pass. The complete import notification contains only basenames for the POSIX and UNC paths throughout the root chain, rollback chain, and leaked entries. The real apply case retains its exact basename-only notification under the spaced Unicode root. The redactor, import execute, and apply source/test pairs pass 100% direct coverage.
-
-**Status:** fixed: requires human verification (redaction matching logic). A fresh security recheck is required for CR-03 and the T-06-10/T-06-11 mitigation. The historical security report was not changed.
+**Status:** fixed: requires human verification (filesystem diagnostic redaction logic)
 
 ## Verification
 
-All checks ran in the existing isolated worktree `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-c-369`, branch `agent-reverify-c`, with Node `v26.12.1`. No nested worktree was created.
+Checks ran in the assigned isolated checkout `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-reverify-a-14710`, branch `agent-reverify-a`, with Node `v26.12.1`. `workflow.use_worktrees` was false, so the fixer created no nested worktree.
 
-- Re-read each changed source section and inspected its diff.
-- Ran focused unit regressions before and after each fix.
-- Ran direct coverage for every changed source/test pair: import execute; reconcile apply, apply-outcomes, and notify; shared redact-absolute-paths. All reached 100% line, function, and branch coverage, or the gate's type-only classification where applicable.
-- Ran the exact new Cucumber scenarios together after the final source changes: `npx cucumber-js --name '^Importing two names for one new source|^Apply reports the rollback phases and leaks' --parallel 1`. Exit 0: 2 scenarios, 25 steps.
-- Ran `npx fallow audit --base HEAD` before each fix commit. All three audits found no issues in changed files.
-- Ran pre-commit fixers and normal commit hooks for all three commits. Final hooks passed `npm run check:commit`, including typecheck, lint, Fallow, formatting, source/test pairing, `check:features`, unpaired tests, and staged-pair direct coverage. The first CR-02 commit attempt failed typecheck; its builder type was corrected and the next normal hook passed. No hook was bypassed.
-- The combined-tree `npm run check` gate, fresh review, and security recheck remain the orchestrator's next steps. Per-fix checks do not replace that gate.
+- Owner suites: 153 tests passed.
+- Direct coverage: import execute and shared absolute-path redaction both passed 100% line, function, and branch coverage.
+- Cucumber: the new scenario passed with 1 scenario and 8 steps.
+- `npm run check:features` passed.
+- Fallow guard found no boundary issue. The changed-code audit found no issue in eight changed files.
+- Required pre-commit fixers passed.
+- The normal commit hook passed `npm run check:commit`. No hook was bypassed.
+- The combined `npm run check`, security recheck, and complete code re-review remain for the phase owner.
 
-UNC checks exercise platform-independent diagnostic strings and structured leak fields, not a Windows filesystem. Quoted diagnostics and structured leaked paths supply boundaries for paths containing spaces; arbitrary unquoted prose remains inherently ambiguous.
-
-The report remains uncommitted for the orchestrator. No source changes remain uncommitted.
+This report remains uncommitted for the phase owner. No source or test change remains uncommitted.
 
 ---
 
-_Fixed: 2026-10-29T00:09:33Z_
+_Fixed: 2026-10-29T04:23:55Z_
 _Fixer: gsd-code-fixer_
-_Iteration: 2_
+_Iteration: 3_
