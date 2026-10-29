@@ -2,6 +2,8 @@
 
 ## plugin-lifecycle Marketplace and Plugin Lifecycle Backlog (Shipped: 2026-10-29)
 
+**Pull request:** #290 (open; merge date and squash SHA pending)
+
 **Phases completed:** 11 phases, 80 plans, 121 tasks
 
 **Delivered:** Closed the 64-requirement marketplace and plugin lifecycle backlog across warning transport, reconciliation, dependency cascades, resolver pinning, marketplace and import parity, git failure and lock discipline, background autoupdate, package dependencies, lifecycle coverage, and final cleanup. The exact executable tree passes 1,146 Cucumber scenarios, 11,787 steps, 16 hooks, and 309 direct-coverage records.

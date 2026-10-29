@@ -21,7 +21,7 @@ Use these terms in code, messages, docs, and planning (user decisions 2026-10-17
 - **Declaration:** an entry in a layer. **Installation:** the plugin's artifacts and record in a scope.
 - **Effective configuration:** a scope's two layers merged field by field, local winning on conflicts. The same intent may be declared in both layers.
 
-## Previous Milestone: plugin-lifecycle -- Marketplace and Plugin Lifecycle Backlog (branch: features/plugin-lifecycle-p11, started 2026-10-26, completed 2026-10-29, not yet pushed, no npm release)
+## Previous Milestone: plugin-lifecycle -- Marketplace and Plugin Lifecycle Backlog (branch: features/plugin-lifecycle-p11, started 2026-10-26, completed 2026-10-29, PR #290, not yet merged, no npm release)
 
 **Goal:** Every open `BACKLOG.md` entry about the marketplace and plugin
 lifecycle is fixed, implemented, or closed with a recorded decision, with
@@ -656,7 +656,7 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
-**Completed on a branch, unpushed:** milestone `plugin-lifecycle`
+**Completed on PR branch; PR #290 open:** milestone `plugin-lifecycle`
 (2026-10-29, Phases 1-11, 80 plans, 64/64 requirements; archived to
 `.planning/milestones/plugin-lifecycle-*`). Marketplace and plugin lifecycle
 backlog work now includes typed staging warnings across every cascade, one-run

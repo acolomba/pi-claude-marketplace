@@ -4,7 +4,7 @@
 
 ## Milestone: plugin-lifecycle -- Marketplace and Plugin Lifecycle Backlog
 
-**Completed:** 2026-10-29 on `features/plugin-lifecycle-p11` (not yet pushed, no npm release)
+**Completed:** 2026-10-29 on `features/plugin-lifecycle-p11` (PR #290, not yet merged, no npm release)
 **Phases:** 11 | **Plans:** 80 | **Tasks:** 121 | **Requirements:** 64/64 | **Audit:** `tech_debt`, no blockers (integration 12/12, flows 10/10)
 
 ### What Was Built
