@@ -1,6 +1,6 @@
 ---
 phase: 01-staging-warning-channels
-verified: 2026-10-28T16:37:01Z
+verified: 2026-10-29T02:51:45Z
 status: passed
 score: 5/5 must-haves verified
 covered_files:
@@ -113,7 +113,7 @@ covered_files:
   - test/platform/hermetic-environment.ts
   - test/shared/compare-name-scope.test.ts
   - test/shared/staging-warnings.test.ts
-covered_digest: "v4:sha256:d27cafe4ed08fdb31cf1e6459624d50d525c07ef62f84a2bd667908d34f70c88"
+covered_digest: "v4:sha256:415e38cf308f6b738cef3fa8cf66464e38f33bfaee78b2da2eff3f71dde944b9"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
@@ -122,36 +122,36 @@ re_verification:
   gaps_closed: []
   gaps_remaining: []
   regressions: []
-deferred:
-  - truth: "Plan 01-03's literal refusal for a forced foreign row with a staged name and an escaping target"
-    addressed_in: "Phase 10, plan 10-05 (D-PL10-13)"
-    evidence: "Phase 10 roadmap success criterion 7 requires every XPH-02 item; REQUIREMENTS.md XPH-02 names forced-reinstall foreign agents-index rows. Plan 10-05 and D-PL10-13 require preserving or reporting those rows. Current code preserves differing targets safely."
 ---
 
 # Phase 1: Staging Warning Channels Verification Report
 
 **Phase Goal:** `enable`, the update and reinstall cascades, and a failed install, update, or reinstall show the staging warnings a standalone install shows, and the two warning channels are told apart by type.
-**Verified:** 2026-10-28T16:37:01Z
+**Verified:** 2026-10-29T02:51:45Z
 **Status:** passed
-**Re-verification:** Current-tree verification after the earlier passed report and the four review fixes.
+**Re-verification:** Final A+B+C merged-tree verification after all Phase 1-10 integration fixes.
 
 ## Goal Achievement
 
 | # | Observable roadmap truth | Status | Current-tree evidence |
 | --- | --- | --- | --- |
-| 1 | Enable reports the same collided-skill skip as install (WRN-01) | VERIFIED | `enable-disable.ts:2933` renders only a fresh root through `surfaceStagingDiagnostics`; `:2907` carries both typed halves to orchestrated apply. The complete-result enable scenario in `features/plugin/staging-warnings.feature` asserts the exact skip line and scoped header. The named enable unit test passed independently. |
+| 1 | Enable reports the same collided-skill skip as install (WRN-01) | VERIFIED | `enable-disable.ts` renders only a fresh root through `surfaceStagingDiagnostics` and carries both typed halves to orchestrated apply. The complete-result enable scenario in `features/plugin/staging-warnings.feature` asserts the exact skip line and scoped header. The focused owner proof passed independently. |
 | 2 | Marketplace update, autoupdate, and apply moves show each plugin's warnings under one scoped header (WRN-02) | VERIFIED | `marketplace/update.ts:1099-1109` emits rows, cascade diagnostics, then MCP notices. `update.messaging.ts:207-233` projects updated and failed targets. `apply.ts:2427` calls the same cascade renderer through `stagingDiagnosticsOf`, after its rows and before notices. `apply-outcomes.ts:914-956` sorts entries and derives the verb. Complete-result scenarios cover marketplace update with autoupdate enabled, apply move, apply enable, and both warning halves. `staging-diagnostics.test.ts` independently passed its one-diagnostic/order test. |
 | 3 | Producers tag warning channels and wrong-channel assignment fails typecheck (WRN-03) | VERIFIED | `shared/staging-warnings.ts` defines the discriminated union and partition. Skills, commands, workflows, agents, and MCP stage producers wrap their warnings at creation; all five prepare result types expose `readonly StagingWarning[]`. `install-outcome.ts:1054` partitions by tag; `staging-diagnostics.ts:104` requires `readonly DiscoveryWarning[]` for standalone output. `@ts-expect-error` pins exist in `test/shared/staging-warnings.test.ts:15` and `test/orchestrators/plugin/staging-diagnostics.test.ts:204`. The unchanged-input full gate includes typecheck; the duplicate-agent scenario checks a discovery line. |
 | 4 | Failed install, update, and reinstall retain earlier prepare warnings (WRN-04) | VERIFIED | `install-outcome.ts:1013-1020,1671` captures collected warnings before the ledger returns failure; `install-flow-results.ts:643` renders the standalone failed row's warning. `update-swap.ts:449-475` reports prepared handles through `onStagingWarnings`; `materialize-latest.ts:51-61` stores them per target; `update-flow.ts:559,750` renders failed paths. `reinstall-flow.ts:431,635` carries and renders the discovery half. Three complete-result MCP-phase failure scenarios assert the `(failed)` row followed by the exact diagnostic. The named prepare-failure unit test passed independently. |
 | 5 | Forced reinstall preserves a hand-named agent row; update shows dependency MCP notices; reinstall drops cache once (WRN-05/06/07) | VERIFIED | `bridges/agents/stage.ts:303-337` replaces only foreign rows matching both staged name and target path; the WRN-05 test asserts exact index and file bytes. `dependency-settle.ts:185-243` accumulates notices across steps including failure; `materialize-latest.ts:181-186` prepends them to the root's notices, and `update-flow.ts:615-626` emits them. Two complete-result scenarios check success and refused-settle notices. `update-swap.ts:1625-1640,1727` derives `resourcesChanged` and drops the cache; `reinstall-record.ts:101` copies the field; `reinstall-flow.ts:450-460` only removes plugin data after success. Named cache and resources tests passed independently. |
 
-**Score:** 5/5 roadmap truths verified; all seven WRN requirements satisfied. No behavior-dependent truth rests on symbol presence alone.
+**Score:** 5/5 roadmap truths verified; all seven WRN requirements and NFR-10 are satisfied. No behavior-dependent truth rests on symbol presence alone.
 
-### Deferred historical plan detail
+### Superseding decision resolution
 
-| Item | Addressed in later phase | Evidence |
+| Earlier literal | Current governing decision | Verification |
 | --- | --- | --- |
-| Plan 01-03 literally required refusal of a forced *foreign* index row with a staged name and an escaping target. The current implementation preserves a foreign row whose target is not the staged target, without touching that file. | Phase 10 roadmap success criterion 7 (XPH-02), plan 10-05, D-PL10-13 | `REQUIREMENTS.md` names forced-reinstall foreign agents-index rows in XPH-02. The later plan explicitly requires preserving or reporting one whose generated name is staged. `stage.ts:318-337` compares name and target; `stage.test.ts:1681` asserts preservation of a differing target. The owned escaping-row refusal still passes at `stage.test.ts:1815`. This later policy supersedes the old literal while maintaining NFR-10 containment and WRN-05. |
+| Plan 01-03 / D-PL1-15 broadly replaced a forced foreign-preserved row when its generated name was staged. | D-PL10-13 formally supersedes that literal: when the target is a different file, preserve the foreign row and file and report the hygiene warning. | `bridges/agents/stage.ts` matches both generated name and target before replacement, applies containment before owned-target removal, and preserves differing targets. Focused D-PL10-13 and owned-escape tests pass. This is the current WRN-05/NFR-10 behavior and is not a deferred gap. |
+| D-PL1-16 excluded dependency-move notices. | D-PL10-12 amends it to retain dependency-move warnings and MCP notices in occurrence order. | `dependency-settle.ts`, `materialize-latest.ts`, and `update-flow.ts` carry and emit those notices; the D-PL10-12 owner proof and public success/refusal scenarios pass. |
+| D-PL1-08 rendered discovery warnings only in cascades. | D-PL1-25 reverses it: cascades render both typed halves, discovery before hygiene. | `surfaceCascadeStagingDiagnostics` partitions and emits both halves. Marketplace-update/apply scenarios and the focused renderer proof pass. |
+
+The final tree was checked against D-PL1-01 through D-PL1-25, including the recorded reversal above, plus D-PL10-12 and D-PL10-13. The remaining Phase 1 decisions govern module placement, closed verbs, row/diagnostic ordering, root-only enable behavior, failure carriers, report-holder timing, cache-drop ownership, `resourcesChanged`, and feature placement; their production links and owner tests are included in the covered fingerprint.
 
 ## Required Artifacts and Wiring
 
@@ -162,18 +162,45 @@ deferred:
 | `plugin/install-outcome.ts`, `install-flow-results.ts`, `update-swap.ts`, `materialize-latest.ts`, `reinstall-flow.ts` | VERIFIED: failure capture, per-target holder, typed outcomes | Failure catches and success paths send real collected warnings; the full-result feature scenarios exercise each failed command. |
 | `marketplace/update.messaging.ts`, `marketplace/update.ts`, `reconcile/apply-outcomes.ts`, `reconcile/apply.ts`, `reconcile/notify.ts` | VERIFIED: cascade projection and row-order emission | `surfaceCascadeStagingDiagnostics` receives outcome warnings after rows and before MCP notices; both discovery and hygiene lines flow, as D-PL1-25 requires. |
 | `bridges/agents/stage.ts`, `plugin/dependency-settle.ts`, `plugin/reinstall-record.ts` | VERIFIED: index partition, notice accumulator, required outcome field | Current unit tests discriminate preserved file bytes, notice order through failure, both `resourcesChanged` values, and one cache drop. |
-| `features/plugin/staging-warnings.feature` and its step/fixture support | VERIFIED: 16 complete-result scenarios, including review regressions | Cucumber drives `/claude:plugin` through the command harness; the final unchanged-input full gate executed all 16. |
+| `features/plugin/staging-warnings.feature` and its step/fixture support | VERIFIED: 20 complete-result scenarios, including review and cross-phase regressions | Cucumber drives `/claude:plugin` through the command harness; the verifier independently executed all 20 (248 steps, 16 hooks). |
 
 The plan artifact/link checker reports stale literal matches in plans 01-01, 01-02, 01-03, 01-06, and 01-07: the warning renderer moved from `plugin/shared.ts` into `plugin/staging-diagnostics.ts`, the install flow was split into ledger/results modules, `apply` now calls `surfaceCascadeStagingDiagnostics`, and one `from:` value uses a wildcard or `::` symbol rather than a file path. Manual source and test tracing above confirms the current links; those checker mismatches are not orphaned runtime paths.
+
+## Key Link Verification
+
+| From | To | Via | Status |
+| --- | --- | --- | --- |
+| Five bridge stage modules | `shared/staging-warnings.ts` | Producer-time `discoveryWarning` / `hygieneWarning` construction | WIRED |
+| Install ledger/outcome | `plugin/staging-diagnostics.ts` | Typed warning partition and standalone success/failure result rendering | WIRED |
+| Update swap / dependency settlement | `materialize-latest.ts` and `update-flow.ts` | Per-target report holder plus ordered staging-warning/MCP-notice carriers | WIRED |
+| Marketplace update and reconcile apply outcomes | `surfaceCascadeStagingDiagnostics` | Outcome projection after rows and before MCP notices | WIRED |
+| Forced agent staging | agents index and owned target removal | Generated-name plus target-path match, followed by containment validation | WIRED |
+
+## Data-Flow Trace
+
+| Value | Real source | Consumer | Status |
+| --- | --- | --- | --- |
+| Discovery and hygiene warnings | Actual bridge prepare/commit results | Typed install/update/reinstall/enable outcomes and common renderers | FLOWING |
+| Failed-operation diagnostics | Handles prepared before the failing phase | Failure carriers, scoped diagnostic header, mode-selected notification dispatch | FLOWING |
+| Dependency MCP notices | Actual install/move settlement results | Root update outcome and final MCP-notice renderer | FLOWING |
+| Agent preservation/removal decision | Existing agents-index row plus staged generated name/target | Containment-checked commit plan | FLOWING |
+| Reinstall cache/resources state | Actual staged and prior inventories plus shared swap result | One cache drop and required reinstall outcome field | FLOWING |
+
+## Advisory (New Scope, Unevidenced)
+
+None. The complete integrated review found no new-scope concern.
 
 ## Behavioral Spot-Checks
 
 | Behavior | Command / evidence | Result |
 | --- | --- | --- |
-| Cascade two-channel order, early prepare failure, enable diagnostic | Three single-name `node --test --test-name-pattern` invocations on `staging-diagnostics`, `update-swap`, and `enable-disable` test modules | 3/3 commands passed, each with one selected test. |
-| Forced agent row, both `resourcesChanged` values, cache failure, invalid final-config notices, diagnostic row order | Five single-name invocations on `stage`, `update-swap`, `reinstall-flow`, and `install-flow-ledger` test modules | 5/5 commands passed. |
-| Whole-tree gate | Owner's `npm run check`, exit 0 at `99747f39` on Node v26.12.1; `git diff --name-only 99747f39 -- . ':(exclude,glob).planning/**/*.md'` is empty and the worktree was clean before this report | Typecheck, lint, workflow lint, Fallow, format, correspondence, features, 16 hooks, 1,124 scenarios, 11,468 steps, and 309 direct LCOV records passed on unchanged build inputs. |
-| Probe execution | No declared `probe-*.sh` path and no conventional `scripts/*/tests/probe-*.sh` | Not applicable. |
+| Phase 1 owner invariants | `node --test --test-name-pattern 'D-PL1-12|D-PL10-13|D-PL1-13|D-PL1-14|D-PL1-18|D-PL10-12|D-PL1-25'` across the six owning test modules | All six module subtests passed. This covers enable, forced-row ownership, failed install/update capture, `resourcesChanged`, dependency notices, and cascade two-channel rendering. |
+| Public Phase 1 behavior | `npx cucumber-js features/plugin/staging-warnings.feature` | 20 scenarios, 248 steps, and 16 hooks passed. |
+| Whole-tree gate | Owner's exact `npm run check`, exit 0 at merge commit `059a1edd`; no build input changed before the final Phase 1 validation/security/review/report commits | Static checks, 1,142 scenarios, 11,734 steps, and 309 direct LCOV records passed on the final merged implementation. |
+
+## Probe Execution
+
+No PLAN or SUMMARY declares a probe, and no conventional `scripts/*/tests/probe-*.sh` applies to this phase.
 
 ## Requirements Coverage
 
@@ -186,14 +213,15 @@ The plan artifact/link checker reports stale literal matches in plans 01-01, 01-
 | WRN-05 | 01-03 | SATISFIED | Truth 5; exact index/file preservation test. |
 | WRN-06 | 01-08 | SATISFIED | Truth 5; success and refused-settle complete-result scenarios; review fixes 15e12fdf and 4bcdf969 preserve notices through terminal paths. |
 | WRN-07 | 01-04 | SATISFIED | Truth 5; required fields, true/false unit cases, single-drop schedule and failure test. |
+| NFR-10 | 01-03 / project constraint | SATISFIED | Forced replacement validates owned staged targets before removal; D-PL10-13 preserves a foreign differing target. Focused preservation and escape-refusal cases pass. |
 
-No Phase 1 requirement is orphaned. Later Phase 10 changed the foreign-row handling described in the deferred table; the seven roadmap requirements remain satisfied.
+No Phase 1 requirement is orphaned. D-PL10-13 superseded the older foreign-row literal; it is part of the current contract, not a deferred item. NFR-10 remains satisfied because only owned, contained staged targets can be removed, while a foreign differing target is preserved.
 
 ## Anti-Patterns and Disconfirmation
 
 No `TBD`, `FIXME`, or `XXX` marker appeared in the covered implementation, test, or feature files. `PLACEHOLDER` matches are named fallback values in existing skill/update logic, not a user-visible stub. The report does not infer behavior from those tokens. Static checker false negatives were traced to moved modules and invalid plan `from:` syntax as described above.
 
-The counter-check focused on three paths most likely to hide a partial implementation: a warning emitted after a failed later phase, a hygiene line dropped by a cascade, and an MCP notice lost after a later dependency failure. Each has a complete-result scenario or named unit test. Review fix CR-02's root/member diagnostic sorting is exercised by the independently passing row-order case; CR-03's five temporary-tree teardowns were audited and separately tested in `01-REVIEW.md`. Security audit records 19/19 threats closed and the final code review records 0 findings; these reports support quality gates, while the code and tests above establish the goal verdict.
+The counter-check focused on three paths most likely to hide a partial implementation: a warning emitted after a failed later phase, a hygiene line dropped by a cascade, and an MCP notice lost after a later dependency failure. Each has a complete-result scenario or named owner test. The integrated Nyquist audit is COMPLIANT (20 scenarios, 248 steps, 16 owner modules), the security audit is SECURED (19/19 threats closed, none open), and the complete 32-file integrated code review is CLEAN (0 Critical, Warning, or Info findings). Those reports support the gates; the independently traced code and focused tests above establish the goal verdict.
 
 ## Human Verification Required
 
@@ -201,9 +229,9 @@ None. The phase's user-visible results and state transitions have automated chec
 
 ## Gaps Summary
 
-No current Phase 1 goal gap. D-PL1-25 reverses the older discovery-only cascade rule by a recorded user decision. Phase 10's D-PL10-12 also reverses Plan 01-08's old exclusion of dependency-move notices. The literal escaping foreign-row refusal in Plan 01-03 was superseded by Phase 10's preserve/report rule and is disclosed above.
+No current Phase 1 goal gap. D-PL1-25 reverses the older discovery-only cascade rule, D-PL10-12 amends the dependency-move notice rule, and D-PL10-13 formally supersedes Plan 01-03's broad forced-row literal. The final implementation and tests follow the governing decisions.
 
 ---
 
-_Verified: 2026-10-28T16:37:01Z_
+_Verified: 2026-10-29T02:51:45Z_
 _Verifier: gsd-verifier_
