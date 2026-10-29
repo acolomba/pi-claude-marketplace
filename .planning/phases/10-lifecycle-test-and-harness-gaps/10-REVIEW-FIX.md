@@ -1,8 +1,8 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-fixed_at: 2026-10-29T10:16:36Z
+fixed_at: 2026-10-29T10:26:58Z
 review_path: .planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md
-iteration: 15
+iteration: 16
 findings_in_scope: 1
 fixed: 1
 skipped: 0
@@ -11,9 +11,50 @@ status: all_fixed
 
 # Phase 10: Code Review Fix Report
 
-**Fixed at:** 2026-10-29T10:16:36Z
+**Fixed at:** 2026-10-29T10:26:58Z
 **Source review:** `.planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md`
-**Iteration:** 15
+**Iteration:** 16
+
+Iteration 16 reconciles the behavioral contract with iteration 15's binding
+fail-closed rule. A diagnostic containing multiple same-quote fields now
+intentionally ends at `[redacted path]`; the feature suite no longer expects
+text that the security boundary must elide.
+
+## Iteration 16 Fix
+
+### CR-01: Behavioral expectations retain intentionally elided diagnostics
+
+**Status:** fixed
+**Commit:** `8b937d1b` (`test(plugin): reconcile fail-closed diagnostics`)
+**Files modified:**
+
+- `features/plugin/staging-warnings.feature`
+- `features/plugin/update.feature`
+- `features/plugin/apply.feature`
+
+Twenty exact diagnostic rows across 17 scenarios now require the public
+fail-closed output. Fifteen scenarios are in the staging-warning feature; the
+dependency-warning scenarios in plugin update and plugin apply contribute one
+each. The generic result-comparison step, stand-ins, and fixtures are
+unchanged. Rows that also carry a separately emitted staging warning retain
+that text exactly as the command presents it.
+
+These scenarios remain regression-sensitive to the production fix. The
+pre-`d3f53c6d` implementation emitted the detailed duplicate-agent or
+duplicate-skill suffixes that the rows previously required. The changed rows
+now require the shorter `[redacted path]` value, and the unchanged table step
+compares the complete ordered result, so the old implementation fails every
+one of these expectations. Over-redaction is binding here because any second
+matching quote makes the absolute field ambiguous; preserving later text
+would revive the suffix-disclosure class closed by CR-01.
+
+The initial complete run reproduced 17 failures out of 1,144 scenarios. The
+focused GREEN run passes all 101 scenarios and 1,457 steps in the three
+changed files. The final complete Cucumber run passes all 1,144 scenarios and
+11,758 steps, and `check:features`, the required fixers, and the normal commit
+hook pass. These checks ran in the existing Session A worktree because
+`workflow.use_worktrees` was false for the fixer. The parent workflow owns the
+fresh full `npm run check` gate.
 
 Iteration 15 replaces the remaining quote-chain interpretation with the
 binding fail-closed rule. Outside the separately handled exact Node errno
