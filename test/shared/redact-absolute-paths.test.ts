@@ -253,6 +253,21 @@ describe("redactAbsolutePaths", () => {
       expected: "read 'secret.json",
     },
     {
+      name: "bounds an unclosed POSIX path before slash-bearing prose",
+      input: "open '/tmp/private/file.json failed; see docs/errors",
+      expected: "open 'file.json failed; see docs/errors",
+    },
+    {
+      name: "bounds an unclosed drive path before slash-bearing prose",
+      input: String.raw`open 'C:\private\file.json failed; see docs/errors`,
+      expected: "open 'file.json failed; see docs/errors",
+    },
+    {
+      name: "bounds an unclosed UNC path before slash-bearing prose",
+      input: String.raw`open '\\server\private\file.json failed; see docs/errors`,
+      expected: "open 'file.json failed; see docs/errors",
+    },
+    {
       name: "preserves a single-segment JSON pointer",
       input: "invalid /schemaVersion detail",
       expected: "invalid /schemaVersion detail",
@@ -375,6 +390,22 @@ describe("redactAbsolutePaths", () => {
     });
   }
 
+  test("bounds an unclosed path before a later quoted value and URL", () => {
+    // arrange
+    const input =
+      "open '/tmp/private/file.json failed; value 'x' docs/errors " +
+      "https://example.test/docs/errors";
+
+    // act
+    const text = redactAbsolutePaths(input);
+
+    // assert
+    assert.strictEqual(
+      text,
+      "open 'file.json failed; value 'x' docs/errors https://example.test/docs/errors",
+    );
+  });
+
   test("repeated redaction is idempotent", () => {
     const input = String.raw`from /srv/private/a.json to C:\Users\alice\b.json`;
 
@@ -483,6 +514,23 @@ describe("redactCauseChain", () => {
 
     // assert
     assert.strictEqual(trailer, "cause: open 'secret.json' -> open \"secret.json\"");
+  });
+
+  test("bounds unclosed cause paths before slash-bearing prose", () => {
+    // arrange
+    const failure = new Error("open '/tmp/private/file.json failed; see docs/errors", {
+      cause: new Error("open 'C:\\private\\file.json failed; value 'x' docs/errors"),
+    });
+
+    // act
+    const trailer = causeChainTrailer(redactCauseChain(failure));
+
+    // assert
+    assert.strictEqual(
+      trailer,
+      "cause: open 'file.json failed; see docs/errors -> " +
+        "open 'file.json failed; value 'x' docs/errors",
+    );
   });
 
   test("redacts every quoted cause and structured leaked path containing spaces or UNC prefixes", () => {

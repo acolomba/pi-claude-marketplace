@@ -1202,6 +1202,35 @@ describe("presentNotification", () => {
     });
   });
 
+  test("bounds an unclosed path before prose in a presented prune cause", () => {
+    // arrange
+    const message = {
+      kind: "prune-committed-warning",
+      scope: "project",
+      cause: new Error("open '/tmp/private/file.json failed; see docs/errors"),
+    } satisfies PruneCommittedWarningMessage;
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "prune-committed-warning",
+      envelope: {
+        severity: "warning",
+        summary: "Prune committed; finalization needs attention.",
+        needsReload: true,
+        needsApply: false,
+        noOp: false,
+      },
+      scope: "project",
+      cause: {
+        causeChain: ["open 'file.json failed; see docs/errors"],
+        truncated: false,
+      },
+    });
+  });
+
   test("presents a prune warning whose cause is absent with no cause member", () => {
     // arrange
     const message = { kind: "prune-committed-warning", scope: "user" };

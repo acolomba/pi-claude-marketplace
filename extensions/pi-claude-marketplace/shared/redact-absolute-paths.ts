@@ -72,7 +72,7 @@ function isQuotedPathBoundary(character: string | undefined): boolean {
   return character === undefined || /[\s,;:.)\]}]/u.test(character);
 }
 
-function quotedPathEnd(text: string, quote: string, fromIndex: number): number {
+function quotedPathEnd(text: string, quote: string, fromIndex: number): number | undefined {
   const quoteIndices: number[] = [];
   let quoteIndex = text.indexOf(quote, fromIndex);
   while (quoteIndex >= 0) {
@@ -109,6 +109,16 @@ function quotedPathEnd(text: string, quote: string, fromIndex: number): number {
     }
   }
 
+  return undefined;
+}
+
+function unclosedQuotedPathEnd(text: string, fromIndex: number): number {
+  for (let index = fromIndex; index < text.length; index++) {
+    if (/\s/u.test(text.charAt(index))) {
+      return index;
+    }
+  }
+
   return text.length;
 }
 
@@ -119,10 +129,11 @@ function redactQuotedAbsolutePaths(text: string): string {
   let match = opening.exec(text);
   while (match !== null) {
     const quote = text.charAt(match.index);
-    const end = quotedPathEnd(text, quote, opening.lastIndex);
+    const delimiter = quotedPathEnd(text, quote, opening.lastIndex);
+    const end = delimiter ?? unclosedQuotedPathEnd(text, opening.lastIndex);
     const candidate = text.slice(match.index + 1, end);
     if (/^(?:[A-Za-z]:[\\/]|\\\\|\/).*[/\\][^/\\]+$/s.test(candidate)) {
-      const closingQuote = end < text.length ? quote : "";
+      const closingQuote = delimiter === undefined ? "" : quote;
       redacted +=
         text.slice(copiedThrough, match.index) + quote + pathBasename(candidate) + closingQuote;
       copiedThrough = end + closingQuote.length;
