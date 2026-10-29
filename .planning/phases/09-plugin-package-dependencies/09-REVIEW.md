@@ -1,9 +1,9 @@
 ---
 phase: 09-plugin-package-dependencies
-reviewed: 2026-10-29T05:51:18Z
+reviewed: 2026-10-29T06:12:03Z
 depth: standard
-reviewed_commit: 1ef2b0ad63b81c679f258da82f349f3225264178
-source_commit: 1ef2b0ad63b81c679f258da82f349f3225264178
+reviewed_commit: 9b63fb96c21a32a785bb28b2a08b155246f1c4d9
+source_commit: 9b63fb96c21a32a785bb28b2a08b155246f1c4d9
 review_scope_complete: true
 re_review: true
 files_reviewed: 56
@@ -73,76 +73,64 @@ status: issues_found
 gate:
   command: npm run check
   exit_code: 0
-  source_commit: f81d377488a5358f2d77c09b4c2de1014650d848
+  source_commit: 9b63fb96c21a32a785bb28b2a08b155246f1c4d9
   node: v26.12.1
-  reused: true
-  scenarios: 1143
-  steps: 11742
+  reused: false
+  scenarios: 1144
+  steps: 11758
   coverage_records: 309
 ---
 
 # Phase 9: Code Review Report
 
-**Reviewed:** 2026-10-29T05:51:18Z
+**Reviewed:** 2026-10-29T06:12:03Z
 **Depth:** standard, with cross-module traces of the package lifecycle
 **Files Reviewed:** 56
 **Status:** issues_found
 
 ## Summary
 
-The complete prior Phase 9 scope was reviewed against the merged tree, together with the Phase 8 background-settlement guard and the Phase 10 dependency-ledger integration that now drives update settlement. The seven findings from the preceding review remain closed. The Phase 8 wrapper still calls package settlement exactly once on the live path and zero times after stop, abort, or autoupdate opt-out. The Phase 6 state-path grammar remains narrow and does not hide or leak package diagnostics.
+The complete 56-file Phase 9 scope was reviewed against the merged tree, including the Phase 6 redaction integration, the Phase 8 background-settlement guard, and the Phase 10 dependency-ledger integration. Fifty-one files are byte-identical to the prior complete review; all five files changed by `16e4c849` were read in full and their call paths were traced through settlement, materialization, update composition, and rendering. The seven findings from the preceding review remain closed. The Phase 8 wrapper still calls package settlement exactly once on the live path and zero times after stop, abort, or autoupdate opt-out. The Phase 6 state-path grammar remains narrow and does not hide or leak package diagnostics.
 
-One current blocker remains: package warnings raised while an update installs or re-enables a newly required dependency are discarded before the update outcome reaches any renderer. The fresh gate is therefore green while an untested user-visible failure path is wrong.
+The transport half of the latest CR-01 fix works: first-run and planned materialization warnings survive settlement, preserve order, render once, and do not fail the requester or dependency lifecycle. One user-visible ownership blocker remains. The implementation flattens every newly materialized member's warning into the requesting plugin's warning array, so a package failure produced by dependency `zcore` is rendered under `Plugin "widget" ... updated`. That contradicts D-PL10-16's per-member diagnostic contract and the preceding review's explicit requirement that the note appear on the dependency that produced it.
 
 The evaluation-scope resolver reported `degraded` because this integrated branch has no reachable task-commit manifest. This review used the prior explicit 52-file Phase 9 scope and added the four current Phase 8/10 integration inputs named in `files_reviewed_list`.
 
 ## Narrative Findings (AI reviewer)
 
-- **BLOCKER CR-01:** Update dependency settlement drops fresh dependency package diagnostics.
+- **BLOCKER CR-01:** Fresh dependency package diagnostics are attributed to the requester instead of the dependency.
 
 No structural pre-pass payload was supplied.
 
 ## Critical Issues
 
-### CR-01: Update dependency settlement drops fresh dependency package diagnostics
+### CR-01: Fresh dependency package diagnostics are attributed to the requester instead of the dependency
 
 **Files:**
 
 - `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-dependency-ledger.ts:583-589`
-- `extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts:159-162`
-- `extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts:289-295`
+- `extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts:170-175`
+- `extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:566-575`
+- `features/plugin/package-dependencies.feature:471-483`
 
-**Issue:** `recordMaterializedMember` retains every installed dependency's discovery warnings, including `Plugin dependency install failed (...)`, but `saveInstallDependencyPlanClosure` projects only rows and MCP notices from those members. Even if a ledger seam supplies the declared `SettleCascadeRun.stagingWarnings`, both consumers discard them: `runStep` hard-codes `warnings: []` for a planned materialize step, and the first-run success arm omits `first.stagingWarnings`.
+**Issue:** `saveInstallDependencyPlanClosure` uses `flatMap` to turn all member warnings into one unowned `stagingWarnings` array. `dependency-settle.ts` correctly preserves that array through both the first-run and planned-materialization paths, but `settleWarningsFirst` then prepends it to the requesting update's own warnings. `updateStagingDiagnostic` can name only `outcome.name`, so it renders every dependency warning under the requester.
 
-This affects the ordinary no-move path and the planned-closure path. When an update, marketplace update, or background autoupdate installs or re-enables a newly required dependency and that dependency's package install fails softly, the dependency remains installed without its packages and the user receives no warning. That violates PKD-02 and the Phase 9 exact-once warning contract.
+The new behavioral scenario demonstrates the defect rather than preventing it. `zcore` owns the failing package install and has the dependency row at line 483, but line 479 expects `Plugin "widget" [project] updated`. This differs from the established D-PL10-16 behavior in `features/plugin/install.feature`, where a cascade member's package note is rendered under that member's own diagnostic. It also contradicts the preceding CR-01 remediation text, which required the diagnostic to appear exactly once on the dependency.
 
-The loss is directly reproducible without a test double outside the public contract:
+The warning is no longer lost and is not duplicated. The requester still updates successfully, `zcore` remains installed successfully without its packages, and the registry interaction is correct. The blocker is ownership: direct update, marketplace update/autoupdate, and any other consumer of this settlement cannot tell which newly installed dependency produced each warning after the flattening boundary.
 
-```text
-settleDependencies({
-  firstRun: async () => ({
-    kind: "installed",
-    rows: [],
-    stagingWarnings: [{ kind: "discovery", message: "Plugin dependency install failed (npm): E404" }]
-  }),
-  ...
-})
-// actual: { kind: "settled", rows: [] }
-// expected: the same settlement with stagingWarnings preserved
-```
-
-**Fix:** Project each materialized member's `discoveryWarnings` into the closure's `stagingWarnings`, then preserve `run.stagingWarnings` in `runStep` and `first.stagingWarnings` in `settleDependencies`. Add a focused RED/GREEN case for both first-run and planned materialization, plus a user-visible update or marketplace/autoupdate regression where a newly required dependency's package install fails and its diagnostic appears exactly once on that dependency.
+**Fix:** Preserve member identity with each settlement diagnostic instead of flattening member warnings into the requester's `stagingWarnings`. Carry ordered per-member diagnostics (plugin, scope, verb, warnings) alongside the dependency rows through `SettleCascadeRun` and `UpdateDependencySettlement`; render those diagnostics after the corresponding cascade rows; keep the requester's own warnings in its existing outcome array. Change the behavioral regression to expect `Plugin "zcore" [project] installed; ...` exactly once, while retaining the complete `widget` and `zcore` success rows, registry request, records, and no-package assertion.
 
 ## Prior finding closure
 
 All seven prior findings remain closed: timed-out process-tree escalation, disabled-revision package invalidation, locked uninstall cleanup, combined move/enable diagnostics, moved-dependency warning ownership, the exact package-runner lint seam, and incremental UTF-8 decoding.
 
-The current focused evidence otherwise remains green: 1,042 owner/integration tests, 20 package-dependency scenarios with 281 steps, and five direct-coverage pairs at 100%. The exact merged-tree gate at `f81d3774` passed 1,143 Cucumber scenarios, 11,742 steps, and 309 LCOV records. These checks do not cover CR-01's fresh-dependency warning projection.
+The current focused evidence is green: 27 dependency-settlement tests, 14 install-ledger tests, both changed direct-coverage pairs at 100%, and the exact new Cucumber scenario at 1 scenario / 16 steps. The exact merged-tree gate at `9b63fb96` passed 1,144 Cucumber scenarios, 11,758 steps, and 309 LCOV records. These checks prove warning transport and lifecycle success, but the behavioral scenario currently encodes the incorrect owner.
 
 No source or test file was modified by this review, and no commit was made.
 
 ---
 
-_Reviewed: 2026-10-29T05:51:18Z_
+_Reviewed: 2026-10-29T06:12:03Z_
 _Reviewer: gsd-code-reviewer_
 _Depth: standard_
