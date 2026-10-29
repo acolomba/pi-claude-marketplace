@@ -1,8 +1,8 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-fixed_at: 2026-10-29T08:52:46Z
+fixed_at: 2026-10-29T09:18:29Z
 review_path: .planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md
-iteration: 11
+iteration: 12
 findings_in_scope: 2
 fixed: 2
 skipped: 0
@@ -11,13 +11,68 @@ status: all_fixed
 
 # Phase 10: Code Review Fix Report
 
-**Fixed at:** 2026-10-29T08:52:46Z
+**Fixed at:** 2026-10-29T09:18:29Z
 **Source review:** `.planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md`
-**Iteration:** 11
+**Iteration:** 12
 
-Iteration 11 fixes the complete boundary set after embedded quotes and bounds
-unclosed paths before later diagnostic prose. The package
+Iteration 12 fails closed when an unmatched path field has no trustworthy
+extent. It also makes known closed-path diagnostics locally monotonic, so
+unrelated malformed quotes cannot reopen an earlier delimiter. The package
 manager settlement fix and the earlier integration fixes remain closed.
+
+## Iteration 12 Fixes
+
+### CR-01: The unclosed-path fallback leaks the path or consumes prose
+
+**Status:** fixed: requires human verification
+**Commit:** `0cdbdf52` (`fix(redaction): fail closed on unmatched paths`)
+**Files modified:**
+
+- `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`
+- `test/shared/redact-absolute-paths.test.ts`
+- `test/shared/notification-present.test.ts`
+
+An unmatched quoted absolute field now becomes the stable
+`[redacted path]` placeholder. The redactor preserves text only after the
+narrow, recognized ` failed; ` or `;see=` diagnostic separators. If neither
+separator is present, it elides the whole ambiguous remainder. It no longer
+guesses that the first whitespace or message end is a safe path boundary.
+
+The RED run failed 13 cases through utility, cause-chain, and public
+presentation boundaries. The cases cover POSIX, drive, and UNC forms,
+internal ASCII and Unicode whitespace, a no-space `;see=docs/errors` suffix,
+URLs, both quote types, and the earliest recognized separator. The GREEN
+focused owners pass 287 tests. Both direct pairs pass 100% line, function,
+and branch coverage. Type checking, Fallow guard and audit, the required
+fixers, and the normal commit hook pass.
+
+### CR-02: A later unmatched quote changes an already closed path
+
+**Status:** fixed: requires human verification
+**Commit:** `07f2f310` (`fix(redaction): keep path closure local`)
+**Files modified:**
+
+- `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`
+- `test/shared/redact-absolute-paths.test.ts`
+- `test/shared/notification-present.test.ts`
+
+The redactor now recognizes the known ` failed; see ` and ` docs/errors `
+diagnostic separators next to the candidate closing quote before it consults
+the later quote-balance fallback. That local decision is monotonic: a bare
+unmatched quote, an unmatched quoted token, or a balanced relative quoted
+value followed by another malformed fragment cannot reopen the closed path.
+The existing multi-embedded-quote and balanced later-value matrices retain
+their prior behavior.
+
+The RED run failed eight cases: six utility cases across POSIX, drive, UNC,
+single-quoted, and double-quoted forms, plus one cause-chain and one public
+presentation case. The final GREEN focused owners pass 295 tests: 249 in the
+redactor owner and 46 in notification presentation. Both direct pairs pass
+100% line, function, and branch coverage. Type checking, Prettier, ESLint,
+Fallow guard and audit, and the normal commit hook pass. The first hook run
+rejected a new standalone test loop for raising cognitive complexity. Folding
+those rows into the existing table removed the added branch; the final hook
+then passed, including `npm run check:commit`.
 
 ## Iteration 11 Fixes
 
@@ -330,6 +385,15 @@ with Node `v26.12.1`.
 
 | Check | Result |
 | --- | --- |
+| Iteration 12 CR-01 focused RED | Failed 13 cases across utility, cause, and public-presentation boundaries |
+| Iteration 12 CR-02 focused RED | Failed 8 cases across utility, cause, and public-presentation boundaries |
+| Iteration 12 final focused owners | Passed: 249 redactor + 46 notification-presentation tests |
+| Iteration 12 redactor direct coverage | Passed: 100% line, function, and branch coverage |
+| Iteration 12 notification-presentation direct coverage | Passed: 100% line, function, and branch coverage |
+| Iteration 12 type checking | Passed |
+| Iteration 12 Fallow guard and audit | Passed with no final findings |
+| Iteration 12 required pre-commit fixers | Passed for both commits |
+| Iteration 12 commit hooks | Passed, including `npm run check:commit`, for both commits |
 | Iteration 11 CR-01 focused RED | Failed 56 cases across utility, cause, and public-presentation boundaries |
 | Iteration 11 CR-02 focused RED | Failed 5 cases across utility, cause, and public-presentation boundaries |
 | Final focused owners | Passed: 281/281 |
@@ -382,6 +446,6 @@ re-review, and goal verification on the unchanged integrated tree.
 
 ---
 
-_Fixed: 2026-10-29T08:52:46Z_
+_Fixed: 2026-10-29T09:18:29Z_
 _Fixer: the agent (gsd-code-fixer)_
-_Iteration: 11_
+_Iteration: 12_
