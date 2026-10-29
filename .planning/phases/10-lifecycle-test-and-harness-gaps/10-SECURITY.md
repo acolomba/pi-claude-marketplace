@@ -5,6 +5,7 @@ status: verified
 threats_open: 0
 asvs_level: 1
 created: "2026-10-27"
+audited_commit: 3fde60a7
 ---
 
 # Phase 10 — Security
@@ -121,6 +122,13 @@ owner passed 41/41, D-PL10-13 passed 1/1, and the strict coverage ledger passed
 scenarios, 11,758 steps, and 309 direct LCOV records. No unregistered or
 reopened threat was found.
 
+The final-head audit traced exact HEAD `3fde60a7`. All 19 authored rows remain
+closed: 12 mitigations and seven documented plan-qualified accepted risks.
+The strict coverage checker passes 56/56 rows, Nyquist is COMPLIANT for all
+seven requirements and 28 truths, and the unchanged-input full gate is green
+with 1,145 scenarios, 11,777 steps, and 309 LCOV records. The final complete
+review is CLEAN across 130 files. No unregistered or open threat remains.
+
 ---
 
 ## Sign-Off
@@ -130,4 +138,4 @@ reopened threat was found.
 - [x] `threats_open: 0` confirmed.
 - [x] `status: verified` set in frontmatter.
 
-**Approval:** verified 2026-10-29 after final integrated audit at `f310906d`.
+**Approval:** verified 2026-10-29 after final-head audit at `3fde60a7`.
