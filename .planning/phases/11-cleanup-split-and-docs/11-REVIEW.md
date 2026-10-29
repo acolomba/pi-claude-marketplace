@@ -1,7 +1,7 @@
 ---
 phase: 11-cleanup-split-and-docs
-reviewed: 2026-10-28T12:38:00Z
-depth: deep
+reviewed: 2026-10-29T14:19:41Z
+depth: standard
 files_reviewed: 70
 files_reviewed_list:
   - .pre-commit-config.yaml
@@ -84,20 +84,18 @@ status: clean
 
 # Phase 11: Code Review Report
 
-**Reviewed:** 2026-10-28T12:38:00Z
-**Depth:** deep
+**Reviewed:** 2026-10-29T14:19:41Z
+**Depth:** standard
 **Files Reviewed:** 70
 **Status:** clean
 
 ## Summary
 
-The review covered the exact union of Phase 11 implementation commits through `a93b3699`, including the six Plan 11-13 source/test owners and the filesystem-capability remediation at `4cceceb2`. It traced public API stability, recursive install re-entry, transaction ordering, dependency moves, rollback and deferred-pin projection, package containment, and the typed removal capability. The documentation-truth audit also covered all 13 plan/summary pairs, `11-SECURITY.md`, `11-SECURITY-FIX.md`, `11-VALIDATION.md`, `.planning/{PROJECT,BACKLOG,REQUIREMENTS}.md`, and `.planning/codebase/ARCHITECTURE.md`; planning artifacts are excluded from the formal source-file count above.
+The review covered the complete retained 70-file Phase 11 implementation, test, behavior, hook-policy, and reader-documentation scope. Forty-five files are byte-identical to the previously reviewed `a93b3699` baseline. The remaining 25 files were re-read against the integrated `ff8892eb` executable tree, including their changed call paths and exact regression assertions. The documentation-truth audit also covered all 13 plan/summary pairs and the current validation and review artifacts; planning records are excluded from the formal source-file count above.
 
-The public `install-flow.ts` root still exports the same three factories and four contract types and binds the same five-operation planning port. Recursive re-entry carries the same `InstallLedgerComposition`, and missing-dependency, preview, initial/materialized cascade, and update-settlement paths receive the root-owned removal capability. The remediation binds data-directory creation to the transaction's own `pluginDataDir`; cascade and result owners do not acquire raw filesystem removal authority. Dependency-ledger imports the main ledger in one direction only, so the split adds no runtime or type-only cycle. The architecture map retains the child-process, hosted-manifest fetch, and path-containment chokepoints.
+The merged changes preserve the Phase 11 ownership split. The public install-flow root still binds the same five-operation planning port; exact clone candidates now flow through preview, dependency planning, and move materialization before a fresh-lock sweep. Dependency MCP notices and per-member staging diagnostics survive recursive install re-entry, failures, and update settlement. Reconcile's deferred move rows retain enable rollback details, source replacements keep their pending add header, hosted marketplace replacement protects the old managed catalog, and import diagnostics redact absolute paths before reaching either text or structured output. No changed test weakens an assertion, imports another test owner, reaches a live service, or leaves process-global or filesystem state behind.
 
-Fallow's final review brief passed with no introduced dead-code, complexity, duplication, boundary, or cycle findings. Fallow architecture reported zero issues, guard showed the expected rule coverage, and explicit traces proved there is no reverse ledger-to-dependency-ledger edge. The exact build-input tree at `a93b3699` passed the full `npm run check` gate with 1,120 Cucumber scenarios, 11,411 steps, and 309 direct-coverage records under Node `26.12.1`. The later commits through `bafb8af3` change planning records only, so that evidence is reusable under the local-verification policy. All six install-flow pairs also passed 100% direct coverage in the refreshed validation. CodeGraph was attempted first but could not open its database.
-
-WR-01 is closed. The ledger header names its current file, its sequencing comment points to the current cascade-context and result owners, and the detached WARN-01 block is gone. The correction changes no executable code, export, type, or call path.
+The refreshed Nyquist audit is COMPLIANT for 4/4 requirements and all 13 plan groups. The exact executable tree at `ff8892eb` passed `npm run check`: all static checks, 1,145 Cucumber scenarios, 11,777 steps, 16 hook tests, and 309 direct-coverage records. The current `46b6c8bf` delta is planning-only, so the executable evidence remains reusable under the repository's local-verification policy. CodeGraph was attempted first but could not open its database; direct source, diff, caller, and owner-test traces supplied the review context.
 
 ## Narrative Findings (AI reviewer)
 
@@ -105,6 +103,6 @@ No critical issues, warnings, or informational findings remain.
 
 ---
 
-_Reviewed: 2026-10-28T12:38:00Z_
+_Reviewed: 2026-10-29T14:19:41Z_
 _Reviewer: the agent (gsd-code-reviewer)_
-_Depth: deep_
+_Depth: standard_
