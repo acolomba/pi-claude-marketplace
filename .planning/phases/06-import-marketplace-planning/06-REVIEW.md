@@ -1,10 +1,10 @@
 ---
 phase: 06-import-marketplace-planning
-reviewed: 2026-10-29T04:46:44Z
-reviewed_commit: 2072cdcde7231f811c810a3e03d27db3b8e16f67
+reviewed: 2026-10-29T13:18:49Z
+reviewed_commit: d08f3751d9d5cb61f4379a19e34934971116c927
 depth: standard
 review_scope_complete: true
-scope_status: explicit
+scope_status: retained-plus-final-head-delta
 files_reviewed: 39
 files_reviewed_list:
   - .agents/skills/cucumber/rules/features.md
@@ -56,9 +56,9 @@ status: clean
 
 # Phase 6: Code Review Report
 
-**Reviewed:** 2026-10-29T04:46:44Z
+**Reviewed:** 2026-10-29T13:18:49Z
 
-**Commit:** `2072cdcde7231f811c810a3e03d27db3b8e16f67`
+**Commit:** `d08f3751d9d5cb61f4379a19e34934971116c927`
 
 **Depth:** standard
 
@@ -68,61 +68,52 @@ status: clean
 
 ## Summary
 
-The final post-fix review found no current blocker, warning, or informational
-finding in the complete explicit Phase 6 scope. CR-01 is closed for the state
-read and config-write diagnostic boundaries, including the production held and
-compromised state-lock error grammars that embed a path in parentheses.
+The final-head review found no current blocker, warning, or informational
+finding in the complete 39-file Phase 6 scope. All reviewed files meet the
+project's correctness, security, TypeScript, unit-test, and Cucumber rules.
 
-The preceding complete 39-file review was at `f5f89da1`. Between that review
-and this one, only `redact-absolute-paths.ts`, its paired test, and the import
-execute test changed. The other 36 scoped files are byte-identical. This review
-rechecked the full scope and completely reviewed those three current deltas,
-their call path through `writeBatchedConfigForScope`,
-`surfaceImportDiagnostics`, and `notifyDiagnostic`, and their shared-export
-impact on the other redactor consumers.
+The prior complete clean review was at `2072cdc`. Thirty-one scoped files are
+byte-identical to that reviewed tree. This review retained that complete-file
+evidence and adversarially re-reviewed all eight later-changed scoped files:
+the dependency-ledger diagnostic carrier, the shared path redactor, the apply
+feature, and their five affected owner modules. It also traced the current
+`InstallPluginOutcome` boundary through import dispatch, rollback-partial row
+projection, config-write diagnostic redaction, and apply notification output.
+The later dependency-warning and fail-closed redaction work does not reopen a
+Phase 6 failure or disclosure path.
 
 ## Narrative Findings (AI reviewer)
 
 No current BLOCKER or WARNING findings. No informational findings.
 
-## Closure of CR-01
+## Prior Finding Closure
 
-- `redactAbsolutePaths` now recognizes the exact messages constructed by
-  `StateLockHeldError` and `StateLockCompromisedError`. The expressions are
-  bounded by the full product-owned prefix and suffix and require an absolute
-  path ending in `/.state-lock`; they do not introduce a broad parenthesis
-  matcher.
-- Direct probes over both scopes and POSIX, drive-letter, UNC, and extended
-  path forms produced only `.state-lock`. Reapplying the redactor was
-  idempotent in every case.
-- The real lock-race owner test uses a spaced case-owned root and compares the
-  complete returned diagnostic and TUI notification. The JSON and RPC cases
-  compare the exact diagnostic payload, require the exact entry count, and
-  scan the complete result and capture for the unique leaked suffix. `print`
-  shares the same resolved text branch as `tui`; both structured modes consume
-  the same already-redacted diagnostic lines.
-- The shared redactor table independently covers both held and compromised
-  production messages plus the unquoted failed-write grammar. The earlier
-  state-read Cucumber scenario continues to assert that no absolute sandbox
-  path reaches the public command result.
+- CR-01 remains closed. State-read, config-write, held-lock, and compromised-
+  lock diagnostics redact absolute POSIX, drive, UNC, and extended paths before
+  returned data or TUI, print, JSON, or RPC output.
+- The final fail-closed quoted-path parser strengthens this boundary. Ambiguous,
+  unmatched, surplus, and separator-adjacent quote chains redact the entire
+  remainder rather than exposing a suffix. Exact Node errno two-path grammar
+  remains separately bounded and requires one arrow.
+- The current dependency-ledger carrier adds only typed staging diagnostics to
+  the install/update settlement path. Phase 6's import and apply rollback rows,
+  causes, ownership, and ordering remain unchanged.
 
 ## Verification Evidence
 
-- Fix commits: `2d258ae7` and `b58cdd6e`.
-- Fresh exact combined gate at the reviewed implementation tree: 1,143/1,143
-  scenarios, 11,742/11,742 steps, and 309 merged direct-coverage records.
-- Owner suites after the final fix: 114 import execution tests and 45 shared
-  redactor tests; both changed source/test pairs reached 100% direct coverage.
-- Focused Cucumber: 2 scenarios and 20 steps passed.
-- Fallow changed-code review reported no dead-code, complexity, or duplication
-  finding. Its public-contract note was checked against the 20 shared-redactor
-  consumers; the new preprocessing changes only the exact state-lock messages
-  and preserves every other path through the existing redactor.
+- Nyquist is COMPLIANT for MIM-01 through MIM-04: eight owner modules passed;
+  15 public scenarios, 177 steps, and 16 hooks passed.
+- The exact unchanged-input combined gate at executable head `be0de0c3` is
+  green: 1,145 scenarios, 11,777 steps, and 309 merged direct-coverage records.
+  `git diff --quiet be0de0c3 -- . ':(exclude,glob).planning/**/*.md'` exits 0
+  at the reviewed head.
+- The complete retained scope contains no committed `.only`, `.skip`, `.todo`,
+  debug artifact, unhandled empty catch, or unsupported TypeScript assertion.
 - No source, test, state, security, or configuration file was modified by this
   reviewer.
 
 ---
 
-_Reviewed: 2026-10-29T04:46:44Z_
+_Reviewed: 2026-10-29T13:18:49Z_
 _Reviewer: gsd-code-reviewer_
 _Depth: standard_
