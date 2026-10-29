@@ -254,7 +254,7 @@ describe("runDependencySteps", () => {
       ]),
       [
         ["helper@mp", "installed", undefined],
-        ["lib@mp", "failed", "EACCES: permission denied, copyfile 'notes.md'"],
+        ["lib@mp", "failed", "EACCES: permission denied, copyfile '[redacted path]'"],
       ],
     );
   });

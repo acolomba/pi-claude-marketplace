@@ -872,7 +872,7 @@ describe("failedMoveRow", () => {
       name: "zcore@mp",
       version: "1.0.0",
       reasons: [],
-      cause: new Error("EACCES: permission denied, copyfile 'notes.md'"),
+      cause: new Error("EACCES: permission denied, copyfile '[redacted path]'"),
       severity: "error",
     });
   });

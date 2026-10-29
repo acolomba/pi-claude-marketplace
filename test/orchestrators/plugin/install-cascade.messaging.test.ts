@@ -1728,7 +1728,7 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ formatter@tools (failed)",
-        "    cause: EACCES: permission denied, copyfile 'notes.md' -> open 'notes.md'",
+        "    cause: EACCES: permission denied, copyfile '[redacted path]' -> open 'notes.md'",
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
