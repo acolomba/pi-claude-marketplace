@@ -24,10 +24,10 @@
 // The cascade, the plan and the steps are ports install's flow binds, so
 // this module holds only the order.
 //
-// D-PL1-16: a settle reports the MCP config notices of the dependencies its
-// cascades install, in step order, on both of its arms, so an update can show
-// them ahead of its own. The MCP notices and staging warnings of a dependency
-// move are not reported; that is deferred (D-PL1-16).
+// D-PL1-16 / D-PL10-12: planned steps report closure-slice MCP config notices
+// and dependency-move MCP config notices and staging warnings in step order,
+// on success and failure. A move row owns its package note, so
+// `runDependencyMove` filters that note from the forwarded staging warnings.
 
 import { DependencyCascadeError, rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
 import { mcpConfigNoticesMember } from "../marketplace/shared.ts";
