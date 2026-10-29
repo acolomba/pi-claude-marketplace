@@ -5,6 +5,7 @@ status: verified
 threats_open: 0
 asvs_level: 1
 created: "2026-10-28"
+audited_commit: ff8892eb
 ---
 
 # Phase 11 — Security
@@ -94,8 +95,19 @@ None. Plan 11-13 removed every install-flow large-file exception, which resolved
 |------------|---------------|--------|------|--------|
 | 2026-10-28 | 24 | 24 | 0 | GSD security auditor, ASVS L1 |
 | 2026-10-28 | 27 | 27 | 0 | GSD security auditor, ASVS L1 |
+| 2026-10-29 | 27 | 27 | 0 | GSD final integrated security auditor, ASVS L1 |
 
 The final audit verified the remediation at `4cceceb2` and the backlog evidence at `91f46fe7`. The exact build-input tree passed 1,120 scenarios, 11,411 steps, and 309 direct LCOV records. Four focused security architecture suites passed. Every install-flow source meets the size limits, the hook has no install-flow exception, and the import graph has no cycle.
+
+The final integrated audit at executable head `ff8892eb` reverified all 27
+plan-qualified rows: 16 mitigations and eleven documented accepted risks.
+Plan 11-13 keeps the exact five-operation planning port, transaction and
+rollback ownership, package ordering and containment, and no raw authority in
+the extracted siblings. The historical `hook-policy-exception` is resolved.
+Nyquist is COMPLIANT 4/4 requirements and 13/13 plan groups. The exact full
+gate is green with 1,145 scenarios, 11,777 steps, 16 hooks, and 309 LCOV
+records. The complete integrated review is CLEAN across 70 files. No
+unregistered flag or open threat remains.
 
 ---
 
@@ -106,4 +118,4 @@ The final audit verified the remediation at `4cceceb2` and the backlog evidence 
 - [x] `threats_open: 0` confirmed.
 - [x] `status: verified` set in frontmatter.
 
-**Approval:** verified 2026-10-28.
+**Approval:** verified 2026-10-29 at executable head `ff8892eb`.
