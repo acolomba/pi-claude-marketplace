@@ -17,7 +17,7 @@ threats_open_nonblocking: 0
 
 SECURED: all 15 declared mitigations are verified, and all six accepted dispositions have distinct recorded entries. SEC-08-01 / T-08-17 is closed by the distinct-name behavioral scenario, its recorded mutant failure, and the existing exact-entry owner assertion.
 
-Audited integrated HEAD: `076cb060e4168e9aae9ab84ea5c76f738e00642b`.
+Audited integrated executable HEAD: `be0de0c3`.
 The final merged-tree audit includes the later Phase 9/10 changes and the Phase 6
 path-redactor changes. The exact combined gate is green with 1,143 scenarios,
 11,742 steps, and 309 LCOV records.
@@ -155,6 +155,7 @@ The current LCOV artifact was inspected:
 | 2026-10-28 final integrated recheck at 9b27a809 | 21 | 15/15 | 6 | 0 | 0 |
 | 2026-10-29 final merged-tree ASVS L1 re-audit at c12e9a1f | 21 | 15/15 | 6 | 0 | 0 |
 | 2026-10-29 final post-fix ASVS L1 re-audit at 076cb060 | 21 | 15/15 | 6 | 0 | 0 |
+| 2026-10-29 final-head ASVS L1 re-audit at be0de0c3 | 21 | 15/15 | 6 | 0 | 0 |
 
 - [x] All 21 authored rows retained, including four plan-qualified supply-chain sentinels.
 - [x] Every accepted disposition has a distinct recorded entry.
@@ -163,3 +164,8 @@ The current LCOV artifact was inspected:
 - [x] T-08-17 behavioral-proof gap resolved and reverified.
 
 Approval: SECURED at `076cb060e4168e9aae9ab84ea5c76f738e00642b`. CR-01 is closed by the post-config stop/abort guards in `f61d5848`: abort latches halt, later targets skip, and dependency settlement keeps its fresh-signal boundary. An independent 621-test security/oracle run passed; T-08-17 remains closed by the distinct-name aggregate PTY oracle and exact-entry owner assertion, and wait-cap coverage reaches streamed-git abort. All 21 authored rows are closed; threats_open is zero.
+
+Final-head approval: SECURED at executable head `be0de0c3`. Nyquist AUP-01..03
+and all four roadmap truths are COMPLIANT. The unchanged-input full gate is
+green with 1,145 scenarios, 11,777 steps, and 309 LCOV records. All 21 authored
+rows remain closed; `threats_open` is zero.
