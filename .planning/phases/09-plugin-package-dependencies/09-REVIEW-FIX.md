@@ -41,6 +41,8 @@ Checks ran in the existing isolated worktree `/home/acolomba/src/pi-claude-marke
 - TypeScript passed with `tsc --noEmit --incremental false`; focused ESLint, Prettier, `check:features`, Fallow guard, and the changed-code Fallow audit passed.
 - Repository fixers passed. The normal commit hook passed `npm run check:commit`; no hook was bypassed.
 
+**Combined-gate follow-up:** The parent's exact `npm run check` run found one stale ownership oracle in `features/plugin/update.feature`: the dependency move warning was still expected under requester `app`, while the corrected structured diagnostic renders under dependency `lib`. The old expectation failed the focused scenario with `Plugin "lib" [project] updated` versus `Plugin "app" [project] updated`. Commit `741516af` (`test(update): expect dependency warning owner`) changes only that header. The corrected scenario passed 1 scenario and 17 steps; the complete update feature passed 26 scenarios and 380 steps. `check:features`, repository fixers, and the normal commit hook passed.
+
 The fixer did not run the full combined-tree `npm run check` gate. The parent workflow must run that gate before completing Phase 9. This report remains uncommitted for the parent workflow.
 
 The automated regressions prove structured ownership, ordering, exact-once rendering, requester-warning separation, and lifecycle success. Human review remains requested because this is a logic correction across the dependency closure, settlement, update outcome, and two notification surfaces.
