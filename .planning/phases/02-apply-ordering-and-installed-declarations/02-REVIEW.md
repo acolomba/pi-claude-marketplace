@@ -1,6 +1,6 @@
 ---
 phase: 02-apply-ordering-and-installed-declarations
-reviewed: 2026-10-29T03:00:51Z
+reviewed: 2026-10-29T12:30:32Z
 depth: standard
 files_reviewed: 44
 files_reviewed_list:
@@ -58,7 +58,7 @@ status: clean
 
 # Phase 2: Code Review Report
 
-**Reviewed:** 2026-10-29T03:00:51Z
+**Reviewed:** 2026-10-29T12:30:32Z
 **Depth:** standard
 **Files Reviewed:** 44
 **Status:** clean
@@ -67,16 +67,19 @@ status: clean
 
 ## Summary
 
-Final merged-tree review of branch HEAD
-`decf5452204d25c664e7e9a251647c8bc498edab`. No Critical, Warning, or Info
+Final integrated stale-verification review of branch HEAD
+`91b3fdd8e9bad705e14495fa14481ab548f15491`. No Critical, Warning, or Info
 findings remain. All reviewed files meet the Phase 2 quality and correctness
 requirements.
 
-The complete 44-file Phase 2 scope was reassessed against RCN-01 through
-RCN-08. The last clean Phase 2 review (`fdf127dc`) is an ancestor of the merged
-HEAD. Nine files in this scope changed afterward; their complete diffs and
-affected call paths were reviewed again. The remaining 35 files are
-content-identical to that clean review and retain its disposition.
+The complete retained 44-file Phase 2 scope was reassessed against RCN-01
+through RCN-08. The previous complete clean review at `decf5452` is an
+ancestor of this HEAD. Forty files are byte-identical to that clean baseline.
+The four later-changed files -- `orchestrators/types.ts`, `apply.feature`,
+`import.feature`, and `apply.test.ts` -- were re-read with their complete diffs
+and affected call paths. Their changes add dependency-warning ownership typing,
+fail-closed redaction expectations, and an import redaction scenario; none
+changes Phase 2 ordering, declaration-source, containment, or scope semantics.
 
 ## Integrated regression assessment
 
@@ -114,29 +117,35 @@ content-identical to that clean review and retain its disposition.
   every git and marketplace-tag materialization path. They do not bypass the
   Phase 2 installed-copy lock or constraint fold, and cleanup remains scoped to
   the owning `ScopedLocations` bundle.
-- The new behavioral scenarios assert full structured output, tally, recovery
-  details, installation record, and absence/presence of the intended
-  declaration. The matching unit cases assert exact text/JSON projections,
-  state rollback, leaked-resource evidence, deferred pin restoration, and
-  post-transition diagnostics. They are discriminating rather than
-  success-only checks.
+- The behavioral scenarios assert full structured output, tally, recovery
+  details, installation records, and the intended declaration presence or
+  absence. The matching unit cases assert exact text/JSON projections, state
+  rollback, leaked-resource evidence, deferred pin restoration, and
+  post-transition diagnostics. The later fail-closed diagnostic expectations
+  remain exact byte assertions rather than success-only checks.
 
 ## Validation evidence
 
-- The orchestrator supplied a fresh merged-tree `npm run check` at this HEAD:
-  exit 0; Cucumber passed 1142 scenarios and 11734 steps; direct coverage
-  merged 309 LCOV records.
-- The Phase 2 Nyquist audit is COMPLIANT on the merged tree.
-- Independently ran focused current-tree apply and notification cases for
-  failed-enable recovery, deferred move/enable diagnostics, and rollback-phase
-  projection with Node's test runner: both owner modules passed.
-- CodeGraph call-path inspection found no alternate catalog-only declaration
-  read, scope-crossing path, or reordered pending/apply cascade in the reviewed
-  composition.
-- Fallow's repository security advisory pass completed without an enforced
-  gate failure. Its broad path-sink candidates did not establish a Phase 2
-  containment bypass; the reviewed boundaries validate ownership and realpath
-  containment before use.
+- The fresh Phase 2 Nyquist audit is COMPLIANT 8/8. Its current-tree public
+  selection passed 10 scenarios and 159 steps; its 14-module owner selection
+  passed 1,387/1,387 tests.
+- The exact integrated `npm run check` remains reusable at this HEAD because
+  there is no executable-input diff from `be0de0c3`: exit 0; Cucumber passed
+  1,145 scenarios and 11,777 steps; direct coverage merged 309 LCOV records.
+- Current CodeGraph and direct-source inspection found no alternate
+  catalog-only installed-declaration read, scope-crossing path, or reordered
+  pending/apply cascade. The update constraint gate still uses the installed
+  copy under the scope lock, while reconcile convergence intentionally keeps
+  its catalog-first contract.
+- Fallow's security advisory pass completed without an enforced gate failure.
+  Its broad repository path-sink candidates do not establish a Phase 2
+  containment bypass; the Phase 2 readers admit the owning root before opening
+  a bounded manifest candidate.
+- The evaluation-scope resolver reported `degraded` because the original Phase
+  2 task commits are unreachable after branch convergence. This review therefore
+  retained the explicit 44-file scope from the prior complete clean review and
+  reconciled every later change to that scope; it did not substitute the
+  resolver's milestone-wide fallback.
 - `git diff --check` passed. The only pre-existing dirty file during review was
   the orchestrator-owned `.planning/STATE.md`; this review changed only
   `02-REVIEW.md` and made no commit.
