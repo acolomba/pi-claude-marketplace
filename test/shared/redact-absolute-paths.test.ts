@@ -70,6 +70,11 @@ describe("redactAbsolutePaths", () => {
       expected: "unlink 'secret.json'",
     },
     {
+      name: "redacts a multi-word path component after an apostrophe",
+      input: "unlink '/tmp/O' Mary Jane/秘密/secret.json'",
+      expected: "unlink 'secret.json'",
+    },
+    {
       name: "stops a POSIX path before later slash-bearing prose",
       input: "open '/tmp/private/file.json' failed; see docs/errors 'E_READ'",
       expected: "open 'file.json' failed; see docs/errors 'E_READ'",
@@ -83,6 +88,21 @@ describe("redactAbsolutePaths", () => {
       name: "stops a UNC path before later slash-bearing prose",
       input: String.raw`open '\\server\private\file.json' failed; see docs/errors 'E_READ'`,
       expected: "open 'file.json' failed; see docs/errors 'E_READ'",
+    },
+    {
+      name: "stops a POSIX path before immediate slash-bearing prose",
+      input: "open '/tmp/private/file.json' docs/errors 'E_READ'",
+      expected: "open 'file.json' docs/errors 'E_READ'",
+    },
+    {
+      name: "stops a drive path before immediate slash-bearing prose",
+      input: String.raw`open 'C:\private\file.json' docs/errors 'E_READ'`,
+      expected: "open 'file.json' docs/errors 'E_READ'",
+    },
+    {
+      name: "stops a UNC path before immediate slash-bearing prose",
+      input: String.raw`open '\\server\private\file.json' docs/errors 'E_READ'`,
+      expected: "open 'file.json' docs/errors 'E_READ'",
     },
     {
       name: "keeps separate quoted paths with internal apostrophes",
@@ -258,6 +278,22 @@ describe("redactCauseChain", () => {
 
     // assert
     assert.strictEqual(trailer, "cause: open 'file.json' failed; see docs/errors 'E_READ'");
+  });
+
+  test("handles ambiguous quote boundaries in a cause chain", () => {
+    // arrange
+    const failure = new Error("unlink '/tmp/O' Mary Jane/秘密/secret.json'", {
+      cause: new Error("open '/tmp/private/file.json' docs/errors 'E_READ'"),
+    });
+
+    // act
+    const trailer = causeChainTrailer(redactCauseChain(failure));
+
+    // assert
+    assert.strictEqual(
+      trailer,
+      "cause: unlink 'secret.json' -> open 'file.json' docs/errors 'E_READ'",
+    );
   });
 
   test("redacts every quoted cause and structured leaked path containing spaces or UNC prefixes", () => {

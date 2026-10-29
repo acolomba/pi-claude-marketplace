@@ -79,12 +79,12 @@ function continuesQuotedPath(text: string, quote: string, quoteIndex: number): b
   }
 
   const nextQuote = text.indexOf(quote, quoteIndex + 1);
-  if (nextQuote < 0) {
+  if (nextQuote < 0 || !isQuotedPathBoundary(text[nextQuote + 1])) {
     return false;
   }
 
   const continuation = text.slice(quoteIndex + 1, nextQuote);
-  return /^[ \t][^\s'"/\\]+[/\\]/u.test(continuation);
+  return /^[ \t][^'"\r\n]*[/\\]/u.test(continuation);
 }
 
 function quotedPathEnd(text: string, quote: string, fromIndex: number): number | undefined {
