@@ -305,10 +305,15 @@ describe("dependency planning operations", () => {
   test("runs initial and materialized closure slices", async (t) => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd } = await catalog(t, {
+      const { cwd, marketplaceRoot } = await catalog(t, {
         app: { version: "1.0.0", dependencies: ["dep"] },
         dep: { version: "1.0.0" },
       });
+      await writeFile(
+        path.join(marketplaceRoot, "plugins", "dep", "package.json"),
+        '{"dependencies":{"pkd-dep":"1.0.0"}}',
+      );
+      await writeFile(path.join(marketplaceRoot, "plugins", "dep", "yarn.lock"), "lockfile");
       const args = planning(owner, cwd);
 
       // act
@@ -328,6 +333,16 @@ describe("dependency planning operations", () => {
 
       // assert
       assert.strictEqual(initial.kind, "installed");
+      assert.deepStrictEqual(
+        initial.kind === "installed"
+          ? initial.stagingWarnings?.map((warning) => warning.kind)
+          : undefined,
+        ["discovery"],
+      );
+      assert.match(
+        initial.kind === "installed" ? (initial.stagingWarnings?.[0]?.message ?? "") : "",
+        /yarn or pnpm lockfile/,
+      );
       assert.strictEqual(materialized.kind, "installed");
     });
   });

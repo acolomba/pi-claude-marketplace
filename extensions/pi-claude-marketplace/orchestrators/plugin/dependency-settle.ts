@@ -158,7 +158,11 @@ async function runStep(step: DependencyPlanStep, ports: DependencyStepPorts): Pr
 
   const run = await ports.materialize(step.members);
   if (run.kind === "installed") {
-    return { rows: run.rows, notices: run.mcpConfigNotices ?? [], warnings: [] };
+    return {
+      rows: run.rows,
+      notices: run.mcpConfigNotices ?? [],
+      warnings: run.stagingWarnings ?? [],
+    };
   }
 
   const refusal = ports.refusal(run.subject);
@@ -292,6 +296,7 @@ export async function settleDependencies(
       kind: "settled",
       rows: first.rows,
       ...mcpConfigNoticesMember(first.mcpConfigNotices ?? []),
+      ...warningsMember(first.stagingWarnings ?? []),
     };
   }
 

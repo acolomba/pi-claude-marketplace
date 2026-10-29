@@ -136,6 +136,7 @@ const LEGACY_NOTICE: McpConfigNotice = {
   scope: "project",
   file: "mcp.json",
 };
+const PACKAGE_WARNING = discoveryWarning("Plugin dependency install failed (npm): no output");
 const ZCORE: PlannedCascadeMember = {
   kind: "install",
   member: { ...HELPER.member, key: "zcore@mp", name: "zcore" },
@@ -405,6 +406,28 @@ describe("runDependencySteps", () => {
     });
   });
 
+  test("a materialized closure carries its dependency warnings", async () => {
+    // arrange
+    const ports = stepPorts({
+      materialize: (members) =>
+        Promise.resolve({
+          kind: "installed",
+          rows: members.map((entry) => installedRow(entry.member.key)),
+          stagingWarnings: [PACKAGE_WARNING],
+        }),
+    });
+
+    // act
+    const ran = await runDependencySteps([{ kind: "materialize", members: [HELPER] }], ports);
+
+    // assert
+    assert.deepStrictEqual(ran, {
+      ok: true,
+      landed: [moved(installedRow("helper@mp"))],
+      stagingWarnings: [PACKAGE_WARNING],
+    });
+  });
+
   test("D-PL1-16: a move that throws after a slice landed keeps that slice's notices on the failure", async () => {
     // arrange
     const ports = stepPorts({
@@ -540,6 +563,28 @@ describe("settleDependencies", () => {
       kind: "settled",
       rows: [installedRow("zcore@mp")],
       mcpConfigNotices: [ADAPTER_NOTICE],
+    });
+  });
+
+  test("a first run carries dependency warnings into the settlement", async () => {
+    // arrange
+    const ports = settlePorts({
+      firstRun: () =>
+        Promise.resolve({
+          kind: "installed",
+          rows: [installedRow("zcore@mp")],
+          stagingWarnings: [PACKAGE_WARNING],
+        }),
+    });
+
+    // act
+    const settled = await settleDependencies(ports);
+
+    // assert
+    assert.deepStrictEqual(settled, {
+      kind: "settled",
+      rows: [installedRow("zcore@mp")],
+      stagingWarnings: [PACKAGE_WARNING],
     });
   });
 

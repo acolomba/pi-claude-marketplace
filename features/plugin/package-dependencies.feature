@@ -453,6 +453,43 @@ Feature: Plugin package dependencies
       | GET    | /pkd-dep/-/pkd-dep-1.0.0.tgz | 404    |
     Then the plugin "zcore" installed in the project scope has no npm packages
 
+  Scenario: A direct update reports a newly installed dependency package failure once
+    Given the npm registry serves these packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   |              |
+      | zcore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore        |
+      | zcore  | 1.0.0   |              |
+    Given the published plugin "zcore" of the marketplace "tools" depends on these npm packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the npm registry answers 404 for the package "pkd-dep"
+    When the user runs "/claude:plugin update widget@tools --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                             | lines                                             |
+      | cascade    | info     | true         |                                                                    |                                                   |
+      | diagnostic | warning  | false        | Plugin "widget" [project] updated; 1 declared component has a note. | Plugin dependency install failed (npm): no output |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id           | name        | status    | reasons | scope   | version | from  | to    |
+      | tools            | project           | widget@tools | widget      | updated   |         | project |         | 1.0.0 | 1.1.0 |
+      | tools            | project           | zcore@tools  | zcore@tools | installed |         | project | 1.0.0   |       |       |
+    Then the npm registry receives these requests:
+      | method | path                         | status |
+      | GET    | /pkd-dep/-/pkd-dep-1.0.0.tgz | 404    |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | widget@tools | 1.1.0   | true    |
+      | zcore@tools  | 1.0.0   | true    |
+    Then the plugin "zcore" installed in the project scope has no npm packages
+
   Scenario: A marketplace autoupdate reports a moved dependency package failure only on that dependency
     Given the npm registry serves these packages:
       | name    | version |
