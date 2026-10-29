@@ -1,8 +1,8 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-fixed_at: 2026-10-29T11:09:57Z
+fixed_at: 2026-10-29T11:17:11Z
 review_path: .planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md
-iteration: 19
+iteration: 20
 findings_in_scope: 1
 fixed: 1
 skipped: 0
@@ -11,9 +11,38 @@ status: all_fixed
 
 # Phase 10: Code Review Fix Report
 
-**Fixed at:** 2026-10-29T11:09:57Z
+**Fixed at:** 2026-10-29T11:17:11Z
 **Source review:** `.planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md`
-**Iteration:** 19
+**Iteration:** 20
+
+Iteration 20 reconciles the behavioral semantic fixture with iteration 19's
+strict errno output. The unreadable-skill copy placeholder now expands to the
+stable public redaction value instead of the old path-derived copy message.
+
+## Iteration 20 Fix
+
+### CR-01: Behavioral copy-error expectations retain the pre-policy errno value
+
+**Status:** fixed
+**Commit:** `94b114bb` (`test(plugin): update unreadable copy expectation`)
+**File modified:**
+
+- `features/step_definitions/marketplace/update.steps.ts`
+
+The placeholder `{unreadable skill file copy error}` is exclusive to eight
+scenario expectations for the same staged unreadable-skill copy failure. Its
+setup still performs the real local copy, proves the error code is `EACCES`
+and the syscall is `copyfile`, and now records the independently stated public
+contract `EACCES: permission denied, copyfile '[redacted path]'`. No feature
+table, generic result comparison, normalizer, driver, or stand-in changed.
+
+The focused run passes all eight affected scenarios and 103 steps. The full
+Cucumber suite passes 1,144 scenarios and 11,758 steps. Fallow guard and the
+changed-file audit report no issue; the required fixers and the normal commit
+hook also pass. These checks ran in the existing Session A worktree because
+`workflow.use_worktrees` was false for the fixer. The parent workflow owns the
+fresh full `npm run check` gate and any direct-owner expectation fallout it
+finds.
 
 Iteration 19 makes the exact Node errno arrow grammar cardinality-strict.
 `rename`, `copyfile`, `link`, and `symlink` diagnostics may expose basenames
