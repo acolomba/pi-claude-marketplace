@@ -200,6 +200,13 @@ to T-04-14, T-04-15, T-04-16, and T-04-SC. No unmapped threat flag was found.
 - Unregistered flags: 0.
 - Blocking mitigation gaps: 0.
 - Final verdict: SECURED; 17/17 closed, zero blocking or non-blocking open threats.
+- Final merged-tree audit at `9882f1eb` reverified all 17 threats: 13
+  implementation mitigations and four accepted risks. Resolver target refusal,
+  exact SHA handoff, tag precedence, warm-cache behavior, rollback/redaction,
+  fixture containment, loopback request oracles, and later package-execution
+  containment remain intact. Nyquist RSV-01..05 is COMPLIANT; the exact merged
+  gate passed 1,142 scenarios, 11,734 steps, and 309 LCOV records. No threat
+  reopened and `threats_open` remains 0.
 
 ## Sign-Off
 
