@@ -1,8 +1,8 @@
 ---
 phase: "10"
 slug: "lifecycle-test-and-harness-gaps"
-status: complete
-nyquist_compliant: true
+status: gaps_found
+nyquist_compliant: false
 wave_0_complete: true
 created: "2026-10-27"
 ---
@@ -143,3 +143,48 @@ TST-02, CAS-08, MIM-05, XPH-01, and XPH-02. Direct coverage for the public
 install root, planning leaf, and ledger leaf remains 100% for lines, branches,
 and functions. TST-03 is covered by the focused manifest-first install and
 reinstall fixture owners. No production or test source changed.
+
+## Final Integrated Convergence Audit 2026-10-29
+
+| Metric                           | Count |
+| -------------------------------- | ----- |
+| Gaps found                       | 1     |
+| Resolved                         | 0     |
+| Escalated                        | 1     |
+| Evidence rows structurally valid | 56/56 |
+| Must-haves behaviorally green    | 28/28 |
+
+The integrated implementation and behavioral tests are green, but one exact
+evidence pin is semantically stale. `XPH02-MOVE-DIAGNOSTICS` cites commit
+`291b2df1`. At that commit, the scenario titled `Update preserves dependency
+move warnings and MCP notices` attributed the dependency warning to the root
+plugin `app`. Phase 9 later fixed the carrier to retain the producing
+dependency and changed the same scenario to require `lib` at `741516af`; it
+also added direct-update package-failure scenarios at `16e4c849` and
+`db79c003`. The checker passes because it verifies that the unchanged title is
+present at the cited commit, not that the committed assertion contains the
+final owner contract.
+
+Keep the existing row and ID, but update its exact evidence commit to
+`741516af` and bind all three current behavioral titles:
+
+- `features/plugin/update.feature` — `Scenario: Update preserves dependency move warnings and MCP notices`
+- `features/plugin/package-dependencies.feature` — `Scenario: A direct update reports a moved dependency package failure only on that dependency`
+- `features/plugin/package-dependencies.feature` — `Scenario: A direct update reports a newly installed dependency package failure once`
+
+No implementation or test failure was found. The focused final audit passed:
+
+- `node scripts/check-phase10-coverage.mjs`: 56/56 rows structurally valid.
+- Focused Cucumber: 9/9 scenarios and 139/139 steps, covering all three
+  CAS-08 routes, MIM-05, both repaired Phase 8 PTY oracles, and the final
+  Phase 9 warning-owner behaviors.
+- Focused owners: 10/10 passed with no skips or todos, including D-PL10-13,
+  both manifest-first fixtures, the real process-tree child, Phase 6 lock-path
+  redaction, and the Phase 8 config-read stop/abort races.
+- Direct coverage: all 11 selected final Phase 6/8/9 source-test pairs passed
+  100% line, branch, and function thresholds.
+- The owner-provided exact full gate remains green on this unchanged build
+  tree: 1,144 scenarios, 11,758 steps, and 309 merged LCOV records.
+
+D-PL10-13 remains the formal superseding decision over the older Plan 01-03
+literal. Its focused owner case passed; no older behavior should be restored.
