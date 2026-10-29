@@ -1,8 +1,8 @@
 ---
 phase: 10-lifecycle-test-and-harness-gaps
-fixed_at: 2026-10-29T08:06:40Z
+fixed_at: 2026-10-29T08:19:30Z
 review_path: .planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md
-iteration: 8
+iteration: 9
 findings_in_scope: 1
 fixed: 1
 skipped: 0
@@ -11,12 +11,43 @@ status: all_fixed
 
 # Phase 10: Code Review Fix Report
 
-**Fixed at:** 2026-10-29T08:06:40Z
+**Fixed at:** 2026-10-29T08:19:30Z
 **Source review:** `.planning/phases/10-lifecycle-test-and-harness-gaps/10-REVIEW.md`
-**Iteration:** 8
+**Iteration:** 9
 
-Iteration 8 fixes the remaining quoted-path boundary finding. The package
+Iteration 9 fixes the remaining quoted-value boundary finding. The package
 manager settlement fix and the earlier integration fixes remain closed.
+
+## Iteration 9 Fix
+
+### CR-01: The quote-role heuristic consumes slash-bearing prose
+
+**Status:** fixed: requires human verification
+**Commit:** `c6a1fab2` (`fix(redaction): distinguish quoted value boundaries`)
+**Files modified:**
+
+- `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`
+- `test/shared/redact-absolute-paths.test.ts`
+- `test/shared/notification-present.test.ts`
+
+An ambiguous apostrophe now continues a quoted path only when the text before
+the next matching quote contains a separator and ends with non-whitespace path
+text. A later opening quote is preceded by whitespace, so it cannot close the
+path candidate. This rule keeps multi-word path components such as
+`O' Mary Jane/秘密` and stops before later quoted diagnostic values.
+
+The RED run failed 35 cases. The utility matrix covers POSIX, drive, and UNC
+paths followed by slash-bearing prose. It uses every punctuation delimiter in
+`isQuotedPathBoundary` and representative horizontal, line, and Unicode
+whitespace values. Cause-chain and public-presentation cases prove the same
+boundary. The GREEN owner run passes all 132 focused tests. Both direct pairs
+pass 100% line, function, and branch coverage.
+
+Type checking and Fallow guard and audit pass. The first normal commit hook
+rejected a compact regular expression for super-linear backtracking. The
+linear predicate form passes the required fixers and the complete normal
+commit hook, including `npm run check:commit`. These checks ran in the existing
+Session A worktree with Node `v26.12.1`.
 
 ## Iteration 8 Fix
 
@@ -259,6 +290,6 @@ re-review, and goal verification on the unchanged integrated tree.
 
 ---
 
-_Fixed: 2026-10-29T08:06:40Z_
+_Fixed: 2026-10-29T08:19:30Z_
 _Fixer: the agent (gsd-code-fixer)_
-_Iteration: 8_
+_Iteration: 9_
