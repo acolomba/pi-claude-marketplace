@@ -1,8 +1,8 @@
 ---
 phase: 04-dependency-resolver-residue
-reviewed: 2026-10-28T17:45:14Z
+reviewed: 2026-10-29T03:34:12Z
 depth: standard
-files_reviewed: 44
+files_reviewed: 52
 files_reviewed_list:
   - extensions/pi-claude-marketplace/bridges/agents/index.ts
   - extensions/pi-claude-marketplace/bridges/agents/index-mutation.ts
@@ -10,8 +10,12 @@ files_reviewed_list:
   - extensions/pi-claude-marketplace/bridges/agents/stage.ts
   - extensions/pi-claude-marketplace/bridges/agents/target-check.ts
   - extensions/pi-claude-marketplace/domain/release-tag.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts
@@ -38,7 +42,11 @@ files_reviewed_list:
   - test/bridges/agents/stage.test.ts
   - test/bridges/agents/target-check.test.ts
   - test/domain/release-tag.test.ts
+  - test/orchestrators/plugin/clone-cache.test.ts
+  - test/orchestrators/plugin/clone-gc.test.ts
+  - test/orchestrators/plugin/dependency-move.test.ts
   - test/orchestrators/plugin/dependency-plan.test.ts
+  - test/orchestrators/plugin/dependency-settle.test.ts
   - test/orchestrators/plugin/dependency-tag-probe.test.ts
   - test/orchestrators/plugin/install-cascade.test.ts
   - test/orchestrators/plugin/install-flow-cascade-context.test.ts
@@ -50,76 +58,87 @@ files_reviewed_list:
   - test/orchestrators/plugin/update-swap.test.ts
 findings:
   critical: 0
-  warning: 0
+  warning: 1
   info: 0
-  total: 0
-status: clean
-reviewed_commit: e56948b1b9cf8fdf148656646ee5b140381303e3
+  total: 1
+status: issues_found
+reviewed_commit: 9882f1eb
 ---
 
 # Phase 04: Code Review Report
 
-**Reviewed:** 2026-10-28
+**Reviewed:** 2026-10-29
 **Depth:** standard
-**Files Reviewed:** 44
-**Status:** clean
+**Files Reviewed:** 52
+**Status:** issues_found
 
 ## Summary
 
-Fresh post-fix review of the integrated implementation of RSV-01 through RSV-05 and
-D-PL4-01 through D-PL4-07. The review followed all six plans through the current split
-owners and their unit and behavioral tests. The previewed-commit pins, fresh-dependency
-previews, recorded greedy-search limit, early agent-target refusal, no-match tag cleanup,
-rollback-partial type, and move-refusal redaction remain consistent with their callers.
+The final merged implementation still satisfies the substantive Phase 4 contract. Fresh
+git members and the install root carry the commit returned by their preview into the
+ledger pin; the move planner completes every judge and preview before it runs a step;
+agent file and foreign-index ownership refusals remain write-free; and the range-free
+`no-matching-tag` and `rollbackPartials` contracts remain intact.
 
-The previous critical ownership mismatch is closed. Preview and staging now call the same
-`assertAgentNamesUnclaimed` rule over the foreign partition of the agents index, before
-either path tests target files. A foreign claim therefore refuses even when its target is
-missing. The two public regressions prove that a refusal on the second dependency leaves
-every installed version, config and installation-record byte, staged skill byte, agent
-file set, and index row unchanged. The previous rollback-partial comment is also accurate
-after its obsolete apply claim was removed.
+The integrated clone-cleanup changes also preserve those guarantees. A planning attempt
+collects only clone keys it created or may supersede, the sweep takes a fresh scope lock
+and re-reads live records, warm and exact-key race winners are not claimed, and unrelated
+cache entries are outside the candidate set. The focused refusal scenarios still compare
+record/config bytes and staged artifacts, so a premature move cannot hide behind row-only
+assertions.
 
-All reviewed files meet the applicable correctness, security, TypeScript, unit-test, and
-Cucumber rules. No issues found.
+One merged documentation contract is now stale. It contradicts the code that forwards
+dependency-move notices and warnings, which risks a later cleanup removing behavior the
+tests and result types now require.
 
 ## Narrative Findings (AI reviewer)
 
-None.
+## Warnings
+
+### WR-01: The settle module says move notices and warnings are discarded after it began forwarding them
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts:27-30`
+
+**Issue:** The module contract says that MCP notices and staging warnings from a dependency
+move “are not reported.” `runStep` now copies `moved.mcpConfigNotices` and
+`moved.stagingWarnings` into `StepRun` at lines 143-155, and `runDependencySteps` folds
+them into both success and failure results. The comment therefore documents the opposite
+of the current API contract. A maintainer following it could remove the forwarding as
+supposed dead behavior or add a second reporting path and duplicate user-visible output.
+
+**Fix:** Rewrite the paragraph to say that closure slices and dependency moves contribute
+their MCP notices and staging warnings in step order, with the move row retaining ownership
+of any package note filtered by `runDependencyMove`.
 
 ## Previous finding disposition
 
-| Finding                                                                           | Disposition | Evidence                                                                                                                                                                                                                                                                                                       |
-| --------------------------------------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CR-01: foreign agent-index ownership refused only after an earlier move committed | Closed      | `assertAgentTargetsFree` retains both index partitions and calls the shared `assertAgentNamesUnclaimed` rule before disk checks. `prepareStagePluginAgents` calls the same rule. Unit coverage compares both typed refusals and proves neither writes. Install and update scenarios prove no dependency moves. |
-| WR-01: rollback-partial contract said apply did not render it                     | Closed      | `InstallMissingDependencyOutcome.rollbackPartials` now documents only the failed undo steps and its omission rule. The stale apply statement is gone.                                                                                                                                                          |
+| Finding | Disposition | Evidence |
+| --- | --- | --- |
+| CR-01: foreign agent-index ownership refused only after an earlier move committed | Closed | Preview and staging call the same foreign-index ownership rule before target-file checks; install and update scenarios preserve all state and artifact bytes. |
+| WR-01: rollback-partial contract said apply did not render it | Closed | `InstallMissingDependencyOutcome.rollbackPartials` describes the failed undo steps only, and the catch projects the captured partials. |
 
 ## Scope and verification evidence
 
-- Reviewed commit: `e56948b1b9cf8fdf148656646ee5b140381303e3` on branch
-  `agent-reverify-a`, Node `v26.12.1`.
+- Reviewed commit: `9882f1eb` on `agent-reverify-a`.
 - The evaluation-scope resolver returned `degraded` / `phase-range` /
-  `no-task-commit-rows` because later milestone history reuses the phase range. The review
-  therefore retained the explicit 44-file Phase 4 contract scope derived from the six
-  plans and followed current split owners and callers rather than accepting the resolver's
-  unrelated milestone-wide union.
-- CodeGraph traced the preview check through `previewInstall` and
-  `assertUpdateNamesFree`, and traced staging through `prepareStagePluginAgents`.
-  `discoverGeneratedNames` and staging both consume `discoverPluginAgents`, so both paths
-  compare the same canonical generated names.
-- The focused `index-mutation`, `target-check`, and `stage` bridge suites passed 49 of 49
-  cases.
-- Direct coverage for `index-mutation.ts`, `target-check.ts`, and `stage.ts` exited 0;
-  every changed source-test pair retained 100% direct coverage.
-- The focused public regressions passed 2 scenarios and 41 steps against local stand-ins.
-- `fallow review --base 92501edf --brief` reported 0 dead-code, 0 complexity, and 0
-  duplication findings. Its contract prompts were checked against the unchanged callers;
-  the shared assertion changes behavior only for the previously missed foreign-claim arm.
-- `git diff --check` passed. No source or test file was modified by this reviewer. The
-  combined-tree `npm run check` remains the owning workflow's phase gate.
+  `no-task-commit-rows`. The review retained the prior explicit 44-file Phase 4 scope and
+  added the eight integrated clone-ownership/settlement owners and tests that can change
+  preview, refusal, cleanup, or concurrency behavior.
+- CodeGraph was consulted first, but marked the integrated planning owners stale; their
+  current source was therefore read directly.
+- The final Nyquist audit passed all 11 focused owner modules and four Phase 4 scenarios
+  (57 steps). The unchanged-tree full gate supplied by the owner passed 1,142 scenarios,
+  11,734 steps, and 309 LCOV records.
+- The clone-cleanup oracles distinguish a cold clone owned by the attempt, a warm entry,
+  an exact-key race winner, an unrelated concurrent entry, a superseded live record, and
+  a ruled-out backtracking candidate.
+- `fallow guard` confirmed the applicable orchestrator boundaries. `fallow review` could
+  not create its temporary comparison worktree in the restricted sandbox, so no Fallow
+  review verdict is claimed.
+- `git diff --check` passed. No source or test file was modified by this reviewer.
 
 ---
 
-_Reviewed: 2026-10-28T17:45:14Z_
+_Reviewed: 2026-10-29T03:34:12Z_
 _Reviewer: gsd-code-reviewer_
 _Depth: standard_
