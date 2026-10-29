@@ -45,6 +45,7 @@
 //
 // D-PL9-10: this is the only module that imports platform/package-manager.ts.
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -64,9 +65,22 @@ import { discoveryWarning } from "../../shared/staging-warnings.ts";
 import type { UpdateRunOutcome } from "./update-swap.ts";
 import type { LockfileCheck } from "../../domain/package-lockfile.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { PackageManagerRun, PackageManagerRunner } from "../../platform/package-manager.ts";
+import type {
+  PackageManagerRequest,
+  PackageManagerRun,
+  PackageManagerRunner,
+} from "../../platform/package-manager.ts";
 import type { DiscoveryWarning } from "../../shared/staging-warnings.ts";
 import type { Phase } from "../../transaction/phase-ledger.ts";
+
+export type AbortScopedRun = <T>(signal: AbortSignal, step: () => Promise<T>) => Promise<T>;
+
+const packageInstallAbortScope = new AsyncLocalStorage<AbortSignal>();
+
+/** Adds package-manager cancellation to an outer background-operation abort scope. */
+export function composePackageInstallAbortScope(outer: AbortScopedRun): AbortScopedRun {
+  return (signal, step) => outer(signal, () => packageInstallAbortScope.run(signal, step));
+}
 
 const NPM_CI_ARGUMENTS = [
   "ci",
@@ -81,8 +95,6 @@ interface RunnableLockfile {
   readonly lockfile: string;
   readonly command: "bun" | "npm";
   readonly args: readonly string[];
-  /** The variable that points the package manager's cache into the work dir. */
-  readonly cacheDirVariable?: string;
 }
 
 interface RefusedLockfile {
@@ -97,7 +109,6 @@ const LOCKFILE_TABLE = [
     lockfile: "bun.lock",
     command: "bun",
     args: BUN_INSTALL_ARGUMENTS,
-    cacheDirVariable: "BUN_INSTALL_CACHE_DIR",
   },
   { lockfile: "npm-shrinkwrap.json", command: "npm", args: NPM_CI_ARGUMENTS },
   { lockfile: "package-lock.json", command: "npm", args: NPM_CI_ARGUMENTS },
@@ -459,6 +470,23 @@ function gitDisabledArgument(workDir: string): string {
   return `--git=${path.join(workDir, "git-is-disabled")}`;
 }
 
+function packageManagerEnvironment(
+  command: RunnableLockfile["command"],
+  workDir: string,
+): Readonly<Record<string, string>> {
+  return command === "bun"
+    ? { BUN_INSTALL_CACHE_DIR: path.join(workDir, "bun-cache") }
+    : {
+        npm_config_cache: path.join(workDir, "npm-cache"),
+        npm_config_logs_dir: path.join(workDir, "npm-logs"),
+      };
+}
+
+function scopedPackageManagerRequest(request: PackageManagerRequest): PackageManagerRequest {
+  const signal = packageInstallAbortScope.getStore();
+  return signal === undefined ? request : { ...request, signal };
+}
+
 function jsonFileText(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
@@ -469,11 +497,14 @@ async function httpRegistryOrigin(
   workDir: string,
   ops: PackageInstallOps,
 ): Promise<string | undefined> {
-  const run = await ops.runRegistryQuery({
-    command: "npm",
-    args: [gitDisabledArgument(workDir), "config", "get", "registry", "--workspaces=false"],
-    cwd: workDir,
-  });
+  const run = await ops.runRegistryQuery(
+    scopedPackageManagerRequest({
+      command: "npm",
+      args: [gitDisabledArgument(workDir), "config", "get", "registry", "--workspaces=false"],
+      cwd: workDir,
+      env: packageManagerEnvironment("npm", workDir),
+    }),
+  );
   const registry = run.stdout.trim();
   if (run.code !== 0 || !URL.canParse(registry)) {
     return undefined;
@@ -510,14 +541,14 @@ async function runInWorkDir(
   ops: PackageInstallOps,
 ): Promise<PackageStepOutcome> {
   const { row } = inputs;
-  const run = await ops.runPackageManager({
-    command: row.command,
-    args: row.command === "npm" ? [gitDisabledArgument(workDir), ...row.args] : row.args,
-    cwd: workDir,
-    ...(row.cacheDirVariable === undefined
-      ? {}
-      : { env: { [row.cacheDirVariable]: path.join(workDir, "bun-cache") } }),
-  });
+  const run = await ops.runPackageManager(
+    scopedPackageManagerRequest({
+      command: row.command,
+      args: row.command === "npm" ? [gitDisabledArgument(workDir), ...row.args] : row.args,
+      cwd: workDir,
+      env: packageManagerEnvironment(row.command, workDir),
+    }),
+  );
   if (runFailed(run)) {
     return { note: failedNote(row.command, failureDetail(run)), createdNodeModules: false };
   }

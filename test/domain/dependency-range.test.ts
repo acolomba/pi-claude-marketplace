@@ -373,6 +373,17 @@ describe("renderDeclaredRanges", () => {
 });
 
 describe("truncateForRefusal", () => {
+  test("D-PL3-12 a zero limit keeps no code units", () => {
+    // arrange
+    const version = "abc";
+
+    // act
+    const cut = truncateForRefusal(version, 0);
+
+    // assert
+    assert.equal(cut, "\u2026");
+  });
+
   test("D-PL3-12 a version at the limit is kept whole", () => {
     // arrange
     const version = "abc";

@@ -84,6 +84,8 @@ export interface PackageManagerRequest {
   readonly cwd: string;
   /** Variables added to the child environment for this run. */
   readonly env?: Readonly<Record<string, string>>;
+  /** Stops the package manager and its process tree when the owning operation is cancelled. */
+  readonly signal?: AbortSignal;
 }
 
 export interface PackageManagerRun {
@@ -161,32 +163,54 @@ function finishOutput(captured: string, decoder: StringDecoder): string {
   return appendCapped(captured, decoder.end()).replace(/[\uD800-\uDBFF]$/u, "");
 }
 
-// SIGTERM at the timeout, SIGKILL once the grace runs out, and `abandon` one
-// more grace later. The live child keeps the initial timeout reachable. After
-// timeout, the escalation timers stay referenced until settlement because the
-// parent and its pipes may close before its descendants. Returns the function
-// that cancels them all.
+interface KillTimers {
+  readonly cancel: () => void;
+  readonly isTerminating: () => boolean;
+  readonly terminate: () => void;
+}
+
+// SIGTERM at the timeout or cancellation, SIGKILL once the grace runs out,
+// and `abandon` one more grace later. The live child keeps the initial timeout
+// reachable. After termination starts, the escalation timers stay referenced
+// until settlement because the parent and its pipes may close before its
+// descendants.
 function startKillTimers(
   stop: (signal: KillSignal) => void,
   options: PackageManagerRunnerOptions,
   captured: CapturedOutput,
   abandon: () => void,
-): () => void {
+): KillTimers {
   let graceTimer: NodeJS.Timeout | undefined;
   let deadlineTimer: NodeJS.Timeout | undefined;
-  const timeoutTimer = setTimeout(() => {
-    captured.timedOut = true;
+  const timers: { timeout?: NodeJS.Timeout } = {};
+  let terminating = false;
+  const terminate = (): void => {
+    if (terminating) {
+      return;
+    }
+
+    terminating = true;
+    clearTimeout(timers.timeout);
     stop("SIGTERM");
     graceTimer = setTimeout(() => {
       stop("SIGKILL");
       deadlineTimer = setTimeout(abandon, options.killGraceMs);
     }, options.killGraceMs);
+  };
+
+  timers.timeout = setTimeout(() => {
+    captured.timedOut = true;
+    terminate();
   }, options.timeoutMs);
-  timeoutTimer.unref();
-  return () => {
-    clearTimeout(timeoutTimer);
-    clearTimeout(graceTimer);
-    clearTimeout(deadlineTimer);
+  timers.timeout.unref();
+  return {
+    cancel: () => {
+      clearTimeout(timers.timeout);
+      clearTimeout(graceTimer);
+      clearTimeout(deadlineTimer);
+    },
+    isTerminating: () => terminating,
+    terminate,
   };
 }
 
@@ -195,6 +219,7 @@ function watchProcess(
   options: PackageManagerRunnerOptions,
   resolve: (run: PackageManagerRun) => void,
   stop: (signal: KillSignal) => void,
+  signal?: AbortSignal,
 ): void {
   const captured: CapturedOutput = { stdout: "", stderr: "", timedOut: false };
   const stdoutDecoder = new StringDecoder("utf8");
@@ -206,12 +231,22 @@ function watchProcess(
     captured.stderr = appendCapped(captured.stderr, stderrDecoder.write(chunk));
   });
   // Node emits `close` after `error` for a process that cannot start. A close
-  // after timeout waits for the process-group escalation before it settles.
+  // after termination begins waits for the process-group escalation before it
+  // settles.
   let settled = false;
   let closeCode: number | null = null;
-  const stopTimers = startKillTimers(stop, options, captured, () => {
+  const killTimers = startKillTimers(stop, options, captured, () => {
     settle(closeCode);
   });
+  const abort = (): void => {
+    killTimers.terminate();
+  };
+
+  signal?.addEventListener("abort", abort, { once: true });
+  if (signal?.aborted === true) {
+    abort();
+  }
+
   function settle(code: number | null, error?: Error): void {
     if (settled) {
       return;
@@ -220,9 +255,11 @@ function watchProcess(
     settled = true;
     captured.stdout = finishOutput(captured.stdout, stdoutDecoder);
     captured.stderr = finishOutput(captured.stderr, stderrDecoder);
-    stopTimers();
+    killTimers.cancel();
+    signal?.removeEventListener("abort", abort);
 
-    resolve({ code, ...captured, ...(error === undefined ? {} : { error }) });
+    const run = { code, ...captured };
+    resolve(error === undefined ? run : { ...run, error });
   }
 
   // Node also emits `error` for a signal it could not send to a running
@@ -235,7 +272,7 @@ function watchProcess(
   });
   child.on("close", (code: number | null) => {
     closeCode = code;
-    if (!captured.timedOut) {
+    if (!killTimers.isTerminating()) {
       settle(code);
     }
   });
@@ -257,7 +294,7 @@ function killWindowsTree(
   options: PackageManagerRunnerOptions,
   spawnOptions: PackageManagerSpawnOptions,
 ): void {
-  const systemRoot = variable(options.env, "SYSTEMROOT") ?? "C:\\Windows";
+  const systemRoot = variable(options.env, "SYSTEMROOT") ?? String.raw`C:\Windows`;
   const taskkill = path.win32.join(systemRoot, "System32", "taskkill.exe");
   try {
     const killer = options.spawn(taskkill, ["/PID", String(pid), "/T", "/F"], spawnOptions);
@@ -298,6 +335,10 @@ function startProcess(
   request: PackageManagerRequest,
   launch: Launch,
 ): Promise<PackageManagerRun> {
+  if (request.signal?.aborted === true) {
+    return Promise.resolve(aborted(request.signal));
+  }
+
   return new Promise((resolve) => {
     // A detached Windows process would open a console window of its own.
     const spawnOptions: PackageManagerSpawnOptions = {
@@ -317,14 +358,24 @@ function startProcess(
       return;
     }
 
-    watchProcess(child, options, resolve, (signal) => {
-      stopTree(child, signal, options, { ...spawnOptions, detached: false });
-    });
+    watchProcess(
+      child,
+      options,
+      resolve,
+      (signal) => {
+        stopTree(child, signal, options, { ...spawnOptions, detached: false });
+      },
+      request.signal,
+    );
   });
 }
 
 function notStarted(error: Error): PackageManagerRun {
   return { code: null, stdout: "", stderr: "", timedOut: false, error };
+}
+
+function aborted(signal: AbortSignal): PackageManagerRun {
+  return notStarted(new Error("Package manager run aborted", { cause: signal.reason }));
 }
 
 // The absolute directories of PATH, read through any spelling of its name.

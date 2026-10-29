@@ -333,8 +333,10 @@ export function truncateForRefusal(text: string, limit: number): string {
     return text;
   }
 
-  const last = text.charCodeAt(limit - 1);
-  const kept = last >= 0xd800 && last <= 0xdbff ? text.slice(0, limit - 1) : text.slice(0, limit);
+  const last = text.codePointAt(limit - 1);
+  const splitsSurrogatePair =
+    last !== undefined && (last > 0xffff || (last >= 0xd800 && last <= 0xdbff));
+  const kept = splitsSurrogatePair ? text.slice(0, limit - 1) : text.slice(0, limit);
   return `${kept}…`;
 }
 

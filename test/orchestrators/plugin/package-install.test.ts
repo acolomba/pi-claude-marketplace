@@ -18,6 +18,7 @@ import { describe, test } from "node:test";
 import { mock, verify } from "strong-mock";
 
 import {
+  composePackageInstallAbortScope,
   createPackagesPhase,
   installUpdatedPackages,
   removeInstalledPackages,
@@ -170,6 +171,10 @@ function npmRequest(workDir: string): PackageManagerRequest {
     command: "npm",
     args: [`--git=${path.join(workDir, "git-is-disabled")}`, ...NPM_CI_ARGUMENTS],
     cwd: workDir,
+    env: {
+      npm_config_cache: path.join(workDir, "npm-cache"),
+      npm_config_logs_dir: path.join(workDir, "npm-logs"),
+    },
   };
 }
 
@@ -1001,6 +1006,12 @@ describe("createPackagesPhase", () => {
     });
     const queries: Array<{ request: PackageManagerRequest; files: Record<string, string> }> = [];
     const requests: PackageManagerRequest[] = [];
+    const controller = new AbortController();
+    const outerSignals: AbortSignal[] = [];
+    const runWithAbortSignal = composePackageInstallAbortScope(async (signal, step) => {
+      outerSignals.push(signal);
+      return step();
+    });
     const phase = createPackagesPhase(
       opsWith(installingRunner(requests), async (request) => {
         queries.push({ request, files: await filesIn(request.cwd) });
@@ -1009,7 +1020,7 @@ describe("createPackagesPhase", () => {
     );
 
     // act
-    await phase.do(seeded.context);
+    await runWithAbortSignal(controller.signal, () => phase.do(seeded.context));
 
     // assert
     assert.deepStrictEqual(queries, [
@@ -1024,11 +1035,19 @@ describe("createPackagesPhase", () => {
             "--workspaces=false",
           ],
           cwd: seeded.workDir,
+          env: {
+            npm_config_cache: path.join(seeded.workDir, "npm-cache"),
+            npm_config_logs_dir: path.join(seeded.workDir, "npm-logs"),
+          },
+          signal: controller.signal,
         },
         files: { "package.json": "{}" },
       },
     ]);
-    assert.deepStrictEqual(requests, [npmRequest(seeded.workDir)]);
+    assert.deepStrictEqual(requests, [
+      { ...npmRequest(seeded.workDir), signal: controller.signal },
+    ]);
+    assert.deepStrictEqual(outerSignals, [controller.signal]);
     assert.deepStrictEqual(
       seeded.context.discoveryWarnings.map((w) => w.message),
       [],

@@ -151,6 +151,32 @@ test("starts no process until a request runs", () => {
   assert.deepStrictEqual(launches, []);
 });
 
+test("starts no process for a request whose operation was already cancelled", async () => {
+  // arrange
+  const controller = new AbortController();
+  const reason = new Error("foreground command arrived");
+  controller.abort(reason);
+  const runPackageManager = createPackageManagerRunner({
+    spawn: () => assert.fail("a cancelled request started a process"),
+    timeoutMs: TIMEOUT_MS,
+    killGraceMs: KILL_GRACE_MS,
+    env: {},
+    host: linuxHost(),
+  });
+
+  // act
+  const run = await runPackageManager({ ...request, signal: controller.signal });
+
+  // assert
+  assert.deepStrictEqual(run, {
+    code: null,
+    stdout: "",
+    stderr: "",
+    timedOut: false,
+    error: new Error("Package manager run aborted", { cause: reason }),
+  });
+});
+
 test("spawns the command with its arguments verbatim, no shell, the request directory, and the update notifier off", async () => {
   // arrange
   const control = createPackageManagerProcess();
@@ -341,10 +367,12 @@ test("finishes the escalation after a timed-out process closes on SIGTERM", asyn
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const control = createPackageManagerProcess();
   const runPackageManager = runnerFor(control);
+  const controller = new AbortController();
 
   // act
-  const pending = runPackageManager(request);
+  const pending = runPackageManager({ ...request, signal: controller.signal });
   t.mock.timers.tick(TIMEOUT_MS);
+  controller.abort();
   control.close(null);
   t.mock.timers.tick(KILL_GRACE_MS);
   t.mock.timers.tick(KILL_GRACE_MS);
@@ -434,15 +462,84 @@ test("signals nothing after the process closed", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const control = createPackageManagerProcess();
   const runPackageManager = runnerFor(control);
+  const controller = new AbortController();
 
   // act
-  const pending = runPackageManager(request);
+  const pending = runPackageManager({ ...request, signal: controller.signal });
   control.close(0);
   await pending;
+  controller.abort();
   t.mock.timers.tick(TIMEOUT_MS + KILL_GRACE_MS);
 
   // assert
   assert.deepStrictEqual(control.kills(), []);
+});
+
+test("cancelling a run stops its whole process tree without reporting a timeout", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const control = createPackageManagerProcess(42);
+  const groupSignals: GroupSignal[] = [];
+  const runPackageManager = runnerFor(control, linuxHost(groupSignals));
+  const controller = new AbortController();
+  let settled = false;
+
+  // act
+  const pending = runPackageManager({ ...request, signal: controller.signal });
+  void pending.then(() => {
+    settled = true;
+  });
+  controller.abort(new Error("foreground command arrived"));
+  const signalsAfterAbort = [...groupSignals];
+  control.close(null);
+  await Promise.resolve();
+  const settledAfterParentClose = settled;
+  t.mock.timers.tick(KILL_GRACE_MS);
+  await Promise.resolve();
+  const settledAfterSigkill = settled;
+  t.mock.timers.tick(KILL_GRACE_MS);
+  const run = await pending;
+
+  // assert
+  assert.deepStrictEqual(signalsAfterAbort, [[42, "SIGTERM"]]);
+  assert.strictEqual(settledAfterParentClose, false);
+  assert.strictEqual(settledAfterSigkill, false);
+  assert.deepStrictEqual(groupSignals, [
+    [42, "SIGTERM"],
+    [42, "SIGKILL"],
+  ]);
+  assert.deepStrictEqual(run, { code: null, stdout: "", stderr: "", timedOut: false });
+});
+
+test("cancels a process when its signal aborts while the launcher returns", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const control = createPackageManagerProcess(42);
+  const groupSignals: GroupSignal[] = [];
+  const controller = new AbortController();
+  const runPackageManager = createPackageManagerRunner({
+    spawn: () => {
+      controller.abort();
+      return control.process;
+    },
+    timeoutMs: TIMEOUT_MS,
+    killGraceMs: KILL_GRACE_MS,
+    env: {},
+    host: linuxHost(groupSignals),
+  });
+
+  // act
+  const pending = runPackageManager({ ...request, signal: controller.signal });
+  t.mock.timers.tick(KILL_GRACE_MS);
+  t.mock.timers.tick(KILL_GRACE_MS);
+  const run = await pending;
+
+  // assert
+  assert.deepStrictEqual(groupSignals, [
+    [42, "SIGTERM"],
+    [42, "SIGKILL"],
+  ]);
+  assert.deepStrictEqual(run, { code: null, stdout: "", stderr: "", timedOut: false });
 });
 
 test("kills a surviving group after its timed-out parent closes", async (t) => {

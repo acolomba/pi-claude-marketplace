@@ -66,7 +66,7 @@ const ALL_LISTS = [
 const ENTRY_LISTS = ["dependencies", "optionalDependencies", "peerDependencies"] as const;
 const ENTRY_FLAGS = ["dev", "optional", "devOptional", "peer"] as const;
 const PLATFORM_LISTS = ["os", "cpu", "libc"] as const;
-const BUN_LOCKFILE_VERSIONS: readonly unknown[] = [0, 1, 2];
+const BUN_LOCKFILE_VERSIONS: ReadonlySet<unknown> = new Set([0, 1, 2]);
 const INTEGRITY_TOKEN = /^(sha512|sha384|sha256|sha1)-[A-Za-z0-9+/]+={0,2}$/;
 const SCOPED_NAME = /^@[a-z0-9][a-z0-9-._]*\/[a-z0-9][a-z0-9-._]*$/;
 const UNSCOPED_NAME = /^[a-z0-9][a-z0-9-._]*$/;
@@ -304,8 +304,8 @@ function checkedOptionalPeers(value: unknown, label: string): readonly string[] 
 
 function hasControlCharacter(text: string): boolean {
   for (let index = 0; index < text.length; index++) {
-    const code = text.charCodeAt(index);
-    if (code < 32 || code === 127) {
+    const code = text.codePointAt(index);
+    if (code !== undefined && (code < 32 || code === 127)) {
       return true;
     }
   }
@@ -667,7 +667,7 @@ function bunWorkspace(lock: JsonObject): JsonObject {
 function sanitizeBun(input: LockfileInput): SanitizedLockfile {
   const { manifest } = input;
   const lock = parsedBunLockfile(input.lockfileText);
-  if (!BUN_LOCKFILE_VERSIONS.includes(lock.lockfileVersion)) {
+  if (!BUN_LOCKFILE_VERSIONS.has(lock.lockfileVersion)) {
     throw new LockfileRefusal("its bun.lock is in a format this extension does not read");
   }
 

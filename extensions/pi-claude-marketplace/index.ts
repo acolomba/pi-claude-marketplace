@@ -15,6 +15,7 @@ import { createBackgroundUpdate } from "./orchestrators/marketplace/background-u
 import { DEFAULT_GIT_OPS, runWithGitAbortSignal } from "./orchestrators/marketplace/shared.ts";
 import { updateMarketplace } from "./orchestrators/marketplace/update.ts";
 import { createUpdateOperations } from "./orchestrators/plugin/operations.ts";
+import { composePackageInstallAbortScope } from "./orchestrators/plugin/package-install.ts";
 import { recomputePluginPath } from "./orchestrators/plugin-path.ts";
 import {
   createApplyReconcile,
@@ -238,7 +239,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
       beginPluginUpdateRun: pluginUpdateOperations.beginPluginUpdateRun,
       updateMarketplace,
       installMissingDependencies,
-      runWithAbortSignal: runWithGitAbortSignal,
+      runWithAbortSignal: composePackageInstallAbortScope(runWithGitAbortSignal),
     }),
     env: process.env,
     random: Math.random,
