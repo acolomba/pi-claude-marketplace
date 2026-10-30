@@ -206,8 +206,8 @@ Feature: Marketplace git source
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons                 | scope   | leaks | rollback partial | cause chain   | cause truncated |
-      | tools            | project           | failed             | tools@tools | tools | failed | authentication required | project |       |                  | <cause chain> | false           |
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons                 | scope   | leaks | rollback partial | cause chain   | cause truncated |
+      | tools            | project           | failed             | tools | tools | failed | authentication required | project |       |                  | <cause chain> | false           |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name  | source   |
       | tools | <source> |
@@ -238,8 +238,8 @@ Feature: Marketplace git source
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons                 | scope   | leaks | rollback partial | cause chain   | cause truncated |
-      | tools            | project           | failed             | tools@tools | tools | failed | authentication required | project |       |                  | <cause chain> | false           |
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons                 | scope   | leaks | rollback partial | cause chain   | cause truncated |
+      | tools            | project           | failed             | tools | tools | failed | authentication required | project |       |                  | <cause chain> | false           |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name  | source   |
       | tools | <source> |

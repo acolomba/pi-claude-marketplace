@@ -5,7 +5,8 @@
 // `SubcommandHandlers` record from it.
 //
 // `GitOps` lives in `orchestrators/marketplace/shared.ts` (D-12).
-// `PluginUpdateFn` lives in `orchestrators/types.ts` (D-06).
+// `PluginUpdateFn` and `ScopeDependencyInstallFn` live in
+// `orchestrators/types.ts` (D-06, D-PL2-09).
 // `edge/` imports both -- allowed by D-v1.0-01-11 (edge -> orchestrators).
 //
 // This module declares `EdgeDeps` only. `SubcommandHandlers` is declared and
@@ -19,7 +20,7 @@ import type {
 } from "../orchestrators/import/index.ts";
 import type { GitOps } from "../orchestrators/marketplace/shared.ts";
 import type { ApplyReconcileOptions } from "../orchestrators/reconcile/types.ts";
-import type { PluginUpdateFn } from "../orchestrators/types.ts";
+import type { PluginUpdateFn, ScopeDependencyInstallFn } from "../orchestrators/types.ts";
 import type { McpStatusReader } from "../platform/mcp-status.ts";
 import type { NotificationContext } from "../platform/pi-api.ts";
 import type { CompletionCache } from "../shared/completion-cache.ts";
@@ -47,6 +48,12 @@ export interface EdgeDeps {
   }) => PluginUpdateFn;
   /** APL-01: the reconcile apply step that `/claude:plugin apply` runs. */
   readonly applyReconcile: (opts: ApplyReconcileOptions) => Promise<void>;
+  /**
+   * D-PL2-09: `apply`'s missing-dependency step over one scope, which
+   * `marketplace add`, `bootstrap` and `marketplace update` run
+   * (`ScopeDependencyInstallFn`).
+   */
+  readonly installMissingDependencies: ScopeDependencyInstallFn;
   readonly importClaudeSettings?: (
     opts: ImportClaudeSettingsOptions,
   ) => Promise<ClaudeImportExecutionResult>;

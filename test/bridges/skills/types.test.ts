@@ -46,7 +46,7 @@ void skillDegradeRecord;
 const stageSkillsCommitResult: StageSkillsCommitResult = {
   stagedNames: ["acme-deploy"],
   recorded: [stagedSkillRecord],
-  warnings: ["neutralized malformed frontmatter"],
+  warnings: [{ kind: "discovery", message: "neutralized malformed frontmatter" }],
   degraded: [skillDegradeRecord],
 } satisfies StageSkillsCommitResult;
 void stageSkillsCommitResult;

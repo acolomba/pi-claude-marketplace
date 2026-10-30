@@ -1,13 +1,11 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import * as fs from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import nodeHttp from "node:http";
 import https from "node:https";
-import { tmpdir } from "node:os";
 import * as path from "node:path";
-import { join } from "node:path";
-import { Readable } from "node:stream";
+import { PassThrough, Readable } from "node:stream";
 import { describe, test, type TestContext } from "node:test";
 
 import * as git from "isomorphic-git";
@@ -26,6 +24,7 @@ import {
   resolveRef,
   resolveRemoteRef,
   resolveTagOid,
+  runWithGitAbortSignal,
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import {
   CrossOriginChallengeError,
@@ -860,18 +859,19 @@ describe("local Git operations", () => {
     assert.strictEqual(await currentBranch({ dir: repository.dir }), "feature");
   });
 
-  test("forwards force so a checkout into an empty work tree writes the target tree", async (t) => {
+  test("checks out a detached commit", async (t) => {
     // arrange
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    const staging = await mkdtemp(join(tmpdir(), "pi-cm-git-force-checkout-"));
-    t.after(() => rm(staging, { recursive: true, force: true }));
-    await cp(join(repository.dir, ".git"), join(staging, ".git"), { recursive: true });
 
     // act
-    await checkout({ dir: staging, ref: repository.initialOid, force: true });
+    await checkout({ dir: repository.dir, ref: repository.initialOid });
 
     // assert
-    assert.strictEqual(fs.existsSync(join(staging, "README.md")), true);
+    assert.strictEqual(await currentBranch({ dir: repository.dir }), undefined);
+    assert.strictEqual(
+      await resolveRef({ dir: repository.dir, ref: "HEAD" }),
+      repository.initialOid,
+    );
   });
 });
 
@@ -2470,6 +2470,502 @@ describe("resolveTagOid", () => {
     // signals that rather than handing back an intermediate tag-object oid a
     // caller could mistake for a commit.
     assert.strictEqual(oid, undefined);
+  });
+});
+
+/** A promise and the two functions that settle it. */
+interface Settleable<T> {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T) => void;
+  readonly reject: (reason: Error) => void;
+}
+
+function settleable<T>(): Settleable<T> {
+  let resolve: (value: T) => void = () => {
+    throw new Error("the promise was not created");
+  };
+
+  let reject: (reason: Error) => void = () => {
+    throw new Error("the promise was not created");
+  };
+
+  const promise = new Promise<T>((settleWith, failWith) => {
+    resolve = settleWith;
+    reject = failWith;
+  });
+  return { promise, resolve, reject };
+}
+
+/** A request the transport holds until the case settles `answer`. */
+interface HeldTransport {
+  readonly requests: string[];
+  readonly arrived: Promise<void>;
+  readonly answer: Settleable<GitHttpResponse>;
+}
+
+function installHeldTransport(t: TestContext): HeldTransport {
+  const requests: string[] = [];
+  const arrival = settleable<undefined>();
+  const answer = settleable<GitHttpResponse>();
+  t.mock.method(http, "request", (request: GitHttpRequest): Promise<GitHttpResponse> => {
+    requests.push(`${request.method ?? "GET"} ${request.url}`);
+    arrival.resolve(undefined);
+    return answer.promise;
+  });
+  return { requests, arrived: arrival.promise, answer };
+}
+
+/** A response body whose `return()` calls are counted. */
+function countedBody(chunks: readonly Uint8Array[]): {
+  readonly body: AsyncIterableIterator<Uint8Array>;
+  readonly returns: () => number;
+} {
+  let returned = 0;
+  const source = chunks[Symbol.iterator]();
+  const body: AsyncIterableIterator<Uint8Array> = {
+    next: () => Promise.resolve(source.next()),
+    return: () => {
+      returned += 1;
+      return Promise.resolve({ done: true, value: undefined });
+    },
+    [Symbol.asyncIterator]: () => body,
+  };
+  return { body, returns: () => returned };
+}
+
+/**
+ * A tag listing whose ls-refs body yields its first tag, then holds its next
+ * read; `onHeldRead` runs when that read starts.
+ */
+function installCutOffTagListing(
+  t: TestContext,
+  onHeldRead: () => void,
+): { readonly returns: () => number } {
+  let returned = 0;
+  t.mock.method(http, "request", async (request: GitHttpRequest): Promise<GitHttpResponse> => {
+    await collectBody(request.body);
+    if (request.method === "GET") {
+      return response(
+        request.url,
+        200,
+        "OK",
+        "application/x-git-upload-pack-advertisement",
+        advertisementBody(),
+      );
+    }
+
+    let reads = 0;
+    const body: AsyncIterableIterator<Uint8Array> = {
+      next: () => {
+        reads += 1;
+        if (reads === 1) {
+          return Promise.resolve({
+            done: false,
+            value: Uint8Array.from(packet(`${OID_LIGHTWEIGHT} refs/tags/v1.0.0\n`)),
+          });
+        }
+
+        onHeldRead();
+        return new Promise(() => undefined);
+      },
+      return: () => {
+        returned += 1;
+        return Promise.resolve({ done: true, value: undefined });
+      },
+      [Symbol.asyncIterator]: () => body,
+    };
+    return {
+      url: request.url,
+      statusCode: 200,
+      statusMessage: "OK",
+      headers: { "content-type": "application/x-git-upload-pack-result" },
+      body,
+    };
+  });
+  return { returns: () => returned };
+}
+
+/**
+ * Answers `info/refs` with a protocol version 1 advertisement of `OID_MAIN`,
+ * then answers `git-upload-pack` with a NAK and a pack stream that stays open.
+ */
+function installStalledPackWireTransport(t: TestContext): {
+  readonly pack: PassThrough;
+  readonly packAnswered: Promise<void>;
+} {
+  const pack = new PassThrough();
+  const packAnswer = settleable<undefined>();
+
+  function request(
+    options: WireRequestOptions,
+    onResponse: (response: Readable) => void,
+  ): EventEmitter {
+    return Object.assign(new EventEmitter(), {
+      end(): void {
+        setImmediate(() => {
+          if (options.method === "GET") {
+            onResponse(
+              Object.assign(Readable.from([uploadPackAdvertisementBody(OID_MAIN)]), {
+                statusCode: 200,
+                statusMessage: "OK",
+                headers: { "content-type": "application/x-git-upload-pack-advertisement" },
+              }),
+            );
+            return;
+          }
+
+          onResponse(
+            Object.assign(pack, {
+              statusCode: 200,
+              statusMessage: "OK",
+              headers: { "content-type": "application/x-git-upload-pack-result" },
+            }),
+          );
+          pack.write(packet("NAK\n"));
+          packAnswer.resolve(undefined);
+        });
+      },
+    });
+  }
+
+  t.mock.method(https, "request", request);
+  return { pack, packAnswered: packAnswer.promise };
+}
+
+async function remoteBranchesAndHead(
+  dir: string,
+): Promise<{ readonly head: string; readonly remoteBranches: string[] }> {
+  return {
+    head: await git.resolveRef({ fs, dir, ref: "HEAD" }),
+    remoteBranches: await git.listBranches({ fs, dir, remote: "origin" }),
+  };
+}
+
+function isAbortReason(reason: Error): (error: unknown) => boolean {
+  return (error) => {
+    assert.strictEqual(error, reason);
+    return true;
+  };
+}
+
+/**
+ * Runs `run` in this many microtask turns: late enough that a request or body
+ * read that settled just now has already told its abort race, early enough
+ * that the call has not returned to its caller.
+ */
+function afterSettlement(run: () => void): void {
+  queueMicrotask(() => {
+    queueMicrotask(() => {
+      queueMicrotask(run);
+    });
+  });
+}
+
+describe("runWithGitAbortSignal", () => {
+  test("D-PL8-24: a fetch whose request never answers rejects with the abort reason and leaves the refs as they were", async (t) => {
+    // arrange
+    const transport = installHeldTransport(t);
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await git.addRemote({ fs, dir: repository.dir, remote: "origin", url: REMOTE_URL });
+    const refsBefore = await remoteBranchesAndHead(repository.dir);
+    const controller = new AbortController();
+    const reason = new Error("background step stopped");
+    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir: repository.dir }));
+    await transport.arrived;
+
+    // act
+    controller.abort(reason);
+
+    // assert
+    await assert.rejects(fetching, isAbortReason(reason));
+    assert.deepStrictEqual(await remoteBranchesAndHead(repository.dir), refsBefore);
+    assert.deepStrictEqual(transport.requests, [`GET ${BOUND_INFO_URL}`]);
+  });
+
+  test("D-PL8-24: a fetch whose pack stalls rejects with the abort reason and destroys the pack stream", async (t) => {
+    // arrange
+    const transport = installStalledPackWireTransport(t);
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await git.addRemote({ fs, dir: repository.dir, remote: "origin", url: REMOTE_URL });
+    const controller = new AbortController();
+    const reason = new Error("background step stopped");
+    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir: repository.dir }));
+    await transport.packAnswered;
+    await new Promise((resolve) => {
+      setImmediate(resolve);
+    });
+
+    // act
+    controller.abort(reason);
+
+    // assert
+    await assert.rejects(fetching, isAbortReason(reason));
+    assert.strictEqual(transport.pack.destroyed, true);
+  });
+
+  test("D-PL8-24: an already-aborted signal rejects before any request is sent", async (t) => {
+    // arrange
+    const transport = installHeldTransport(t);
+    const reason = new Error("background step stopped");
+
+    // act
+    const listing = runWithGitAbortSignal(AbortSignal.abort(reason), () =>
+      listRemoteTags({ url: REMOTE_URL }),
+    );
+
+    // assert
+    await assert.rejects(listing, isAbortReason(reason));
+    assert.deepStrictEqual(transport.requests, []);
+  });
+
+  test("D-PL8-24: a response that arrives after its request was aborted has its body ended", async (t) => {
+    // arrange
+    const transport = installHeldTransport(t);
+    const controller = new AbortController();
+    const reason = new Error("background step stopped");
+    const listing = runWithGitAbortSignal(controller.signal, () =>
+      listRemoteTags({ url: REMOTE_URL }),
+    );
+    await transport.arrived;
+    controller.abort(reason);
+    await assert.rejects(listing, isAbortReason(reason));
+    const late = countedBody([advertisementBody()]);
+
+    // act
+    transport.answer.resolve({
+      url: BOUND_INFO_URL,
+      statusCode: 200,
+      statusMessage: "OK",
+      headers: { "content-type": "application/x-git-upload-pack-advertisement" },
+      body: late.body,
+    });
+    await new Promise((resolve) => {
+      setImmediate(resolve);
+    });
+
+    // assert
+    assert.strictEqual(late.returns(), 1);
+  });
+
+  test("D-PL8-24: a late response whose body fails to end raises no unhandled rejection", async (t) => {
+    // arrange
+    const transport = installHeldTransport(t);
+    const controller = new AbortController();
+    const reason = new Error("background step stopped");
+    const listing = runWithGitAbortSignal(controller.signal, () =>
+      listRemoteTags({ url: REMOTE_URL }),
+    );
+    await transport.arrived;
+    controller.abort(reason);
+    await assert.rejects(listing, isAbortReason(reason));
+    let returned = 0;
+    const body: AsyncIterableIterator<Uint8Array> = {
+      next: () => Promise.resolve({ done: true, value: undefined }),
+      return: () => {
+        returned += 1;
+        return Promise.reject(new Error("socket already closed"));
+      },
+      [Symbol.asyncIterator]: () => body,
+    };
+    const unhandled: unknown[] = [];
+    const onUnhandled = (error: unknown): void => {
+      unhandled.push(error);
+    };
+
+    process.on("unhandledRejection", onUnhandled);
+    t.after(() => {
+      process.off("unhandledRejection", onUnhandled);
+    });
+
+    // act
+    transport.answer.resolve({
+      url: BOUND_INFO_URL,
+      statusCode: 200,
+      statusMessage: "OK",
+      headers: { "content-type": "application/x-git-upload-pack-advertisement" },
+      body,
+    });
+    await new Promise((resolve) => {
+      setImmediate(resolve);
+    });
+
+    // assert
+    assert.deepStrictEqual({ returned, unhandled }, { returned: 1, unhandled: [] });
+  });
+
+  test("D-PL8-24: a request that fails after its abort still rejects with the abort reason", async (t) => {
+    // arrange
+    const transport = installHeldTransport(t);
+    const controller = new AbortController();
+    const reason = new Error("background step stopped");
+    const listing = runWithGitAbortSignal(controller.signal, () =>
+      listRemoteTags({ url: REMOTE_URL }),
+    );
+    await transport.arrived;
+    controller.abort(reason);
+
+    // act
+    transport.answer.reject(new Error("socket closed"));
+
+    // assert
+    await assert.rejects(listing, isAbortReason(reason));
+  });
+
+  test("D-PL8-24: a call that already failed for another reason rejects with that error when the abort lands afterwards", async (t) => {
+    // arrange
+    const controller = new AbortController();
+    const failure = new Error("socket closed");
+    t.mock.method(http, "request", (): Promise<GitHttpResponse> => {
+      afterSettlement(() => {
+        controller.abort(new Error("background step stopped"));
+      });
+      return Promise.reject(failure);
+    });
+
+    // act
+    const listing = runWithGitAbortSignal(controller.signal, () =>
+      listRemoteTags({ url: REMOTE_URL }),
+    );
+
+    // assert
+    await assert.rejects(listing, (error: unknown) => error === failure);
+  });
+
+  test("D-PL8-24: a call that already completed returns its result when the abort lands afterwards", async (t) => {
+    // arrange
+    const controller = new AbortController();
+    t.mock.method(http, "request", async (request: GitHttpRequest): Promise<GitHttpResponse> => {
+      await collectBody(request.body);
+      const answer = response(
+        request.url,
+        200,
+        "OK",
+        request.method === "GET"
+          ? "application/x-git-upload-pack-advertisement"
+          : "application/x-git-upload-pack-result",
+        request.method === "GET"
+          ? advertisementBody()
+          : refsBody([`${OID_LIGHTWEIGHT} refs/tags/v1.0.0`]),
+      );
+      const { body } = answer;
+      if (request.method !== "POST" || body === undefined) {
+        return answer;
+      }
+
+      const source = body[Symbol.asyncIterator]();
+      return {
+        ...answer,
+        body: {
+          next: async () => {
+            const chunk = await source.next();
+            if (chunk.done === true) {
+              afterSettlement(() => {
+                controller.abort(new Error("background step stopped"));
+              });
+            }
+
+            return chunk;
+          },
+          [Symbol.asyncIterator]() {
+            return this;
+          },
+        },
+      };
+    });
+
+    // act
+    const tags = await runWithGitAbortSignal(controller.signal, () =>
+      listRemoteTags({ url: REMOTE_URL }),
+    );
+
+    // assert
+    assert.deepStrictEqual(tags, [{ name: "v1.0.0", oid: OID_LIGHTWEIGHT }]);
+  });
+
+  test("D-PL8-24: a tag listing whose tag list is cut off by the abort rejects instead of returning part of it", async (t) => {
+    // arrange
+    const controller = new AbortController();
+    const reason = new Error("background step stopped");
+    const listing = installCutOffTagListing(t, () => {
+      queueMicrotask(() => {
+        controller.abort(reason);
+      });
+    });
+
+    // act
+    const tags = runWithGitAbortSignal(controller.signal, () =>
+      listRemoteTags({ url: REMOTE_URL }),
+    );
+
+    // assert
+    await assert.rejects(tags, isAbortReason(reason));
+    assert.strictEqual(listing.returns(), 1);
+  });
+
+  test("D-PL8-24: a body read that starts after the abort ends the body and rejects", async (t) => {
+    // arrange
+    const controller = new AbortController();
+    const reason = new Error("background step stopped");
+    const listing = installCutOffTagListing(t, () => {
+      controller.abort(reason);
+    });
+
+    // act
+    const tags = runWithGitAbortSignal(controller.signal, () =>
+      listRemoteTags({ url: REMOTE_URL }),
+    );
+
+    // assert
+    await assert.rejects(tags, isAbortReason(reason));
+    assert.strictEqual(listing.returns(), 1);
+  });
+
+  test("D-PL8-24: a scope whose signal never aborts lists every tag with the same requests", async (t) => {
+    // arrange
+    const requests = installRemoteTransport(t, [
+      `${OID_LIGHTWEIGHT} refs/tags/v1.0.0`,
+      `${OID_TAG} refs/tags/v2.0.0 peeled:${OID_PEELED}`,
+    ]);
+
+    // act
+    const tags = await runWithGitAbortSignal(new AbortController().signal, () =>
+      listRemoteTags({ url: REMOTE_URL }),
+    );
+
+    // assert
+    assert.deepStrictEqual(tags, [
+      { name: "v1.0.0", oid: OID_LIGHTWEIGHT },
+      { name: "v2.0.0", oid: OID_PEELED },
+    ]);
+    assert.deepStrictEqual(requests, expectedTagRequests());
+  });
+
+  test("D-PL8-24: a response without a body reaches isomorphic-git unchanged inside a scope", async (t) => {
+    // arrange
+    t.mock.method(http, "request", (request: GitHttpRequest): Promise<GitHttpResponse> =>
+      Promise.resolve({
+        url: request.url,
+        statusCode: 500,
+        statusMessage: "Internal Server Error",
+        headers: {},
+      }),
+    );
+
+    // act
+    const listing = runWithGitAbortSignal(new AbortController().signal, () =>
+      listRemoteTags({ url: REMOTE_URL }),
+    );
+
+    // assert
+    await assert.rejects(listing, (error: unknown) => {
+      assert.ok(error instanceof git.Errors.HttpError);
+      assert.deepStrictEqual(error.data, {
+        statusCode: 500,
+        statusMessage: "Internal Server Error",
+        response: undefined,
+      });
+      return true;
+    });
   });
 });
 

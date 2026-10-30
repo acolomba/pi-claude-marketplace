@@ -14,7 +14,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { loadMarketplaceManifest } from "../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import { addMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
-import { garbageCollectPluginClones } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts";
+import { collectPluginClonesLocked } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts";
 import {
   probeManifestEntry,
   type ManifestEntry,
@@ -186,7 +186,7 @@ test("seeds a same-repository URL plugin mirror with one marketplace clone", asy
     assert.strictEqual(
       await probeManifestEntry(
         entry,
-        { marketplaceRoot, marketplaceName: "third-party" },
+        { marketplaceRoot, marketplaceName: "third-party", marketplaceSource: undefined },
         locations,
       ),
       "available",
@@ -237,7 +237,7 @@ test("seeds a matching path marketplace without network operations", async () =>
     assert.strictEqual(
       await probeManifestEntry(
         entry,
-        { marketplaceRoot, marketplaceName: "third-party" },
+        { marketplaceRoot, marketplaceName: "third-party", marketplaceSource: undefined },
         locations,
       ),
       "available",
@@ -278,7 +278,7 @@ test("leaves a different-repository plugin remote and unseeded", async () => {
     assert.strictEqual(
       await probeManifestEntry(
         entry,
-        { marketplaceRoot, marketplaceName: "third-party" },
+        { marketplaceRoot, marketplaceName: "third-party", marketplaceSource: undefined },
         locations,
       ),
       "remote",
@@ -414,7 +414,7 @@ test("lets normal clone garbage collection sweep an unreferenced seeded mirror",
     assert.strictEqual(await pathExists(mirror), true);
 
     // act
-    await garbageCollectPluginClones(locations);
+    await collectPluginClonesLocked(locations);
 
     // assert
     assert.strictEqual(await pathExists(mirror), false);

@@ -7,7 +7,6 @@ import path from "node:path";
 import test from "node:test";
 
 import * as git from "isomorphic-git";
-import lockfile from "proper-lockfile";
 
 import {
   createHooksRouting,
@@ -56,7 +55,9 @@ import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
+import { whileStateLockHeld } from "../state-lock.ts";
 
+import { seedMarketplaceRecord } from "./marketplace-seed.ts";
 import { materializeCommitCopyWith } from "./mirror-checkout.ts";
 import { retryTree } from "./scope-tree-inventory.ts";
 import {
@@ -641,6 +642,7 @@ for (const coexist of [false, true]) {
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "reinstalled",
+        resourcesChanged: true,
         name: "hello",
         marketplace: "mp",
         scope: "project",
@@ -681,19 +683,26 @@ for (const coexist of [false, true]) {
         JSON.parse(await readFile(locations.agentsIndexPath, "utf8")),
         expectedIndex,
       );
-      const afterState = await loadState(locations.extensionRoot);
-      assert.deepStrictEqual(afterState, {
+      const migratedState = (updatedAt: string) => ({
         ...beforeState,
         marketplaces: {
           ...beforeState.marketplaces,
           mp: {
             ...beforeState.marketplaces.mp,
             plugins: {
-              hello: { ...oldRecord, resources: { ...oldRecord.resources, agents: expectedNames } },
+              hello: {
+                ...oldRecord,
+                resources: { ...oldRecord.resources, agents: expectedNames },
+                updatedAt,
+              },
             },
           },
         },
       });
+      assert.deepStrictEqual(
+        await loadState(locations.extensionRoot),
+        migratedState("2026-01-02T00:00:00.002Z"),
+      );
       if (!coexist) {
         await assert.rejects(readFile(oldTarget), { code: "ENOENT" });
       }
@@ -710,7 +719,10 @@ for (const coexist of [false, true]) {
         JSON.parse(await readFile(locations.agentsIndexPath, "utf8")),
         expectedIndex,
       );
-      assert.deepStrictEqual(await loadState(locations.extensionRoot), afterState);
+      assert.deepStrictEqual(
+        await loadState(locations.extensionRoot),
+        migratedState("2026-01-02T00:00:00.004Z"),
+      );
     });
   });
 }
@@ -774,7 +786,7 @@ test("AGENT-01 / NFR-3: a reinstall refuses a file no index row names at its new
       indexBefore,
       stateBefore,
     });
-    const message = `Cannot replace agent target with non-previous content at ${newTarget}`;
+    const message = `Cannot replace agent target with non-previous content at ${path.basename(newTarget)}`;
     assert.deepStrictEqual(outcome, {
       partition: "failed",
       name: "hello",
@@ -920,19 +932,13 @@ test("PDEF-01: reinstall preview detects an agent conflict from a later resolved
       // D-18-17: the dependency walk reads every recorded plugin of the scope,
       // so `world` needs a marketplace that declares it; without one the
       // reinstall fails as unreadable before it reaches the conflict.
-      const otherRoot = path.join(cwd, "other-mp");
-      await writePluginTree(path.join(otherRoot, "plugins", "world"), "world", {});
-      const otherManifestPath = await writeManifest(otherRoot, "other-mp", { world: "1.0.0" });
       const state = await loadState(locations.extensionRoot);
       const installed = state.marketplaces.mp?.plugins.hello;
       assert.ok(installed !== undefined);
-      state.marketplaces["other-mp"] = {
-        name: "other-mp",
+      state.marketplaces["other-mp"] = await seedMarketplaceRecord({
+        cwd,
+        marketplace: "other-mp",
         scope: "project",
-        source: pathSource("./other-mp"),
-        addedFromCwd: cwd,
-        manifestPath: otherManifestPath,
-        marketplaceRoot: otherRoot,
         plugins: {
           world: {
             ...installed,
@@ -942,7 +948,7 @@ test("PDEF-01: reinstall preview detects an agent conflict from a later resolved
             },
           },
         },
-      };
+      });
       await saveState(locations.extensionRoot, state);
       const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
 
@@ -1011,9 +1017,20 @@ test("PDEF-01: reinstall stages every agent directory", async () => {
 
       // assert
       assert.strictEqual(outcome.partition, "reinstalled");
-      // The duplicate-name warning is an agents hygiene note, which the shared
-      // swap does not carry in direct mode (D-18-02, D-141-03).
-      assert.ok(!Object.hasOwn(outcome, "notes"), JSON.stringify(outcome));
+      // D-PL1-02: the duplicate-name skip is a discovery warning, so the
+      // direct swap carries it like any other bridge's skip.
+      const pluginRoot = path.join(cwd, "mp-src", "plugins", "hello");
+      const duplicate =
+        `agent source "shared" at "${path.join(pluginRoot, "agents", "shared-later.md")}" duplicates generated name ` +
+        '"pi-claude-marketplace-hello-shared" already produced by agent source "shared" at ' +
+        `"${path.join(pluginRoot, "declared-agents", "shared-first.md")}"; keeping first discovered source.`;
+      assert.deepStrictEqual(
+        { notes: outcome.notes, discoveryWarnings: outcome.discoveryWarnings },
+        {
+          notes: [`warning: ${duplicate}`],
+          discoveryWarnings: [{ kind: "discovery", message: duplicate }],
+        },
+      );
       const state = await loadState(locations.extensionRoot);
       assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources.agents, [
         "pi-claude-marketplace-hello-shared",
@@ -1371,7 +1388,7 @@ test("PRL-13 quiet render suppresses per-plugin notifications", async () => {
   });
 });
 
-test("PRL-13 quiet render returns warning notes after successful cleanup warnings", async () => {
+test("PRL-13 / D-PL1-17: quiet render notes the data cleanup deferral and no cache deferral", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-quiet-warnings-"));
     try {
@@ -1382,6 +1399,7 @@ test("PRL-13 quiet render returns warning notes after successful cleanup warning
         resources: { skill: "old skill" },
         install: true,
       });
+      const dataDir = await locationsFor("project", cwd).pluginDataDir("mp", "hello");
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -1402,18 +1420,9 @@ test("PRL-13 quiet render returns warning notes after successful cleanup warning
       // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.deepEqual(notifications, []);
-      assert.ok(
-        outcome.notes?.some((n) =>
-          n.includes(
-            'warning: Plugin "hello" reinstalled; completion cache refresh deferred: cache drop failed',
-          ),
-        ),
-      );
-      assert.ok(
-        outcome.notes?.some((n) =>
-          n.includes('warning: Plugin "hello" reinstalled; data cleanup deferred'),
-        ),
-      );
+      assert.deepStrictEqual(outcome.notes, [
+        `warning: Plugin "hello" reinstalled; data cleanup deferred at ${dataDir}: data cleanup failed`,
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1608,6 +1617,7 @@ test("REI-04: a reinstall after the marketplace offers a newer version records a
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "reinstalled",
+        resourcesChanged: true,
         name: "hello",
         marketplace: "mp",
         scope: "project",
@@ -1649,14 +1659,9 @@ test("UPR-03: a reinstall refused at its intent mark by a held lock names the ve
       const stateBefore = await readFile(locations.stateJsonPath, "utf8");
       const { ctx, run, notifications } = makeCtx();
       const lockMessage = `Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes.`;
-      const release = await lockfile.lock(locations.extensionRoot, {
-        lockfilePath: locations.stateLockFile,
-        realpath: false,
-      });
-      let outcome;
-      try {
+      const outcome = await whileStateLockHeld(locations, async () => {
         // act
-        outcome = await reinstallPlugin({
+        return reinstallPlugin({
           ctx,
           run,
           scope: "project",
@@ -1664,9 +1669,7 @@ test("UPR-03: a reinstall refused at its intent mark by a held lock names the ve
           marketplace: "mp",
           plugin: "hello",
         });
-      } finally {
-        await release();
-      }
+      });
 
       // assert
       assert.ok(outcome.partition === "failed");
@@ -2631,6 +2634,120 @@ test("GAP-06: an MCP collision at prepare aborts the prepared handles and fails 
   });
 });
 
+/**
+ * D-PL1-14: give the installed `pluginName` a second skill whose generated
+ * name collides with `tool`'s, and return the discovery message it yields.
+ */
+async function seedCollidingSkill(marketplaceRoot: string, pluginName: string): Promise<string> {
+  const skillsDir = path.join(marketplaceRoot, "plugins", pluginName, "skills");
+  const collidingDir = path.join(skillsDir, `${pluginName}-tool`);
+  await mkdir(collidingDir, { recursive: true });
+  await writeFile(path.join(collidingDir, "SKILL.md"), "---\nname: tool\n---\n\nBody.\n");
+  return `skill source "tool" in "${skillsDir}" elides to generated name "${pluginName}-tool", already produced by skill source "${pluginName}-tool"; ignoring duplicate.`;
+}
+
+/** D-PL1-14: a foreign definition under `pluginName`'s `server1` key fails its mcp prepare. */
+async function seedForeignServerKey(cwd: string, pluginName: string): Promise<void> {
+  const mcpPath = locationsFor("project", cwd).mcpAdapterJsonPath;
+  const mcpDoc = JSON.parse(await readFile(mcpPath, "utf8")) as {
+    mcpServers: Record<string, unknown>;
+  };
+  mcpDoc.mcpServers[`plugin_${pluginName}_server1_`] = { command: "node", args: ["other.js"] };
+  await writeFile(mcpPath, JSON.stringify(mcpDoc));
+}
+
+test("D-PL1-14: a reinstall whose prepare throws carries the discovery half of the warnings it prepared", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-failed-warnings-"));
+    try {
+      // arrange
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        resources: { skill: "old skill", agent: "bot", mcp: true },
+        install: true,
+      });
+      const duplicate = await seedCollidingSkill(marketplaceRoot, "hello");
+      await seedForeignServerKey(cwd, "hello");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      });
+
+      // assert
+      assert.ok(outcome.partition === "failed");
+      assert.deepStrictEqual(outcome.discoveryWarnings, [
+        { kind: "discovery", message: duplicate },
+      ]);
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-PL1-14: a bulk reinstall renders each reinstalled and failed plugin's diagnostic in row order after its cascade", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-failed-warnings-bulk-"));
+    try {
+      // arrange
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      for (const pluginName of ["aaa", "zzz"]) {
+        await seedMarketplace({
+          cwd,
+          marketplaceRoot,
+          pluginName,
+          resources: { skill: "old skill", mcp: true },
+          install: true,
+        });
+        await seedCollidingSkill(marketplaceRoot, pluginName);
+      }
+
+      await seedForeignServerKey(cwd, "zzz");
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+
+      // act
+      await reinstallPlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ● aaa v1.0.0 (reinstalled)\n  ⊘ zzz v1.0.0 (failed) {unreadable}\n\nPlugin reinstall: 1 failure, 1 success\n\n/reload to pick up changes",
+          severity: "error",
+        },
+        {
+          message:
+            'Plugin "aaa" [project] reinstalled; 1 declared component has a note.\n\nskill source "tool" in "[redacted path]',
+          severity: "warning",
+        },
+        {
+          message:
+            'Plugin "zzz" [project] reinstall failed; 1 declared component has a note.\n\nskill source "zzz-tool" in "[redacted path]',
+          severity: "warning",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("GAP-07: a reinstall that fails as not installed does not trigger runPostSuccessMaintenance", async () => {
   // When the plugin is not installed, the reinstall returns
   // partition='failed' without calling runPostSuccessMaintenance (so no
@@ -2901,14 +3018,9 @@ test("GAP-14 / UPR-04: a reinstall whose record was removed from state fails as 
   });
 });
 
-test("GAP-15: reinstallPlugin with bridge warning emits notifyWarning before success", async () => {
-  // collectStagingWarnings propagates through locked.bridgeWarnings.
-  // When render='default', bridgeWarnings are emitted via notifyWarning
-  // before the success notification. This exercises the
-  // 'for (const warning of locked.bridgeWarnings)' loop body.
-  // We trigger the warning via a dropMarketplaceCache failure with render='default'.
+test("D-PL1-17: a reinstall whose completion-cache drop fails still reinstalls and notes no cache deferral", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bridge-warn-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-cache-drop-fails-"));
     try {
       // arrange
       await seedMarketplace({
@@ -2928,14 +3040,15 @@ test("GAP-15: reinstallPlugin with bridge warning emits notifyWarning before suc
           cwd,
           marketplace: "mp",
           plugin: "hello",
+          render: "none",
         },
         createCompletionCacheWithDrop(() => Promise.reject(new Error("cache-drop-warn"))),
       );
 
       // assert
-      // dropMarketplaceCache failure is swallowed; reinstall still succeeds.
       assert.equal(outcome.partition, "reinstalled");
-      assert.ok(notifications.some((n) => n.message.includes("reinstalled")));
+      assert.equal(outcome.notes, undefined);
+      assert.deepStrictEqual(notifications, []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3732,6 +3845,7 @@ test("LAYER-04: the unnamed flagless reinstall the load-time backfill runs on a 
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "reinstalled",
+        resourcesChanged: true,
         name: "hello",
         marketplace: "mp",
         scope: "project",
@@ -4503,12 +4617,12 @@ test("SRC-01: a cold-cache reinstall whose git host answers 404 fails as source 
         fromVersion: "9.9.9",
         notes: ["HTTP Error: 404 Not Found"],
         reasons: ["source missing"],
-        cause: notFound,
+        cause: new Error("404 on https://github.com/org/repo.git", { cause: notFound }),
       });
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ gp v9.9.9 (failed) {source missing}\n    cause: HTTP Error: 404 Not Found",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ gp v9.9.9 (failed) {source missing}\n    cause: 404 on https://github.com/org/repo.git -> HTTP Error: 404 Not Found",
           severity: "error",
         },
       ]);
@@ -5199,6 +5313,7 @@ test("GIT-01 / D-18-04 / D-18-11: an unpinned reinstall of a record on the mirro
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "reinstalled",
+        resourcesChanged: true,
         name: "gp",
         marketplace: "mp",
         scope: "project",
@@ -5281,6 +5396,7 @@ test("REI-04 / D-18-04: an unpinned reinstall copies the commit the mirror last 
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "reinstalled",
+        resourcesChanged: true,
         name: "gp",
         marketplace: "mp",
         scope: "project",
@@ -6524,10 +6640,8 @@ for (const mode of ["json", "rpc"]) {
               kind: "diagnostic",
               severity: "warning",
               needsReload: false,
-              header: 'Plugin "hello" reinstalled; 1 declared component has a note.',
-              lines: [
-                'skill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
-              ],
+              header: 'Plugin "hello" [project] reinstalled; 1 declared component has a note.',
+              lines: ['skill source "hello-foo" in "[redacted path]'],
             },
           },
         ]);
@@ -6571,7 +6685,7 @@ test("D-141-03: a standalone reinstall surfaces a skills discovery warning after
         },
         {
           message:
-            'Plugin "hello" reinstalled; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" [project] reinstalled; 1 declared component has a note.\n\nskill source "hello-foo" in "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -6625,12 +6739,12 @@ test("D-141-03: a bulk reinstall surfaces one diagnostic per plugin, singular an
         },
         {
           message:
-            'Plugin "hello" reinstalled; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" [project] reinstalled; 1 declared component has a note.\n\nskill source "hello-foo" in "[redacted path]',
           severity: "warning",
         },
         {
           message:
-            'Plugin "world" reinstalled; 2 declared components have notes.\n\nskill source "world-bar" in "skills" elides to generated name "world-bar", already produced by skill source "bar"; ignoring duplicate.\nskill source "world-foo" in "skills" elides to generated name "world-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "world" [project] reinstalled; 2 declared components have notes.\n\nskill source "world-bar" in "[redacted path]\nskill source "world-foo" in "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -6680,8 +6794,9 @@ test("D-141-03: an orchestrated reinstall carries the discovery half on notes an
       // The unprefixed carrier is what `reinstallPlugins` renders from.
       const carried = outcome.partition === "reinstalled" ? (outcome.discoveryWarnings ?? []) : [];
       assert.equal(carried.length, 1, JSON.stringify(carried));
-      assert.ok(carried[0]?.includes('"hello-foo"'));
-      assert.ok(!carried[0]?.startsWith("warning: "));
+      assert.equal(carried[0]?.kind, "discovery");
+      assert.ok(carried[0].message.includes('"hello-foo"'));
+      assert.ok(!carried[0].message.startsWith("warning: "));
       verifyBoundary();
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -6753,6 +6868,7 @@ test("NREG-01: a hygiene-only reinstall carries neither notes nor discoveryWarni
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "reinstalled",
+        resourcesChanged: true,
         name: "hello",
         marketplace: "mp",
         scope: "project",
@@ -6815,14 +6931,17 @@ test("D-141-03: a reinstall carries its discovery warning on notes and drops the
       // assert
       assert.ok(orchestratedOutcome.partition === "reinstalled");
       assert.deepStrictEqual(orchestratedOutcome.notes, [`warning: ${discovery}`]);
-      assert.deepStrictEqual(orchestratedOutcome.discoveryWarnings, [discovery]);
+      assert.deepStrictEqual(orchestratedOutcome.discoveryWarnings, [
+        { kind: "discovery", message: discovery },
+      ]);
       assert.deepStrictEqual(orchestrated.notifications, []);
       assert.deepStrictEqual(standalone.notifications, [
         {
           message: "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n\n/reload to pick up changes",
         },
         {
-          message: `Plugin "hello" reinstalled; 1 declared component has a note.\n\n${elision("skills")}`,
+          message:
+            'Plugin "hello" [project] reinstalled; 1 declared component has a note.\n\nskill source "hello-foo" in "[redacted path]',
           severity: "warning",
         },
       ]);
@@ -6965,7 +7084,7 @@ test("WGATE-01 / D-115-05: a standalone reinstall renders every workflow discove
       // refuse to load. It is shared by install, update and reinstall.
       assert.equal(
         diagnostic.message,
-        `Plugin "hello" reinstalled; 6 declared components have notes.\n\n${EXPECTED_FAMILY_LINES.join("\n")}`,
+        `Plugin "hello" [project] reinstalled; 6 declared components have notes.\n\n${EXPECTED_FAMILY_LINES.join("\n")}`,
       );
       // WGATE-03: the row itself states no gate. The channel is a second
       // notification precisely so the row is free of it.
@@ -7565,10 +7684,10 @@ function retryCauseChain(message: string): string {
 
 /**
  * The schedule of a reinstall that converged: the swap's intent mark and
- * finalize, its completion-cache refresh, then reinstall's own maintenance
- * (D-18-05, D-18-10).
+ * finalize, its completion-cache refresh (the only drop, D-PL1-17), then
+ * reinstall's own maintenance (D-18-05, D-18-10).
  */
-const CONVERGED_SCHEDULE = ["save:state", "save:state", "drop:cache", "drop:cache", "remove:data"];
+const CONVERGED_SCHEDULE = ["save:state", "save:state", "drop:cache", "remove:data"];
 
 // ──────────────────────────────────────────────────────────────────────────
 // NFR-3 failure-then-retry proof: every operation is safe to retry --
@@ -7676,6 +7795,7 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
         marketplace: "mp",
         name: "hello",
         partition: "reinstalled",
+        resourcesChanged: true,
         scope: "project",
         stagedAgentNames: [],
         stagedMcpServerNames: [],
@@ -7818,6 +7938,7 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
         marketplace: "mp",
         name: "hello",
         partition: "reinstalled",
+        resourcesChanged: true,
         scope: "project",
         stagedAgentNames: [],
         stagedMcpServerNames: [],
@@ -8278,6 +8399,7 @@ test("retry proof: reinstall: a refused finalize save after every commit fails r
       assert.ok(markedStamp > readStamp, `${markedStamp} is not later than ${readStamp}`);
       assert.deepStrictEqual(second, {
         partition: "reinstalled",
+        resourcesChanged: true,
         name: "hello",
         marketplace: "mp",
         scope: "project",
@@ -8592,7 +8714,7 @@ test("retry proof: reinstall: an unreadable base layer is left unchanged by a re
   });
 });
 
-test("retry proof: reinstall: a completion-cache maintenance failure notes the deferral and the retry clears it", async () => {
+test("retry proof: reinstall: a completion-cache drop failure notes nothing and the retry converges", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-cache-maintenance-"));
     const cacheFault = { enabled: true, message: "completion cache refresh refused" };
@@ -8661,17 +8783,15 @@ test("retry proof: reinstall: a completion-cache maintenance failure notes the d
       });
 
       // assert
-      // The swap's own cache refresh fails silently; only reinstall's
-      // maintenance step notes the deferral, once.
+      // The swap's one cache drop fails silently (D-19-01) and reinstall
+      // drops no second time (D-PL1-17), so neither run notes a deferral.
       assert.equal(first.partition, "reinstalled");
-      assert.deepStrictEqual(first.notes, [
-        'warning: Plugin "hello" reinstalled; completion cache refresh deferred: completion cache refresh refused',
-      ]);
+      assert.equal(first.notes, undefined);
       assert.equal(first.discoveryWarnings, undefined);
       assert.equal(second.partition, "reinstalled");
       assert.equal(second.notes, undefined);
       assert.deepStrictEqual(notifications, []);
-      // The data cleanup still runs, so the deferral is cache-only.
+      // The data cleanup still runs after the failed drop.
       assert.deepStrictEqual(firstSchedule, CONVERGED_SCHEDULE);
       assert.deepStrictEqual(secondSchedule, firstSchedule);
       assert.deepStrictEqual(firstTree, [
@@ -9697,6 +9817,7 @@ test("PRL-08 / PRL-11 / REI-04: a reinstall records the version its source now d
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "reinstalled",
+        resourcesChanged: true,
         name: "hello",
         marketplace: "mp",
         scope: "project",
@@ -9967,6 +10088,7 @@ test("AFILE-04: an orchestrated reinstall returns the notice on its outcome and 
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "reinstalled",
+        resourcesChanged: true,
         name: "hello",
         marketplace: "mp",
         scope: "project",

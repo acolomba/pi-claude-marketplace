@@ -343,6 +343,21 @@ describe("listedDirectoryPin", () => {
     // assert
     assert.deepStrictEqual(pins, [PIN, undefined, undefined]);
   });
+
+  test("D-PL5-05: a hosted plugin source of the plugin directory is listed at none", () => {
+    // arrange
+    const hosted: ParsedSource = {
+      kind: "hosted",
+      raw: "https://h.example/m.json",
+      url: "https://h.example/m.json",
+    };
+
+    // act
+    const pin = listedDirectoryPin(hosted, "anthropic-plugin-directory");
+
+    // assert
+    assert.strictEqual(pin, undefined);
+  });
 });
 
 describe("declaredVersionWithPin", () => {

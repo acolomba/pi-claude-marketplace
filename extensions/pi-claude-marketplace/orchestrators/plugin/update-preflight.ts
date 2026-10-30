@@ -16,7 +16,7 @@ import {
   rethrowInvalidGitHubBaseUrl,
   StateLockHeldError,
 } from "../../shared/errors.ts";
-import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
+import { classifyGitFailure } from "../../shared/git-failure-classifiers.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { narrowResolverNotes, narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import {
@@ -43,6 +43,7 @@ import {
   resolvePluginPin,
 } from "./clone-cache.ts";
 import { admitResolvedVersion, evaluateCatalogConstraint } from "./constraint-fold.ts";
+import { DEFAULT_PACKAGE_INSTALL_OPS, removeInstalledPackages } from "./package-install.ts";
 import {
   isRecordedCandidate,
   isSameRevision,
@@ -53,7 +54,11 @@ import { evaluateUpdateConstraint } from "./update-constraint-gate.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
-import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver-types.ts";
+import type {
+  GitPluginRootResult,
+  MaterializablePlugin,
+  ResolveContext,
+} from "../../domain/resolver-types.ts";
 import type { GitBackedSource, PathSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -194,6 +199,8 @@ export interface PreparePluginUpdateOptions {
   readonly partial?: boolean;
   readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
+  /** Exact clone-cache keys created by the current dependency-planning attempt. */
+  readonly cloneCandidates?: Set<string>;
   /**
    * D-10-02 / D-10-19: the constraint gate is composed through this field,
    * defaulted by `policy.searchReleaseTags` to the real
@@ -317,8 +324,12 @@ function makeUpdateCloneProbe(
     readonly authMemo?: Map<string, AuthAttemptResult>;
   },
   refreshSource: boolean,
+  cloneCandidates: Set<string> | undefined,
 ): UpdateCloneProbe {
   let captured: string | undefined;
+  const onCloneCreated = (key: string): void => {
+    cloneCandidates?.add(key);
+  };
 
   function cloneAuth(cloneUrl: string, kind: GitBackedSource["kind"]): GitAuthBundle {
     return auth.notification === undefined
@@ -336,6 +347,7 @@ function makeUpdateCloneProbe(
         source: gitSource,
         auth: cloneAuth(canonicalCloneUrl(gitSource), gitSource.kind),
         refresh: refreshSource,
+        onCloneCreated,
       }),
     );
     if (result.kind === "materialized") {
@@ -358,6 +370,7 @@ function makeUpdateCloneProbe(
       pin: pin.pin,
       ...(pin.ref !== undefined && { ref: pin.ref }),
       resolveAuth: () => authBundle,
+      onCloneCreated,
     });
     if (gitSource.kind === "git-subdir") {
       const subdir = await resolveGitSubdirRoot(cloneRoot, gitSource.path);
@@ -390,18 +403,18 @@ function makeUpdateCloneProbe(
 async function deriveUpdateToVersion(
   entry: PluginEntry,
   installable: MaterializablePlugin,
-  marketplaceName: string,
+  marketplace: Pick<ResolveContext, "marketplaceName" | "marketplaceRoot">,
   resolvedSha: string | undefined,
   pin: UpdateTagPin | undefined,
 ): Promise<string> {
   if (pin !== undefined) {
-    return resolveTagPinnedPluginVersion(entry, installable, marketplaceName, pin.oid);
+    return resolveTagPinnedPluginVersion(entry, installable, marketplace.marketplaceName, pin.oid);
   }
 
   return resolvePluginVersion(
     entry,
     installable,
-    marketplaceName,
+    marketplace,
     isGitSourceEntry(entry) ? resolvedSha : undefined,
   );
 }
@@ -445,23 +458,28 @@ async function resolveUpdateCandidate(
     readonly locations: ScopedLocations;
     readonly pin?: UpdateTagPin;
     readonly pathPinProbe?: typeof materializeMarketplaceTagClone;
+    readonly cloneCandidates?: Set<string>;
   },
 ): Promise<UpdateCandidateResolution> {
   let pathResolvedSha: string | undefined;
+  let remoteUrl: string | undefined;
   try {
     const resolved = await resolveStrict(entry, {
       marketplaceRoot: marketplace.marketplaceRoot,
       marketplaceName: marketplace.name,
-      resolveGitPluginRoot: (gitSource) =>
+      marketplaceSource: marketplace.source,
+      resolveGitPluginRoot: (gitSource) => {
+        remoteUrl = networkCloneUrl(gitSource);
         // D-10-17: overriding `sha` is what routes the EXISTING probe down
         // its already-pinned arm, exactly as an explicitly pinned entry
         // source already does -- no second materialization path exists for
         // a constrained update. `clone.resolvedSha()` (read by the caller
         // after this call returns) already captures whatever this probe
         // resolves to, pinned or not, so nothing here needs to intercept it.
-        resolveGitPluginRoot(
+        return resolveGitPluginRoot(
           options.pin === undefined ? gitSource : { ...gitSource, sha: options.pin.oid },
-        ),
+        );
+      },
       // D-07-06 / D-10-17: added ONLY when a pin is present, so an
       // unconstrained update's resolver context has exactly the keys it has
       // today (success criterion 3) -- neither field is set at all.
@@ -471,14 +489,19 @@ async function resolveUpdateCandidate(
           pathSource: PathSource,
           tagPin: string,
         ): Promise<GitPluginRootResult> => {
-          const result = await (options.pathPinProbe ?? materializeMarketplaceTagClone)({
-            locations: options.locations,
-            marketplaceRoot: marketplace.marketplaceRoot,
-            marketplaceSource: marketplace.source,
-            marketplaceName: marketplace.name,
-            pathSource,
-            tagOid: tagPin,
-          });
+          // GLK-04 / D-PL7-06: the copy reads the marketplace `.git` that
+          // `marketplace update` refreshes under this same scope lock.
+          const result = await withExistingScopeLock(options.locations, () =>
+            (options.pathPinProbe ?? materializeMarketplaceTagClone)({
+              locations: options.locations,
+              marketplaceRoot: marketplace.marketplaceRoot,
+              marketplaceSource: marketplace.source,
+              marketplaceName: marketplace.name,
+              pathSource,
+              tagOid: tagPin,
+              onCloneCreated: (key) => options.cloneCandidates?.add(key),
+            }),
+          );
           if (result.kind === "materialized") {
             pathResolvedSha = result.resolvedSha;
           }
@@ -504,7 +527,10 @@ async function resolveUpdateCandidate(
       throw error;
     }
 
-    return { candidate: candidateFailure(error, options), pathResolvedSha: undefined };
+    return {
+      candidate: candidateFailure(error, { ...options, remoteUrl }),
+      pathResolvedSha: undefined,
+    };
   }
 }
 
@@ -517,20 +543,30 @@ async function resolveUpdateCandidate(
  * same answer, and a throw no ladder classifies keeps its cause and no reason
  * -- the source has not stopped being installable. Only the resolver's own
  * refusal skips.
+ *
+ * `remoteUrl` is the URL of the plugin's git source, unset for a `path`
+ * source. When the host answered with an HTTP status, the cause leads with
+ * `{status} on {url}`, the status and the URL the clone fetched, as
+ * `marketplace update` frames a refused refresh (D-PL7-03, D-PL7-14).
  */
 function candidateFailure(
   error: unknown,
-  options: { readonly plugin: string; readonly fromVersion: string },
+  options: {
+    readonly plugin: string;
+    readonly fromVersion: string;
+    readonly remoteUrl: string | undefined;
+  },
 ): PluginUpdateSkippedOutcome | PreflightFailedOutcome {
   const notes = [errorMessage(error)];
   const cause = error instanceof Error ? error : new Error(errorMessage(error));
-  const hostReason = classifyGitHostFailure(error);
-  if (hostReason !== undefined) {
+  const classified = classifyGitFailure(error, { notFound: "source missing" }, options.remoteUrl);
+  if (classified !== undefined) {
+    const { reason, frame } = classified;
     // The bare auth row keeps no cause, unless a cleanup leaked: its cause
-    // carries the manual-cleanup hint (MA-9, INR-02).
-    const keepsCause =
-      hostReason !== "authentication required" || error instanceof CleanupLeakError;
-    return failedCandidate(options, notes, [hostReason], keepsCause ? cause : undefined);
+    // carries the manual-cleanup hint (MA-9, INR-02). An auth row has no frame.
+    const keepsCause = reason !== "authentication required" || error instanceof CleanupLeakError;
+    const rowCause = frame === undefined ? cause : new Error(frame, { cause });
+    return failedCandidate(options, notes, [reason], keepsCause ? rowCause : undefined);
   }
 
   if (isPartialableUpdateShapeError(error)) {
@@ -769,6 +805,19 @@ async function refreshDisabledRecord(
         return false;
       }
 
+      // A disabled update saves its new pin without running the package step.
+      // Invalidate our old packages under the lock so enable reads the new lockfile.
+      if (
+        record.resolvedSource === preflight.installable.pluginRoot &&
+        (record.version !== preflight.toVersion || record.resolvedSha !== preflight.resolvedSha)
+      ) {
+        await removeInstalledPackages(
+          DEFAULT_PACKAGE_INSTALL_OPS,
+          options.locations,
+          record.resolvedSource,
+        );
+      }
+
       record.version = preflight.toVersion;
       record.resolvedSource = preflight.installable.pluginRoot;
       // WR-01: a re-resolution that produced no pin (a `path` source with no
@@ -816,7 +865,8 @@ async function refreshDisabledPluginUpdate(
     } catch (err) {
       // Clone cleanup is hygienic and retries on a later lifecycle operation.
       hookDebugLog(
-        `refreshDisabledPluginUpdate: clone cleanup failed for ${options.plugin}: ${errorMessage(err)}`,
+        `refreshDisabledPluginUpdate: clone cleanup failed for ${options.plugin}: ` +
+          errorMessage(err),
       );
     }
   }
@@ -873,6 +923,7 @@ async function resolvePinnedUpdateCandidate(
     readonly fromVersion: string;
     readonly partial: boolean;
     readonly locations: ScopedLocations;
+    readonly cloneCandidates?: Set<string>;
   },
   pathPinProbe: typeof materializeMarketplaceTagClone | undefined,
 ): Promise<PinnedUpdateCandidateResolution> {
@@ -914,7 +965,8 @@ function postFetchGuard(
   // UPD-DEP-D1: a dependency plan judged this move at `expectVersion`; any
   // other candidate is a version the plan never judged, so the move fails.
   if (expectVersion !== undefined && toVersion !== expectVersion) {
-    const note = `version ${toVersion} is not version ${expectVersion}, which the dependency plan chose`;
+    const mismatch = `version ${toVersion} is not version ${expectVersion}`;
+    const note = `${mismatch}, which the dependency plan chose`;
     return failedCandidate(base, [note], [], new Error(note));
   }
 
@@ -1103,6 +1155,7 @@ export async function preparePluginUpdate(
     options.locations,
     auth,
     options.policy.refreshSource,
+    options.cloneCandidates,
   );
   const { candidate, resolvedSha, pin } = await resolvePinnedUpdateCandidate(
     triaged.entry,
@@ -1114,6 +1167,9 @@ export async function preparePluginUpdate(
       fromVersion: triaged.record.version,
       partial: options.partial === true || widensPartialGate(triaged.record),
       locations: options.locations,
+      ...(options.cloneCandidates !== undefined && {
+        cloneCandidates: options.cloneCandidates,
+      }),
     },
     options.pathPinProbe,
   );
@@ -1124,7 +1180,7 @@ export async function preparePluginUpdate(
   const toVersion = await deriveUpdateToVersion(
     triaged.entry,
     candidate,
-    options.marketplace,
+    { marketplaceName: options.marketplace, marketplaceRoot: marketplace.marketplaceRoot },
     resolvedSha,
     pin,
   );

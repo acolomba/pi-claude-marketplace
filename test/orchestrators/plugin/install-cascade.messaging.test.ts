@@ -151,6 +151,42 @@ describe("CASCADE_CONTEXT", () => {
 });
 
 describe("composeCascadeMemberRows", () => {
+  test("a partial dependency reports its unsupported kinds while its dependent stays installed", () => {
+    // arrange
+    const installed = [member({ unsupported: ["outputStyles", "themes", "lspServers"] })];
+
+    // act
+    const rows = composeCascadeMemberRows({
+      scope: "user",
+      rootKey: ROOT_KEY,
+      rootRow: ROOT_ROW,
+      installed,
+      alreadyInstalled: [],
+      probe: PROBE_BOTH_LOADED,
+    });
+
+    // assert
+    assert.deepStrictEqual(rows, [
+      {
+        status: "partially-installed",
+        name: "formatter@tools",
+        dependencies: [],
+        version: "2.1.0",
+        reasons: ["unsupported component", "lsp"],
+        severity: "info",
+        needsReload: true,
+      },
+      {
+        status: "installed",
+        name: "helper",
+        dependencies: [],
+        version: "1.0.0",
+        severity: "info",
+        needsReload: true,
+      },
+    ]);
+  });
+
   test("a plugin that declares nothing renders the single row it always did", () => {
     // arrange
     const rows = composeCascadeMemberRows({
@@ -494,6 +530,141 @@ describe("composeCascadeMemberRows", () => {
 });
 
 describe("composeCascadeMemberRow", () => {
+  for (const { title, signals, reasons, severity } of [
+    {
+      title: "a malformed skill warns without an unloaded companion",
+      signals: { degradedKinds: ["skill"] },
+      reasons: ["malformed skill"],
+      severity: "warning",
+    },
+    {
+      title: "a malformed command warns without an unloaded companion",
+      signals: { degradedKinds: ["command"] },
+      reasons: ["malformed command"],
+      severity: "warning",
+    },
+    {
+      title: "malformed reasons are ordered and deduplicated after orphan rewake",
+      signals: { orphanRewake: true, degradedKinds: ["command", "skill", "command", "skill"] },
+      reasons: ["orphan rewake", "malformed skill", "malformed command"],
+      severity: "warning",
+    },
+    {
+      title: "orphan rewake with no degraded kinds stays informational",
+      signals: { orphanRewake: true, degradedKinds: [] },
+      reasons: ["orphan rewake"],
+      severity: "info",
+    },
+  ] satisfies ReadonlyArray<{
+    title: string;
+    signals: Partial<CascadeInstalledRow>;
+    reasons: readonly string[];
+    severity: "info" | "warning";
+  }>) {
+    test(title, () => {
+      // arrange
+      const installed = member(signals);
+
+      // act
+      const row = composeCascadeMemberRow(installed, PROBE_BOTH_LOADED);
+
+      // assert
+      assert.deepStrictEqual(row, {
+        status: "installed",
+        name: "formatter@tools",
+        dependencies: [],
+        version: "2.1.0",
+        reasons,
+        severity,
+        needsReload: true,
+      });
+    });
+  }
+
+  for (const { title, origin, reasons } of [
+    {
+      title: "a degraded partial dependency preserves its current-copy reason",
+      origin: { fellBackToCurrentCopy: true },
+      reasons: [
+        "dependency current copy",
+        "orphan rewake",
+        "malformed skill",
+        "malformed command",
+        "unsupported component",
+        "lsp",
+      ],
+    },
+    {
+      title: "a degraded partial dependency preserves its re-enable reasons",
+      origin: { reEnabledFromRecord: true },
+      reasons: [
+        "already installed",
+        "dependency enabled",
+        "orphan rewake",
+        "malformed skill",
+        "malformed command",
+        "unsupported component",
+        "lsp",
+      ],
+    },
+  ]) {
+    test(title, () => {
+      // arrange
+      const installed = member({
+        ...origin,
+        orphanRewake: true,
+        degradedKinds: ["command", "skill", "skill"],
+        unsupported: ["outputStyles", "themes", "lspServers"],
+      });
+
+      // act
+      const row = composeCascadeMemberRow(installed, PROBE_BOTH_LOADED);
+
+      // assert
+      assert.deepStrictEqual(row, {
+        status: "partially-installed",
+        name: "formatter@tools",
+        dependencies: [],
+        version: "2.1.0",
+        reasons,
+        severity: "warning",
+        needsReload: true,
+      });
+    });
+  }
+
+  for (const { title, origin, reasons } of [
+    {
+      title: "a partial dependency preserves its current-copy reason and companion warning",
+      origin: { fellBackToCurrentCopy: true },
+      reasons: ["dependency current copy", "unsupported component"],
+    },
+    {
+      title: "a partial dependency preserves its re-enable reasons and companion warning",
+      origin: { reEnabledFromRecord: true },
+      reasons: ["already installed", "dependency enabled", "unsupported component"],
+    },
+  ]) {
+    test(title, () => {
+      // arrange
+      const installed = member({ ...origin, declaresAgents: true, unsupported: ["outputStyles"] });
+
+      // act
+      const row = composeCascadeMemberRow(installed, PROBE_NO_AGENTS);
+
+      // assert
+      assert.deepStrictEqual(row, {
+        status: "partially-installed",
+        name: "formatter@tools",
+        dependencies: ["agents"],
+        version: "2.1.0",
+        reasons,
+        severity: "warning",
+        needsReload: true,
+      });
+    });
+  }
+
   test("UPD-DEP-D1 a member installed from its marketplace's current copy names the fallback", () => {
     // act
     const row = composeCascadeMemberRow(
@@ -523,6 +694,7 @@ describe("composeCascadeFailureMessage", () => {
         ok: false,
         reason: "cycle",
         chain: [ROOT_KEY, "formatter@tools", "linter@tools", "formatter@tools"],
+        unmaterialized: ["linter@tools"],
       },
     };
 
@@ -539,6 +711,7 @@ describe("composeCascadeFailureMessage", () => {
         "  ⊘ formatter@tools (failed) {dependency cycle}",
         "    cause: Dependency cycle: helper@official -> formatter@tools -> linter@tools -> formatter@tools.",
         "  ⊘ helper (failed) {dependency failed}",
+        "  ⊘ linter@tools (failed) {dependency failed}",
       ].join("\n"),
     });
   });
@@ -711,6 +884,105 @@ describe("composeCascadeFailureMessage", () => {
     });
   });
 
+  for (const { label, invalidPart, half } of [
+    {
+      label: "plugin name",
+      invalidPart: "plugin",
+      half: "the plugin's name does not; the marketplace's maintainer can rename it",
+    },
+    {
+      label: "marketplace name",
+      invalidPart: "marketplace",
+      half: "the marketplace's name does not; the marketplace's maintainer can rename it",
+    },
+    {
+      label: "plugin and marketplace names",
+      invalidPart: "both",
+      half: "they do not; the marketplace's maintainer can rename both",
+    },
+  ] as const) {
+    test(`CAS-02 / D-PL3-14 a requesting plugin whose id breaks the token rule in its ${label} renders Claude Code's invalid-id cause`, () => {
+      // arrange
+      const subject: CascadeFailureSubject = {
+        kind: "closure",
+        failure: { ok: false, reason: "invalid-root-id", key: ROOT_KEY, invalidPart },
+      };
+
+      // act
+      const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+      // assert
+      assert.deepStrictEqual(emitted, {
+        severity: "error",
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● official [user]",
+          "  ⊘ helper (failed) {invalid manifest}",
+          `    cause: Plugin "helper@official" cannot be installed, because its id is invalid: Each part of a plugin id (plugin@marketplace) may use only the letters a-z and A-Z, digits, ".", "_" and "-", and must start with a letter or digit. Here ${half}.`,
+        ].join("\n"),
+      });
+    });
+  }
+
+  test("D-PL3-14 the invalid-id cause escapes a format character in the plugin id", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "closure",
+      failure: {
+        ok: false,
+        reason: "invalid-root-id",
+        key: "_hel\u202eper@official",
+        invalidPart: "plugin",
+      },
+    };
+
+    // act
+    const cause = cascadeFailureCause(subject, ROOT_KEY);
+
+    // assert
+    assert.strictEqual(
+      cause.message,
+      String.raw`Plugin "_hel\u202eper@official" cannot be installed, because its id is invalid: Each part of a plugin id (plugin@marketplace) may use only the letters a-z and A-Z, digits, ".", "_" and "-", and must start with a letter or digit. Here the plugin's name does not; the marketplace's maintainer can rename it.`,
+    );
+  });
+
+  test("D-PL3-14 the invalid-id row escapes a format character in the plugin name", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "closure",
+      failure: {
+        ok: false,
+        reason: "invalid-root-id",
+        key: "_hel\u202eper@official",
+        invalidPart: "plugin",
+      },
+    };
+
+    // act
+    const emitted = emit(
+      composeCascadeFailureMessage({
+        scope: "user",
+        rootKey: "_hel\u202eper@official",
+        rootName: "_hel\u202eper",
+        subject,
+      }),
+      PROBE_BOTH_LOADED,
+    );
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "A plugin operation has failed.",
+        "",
+        "● official [user]",
+        String.raw`  ⊘ _hel\u202eper (failed) {invalid manifest}`,
+        String.raw`    cause: Plugin "_hel\u202eper@official" cannot be installed, because its id is invalid: Each part of a plugin id (plugin@marketplace) may use only the letters a-z and A-Z, digits, ".", "_" and "-", and must start with a letter or digit. Here the plugin's name does not; the marketplace's maintainer can rename it.`,
+      ].join("\n"),
+    });
+  });
+
   test("RESV-03 contradictory declarations name the joined declared ranges", () => {
     // arrange
     const subject: CascadeFailureSubject = {
@@ -721,6 +993,7 @@ describe("composeCascadeFailureMessage", () => {
         key: "formatter@tools",
         range: "^1.0.0, ^2.0.0",
         detail: "inputs 1 and 2 do not overlap",
+        unmaterialized: ["linter@tools"],
       },
     };
 
@@ -737,6 +1010,7 @@ describe("composeCascadeFailureMessage", () => {
         "  ⊘ formatter@tools (failed) {version conflict}",
         '    cause: Dependency "formatter@tools" has contradictory version constraints ^1.0.0, ^2.0.0 (inputs 1 and 2 do not overlap).',
         "  ⊘ helper (failed) {dependency failed}",
+        "  ⊘ linter@tools (failed) {dependency failed}",
       ].join("\n"),
     });
   });
@@ -771,7 +1045,127 @@ describe("composeCascadeFailureMessage", () => {
     });
   });
 
-  test("UPD-DEP-D1 an installed copy that cannot move into the constraint names why", () => {
+  test("CAS-07 an unsatisfied installed copy's cause cuts its recorded version at 64 characters", () => {
+    // arrange
+    const recordedVersion = `1.0.0-${"z".repeat(74)}`;
+    const subject: CascadeFailureSubject = {
+      kind: "constraint",
+      failure: {
+        kind: "range-conflict",
+        why: "installed-unsatisfied",
+        key: "formatter@tools",
+        range: "^2.0.0",
+        recordedVersion,
+      },
+    };
+
+    // act
+    const cause = cascadeFailureCause(subject, ROOT_KEY);
+
+    // assert
+    assert.strictEqual(
+      cause.message,
+      `Dependency "formatter@tools" is installed at version 1.0.0-${"z".repeat(58)}…, which does not satisfy ^2.0.0.`,
+    );
+  });
+
+  test("UPD-DEP-D1 / CAS-06 an installed copy the requested plugin declares that cannot move names why and the update to run", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "constraint",
+      failure: {
+        kind: "range-conflict",
+        why: "installed-unsatisfied",
+        key: "formatter@tools",
+        range: "^2.0.0",
+        recordedVersion: "1.0.0",
+        moveRefusal: "no release moves it",
+        declaredBy: [ROOT_KEY],
+      },
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}",
+        '    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: no release moves it. To look for a version in range, run /claude:plugin update formatter@tools.',
+        "  ⊘ helper (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("CAS-06 a move refusal that already ends with a period gets no second one before the update hint", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "constraint",
+      failure: {
+        kind: "range-conflict",
+        why: "installed-unsatisfied",
+        key: "formatter@tools",
+        range: "^2.0.0",
+        recordedVersion: "1.0.0",
+        moveRefusal: "no release moves it.",
+        declaredBy: [ROOT_KEY],
+      },
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}",
+        '    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: no release moves it. To look for a version in range, run /claude:plugin update formatter@tools.',
+        "  ⊘ helper (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("CAS-06 a move refusal names no update when the requested plugin does not declare the dependency", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "constraint",
+      failure: {
+        kind: "range-conflict",
+        why: "installed-unsatisfied",
+        key: "formatter@tools",
+        range: "^2.0.0",
+        recordedVersion: "1.0.0",
+        moveRefusal: "no release moves it",
+        declaredBy: ["other@official"],
+      },
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}",
+        '    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: no release moves it',
+        "  ⊘ helper (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("CAS-06 a move refusal names no update when no declaring plugin is known", () => {
     // arrange
     const subject: CascadeFailureSubject = {
       kind: "constraint",
@@ -797,6 +1191,71 @@ describe("composeCascadeFailureMessage", () => {
         "● official [user]",
         "  ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}",
         '    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: no release moves it',
+        "  ⊘ helper (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("CAS-06 a move refusal update would meet too names no update", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "constraint",
+      failure: {
+        kind: "range-conflict",
+        why: "installed-unsatisfied",
+        key: "formatter@tools",
+        range: "^2.0.0",
+        recordedVersion: "1.0.0",
+        moveRefusal:
+          "Cannot replace agent target with non-previous content at pi-claude-marketplace-formatter-helper.md",
+        declaredBy: [ROOT_KEY],
+        updateBlocked: true,
+      },
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}",
+        '    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: Cannot replace agent target with non-previous content at pi-claude-marketplace-formatter-helper.md',
+        "  ⊘ helper (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("CAS-06 an installed copy no move was judged for names no update", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "constraint",
+      failure: {
+        kind: "range-conflict",
+        why: "installed-unsatisfied",
+        key: "formatter@tools",
+        range: "^2.0.0",
+        recordedVersion: "1.0.0",
+        declaredBy: [ROOT_KEY],
+      },
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}",
+        '    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0.',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
@@ -1054,7 +1513,7 @@ describe("composeCascadeFailureMessage", () => {
     });
   });
 
-  test("RESV-06 a member whose rollback could not finish names the phases it left behind", () => {
+  test("RESV-06 a rollback failure redacts paths and names the phases it left behind", () => {
     // arrange
     const subject: CascadeFailureSubject = {
       kind: "member",
@@ -1064,7 +1523,9 @@ describe("composeCascadeFailureMessage", () => {
         {
           phase: "skills",
           msg: "EACCES removing a-fmt",
-          cause: new Error("EACCES removing a-fmt"),
+          cause: new Error("EACCES removing /private/scope/a-fmt", {
+            cause: new Error("unlink /private/scope/state.json"),
+          }),
         },
         { phase: "agents", msg: "removal reported no error" },
       ],
@@ -1083,8 +1544,191 @@ describe("composeCascadeFailureMessage", () => {
         "  ⊘ formatter@tools (failed) {rollback partial}",
         "    cause: failed to stage skill a-fmt: EACCES",
         "    [skills] (rollback failed)",
-        "      cause: EACCES removing a-fmt",
+        "      cause: EACCES removing a-fmt -> unlink state.json",
         "    [agents] (rollback failed)",
+        "  ⊘ helper (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("CAS-01 / D-PL3-02 a walk failure gives each listed dependency a cause-less dependency-failed row", () => {
+    // arrange: the list also names the failing key and the root, which keep
+    // their own rows and get no second one.
+    const subject: CascadeFailureSubject = {
+      kind: "closure",
+      failure: {
+        ok: false,
+        reason: "not-found",
+        key: "base@tools",
+        requiredBy: "lib@tools",
+        unmaterialized: ["lib@tools", "base@tools", ROOT_KEY],
+      },
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ base@tools (failed) {not in manifest}",
+        '    cause: Dependency "base@tools" is not declared by its marketplace.',
+        "  ⊘ helper (failed) {dependency failed}",
+        "  ⊘ lib@tools (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("CAS-01 / D-PL3-02 a constraint failure gives each listed dependency a dependency-failed row in name order", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "constraint",
+      failure: {
+        kind: "range-conflict",
+        why: "contradictory-declarations",
+        key: "lib@tools",
+        range: "^1.0.0, ^2.0.0",
+        detail: "no version satisfies all 2 declared ranges",
+        unmaterialized: ["mid@tools", "aux@tools"],
+      },
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ aux@tools (failed) {dependency failed}",
+        "  ⊘ helper (failed) {dependency failed}",
+        "  ⊘ lib@tools (failed) {version conflict}",
+        '    cause: Dependency "lib@tools" has contradictory version constraints ^1.0.0, ^2.0.0 (no version satisfies all 2 declared ranges).',
+        "  ⊘ mid@tools (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("CAS-01 a failure of the requesting plugin itself renders its row beside the listed dependencies", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "constraint",
+      failure: {
+        kind: "range-conflict",
+        why: "contradictory-declarations",
+        key: ROOT_KEY,
+        range: ">=2.0.0, <1.0.0",
+        detail: "no version satisfies all 2 declared ranges",
+        unmaterialized: ["formatter@tools"],
+      },
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools (failed) {dependency failed}",
+        "  ⊘ helper (failed) {version conflict}",
+        '    cause: Dependency "helper@official" has contradictory version constraints >=2.0.0, <1.0.0 (no version satisfies all 2 declared ranges).',
+      ].join("\n"),
+    });
+  });
+
+  test("CAS-01 / D-PL3-03 a member failure gives the members it rolled back or never reached a dependency-failed row", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "member",
+      key: "formatter@tools",
+      error: new Error("failed to stage skill a-fmt: EACCES"),
+      version: "1.2.3",
+      rollbackPartials: [],
+      unmaterialized: ["linter@tools", "aux@tools"],
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ aux@tools (failed) {dependency failed}",
+        "  ⊘ formatter@tools v1.2.3 (failed)",
+        "    cause: failed to stage skill a-fmt: EACCES",
+        "  ⊘ helper (failed) {dependency failed}",
+        "  ⊘ linter@tools (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("D-PL3-15 a listed member whose move another row reports gets no dependency-failed row", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "member",
+      key: "formatter@tools",
+      error: new Error("failed to stage skill a-fmt: EACCES"),
+      rollbackPartials: [],
+      unmaterialized: ["linter@tools", "aux@tools"],
+    };
+
+    // act
+    const rows = composeCascadeFailureMessage({
+      scope: "user",
+      rootKey: ROOT_KEY,
+      rootName: "helper",
+      subject,
+      moved: [{ name: "linter@tools" }],
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      rows.map((row) => row.name),
+      ["aux@tools", "formatter@tools", "helper"],
+    );
+  });
+
+  test("T-03-48 a dependency's ledger failure names no absolute path", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "member",
+      key: "formatter@tools",
+      error: new Error(
+        "EACCES: permission denied, copyfile '/home/u/p/.pi/staging/a-fmt/notes.md'",
+        {
+          cause: new Error("open '/home/u/p/.pi/staging/a-fmt/notes.md'"),
+        },
+      ),
+      rollbackPartials: [],
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools (failed)",
+        "    cause: EACCES: permission denied, copyfile '[redacted path]' -> open 'notes.md'",
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });

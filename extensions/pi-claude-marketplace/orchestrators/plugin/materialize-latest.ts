@@ -8,32 +8,47 @@
 
 import { loadState } from "../../persistence/state-io.ts";
 import { composeErrorWithCauseChain, rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
+import { mcpConfigNoticesMember } from "../marketplace/shared.ts";
 
+import { DEFAULT_PACKAGE_INSTALL_OPS, installUpdatedPackages } from "./package-install.ts";
 import { isUpdatePreflightOutcome, preparePluginUpdate } from "./update-preflight.ts";
 import { preflightMove, swapPluginUpdate } from "./update-swap.ts";
 
+import type { PackageInstallOps } from "./package-install.ts";
 import type {
   MaterializationPolicy,
   PreparedPluginUpdate,
   PreparePluginUpdateOptions,
 } from "./update-preflight.ts";
-import type { ThreePhaseArgs, ThreePhaseArgsBase, UpdateRunOutcome } from "./update-swap.ts";
-import type { RevisionMove, UpdateDependencyRow } from "../types.ts";
+import type {
+  ThreePhaseArgs,
+  ThreePhaseArgsBase,
+  UpdateDependencySettlement,
+  UpdateRunOutcome,
+} from "./update-swap.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
+import type { PluginUpdateFailedOutcome, RevisionMove } from "../types.ts";
 
 /**
  * UPR-03: what one target's runner reported, so a thrown failure can name the
  * installed version once the preflight found the record, and the move it
  * attempted once it derived a candidate. A caller creates a fresh one per
  * target, so a later target never renders an earlier target's versions.
+ *
+ * D-PL1-14 / D-PL1-24: `stagingWarnings` holds the tagged warnings of the
+ * handles the swap prepared before it threw, so the same per-target holder
+ * carries them to the catch site that builds the failed outcome.
  */
 export interface CandidateReport {
   move?: Partial<RevisionMove>;
+  stagingWarnings?: readonly StagingWarning[];
 }
 
-/** UPR-03: the runner callbacks that fill `report`, for both verbs. */
+/** UPR-03 / D-PL1-14: the runner callbacks that fill `report`, for both verbs. */
 export function recordCandidate(
   report: CandidateReport,
-): Pick<ThreePhaseArgsBase, "onCandidate" | "onRecord"> {
+): Pick<ThreePhaseArgsBase, "onCandidate" | "onRecord" | "onStagingWarnings"> {
   return {
     onRecord: (fromVersion) => {
       report.move = { fromVersion };
@@ -41,7 +56,20 @@ export function recordCandidate(
     onCandidate: (move) => {
       report.move = move;
     },
+    onStagingWarnings: (warnings) => {
+      report.stagingWarnings = warnings;
+    },
   };
+}
+
+/**
+ * D-PL1-14: the reported warnings as a failed outcome's member, omitted when
+ * the swap reported none (NREG-01).
+ */
+export function reportedStagingWarnings(
+  report: CandidateReport,
+): Pick<PluginUpdateFailedOutcome, "stagingWarnings"> {
+  return report.stagingWarnings === undefined ? {} : { stagingWarnings: report.stagingWarnings };
 }
 
 /**
@@ -59,10 +87,14 @@ export function recordCandidate(
  * UPR-03: once the preflight derived a candidate, and before the swap starts,
  * the runner reports the candidate's revisions through `args.onCandidate`, so
  * a caller can name the move on a failure the swap throws.
+ *
+ * D-PL9-12: `packageInstallOps` drives the updated plugin's package install;
+ * production callers omit it and get the real package manager.
  */
 export async function materializeLatestVersion(
   args: ThreePhaseArgs,
   policy: MaterializationPolicy,
+  packageInstallOps: PackageInstallOps = DEFAULT_PACKAGE_INSTALL_OPS,
 ): Promise<UpdateRunOutcome> {
   const preflight = await preparePluginUpdate({
     ...args,
@@ -94,14 +126,73 @@ export async function materializeLatestVersion(
       declaresAgents: false,
       declaresMcp: false,
       declaresWorkflows: false,
+      ...dependencyStagingDiagnosticsMember(settled),
+      // D-PL1-16: the dependencies installed before the refusal rewrote the file.
+      ...settleNoticesFirst(settled, undefined),
     };
   }
 
-  if (settled === undefined || settled.rows.length === 0) {
-    return swapPluginUpdate(args, preflight, policy);
+  // D-PL9-07: an updated plugin gets the packages its new version lists.
+  const packageTarget = {
+    locations: args.locations,
+    marketplace: args.marketplace,
+    pluginRoot: preflight.installable.pluginRoot,
+    force: revisionMoved(move),
+  };
+  if (settled === undefined || !reportsChanges(settled)) {
+    return installUpdatedPackages(
+      packageInstallOps,
+      await swapPluginUpdate(args, preflight, policy),
+      packageTarget,
+    );
   }
 
-  return swapAfterSettle(args, preflight, policy, settled.rows);
+  return installUpdatedPackages(
+    packageInstallOps,
+    await swapAfterSettle(args, preflight, policy, settled),
+    packageTarget,
+  );
+}
+
+/**
+ * D-PL1-16: a settle that installed a dependency reports a row for it, and
+ * one that rewrote the MCP file reports a notice. Either one routes the swap
+ * through `swapAfterSettle`, so no notice is dropped for want of a row.
+ */
+function reportsChanges(settled: UpdateDependencySettlement): boolean {
+  return (
+    settled.rows.length > 0 ||
+    (settled.mcpConfigNotices ?? []).length > 0 ||
+    (settled.stagingDiagnostics ?? []).length > 0
+  );
+}
+
+function dependencyStagingDiagnosticsMember(
+  settled: UpdateDependencySettlement,
+): Pick<PluginUpdateFailedOutcome, "dependencyStagingDiagnostics"> {
+  return settled.stagingDiagnostics === undefined
+    ? {}
+    : { dependencyStagingDiagnostics: settled.stagingDiagnostics };
+}
+
+/**
+ * D-PL1-16: the settle's MCP config notices ahead of the outcome's own, as
+ * an outcome member omitted when both are empty (NREG-01).
+ */
+function settleNoticesFirst(
+  settled: UpdateDependencySettlement,
+  own: readonly McpConfigNotice[] | undefined,
+): { readonly mcpConfigNotices?: readonly McpConfigNotice[] } {
+  return mcpConfigNoticesMember([...(settled.mcpConfigNotices ?? []), ...(own ?? [])]);
+}
+
+/**
+ * D-PL9-06: whether the swap lands another revision than the record holds.
+ * Every verb may move: a reinstall lands the version the marketplace offers
+ * now (REI-04), so the policy's `skipSameRevision` does not tell.
+ */
+function revisionMoved(move: RevisionMove): boolean {
+  return move.toCommit !== move.fromCommit || move.toVersion !== move.fromVersion;
 }
 
 /** The command's context for the preflight's prompts, when it has one. */
@@ -123,18 +214,29 @@ function preflightNotification(
  * changes are complete installs, enables and moves, and they stay when the
  * swap then fails; the failed row lists them, so the report names every
  * change the update made.
+ *
+ * D-PL1-16: the settle's MCP config notices come first on either outcome,
+ * since the dependencies rewrote the file before the swap did.
  */
 async function swapAfterSettle(
   args: ThreePhaseArgs,
   preflight: PreparedPluginUpdate,
   policy: MaterializationPolicy,
-  rows: readonly UpdateDependencyRow[],
+  settled: UpdateDependencySettlement,
 ): Promise<UpdateRunOutcome> {
   const settledState = await loadState(args.locations.extensionRoot);
+  const report: CandidateReport = {};
   try {
+    const outcome = await swapPluginUpdate(
+      forwardingStagingWarnings(args, report),
+      { ...preflight, state: settledState },
+      policy,
+    );
     return {
-      ...(await swapPluginUpdate(args, { ...preflight, state: settledState }, policy)),
-      dependencyRows: rows,
+      ...outcome,
+      ...dependencyRowsMember(settled),
+      ...dependencyStagingDiagnosticsMember(settled),
+      ...settleNoticesFirst(settled, ownNotices(outcome)),
     };
   } catch (err) {
     rethrowInvalidGitHubBaseUrl(err);
@@ -145,10 +247,40 @@ async function swapAfterSettle(
       notes: [composeErrorWithCauseChain(err)],
       reasons: [],
       cause: err as Error,
-      dependencyRows: rows,
+      ...dependencyRowsMember(settled),
       declaresAgents: false,
       declaresMcp: false,
       declaresWorkflows: false,
+      // D-PL1-14: the warnings of the handles prepared before the throw.
+      ...reportedStagingWarnings(report),
+      ...dependencyStagingDiagnosticsMember(settled),
+      ...settleNoticesFirst(settled, undefined),
     };
   }
+}
+
+/** The settle's dependency rows, as an outcome member omitted when empty (NREG-01). */
+function dependencyRowsMember(settled: UpdateDependencySettlement): {
+  readonly dependencyRows?: UpdateDependencySettlement["rows"];
+} {
+  return settled.rows.length > 0 ? { dependencyRows: settled.rows } : {};
+}
+
+/** The swap outcome's own MCP config notices; only its updated and failed arms carry any. */
+function ownNotices(outcome: UpdateRunOutcome): readonly McpConfigNotice[] | undefined {
+  return "mcpConfigNotices" in outcome ? outcome.mcpConfigNotices : undefined;
+}
+
+/**
+ * D-PL1-14: `args` whose swap reports its warnings into `report` as well as
+ * to the caller's own holder, so this module's failed outcome can carry them.
+ */
+function forwardingStagingWarnings(args: ThreePhaseArgs, report: CandidateReport): ThreePhaseArgs {
+  return {
+    ...args,
+    onStagingWarnings: (warnings) => {
+      report.stagingWarnings = warnings;
+      args.onStagingWarnings?.(warnings);
+    },
+  };
 }

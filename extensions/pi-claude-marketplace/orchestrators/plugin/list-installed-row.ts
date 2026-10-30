@@ -34,6 +34,7 @@ export interface ComposeInstalledListRowOptions {
   readonly marketplaceScope: Scope;
   readonly marketplaceRoot: string;
   readonly marketplaceName: string;
+  readonly marketplaceSource: unknown;
   readonly record: PluginInstallRecord;
   readonly lookup: ManifestLookup;
   readonly cwd: string;
@@ -85,13 +86,17 @@ function catalogVersion(entry: ManifestPluginEntry, marketplaceName: string): st
  * version). The resolved verdict travels only when the row is upgradable; a
  * cold candidate or a throw carries none (the CR-01 "could not assert" degrade).
  */
-async function upgradeCandidate(
+export async function upgradeCandidate(
   manifestEntry: ManifestPluginEntry,
   options: ComposeInstalledListRowOptions,
 ): Promise<UpgradeCandidate> {
   const candidate = await resolveListCandidate(
     manifestEntry,
-    { marketplaceRoot: options.marketplaceRoot, marketplaceName: options.marketplaceName },
+    {
+      marketplaceRoot: options.marketplaceRoot,
+      marketplaceName: options.marketplaceName,
+      marketplaceSource: options.marketplaceSource,
+    },
     locationsFor(options.pluginScope, options.cwd),
   ).catch((): undefined => undefined);
   const resolved = candidate?.kind === "resolved" ? candidate : undefined;

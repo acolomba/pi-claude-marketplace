@@ -50,7 +50,7 @@ import {
   PluginShapeError,
   StoredCredentialRejectedError,
 } from "../../shared/errors.ts";
-import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { classifyGitFailure } from "../../shared/git-failure-classifiers.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type MarketplaceRows, type Single } from "../../shared/notify-context.ts";
@@ -72,7 +72,11 @@ import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { ListRemotesResult } from "../../platform/git.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { McpConfigNotice, PluginFailedMessage } from "../../shared/notification-types.ts";
+import type {
+  MarketplaceNotAddedMessage,
+  McpConfigNotice,
+  PluginFailedMessage,
+} from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -227,6 +231,12 @@ export const DEFAULT_GIT_OPS: GitOps = {
   resolveRemoteRef: defaultGit.resolveRemoteRef,
   listRemotes: defaultGit.listRemotes,
 };
+
+/**
+ * D-PL8-24: the git abort scope, re-exported here so `index.ts` hands it to the
+ * background pass without naming `platform/git.ts`.
+ */
+export { runWithGitAbortSignal } from "../../platform/git.ts";
 
 /**
  * Recognize isomorphic-git's `NotFoundError` without importing the library
@@ -408,7 +418,7 @@ export function lacksStoredCredential(err: unknown, auth: GitAuthBundle): err is
     auth.kind === "stored-credential" &&
     !(err instanceof CrossOriginChallengeError) &&
     !(err instanceof StoredCredentialRejectedError) &&
-    classifyGitTransportFailure(err) === "authentication required"
+    classifyGitFailure(err, { notFound: "network error" })?.reason === "authentication required"
   );
 }
 
@@ -855,24 +865,33 @@ export function narrowCascadeFailure(cause: Error): ContentReason {
     return "not in manifest";
   }
 
-  if (isErrnoException(cause)) {
-    switch (cause.code) {
-      case "EACCES":
-      case "EPERM":
-        return "permission denied";
-      case "ENOENT":
-      case "ENOTDIR":
-        return "source missing";
-      case "EBADF":
-      case "EIO":
-      case "EISDIR":
-        return "unreadable";
-      default:
-        break;
-    }
-  }
+  const errnoReason = isErrnoException(cause) ? fsErrnoReason(cause.code) : undefined;
+  return errnoReason ?? "not in manifest";
+}
 
-  return "not in manifest";
+/**
+ * D-PL5-18: the one filesystem errno mapping `narrowCascadeFailure` and
+ * `marketplace add` share, so `list`, `info`, and `add` read a code alike.
+ * Undefined for a code it does not name.
+ */
+export function fsErrnoReason(
+  code: string | undefined,
+): "permission denied" | "source missing" | "unreadable" | undefined {
+  switch (code) {
+    case "EACCES":
+    case "EPERM":
+      return "permission denied";
+    case "ENOENT":
+    case "ENOTDIR":
+      return "source missing";
+    case "EBADF":
+    case "EIO":
+    case "EISDIR":
+      return "unreadable";
+    case undefined:
+    default:
+      return undefined;
+  }
 }
 
 /**
@@ -916,6 +935,20 @@ export async function marketplaceInOtherScope(opts: {
 }): Promise<boolean> {
   const other: Scope = opts.scope === "user" ? "project" : "user";
   return await marketplaceRecordedIn(other, () => locationsFor(other, opts.cwd), opts.marketplace);
+}
+
+/** Build the shared marketplace-absence message without reading state. */
+export function marketplaceNotAddedMessage(opts: {
+  readonly name: string;
+  readonly scope: Scope | undefined;
+  readonly presentInOtherScope?: true;
+}): MarketplaceNotAddedMessage {
+  return {
+    kind: "marketplace-not-added",
+    name: opts.name,
+    ...(opts.scope !== undefined && { scope: opts.scope }),
+    ...(opts.presentInOtherScope === true && { presentInOtherScope: true }),
+  };
 }
 
 /**
@@ -995,7 +1028,8 @@ export function recordedManifestPath(record: ExtensionState["marketplaces"][stri
  * The rows of a marketplace-level failure that has a cause: a `(failed)`
  * marketplace header with one failed child of the same name. A marketplace
  * header carries no cause (SNM-10), so the child carries the reason and the
- * cause line.
+ * cause line. The child stands for the marketplace, so its JSON id is the
+ * marketplace name alone (D-PL5-12).
  */
 export function marketplaceFailureRows(
   name: string,
@@ -1015,6 +1049,7 @@ export function marketplaceFailureRows(
           name,
           reasons: [reason],
           cause,
+          marketplaceSubject: true,
           severity: "error",
           needsReload: false,
         },

@@ -330,6 +330,16 @@ export type DependencyDisableStamp = (
 ) => Promise<void>;
 
 /**
+ * Puts a deferred record's pin back to what `before` recorded, in the
+ * scope its failed enable left it, for the plugin named `key`.
+ */
+export type DeferredPinRestore = (
+  scope: Scope,
+  key: string,
+  before: ExtensionState,
+) => Promise<void>;
+
+/**
  * RECON-01..05 options bundle. When `scope` is omitted, applyReconcile fans
  * out across BOTH scopes project-first (mirrors
  * `pending.ts::pendingReconcile`'s scope fan-out).
@@ -446,4 +456,10 @@ export interface ScopeReadResult {
    * them once the moves they wait on land.
    */
   readonly deferredEnables?: readonly PlannedPluginEnable[];
+  /**
+   * D-PL2-16: the enables of records that wait on an install the plan
+   * schedules. `enable` refuses a record whose closure holds an uninstalled
+   * member, so `apply` runs them after its missing-dependency install.
+   */
+  readonly enablesAfterInstalls?: readonly PlannedPluginEnable[];
 }

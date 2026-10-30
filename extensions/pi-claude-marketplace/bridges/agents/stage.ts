@@ -12,7 +12,8 @@
 //      D-06 corollary) -- surfaced via result.failed[].
 //      Foreign-preserved index rows survive the commit (kept in agents:[]),
 //      except under `force`, reinstall's repair overwrite (RINST-01), which
-//      removes their files after a containment check and drops the rows.
+//      removes the files of the rows this staging re-produces after a
+//      containment check and drops those rows (D-PL1-15).
 //   3. AG-9 / RN-4 cross-owner conflict (a generated name is already owned
 //      by a DIFFERENT (mp, plugin)) throws -- AgentOwnershipConflictError
 //      carries the full conflict list.
@@ -27,14 +28,15 @@ import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { loadAgentsIndex, saveAgentsIndex } from "../../persistence/agents-index-io.ts";
-import { AgentOwnershipConflictError } from "../../shared/errors-bridges.ts";
+import { AgentTargetOccupiedError } from "../../shared/errors-bridges.ts";
 import { appendLeakToError, appendLeaks, errorMessage } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
+import { discoveryWarning, hygieneWarning } from "../../shared/staging-warnings.ts";
 
 import { convertAgent, GUIDED_DROPPED_FIELDS } from "./convert.ts";
 import { discoverPluginAgents } from "./discover.ts";
-import { findOwnershipConflicts, partitionByOwner } from "./index-mutation.ts";
+import { assertAgentNamesUnclaimed, partitionByOwner } from "./index-mutation.ts";
 import { isOwnedAgentFile } from "./marker.ts";
 
 import type {
@@ -49,6 +51,7 @@ import type {
 } from "./types.ts";
 import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 
 /**
  * 9-step prepare. NOTHING outside `<extensionRoot>/agents-staging/<uuid>/`
@@ -66,7 +69,7 @@ import type { RemovalOps } from "../../shared/fs-utils.ts";
  *   6. Safety-check previous targets (AG-5 foreign-content SOFT-FAIL)
  *   7. Write staged files into <extensionRoot>/agents-staging/<uuid>/
  *   8. Build new index entries
- *   9. Assemble the result (warnings are aggregated, unlabeled, between
+ *   9. Assemble the result (warnings are aggregated and tagged between
  *      steps 4 and 5)
  */
 export async function prepareStagePluginAgents(
@@ -126,27 +129,22 @@ export async function prepareStagePluginAgents(
 
   // Step 4: AG-9 cross-owner guard. THROWS -- a generated name owned by a
   // different (mp, plugin) cannot be silently overwritten.
-  const conflicts = findOwnershipConflicts(
+  assertAgentNamesUnclaimed(
+    { marketplace: marketplaceName, plugin: pluginName },
     otherEntries,
     converted.map((c) => c.generatedName),
   );
-  if (conflicts.length > 0) {
-    throw new AgentOwnershipConflictError(
-      { marketplace: marketplaceName, plugin: pluginName },
-      conflicts.map((c) => ({
-        generatedName: c.generatedName,
-        owner: { marketplace: c.owner.marketplace, plugin: c.owner.plugin },
-      })),
-    );
-  }
 
-  // Aggregate warnings (corruptions + per-agent warnings + D-07 dedup
-  // warnings) -- needed for both noop and staged paths so they're built
-  // up here.
-  const aggregatedWarnings: string[] = [
-    ...loaded.corruptions.map((c) => `agent index corruption (entry dropped): ${c}`),
-    ...converted.flatMap((c) => formatAgentWarnings(c)),
-    ...discoverWarnings,
+  // Aggregate warnings for both the noop and staged paths (D-PL1-02): index
+  // corruptions and per-agent conversion notes are hygiene, and the D-07
+  // duplicate-name skips are discovery, because each names a declared agent
+  // this install did not materialize.
+  const aggregatedWarnings: StagingWarning[] = [
+    ...loaded.corruptions.map((c) =>
+      hygieneWarning(`agent index corruption (entry dropped): ${c}`),
+    ),
+    ...converted.flatMap((c) => formatAgentWarnings(c)).map((w) => hygieneWarning(w)),
+    ...discoverWarnings.map((w) => discoveryWarning(w)),
   ];
 
   // Step 5: AS-9 noop short-circuit. Nothing to write AND no previous
@@ -289,16 +287,35 @@ function formatAgentWarnings(converted: ConvertedAgent): string[] {
  * it keeps. By default only the rows whose files this plugin still owns are
  * replaced; the AG-5 rows (this plugin's own agent files whose bytes a user
  * changed) stay on disk and in the index. `force` is reinstall's repair
- * overwrite: it replaces the AG-5 rows too. A file no index row names is
- * never in either set.
+ * overwrite: it also replaces the AG-5 rows whose `generatedName` this
+ * staging produces (D-PL1-15), but only when the row's `targetPath` is the
+ * path this staging writes for that name. A staged-name row that points
+ * anywhere else, as a hand-edited index can, stays in the index with its file.
+ * Any other AG-5 row, such as one the user named by hand, keeps its file and
+ * its row, as an unforced commit keeps it. A kept row whose target equals a
+ * new entry's target makes the commit refuse before it removes anything. A
+ * file no index row names is never in either set.
  */
 function partitionPreviousEntries(
   prepared: PreparedAgentsStaged,
   options: { readonly force?: boolean } | undefined,
 ): { readonly replaced: readonly AgentsIndexEntry[]; readonly kept: readonly AgentsIndexEntry[] } {
-  return options?.force === true
-    ? { replaced: [...prepared.previousEntries, ...prepared.foreignPreservedEntries], kept: [] }
-    : { replaced: prepared.previousEntries, kept: prepared.foreignPreservedEntries };
+  if (options?.force !== true) {
+    return { replaced: prepared.previousEntries, kept: prepared.foreignPreservedEntries };
+  }
+
+  const stagedTargets = new Map(
+    prepared.newEntries.map((entry) => [entry.generatedName, entry.targetPath]),
+  );
+  const isOverwritten = (entry: AgentsIndexEntry): boolean =>
+    stagedTargets.get(entry.generatedName) === entry.targetPath;
+  return {
+    replaced: [
+      ...prepared.previousEntries,
+      ...prepared.foreignPreservedEntries.filter(isOverwritten),
+    ],
+    kept: prepared.foreignPreservedEntries.filter((entry) => !isOverwritten(entry)),
+  };
 }
 
 /**
@@ -325,19 +342,18 @@ export async function assertAgentCommitTargets(
   for (const entry of prepared.newEntries) {
     // eslint-disable-next-line no-await-in-loop -- the first non-previous target throws before any rm
     if (!previousTargets.has(entry.targetPath) && (await pathExists(entry.targetPath))) {
-      throw new Error(
-        `Cannot replace agent target with non-previous content at ${entry.targetPath}`,
-      );
+      throw new AgentTargetOccupiedError(entry.targetPath);
     }
   }
 }
 
 /**
- * NFR-10 / RINST-01: a forced commit removes index rows that failed the AG-5
- * ownership check, so the marker cannot vouch for their `targetPath`. Each
- * one must resolve inside `<scopeRoot>/agents/` before anything is removed;
- * a hand-edited index, or a project `.pi/` moved with absolute paths in it,
- * would otherwise point the removal at any file.
+ * NFR-10 / RINST-01: every row a forced commit replaces must resolve inside
+ * `<scopeRoot>/agents/` before anything is removed; a hand-edited index, or
+ * a project `.pi/` moved with absolute paths in it, would otherwise point the
+ * removal at any file. The AG-5 rows it replaces sit at a path this staging
+ * writes (D-PL1-15), so the check matters for the owned rows: their marker
+ * says the file is a generated agent, not where that file lives.
  */
 async function assertForcedTargetsContained(
   prepared: PreparedAgentsStaged,
@@ -359,8 +375,11 @@ async function assertForcedTargetsContained(
  * rename staged files into <scopeRoot>/agents/, persist the index, clean up.
  *
  * `options.force` is reinstall's repair overwrite (RINST-01, D-18-15): the
- * plugin's own user-edited previous agent files are replaced and their
- * preserved index rows dropped. `update` and install never pass it. A file at
+ * plugin's own user-edited previous agent files that this staging writes
+ * again, at the same path, are replaced and their preserved index rows
+ * dropped. A preserved row with a staged name and another path keeps its row
+ * and file; any other preserved row keeps its file and row
+ * (D-PL1-15). `update` and install never pass it. A file at
  * a new target that no index row names is refused with or without it (PI-6).
  *
  * If deletion, rename or index persistence fails, the index still describes
@@ -391,9 +410,9 @@ export async function commitPreparedAgents(
   // the OLD targetPaths plus step-1 ENOENT tolerance closes the retry loop).
   // The loop stays parallel here because step 1 has no source to roll back
   // to -- this commit keeps no backup of those files, so rollback would have
-  // nothing to restore. The kept rows (foreignPreservedEntries unless
-  // forced) are INTENTIONALLY excluded -- those targets stay untouched on disk
-  // and their rows stay in the index.
+  // nothing to restore. The kept rows (foreignPreservedEntries, minus the
+  // re-produced ones when forced) are INTENTIONALLY excluded -- those targets
+  // stay untouched on disk and their rows stay in the index.
   try {
     // The backstop for a file that appeared after the caller's own probe.
     await assertAgentCommitTargets(prepared, options);

@@ -13,7 +13,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -25,15 +25,20 @@ import {
   World,
 } from "@cucumber/cucumber";
 
+import { npmConfigText, NpmRegistry } from "../lib/npm-registry.ts";
 import { readSession } from "../lib/pi-commands.ts";
 import { PiProcess } from "../lib/pi-process.ts";
+import { PiTuiSession } from "../lib/pi-tui.ts";
 import { rowArrays } from "../lib/result-rows.ts";
 
 import { currentRun } from "./pi-process.ts";
 
 import type { GitPluginRepository } from "../lib/git-plugin.ts";
 import type { GitHostTraffic, HttpsGitHost, RequestWindow } from "../lib/https-git-host/server.ts";
+import type { NpmRegistryRequest } from "../lib/npm-registry.ts";
 import type { NotificationPayload, OfferedSkill, SessionReport } from "../lib/pi-commands.ts";
+import type { RpcGitEnvironment } from "../lib/pi-process.ts";
+import type { PluginCompletion } from "../lib/plugin-completions.ts";
 import type { PublicationSites, PublishedMarketplace } from "../lib/published-marketplace.ts";
 import type { RunTokens } from "../lib/run-tokens.ts";
 
@@ -42,6 +47,12 @@ import type { RunTokens } from "../lib/run-tokens.ts";
 const STEP_TIMEOUT_MS = 30_000;
 
 setDefaultTimeout(STEP_TIMEOUT_MS);
+
+/** The bytes of a scope's base config and installation record. */
+export interface ScopeBytes {
+  readonly config: Buffer;
+  readonly state: Buffer;
+}
 
 export class ScenarioWorld extends World {
   results: readonly NotificationPayload[] | undefined = undefined;
@@ -60,6 +71,14 @@ export class ScenarioWorld extends World {
   // so a session payload without rows would otherwise pass unseen. The steps
   // that state the fields of every result call `markResultsCompared()`.
   uncomparedSessionResults: readonly string[] = [];
+  // A TUI message may produce background notices; its assertion compares the complete set.
+  uncomparedTuiNotices = false;
+  backgroundForegroundWaitMs: number | undefined = undefined;
+  backgroundRequestWindow: RequestWindow | undefined = undefined;
+  // The scope bytes the config steps remembered, by scope.
+  readonly rememberedScopeBytes = new Map<string, ScopeBytes>();
+  private readonly completionSets = new Map<string, readonly PluginCompletion[]>();
+  private readonly uncomparedCompletionSets = new Set<string>();
   // Cucumber builds the world before any `Before()` hook, so the
   // `{scenario time}` window opens before any setup command runs (D-05).
   readonly startedAt = Date.now();
@@ -68,6 +87,10 @@ export class ScenarioWorld extends World {
   // step reads only that command's traffic. The `BeforeStep` hook in
   // `support/https-git-host.ts` sets it.
   requestWindow: RequestWindow | undefined = undefined;
+  // The npm registry this scenario started, which only a scenario that ships plugin packages needs.
+  npmRegistry: NpmRegistry | undefined = undefined;
+  // The npm registry's log length when the last `When` step started; `support/npm-registry.ts` sets it.
+  npmRequestWindow: number | undefined = undefined;
   private readonly published = new Map<string, PublishedMarketplace>();
   private readonly gitRepositories = new Map<string, GitPluginRepository>();
   private readonly errorMessages = new Map<string, string>();
@@ -75,11 +98,14 @@ export class ScenarioWorld extends World {
   // A Pi this scenario started with an environment of its own; while set it
   // takes the place of the run's Pi.
   private scenarioPi: PiProcess | undefined = undefined;
+  private tuiSession: PiTuiSession | undefined = undefined;
+  private tuiEnvironment: RpcGitEnvironment | undefined = undefined;
+  private readonly tuiVariables: Record<string, string> = {};
 
   /**
    * The Pi the steps talk to: the one this scenario started with
-   * `usePiWithGitHubBaseUrl()`, or else the run's Pi, which the `Before()`
-   * hook has reset for this scenario.
+   * `usePiWithGitHubBaseUrl()` or `usePiWithBackgroundUpdateDelay()`, or else
+   * the run's Pi, which the `Before()` hook has reset for this scenario.
    */
   get pi(): PiProcess {
     return this.scenarioPi ?? currentRun().pi;
@@ -247,6 +273,48 @@ export class ScenarioWorld extends World {
   }
 
   /**
+   * Returns the npm registry of this scenario, starting it the first time.
+   * Starting it writes the sandbox `.npmrc` that points npm at it, before any
+   * plugin ships a package file, so no npm run reaches the public registry.
+   * The scenario's releases remove the `.npmrc` and close the registry.
+   */
+  async useNpmRegistry(): Promise<NpmRegistry> {
+    if (this.npmRegistry !== undefined) {
+      return this.npmRegistry;
+    }
+
+    const registry = await NpmRegistry.start();
+    this.onRelease(() => registry.close());
+    this.npmRegistry = registry;
+    const config = path.join(this.tokens.home, ".npmrc");
+    const text = npmConfigText(registry);
+    await writeFile(config, text, { flag: "wx" });
+    this.onRelease(() => rm(config, { force: true }));
+    assert.strictEqual(await readFile(config, "utf8"), text);
+    return registry;
+  }
+
+  /** Returns the npm registry of this scenario, failing when no step started one. */
+  requireNpmRegistry(): NpmRegistry {
+    if (this.npmRegistry === undefined) {
+      assert.fail("no step started the npm registry in this scenario");
+    }
+
+    return this.npmRegistry;
+  }
+
+  /** Returns the requests the npm registry received since the last `When` step started. */
+  npmRequestsOfLastCommand(): readonly NpmRegistryRequest[] {
+    const registry = this.requireNpmRegistry();
+    const window = this.npmRequestWindow;
+    if (window === undefined) {
+      throw new Error("no command has run in this scenario");
+    }
+
+    return registry.requestsSince(window);
+  }
+
+  /**
    * Records that a row step compared the row arrays of the last results. This
    * is the one write a `Then` step makes to the world.
    */
@@ -364,13 +432,108 @@ export class ScenarioWorld extends World {
    * the scenario.
    */
   async usePiWithGitHubBaseUrl(value: string): Promise<void> {
-    const run = currentRun();
-    const pi = await PiProcess.start(run.sandbox, {
-      ...run.piEnvironment,
+    await this.usePiWith({
+      ...currentRun().piEnvironment,
       PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: value,
     });
-    this.onRelease(() => pi.stop());
-    this.scenarioPi = pi;
+  }
+
+  /**
+   * Starts a second Pi as `usePiWithGitHubBaseUrl()` does, except that the
+   * maximum delay of the background update is `value` (D-PL8-09) instead of
+   * the GitHub base override. A Pi's environment is fixed when it starts, and
+   * the run's Pi never sets that variable, so its background update keeps the
+   * ten-minute maximum.
+   */
+  async usePiWithBackgroundUpdateDelay(value: string): Promise<void> {
+    const environment = {
+      ...currentRun().piEnvironment,
+      PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS: value,
+    } satisfies RpcGitEnvironment;
+    this.tuiEnvironment = environment;
+    await this.usePiWith(environment);
+  }
+
+  /** Adds a variable to the environment of the TUI session this scenario starts. */
+  setTuiVariable(name: string, value: string): void {
+    if (this.tuiSession !== undefined) {
+      throw new Error("the TUI session already started in this scenario");
+    }
+
+    this.tuiVariables[name] = value;
+  }
+
+  /** Starts one contained production TUI and registers its release before waiting for readiness. */
+  async startTuiSession(): Promise<PiTuiSession> {
+    if (this.tuiSession !== undefined) {
+      throw new Error("a TUI session already started in this scenario");
+    }
+
+    const run = currentRun();
+    const tui = await PiTuiSession.start({
+      sandbox: run.sandbox,
+      git: this.tuiEnvironment ?? run.piEnvironment,
+      variables: this.tuiVariables,
+    });
+    this.onRelease(() => tui.stop());
+    this.tuiSession = tui;
+    await tui.waitUntilReady();
+    return tui;
+  }
+
+  /** Returns the contained TUI this scenario started. */
+  requireTuiSession(): PiTuiSession {
+    if (this.tuiSession === undefined) {
+      throw new Error("no TUI session started in this scenario");
+    }
+
+    return this.tuiSession;
+  }
+
+  /** Marks that a TUI message may have produced notices that a Then step must compare. */
+  expectTuiNotices(): void {
+    assert.strictEqual(this.uncomparedTuiNotices, false, "TUI notices are already uncompared");
+    this.uncomparedTuiNotices = true;
+  }
+
+  /** Marks the complete TUI notice set compared. */
+  markTuiNoticesCompared(): void {
+    this.uncomparedTuiNotices = false;
+  }
+
+  /** Records the complete registered-provider completion set for `prefix`. */
+  recordCompletions(prefix: string, completions: readonly PluginCompletion[]): void {
+    assert.strictEqual(
+      this.completionSets.has(prefix),
+      false,
+      `${prefix} completions already exist`,
+    );
+    this.completionSets.set(prefix, completions);
+    this.uncomparedCompletionSets.add(prefix);
+  }
+
+  /** Returns the complete completion set recorded for `prefix`. */
+  completionsFor(prefix: string): readonly PluginCompletion[] {
+    const completions = this.completionSets.get(prefix);
+    if (completions === undefined) {
+      throw new Error(`no plugin completions were requested for ${prefix}`);
+    }
+
+    return completions;
+  }
+
+  /** Marks the completion set for `prefix` compared by a Then step. */
+  markCompletionsCompared(prefix: string): void {
+    assert.strictEqual(
+      this.uncomparedCompletionSets.delete(prefix),
+      true,
+      `${prefix} completions were not awaiting comparison`,
+    );
+  }
+
+  /** Returns every completion prefix still awaiting a complete-set comparison. */
+  completionSetsAwaitingComparison(): readonly string[] {
+    return [...this.uncomparedCompletionSets];
   }
 
   /** Registers `release` to run when the scenario ends, before anything registered earlier. */
@@ -393,6 +556,14 @@ export class ScenarioWorld extends World {
       throw new AggregateError(errors, "scenario releases failed");
     }
   }
+
+  // Starts a Pi in the run's sandbox with `environment`, stops it with the
+  // scenario, and makes it the Pi the steps talk to.
+  private async usePiWith(environment: RpcGitEnvironment): Promise<void> {
+    const pi = await PiProcess.start(currentRun().sandbox, environment);
+    this.onRelease(() => pi.stop());
+    this.scenarioPi = pi;
+  }
 }
 
 setWorldConstructor(ScenarioWorld);
@@ -401,6 +572,8 @@ After(async function (this: ScenarioWorld, { result }: ITestCaseHookParameter): 
   const uncompared = this.uncomparedRows;
   const uncomparedNotices = this.uncomparedNotices;
   const uncomparedSessionResults = this.uncomparedSessionResults;
+  const uncomparedTuiNotices = this.uncomparedTuiNotices;
+  const uncomparedCompletionSets = this.completionSetsAwaitingComparison();
   await this.release();
   if (result?.status === Status.PASSED) {
     assert.deepStrictEqual(uncompared, [], "no step compared these rows of the last results");
@@ -413,6 +586,12 @@ After(async function (this: ScenarioWorld, { result }: ITestCaseHookParameter): 
       uncomparedSessionResults,
       [],
       "no step compared the fields of these results of the last session",
+    );
+    assert.strictEqual(uncomparedTuiNotices, false, "no step compared the TUI notice set");
+    assert.deepStrictEqual(
+      uncomparedCompletionSets,
+      [],
+      "no step compared these plugin completion sets",
     );
   }
 });

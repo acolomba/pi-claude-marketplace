@@ -18,6 +18,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import lockfile from "proper-lockfile";
 import { mock, verify } from "strong-mock";
 
 import { GENERATED_AGENT_MARKER } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
@@ -74,6 +75,7 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { TestContext } from "node:test";
@@ -3197,9 +3199,10 @@ test("WR-03: a post-save routing failure cannot roll back committed uninstall", 
 // ─────────────────────────────────────────────────────────────────────────────
 // PURL-05 / D-78-01: post-state-commit clone garbage-collection.
 //
-// After the uninstall transaction commits, uninstall calls
-// garbageCollectPluginClones(locations) beside the existing
-// rm(pluginDataDir) cleanup (D-19-01 swallow discipline). A git-source
+// After the uninstall transaction commits and releases its lock, uninstall
+// calls collectPluginClonesLocked(locations), which takes a fresh scope lock
+// (D-PL7-05), beside the existing rm(pluginDataDir) cleanup (D-19-01 swallow
+// discipline). A held lock skips the GC and leaves the clone. A git-source
 // clone is reclaimed once no surviving record references it; a shared
 // clone survives while another installed plugin still references it. The
 // GC runs strictly AFTER the state save (T-78-08) and a GC leak never
@@ -3387,6 +3390,69 @@ test("uninstalling the last referencer of a git clone deletes its plugin-clones 
         false,
         "clone dir removed after last referencer gone",
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GLK-03 / D-PL7-05: a held scope lock leaves the last referencer's clone and the uninstall still succeeds", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-gc-held-"));
+    try {
+      // arrange -- the completion-cache drop runs after the uninstall's lock is
+      // released and before the GC, so a second holder taken there holds the
+      // lock while the GC tries to take it.
+      const locations = locationsFor("project", cwd);
+      await seedGitPlugin(locations, "mp", { solo: "keySolo" }, cwd);
+      const releases: Array<() => Promise<void>> = [];
+      const completionCache: CompletionCache = {
+        ...createCompletionCache(),
+        dropMarketplaceCache: async () => {
+          releases.push(
+            await lockfile.lock(locations.extensionRoot, {
+              lockfilePath: locations.stateLockFile,
+              realpath: false,
+            }),
+          );
+        },
+      };
+      const uninstallPlugin = createUninstallOperation(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        completionCache,
+      );
+      const { ctx, run, notifications } = makeCtx();
+      const logged = captureDebugLog(t);
+
+      // act
+      try {
+        await uninstallPlugin({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "solo",
+        });
+      } finally {
+        await Promise.all(releases.map((release) => release()));
+      }
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation needs attention.\n" +
+            "\n● mp [project]\n  ○ solo v0.0.1 (uninstalled) {stale workflow command}\n" +
+            "\n/reload to pick up changes",
+          severity: "warning",
+        },
+      ]);
+      assert.deepStrictEqual(await readdir(locations.pluginClonesDir), ["keySolo"]);
+      assert.deepStrictEqual(logged, [
+        `[hooks] uninstall: package removal failed for solo@mp: Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes.`,
+        `[hooks] uninstall: clone GC failed for solo@mp: Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes.`,
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -5735,6 +5801,9 @@ async function seedDeclaringScope(
       await mkdir(skillDir, { recursive: true });
       await writeFile(path.join(skillDir, "SKILL.md"), `---\nname: ${skillName}\n---\nbody\n`);
       const record = makePluginRecord({ skills: [skillName] }, seed.provenance ?? "explicit");
+      // D-PL2-12: a path record's installed copy sits in its marketplace tree;
+      // this one is gone, so a delisted record's copy reads as absent.
+      record.resolvedSource = path.join(marketplaceRoot, "installed", plugin);
       record.enabled = seed.enabled ?? true;
       if (seed.dependencyDisabled !== undefined) {
         record.dependencyDisabled = seed.dependencyDisabled;
@@ -7744,6 +7813,257 @@ test("AFILE-04: an orchestrated partial uninstall returns the notice on its fail
         ],
       });
       assert.deepStrictEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// D-PL9-22: the marker's name is the on-disk contract the package step writes.
+const PACKAGE_STEP_MARKER = ".pi-claude-marketplace";
+
+/**
+ * Points each named record of the marketplace at one plugin root inside the
+ * extension root, whose node_modules the package step marked.
+ */
+async function placeStepPackages(
+  locations: ReturnType<typeof locationsFor>,
+  marketplace: string,
+  plugins: readonly string[],
+  folder: string,
+): Promise<string> {
+  const pluginRoot = path.join(locations.extensionRoot, "sources", marketplace, "plugins", folder);
+  await mkdir(path.join(pluginRoot, "node_modules", "pkd-dep"), { recursive: true });
+  await writeFile(path.join(pluginRoot, "plugin.json"), "{}");
+  await writeFile(path.join(pluginRoot, "node_modules", PACKAGE_STEP_MARKER), "");
+  await writeFile(path.join(pluginRoot, "node_modules", "pkd-dep", "index.js"), "");
+  const state = await loadState(locations.extensionRoot);
+  for (const plugin of plugins) {
+    const record = state.marketplaces[marketplace]?.plugins[plugin];
+    assert.ok(record !== undefined);
+    record.resolvedSource = pluginRoot;
+  }
+
+  await saveState(locations.extensionRoot, state);
+  return pluginRoot;
+}
+
+async function sortedEntries(directory: string): Promise<string[]> {
+  return (await readdir(directory)).sort();
+}
+
+const UNINSTALLED_X_ROW =
+  "● mp [project]\n  ○ x v0.0.1 (uninstalled)\n\n/reload to pick up changes";
+
+for (const { mode, outcome, notifications } of [
+  { mode: "standalone", outcome: undefined, notifications: [{ message: UNINSTALLED_X_ROW }] },
+  {
+    mode: "orchestrated",
+    outcome: { status: "uninstalled", name: "x", version: "0.0.1" },
+    notifications: [],
+  },
+] as const) {
+  test(`D-PL9-22: uninstall in ${mode} mode removes the node_modules the package step wrote and reports what a plain uninstall reports`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-packages-"));
+      try {
+        // arrange
+        const locations = locationsFor("project", cwd);
+        await seedDeclaringMarketplace(locations, "mp", { x: {} }, cwd);
+        const pluginRoot = await placeStepPackages(locations, "mp", ["x"], "x");
+        const captured = makeCtx();
+
+        // act
+        const uninstallOutcome = await uninstallWithFreshOwner({
+          ctx: captured.ctx,
+          run: captured.run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "x",
+          notifications: { mode },
+        });
+
+        // assert
+        assert.deepStrictEqual(uninstallOutcome, outcome);
+        assert.deepStrictEqual(captured.notifications, notifications);
+        assert.deepStrictEqual(await sortedEntries(pluginRoot), ["plugin.json"]);
+        assert.deepStrictEqual(
+          await sortedEntries(path.join(locations.extensionRoot, "sources-staging")),
+          [],
+        );
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+test("D-PL9-22: uninstall keeps the step's node_modules while another installed plugin runs from the same folder", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-packages-shared-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(locations, "mp", { x: {}, y: {} }, cwd);
+      const pluginRoot = await placeStepPackages(locations, "mp", ["x", "y"], "shared");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await uninstallWithFreshOwner({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [{ message: UNINSTALLED_X_ROW }]);
+      assert.deepStrictEqual(await sortedEntries(path.join(pluginRoot, "node_modules")), [
+        PACKAGE_STEP_MARKER,
+        "pkd-dep",
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("keeps packages a concurrent install reads under the scope lock before saving its new record", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-packages-concurrent-"));
+    let release: (() => Promise<void>) | undefined;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(locations, "mp", { x: {} }, cwd);
+      const pluginRoot = await placeStepPackages(locations, "mp", ["x"], "x");
+      const installedState = await loadState(locations.extensionRoot);
+      const installed = installedState.marketplaces.mp?.plugins.x;
+      assert.ok(installed !== undefined);
+      const { ctx, run, notifications } = makeCtx();
+      const uninstall = createUninstallOperation(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        {
+          ...createCompletionCache(),
+          dropMarketplaceCache: async () => {
+            // The install sees existing modules and will skip its package step.
+            release = await lockfile.lock(locations.extensionRoot, {
+              lockfilePath: locations.stateLockFile,
+              realpath: false,
+              retries: 0,
+            });
+            assert.deepStrictEqual(await sortedEntries(path.join(pluginRoot, "node_modules")), [
+              PACKAGE_STEP_MARKER,
+              "pkd-dep",
+            ]);
+          },
+        },
+      );
+
+      // act
+      await uninstall({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "x" });
+      const state = await loadState(locations.extensionRoot);
+      assert.ok(state.marketplaces.mp !== undefined);
+      state.marketplaces.mp.plugins.x = installed;
+      await saveState(locations.extensionRoot, state);
+
+      // assert
+      assert.deepStrictEqual(notifications, [{ message: UNINSTALLED_X_ROW }]);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.x,
+        installed,
+      );
+      assert.deepStrictEqual(await sortedEntries(path.join(pluginRoot, "node_modules")), [
+        PACKAGE_STEP_MARKER,
+        "pkd-dep",
+      ]);
+    } finally {
+      await release?.();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-PL9-22 / D-19-01: a node_modules that cannot be moved out stays whole and the uninstall still succeeds", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-packages-locked-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(locations, "mp", { x: {} }, cwd);
+      const pluginRoot = await placeStepPackages(locations, "mp", ["x"], "x");
+      const { ctx, run, notifications } = makeCtx();
+      await chmod(pluginRoot, 0o555);
+
+      // act
+      try {
+        await uninstallWithFreshOwner({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "x",
+        });
+      } finally {
+        await chmod(pluginRoot, 0o755);
+      }
+
+      // assert
+      assert.deepStrictEqual(notifications, [{ message: UNINSTALLED_X_ROW }]);
+      assert.deepStrictEqual(await recordedInventory(locations), {});
+      assert.deepStrictEqual(await sortedEntries(path.join(pluginRoot, "node_modules")), [
+        PACKAGE_STEP_MARKER,
+        "pkd-dep",
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-PL9-22 / D-05-09: uninstall --prune removes the step's node_modules of a dependency it sweeps", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-packages-prune-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedDeclaringMarketplace(
+        locations,
+        "mp",
+        { x: { dependencies: ["d"] }, d: { provenance: "dependency" } },
+        cwd,
+      );
+      const pluginRoot = await placeStepPackages(locations, "mp", ["d"], "d");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await uninstallWithFreshOwner({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "x",
+        prune: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            "  ○ x v0.0.1 (uninstalled)\n" +
+            "  ○ d v0.0.1 (uninstalled) {dependency pruned}\n" +
+            "\n" +
+            "/reload to pick up changes",
+        },
+      ]);
+      assert.deepStrictEqual(await recordedInventory(locations), {});
+      assert.deepStrictEqual(await sortedEntries(pluginRoot), ["plugin.json"]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

@@ -171,6 +171,29 @@ function promoteExactSubcommandToken(parts: { tokens: string[]; current: string 
   return parts;
 }
 
+/**
+ * D-PL5-11: the router reads a leading `market` as `marketplace`, so completion
+ * reads it that way too. The argument text keeps the head as typed, so the value
+ * for `market a` is `market add `.
+ */
+function readCompletionInput(prefix: string): {
+  tokens: string[];
+  current: string;
+  argumentTextPrefix: string;
+} {
+  const typed = promoteExactSubcommandToken(splitCompletionInput(prefix));
+  const [head, ...rest] = typed.tokens;
+  if (head !== "market") {
+    return { ...typed, argumentTextPrefix: typed.tokens.join(" ") };
+  }
+
+  const { tokens, current } = promoteExactSubcommandToken({
+    tokens: ["marketplace", ...rest],
+    current: typed.current,
+  });
+  return { tokens, current, argumentTextPrefix: ["market", ...tokens.slice(1)].join(" ") };
+}
+
 function marketplaceNameWanted(positionals: readonly string[]): boolean {
   const positionalHead = positionals[0] ?? "";
   return (
@@ -277,8 +300,7 @@ export async function getArgumentCompletions(
   resolver: LocationsResolver,
   completionCache: CompletionCache,
 ): Promise<AutocompleteItem[] | null> {
-  const { tokens, current } = promoteExactSubcommandToken(splitCompletionInput(prefix));
-  const argumentTextPrefix = tokens.join(" ");
+  const { tokens, current, argumentTextPrefix } = readCompletionInput(prefix);
   const headPrefix = argumentTextPrefix === "" ? "" : argumentTextPrefix + " ";
 
   // Branch 1 (TC-1): top-level subcommand keyword.

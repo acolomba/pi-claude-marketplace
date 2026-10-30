@@ -23,6 +23,7 @@ import type {
   ResolvedRow,
 } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import type {
+  BackgroundUpdateSurface,
   CascadeNotificationMessage,
   MarketplaceNotAddedMessage,
   MarketplaceNotificationMessage,
@@ -983,6 +984,88 @@ describe("resolveRows", () => {
     ]);
   });
 
+  test("D-PL6-20 lists the leaks of the row cause, then of each rollback phase cause, once", () => {
+    // arrange
+    const marketplaces = marketplaceWith([
+      {
+        status: "failed",
+        severity: "error",
+        name: "alpha",
+        reasons: ["rollback partial"],
+        cause: new ManualRecoveryError("row stuck", ["/tmp/shared", "/tmp/row"]),
+        rollbackPartial: [
+          {
+            phase: "skills",
+            cause: new ManualRecoveryError("skill stuck", ["/tmp/skill", "/tmp/shared"]),
+          },
+          { phase: "mcp", cause: new Error("mcp undo failed") },
+        ],
+      },
+    ]);
+
+    // act
+    const resolved = resolveRows(marketplaces, allLoaded(), CENTRAL_ROW_POLICY);
+
+    // assert
+    assert.deepStrictEqual(resolved[0]!.plugins, [
+      {
+        status: "failed",
+        severity: "error",
+        name: "alpha",
+        reasons: ["rollback partial"],
+        failure: {
+          cause: { causeChain: ["row stuck"], truncated: false },
+          leaks: ["/tmp/shared", "/tmp/row", "/tmp/skill"],
+          rollbackPartial: [
+            { phase: "skills", cause: { causeChain: ["skill stuck"], truncated: false } },
+            { phase: "mcp", cause: { causeChain: ["mcp undo failed"], truncated: false } },
+          ],
+        },
+      },
+    ]);
+  });
+
+  test("D-PL6-20 redacts the credentials of a rollback phase cause's leaks", () => {
+    // arrange
+    const marketplaces = marketplaceWith([
+      {
+        status: "failed",
+        severity: "error",
+        name: "alpha",
+        reasons: ["rollback partial"],
+        cause: new Error("install failed"),
+        rollbackPartial: [
+          {
+            phase: "skills",
+            cause: new ManualRecoveryError("skill stuck", [
+              "clone-ghp_0123456789abcdefghijklmnopqrstuvwxyz",
+            ]),
+          },
+        ],
+      },
+    ]);
+
+    // act
+    const resolved = resolveRows(marketplaces, allLoaded(), CENTRAL_ROW_POLICY);
+
+    // assert
+    assert.deepStrictEqual(resolved[0]!.plugins, [
+      {
+        status: "failed",
+        severity: "error",
+        name: "alpha",
+        reasons: ["rollback partial"],
+        failure: {
+          cause: { causeChain: ["install failed"], truncated: false },
+          leaks: ["clone-***"],
+          rollbackPartial: [
+            { phase: "skills", cause: { causeChain: ["skill stuck"], truncated: false } },
+          ],
+        },
+      },
+    ]);
+  });
+
   for (const { title, name, expectedName } of [
     {
       title: "PMOD-04 / D-07 redacts the userinfo of a marketplace block name",
@@ -1670,6 +1753,56 @@ describe("resolveRawSurface", () => {
       kind: "plugin-path-skipped",
       scope: "project",
       reason: "fetch with Bearer *** failed",
+    });
+  });
+
+  test("PMOD-04 redacts a credential in every string field of a background update row", () => {
+    // arrange
+    const surface = {
+      kind: "background-update",
+      plugins: [
+        {
+          name: "https://user:tok@host/alpha",
+          marketplace: "tools-ghp_0123456789abcdefghijklmnopqrstuvwxyz",
+          scope: "project",
+          fromVersion: "https://user:tok@host/1.0.0",
+          toVersion: "ghp_0123456789abcdefghijklmnopqrstuvwxyz",
+        },
+      ],
+    } satisfies BackgroundUpdateSurface;
+
+    // act
+    const resolved = resolveRawSurface(surface);
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "background-update",
+      plugins: [
+        {
+          name: "https://***@host/alpha",
+          marketplace: "tools-***",
+          scope: "project",
+          fromVersion: "https://***@host/1.0.0",
+          toVersion: "***",
+        },
+      ],
+    });
+  });
+
+  test("D-PL8-16 resolves a background update row without a from version", () => {
+    // arrange
+    const surface = {
+      kind: "background-update",
+      plugins: [{ name: "alpha", marketplace: "tools", scope: "user", toVersion: "1.1.0" }],
+    } satisfies BackgroundUpdateSurface;
+
+    // act
+    const resolved = resolveRawSurface(surface);
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "background-update",
+      plugins: [{ name: "alpha", marketplace: "tools", scope: "user", toVersion: "1.1.0" }],
     });
   });
 

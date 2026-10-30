@@ -93,8 +93,10 @@ import { resolveDependencyClosure } from "../../domain/dependency-closure.ts";
 import {
   intersectDependencyRanges,
   isUnconstrainedRange,
+  MAX_DIRECTORY_PIN_FIELD_CHARS,
   recordedVersionSatisfies,
   renderDeclaredRanges,
+  truncateForRefusal,
 } from "../../domain/dependency-range.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
@@ -112,7 +114,7 @@ import { DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
 import { cascadeUnstagePlugin, foldUnstageNotices } from "../marketplace/shared.ts";
 
 import { probeDependencyTags } from "./dependency-tag-probe.ts";
-import { runInstallLedger } from "./install-outcome.ts";
+import { ledgerDegradationSignals, runInstallLedger } from "./install-outcome.ts";
 import { probeMarketplaceTags } from "./marketplace-tag-probe.ts";
 import { applyPartialCascadeFold } from "./shared.ts";
 
@@ -129,6 +131,7 @@ import type {
   InstallLedgerTransaction,
 } from "./install-outcome.ts";
 import type { MarketplaceTagProbeOptions } from "./marketplace-tag-probe.ts";
+import type { LedgerDegradationSignals } from "./shared.ts";
 import type {
   ClosureLookup,
   ClosureMember,
@@ -141,6 +144,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { RemoteTag } from "../../platform/git.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type { DiscoveryWarning } from "../../shared/staging-warnings.ts";
 import type { Phase, RollbackPartial, RunPhasesResult } from "../../transaction/phase-ledger.ts";
 
 /** Materialization operations the cascade drives, injectable for fault tests. */
@@ -208,7 +212,7 @@ export type CascadeMarketplaceLookup = (
  * Why a member's accumulated version constraint produced no install.
  *
  * `range` is the constraint as rendered for a user-visible row, already bounded
- * by `renderConstraintRange`. Every arm carries the member key and that range
+ * by `renderDeclaredRanges`. Every arm carries the member key and that range
  * and nothing else identifying: no arm carries a filesystem path, and the
  * intersection's own `detail` is assembled from measurements and field
  * positions rather than from any declared range's text.
@@ -236,6 +240,14 @@ export type CascadeConstraintFailure =
        * when the caller judged a move. Absent when no move was judged.
        */
       readonly moveRefusal?: string;
+      /**
+       * D-PL3-11: the keys of the plugins that declare the dependency, set
+       * beside `moveRefusal` by the plan that judged the move, so the refusal
+       * can tell whether the plugin the user named declares it.
+       */
+      readonly declaredBy?: readonly string[];
+      /** Set when `update` would meet the same refusal, so no hint names it. */
+      readonly updateBlocked?: true;
     }
   | {
       readonly kind: "range-too-complex";
@@ -303,6 +315,12 @@ export interface ResolvedCascadeMember extends ClosureMember {
    * range.
    */
   readonly directoryPin?: DirectoryPinRange;
+  /**
+   * D-PL4-01: the commit the dependency plan's install preview resolved for
+   * this member. The install pins it when no release tag pins the member, so
+   * it installs what the plan previewed and resolves the source once.
+   */
+  readonly previewedCommit?: string;
 }
 
 /**
@@ -371,6 +389,11 @@ interface MemberConstraintOptions {
    * is a recorded member a plan moves; the rest install fresh.
    */
   readonly closure: readonly ClosureMember[];
+  /** What each plugin the walk found declares, as `recordingLookup` recorded it. */
+  readonly declared: ReadonlyMap<
+    string,
+    readonly { readonly key: string; readonly range?: string }[]
+  >;
   /** UPD-DEP-D1: the recorded ENABLED keys a dependency plan moves. */
   readonly readThrough: ReadonlySet<string>;
   /**
@@ -408,12 +431,17 @@ interface MemberConstraintOptions {
 }
 
 /** One member the cascade itself materialized, in install order. */
-export interface CascadeMemberOutcome {
+export interface CascadeMemberOutcome extends Pick<
+  LedgerDegradationSignals,
+  "orphanRewake" | "degradedKinds"
+> {
   readonly key: string;
   readonly name: string;
   readonly marketplace: string;
   readonly requiredBy: string | undefined;
   readonly version: string;
+  /** Unsupported kinds omitted by this member's partial installation. */
+  readonly unsupported?: readonly string[];
   /**
    * What the member staged, as the three soft-dependency kinds the renderer
    * probes for. Carried as booleans rather than as the staged name lists so a
@@ -438,6 +466,8 @@ export interface CascadeMemberOutcome {
    */
   readonly pluginRoot: string;
   readonly hooksConfigPath: string | undefined;
+  /** D-PL10-16: the member's own discovery notes, omitted when it raised none. */
+  readonly discoveryWarnings?: readonly DiscoveryWarning[];
   /**
    * TAGS-02: whether this member installed the marketplace's current copy
    * because no tag satisfied its constraint, rather than a pin.
@@ -555,6 +585,20 @@ export interface InstallCascadeOptions {
   readonly marketplaceRecordFor?: CascadeMarketplaceLookup;
 }
 
+/**
+ * CAS-01 / D-PL3-01: the closure members this run would have materialized and
+ * did not, in the order the walk first looked them up. The root, the failing
+ * member, and the members a plan moves are never listed: each already has a
+ * row of its own.
+ *
+ * REQUIRED on every failure the cascade produces, on the D-07 rationale of
+ * `CascadeMemberOutcome.fellBackToCurrentCopy`: a producer that omits it is a
+ * compile error rather than a silently missing row.
+ */
+export interface Unmaterialized {
+  readonly unmaterialized: readonly string[];
+}
+
 /** The cascade's outcome. */
 export type InstallCascadeResult =
   | {
@@ -590,14 +634,23 @@ export type InstallCascadeResult =
   | { readonly kind: "marketplace-absent" }
   | {
       readonly kind: "closure-failed";
-      readonly failure: Extract<DependencyClosureResult, { readonly ok: false }>;
+      readonly failure: Extract<DependencyClosureResult, { readonly ok: false }> & Unmaterialized;
     }
-  | { readonly kind: "constraint-failed"; readonly failure: CascadeConstraintFailure }
+  | {
+      readonly kind: "constraint-failed";
+      readonly failure: CascadeConstraintFailure & Unmaterialized;
+    }
   | {
       readonly kind: "member-failed";
       readonly key: string;
       readonly error: Error;
       readonly rollbackPartials: readonly RollbackPartial[];
+      /**
+       * CAS-01 / D-PL3-03: the members this run rolled back or never reached,
+       * in phase order, the root and the failing member excluded. REQUIRED on
+       * the D-07 rationale `Unmaterialized` states.
+       */
+      readonly unmaterialized: readonly string[];
       /**
        * AFILE-04: the notices of the members that committed before the
        * failure, then those of their undo. The undo unstages from the
@@ -812,7 +865,7 @@ function toMemberConstraintOutcome(
   declared: string,
   probed:
     | { readonly kind: "pinned"; readonly oid: string; readonly version: string }
-    | { readonly kind: "no-matching-tag"; readonly range: string }
+    | { readonly kind: "no-matching-tag" }
     | {
         readonly kind: "tag-listing-failed";
         readonly classification: DependencyTagListingFailureReason;
@@ -923,18 +976,31 @@ function effectiveRanges(
 
 /**
  * GV-01: the plugins a member's ranges came from, as Claude Code names them
- * when a plugin directory copy falls outside them: the caller's requirers for
- * the root (MISS-01), else the plugin whose declaration reached the member.
+ * when a plugin directory copy falls outside them. The root gets the caller's
+ * requirers (MISS-01). Any other member gets every cascade member that
+ * declared a range on it, in reverse install order: the closure's post order
+ * reversed, which is the order Claude Code names them in (D-PL3-08). This is
+ * not the order of distance from the requested plugin. An installed plugin
+ * outside the closure is not named, because D-03-10 keeps its range out of the
+ * walk and out of the check (D-PL3-13).
  */
 function rangeRequirers(
   options: MemberConstraintOptions,
   member: ClosureMember,
 ): readonly string[] {
-  if (member.key === options.rootKey && options.rootRequiredBy !== undefined) {
-    return options.rootRequiredBy;
+  if (member.key === options.rootKey) {
+    return options.rootRequiredBy ?? [];
   }
 
-  return member.requiredBy === undefined ? [] : [member.requiredBy];
+  const declarers = new Set(
+    requestersOf(options.declared, member.key)
+      .filter((requester) => requester.ranges.length > 0)
+      .map((requester) => requester.key),
+  );
+  return [...options.closure]
+    .reverse()
+    .filter((declarer) => declarers.has(declarer.key))
+    .map((declarer) => declarer.key);
 }
 
 /**
@@ -967,7 +1033,7 @@ async function resolveOneMember(
         ...member,
         directoryPin: {
           range: intersected.range,
-          declared: renderDeclaredRanges(ranges),
+          declared: truncateForRefusal(ranges.join(", "), MAX_DIRECTORY_PIN_FIELD_CHARS),
           requiredBy: rangeRequirers(options, member),
         },
       },
@@ -1194,11 +1260,18 @@ function recordMaterializedMember(
     marketplace: member.marketplace,
     requiredBy: member.requiredBy,
     version: summary.version,
+    ...(summary.resolved.state === "partially-available" && {
+      unsupported: [...summary.resolved.unsupported],
+    }),
+    ...ledgerDegradationSignals(summary),
     declaresAgents: summary.stagedAgentNames.length > 0,
     declaresMcp: summary.stagedMcpServerNames.length > 0,
     declaresWorkflows: summary.stagedWorkflowNames.length > 0,
     pluginRoot: summary.resolved.pluginRoot,
     hooksConfigPath: summary.resolved.hooksConfigPath,
+    ...(summary.discoveryWarnings.length > 0 && {
+      discoveryWarnings: summary.discoveryWarnings,
+    }),
     ...origin,
   });
 }
@@ -1419,23 +1492,29 @@ interface MaterializedCascade {
   readonly result: RunPhasesResult;
   readonly run: CascadeRun;
   readonly alreadyInstalled: readonly CascadeSkippedMember[];
+  /** The key of every member the run built a phase for, in phase order. */
+  readonly phaseKeys: readonly string[];
 }
 
 /** The failure arms a ledger run can reach. */
 function failedCascade(
   options: InstallCascadeOptions,
-  { result, run }: MaterializedCascade,
+  { result, run, phaseKeys }: MaterializedCascade,
 ): Extract<InstallCascadeResult, { readonly kind: "marketplace-absent" | "member-failed" }> {
   if (run.marketplaceAbsent) {
     return { kind: "marketplace-absent" };
   }
 
+  const key = run.attempting ?? options.rootKey;
   return {
     kind: "member-failed",
-    key: run.attempting ?? options.rootKey,
+    key,
     error: result.error ?? new Error("Install cascade failed."),
     rollbackPartials: result.rollbackPartials,
     mcpConfigNotices: run.mcpConfigNotices,
+    unmaterialized: phaseKeys.filter(
+      (phaseKey) => phaseKey !== options.rootKey && phaseKey !== key,
+    ),
   };
 }
 
@@ -1532,6 +1611,7 @@ function plannedCascade(options: InstallCascadeOptions, planned: PlannedClosure)
 async function resolveCascade(
   options: InstallCascadeOptions,
   moveOutOfRange: boolean,
+  declared: DeclaredEdges,
 ): Promise<ResolvedCascade | CascadeResolutionFailure> {
   if (options.planned !== undefined) {
     return plannedCascade(options, options.planned);
@@ -1549,7 +1629,7 @@ async function resolveCascade(
   const walls = options.treatDisabledAsWall === true ? options.installedKeys : live;
   const closure = await resolveDependencyClosure({
     rootKey: options.rootKey,
-    lookup: options.lookup,
+    lookup: recordingLookup(options.lookup, declared),
     installedKeys: new Set([...walls].filter((key) => !readThrough.has(key))),
     knownMarketplaces: options.knownMarketplaces,
     // XMKT-02: only an enabled record is exempt from the root's allowlist, as
@@ -1561,7 +1641,11 @@ async function resolveCascade(
     },
   });
   if (!closure.ok) {
-    return { kind: "closure-failed", failure: closure };
+    const failing = closure.reason === "cycle" ? closure.chain.slice(-1) : [closure.key];
+    return {
+      kind: "closure-failed",
+      failure: { ...closure, ...unmaterialized(options.rootKey, failing, declared, readThrough) },
+    };
   }
 
   // RESV-03 / RESV-05: decided here, between the walk and the phase array, so
@@ -1572,6 +1656,7 @@ async function resolveCascade(
     state: options.state,
     rootKey: options.rootKey,
     closure: closure.closure,
+    declared,
     readThrough,
     alreadyInstalled: closure.alreadyInstalled,
     ledgerOptionsFor: options.ledgerOptionsFor,
@@ -1590,7 +1675,14 @@ async function resolveCascade(
     }),
   });
   if (!constraints.ok) {
-    return { kind: "constraint-failed", failure: constraints.failure };
+    const failing = [constraints.failure.key];
+    return {
+      kind: "constraint-failed",
+      failure: {
+        ...constraints.failure,
+        ...unmaterialized(options.rootKey, failing, declared, readThrough),
+      },
+    };
   }
 
   return {
@@ -1647,7 +1739,12 @@ async function materializeCascade(
     }),
   );
 
-  return { result: await transaction.runPhases(phases, run), run, alreadyInstalled };
+  return {
+    result: await transaction.runPhases(phases, run),
+    run,
+    alreadyInstalled,
+    phaseKeys: members.map((entry) => entry.member.key),
+  };
 }
 
 /**
@@ -1658,7 +1755,7 @@ async function materializeCascade(
 export async function runInstallCascade(
   options: InstallCascadeOptions,
 ): Promise<RootCascadeResult> {
-  const resolved = await resolveCascade(options, false);
+  const resolved = await resolveCascade(options, false, new Map());
   return resolved.kind === "resolved"
     ? rootCascadeResult(options, await materializeCascade(options, resolved, false))
     : resolved;
@@ -1671,7 +1768,7 @@ export async function runInstallCascade(
 export async function runInstallCascadeOrPlanMoves(
   options: InstallCascadeOptions,
 ): Promise<RootCascadeResult | CascadePlan> {
-  const resolved = await resolveCascade(options, true);
+  const resolved = await resolveCascade(options, true, new Map());
   if (resolved.kind !== "resolved") {
     return resolved;
   }
@@ -1689,7 +1786,7 @@ export async function runInstallCascadeOrPlanMoves(
 export async function runDependencyCascade(
   options: InstallCascadeOptions,
 ): Promise<DependencyCascadeResult> {
-  const resolved = await resolveCascade(options, false);
+  const resolved = await resolveCascade(options, false, new Map());
   return resolved.kind === "resolved"
     ? dependencyCascadeResult(options, await materializeCascade(options, resolved, true))
     : resolved;
@@ -1702,7 +1799,7 @@ export async function runDependencyCascade(
 export async function runDependencyCascadeOrPlanMoves(
   options: InstallCascadeOptions,
 ): Promise<DependencyCascadeResult | CascadePlan> {
-  const resolved = await resolveCascade(options, true);
+  const resolved = await resolveCascade(options, true, new Map());
   if (resolved.kind !== "resolved") {
     return resolved;
   }
@@ -1715,8 +1812,46 @@ export async function runDependencyCascadeOrPlanMoves(
 /** UPD-DEP-D1: what each plugin the walk read declares, by key. */
 type DeclaredEdges = Map<string, readonly { readonly key: string; readonly range?: string }[]>;
 
+/** Wraps `lookup` so every plugin it finds lands in `declared` with its declarations. */
+function recordingLookup(lookup: ClosureLookup, declared: DeclaredEdges): ClosureLookup {
+  return async (subject) => {
+    const looked = await lookup(subject);
+    if (looked.kind === "found") {
+      declared.set(
+        subject.key,
+        looked.dependencies.map((dependency) => ({
+          key: `${dependency.name}@${dependency.marketplace ?? subject.marketplace}`,
+          ...(dependency.version !== undefined && { range: dependency.version }),
+        })),
+      );
+    }
+
+    return looked;
+  };
+}
+
+/**
+ * CAS-01 / D-PL3-01: every plugin the walk found before it failed, minus the
+ * root, the failing member, and the members a plan moves (`Unmaterialized`).
+ */
+function unmaterialized(
+  rootKey: string,
+  failing: readonly string[],
+  declared: DeclaredEdges,
+  readThrough: ReadonlySet<string>,
+): Unmaterialized {
+  return {
+    unmaterialized: [...declared.keys()].filter(
+      (key) => key !== rootKey && !failing.includes(key) && !readThrough.has(key),
+    ),
+  };
+}
+
 /** Every plugin the walk read that declares `key`, with the ranges it declares, in walk order. */
-function requestersOf(declared: DeclaredEdges, key: string): GraphRequester[] {
+function requestersOf(
+  declared: ReadonlyMap<string, readonly { readonly key: string; readonly range?: string }[]>,
+  key: string,
+): GraphRequester[] {
   const requesters: GraphRequester[] = [];
   for (const [declarer, edges] of declared) {
     const toKey = edges.filter((edge) => edge.key === key);
@@ -1742,6 +1877,10 @@ function failureDeclarers(failure: CascadeResolutionFailure, declared: DeclaredE
   const closure = failure.failure;
   if (closure.reason === "cycle") {
     return [...closure.chain];
+  }
+
+  if (closure.reason === "invalid-root-id") {
+    return [];
   }
 
   return closure.reason === "unusable-declaration"
@@ -1797,26 +1936,7 @@ export async function walkDependencyGraph(
   options: InstallCascadeOptions,
 ): Promise<DependencyGraph | GraphWalkFailure> {
   const declared: DeclaredEdges = new Map();
-  const resolved = await resolveCascade(
-    {
-      ...options,
-      lookup: async (subject) => {
-        const looked = await options.lookup(subject);
-        if (looked.kind === "found") {
-          declared.set(
-            subject.key,
-            looked.dependencies.map((dependency) => ({
-              key: `${dependency.name}@${dependency.marketplace ?? subject.marketplace}`,
-              ...(dependency.version !== undefined && { range: dependency.version }),
-            })),
-          );
-        }
-
-        return looked;
-      },
-    },
-    true,
-  );
+  const resolved = await resolveCascade(options, true, declared);
   if (resolved.kind !== "resolved") {
     return { ...resolved, declarers: failureDeclarers(resolved, declared) };
   }

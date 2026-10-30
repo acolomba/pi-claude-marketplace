@@ -61,6 +61,7 @@ import {
   FetchedUrlCause,
   InstallMarketplaceAddError,
   InvalidGitHubBaseUrlError,
+  ManualRecoveryError,
   PluginShapeError,
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -325,6 +326,7 @@ function installedOutcome(): InstallOutcome {
     declaresWorkflows: false,
     resourcesChanged: true,
     status: "installed",
+    version: "1.0.0",
   };
 }
 
@@ -404,6 +406,7 @@ function installed(
     readonly workflows?: boolean;
   } = { agents: false, mcp: false },
   resourcesChanged = true,
+  version: string | null = "1.0.0",
 ): Installed {
   return {
     declaresAgents: declares.agents,
@@ -416,6 +419,7 @@ function installed(
     ref: `${plugin}@${marketplace}`,
     resourcesChanged,
     scope,
+    ...(version !== null && { version }),
   };
 }
 
@@ -560,6 +564,141 @@ test("declares plural cardinality when import produces zero rows", async (t) => 
   verifyBoundary();
 });
 
+test("import execute consumes unchanged marketplace add without a row", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "unchanged-marketplace-add");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve({ status: "unchanged", name: "mp" }),
+      loadSettings: () =>
+        Promise.resolve(claudeSettings({ extraKnownMarketplaces: { mp: { directory: "./mp" } } })),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, emptyImportResult());
+  assert.deepStrictEqual(notifications, [{ message: "(no marketplaces)" }]);
+  verifyBoundary();
+});
+
+test("reports a missing settings name when its source was added earlier in the import", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "source-added-twice");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const marketplaceRoot = path.join(cwd, "alpha");
+  await writeUnder(
+    path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: "alpha",
+      owner: { name: "import owner suite" },
+      plugins: [{ name: "p", source: "./plugins/p", version: "1.0.0" }],
+    }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "p", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "p", version: "1.0.0" }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "p", "skills", "tool", "SKILL.md"),
+    "---\nname: tool\n---\n\nBody.\n",
+  );
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    gitOps: createOfflineGitOps(),
+    deps: {
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: { "p@alpha": true, "p@beta": true },
+            extraKnownMarketplaces: {
+              alpha: { directory: marketplaceRoot },
+              beta: { directory: marketplaceRoot },
+            },
+          }),
+        ),
+    },
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("alpha", "project")],
+    installedPlugins: [installed("p", "alpha", "project")],
+    changedResources: true,
+    unexpectedPluginFailures: [notAdded("p", "beta", "project")],
+  });
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Some operations have failed.\n\n" +
+        "● alpha [project] (added)\n  ● p v1.0.0 (installed)\n\n" +
+        "⊘ beta [project] (failed)\n  ⊘ p (failed)\n" +
+        '    cause: Marketplace "beta" is not added in the project scope.\n\n' +
+        "Import: 2 failures, 2 successes\n\n/reload to pick up changes",
+      severity: "error",
+    },
+  ]);
+  assert.strictEqual(
+    await readFile(project.baseConfigJsonPath, "utf8"),
+    configBytes({
+      marketplaces: { alpha: { source: marketplaceRoot } },
+      plugins: { "p@alpha": {} },
+    }),
+  );
+  verifyBoundary();
+});
+
+test("keeps a header for a failed plugin after an unchanged add of the same name", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "unchanged-marketplace-plugin");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve({ status: "unchanged", name: "mp" }),
+      loadSettings: () => Promise.resolve(settingsForMp("plugin")),
+      loadState: () => Promise.resolve(recordedState([])),
+      installPlugin: () =>
+        Promise.resolve(failedInstallOutcome(new Error("staging failed"), "staging failed")),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult.skippedExistingMarketplaces, [skipped("mp", "project")]);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation has failed.\n\n" +
+        "● mp [project] (skipped) {already added}\n" +
+        "  ⊘ plugin (failed)\n    cause: staging failed\n\n" +
+        "Import: 1 failure, 1 success",
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+});
+
 test("records a marketplace the state does not carry and installs its declared plugin", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "add-and-install");
@@ -596,6 +735,7 @@ test("records a marketplace the state does not carry and installs its declared p
         ref: "plugin@mp",
         resourcesChanged: true,
         scope: "user",
+        version: "1.0.0",
       },
     ],
   };
@@ -627,7 +767,7 @@ test("records a marketplace the state does not carry and installs its declared p
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [user] (added)\n  ● plugin (installed)\n\nImport: 2 successes\n\n/reload to pick up changes",
+        "● mp [user] (added)\n  ● plugin v1.0.0 (installed)\n\nImport: 2 successes\n\n/reload to pick up changes",
     },
   ]);
   verifyBoundary();
@@ -790,8 +930,8 @@ for (const { addMarketplace, cause, title } of [
           "⊘ mp-a [user] (failed)\n" +
           "  ⊘ mp-a (failed)\n" +
           `    cause: ${cause}\n\n` +
-          "● mp-b [user] (added)\n  ● b (installed)\n\n" +
-          "● mp-c [user] (added)\n  ● c (installed)\n\n" +
+          "● mp-b [user] (added)\n  ● b v1.0.0 (installed)\n\n" +
+          "● mp-c [user] (added)\n  ● c v1.0.0 (installed)\n\n" +
           "Import: 2 failures, 4 successes\n\n" +
           "/reload to pick up changes",
         severity: "error",
@@ -878,11 +1018,11 @@ for (const { addMarketplace, cause, title } of [
       {
         message:
           "Some operations have failed.\n\n" +
-          "● mp-a [user] (added)\n  ● a (installed)\n\n" +
+          "● mp-a [user] (added)\n  ● a v1.0.0 (installed)\n\n" +
           "⊘ mp-b [user] (failed)\n" +
           "  ⊘ mp-b (failed)\n" +
           `    cause: ${cause}\n\n` +
-          "● mp-c [user] (added)\n  ● c (installed)\n\n" +
+          "● mp-c [user] (added)\n  ● c v1.0.0 (installed)\n\n" +
           "Import: 2 failures, 4 successes\n\n" +
           "/reload to pick up changes",
         severity: "error",
@@ -1001,39 +1141,324 @@ for (const { declared, stored, title } of [
   });
 }
 
-// A recorded marketplace whose source no longer matches the declaration blocks
-// every dependent plugin and reports the divergence once per plugin.
-for (const { cause, declared, stored, title } of [
-  {
-    cause: "Existing marketplace source ./mp does not match Claude settings source owner/new.",
-    declared: { github: { repo: "owner/new" } },
-    stored: pathSource("./mp"),
-    title: "the stored kind differs from the declared kind",
-  },
-  {
-    cause:
-      "Existing marketplace source https://github.com/owner/old does not match Claude settings source owner/new.",
-    declared: { github: { repo: "owner/new" } },
-    stored: githubSource("owner", "old"),
-    title: "the stored repository differs from the declared repository",
-  },
+// D-PL6-19: a recorded marketplace whose source differs from the declaration
+// is added again in place from the settings source, and its plugins go on
+// against the snapshot.
+for (const { stored, title } of [
+  { stored: pathSource("./mp"), title: "a stored path" },
+  { stored: githubSource("owner", "old"), title: "a stored github repository" },
 ] satisfies readonly {
-  readonly cause: string;
-  readonly declared: Record<string, unknown>;
   readonly stored: MarketplaceSource;
   readonly title: string;
 }[]) {
-  test(`reports a source mismatch on every dependent plugin when ${title}`, async (t) => {
+  test(`D-PL6-19: adds a settings marketplace again from its new source over ${title} and settles its plugins`, async (t) => {
     // arrange
-    const { cwd } = await createHermeticScopes(t, "recorded-different");
+    const { cwd, project } = await createHermeticScopes(t, "recorded-different");
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const expectedResult: ClaudeImportExecutionResult = {
+    const run = runWithNothingLoaded();
+    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+    const requested: AddOptions[] = [];
+    const installs: string[] = [];
+
+    // act
+    const importResult = await importClaudeSettings({
+      ctx,
+      run,
+      cwd,
+      deps: collaborators({
+        addMarketplace: (options) => {
+          requested.push(options);
+          return Promise.resolve(addedOutcome("mp"));
+        },
+        installPlugin: (options) => {
+          installs.push(`${options.plugin}@${options.marketplace}`);
+          return Promise.resolve(installedOutcome());
+        },
+        loadSettings: () =>
+          Promise.resolve(
+            claudeSettings({
+              enabledPlugins: { "one@mp": true, "two@mp": true },
+              extraKnownMarketplaces: { mp: { github: { repo: "owner/new" } } },
+            }),
+          ),
+        loadState: () =>
+          Promise.resolve(
+            recordedState([
+              recordedMarketplace({
+                name: "mp",
+                plugins: ["two"],
+                scope: "project",
+                source: stored,
+              }),
+            ]),
+          ),
+      }),
+      hooksRouting,
+      selectedScopes: ["project"],
+    });
+
+    // assert
+    assert.deepStrictEqual(requested, [
+      {
+        ctx,
+        completionCache: completionCacheFor(hooksRouting),
+        cwd,
+        notifications: { mode: "orchestrated" },
+        rawSource: "owner/new",
+        replaceRecorded: "mp",
+        run,
+        scope: "project",
+      },
+    ]);
+    assert.deepStrictEqual(installs, ["one@mp"]);
+    assert.deepStrictEqual(importResult, {
       ...emptyImportResult(),
-      sourceMismatches: [
-        mismatched("one", "mp", "project", cause),
-        mismatched("two", "mp", "project", cause),
-      ],
-    };
+      addedMarketplaces: [added("mp", "project")],
+      changedResources: true,
+      installedPlugins: [installed("one", "mp", "project")],
+      skippedExistingPlugins: [skippedPlugin("two", "mp", "project")],
+    });
+    assert.strictEqual(
+      await readFile(project.baseConfigJsonPath, "utf8"),
+      configBytes({
+        marketplaces: { mp: { source: "owner/new" } },
+        plugins: { "one@mp": {}, "two@mp": {} },
+      }),
+    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project] (added)\n" +
+          "  ● one v1.0.0 (installed)\n" +
+          "  ⊘ two (skipped) {already installed}\n\n" +
+          "Import: 3 successes\n\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    verifyBoundary();
+  });
+}
+
+test("D-PL10-25: rewrites a re-added marketplace in its owning local layer", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "recorded-different-local");
+  const baseBytes = configBytes({
+    marketplaces: { mp: { source: "owner/old" } },
+    plugins: { "two@mp": {} },
+  });
+  const localBytes = configBytes({
+    marketplaces: { kept: { source: "./kept" }, mp: { source: "owner/old" } },
+    plugins: {},
+  });
+  await writeUnder(project.baseConfigJsonPath, baseBytes);
+  await writeUnder(project.localConfigJsonPath, localBytes);
+  const { ctx, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: () => Promise.resolve(installedOutcome()),
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: { "one@mp": true, "two@mp": true },
+            extraKnownMarketplaces: { mp: { github: { repo: "owner/new" } } },
+          }),
+        ),
+      loadState: () =>
+        Promise.resolve(
+          recordedState([
+            recordedMarketplace({
+              name: "mp",
+              plugins: ["two"],
+              scope: "project",
+              source: githubSource("owner", "old"),
+            }),
+          ]),
+        ),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("mp", "project")],
+    changedResources: true,
+    installedPlugins: [installed("one", "mp", "project")],
+    skippedExistingPlugins: [skippedPlugin("two", "mp", "project")],
+  });
+  assert.strictEqual(
+    await readFile(project.baseConfigJsonPath, "utf8"),
+    configBytes({
+      marketplaces: { mp: { source: "owner/old" } },
+      plugins: { "two@mp": {}, "one@mp": {} },
+    }),
+  );
+  assert.strictEqual(
+    await readFile(project.localConfigJsonPath, "utf8"),
+    configBytes({
+      marketplaces: { kept: { source: "./kept" }, mp: { source: "owner/new" } },
+      plugins: {},
+    }),
+  );
+  verifyBoundary();
+});
+
+test("D-PL10-25: does not recreate a local declaration removed before the post-pass", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "recorded-different-local-removed");
+  await writeUnder(
+    project.baseConfigJsonPath,
+    configBytes({ marketplaces: { mp: { source: "owner/old" } }, plugins: {} }),
+  );
+  await writeUnder(
+    project.localConfigJsonPath,
+    configBytes({ marketplaces: { mp: { source: "owner/old" } }, plugins: {} }),
+  );
+  const { ctx, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: async () => {
+        await writeUnder(
+          project.localConfigJsonPath,
+          configBytes({ marketplaces: { kept: { source: "./kept" } }, plugins: {} }),
+        );
+        return installedOutcome();
+      },
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: { "one@mp": true },
+            extraKnownMarketplaces: { mp: { github: { repo: "owner/new" } } },
+          }),
+        ),
+      loadState: () =>
+        Promise.resolve(
+          recordedState([
+            recordedMarketplace({
+              name: "mp",
+              scope: "project",
+              source: githubSource("owner", "old"),
+            }),
+          ]),
+        ),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.strictEqual(
+    await readFile(project.baseConfigJsonPath, "utf8"),
+    configBytes({
+      marketplaces: { mp: { source: "owner/new" } },
+      plugins: { "one@mp": {} },
+    }),
+  );
+  assert.strictEqual(
+    await readFile(project.localConfigJsonPath, "utf8"),
+    configBytes({ marketplaces: { kept: { source: "./kept" } }, plugins: {} }),
+  );
+  verifyBoundary();
+});
+
+test("D-PL6-19: blocks the plugins of a settings marketplace whose re-add fails and shows the add's cause", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "recorded-different-add-fails");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(failedAddOutcome("clone refused")),
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: { "one@mp": true },
+            extraKnownMarketplaces: { mp: { github: { repo: "owner/new" } } },
+          }),
+        ),
+      loadState: () =>
+        Promise.resolve(
+          recordedState([
+            recordedMarketplace({
+              name: "mp",
+              plugins: ["one"],
+              scope: "project",
+              source: pathSource("./mp"),
+            }),
+          ]),
+        ),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    marketplaceFailures: [addFailed("mp", "project", "clone refused")],
+    warnings: [warned("one", "mp", "project", "marketplace-failed", "clone refused")],
+  });
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Some operations have failed.\n\n" +
+        "⊘ mp [project] (failed)\n" +
+        "  ⊘ mp (failed)\n" +
+        "    cause: clone refused\n\n" +
+        "Import: 2 failures",
+      severity: "error",
+    },
+  ]);
+  await assert.rejects(stat(project.baseConfigJsonPath), { code: "ENOENT" });
+  verifyBoundary();
+});
+
+for (const { declared, extraRecords, source, title } of [
+  {
+    declared: { directory: "./moved" },
+    extraRecords: [],
+    source: "./moved",
+    title: "gives a directory that does not exist",
+  },
+  {
+    declared: { github: { repo: "owner/other" } },
+    extraRecords: [
+      recordedMarketplace({
+        name: "other",
+        scope: "project",
+        source: githubSource("owner", "other"),
+      }),
+    ],
+    source: "owner/other",
+    title: "gives the source another record holds",
+  },
+] satisfies readonly {
+  readonly declared: Record<string, unknown>;
+  readonly extraRecords: readonly MarketplaceRecord[];
+  readonly source: string;
+  readonly title: string;
+}[]) {
+  test(`D-PL6-19: keeps a recorded marketplace whose settings entry ${title}`, async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "recorded-different-kept");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
     const importResult = await importClaudeSettings({
@@ -1044,13 +1469,21 @@ for (const { cause, declared, stored, title } of [
         loadSettings: () =>
           Promise.resolve(
             claudeSettings({
-              enabledPlugins: { "one@mp": true, "two@mp": true },
+              enabledPlugins: { "one@mp": true },
               extraKnownMarketplaces: { mp: declared },
             }),
           ),
         loadState: () =>
           Promise.resolve(
-            recordedState([recordedMarketplace({ name: "mp", scope: "project", source: stored })]),
+            recordedState([
+              recordedMarketplace({
+                name: "mp",
+                plugins: ["one"],
+                scope: "project",
+                source: pathSource("./mp"),
+              }),
+              ...extraRecords,
+            ]),
           ),
       }),
       hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
@@ -1058,21 +1491,75 @@ for (const { cause, declared, stored, title } of [
     });
 
     // assert
-    assert.deepStrictEqual(importResult, expectedResult);
+    assert.deepStrictEqual(importResult, {
+      ...emptyImportResult(),
+      skippedExistingMarketplaces: [skipped("mp", "project")],
+      skippedExistingPlugins: [skippedPlugin("one", "mp", "project")],
+    });
+    assert.strictEqual(
+      await readFile(project.baseConfigJsonPath, "utf8"),
+      configBytes({ marketplaces: { mp: { source } }, plugins: { "one@mp": {} } }),
+    );
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "Some operations have failed.\n\n" +
-          "⊘ mp [project] (failed)\n" +
-          "  ⊘ one (failed) {source mismatch}\n" +
-          "  ⊘ two (failed) {source mismatch}\n\n" +
-          "Import: 3 failures",
-        severity: "error",
+          "● mp [project] (skipped) {already added}\n" +
+          "  ⊘ one (skipped) {already installed}\n\n" +
+          "Import: 2 successes",
       },
     ]);
     verifyBoundary();
   });
 }
+
+test("IMP-05: reports a source mismatch on the official marketplace an enabled plugin names when the scope records another source", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "official-different");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const cause =
+    "Existing marketplace source https://github.com/someone/else does not match Claude settings source anthropics/claude-plugins-official.";
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      loadSettings: () =>
+        Promise.resolve(claudeSettings({ enabledPlugins: { "p@claude-plugins-official": true } })),
+      loadState: () =>
+        Promise.resolve(
+          recordedState([
+            recordedMarketplace({
+              name: "claude-plugins-official",
+              scope: "project",
+              source: githubSource("someone", "else"),
+            }),
+          ]),
+        ),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    sourceMismatches: [mismatched("p", "claude-plugins-official", "project", cause)],
+  });
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Some operations have failed.\n\n" +
+        "⊘ claude-plugins-official [project] (failed)\n" +
+        "  ⊘ p (failed) {source mismatch}\n\n" +
+        "Import: 2 failures",
+      severity: "error",
+    },
+  ]);
+  await assert.rejects(stat(project.baseConfigJsonPath), { code: "ENOENT" });
+  verifyBoundary();
+});
 
 test("fails a recorded marketplace whose stored source is unrecognized and renders its header", async (t) => {
   // arrange
@@ -1137,6 +1624,167 @@ test("fails a recorded marketplace whose stored source is unrecognized and rende
       message: `1 import diagnostic surfaced.\n\n${diagnosticMessage}`,
       severity: "warning",
     },
+  ]);
+  verifyBoundary();
+});
+
+test("MIM-02: adds an extra known marketplace no plugin names after the referenced one and declares both", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "extra-unreferenced");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const calls: string[] = [];
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: (options) => {
+        calls.push(`add ${options.scope} ${options.rawSource}`);
+        return Promise.resolve(addedOutcome(options.rawSource));
+      },
+      installPlugin: (options) => {
+        calls.push(`install ${options.scope} ${options.plugin}@${options.marketplace}`);
+        return Promise.resolve(installedOutcome());
+      },
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: { "plugin@mp": true },
+            extraKnownMarketplaces: {
+              tools: { github: { repo: "owner/tools" } },
+              mp: { directory: "./mp" },
+            },
+          }),
+        ),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(calls, [
+    "add project ./mp",
+    "add project owner/tools",
+    "install project plugin@mp",
+  ]);
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("mp", "project"), added("tools", "project")],
+    changedResources: true,
+    installedPlugins: [installed("plugin", "mp", "project")],
+  });
+  assert.strictEqual(
+    await readFile(project.baseConfigJsonPath, "utf8"),
+    configBytes({
+      marketplaces: { mp: { source: "./mp" }, tools: { source: "owner/tools" } },
+      plugins: { "plugin@mp": {} },
+    }),
+  );
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● mp [project] (added)\n  ● plugin v1.0.0 (installed)\n\n" +
+        "● tools [project] (added)\n\n" +
+        "Import: 3 successes\n\n" +
+        "/reload to pick up changes",
+    },
+  ]);
+  verifyBoundary();
+});
+
+test("D-PL6-01: settings that name only an extra known marketplace still read the scope and add it", async (t) => {
+  // arrange
+  const { cwd, user } = await createHermeticScopes(t, "extra-only");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const calls: string[] = [];
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: (options) => {
+        calls.push(`add ${options.scope} ${options.rawSource}`);
+        return Promise.resolve(addedOutcome("tools"));
+      },
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({ extraKnownMarketplaces: { tools: { directory: "./tools" } } }),
+        ),
+      loadState: (scope) => {
+        calls.push(`read ${scope}`);
+        return Promise.resolve(recordedState([]));
+      },
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(calls, ["read user", "add user ./tools"]);
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("tools", "user")],
+  });
+  assert.strictEqual(
+    await readFile(user.baseConfigJsonPath, "utf8"),
+    configBytes({ marketplaces: { tools: { source: "./tools" } }, plugins: {} }),
+  );
+  assert.deepStrictEqual(notifications, [
+    { message: "● tools [user] (added)\n\nImport: 1 success" },
+  ]);
+  verifyBoundary();
+});
+
+test("D-PL6-19: adds an extra known marketplace no plugin names again when its recorded source differs", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "extra-different");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const calls: string[] = [];
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: (options) => {
+        calls.push(`add ${options.rawSource} over ${options.replaceRecorded ?? "nothing"}`);
+        return Promise.resolve(addedOutcome("tools"));
+      },
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            extraKnownMarketplaces: { tools: { github: { repo: "owner/tools" } } },
+          }),
+        ),
+      loadState: () =>
+        Promise.resolve(
+          recordedState([
+            recordedMarketplace({ name: "tools", scope: "project", source: pathSource("./old") }),
+          ]),
+        ),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(calls, ["add owner/tools over tools"]);
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("tools", "project")],
+  });
+  assert.strictEqual(
+    await readFile(project.baseConfigJsonPath, "utf8"),
+    configBytes({ marketplaces: { tools: { source: "owner/tools" } }, plugins: {} }),
+  );
+  assert.deepStrictEqual(notifications, [
+    { message: "● tools [project] (added)\n\nImport: 1 success" },
   ]);
   verifyBoundary();
 });
@@ -1355,8 +2003,8 @@ for (const { cause, error, token, title, warning } of [
         message:
           "A plugin operation needs attention.\n\n" +
           "● mp [project] (added)\n" +
-          "  ● before (installed)\n" +
-          "  ● after (installed)\n" +
+          "  ● before v1.0.0 (installed)\n" +
+          "  ● after v1.0.0 (installed)\n" +
           `  ⊘ target (unavailable) {${token}}\n\n` +
           "Import: 1 warning, 3 successes\n\n" +
           "/reload to pick up changes",
@@ -1439,8 +2087,8 @@ for (const { error, faulted, order, title } of [
       {
         message:
           "● mp [user] (added)\n" +
-          `  ● ${surviving[0]} (installed)\n` +
-          `  ● ${surviving[1]} (installed)\n` +
+          `  ● ${surviving[0]} v1.0.0 (installed)\n` +
+          `  ● ${surviving[1]} v1.0.0 (installed)\n` +
           "  ⊘ target (skipped) {already installed}\n\n" +
           "Import: 4 successes\n\n" +
           "/reload to pick up changes",
@@ -1535,8 +2183,8 @@ for (const { cause, installPlugin, order, title } of [
         message:
           "A plugin operation has failed.\n\n" +
           "● mp [user] (added)\n" +
-          `  ● ${surviving[0]} (installed)\n` +
-          `  ● ${surviving[1]} (installed)\n` +
+          `  ● ${surviving[0]} v1.0.0 (installed)\n` +
+          `  ● ${surviving[1]} v1.0.0 (installed)\n` +
           "  ⊘ target (failed)\n" +
           `    cause: ${cause}\n\n` +
           "Import: 1 failure, 3 successes\n\n" +
@@ -1549,9 +2197,6 @@ for (const { cause, installPlugin, order, title } of [
   });
 }
 
-// IMP-09: an unclassified failure carries the reason `install`'s failure row
-// reads off the same error -- a git host's answer, or the marketplace add an
-// install ran -- and the authentication row is bare, as install's is.
 test("REC-06: names a rollback the failed install could not finish as rollback partial", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "install-rollback-partial");
@@ -1582,6 +2227,7 @@ test("REC-06: names a rollback the failed install could not finish as rollback p
     {
       ...failedUnexpectedly("broken", "mp", "user", failure.message),
       runtimeReason: "rollback partial",
+      rollbackPartial: [{ phase: "skills" }],
     },
   ]);
   assert.deepStrictEqual(notifications, [
@@ -1590,7 +2236,8 @@ test("REC-06: names a rollback the failed install could not finish as rollback p
         "A plugin operation has failed.\n\n" +
         "● mp [user] (added)\n" +
         "  ⊘ broken (failed) {rollback partial}\n" +
-        `    cause: ${failure.message}\n\n` +
+        `    cause: ${failure.message}\n` +
+        "    [skills] (rollback failed)\n\n" +
         "Import: 1 failure, 1 success",
       severity: "error",
     },
@@ -1598,6 +2245,201 @@ test("REC-06: names a rollback the failed install could not finish as rollback p
   verifyBoundary();
 });
 
+async function quotedImportFailure(t: TestContext) {
+  const { cwd } = await createHermeticScopes(t, "redacted 秘密 O' Brien");
+  const privateSkill = path.join(cwd, "private dir", "skill one");
+  const missingFile = path.join(cwd, "private dir", "secret.json");
+  const readFailure = await readFile(missingFile).catch((error: unknown) => {
+    assert.ok(error instanceof Error);
+    return error;
+  });
+  assert.ok(readFailure instanceof Error);
+  const readMessage = "ENOENT: no such file or directory, open 'secret.json'";
+  const networkSkill = String.raw`\\server\private share\skill two`;
+  const failure = new Error(readFailure.message, {
+    cause: new ManualRecoveryError(
+      `EACCES: permission denied, unlink '${privateSkill}'`,
+      [privateSkill, networkSkill],
+      {
+        cause: readFailure,
+      },
+    ),
+  });
+  const undoFailure = new Error(`EACCES: permission denied, unlink '${privateSkill}'`, {
+    cause: readFailure,
+  });
+
+  const options = {
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: () =>
+        Promise.resolve({
+          ...failedInstallOutcome(failure, failure.message),
+          rollbackPartials: [{ phase: "skills", msg: undoFailure.message, cause: undoFailure }],
+        }),
+      loadSettings: () => Promise.resolve(settingsForMp("broken")),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  } satisfies Omit<TestImportOptions, "ctx" | "run">;
+  return { options, readMessage };
+}
+
+test("redacts quoted paths in every import failure link and leaked resource", async (t) => {
+  // arrange
+  const { options, readMessage } = await quotedImportFailure(t);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await importClaudeSettings({ ...options, ctx, run: runWithNothingLoaded() });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation has failed.\n\n● mp [user] (added)\n" +
+        "  ⊘ broken (failed) {rollback partial}\n" +
+        `    cause: ${readMessage} -> EACCES: permission denied, unlink 'skill one' -> ${readMessage}\n` +
+        "    leaked: skill one\n    leaked: skill two\n" +
+        "    [skills] (rollback failed)\n" +
+        `      cause: EACCES: permission denied, unlink 'skill one' -> ${readMessage}\n\n` +
+        "Import: 1 failure, 1 success",
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+});
+
+test("redacts quoted paths in import JSON cause arrays and leaks", async (t) => {
+  // arrange
+  const { options, readMessage } = await quotedImportFailure(t);
+  const capture = createJsonCapture();
+  const ctx = mock<ImportClaudeSettingsOptions["ctx"]>({ exactParams: true, name: "context" });
+  when(() => ctx.mode)
+    .thenReturn("json")
+    .once();
+  const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+  // act
+  await importClaudeSettings({ ...options, ctx, run });
+
+  // assert
+  assert.deepStrictEqual(capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+        kind: "cascade",
+        severity: "error",
+        needsReload: false,
+        summary: "A plugin operation has failed.",
+        tally: { label: "Import", failures: 1, warnings: 0, success: { count: 1 } },
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            status: "added",
+            plugins: [
+              {
+                name: "broken",
+                id: "broken@mp",
+                scope: "user",
+                status: "failed",
+                reasons: ["rollback partial"],
+                cause: {
+                  causeChain: [
+                    readMessage,
+                    "EACCES: permission denied, unlink 'skill one'",
+                    readMessage,
+                  ],
+                  truncated: false,
+                },
+                leaks: ["skill one", "skill two"],
+                rollbackPartial: [
+                  {
+                    phase: "skills",
+                    cause: {
+                      causeChain: ["EACCES: permission denied, unlink 'skill one'", readMessage],
+                      truncated: false,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ]);
+  capture.assertValid();
+  verify(ctx);
+});
+
+test("D-PL6-12: shows a rollback phase cause with each absolute path cut to its last segment", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "install-rollback-partial-redacted");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const failure = new Error("failed to stage skill a-fmt: EACCES");
+  const undoFailure = new Error("could not remove skill a-fmt", {
+    cause: new Error(
+      "EACCES: permission denied, unlink '/home/user/.pi/agent/pi-claude-marketplace/resources/skills/a-fmt/data.txt'",
+    ),
+  });
+  const redactedUndoCause = "EACCES: permission denied, unlink 'data.txt'";
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: () =>
+        Promise.resolve({
+          ...failedInstallOutcome(failure, failure.message),
+          rollbackPartials: [{ phase: "skills", msg: undoFailure.message, cause: undoFailure }],
+        }),
+      loadSettings: () => Promise.resolve(settingsForMp("broken")),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult.unexpectedPluginFailures, [
+    {
+      ...failedUnexpectedly("broken", "mp", "user", failure.message),
+      runtimeReason: "rollback partial",
+      rollbackPartial: [
+        {
+          phase: "skills",
+          cause: new Error(undoFailure.message, { cause: new Error(redactedUndoCause) }),
+        },
+      ],
+    },
+  ]);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation has failed.\n\n" +
+        "● mp [user] (added)\n" +
+        "  ⊘ broken (failed) {rollback partial}\n" +
+        `    cause: ${failure.message}\n` +
+        "    [skills] (rollback failed)\n" +
+        `      cause: ${undoFailure.message} -> ${redactedUndoCause}\n\n` +
+        "Import: 1 failure, 1 success",
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+});
+
+// IMP-09: an unclassified failure carries the reason `install`'s failure row
+// reads from the same error, and the authentication row is bare, as install's is.
 test("names the reason install gives an unclassified install failure", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "install-git-host");
@@ -1870,8 +2712,8 @@ test("records a dependency-cascade failure with the dependency-failed reason", a
       message:
         "A plugin operation has failed.\n\n" +
         "● mp [user] (added)\n" +
-        `  ● ${surviving[0]} (installed)\n` +
-        `  ● ${surviving[1]} (installed)\n` +
+        `  ● ${surviving[0]} v1.0.0 (installed)\n` +
+        `  ● ${surviving[1]} v1.0.0 (installed)\n` +
         "  ⊘ target (failed) {dependency failed}\n" +
         `    cause: ${redactedCause}\n\n` +
         "Import: 1 failure, 3 successes\n\n" +
@@ -1950,8 +2792,8 @@ test("records a dependency-cascade failure whose ledger error carries a nested c
       message:
         "A plugin operation has failed.\n\n" +
         "● mp [user] (added)\n" +
-        `  ● ${surviving[0]} (installed)\n` +
-        `  ● ${surviving[1]} (installed)\n` +
+        `  ● ${surviving[0]} v1.0.0 (installed)\n` +
+        `  ● ${surviving[1]} v1.0.0 (installed)\n` +
         "  ⊘ target (failed) {dependency failed}\n" +
         `    cause: ${headCause} -> ${redactedNestedMessage}\n\n` +
         "Import: 1 failure, 3 successes\n\n" +
@@ -1960,6 +2802,192 @@ test("records a dependency-cascade failure whose ledger error carries a nested c
     },
   ]);
   assert.deepStrictEqual(attempted, order);
+  verifyBoundary();
+});
+
+// D-PL6-04: a dependency whose rollback could not finish gets its own row, as
+// install shows it, and the requested plugin's row stays a bare
+// `{dependency failed}`. The two rows are ordered by name.
+test("D-PL6-04: names a dependency whose rollback could not finish on its own row", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "install-dependency-rollback-partial");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const headCause = "failed to stage the MCP servers of lib";
+  const nestedCause = new Error(
+    "EISDIR: illegal operation on a directory, read '/home/user/.pi/agent/mcp-adapter.json'",
+  );
+  const redactedNestedMessage = "EISDIR: illegal operation on a directory, read 'mcp-adapter.json'";
+  const undoFailure = new Error(
+    "EACCES: permission denied, unlink '/home/user/.pi/agent/pi-claude-marketplace/resources/skills/lib-skill/data.txt'",
+  );
+  const redactedUndoMessage = "EACCES: permission denied, unlink 'data.txt'";
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: () =>
+        Promise.resolve({
+          ...failedInstallOutcome(
+            new DependencyCascadeError(headCause, "lib@mp", { cause: nestedCause }),
+            headCause,
+          ),
+          rollbackPartials: [{ phase: "skills", msg: undoFailure.message, cause: undoFailure }],
+        }),
+      loadSettings: () => Promise.resolve(settingsForMp("app")),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    run: runWithNothingLoaded(),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("mp", "user")],
+    unexpectedPluginFailures: [
+      {
+        ...failedDependency("app", "mp", "user", headCause, new Error(redactedNestedMessage)),
+        failedDependency: {
+          key: "lib@mp",
+          rollbackPartial: [{ phase: "skills", cause: new Error(redactedUndoMessage) }],
+        },
+      },
+    ],
+  });
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Some plugin operations have failed.\n\n" +
+        "● mp [user] (added)\n" +
+        "  ⊘ app (failed) {dependency failed}\n" +
+        "  ⊘ lib@mp (failed) {rollback partial}\n" +
+        `    cause: ${headCause} -> ${redactedNestedMessage}\n` +
+        "    [skills] (rollback failed)\n" +
+        `      cause: ${redactedUndoMessage}\n\n` +
+        "Import: 2 failures, 1 success",
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+});
+
+test("D-PL6-04: names a dependency two plugins of one marketplace failed on once", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "install-shared-dependency-rollback-partial");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const headCause = "failed to stage the MCP servers of lib";
+  const undoFailure = new Error("EACCES: permission denied, unlink 'data.txt'");
+  const failedDependencyFields = {
+    key: "lib@mp",
+    rollbackPartial: [{ phase: "skills", cause: new Error(undoFailure.message) }],
+  };
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: () =>
+        Promise.resolve({
+          ...failedInstallOutcome(new DependencyCascadeError(headCause, "lib@mp"), headCause),
+          rollbackPartials: [{ phase: "skills", msg: undoFailure.message, cause: undoFailure }],
+        }),
+      loadSettings: () => Promise.resolve(settingsForMp("app", "tool")),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    run: runWithNothingLoaded(),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("mp", "user")],
+    unexpectedPluginFailures: [
+      {
+        ...failedDependency("app", "mp", "user", headCause),
+        failedDependency: failedDependencyFields,
+      },
+      {
+        ...failedDependency("tool", "mp", "user", headCause),
+        failedDependency: failedDependencyFields,
+      },
+    ],
+  });
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Some plugin operations have failed.\n\n" +
+        "● mp [user] (added)\n" +
+        "  ⊘ app (failed) {dependency failed}\n" +
+        "  ⊘ lib@mp (failed) {rollback partial}\n" +
+        `    cause: ${headCause}\n` +
+        "    [skills] (rollback failed)\n" +
+        `      cause: ${undoFailure.message}\n` +
+        "  ⊘ tool (failed) {dependency failed}\n\n" +
+        "Import: 3 failures, 1 success",
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+});
+
+test("D-PL6-04: puts the undo of another member the cascade had installed on the plugin's row, not the dependency's", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "install-sibling-rollback-partial");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const headCause = "failed to stage the MCP servers of lib";
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: () =>
+        Promise.resolve({
+          ...failedInstallOutcome(new DependencyCascadeError(headCause, "lib@mp"), headCause),
+          rollbackPartials: [
+            { phase: "skills", msg: "skills undo failed" },
+            { phase: "sibling@mp", msg: "sibling undo failed" },
+          ],
+        }),
+      loadSettings: () => Promise.resolve(settingsForMp("app")),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    run: runWithNothingLoaded(),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult.unexpectedPluginFailures, [
+    {
+      ...failedDependency("app", "mp", "user", headCause),
+      rollbackPartial: [{ phase: "sibling@mp" }],
+      failedDependency: { key: "lib@mp", rollbackPartial: [{ phase: "skills" }] },
+    },
+  ]);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Some plugin operations have failed.\n\n" +
+        "● mp [user] (added)\n" +
+        "  ⊘ app (failed) {dependency failed}\n" +
+        "    [sibling@mp] (rollback failed)\n" +
+        "  ⊘ lib@mp (failed) {rollback partial}\n" +
+        `    cause: ${headCause}\n` +
+        "    [skills] (rollback failed)\n\n" +
+        "Import: 2 failures, 1 success",
+      severity: "error",
+    },
+  ]);
   verifyBoundary();
 });
 
@@ -2029,8 +3057,8 @@ test("records an unexpected plugin failure whose error carries a nested cause wi
       message:
         "A plugin operation has failed.\n\n" +
         "● mp [user] (added)\n" +
-        `  ● ${surviving[0]} (installed)\n` +
-        `  ● ${surviving[1]} (installed)\n` +
+        `  ● ${surviving[0]} v1.0.0 (installed)\n` +
+        `  ● ${surviving[1]} v1.0.0 (installed)\n` +
         "  ⊘ target (failed)\n" +
         `    cause: ${headCause} -> ${redactedNestedMessage}\n\n` +
         "Import: 1 failure, 3 successes\n\n" +
@@ -2134,7 +3162,7 @@ for (const { declaresAgents, declaresMcp, declaresWorkflows, marker } of [
     assert.deepStrictEqual(notifications, [
       {
         message:
-          `● mp [user] (added)\n  ● plugin (installed)${marker}\n\n` +
+          `● mp [user] (added)\n  ● plugin v1.0.0 (installed)${marker}\n\n` +
           "Import: 2 successes\n\n" +
           "/reload to pick up changes",
       },
@@ -2248,7 +3276,7 @@ test("records each post-commit warning the installed outcome carried as its own 
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [user] (added)\n  ● plugin (installed)\n\n" +
+        "● mp [user] (added)\n  ● plugin v1.0.0 (installed)\n\n" +
         "Import: 2 successes\n\n" +
         "/reload to pick up changes",
     },
@@ -2333,7 +3361,7 @@ test("AFILE-04: import over a commented mcp-adapter.json shows the comments-remo
       message:
         "A plugin operation has failed.\n\n" +
         "● mp [user] (added)\n" +
-        "  ● alpha (installed)\n" +
+        "  ● alpha v1.0.0 (installed)\n" +
         "  ⊘ target (failed)\n" +
         "    cause: disk full\n\n" +
         "Import: 1 failure, 2 successes\n\n" +
@@ -2532,7 +3560,7 @@ test("reports no changed resources when every install left the Pi resource set a
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [user] (added)\n  ● plugin (installed)\n\n" +
+        "● mp [user] (added)\n  ● plugin v1.0.0 (installed)\n\n" +
         "Import: 2 successes\n\n" +
         "/reload to pick up changes",
     },
@@ -2612,7 +3640,7 @@ test("UPD-DEP-D1 / WR-N5 / WR-3: lists every dependency change an install made b
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [user] (added)\n  ● plugin (installed)\n  ● lib@mp v1.0.0 → v2.0.0 (updated)\n" +
+        "● mp [user] (added)\n  ● plugin v1.0.0 (installed)\n  ● lib@mp v1.0.0 → v2.0.0 (updated)\n" +
         "  ● ggg@mp v1.0.0 (installed)\n\n" +
         "Import: 4 successes\n\n" +
         "/reload to pick up changes",
@@ -2741,7 +3769,7 @@ test("installs only the plugin the state does not already record under a recorde
     {
       message:
         "● mp [user] (skipped) {already added}\n" +
-        "  ● fresh (installed)\n" +
+        "  ● fresh v1.0.0 (installed)\n" +
         "  ⊘ recorded (skipped) {already installed}\n\n" +
         "Import: 3 successes\n\n" +
         "/reload to pick up changes",
@@ -2808,8 +3836,11 @@ test("installs every plugin in orchestrated mode and never opts in to the defaul
 
 test("abandons only the scope whose state cannot be read and records why", async (t) => {
   // arrange
-  const { cwd } = await createHermeticScopes(t, "state-unreadable");
+  const { cwd, user } = await createHermeticScopes(t, "state unreadable");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+  const stateFailure = new Error(
+    `state.json at ${user.stateJsonPath} is not valid JSON: bad input`,
+  );
   const expectedResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
     addedMarketplaces: [added("mp-project", "project")],
@@ -2817,7 +3848,8 @@ test("abandons only the scope whose state cannot be read and records why", async
     diagnostics: [
       {
         code: "settings-read-error",
-        message: "Cannot read user scope state: state.json is unreadable",
+        message:
+          "Cannot read user scope state: state.json at state.json is not valid JSON: bad input",
         scope: "user",
         severity: "warning",
       },
@@ -2841,9 +3873,7 @@ test("abandons only the scope whose state cannot be read and records why", async
           }),
         ),
       loadState: (scope) =>
-        scope === "user"
-          ? Promise.reject(new Error("state.json is unreadable"))
-          : Promise.resolve(recordedState([])),
+        scope === "user" ? Promise.reject(stateFailure) : Promise.resolve(recordedState([])),
     }),
     hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user", "project"],
@@ -2854,16 +3884,19 @@ test("abandons only the scope whose state cannot be read and records why", async
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp-project [project] (added)\n  ● plugin (installed)\n\n" +
+        "● mp-project [project] (added)\n  ● plugin v1.0.0 (installed)\n\n" +
         "Import: 2 successes\n\n" +
         "/reload to pick up changes",
     },
     {
       message:
-        "1 import diagnostic surfaced.\n\nCannot read user scope state: state.json is unreadable",
+        "1 import diagnostic surfaced.\n\n" +
+        "Cannot read user scope state: state.json at state.json is not valid JSON: bad input",
       severity: "warning",
     },
   ]);
+  assert.strictEqual(JSON.stringify(importResult).includes(user.scopeRoot), false);
+  assert.strictEqual(JSON.stringify(notifications).includes(user.scopeRoot), false);
   verifyBoundary();
 });
 
@@ -2911,8 +3944,8 @@ test("keeps each selected scope's marketplaces and plugins independent and rende
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [project] (added)\n  ● plugin (installed)\n\n" +
-        "● mp [user] (added)\n  ● plugin (installed)\n\n" +
+        "● mp [project] (added)\n  ● plugin v1.0.0 (installed)\n\n" +
+        "● mp [user] (added)\n  ● plugin v1.0.0 (installed)\n\n" +
         "Import: 4 successes\n\n" +
         "/reload to pick up changes",
     },
@@ -3098,8 +4131,8 @@ test("abandons the post-pass for a scope whose config is invalid and still write
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp-project [project] (added)\n  ● p (installed)\n\n" +
-        "● mp-user [user] (added)\n  ● p (installed)\n\n" +
+        "● mp-project [project] (added)\n  ● p v1.0.0 (installed)\n\n" +
+        "● mp-user [user] (added)\n  ● p v1.0.0 (installed)\n\n" +
         "Import: 4 successes\n\n" +
         "/reload to pick up changes",
     },
@@ -3351,8 +4384,8 @@ test("skips a recorded marketplace the later scope plan never declared when buil
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp-a [project] (added)\n  ● a (installed)\n\n" +
-        "● mp-b [project] (added)\n  ● b (installed)\n\n" +
+        "● mp-a [project] (added)\n  ● a v1.0.0 (installed)\n\n" +
+        "● mp-b [project] (added)\n  ● b v1.0.0 (installed)\n\n" +
         "Import: 4 successes\n\n" +
         "/reload to pick up changes",
     },
@@ -3441,7 +4474,7 @@ test("records a diagnostic and keeps the result when the batched config write fa
 
   const writeFailureMessage =
     "Failed to write project scope claude-plugins.json batched post-pass: " +
-    `EEXIST: file already exists, mkdir '${project.extensionRoot}'`;
+    "EEXIST: file already exists, mkdir 'pi-claude-marketplace'";
   const expectedResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
     addedMarketplaces: [added("mp", "project")],
@@ -3483,7 +4516,7 @@ test("records a diagnostic and keeps the result when the batched config write fa
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [project] (added)\n  ● plugin (installed)\n\n" +
+        "● mp [project] (added)\n  ● plugin v1.0.0 (installed)\n\n" +
         "Import: 2 successes\n\n" +
         "/reload to pick up changes",
     },
@@ -3492,8 +4525,169 @@ test("records a diagnostic and keeps the result when the batched config write fa
       severity: "warning",
     },
   ]);
+  assert.strictEqual(JSON.stringify(importResult).includes(project.scopeRoot), false);
+  assert.strictEqual(JSON.stringify(notifications).includes(project.scopeRoot), false);
   verifyBoundary();
 });
+
+test("redacts a spaced state-lock path when the batched config post-pass loses its lock race", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "batch write lock private user");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+  let releaseLock: (() => Promise<void>) | undefined;
+  t.after(async () => {
+    await releaseLock?.();
+  });
+  const installWhileTakingLock = async (): Promise<InstallOutcome> => {
+    await mkdir(project.extensionRoot, { recursive: true });
+    releaseLock = await lockfile.lock(project.extensionRoot, {
+      lockfilePath: project.stateLockFile,
+      realpath: false,
+    });
+    return installedOutcome();
+  };
+
+  const lockMessage =
+    "Another pi-claude-marketplace operation is in progress for project scope " +
+    "(.state-lock). Retry after it completes.";
+  const writeFailureMessage =
+    "Failed to write project scope claude-plugins.json batched post-pass: " + lockMessage;
+  const expectedResult: ClaudeImportExecutionResult = {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("mp", "project")],
+    changedResources: true,
+    diagnostics: [
+      {
+        code: "settings-write-error",
+        message: writeFailureMessage,
+        scope: "project",
+        severity: "warning",
+      },
+    ],
+    installedPlugins: [installed("plugin", "mp", "project")],
+  };
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: installWhileTakingLock,
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: { "plugin@mp": true },
+            extraKnownMarketplaces: { mp: { directory: "./mp" } },
+          }),
+        ),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, expectedResult);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● mp [project] (added)\n  ● plugin v1.0.0 (installed)\n\n" +
+        "Import: 2 successes\n\n" +
+        "/reload to pick up changes",
+    },
+    {
+      message: `1 import diagnostic surfaced.\n\n${writeFailureMessage}`,
+      severity: "warning",
+    },
+  ]);
+  assert.strictEqual(JSON.stringify(importResult).includes("private user"), false);
+  assert.strictEqual(JSON.stringify(notifications).includes("private user"), false);
+  verifyBoundary();
+});
+
+for (const mode of ["json", "rpc"] as const) {
+  test(`redacts a spaced state-lock path from every ${mode} post-pass payload`, async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, `batch write lock private user ${mode}`);
+    const capture = createJsonCapture();
+    const ctx = mock<ImportClaudeSettingsOptions["ctx"]>({
+      exactParams: true,
+      name: "context",
+    });
+    when(() => ctx.mode)
+      .thenReturn(mode)
+      .times(2);
+    let releaseLock: (() => Promise<void>) | undefined;
+    t.after(async () => {
+      await releaseLock?.();
+    });
+    const installWhileTakingLock = async (): Promise<InstallOutcome> => {
+      await mkdir(project.extensionRoot, { recursive: true });
+      releaseLock = await lockfile.lock(project.extensionRoot, {
+        lockfilePath: project.stateLockFile,
+        realpath: false,
+      });
+      return installedOutcome();
+    };
+
+    const lockMessage =
+      "Another pi-claude-marketplace operation is in progress for project scope " +
+      "(.state-lock). Retry after it completes.";
+    const writeFailureMessage =
+      "Failed to write project scope claude-plugins.json batched post-pass: " + lockMessage;
+    const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+    // act
+    const importResult = await importClaudeSettings({
+      ctx,
+      run,
+      cwd,
+      deps: collaborators({
+        addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+        installPlugin: installWhileTakingLock,
+        loadSettings: () =>
+          Promise.resolve(
+            claudeSettings({
+              enabledPlugins: { "plugin@mp": true },
+              extraKnownMarketplaces: { mp: { directory: "./mp" } },
+            }),
+          ),
+        loadState: () => Promise.resolve(recordedState([])),
+      }),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      selectedScopes: ["project"],
+    });
+
+    // assert
+    assert.deepStrictEqual(importResult.diagnostics, [
+      {
+        code: "settings-write-error",
+        message: writeFailureMessage,
+        scope: "project",
+        severity: "warning",
+      },
+    ]);
+    assert.strictEqual(capture.entries.length, 2);
+    assert.deepStrictEqual(capture.entries.at(-1), {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+        kind: "diagnostic",
+        severity: "warning",
+        needsReload: false,
+        header: "1 import diagnostic surfaced.",
+        lines: [writeFailureMessage],
+      },
+    });
+    assert.strictEqual(JSON.stringify(importResult).includes("private user"), false);
+    assert.strictEqual(JSON.stringify(capture.entries).includes("private user"), false);
+    capture.assertValid();
+    verify(ctx);
+  });
+}
 
 /** Write `bytes` at `filePath`, creating the parent directory first. */
 async function writeUnder(filePath: string, bytes: string): Promise<void> {
@@ -4436,17 +5630,18 @@ test("declares a freshly installed plugin under a recorded marketplace that reco
   verifyBoundary();
 });
 
-test("lets a later scope plan's source mismatch supersede the header an earlier add recorded", async (t) => {
+test("IMP-05: lets a later scope plan's official source mismatch supersede the header an earlier add recorded", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "status-supersede");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-  const cause = "Existing marketplace source ./x does not match Claude settings source owner/x.";
+  const cause =
+    "Existing marketplace source ./x does not match Claude settings source anthropics/claude-plugins-official.";
   const expectedResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),
-    addedMarketplaces: [added("mp-x", "project")],
+    addedMarketplaces: [added("claude-plugins-official", "project")],
     changedResources: true,
-    installedPlugins: [installed("p", "mp-x", "project")],
-    sourceMismatches: [mismatched("q", "mp-x", "project", cause)],
+    installedPlugins: [installed("p", "claude-plugins-official", "project")],
+    sourceMismatches: [mismatched("q", "claude-plugins-official", "project", cause)],
   };
 
   // act
@@ -4455,22 +5650,20 @@ test("lets a later scope plan's source mismatch supersede the header an earlier 
     run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
-      addMarketplace: () => Promise.resolve(addedOutcome("mp-x")),
+      addMarketplace: () => Promise.resolve(addedOutcome("claude-plugins-official")),
       installPlugin: () => Promise.resolve(installedOutcome()),
       loadSettings: settingsSequence([
-        claudeSettings({
-          enabledPlugins: { "p@mp-x": true },
-          extraKnownMarketplaces: { "mp-x": { directory: "./x" } },
-        }),
-        claudeSettings({
-          enabledPlugins: { "q@mp-x": true },
-          extraKnownMarketplaces: { "mp-x": { github: { repo: "owner/x" } } },
-        }),
+        claudeSettings({ enabledPlugins: { "p@claude-plugins-official": true } }),
+        claudeSettings({ enabledPlugins: { "q@claude-plugins-official": true } }),
       ]),
       loadState: stateSequence([
         recordedState([]),
         recordedState([
-          recordedMarketplace({ name: "mp-x", scope: "project", source: pathSource("./x") }),
+          recordedMarketplace({
+            name: "claude-plugins-official",
+            scope: "project",
+            source: pathSource("./x"),
+          }),
         ]),
       ]),
     }),
@@ -4484,8 +5677,8 @@ test("lets a later scope plan's source mismatch supersede the header an earlier 
     {
       message:
         "Some operations have failed.\n\n" +
-        "⊘ mp-x [project] (failed)\n" +
-        "  ● p (installed)\n" +
+        "⊘ claude-plugins-official [project] (failed)\n" +
+        "  ● p v1.0.0 (installed)\n" +
         "  ⊘ q (failed) {source mismatch}\n\n" +
         "Import: 2 failures, 1 success\n\n" +
         "/reload to pick up changes",
@@ -4518,6 +5711,14 @@ function settingsForMp(...plugins: readonly string[]): ClaudeSettings {
   return claudeSettings({
     enabledPlugins: Object.fromEntries(plugins.map((plugin) => [`${plugin}@mp`, true])),
     extraKnownMarketplaces: { mp: { directory: "./mp" } },
+  });
+}
+
+/** CR-01: the settings naming `plugins` under the recorded marketplace `recorded-mp` itself. */
+function settingsForRecordedMp(...plugins: readonly string[]): ClaudeSettings {
+  return claudeSettings({
+    enabledPlugins: Object.fromEntries(plugins.map((plugin) => [`${plugin}@recorded-mp`, true])),
+    extraKnownMarketplaces: { "recorded-mp": { directory: "./mp" } },
   });
 }
 
@@ -4734,9 +5935,13 @@ test("IMP-05: enables a plugin the scope records disabled and declares it enable
         ...installed("alpha", "mp", "project", { agents: true, mcp: true, workflows: true }),
         version: "1.0.0",
         reenabled: true,
-        enableSignals: { stagedAgents: true, stagedMcpServers: true, stagedWorkflows: true },
+        enableSignals: {},
       },
-      { ...installed("beta", "mp", "project"), reenabled: true, enableSignals: {} },
+      {
+        ...installed("beta", "mp", "project", undefined, true, null),
+        reenabled: true,
+        enableSignals: {},
+      },
     ],
     skippedExistingMarketplaces: [skipped("mp", "project")],
   });
@@ -4837,11 +6042,12 @@ test("IMP-05: an enable that fails or finds the plugin enabled is reported, not 
   verifyBoundary();
 });
 
-test("IMP-05: a settings marketplace the scope records only under another name is added, not followed to that record", async (t) => {
+test("D-PL6-03: an enable whose rollback could not finish lists the rollback phases", async (t) => {
   // arrange
-  const { cwd, project } = await createHermeticScopes(t, "source-claimed");
+  const { cwd } = await createHermeticScopes(t, "enable-rollback-partial");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-  const addCalls: string[] = [];
+  const failure = new Error("failed to stage the MCP servers of demo");
+  const undoFailure = new Error("could not remove skill demo-skill");
 
   // act
   const importResult = await importClaudeSettings({
@@ -4849,17 +6055,206 @@ test("IMP-05: a settings marketplace the scope records only under another name i
     run: runWithNothingLoaded(),
     cwd,
     deps: collaborators({
-      addMarketplace: (options) => {
-        addCalls.push(`${options.scope} ${options.rawSource}`);
-        return Promise.resolve(failedAddOutcome("duplicate marketplace name recorded-mp"));
+      loadSettings: () => Promise.resolve(settingsForMp("demo")),
+      loadState: () => Promise.resolve(stateWithDisabled("demo")),
+      setPluginEnabled: () =>
+        Promise.resolve({
+          status: "failed",
+          reason: "rollback partial",
+          error: failure,
+          cause: failure.message,
+          rollbackPartials: [
+            { phase: "skills", msg: undoFailure.message, cause: undoFailure },
+            { phase: "commands", msg: "could not remove prompt demo-run" },
+          ],
+        }),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    skippedExistingMarketplaces: [skipped("mp", "project")],
+    unexpectedPluginFailures: [
+      {
+        ...failedUnexpectedly("demo", "mp", "project", failure.message),
+        runtimeReason: "rollback partial",
+        rollbackPartial: [
+          { phase: "skills", cause: new Error(undoFailure.message) },
+          { phase: "commands" },
+        ],
       },
+    ],
+  });
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation has failed.\n\n" +
+        "● mp [project] (skipped) {already added}\n" +
+        "  ⊘ demo (failed) {rollback partial}\n" +
+        `    cause: ${failure.message}\n` +
+        "    [skills] (rollback failed)\n" +
+        `      cause: ${undoFailure.message}\n` +
+        "    [commands] (rollback failed)\n\n" +
+        "Import: 1 failure, 1 success",
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+});
+
+/** D-PL6-17: the failure of a plugin whose settings marketplace the scope holds under another name. */
+function notAdded(plugin: string, marketplace: string, scope: Scope): UnexpectedFailure {
+  return {
+    cause: `Marketplace "${marketplace}" is not added in the ${scope} scope.`,
+    kind: "plugin-failure",
+    marketplace,
+    plugin,
+    reason: "marketplace-not-added",
+    ref: `${plugin}@${marketplace}`,
+    scope,
+  };
+}
+
+/** D-PL6-17: the cascade of one `plugin@mp` that fails as not added. */
+function notAddedCascade(): { readonly message: string; readonly severity: "error" } {
+  return {
+    message:
+      "Some operations have failed.\n\n" +
+      "⊘ mp [project] (failed)\n" +
+      "  ⊘ plugin (failed)\n" +
+      '    cause: Marketplace "mp" is not added in the project scope.\n\n' +
+      "Import: 2 failures",
+    severity: "error",
+  };
+}
+
+test("D-PL6-17: a settings marketplace the scope records under one other name fails its plugin as not added", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "source-reused");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const recorded = recordedMarketplace({
+    name: "recorded-mp",
+    scope: "project",
+    source: pathSource("./mp"),
+  });
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      loadSettings: () => Promise.resolve(settingsForMp("plugin")),
+      loadState: () => Promise.resolve(recordedState([recorded])),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    unexpectedPluginFailures: [notAdded("plugin", "mp", "project")],
+  });
+  assert.deepStrictEqual(notifications, [notAddedCascade()]);
+  await assert.rejects(stat(project.baseConfigJsonPath), { code: "ENOENT" });
+  verifyBoundary();
+});
+
+test("D-PL6-17: a settings marketplace no plugin names reuses the record that holds its source with no row", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "source-reused-unreferenced");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const recorded = recordedMarketplace({
+    name: "recorded-mp",
+    scope: "project",
+    source: pathSource("./mp"),
+  });
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      loadSettings: () => Promise.resolve(settingsForMp()),
+      loadState: () => Promise.resolve(recordedState([recorded])),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, emptyImportResult());
+  assert.deepStrictEqual(notifications, [{ message: "(no marketplaces)" }]);
+  await assert.rejects(stat(project.baseConfigJsonPath), { code: "ENOENT" });
+  verifyBoundary();
+});
+
+test("D-PL6-17: a settings marketplace whose source two records hold fails its plugin as not added", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "source-reused-ambiguous");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
       loadSettings: () => Promise.resolve(settingsForMp("plugin")),
       loadState: () =>
         Promise.resolve(
           recordedState([
             recordedMarketplace({
+              name: "second-mp",
+              scope: "project",
+              source: pathSource("./mp"),
+            }),
+            recordedMarketplace({ name: "first-mp", scope: "project", source: pathSource("./mp") }),
+          ]),
+        ),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    unexpectedPluginFailures: [notAdded("plugin", "mp", "project")],
+  });
+  assert.deepStrictEqual(notifications, [notAddedCascade()]);
+  await assert.rejects(stat(project.baseConfigJsonPath), { code: "ENOENT" });
+  verifyBoundary();
+});
+
+test("D-PL6-17: two settings marketplaces that give one record's source both reuse it", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "source-reused-twice");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: { "plugin@mp": true },
+            extraKnownMarketplaces: { mp: { directory: "./mp" }, twin: { directory: "./mp" } },
+          }),
+        ),
+      loadState: () =>
+        Promise.resolve(
+          recordedState([
+            recordedMarketplace({
               name: "recorded-mp",
-              plugins: ["plugin"],
               scope: "project",
               source: pathSource("./mp"),
             }),
@@ -4871,21 +6266,249 @@ test("IMP-05: a settings marketplace the scope records only under another name i
   });
 
   // assert
-  assert.deepStrictEqual(addCalls, ["project ./mp"]);
   assert.deepStrictEqual(importResult, {
     ...emptyImportResult(),
-    marketplaceFailures: [addFailed("mp", "project", "duplicate marketplace name recorded-mp")],
-    warnings: [
-      warned(
-        "plugin",
-        "mp",
-        "project",
-        "marketplace-failed",
-        "duplicate marketplace name recorded-mp",
-      ),
-    ],
+    unexpectedPluginFailures: [notAdded("plugin", "mp", "project")],
   });
-  assert.strictEqual(notifications.length, 1);
+  assert.deepStrictEqual(notifications, [notAddedCascade()]);
+  await assert.rejects(stat(project.baseConfigJsonPath), { code: "ENOENT" });
+  verifyBoundary();
+});
+
+for (const { diagnostics, entry, recordedName, title } of [
+  {
+    diagnostics: [
+      {
+        code: "unmappable-marketplace-source",
+        marketplace: "recorded-mp",
+        message:
+          'Skipping Claude marketplace "recorded-mp" because it has no supported url, github, ' +
+          "or directory source (nested file/remote-marketplace.json sources are not importable).",
+        scope: "project",
+        severity: "warning",
+      },
+    ],
+    entry: { source: { source: "file", url: "https://example.test/marketplace.json" } },
+    recordedName: "recorded-mp",
+    title: "with no supported source",
+  },
+  {
+    diagnostics: [],
+    entry: { github: { repo: "someone/else" } },
+    recordedName: "claude-plugins-official",
+    title: "as the official marketplace no plugin names",
+  },
+] satisfies readonly {
+  readonly diagnostics: ClaudeImportExecutionResult["diagnostics"];
+  readonly entry: Record<string, unknown>;
+  readonly recordedName: string;
+  readonly title: string;
+}[]) {
+  test(`D-PL6-18: fails a settings marketplace's plugin as not added when the settings also declare the record that holds its source ${title}`, async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "source-reused-declared-by-settings");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(
+      diagnostics.length + 1,
+    );
+
+    // act
+    const importResult = await importClaudeSettings({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      deps: collaborators({
+        loadSettings: () =>
+          Promise.resolve(
+            claudeSettings({
+              enabledPlugins: { "plugin@mp": true },
+              extraKnownMarketplaces: { mp: { directory: "./mp" }, [recordedName]: entry },
+            }),
+          ),
+        loadState: () =>
+          Promise.resolve(
+            recordedState([
+              recordedMarketplace({
+                name: recordedName,
+                scope: "project",
+                source: pathSource("./mp"),
+              }),
+            ]),
+          ),
+      }),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      selectedScopes: ["project"],
+    });
+
+    // assert
+    assert.deepStrictEqual(importResult, {
+      ...emptyImportResult(),
+      diagnostics,
+      unexpectedPluginFailures: [notAdded("plugin", "mp", "project")],
+    });
+    assert.deepStrictEqual(notifications[0], notAddedCascade());
+    await assert.rejects(stat(project.baseConfigJsonPath), { code: "ENOENT" });
+    verifyBoundary();
+  });
+}
+
+test("CR-01: keeps the name a config declares for a recorded marketplace the settings name directly", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "recorded-name-declared");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  await createScopeRoots(project);
+  const seededBytes = configBytes({
+    marketplaces: { mp: { source: "./mp" } },
+    plugins: { "plugin@mp": {} },
+  });
+  await writeFile(project.baseConfigJsonPath, seededBytes, "utf8");
+  const state = recordedState([
+    recordedMarketplace({
+      name: "recorded-mp",
+      plugins: ["plugin"],
+      scope: "project",
+      source: pathSource("./mp"),
+    }),
+  ]);
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      loadSettings: () => Promise.resolve(settingsForRecordedMp("plugin")),
+      loadState: () => Promise.resolve(state),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    skippedExistingMarketplaces: [skipped("recorded-mp", "project")],
+    skippedExistingPlugins: [skippedPlugin("plugin", "recorded-mp", "project")],
+  });
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), seededBytes);
+  assert.deepStrictEqual(
+    planReconcile((await loadMergedScopeConfig(project)).merged, state, "project"),
+    emptyReconcilePlan("project"),
+  );
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● recorded-mp [project] (skipped) {already added}\n" +
+        "  ⊘ plugin (skipped) {already installed}\n\n" +
+        "Import: 2 successes",
+    },
+  ]);
+  verifyBoundary();
+});
+
+test("CR-01: declares an installed plugin under the name a config declares for a recorded marketplace the settings name directly", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "recorded-name-declared-install");
+  const { ctx, verifyBoundary } = createNotificationBoundary(1);
+  const run = runWithNothingLoaded();
+  await createScopeRoots(project);
+  await writeFile(
+    project.baseConfigJsonPath,
+    configBytes({ marketplaces: { mp: { source: "./mp" } }, plugins: {} }),
+    "utf8",
+  );
+  const installPlugin = mock<InstallPlugin>({ exactParams: true, name: "install plugin" });
+  when(() =>
+    installPlugin({
+      ctx,
+      cwd,
+      marketplace: "recorded-mp",
+      notifications: { mode: "orchestrated" },
+      plugin: "plugin",
+      run,
+      scope: "project",
+    }),
+  ).thenResolve(installedOutcome());
+
+  // act
+  await importClaudeSettings({
+    ctx,
+    run,
+    cwd,
+    deps: collaborators({
+      installPlugin,
+      loadSettings: () => Promise.resolve(settingsForRecordedMp("plugin")),
+      loadState: () =>
+        Promise.resolve(
+          recordedState([
+            recordedMarketplace({
+              name: "recorded-mp",
+              scope: "project",
+              source: pathSource("./mp"),
+            }),
+          ]),
+        ),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.strictEqual(
+    await readFile(project.baseConfigJsonPath, "utf8"),
+    configBytes({ marketplaces: { mp: { source: "./mp" } }, plugins: { "plugin@mp": {} } }),
+  );
+  assert.deepStrictEqual(
+    planReconcile(
+      (await loadMergedScopeConfig(project)).merged,
+      recordedState([
+        recordedMarketplace({
+          name: "recorded-mp",
+          plugins: ["plugin"],
+          scope: "project",
+          source: pathSource("./mp"),
+        }),
+      ]),
+      "project",
+    ),
+    emptyReconcilePlan("project"),
+  );
+  verifyBoundary();
+  verify(installPlugin);
+});
+
+test("D-PL6-17: does not enable a disabled plugin of the record a settings marketplace's source names", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "source-reused-disabled");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const recorded = recordedMarketplace({
+    name: "recorded-mp",
+    scope: "project",
+    source: pathSource("./mp"),
+  });
+  recorded.plugins["plugin"] = toDisabledRecord(
+    recordedPlugin("plugin"),
+    "2026-01-02T00:00:00.000Z",
+  );
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      loadSettings: () => Promise.resolve(settingsForMp("plugin")),
+      loadState: () => Promise.resolve(recordedState([recorded])),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    unexpectedPluginFailures: [notAdded("plugin", "mp", "project")],
+  });
+  assert.deepStrictEqual(notifications, [notAddedCascade()]);
   await assert.rejects(stat(project.baseConfigJsonPath), { code: "ENOENT" });
   verifyBoundary();
 });
@@ -5068,6 +6691,48 @@ test("IMP-10: re-enabling a partially installed record shows the row reconcile s
         "  ◉ partial v1.0.0 (partially-installed) {orphan rewake, unsupported component}\n\n" +
         "Import: 2 successes\n\n" +
         "/reload to pick up changes",
+    },
+  ]);
+  verifyBoundary();
+});
+
+test("IMP-10: re-enabling a record with a malformed skill keeps the degraded kind", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "enable-degraded");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      loadSettings: () => Promise.resolve(settingsForMp("degraded")),
+      loadState: () => Promise.resolve(stateWithDisabled("degraded")),
+      setPluginEnabled: () =>
+        Promise.resolve({ status: "enabled", name: "degraded", degradedKinds: ["skill"] }),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult.installedPlugins, [
+    {
+      ...installed("degraded", "mp", "project", undefined, true, null),
+      reenabled: true,
+      enableSignals: { degradedKinds: ["skill"] },
+    },
+  ]);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation needs attention.\n\n" +
+        "● mp [project] (skipped) {already added}\n" +
+        "  ● degraded (installed) {malformed skill}\n\n" +
+        "Import: 1 warning, 1 success\n\n" +
+        "/reload to pick up changes",
+      severity: "warning",
     },
   ]);
   verifyBoundary();

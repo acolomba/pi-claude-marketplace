@@ -18,6 +18,7 @@
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 
 export interface RawAgentFrontmatter {
   readonly name?: string;
@@ -124,12 +125,15 @@ export interface StageAgentsCommitResult {
    * sourcePath, targetPath} tuple, not just names.
    */
   readonly recorded: readonly StagedAgentRecord[];
-  /** Aggregated warnings (per-agent + per-row index corruptions). */
-  readonly warnings: readonly string[];
+  /**
+   * D-PL1-02: aggregated warnings. Index corruptions and per-agent conversion
+   * notes are `hygiene`; D-07 duplicate-name skips are `discovery`.
+   */
+  readonly warnings: readonly StagingWarning[];
   /**
    * W-08 / B-08: prepare-time AG-5 foreign content surfaces here, NOT via
    * throw, per D-06 corollary. Empty when no foreign content found. The
-   * orchestrator routes these to notifyWarning.
+   * orchestrator reports these as post-commit warnings.
    */
   readonly failed: readonly UnstageAgentFailure[];
 }

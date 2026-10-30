@@ -6,8 +6,8 @@ import {
   intersectDependencyRanges,
   isUnconstrainedRange,
   recordedVersionSatisfies,
-  renderConstraintRange,
   renderDeclaredRanges,
+  truncateForRefusal,
   type DependencyRangeIntersection,
 } from "../../extensions/pi-claude-marketplace/domain/dependency-range.ts";
 
@@ -237,52 +237,6 @@ describe("recordedVersionSatisfies", () => {
   }
 });
 
-describe("renderConstraintRange", () => {
-  test("T-03-08 a range at the rendering bound is carried whole", () => {
-    // arrange
-    const range = ">=1.0.0 ".repeat(25);
-
-    // act
-    const rendered = renderConstraintRange(range);
-
-    // assert
-    assert.deepStrictEqual({ length: range.length, rendered }, { length: 200, rendered: range });
-  });
-
-  test("T-03-08 a range past the rendering bound is truncated and names what it dropped", () => {
-    // arrange
-    const range = "x".repeat(250);
-
-    // act
-    const rendered = renderConstraintRange(range);
-
-    // assert
-    assert.equal(rendered, `${"x".repeat(200)}... (+50 chars)`);
-  });
-
-  test("T-03-08 a range widened by intersection is bounded before it can reach a reason", () => {
-    // arrange: the range the sibling cross-product case pins, which runs 238
-    // characters -- far past what any single declared version may be, because a
-    // synthesized range inherits the declared allowlist's character set and not
-    // its length.
-    const sameMajorThroughout = (major: number): string =>
-      Array.from({ length: 7 }, () => `>=${major}.0.0 <${major + 1}.0.0-0`).join(" ");
-    const widened = `${sameMajorThroughout(1)}||${sameMajorThroughout(2)}`;
-
-    // act
-    const rendered = renderConstraintRange(widened);
-
-    // assert
-    assert.deepStrictEqual(
-      { widenedLength: widened.length, rendered },
-      {
-        widenedLength: 238,
-        rendered: `${widened.slice(0, 200)}... (+38 chars)`,
-      },
-    );
-  });
-});
-
 describe("isUnconstrainedRange", () => {
   for (const { label, range, expected } of [
     { label: "the bare wildcard", range: "*", expected: true },
@@ -336,6 +290,28 @@ describe("excludingRange", () => {
 });
 
 describe("renderDeclaredRanges", () => {
+  test("T-03-08 a range at the rendering bound is carried whole", () => {
+    // arrange
+    const range = ">=1.0.0 ".repeat(25);
+
+    // act
+    const rendered = renderDeclaredRanges([range]);
+
+    // assert
+    assert.deepStrictEqual({ length: range.length, rendered }, { length: 200, rendered: range });
+  });
+
+  test("D-PL3-10 a text that is not a valid range is quoted and cut to 64 code units", () => {
+    // arrange
+    const range = "x".repeat(250);
+
+    // act
+    const rendered = renderDeclaredRanges([range]);
+
+    // assert
+    assert.equal(rendered, `\u201c${"x".repeat(64)}…\u201d`);
+  });
+
   test("INR-05 one declared range renders as written", () => {
     // arrange
     const ranges = ["^1.0.0"];
@@ -369,14 +345,86 @@ describe("renderDeclaredRanges", () => {
     assert.equal(rendered, "1.x || 2.x, <2.5.0");
   });
 
-  test("T-03-08 a join past the rendering bound is truncated once and names what it dropped", () => {
+  test("D-PL3-10 a join past the rendering bound is truncated once and names what it dropped", () => {
     // arrange: four 62-character ranges join to 254 characters.
-    const ranges = Array.from({ length: 4 }, (_, index) => `${String(index)}${"x".repeat(61)}`);
+    const ranges = Array.from(
+      { length: 4 },
+      (_, index) => `^${String(index + 1)}.0.0-${"x".repeat(55)}`,
+    );
 
     // act
     const rendered = renderDeclaredRanges(ranges);
 
     // assert
-    assert.equal(rendered, `${ranges.join(", ").slice(0, 200)}... (+54 chars)`);
+    assert.equal(rendered, `${ranges.join(", ").slice(0, 200)}… (+54 chars)`);
+  });
+
+  test("D-PL3-10 a join is cut before a quoted range the bound would split", () => {
+    // arrange: the fourth quoted range opens inside the first 200 characters.
+    const ranges = Array.from({ length: 4 }, (_, index) => `${String(index)}${"x".repeat(61)}`);
+    const quoted = ranges.map((range) => `\u201c${range}\u201d`).join(", ");
+
+    // act
+    const rendered = renderDeclaredRanges(ranges);
+
+    // assert
+    assert.equal(rendered, `${quoted.slice(0, 198)}… (+64 chars)`);
+  });
+});
+
+describe("truncateForRefusal", () => {
+  test("D-PL3-12 a zero limit keeps no code units", () => {
+    // arrange
+    const version = "abc";
+
+    // act
+    const cut = truncateForRefusal(version, 0);
+
+    // assert
+    assert.equal(cut, "\u2026");
+  });
+
+  test("D-PL3-12 a version at the limit is kept whole", () => {
+    // arrange
+    const version = "abc";
+
+    // act
+    const cut = truncateForRefusal(version, 3);
+
+    // assert
+    assert.equal(cut, "abc");
+  });
+
+  test("D-PL3-12 a version past the limit keeps its first code units and ends in an ellipsis", () => {
+    // arrange
+    const version = `2.0.0-${"z".repeat(70)}`;
+
+    // act
+    const cut = truncateForRefusal(version, 64);
+
+    // assert
+    assert.equal(cut, `2.0.0-${"z".repeat(58)}\u2026`);
+  });
+
+  test("D-PL3-12 a cut that would end on a high surrogate drops it", () => {
+    // arrange: the 64th code unit is the high half of U+1F600.
+    const version = `${"a".repeat(63)}\u{1F600}b`;
+
+    // act
+    const cut = truncateForRefusal(version, 64);
+
+    // assert
+    assert.equal(cut, `${"a".repeat(63)}\u2026`);
+  });
+
+  test("D-PL3-12 a cut that ends after a whole surrogate pair keeps the pair", () => {
+    // arrange: the 64th code unit is the low half of U+1F600.
+    const version = `${"a".repeat(62)}\u{1F600}b`;
+
+    // act
+    const cut = truncateForRefusal(version, 64);
+
+    // assert
+    assert.equal(cut, `${"a".repeat(62)}\u{1F600}\u2026`);
   });
 });

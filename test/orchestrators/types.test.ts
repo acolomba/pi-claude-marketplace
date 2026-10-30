@@ -16,6 +16,8 @@ import type {
   ReinstallReinstalledOutcome,
   ReinstallSkippedOutcome,
   RevisionMove,
+  ScopeDependencyInstallFn,
+  ScopeDependencyInstallResult,
   UpdatePhaseBridge,
   UpdatePhaseFailure,
 } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
@@ -34,6 +36,7 @@ const REINSTALL_REINSTALLED_CLEAN = {
   marketplace: "official",
   name: "alpha",
   partition: "reinstalled",
+  resourcesChanged: false,
   scope: "project",
   stagedAgentNames: [],
   stagedMcpServerNames: [],
@@ -45,13 +48,17 @@ const REINSTALL_REINSTALLED_FULL = {
   declaresMcp: true,
   declaresWorkflows: false,
   degradedKinds: ["skill", "command"],
-  discoveryWarnings: ["skill alpha could not be read", "command beta could not be read"],
+  discoveryWarnings: [
+    { kind: "discovery", message: "skill alpha could not be read" },
+    { kind: "discovery", message: "command beta could not be read" },
+  ],
   fromCommit: "1111111111111111111111111111111111111111",
   fromVersion: "1.0.0",
   marketplace: "official",
   name: "alpha",
   notes: ["warning: skill alpha could not be read", "warning: command beta could not be read"],
   partition: "reinstalled",
+  resourcesChanged: true,
   scope: "user",
   stagedAgentNames: ["alpha-agent"],
   stagedMcpServerNames: ["alpha-mcp"],
@@ -141,6 +148,7 @@ const PLUGIN_UPDATE_UPDATED_CLEAN = {
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: false,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toVersion: "1.1.0",
@@ -157,15 +165,19 @@ const PLUGIN_UPDATE_UPDATED_FULL = {
   degradedKinds: ["skill", "command"],
   fromVersion: "1.0.0",
   name: "alpha",
-  notes: ["warning: skill alpha could not be read"],
   orphanRewake: true,
   partialDegrade: {
     kinds: ["hooks", "lsp"],
     newlyDegraded: true,
   },
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: ["alpha-agent"],
   stagedMcpServerNames: ["alpha-mcp"],
+  stagingWarnings: [
+    { kind: "discovery", message: "skill alpha could not be read" },
+    { kind: "hygiene", message: "agents index entry was corrupt" },
+  ],
   toVersion: "2.0.0",
 } satisfies PluginUpdateUpdatedOutcome;
 
@@ -244,6 +256,37 @@ const PLUGIN_UPDATE_FN = ((plugin, marketplace, scope) => {
 
 void PLUGIN_UPDATE_FN;
 
+// D-PL2-09: the missing-dependency step a marketplace add receives answers one
+// installed row per member, or the refusal's failed row, and the MCP notices.
+const SCOPE_DEPENDENCY_INSTALL_RESULT = {
+  rows: [
+    {
+      status: "installed",
+      name: "lib@other",
+      version: "1.0.0",
+      dependencies: [],
+      reasons: ["dependency installed"],
+      severity: "info",
+      needsReload: true,
+    },
+    {
+      status: "failed",
+      name: "zip@other",
+      reasons: ["version conflict"],
+      severity: "error",
+      needsReload: false,
+    },
+  ],
+  mcpConfigNotices: [],
+} satisfies ScopeDependencyInstallResult;
+
+const SCOPE_DEPENDENCY_INSTALL_FN = ((request) => {
+  void request.select({ plugin: "lib", marketplace: "other", declarers: ["app@tools"] });
+  return Promise.resolve(SCOPE_DEPENDENCY_INSTALL_RESULT);
+}) satisfies ScopeDependencyInstallFn;
+
+void SCOPE_DEPENDENCY_INSTALL_FN;
+
 // D-26: a catalog move names its scope's cwd, whether a partial candidate is admitted,
 // and whether it re-materializes the recorded revision (D-10 / D-25).
 const PLUGIN_CONVERGE_TARGET = {
@@ -304,6 +347,7 @@ const INSTALL_INSTALLED_CLEAN = {
   declaresWorkflows: false,
   resourcesChanged: false,
   status: "installed",
+  version: "1.0.0",
 } satisfies InstallPluginOutcome;
 
 const INSTALL_INSTALLED_FULL = {
@@ -355,11 +399,28 @@ void ({
   marketplace: "official",
   name: "alpha",
   partition: "reinstalled",
+  resourcesChanged: true,
   scope: "project",
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   version: "1.0.0",
   // @ts-expect-error the reinstalled partition requires explicit companion predicates
+} satisfies ReinstallReinstalledOutcome);
+
+// D-PL1-18: a reinstalled outcome carries the runner's resourcesChanged.
+void ({
+  declaresAgents: false,
+  declaresMcp: false,
+  declaresWorkflows: false,
+  fromVersion: "1.0.0",
+  marketplace: "official",
+  name: "alpha",
+  partition: "reinstalled",
+  scope: "project",
+  stagedAgentNames: [],
+  stagedMcpServerNames: [],
+  version: "1.0.0",
+  // @ts-expect-error the reinstalled partition requires resourcesChanged
 } satisfies ReinstallReinstalledOutcome);
 
 void ({
@@ -400,6 +461,7 @@ void ({
   name: "alpha",
   notes: undefined,
   partition: "reinstalled",
+  resourcesChanged: true,
   scope: "project",
   stagedAgentNames: [],
   stagedMcpServerNames: [],
@@ -416,6 +478,7 @@ void ({
   marketplace: "official",
   name: "alpha",
   partition: "reinstalled",
+  resourcesChanged: true,
   scope: "project",
   stagedAgentNames: [],
   stagedMcpServerNames: [],
@@ -431,6 +494,7 @@ void ({
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toCommit: "b".repeat(40),
@@ -469,6 +533,7 @@ void ({
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   // @ts-expect-error the updated partition requires both transition versions
@@ -521,6 +586,7 @@ void ({
     kinds: ["hooks"],
   },
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toVersion: "2.0.0",
@@ -534,6 +600,7 @@ void ({
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toVersion: "2.0.0",
@@ -549,6 +616,7 @@ void ({
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toVersion: "2.0.0",
@@ -597,12 +665,28 @@ void ({
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toVersion: "2.0.0",
   // @ts-expect-error outcome types do not carry rendered-row dependencies
   dependencies: ["agents"],
 } satisfies PluginUpdateOutcome);
+
+// D-PL1-18: every updated outcome states whether it touched a loadable resource.
+void ({
+  constraint: undefined,
+  declaresAgents: false,
+  declaresMcp: false,
+  declaresWorkflows: false,
+  fromVersion: "1.0.0",
+  name: "alpha",
+  partition: "updated",
+  stagedAgentNames: [],
+  stagedMcpServerNames: [],
+  toVersion: "2.0.0",
+  // @ts-expect-error the updated partition requires resourcesChanged
+} satisfies PluginUpdateUpdatedOutcome);
 
 // D-10-17a: the disclosure member is REQUIRED-BUT-NULLABLE, never `constraint?:`
 // -- omitting the key entirely is a compile error, unlike an ordinary optional
@@ -613,6 +697,7 @@ void ({
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toVersion: "2.0.0",
@@ -631,6 +716,7 @@ void ({
   fromVersion: "1.0.0",
   name: "alpha",
   partition: "updated",
+  resourcesChanged: true,
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   toVersion: "2.0.0",
@@ -654,6 +740,19 @@ const PLUGIN_UPDATE_FN_WITH_WRONG_RETURN = (
 // @ts-expect-error the update function resolves a PluginUpdateOutcome
 void (PLUGIN_UPDATE_FN_WITH_WRONG_RETURN satisfies PluginUpdateFn);
 
+const SCOPE_DEPENDENCY_INSTALL_FN_WITH_WRONG_PARAMETER = (
+  _scope: "user" | "project",
+): Promise<ScopeDependencyInstallResult> => Promise.resolve(SCOPE_DEPENDENCY_INSTALL_RESULT);
+
+// @ts-expect-error the missing-dependency step takes its request bundle
+void (SCOPE_DEPENDENCY_INSTALL_FN_WITH_WRONG_PARAMETER satisfies ScopeDependencyInstallFn);
+
+const SCOPE_DEPENDENCY_INSTALL_FN_WITH_WRONG_RETURN = (): Promise<string> =>
+  Promise.resolve("installed");
+
+// @ts-expect-error the missing-dependency step resolves its rows and notices
+void (SCOPE_DEPENDENCY_INSTALL_FN_WITH_WRONG_RETURN satisfies ScopeDependencyInstallFn);
+
 void ({
   declaresAgents: false,
   declaresMcp: false,
@@ -667,6 +766,15 @@ void ({
   resourcesChanged: false,
   status: "installed",
   // @ts-expect-error installed outcomes require both explicit companion predicates
+} satisfies InstallPluginOutcome);
+
+void ({
+  declaresAgents: false,
+  declaresMcp: false,
+  declaresWorkflows: false,
+  resourcesChanged: false,
+  status: "installed",
+  // @ts-expect-error installed outcomes require the resolved version
 } satisfies InstallPluginOutcome);
 
 void ({
@@ -710,10 +818,10 @@ void ({
   declaresAgents: false,
   declaresMcp: false,
   declaresWorkflows: false,
+  // @ts-expect-error installed outcomes require a string version
   version: undefined,
   resourcesChanged: false,
   status: "installed",
-  // @ts-expect-error exact optional properties reject a present undefined version
 } satisfies InstallPluginOutcome);
 
 void ({

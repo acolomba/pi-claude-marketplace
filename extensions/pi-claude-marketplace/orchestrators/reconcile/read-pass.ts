@@ -15,9 +15,9 @@
 //   - WR-01: every per-scope step is isolated, so one scope's throw becomes
 //     one structured row and the other scope still runs.
 //   - Per scope, `openScopePass` runs the read pass and then the AMIG-01 MCP
-//     move; `closeScopePass` reports the unreadable declarer and the delisted
-//     plugins and rebuilds the hook routing table. A caller's own steps run
-//     between the two.
+//     move; `closeScopePass` reports the unreadable declarer, the plugins of a
+//     marketplace Claude Code refuses, and the delisted plugins, and rebuilds
+//     the hook routing table. A caller's own steps run between the two.
 //   - IL-2 / RECON-04: `notifyScopePasses` sends the one migration notice and
 //     at most one cascade for both scopes (`notifyScopeOutcomes`).
 //
@@ -33,12 +33,17 @@ import { errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
 import { notifyMcpMigration } from "../../shared/notification-dispatch.ts";
 import { notifyReconcileAppliedWithContext } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { classifyReadPassThrow, MigrateConfigSaveError } from "./apply-outcomes.ts";
-import { settleMoveCascade } from "./convergence.ts";
-import { reportDelistedPlugins, reportUnreadableDeclarer } from "./delisted-plugins.ts";
+import { settleMoveCascade, withPlannedInstallsLanded } from "./convergence.ts";
+import {
+  reportDelistedPlugins,
+  reportRefusedMarketplaces,
+  reportUnreadableDeclarer,
+} from "./delisted-plugins.ts";
 import { buildScopeSatisfactionVerdict, verdictAfterToggles } from "./dependency-verdict.ts";
 import { migrateLegacyMcpEntries } from "./mcp-migration.ts";
 import { buildReconcileAppliedCascade } from "./notify.ts";
@@ -46,11 +51,17 @@ import { planReconcile } from "./plan.ts";
 import { composeLayerMarketplaceCause, RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
-import type { McpMigrationInput, McpMigrationStep, ScopeReadResult } from "./types.ts";
+import type { ScopeSatisfactionVerdict } from "./dependency-verdict.ts";
+import type {
+  McpMigrationInput,
+  McpMigrationStep,
+  ReconcilePlan,
+  ScopeReadResult,
+} from "./types.ts";
 import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
-import type { ScopeLoadOutcome } from "../../persistence/config-merge.ts";
+import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { loadState } from "../../persistence/state-io.ts";
+import type { ExtensionState, loadState } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice, McpMigrationRow } from "../../shared/notification-types.ts";
@@ -60,6 +71,54 @@ import type { InstallHooksRouting } from "../plugin/install-disable-cascade.ts";
 /** Reads the one state snapshot selected by the reconcile read pass. */
 export interface ReconcileStateReader {
   readonly loadState: typeof loadState;
+}
+
+const OFFICIAL_CLAUDE_MARKETPLACE = "claude-plugins-official";
+const OFFICIAL_CLAUDE_MARKETPLACE_SOURCE = "anthropics/claude-plugins-official";
+
+/**
+ * D-PL6-19: turn a same-name declared-source change into the add path that
+ * replaces the recorded marketplace in place. A conflict or an unrecognized
+ * stored source stays report-only. Claude Code treats its built-in official
+ * source as a fallback, so that declaration is already current regardless of
+ * the source the record carries.
+ */
+export function withMarketplaceSourceRepairs(
+  merged: MergedConfig,
+  state: ExtensionState,
+  plan: ReconcilePlan,
+): ReconcilePlan {
+  const additions = [...plan.marketplacesToAdd];
+  const mismatches: ReconcilePlan["sourceMismatches"][number][] = [];
+  for (const mismatch of plan.sourceMismatches) {
+    if (
+      mismatch.cause === "source-mismatch" &&
+      mismatch.marketplace === OFFICIAL_CLAUDE_MARKETPLACE &&
+      mismatch.declaredSource === OFFICIAL_CLAUDE_MARKETPLACE_SOURCE
+    ) {
+      continue;
+    }
+
+    if (mismatch.cause !== "source-mismatch") {
+      mismatches.push(mismatch);
+      continue;
+    }
+
+    const declaration = ownValue(merged.marketplaces, mismatch.marketplace);
+    const recorded = ownValue(state.marketplaces, mismatch.marketplace);
+    if (declaration !== undefined && recorded !== undefined) {
+      additions.push({
+        scope: mismatch.scope,
+        marketplace: mismatch.marketplace,
+        source: mismatch.declaredSource,
+        configSource: declaration.source,
+      });
+    }
+
+    mismatches.push(mismatch);
+  }
+
+  return { ...plan, marketplacesToAdd: additions, sourceMismatches: mismatches };
 }
 
 // An absent or invalid layer declares nothing.
@@ -116,6 +175,104 @@ export async function readPassForScope(
   reader: ReconcileStateReader,
   scope: Scope,
   cwd: string,
+): Promise<ScopeReadResult> {
+  return readScopeLocked(
+    reader,
+    scope,
+    cwd,
+    async ({ merged, state, locations, verdict, plan }) => {
+      // (6) APPLY1-01: a dependent the catalog moves together with the newer
+      // dependency it needs is not held down; `pending` settles the same way.
+      // The enables that wait on a move run after the convergence, not with
+      // the toggles. D-PL2-02: every plan counts the installs it schedules as
+      // landed, as `pending` plans, because `apply` runs its missing-dependency
+      // install after the moves.
+      const planFrom = (from: ScopeSatisfactionVerdict, planned: ReconcilePlan): ReconcilePlan =>
+        withPlannedInstallsLanded(planned, from, state, (released) =>
+          withMarketplaceSourceRepairs(
+            merged,
+            state,
+            planReconcile(merged, state, scope, released),
+          ),
+        );
+      const settled = await settleMoveCascade({
+        scope,
+        state,
+        locations,
+        plan: planFrom(verdict, plan),
+        verdict,
+        replan: (released) =>
+          planFrom(
+            released,
+            withMarketplaceSourceRepairs(
+              merged,
+              state,
+              planReconcile(merged, state, scope, released),
+            ),
+          ),
+      });
+      const deferred = new Set(
+        settled.deferredEnables.map((op) => `${op.plugin}@${op.marketplace}`),
+      );
+      // DLS-01: carry the loaded state snapshot out so the closing step can
+      // report a recorded plugin its marketplace no longer lists. planReconcile
+      // is pure, so the snapshot is the unmutated read-pass state.
+      return {
+        plan: {
+          ...settled.plan,
+          pluginsToEnable: settled.plan.pluginsToEnable.filter(
+            (op) => !deferred.has(`${op.plugin}@${op.marketplace}`),
+          ),
+        },
+        invalidOutcomes: [],
+        state,
+        verdict,
+        ...(settled.deferredEnables.length > 0 && { deferredEnables: settled.deferredEnables }),
+        // D-PL2-16: the enables that wait on a planned install.
+        ...(settled.enablesAfterInstalls.length > 0 && {
+          enablesAfterInstalls: settled.enablesAfterInstalls,
+        }),
+      };
+    },
+  );
+}
+
+/**
+ * D-PL2-01: the read pass without the move settlement, for `apply` once its
+ * catalog moves have run. The scope then records the versions the moves
+ * landed, so the plan's missing-dependency bucket names what a moved version
+ * needs, and after that install the plan's enables are the records it
+ * satisfied. No planned install counts as landed: the state it plans from is
+ * the one `apply` judges.
+ */
+export async function readPlainPlanForScope(
+  reader: ReconcileStateReader,
+  scope: Scope,
+  cwd: string,
+): Promise<ScopeReadResult> {
+  return readScopeLocked(reader, scope, cwd, ({ state, verdict, plan }) =>
+    Promise.resolve({ plan, invalidOutcomes: [], state, verdict }),
+  );
+}
+
+/** One scope as the read pass plans it, before any catalog move is settled. */
+interface ToggledScope {
+  readonly merged: MergedConfig;
+  readonly state: ExtensionState;
+  readonly locations: ScopedLocations;
+  readonly verdict: ScopeSatisfactionVerdict;
+  readonly plan: ReconcilePlan;
+}
+
+/**
+ * The steps `readPassForScope` and `readPlainPlanForScope` share, through the
+ * plan over the toggles. `finish` runs inside the same lock.
+ */
+async function readScopeLocked(
+  reader: ReconcileStateReader,
+  scope: Scope,
+  cwd: string,
+  finish: (toggled: ToggledScope) => Promise<ScopeReadResult>,
 ): Promise<ScopeReadResult> {
   const loc = locationsFor(scope, cwd);
 
@@ -218,44 +375,24 @@ export async function readPassForScope(
       // record, the verdict is taken again over the scope as those toggles
       // leave it, so a dependent of a record the config disables is held down
       // in the same apply, and `pending` (which plans the same way) lists it.
-      const firstPlan = planReconcile(outcome.merged, state, scope, firstVerdict);
+      const firstPlan = withMarketplaceSourceRepairs(
+        outcome.merged,
+        state,
+        planReconcile(outcome.merged, state, scope, firstVerdict),
+      );
       const verdict = await verdictAfterToggles({ state, locations: loc }, firstVerdict, {
         enable: firstPlan.pluginsToEnable,
         disable: firstPlan.pluginsToDisable,
       });
       const toggled =
-        verdict === firstVerdict ? firstPlan : planReconcile(outcome.merged, state, scope, verdict);
-      // (6) APPLY1-01: a dependent the catalog moves together with the newer
-      // dependency it needs is not held down; `pending` settles the same way.
-      // The enables that wait on a move run after the convergence, not with
-      // the toggles.
-      const settled = await settleMoveCascade({
-        scope,
-        state,
-        locations: loc,
-        plan: toggled,
-        verdict,
-        replan: (released) => planReconcile(outcome.merged, state, scope, released),
-      });
-      const deferred = new Set(
-        settled.deferredEnables.map((op) => `${op.plugin}@${op.marketplace}`),
-      );
-      const plan = {
-        ...settled.plan,
-        pluginsToEnable: settled.plan.pluginsToEnable.filter(
-          (op) => !deferred.has(`${op.plugin}@${op.marketplace}`),
-        ),
-      };
-      // DLS-01: carry the loaded state snapshot out so the closing step can
-      // report a recorded plugin its marketplace no longer lists. planReconcile
-      // is pure, so the snapshot is the unmutated read-pass state.
-      return {
-        plan,
-        invalidOutcomes: [],
-        state,
-        verdict,
-        ...(settled.deferredEnables.length > 0 && { deferredEnables: settled.deferredEnables }),
-      };
+        verdict === firstVerdict
+          ? firstPlan
+          : withMarketplaceSourceRepairs(
+              outcome.merged,
+              state,
+              planReconcile(outcome.merged, state, scope, verdict),
+            );
+      return finish({ merged: outcome.merged, state, locations: loc, verdict, plan: toggled });
     },
     { loadState: reader.loadState },
   );
@@ -439,7 +576,9 @@ export async function openScopePass(input: ScopePassInput): Promise<ScopeReadRes
  * declarer's row comes after the caller's own rows, so a failure the caller
  * reported for the same plugin suppresses it; the delisted rows follow the
  * walk's row, which names a delisted plugin whose installed copy cannot be
- * read with the fuller cause. The routing rebuild runs last, so the next Pi
+ * read with the fuller cause. The rows for the plugins of a marketplace Claude
+ * Code refuses come before the delisted rows, so a refused plugin gets one row
+ * (D-PL5-28). The routing rebuild runs last, so the next Pi
  * event fires against a bucket that reflects the scope after the pass.
  */
 export async function closeScopePass(
@@ -450,6 +589,7 @@ export async function closeScopePass(
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
   reportUnreadableDeclarer(scope, readResult, outcomes);
+  await reportRefusedMarketplaces(scope, readResult.state, outcomes);
   await reportDelistedPlugins(scope, readResult.state, outcomes);
   await rebuildScopeRoutingTableIsolated(scope, cwd, hooksRouting, outcomes);
 }

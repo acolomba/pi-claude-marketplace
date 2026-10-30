@@ -56,7 +56,7 @@ export const MARKETPLACE_LEDGER_TARGETS = [
  * express it.
  */
 export const HOOKS_LIFECYCLE_TARGETS = [
-  "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts",
   "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts",
@@ -163,6 +163,9 @@ export const CREDENTIAL_LEAK_TARGETS = [
   // was covered by nothing. Appended last so no existing positional binding in
   // no-credential-leak.test.ts is re-aimed.
   "extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts",
+  // D-PL5-07: the hosted catalog download, which must send no header,
+  // credential, or cookie. Appended last for the reason given above.
+  "extensions/pi-claude-marketplace/platform/hosted-manifest-fetch.ts",
 ] as const;
 
 /**
@@ -202,18 +205,21 @@ export const LIFECYCLE_ENABLED_READ_TARGETS = [
 ] as const;
 
 /**
- * AUTH-06 / AUTH-08 / D-21: the complete set of modules allowed to spawn a
- * subprocess.
+ * AUTH-06 / AUTH-08 / D-21 / D-PL9-11: the complete set of modules allowed to
+ * spawn a subprocess.
  *
- * Closed, like the console exemption: the claim is that these three and no others
+ * Closed, like the console exemption: the claim is that these four and no others
  * shell out, so the value of a sweep depends on the set being exhaustive.
  * `git-credential.ts` runs the credential helper; the two hooks modules execute
- * user-declared hook commands, which is their entire purpose.
+ * user-declared hook commands, which is their entire purpose; `package-manager.ts`
+ * runs a plugin's own package manager for the package install Claude Code runs
+ * (D-PL9-11, PKD-03).
  */
 export const SHELL_OUT_EXEMPT_TARGETS = [
   "extensions/pi-claude-marketplace/platform/git-credential.ts",
   "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts",
   "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
+  "extensions/pi-claude-marketplace/platform/package-manager.ts",
 ] as const;
 
 /**

@@ -102,6 +102,7 @@ export const TOP_LEVEL_SUBCOMMANDS = [
   "import",
   "browse",
   "marketplace",
+  "market",
   "help",
 ] as const;
 
@@ -146,8 +147,8 @@ const MARKETPLACE_SPELLINGS = MARKETPLACE_VERB_ROWS.flatMap(([verb, { alias }]) 
 ).join("|");
 
 export const TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|autoapply|enable|disable|import|browse|marketplace|help> ...\n" +
-  "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
+  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|autoapply|enable|disable|import|browse|marketplace|market|help> ...\n" +
+  "  bootstrap                                          add anthropics/claude-plugins-official to user scope\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
   "  prune [--scope user|project] [--dry-run]\n" +
@@ -163,7 +164,7 @@ export const TOP_LEVEL_USAGE =
   "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  import [--scope user|project]\n" +
   "  browse\n" +
-  `  marketplace <${MARKETPLACE_SPELLINGS}> ...\n` +
+  `  marketplace <${MARKETPLACE_SPELLINGS}> ...   (alias: market)\n` +
   "  help [marketplace]";
 
 /** The usage line of one marketplace verb, built from its signature row. */
@@ -279,6 +280,7 @@ export function selectClaudePluginRoute(
 
   switch (head) {
     case "marketplace":
+    case "market":
       return selectMarketplaceRoute(rest, handlers);
     case "help":
       return {
@@ -296,10 +298,11 @@ export function selectClaudePluginRoute(
 }
 
 // The help handler tokenizes its topic, so the identity reads the same tokens:
-// `help "marketplace"` is the marketplace topic too.
+// `help "marketplace"` is the marketplace topic too, and so is `help market`.
 function isMarketplaceHelpTopic(args: string): boolean {
   const tokens = tokenizeArgs(args);
-  return tokens.length === 1 && tokens[0]?.value === "marketplace";
+  const topic = tokens.length === 1 ? tokens[0]?.value : undefined;
+  return topic === "marketplace" || topic === "market";
 }
 
 const MARKETPLACE_HELP_USAGE = "Usage: /claude:plugin marketplace help";

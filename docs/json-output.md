@@ -171,13 +171,13 @@ Every kind includes these fields. The `internal-error` kind narrows origin and s
 
 <!-- fields: common-fields -->
 
-| Field path      | Type              | Presence | Meaning                                               |
-| --------------- | ----------------- | -------- | ----------------------------------------------------- |
-| `schemaVersion` | integer `1`       | required | Payload compatibility version.                        |
-| `kind`          | string            | required | Payload kind from the twenty-one kind sections below. |
-| `origin`        | [Origin](#origin) | required | Source of this notification.                          |
-| `severity`      | string            | required | `info`, `warning`, or `error`, in increasing order.   |
-| `needsReload`   | boolean           | required | Whether completed changes need `/reload`.             |
+| Field path      | Type              | Presence | Meaning                                                 |
+| --------------- | ----------------- | -------- | ------------------------------------------------------- |
+| `schemaVersion` | integer `1`       | required | Payload compatibility version.                          |
+| `kind`          | string            | required | Payload kind from the twenty-three kind sections below. |
+| `origin`        | [Origin](#origin) | required | Source of this notification.                            |
+| `severity`      | string            | required | `info`, `warning`, or `error`, in increasing order.     |
+| `needsReload`   | boolean           | required | Whether completed changes need `/reload`.               |
 
 <!-- /fields -->
 
@@ -207,7 +207,7 @@ The ten structured kinds through `prune-committed-warning` also permit this fiel
 
 Load and hook origins have only `kind`. Command IDs can repeat across runs. Invocation IDs keep their results separate, including overlapping commands.
 
-A load reports its pending changes as a `cascade` whose `origin.kind` is `load`, and its per-session warnings as a `reconcile-applied-cascade`. When a config turns `autoapply` on, the load runs `apply` instead and reports its changes as a `reconcile-applied-cascade` whose `origin.kind` is `load`. Such a load with nothing to change emits nothing.
+A load reports its pending changes as a `cascade` whose `origin.kind` is `load`, and its per-session warnings as a `reconcile-applied-cascade`. When a config turns `autoapply` on, the load runs `apply` instead and reports its changes as a `reconcile-applied-cascade` whose `origin.kind` is `load`. Such a load with nothing to change emits nothing. A background update reports the plugins it moved as one `background-update` whose `origin.kind` is `load`. Only a tui session runs the background update, so a json or rpc session never receives this entry; the kind stays in the schema (D-PL8-20).
 
 ### Command origin
 
@@ -558,6 +558,21 @@ The one notice of a load pass that moved plugin MCP servers from `mcp.json` to `
 
 <!-- /fields -->
 
+#### background-update
+
+The one notice of a background update, which runs after the first message of a session, when the update moved at least one plugin. Only a tui session runs the background update, so a json or rpc session never receives this entry; the kind stays in the schema (D-PL8-20). Its origin is `load`, severity is always `info`, and `needsReload` is always `true`. A background update that moved nothing emits nothing.
+
+<!-- fields: kind:background-update -->
+
+<!-- use: common-fields -->
+
+| Field path    | Type                                                    | Presence | Meaning                                                                                                   |
+| ------------- | ------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
+| `needsReload` | boolean                                                 | required | Always `true`.                                                                                            |
+| `plugins`     | [Background update plugin](#background-update-plugin)[] | required | At least one row, one per updated install, in update order. A plugin updated in both scopes has two rows. |
+
+<!-- /fields -->
+
 #### internal-error
 
 An unexpected command failure or a final outcome when ordinary delivery failed. Its origin is always `command`, severity is always `error`, and `summary` is required.
@@ -593,24 +608,24 @@ An unexpected command failure or a final outcome when ordinary delivery failed. 
 
 <!-- fields: plugin-row -->
 
-| Field path        | Type                                | Presence | Meaning                                                                                                                                                                                                                                         |
-| ----------------- | ----------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `status`          | PluginStatus                        | required | Plugin state or operation result.                                                                                                                                                                                                               |
-| `name`            | string                              | required | Plugin name.                                                                                                                                                                                                                                    |
-| `id`              | string                              | required | Qualified address, `<name>@<marketplace>`. A dependency row named by its `<plugin>@<marketplace>` key keeps that key. When a failed `marketplace add` has a child row, the row names the source after redaction, and its id is that name alone. |
-| `reasons`         | Reason[]                            | required | Resolved reasons, including soft-dependency markers. Empty means no reasons.                                                                                                                                                                    |
-| `version`         | string                              | optional | Plugin version. On a reinstalled, partially installed, or failed row that carries `from`, the version it moved to; an updated row carries `to` instead.                                                                                         |
-| `from`            | string                              | optional | Version before the move, on an update row or a pending catalog move, or on a reinstalled, partially installed, or failed row whose revision moved.                                                                                              |
-| `to`              | string                              | optional | Version after an update, or the version a pending catalog move reaches.                                                                                                                                                                         |
-| `fromCommit`      | string                              | optional | Full commit before a move whose version did not change. Present exactly when the text form shows the short commits.                                                                                                                             |
-| `toCommit`        | string                              | optional | Full commit after a move whose version did not change. Present exactly when the text form shows the short commits.                                                                                                                              |
-| `scope`           | Scope                               | optional | Plugin installation scope.                                                                                                                                                                                                                      |
-| `description`     | string                              | optional | Plugin description.                                                                                                                                                                                                                             |
-| `partial`         | boolean                             | optional | Whether only part of the plugin is supported.                                                                                                                                                                                                   |
-| `hint`            | RowHint                             | optional | Follow-up action hint.                                                                                                                                                                                                                          |
-| `cause`           | [Cause](#cause)                     | optional | Serialized cause line: a failure, a remedy, or the constraint disclosure of an updated, reinstalled, or partially installed row.                                                                                                                |
-| `leaks`           | string[]                            | optional | Paths left behind by failed cleanup, after redaction.                                                                                                                                                                                           |
-| `rollbackPartial` | [Rollback phase](#rollback-phase)[] | optional | Rollback phases that did not finish.                                                                                                                                                                                                            |
+| Field path        | Type                                | Presence | Meaning                                                                                                                                                                                                                                                                                                                                                                                             |
+| ----------------- | ----------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`          | PluginStatus                        | required | Plugin state or operation result.                                                                                                                                                                                                                                                                                                                                                                   |
+| `name`            | string                              | required | Plugin name.                                                                                                                                                                                                                                                                                                                                                                                        |
+| `id`              | string                              | required | Qualified address, `<name>@<marketplace>`. A dependency row named by its `<plugin>@<marketplace>` key keeps that key. The child row of a failed `marketplace add`, `marketplace remove`, `marketplace update`, or autoupdate stands for the marketplace, so its id is its name alone: the marketplace name, or, for a `marketplace add` that failed before it read one, the source after redaction. |
+| `reasons`         | Reason[]                            | required | Resolved reasons, including soft-dependency markers. Empty means no reasons.                                                                                                                                                                                                                                                                                                                        |
+| `version`         | string                              | optional | Plugin version. On a reinstalled, partially installed, or failed row that carries `from`, the version it moved to; an updated row carries `to` instead.                                                                                                                                                                                                                                             |
+| `from`            | string                              | optional | Version before the move, on an update row or a pending catalog move, or on a reinstalled, partially installed, or failed row whose revision moved.                                                                                                                                                                                                                                                  |
+| `to`              | string                              | optional | Version after an update, or the version a pending catalog move reaches.                                                                                                                                                                                                                                                                                                                             |
+| `fromCommit`      | string                              | optional | Full commit before a move whose version did not change. Present exactly when the text form shows the short commits.                                                                                                                                                                                                                                                                                 |
+| `toCommit`        | string                              | optional | Full commit after a move whose version did not change. Present exactly when the text form shows the short commits.                                                                                                                                                                                                                                                                                  |
+| `scope`           | Scope                               | optional | Plugin installation scope.                                                                                                                                                                                                                                                                                                                                                                          |
+| `description`     | string                              | optional | Plugin description.                                                                                                                                                                                                                                                                                                                                                                                 |
+| `partial`         | boolean                             | optional | Whether only part of the plugin is supported.                                                                                                                                                                                                                                                                                                                                                       |
+| `hint`            | RowHint                             | optional | Follow-up action hint.                                                                                                                                                                                                                                                                                                                                                                              |
+| `cause`           | [Cause](#cause)                     | optional | Serialized cause line: a failure, a remedy, or the constraint disclosure of an updated, reinstalled, or partially installed row.                                                                                                                                                                                                                                                                    |
+| `leaks`           | string[]                            | optional | Paths left behind by failed cleanup, after redaction.                                                                                                                                                                                                                                                                                                                                               |
+| `rollbackPartial` | [Rollback phase](#rollback-phase)[] | optional | Rollback phases that did not finish.                                                                                                                                                                                                                                                                                                                                                                |
 
 <!-- /fields -->
 
@@ -674,20 +689,20 @@ Each source has exactly one branch. Branch-specific fields are absent from the o
 
 <!-- fields: plugin-info-row -->
 
-| Field path           | Type                                              | Presence    | Meaning                                                                                                                                 |
-| -------------------- | ------------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `status`             | PluginInfoStatus                                  | required    | Plugin information state.                                                                                                               |
-| `name`               | string                                            | required    | Plugin name.                                                                                                                            |
-| `id`                 | string                                            | required    | Qualified address, `<name>@<marketplaceName>`.                                                                                          |
-| `reasons`            | Reason[]                                          | required    | Resolved reasons. Empty means no reasons.                                                                                               |
-| `version`            | string                                            | optional    | Plugin version.                                                                                                                         |
-| `scope`              | Scope                                             | optional    | Plugin installation scope.                                                                                                              |
-| `description`        | string                                            | optional    | Plugin description.                                                                                                                     |
-| `notes`              | string[]                                          | optional    | Ordered advisory lines about component files.                                                                                           |
-| `dependencies`       | string[]                                          | optional    | Dependency addresses with any version or SHA constraints, sorted by dependency name.                                                    |
-| `componentsResolved` | boolean                                           | required    | Selects the resolved (`true`) or unresolved (`false`) branch.                                                                           |
-| `components`         | [Components](#components)                         | conditional | Required when `componentsResolved` is `true`. Absent when it is `false`.                                                                |
-| `requires`           | [Companion requirement](#companion-requirement)[] | optional    | Companion extensions the resolved components need, sorted by name. Absent when none is needed and when `componentsResolved` is `false`. |
+| Field path           | Type                                              | Presence    | Meaning                                                                                                                                             |
+| -------------------- | ------------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`             | PluginInfoStatus                                  | required    | Plugin information state.                                                                                                                           |
+| `name`               | string                                            | required    | Plugin name.                                                                                                                                        |
+| `id`                 | string                                            | required    | Qualified address, `<name>@<marketplaceName>`. A failed `marketplace info` row stands for the marketplace, so its id is the marketplace name alone. |
+| `reasons`            | Reason[]                                          | required    | Resolved reasons. Empty means no reasons.                                                                                                           |
+| `version`            | string                                            | optional    | Plugin version.                                                                                                                                     |
+| `scope`              | Scope                                             | optional    | Plugin installation scope.                                                                                                                          |
+| `description`        | string                                            | optional    | Plugin description.                                                                                                                                 |
+| `notes`              | string[]                                          | optional    | Ordered advisory lines about component files.                                                                                                       |
+| `dependencies`       | string[]                                          | optional    | Dependency addresses with any version or SHA constraints, sorted by dependency name.                                                                |
+| `componentsResolved` | boolean                                           | required    | Selects the resolved (`true`) or unresolved (`false`) branch.                                                                                       |
+| `components`         | [Components](#components)                         | conditional | Required when `componentsResolved` is `true`. Absent when it is `false`.                                                                            |
+| `requires`           | [Companion requirement](#companion-requirement)[] | optional    | Companion extensions the resolved components need, sorted by name. Absent when none is needed and when `componentsResolved` is `false`.             |
 
 <!-- /fields -->
 
@@ -790,6 +805,20 @@ The plain branch has `event` and an optional `matcher`. The lenient branch adds 
 | `key`         | string          | conditional | Required for `collision`. Server key that another config source already defines.                                                     |
 | `source`      | string          | conditional | Required for `collision`. That config source, as a scope file or a home-relative path.                                               |
 | `file`        | string          | conditional | Required for `file-unreadable` (`mcp.json` or `mcp-adapter.json`) and `unfinished` (`mcp.json` or `project-scope mcp-adapter.json`). |
+
+<!-- /fields -->
+
+### Background update plugin
+
+<!-- fields: background-update-plugin -->
+
+| Field path    | Type   | Presence | Meaning                              |
+| ------------- | ------ | -------- | ------------------------------------ |
+| `name`        | string | required | Plugin name, without `@marketplace`. |
+| `marketplace` | string | required | Marketplace of the plugin.           |
+| `scope`       | Scope  | required | Scope of the updated install.        |
+| `fromVersion` | string | optional | Version the install moved from.      |
+| `toVersion`   | string | required | Version the install moved to.        |
 
 <!-- /fields -->
 

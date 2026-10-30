@@ -8,6 +8,9 @@
 //       * pi.registerCommand("claude:plugin", { handler, getArgumentCompletions, description })
 //         -- routes through routeClaudePlugin; arg completions go through
 //         getArgumentCompletions + makeLocationsResolver(process.cwd()).
+//         The handler runs each command through the optional
+//         `runForeground` gate, so a command waits for the background
+//         autoupdate step in flight (D-PL8-04).
 //       * pi.on("session_start", ...) -- installs the TC-7 autocomplete
 //         wrapper that scopes normalizeCompletionWhitespace to lines
 //         matching isClaudePluginCommandLine.
@@ -102,9 +105,12 @@ export function registerClaudePluginCommand(
   options: {
     readonly createInvocationId?: () => string;
     readonly createRecoveryId?: () => string;
+    /** D-PL8-04: runs each command through the background gate. */
+    readonly runForeground?: (command: () => Promise<void>) => Promise<void>;
   } = {},
 ): void {
   const createInvocationId = options.createInvocationId ?? randomUUID;
+  const runForeground = options.runForeground ?? ((command) => command());
   const createRecoveryId = options.createRecoveryId ?? randomUUID;
   const reinstallPlugins = createNodeReinstallPlugins(
     createReinstallOperation(hooksRouting, deps.completionCache),
@@ -142,6 +148,7 @@ export function registerClaudePluginCommand(
       completionCache: deps.completionCache,
       gitOps: deps.gitOps,
       beginPluginUpdateRun: deps.beginPluginUpdateRun,
+      installMissingDependencies: deps.installMissingDependencies,
     }),
     marketplaceAutoupdate: makeAutoupdateHandler(true),
     marketplaceNoautoupdate: makeAutoupdateHandler(false),
@@ -157,12 +164,14 @@ export function registerClaudePluginCommand(
     handler: (args, ctx) => {
       requireNotificationMode(ctx.mode);
       const route = selectClaudePluginRoute(args, handlers);
-      return runCommand(
-        pi,
-        ctx,
-        route.commandId,
-        (run) => routeClaudePlugin(route, handlers, ctx, run),
-        { createInvocationId, createRecoveryId, openRun: openNotificationRun },
+      return runForeground(() =>
+        runCommand(
+          pi,
+          ctx,
+          route.commandId,
+          (run) => routeClaudePlugin(route, handlers, ctx, run),
+          { createInvocationId, createRecoveryId, openRun: openNotificationRun },
+        ),
       );
     },
     // This `process.cwd()` is the single sanctioned site.

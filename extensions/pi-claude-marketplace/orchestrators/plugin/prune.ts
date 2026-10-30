@@ -106,7 +106,7 @@ function notifyOperationFailure(options: PrunePluginOptions, scope: Scope, error
       ? rollbackError.failures.map((failure) => ({
           phase: failure.phase,
           // Every failure has an Error; the redactor returns undefined only for nullish input.
-          cause: redactCauseChain(failure.cause) as unknown as Error,
+          cause: redactCauseChain(failure.cause),
         }))
       : undefined;
   let reason: "rollback partial" | "lock held" | "unreadable" = "unreadable";
@@ -191,7 +191,7 @@ function notifyCommitted(
                       .map(errorMessage)
                       .join("; "),
                   ),
-                ) as unknown as Error,
+                ),
               }
             : member.row,
         ],

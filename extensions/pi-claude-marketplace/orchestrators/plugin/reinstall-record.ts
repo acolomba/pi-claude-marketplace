@@ -12,9 +12,11 @@ import {
   StateLockHeldError,
 } from "../../shared/errors.ts";
 import { ownValue } from "../../shared/own-key.ts";
+import { partitionStagingWarnings } from "../../shared/staging-warnings.ts";
 
 import type { UpdatePhase3Failure, UpdateRunOutcome } from "./update-swap.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   ReinstallFailedOutcome,
@@ -96,6 +98,7 @@ export function reinstallOutcomeFromRun(
         ...knownCommits(run),
         stagedAgentNames: run.stagedAgentNames,
         stagedMcpServerNames: run.stagedMcpServerNames,
+        resourcesChanged: run.resourcesChanged,
         declaresAgents: run.declaresAgents,
         declaresMcp: run.declaresMcp,
         declaresWorkflows: run.declaresWorkflows,
@@ -130,8 +133,21 @@ export function reinstallOutcomeFromRun(
         // AFILE-04: a later bridge or the finalize failed after the MCP commit
         // rewrote the file, which the swap does not restore.
         ...(run.mcpConfigNotices !== undefined && { mcpConfigNotices: run.mcpConfigNotices }),
+        // D-PL1-14: a phase-3 failure's, or a failure after a settle's, warnings.
+        ...discoveryWarningsMember(run.stagingWarnings),
       };
   }
+}
+
+/**
+ * D-PL1-11 / D-PL1-14: the discovery half of a failed reinstall's staging
+ * warnings as its outcome member, omitted when empty (NREG-01).
+ */
+export function discoveryWarningsMember(
+  warnings: readonly StagingWarning[] | undefined,
+): Pick<ReinstallFailedOutcome, "discoveryWarnings"> {
+  const { discovery } = partitionStagingWarnings(warnings ?? []);
+  return discovery.length > 0 ? { discoveryWarnings: discovery } : {};
 }
 
 /** The sides of a move that are known; an unknown side's key stays absent (NREG-01). */

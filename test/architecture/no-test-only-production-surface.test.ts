@@ -167,7 +167,8 @@ interface ClassifiedSeam {
  * `eslint.config.js` gates them by glob, so there is no list this file could
  * read a type from.
  */
-const INSTALL_FLOW_REL = "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
+const INSTALL_FLOW_REL =
+  "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts";
 const FETCH_REL = "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts";
 const PLUGIN_INFO_REL = "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
 const REINSTALL_FLOW_REL =

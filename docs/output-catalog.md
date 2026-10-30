@@ -228,6 +228,12 @@ Plugin list: 2 successes
 
 Two marketplace blocks; one per scope. Joined by one blank line (D-16-07). Plugin rows omit the scope bracket because `p.scope === mp.scope`.
 
+With `--scope user` or `--scope project`, the command keeps only that scope. Each installation appears under that scope's own marketplace block. It is not folded under a block from the other scope (LST-05).
+
+### Named marketplace that no consulted scope records
+
+`list nosuch` consults both scopes. Its complete body is `A marketplace operation has failed.\n\n⊘ nosuch (failed) {marketplace not added}`. `list official --scope user` includes `[user]`. If only the project scope holds `official`, its reason is `{marketplace not added to user scope}`. These are the same `marketplace-not-added` bytes used by the other named plugin and marketplace commands.
+
 ### Project-scope plugins folded under user-scope marketplace (orphan-fold)
 
 <!-- catalog-state: project-orphan-folded -->
@@ -897,7 +903,7 @@ A plugin that declares `dependencies` installs as a CASCADE: the requesting plug
 
 **Cardinality.** The cascade emits `single`, not `plural`: the user named ONE plugin, and the members are that install's transitive consequence rather than a bulk operation. So no trailing tally line appears, and a plugin that declares nothing renders exactly as it always did.
 
-**Failure attribution.** One failing dependency fails the whole install, and the row that carries the reason is the DEPENDENCY's, never only the requesting plugin's. The requesting plugin still gets its own row, stamped `{dependency failed}`, so the command the user typed is visibly accounted for. Both rows stamp `error`, so the summary line counts two operations. No cascade row interpolates a filesystem path: every rendered value is a token-allowlisted key, a bounded rendered constraint, a recorded version, or a closed-set reason.
+**Failure attribution.** One failing dependency fails the whole install, and the row that carries the reason is the DEPENDENCY's, never only the requesting plugin's. The requesting plugin still gets its own row, stamped `{dependency failed}`, so the command the user typed is visibly accounted for. Every other dependency the install would have installed, and did not, because it was rolled back or never reached, also gets a `{dependency failed}` row with no cause line, as Claude Code names every member on success (CAS-01, D-PL3-01). A dependency that was already installed and is left alone gets no row, and a dependency that a moved row already reports gets no second row. Every row stamps `error`, so the summary line counts each one. The requesting plugin's own ledger failure, a dependency plan-step failure, and a catalog failure during the walk carry the ordered members resolved before the failure (CAS-08). No cascade row interpolates a filesystem path: every rendered value is a token-allowlisted key, a bounded rendered constraint, a recorded version, or a closed-set reason.
 
 ### Dependency cascade -- success (RESV-01 / RESV-05)
 
@@ -968,9 +974,10 @@ Some plugin operations have failed.
   ⊘ formatter@tools (failed) {version conflict}
     cause: Dependency "formatter@tools" has contradictory version constraints ^1.0.0, ^2.0.0 (inputs 1 and 2 do not overlap).
   ⊘ helper (failed) {dependency failed}
+  ⊘ linter@tools (failed) {dependency failed}
 ```
 
-Two plugins in one graph declared version sets for `formatter` that do not overlap, so the intersection is empty and no version can satisfy both. The cause names the JOINED DECLARED ranges rather than a combined one, because an intersection that failed produced no combined range to report. The parenthesised detail is the evaluator's own measurement (which inputs, by position), never a declaration's prose.
+`helper` asks for `formatter@tools` at ^1.0.0 and depends on `linter@tools`, which asks for it at ^2.0.0. The two version sets do not overlap, so the intersection is empty and no version can satisfy both. `linter` was resolved but not installed, so it gets its own `{dependency failed}` row. The cause names the JOINED DECLARED ranges rather than a combined one, because an intersection that failed produced no combined range to report. The parenthesised detail is the evaluator's own measurement (which inputs, by position), never a declaration's prose.
 
 ### Dependency cascade -- an installed copy the constraint rejects (RESV-05)
 
@@ -981,11 +988,11 @@ Some plugin operations have failed.
 
 ● official [user]
   ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}
-    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: version 1.5.0 falls outside what the combined range admits (^2.0.0) -- required by "helper@official"
+    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: version 1.5.0 falls outside what the combined range admits (^2.0.0) -- required by "helper@official". To look for a version in range, run /claude:plugin update formatter@tools.
   ⊘ helper (failed) {dependency failed}
 ```
 
-The SAME `version conflict` token as the row above, over a different subject: the copy already on disk. The pair `{already installed, version conflict}` and the recorded version on the row are what separate the two, which is why the cascade mints one token rather than two -- the fact is identical and only the subject moves. UPD-DEP-D1 amends RESV-05: the cascade first tries to move the copy into the constraint (the state below), and this row is what it reports when no version can move there. After `cannot move:` the cause gives `update`'s own reason: the version the move would reach falls outside the range, or the dependency's other dependents hold it (`the declared ranges admit no version in common (...) -- required by ...`). A range or a plugin that repeats is named once. The whole dependency graph is planned before anything changes, so a refusal changes nothing.
+The SAME `version conflict` token as the row above, over a different subject: the copy already on disk. The pair `{already installed, version conflict}` and the recorded version on the row are what separate the two, which is why the cascade mints one token rather than two -- the fact is identical and only the subject moves. UPD-DEP-D1 amends RESV-05: the cascade first tries to move the copy into the constraint (the state below), and this row is what it reports when no version can move there. After `cannot move:` the cause gives `update`'s own reason: the version the move would reach falls outside the range, or the dependency's other dependents hold it (`the declared ranges admit no version in common (...) -- required by ...`). A range or a plugin that repeats is named once. The whole dependency graph is planned before anything changes, so a refusal changes nothing. When the plugin you named declares the dependency itself, the cause ends with Claude Code's next step, `To look for a version in range, run /claude:plugin update <dependency>.`, for every source kind (D-PL3-11). A refusal that judged no move, which ends at `which does not satisfy <range>.`, has no hint.
 
 ### Dependency cascade -- an installed copy moved into the constraint first (UPD-DEP-D1)
 
@@ -1031,7 +1038,7 @@ Some plugin operations have failed.
   ⊘ helper (failed) {dependency failed}
 ```
 
-A declared constraint is not a range the evaluator can read. Distinct from the inherited `{unparseable}`, whose subject is a whole document: here exactly one field of one declaration is at fault, and the row says so. The rendered range is bounded by the shared constraint renderer, so a very long declaration cannot flood the block.
+A declared constraint is not a range the evaluator can read. Distinct from the inherited `{unparseable}`, whose subject is a whole document: here exactly one field of one declaration is at fault, and the row says so. The rendered range is bounded by the shared constraint renderer, so a very long declaration cannot flood the block. As Claude Code does, the real row shows a text that is not a valid range in curly quotes, cut to 64 characters (D-PL3-10); the sample leaves them out because the repository's text fixers turn curly quotes into straight ones.
 
 ### Dependency cascade -- the tag listing could not be read (RESV-03)
 
@@ -1046,7 +1053,7 @@ Some plugin operations have failed.
   ⊘ helper (failed) {dependency failed}
 ```
 
-The constraint was never evaluated, because listing the source's tags failed. The probe's classification is ALREADY a member of the inherited vocabulary, so the row carries `{authentication required}` -- or `{network unreachable}` on the other arm -- and the cascade mints nothing. Truthful attribution: a 401/403 is an auth failure and must not read as unreachable, exactly as on the marketplace-clone surface. An unclassifiable transport failure falls back to `{unreadable}`.
+The constraint was never evaluated, because listing the source's tags failed. The probe classifies the failure with the host ladder that a plugin clone uses (GLK-01 / D-PL7-02). Every reason it gives is already a member of the inherited vocabulary, so the cascade mints nothing. A 404 or 410 from the git host reads `{source missing}`, another HTTP status reads `{network error}`, a connection that could not be made or was dropped reads `{network unreachable}`, and a credential challenge reads `{authentication required}`. The cause line names the same reason in its parentheses. Truthful attribution: a 401/403 is an auth failure and must not read as unreachable, exactly as on the marketplace-clone surface. Any other failure falls back to `{unreadable}`, and its cause line says `tag listing failed`.
 
 ### Dependency cascade -- the dependency's marketplace is not added (RESV-02 / D-03-08)
 
@@ -1108,9 +1115,10 @@ Some plugin operations have failed.
   ⊘ formatter@tools (failed) {dependency cycle}
     cause: Dependency cycle: helper@official -> formatter@tools -> linter@tools -> formatter@tools.
   ⊘ helper (failed) {dependency failed}
+  ⊘ linter@tools (failed) {dependency failed}
 ```
 
-The subject is the key the walk met a second time on its own ancestor chain, and the cause renders the whole chain in walk order with that key shown where it recurs -- a cycle is a property of the PATH, so a row alone cannot state it. A legal diamond (two siblings depending on the same third plugin) is deduped by the walk's visited memo and never reaches this row (D-03-11).
+The subject is the key the walk met a second time on its own ancestor chain, and the cause renders the whole chain in walk order with that key shown where it recurs -- a cycle is a property of the PATH, so a row alone cannot state it. The walk reached `linter` before it found the cycle, so `linter` gets its own `{dependency failed}` row. A legal diamond (two siblings depending on the same third plugin) is deduped by the walk's visited memo and never reaches this row (D-03-11).
 
 ### Dependency cascade -- an unusable `dependencies` declaration (RESV-01)
 
@@ -1126,6 +1134,20 @@ A plugin operation has failed.
 
 One element breaking a character rule refuses the WHOLE `dependencies` array -- a constraint that disappears quietly is worse than a declaration that is refused, because the install would then pin a version nobody asked for. The subject is the plugin whose declaration is at fault, which here is the requesting plugin itself, so there is no second row to add and the summary counts one operation. The cause carries the validator's field path, never the manifest's text.
 
+### Dependency cascade -- the plugin's own id breaks the plugin id rule (CAS-02 / D-PL3-04)
+
+<!-- catalog-state: dependency-invalid-root-id -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ _helper (failed) {invalid manifest}
+    cause: Plugin "_helper@official" cannot be installed, because its id is invalid: Each part of a plugin id (plugin@marketplace) may use only the letters a-z and A-Z, digits, ".", "_" and "-", and must start with a letter or digit. Here the plugin's name does not; the marketplace's maintainer can rename it.
+```
+
+The install looks the plugin up first, as Claude Code does. A plugin the marketplace does not list keeps the `{not in manifest}` row. A listed plugin whose name or marketplace name breaks the id rule gets this refusal, in Claude Code's wording and its three variants: the plugin's name does not, the marketplace's name does not, or they do not, in which case the maintainer can rename both. The subject is the requesting plugin, so there is one row. The id is printed with its control and format characters escaped (D-PL3-14). `apply`, a load, and `import` report the same cause under `{dependency failed}` (D-PL3-17, a known limit).
+
 ### Dependency cascade -- a dependency whose own install threw (RESV-06 / D-03-07)
 
 <!-- catalog-state: dependency-install-failed -->
@@ -1139,7 +1161,7 @@ Some plugin operations have failed.
   ⊘ helper (failed) {dependency failed}
 ```
 
-The dependency resolved cleanly and its own six-phase ledger then failed. There is no cascade reason to add -- the ledger's error IS the fact -- so the row carries an empty reasons array and the renderer suppresses the brace. The requesting plugin's row still says why it is there. Everything this command had already materialized is unwound; a dependency installed BEFORE the command ran is not touched (D-03-07). Re-running the same command after fixing the cause starts from the same state as the first attempt.
+The dependency resolved cleanly and its own six-phase ledger then failed. There is no cascade reason to add -- the ledger's error IS the fact -- so the row carries an empty reasons array and the renderer suppresses the brace. The requesting plugin's row still says why it is there. Any other dependency the command would have installed gets a `{dependency failed}` row. Everything this command had already materialized is unwound; a dependency installed BEFORE the command ran is not touched (D-03-07). Re-running the same command after fixing the cause starts from the same state as the first attempt.
 
 ### Dependency cascade -- a plugin directory copy outside the constraint (GV-01)
 
@@ -1154,7 +1176,7 @@ Some plugin operations have failed.
   ⊘ helper (failed) {dependency failed}
 ```
 
-A plugin of the `anthropic-plugin-directory` marketplace never installs at a release tag, as in Claude Code: the dependency installs the copy its catalog entry lists, and that copy's `plugin.json` version must satisfy the constraint. It does not here, so the cascade fails and unwinds what it had materialized. The `version conflict` token is the one the other version rows use. The cause is Claude Code's own message, naming the listed version (`no version` when the copy declares none), the declared ranges, and each plugin that asked for the dependency with a range, comma-separated. No reload-hint.
+A plugin of the `anthropic-plugin-directory` marketplace never installs at a release tag, as in Claude Code: the dependency installs the copy its catalog entry lists, and that copy's `plugin.json` version must satisfy the constraint. It does not here, so the cascade fails and unwinds what it had materialized. The `version conflict` token is the one the other version rows use. The cause is Claude Code's own message, naming the listed version (`no version` when the copy declares none), the declared ranges, and each plugin that asked for the dependency with a range, comma-separated. It names every plugin of the install that declared a range on the dependency, nearest the requested plugin first, as Claude Code does. An installed plugin outside the install is not named, although Claude Code names it too, because its range is not checked (D-PL3-13). The plugin name, the listed version, the joined ranges, and each requirer are each cut to 120 characters with `…`, as Claude Code cuts them (D-PL3-09). No reload-hint.
 
 ### Dependency promoted to a direct install (D-04-07)
 
@@ -2348,7 +2370,9 @@ Some plugin operations have failed.
 Plugin update: 2 failures
 ```
 
-A git-source update whose clone or fetch the host refuses fails with the reason `install` reports for the same answer, from install's host ladder: `{network unreachable}` for a connection that could not be made or was dropped, `{source missing}` for a 404 or 410 or a pinned commit the clone does not hold, `{network error}` for another HTTP status, and `{authentication required}` for a credential challenge. Each row shows the installed version and keeps the thrown error as its cause line, except the authentication row, which stays bare as install's does, unless a cleanup leaked, because then its cause carries the manual-cleanup hint. Claude Code also fails an update whose source it cannot fetch. `reinstall` renders the same rows when its cache misses, and the autoupdate cascade renders them under its marketplace header. Severity `error`; no reload-hint.
+A git-source update whose clone or fetch the host refuses fails with the reason `install` reports for the same answer, from install's host ladder: `{network unreachable}` for a connection that could not be made or was dropped, `{source missing}` for a 404 or 410 or a pinned commit the clone does not hold, `{network error}` for another HTTP status, and `{authentication required}` for a credential challenge. Each row shows the installed version and keeps the thrown error as its cause line, except the authentication row, which stays bare as install's does, unless a cleanup leaked, because then its cause carries the manual-cleanup hint. When the host answered with an HTTP status, 404 included, the first frame of the cause line is `{status} on {url}`: the status and the URL the clone fetched, with URL credentials redacted. The transport's own message follows, as on `marketplace update` (`update-host-http-error`). A plugin update first refreshes the plugin's marketplace. That refresh is the same operation as `marketplace update`, so a host HTTP answer to it, 404 included, reads `{network error}` with the same frame (UPD-11 / D-PL7-02). Claude Code also fails an update whose source it cannot fetch. `reinstall` renders the same rows when its cache misses, and the autoupdate cascade renders them under its marketplace header.
+
+The autoupdate cascade and `apply`'s catalog moves read a failure the way the direct update does, through one ladder (GLK-02 / D-PL7-04). The typed errors come first. Then a host failure reads its reason from the ladder above, and a filesystem failure reads its errno reason. A failure that nothing classifies reads `{unreadable manifest}`. The autoupdate row carries the thrown error as its cause line, as the direct row does (D-PL7-12). `apply`'s catalog-move row shows the same reason, but it still shows no cause line. `{not in manifest}` stays for a plugin that the catalog does not list. Severity `error`; no reload-hint.
 
 ### Failure -- a failure no ladder classifies (SRC-01)
 
@@ -2405,7 +2429,9 @@ ______________________________________________________________________
 
 ## `/claude:plugin fetch`
 
-Pi-only extension: upstream Claude Code `/plugin` has no `fetch` verb (verified 2026-07-13). `fetch` warms the local clone/mirror cache for a git-source plugin WITHOUT installing it, so a later `install` resolves offline. It renders the always-marketplace-header cascade form: a bare marketplace header at column 0 and per-plugin rows at 2-space indent. A fetch changes no Pi-visible resource (nothing is installed), so no state row is a reload-trigger and no `/reload to pick up changes` trailer ever fires. A post-fetch success renders the plugin's DERIVED status row -- exactly what `list` / `info` show (`(available)` / `(partially-available)` / `(unavailable)`) -- because the fetch is followed by a fresh `probeManifestEntry` against the now-warm tree, never an install cascade (FTCH-02). The `available` / `partially-available` / `unavailable` rows are bare: no `[scope]` bracket (MSG-PL-6 / SNM-11 carve-out). No catalog row introduces a new status token, glyph, or reason -- every member already exists.
+Pi-only extension: upstream Claude Code `/plugin` has no `fetch` verb (verified 2026-07-13). `fetch` warms the local clone/mirror cache for a git-source plugin WITHOUT installing it, so a later `install` resolves offline. It renders the always-marketplace-header cascade form: a bare marketplace header at column 0 and per-plugin rows at 2-space indent. A fetch changes no Pi-visible resource (nothing is installed), so no state row is a reload-trigger and no `/reload to pick up changes` trailer ever fires. A post-fetch success renders the plugin's DERIVED status row -- exactly what `list` / `info` show (`(available)` / `(partially-available)` / `(unavailable)`) -- because the fetch is followed by one read of the now-warm tree through `resolveListCandidate`, the read `list`'s not-installed row uses, never an install cascade (FTCH-02). So the row's version is the version `list` shows for the same tree: the version its `plugin.json` declares, then the entry's version, then the commit (GLK-07 / D-PL7-09). A tree that is still cold reads `(remote)` with the entry's version, as `list`'s row does, and the `(skipped)` rows take their version from the same read (D-PL7-17). The `available` / `partially-available` / `unavailable` rows are bare: no `[scope]` bracket (MSG-PL-6 / SNM-11 carve-out). No catalog row introduces a new status token, glyph, or reason -- every member already exists.
+
+For an unpinned git source, the fetch and the row read run under the scope's state lock in one step, so a clone cleanup in another process cannot remove the tree between them (GLK-05 / D-PL7-07). While another process holds the lock, the row fails as `{lock held}`. A pinned source and a path source take no lock. When the git host refuses the fetch, the row fails with the host ladder's reason (GLK-01 / D-PL7-02). A 404 or 410 reads `{source missing}`, and another HTTP status other than the 401/403 credential challenge reads `{network error}`. For both, the first frame of the cause line is `{status} on {url}`, and the transport's own message follows (D-PL7-14). A connection that could not be made or was dropped reads `{network unreachable}`, and a credential challenge reads `{authentication required}`.
 
 ### Single plugin -- fetched, now available (FTCH-02)
 
@@ -2442,7 +2468,7 @@ Triggered when the target is a path/non-git source (nothing to fetch) OR a pinne
 
 ### Bulk fetch -- mixed outcomes (FTCH-02 / D-81-01)
 
-Triggered by the plural `fetch @<marketplace>` (or bare `fetch`) form: the failure-tolerant sweep enumerates the marketplace's fetchable manifest entries, and a per-plugin throw is captured as a `⊘ <name> (failed) {reason}` row (the sweep never aborts) while the succeeding plugin renders its fresh derived status row. The plural form carries a trailing tally under the `Plugin fetch` label. The default tally counts info rows uniformly as `successes` and the failure category folds in from the rows -> `Plugin fetch: 1 failure, 1 success`. Severity: `error` (a `failed` row drives the first-match ladder). No reload-hint (a fetch installs nothing).
+Triggered by the plural `fetch @<marketplace>` (or bare `fetch`) form: the failure-tolerant sweep enumerates the marketplace's fetchable manifest entries, and a per-plugin throw is captured as a `⊘ <name> (failed) {reason}` row (the sweep never aborts) while the succeeding plugin renders its fresh derived status row. The plural form carries a trailing tally under the `Plugin fetch` label. The default tally counts info rows uniformly as `successes` and the failure category folds in from the rows -> `Plugin fetch: 1 failure, 1 success`. A failed row's reason comes from the same host ladder as a single fetch's: `{source missing}` for a 404 or 410, `{network error}` for another HTTP status, `{network unreachable}` for a connection failure, and `{authentication required}` for a credential challenge. Severity: `error` (a `failed` row drives the first-match ladder). No reload-hint (a fetch installs nothing).
 
 <!-- catalog-state: bulk-mixed -->
 
@@ -2571,7 +2597,7 @@ Import: 1 failure, 2 successes
 /reload to pick up changes
 ```
 
-`hello@mp` declares a dependency the marketplace does not declare, so its install cascade fails before `hello`'s own ledger runs. `installOnePlannedPlugin` drives exactly one orchestrated outcome per planned plugin (it does not install the dependency separately), so the two-row standalone cascade form -- a dependency row plus a `{dependency failed}` root row -- collapses onto the ONE row import can render: `hello`'s own row carries `{dependency failed}` and the failing dependency's cause line, exactly as the "Load-time install failed by a dependency" state under [`## reconcile-applied-cascade`](#reconcile-applied-cascade) renders it. `dispatchFailedOutcome` narrows on `instanceof DependencyCascadeError` before its generic fallthrough, so a cascade failure names its dependency instead of the bare `(failed)` row the fallthrough renders for an unclassified throw (IMP-09). Every other plugin in the batch is unaffected and keeps installing (D-115-08 continuation); the trailing tally counts the marketplace add and `before`'s install as successes and `hello`'s row as the one failure. Severity: `error`; reload-hint fires (`before` materialized).
+`hello@mp` declares a dependency the marketplace does not declare, so its install cascade fails before `hello`'s own ledger runs. `installOnePlannedPlugin` drives exactly one orchestrated outcome per planned plugin (it does not install the dependency separately), so the two-row standalone cascade form -- a dependency row plus a `{dependency failed}` root row -- collapses onto the ONE row import can render: `hello`'s own row carries `{dependency failed}` and the failing dependency's cause line, exactly as the "Apply install failed by a dependency" state under [`## reconcile-applied-cascade`](#reconcile-applied-cascade) renders it. `dispatchFailedOutcome` narrows on `instanceof DependencyCascadeError` before its generic fallthrough, so a cascade failure names its dependency instead of the bare `(failed)` row the fallthrough renders for an unclassified throw (IMP-09). Every other plugin in the batch is unaffected and keeps installing (D-115-08 continuation); the trailing tally counts the marketplace add and `before`'s install as successes and `hello`'s row as the one failure. Severity: `error`; reload-hint fires (`before` materialized).
 
 ### An import whose install moves a dependency first (UPD-DEP-D1)
 
@@ -2632,7 +2658,7 @@ Single-shot setup of `anthropics/claude-plugins-official` in user scope. The mar
 ● claude-plugins-official [user] (added)
 ```
 
-The bootstrap path is a marketplace add; the marketplace status `added` carries the `(added)` header arm. No reload-hint: a marketplace record is not a Pi-visible resource (SNM-33 / D-22-01). Bootstrap also enables autoupdate on the marketplace persistence record, but the v2 state-change header arm (`added`) does not carry the `<autoupdate>` marker -- the marker only appears on the list-surface header form (`mp.status === undefined`, `mp.details.autoupdate === true`). Subsequent `marketplace list` renders the marketplace with the marker.
+The bootstrap path is a marketplace add; the marketplace status `added` carries the `(added)` header arm. No reload-hint: a marketplace record is not a Pi-visible resource (SNM-33 / D-22-01). The official name `claude-plugins-official` has autoupdate on by default (D-PL8-07), so bootstrap writes no autoupdate value, and a value that `claude-plugins.json` already holds stays as it is. The v2 state-change header arm (`added`) does not carry the `<autoupdate>` marker -- the marker only appears on the list-surface header form (`mp.status === undefined`, `mp.details.autoupdate === true`). Subsequent `marketplace list` renders the marketplace with the marker.
 
 ### Re-run when already bootstrapped
 
@@ -2642,7 +2668,7 @@ The bootstrap path is a marketplace add; the marketplace status `added` carries 
 ● claude-plugins-official [user] (skipped) {already added}
 ```
 
-When the marketplace already exists with the same source, the add step is the `marketplace add` no-op (MPA-01): it changes nothing and renders `(skipped) {already added}`. The autoupdate step then renders its own row. No reload-hint. Severity: info.
+When the marketplace already exists with the same source, the add step is the `marketplace add` no-op (MPA-01): it changes nothing and renders `(skipped) {already added}`. It leaves the autoupdate value as it is. No reload-hint. Severity: info.
 
 ______________________________________________________________________
 
@@ -2706,7 +2732,7 @@ D-48-A / ATTR-07: the `failed` marketplace header MAY now carry a closed-set rea
 ● local-mp [user] (added)
 ```
 
-Path-source marketplaces default to autoupdate OFF; the `added` arm does not carry the marker. No reload-hint: `marketplace add` changes a marketplace record, not a Pi-visible resource (SNM-33 / D-22-01).
+A path-source marketplace with no `autoupdate` value takes the default for its name: on for an official Claude Code marketplace name other than `knowledge-work-plugins` and `first-party-plugins`, off for any other name (D-PL8-07). The `added` arm does not carry the marker. No reload-hint: `marketplace add` changes a marketplace record, not a Pi-visible resource (SNM-33 / D-22-01).
 
 ### Success -- GitHub source
 
@@ -2716,7 +2742,7 @@ Path-source marketplaces default to autoupdate OFF; the `added` arm does not car
 ● claude-plugins-official [user] (added)
 ```
 
-`marketplace add` never enables autoupdate for any source kind (github or path); the persisted record stores no `autoupdate` field on add. Autoupdate is opt-in -- enabled later via an explicit `marketplace autoupdate`, or by `bootstrap`. The `added` state-change arm carries `(added)`; subsequent `marketplace list` surfaces show the `<autoupdate>` / `<no autoupdate>` marker on the SUB-BRANCH B list-surface header only once the flag has been set. No reload-hint: a marketplace record is not a Pi-visible resource (SNM-33 / D-22-01).
+`marketplace add` writes no `autoupdate` value for any source kind (github or path). Without a value, a marketplace takes the default for its name: on for an official Claude Code marketplace name other than `knowledge-work-plugins` and `first-party-plugins`, off for any other name (D-PL8-07). Otherwise autoupdate is opt-in -- enabled later via an explicit `marketplace autoupdate`. The `added` state-change arm carries `(added)`; subsequent `marketplace list` surfaces show the `<autoupdate>` marker on the SUB-BRANCH B list-surface header only once autoupdate is on, by a set value or by the default. No reload-hint: a marketplace record is not a Pi-visible resource (SNM-33 / D-22-01).
 
 ### Skipped -- already added
 
@@ -3302,6 +3328,8 @@ The same not-installed plugin as the state above, whose marketplace ENTRY declar
 
 Triggered by `plugin info <plugin>@<marketplace>` against a not-installed git-source plugin (source `url` / `git-subdir` / `github`) whose clone/mirror is not yet materialized locally. The status glyph switches to `◌` (`ICON_REMOTE`, per `pluginInfoStatusGlyph`) and the row reads `(remote)`, replacing the manifest-only `(available)` over-claim (RSTA-01). Because nothing is fetched there is no warm tree to resolve, so the `componentsResolved: false` arm fires and emits the `components: not resolved` marker (existing wording preserved, D-80-04). Severity `info`.
 
+With `--fetch`, a fetch that the git host refuses keeps the row: the `(remote)` row of a plugin that is not installed, or the recorded row of an installed one. The row names the host ladder's reason (GLK-01 / D-PL7-02): `{source missing}` for a 404 or 410, and `{network error}` for another HTTP status. An info row has no cause line, so it shows the reason only, with no status and no URL (D-PL7-03). For an unpinned source, the fetch and the row read run under the scope's state lock in one step (GLK-05 / D-PL7-07). While another process holds the lock, the row fails as `{lock held}`.
+
 <!-- catalog-state: remote-single-scope -->
 
 ```text
@@ -3558,7 +3586,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin pending`
 
-DIFF-01 SC #2 / D-53-01 read-only diff/pending surface. It lists what the next `/claude:plugin apply` would change: the difference between the merged config (`claude-plugins.json` + `claude-plugins.local.json`) and the recorded state (`state.json`). A load changes no installation state, so `apply` is the command that makes these changes. Runs against both scopes when `--scope` is omitted. NEVER writes any file, NEVER touches the network (NFR-5). Running it twice produces byte-identical output (DIFF-01 SC #2). DIFF-02: rows render subject-first `<glyph> <name> [<scope>] (will ...)` with the closed-set pending-tense token set (`will install` / `will uninstall` / `will enable` / `will disable` / `will update`). D-20 (superseding WILL-01 / D-65.1-02 / D-65.1-03): `apply` makes marketplace adds and removes, so a declared marketplace the scope has not added renders a `(will add)` header, and a recorded marketplace no config declares renders a `(will remove)` header above one `will uninstall` row per recorded plugin. D-21 (superseding PENDING-VERDICT-01): `apply` makes the LOAD-01 dependency disable and the MISS-01 missing-dependency install, so `pending` runs the same dependency check, offline. An enabled plugin whose declared dependency is unsatisfied renders `(will disable)`, and a missing declared dependency renders `(will install)` under its marketplace. A dependent whose missing dependency that install brings gets no row, because `apply` keeps it enabled (D-09-07). A plugin that is already disabled gets no `(will disable)` row, and a plugin the check holds down gets `(will enable)` only once its dependency is satisfied. When the check cannot read a plugin's dependencies, `pending` lists no dependency row (D-05-07). APL-04 / D-14: a list that holds at least one change ends with the block `/claude:plugin apply to make these changes`, after any tally line and one blank line below it. A list of failures alone (source mismatch, invalid config, layer gap) has no such trailer, because `apply` cannot fix them. The `/reload to pick up changes` trailer stays STRUCTURALLY EXCLUDED: pending rows are pre-transition, so that trailer would mislead the user. D-05 / D-06: a load (session start or `/reload`) prints this same block when the configs and the records disagree, built by the same code, so its bytes match `pending`'s. A load whose configs match the records prints no block.
+DIFF-01 SC #2 / D-53-01 read-only diff/pending surface. It lists what the next `/claude:plugin apply` would change: the difference between the merged config (`claude-plugins.json` + `claude-plugins.local.json`) and the recorded state (`state.json`). A load changes no installation state, so `apply` is the command that makes these changes. Runs against both scopes when `--scope` is omitted. NEVER writes any file, NEVER touches the network (NFR-5). Running it twice produces byte-identical output (DIFF-01 SC #2). DIFF-02: rows render subject-first `<glyph> <name> [<scope>] (will ...)` with the closed-set pending-tense token set (`will install` / `will uninstall` / `will enable` / `will disable` / `will update`). D-20 (superseding WILL-01 / D-65.1-02 / D-65.1-03): `apply` makes marketplace adds and removes, so a declared marketplace the scope has not added renders a `(will add)` header, and a recorded marketplace no config declares renders a `(will remove)` header above one `will uninstall` row per recorded plugin. D-21 (superseding PENDING-VERDICT-01): `apply` makes the LOAD-01 dependency disable and the MISS-01 missing-dependency install, so `pending` runs the same dependency check, offline. An enabled plugin whose declared dependency is unsatisfied renders `(will disable)`, and a missing declared dependency renders `(will install)` under its marketplace. A dependent whose missing dependency that install brings gets no row, because `apply` keeps it enabled (D-09-07). A plugin that is already disabled gets no `(will disable)` row, and a plugin the check holds down gets `(will enable)` only once its dependency is satisfied. When the check cannot read a plugin's dependencies, `pending` lists no dependency row (D-05-07). APL-04 / D-14: a list that holds at least one change ends with the block `/claude:plugin apply to make these changes`, after any tally line and one blank line below it. A failure-only list has no such trailer. This includes a source mismatch, even though `apply` attempts a same-name replacement. Invalid configs and layer gaps remain report-only failures. The `/reload to pick up changes` trailer stays STRUCTURALLY EXCLUDED: pending rows are pre-transition, so that trailer would mislead the user. D-05 / D-06: a load (session start or `/reload`) prints this same block when the configs and the records disagree, built by the same code, so its bytes match `pending`'s. A load whose configs match the records prints no block.
 
 ### Empty steady-state (no actions pending)
 
@@ -3745,7 +3773,7 @@ A plugin operation needs attention.
 
 ### Source mismatch (declared source diverges from recorded source)
 
-A declared marketplace whose recorded source string does not match the declaration byte-for-byte (the apply path cannot honour the declaration without first removing the recording). The row reuses the existing `"source mismatch"` REASONS member (REASONS stays at 32 entries). Severity `error` (a `(failed)` mp row); summary line prepended (GRAM-01 / GRAM-02): `A marketplace operation has failed.`.
+A declared marketplace whose recorded source string does not match the declaration byte-for-byte. `pending` reports this row without touching the network. `apply` passes the declared source through the marketplace-add replacement path under the state lock. A successful replacement reports the marketplace as `(added)` and leaves installed plugins for the next reconcile plan. If the replacement fails, the original mismatch fact remains available for the failure report. The row reuses the existing `"source mismatch"` REASONS member (REASONS stays at 32 entries). Severity `error` (a `(failed)` mp row); summary line prepended (GRAM-01 / GRAM-02): `A marketplace operation has failed.`.
 
 <!-- catalog-state: source-mismatch -->
 
@@ -3805,7 +3833,7 @@ ______________________________________________________________________
 
 ## reconcile-applied-cascade
 
-RECON-04 / D-08: `/claude:plugin apply`'s report of what it changed, emitted by `applyReconcile` after a pass that performed at least one apply action OR carried at least one invalid-config / source-mismatch row. A load emits this kind only for its per-session warnings (the `{not in manifest}` row and the unreadable declarer, D-18) and for a scope it cannot read (a corrupt `state.json`, a held lock), and those rows never reload. A load whose configs turn `autoapply` on (AAP-02) runs `apply` instead and emits `apply`'s report with the `load` origin, trailer included; when it has nothing to change it emits nothing. A load reports an invalid config and a source mismatch in the pending block instead (see `/claude:plugin pending`). Wraps the same per-status `MarketplaceNotificationMessage[]` shape the cascade arm carries -- realized transition tokens (`added` / `removed` / `installed` / `uninstalled` / `disabled` / `updated` / `failed`) reused per RESEARCH Pattern 5 Option A -- so the rendered bytes match each token's standalone-command counterpart. A catalog move `apply` keeps in place shows the row `pending` lists for it, `(skipped) {dependents constrain}` or `(partially-upgradable)` (D-12). OUT-03/OUT-06/D-03/D-04: a reconcile apply is a plural mixed-subject operation, so a trailing per-operation tally (`Reconcile: <n> failure(s), <n> warning(s), <n> success(es)`) follows the rows, counting all marketplace + plugin rows uniformly under the `Reconcile` operation name. RLD-02 / D-08: the `/reload to pick up changes` trailer follows the tally whenever a row stamps a reload (a realized install, uninstall, enable, disable, or catalog move), because the running session has not loaded what `apply` changed. A report whose rows only failed or warned carries no trailer. An empty-and-clean load is silent (no notify, D-05); an empty-and-clean `apply` emits the advisory in the `/claude:plugin apply` section instead (D-08).
+RECON-04 / D-08: `/claude:plugin apply`'s report of what it changed, emitted by `applyReconcile` after a pass that performed at least one apply action OR carried at least one invalid-config / source-mismatch row. A load emits this kind only for its per-session warnings (the `{not in manifest}` row and the unreadable declarer, D-18) and for a scope it cannot read (a corrupt `state.json`, a held lock), and those rows never reload. A load whose configs turn `autoapply` on (AAP-02) runs `apply` instead and emits `apply`'s report with the `load` origin, trailer included; when it has nothing to change it emits nothing. A load without `autoapply` reports an invalid config and a source mismatch in the pending block instead (see `/claude:plugin pending`). An autoapply load uses the same source-replacement path as `apply`. Wraps the same per-status `MarketplaceNotificationMessage[]` shape the cascade arm carries -- realized transition tokens (`added` / `removed` / `installed` / `uninstalled` / `disabled` / `updated` / `failed`) reused per RESEARCH Pattern 5 Option A -- so the rendered bytes match each token's standalone-command counterpart. A catalog move `apply` keeps in place shows the row `pending` lists for it, `(skipped) {dependents constrain}` or `(partially-upgradable)` (D-12). OUT-03/OUT-06/D-03/D-04: a reconcile apply is a plural mixed-subject operation, so a trailing per-operation tally (`Reconcile: <n> failure(s), <n> warning(s), <n> success(es)`) follows the rows, counting all marketplace + plugin rows uniformly under the `Reconcile` operation name. RLD-02 / D-08: the `/reload to pick up changes` trailer follows the tally whenever a row stamps a reload (a realized install, uninstall, enable, disable, or catalog move), because the running session has not loaded what `apply` changed. A report whose rows only failed or warned carries no trailer. An empty-and-clean load is silent (no notify, D-05); an empty-and-clean `apply` emits the advisory in the `/claude:plugin apply` section instead (D-08).
 
 ### Success cascade -- mixed marketplace add + plugin install across both scopes
 
@@ -4044,7 +4072,7 @@ Reconcile: 1 warning
 
 ### Apply disable, declared dependency version unsatisfied (LOAD-01)
 
-The third shape `/claude:plugin apply` disables a plugin for. The dependency is recorded AND enabled, and its recorded version falls outside the range the dependent declared. This row carries the second closed-set token, `{dependency version unsatisfied}`, mirroring upstream's second error code `dependency-version-unsatisfied`. The split is deliberate: the two remedies differ in kind -- one says install or enable a thing that is not usable, the other says move an existing thing's version -- so one token for both would make a grep for either fact return the other. The range on the cause line is every constraint the dependent declared for that dependency, as written and separated by commas as Claude Code prints them (INR-05): a `^2.0.0` renders as `^2.0.0`, and several declarations of one dependency render as their declared texts in declaration order. The satisfaction check still tests their intersection; only the reported text is the declared one. The verdict bounds the joined text once through the project renderer, so a pathological declared list ends with its `... (+N chars)` overflow marker instead of flooding the row. Severity, tally, write-back and lift behave exactly as on the two rows above.
+The third shape `/claude:plugin apply` disables a plugin for. The dependency is recorded AND enabled, and its recorded version falls outside the range the dependent declared. This row carries the second closed-set token, `{dependency version unsatisfied}`, mirroring upstream's second error code `dependency-version-unsatisfied`. The split is deliberate: the two remedies differ in kind -- one says install or enable a thing that is not usable, the other says move an existing thing's version -- so one token for both would make a grep for either fact return the other. The range on the cause line is every constraint the dependent declared for that dependency, as written and separated by commas as Claude Code prints them (INR-05): a `^2.0.0` renders as `^2.0.0`, and several declarations of one dependency render as their declared texts in declaration order. The satisfaction check still tests their intersection; only the reported text is the declared one. The verdict bounds the joined text once through the project renderer, so a pathological declared list ends with Claude Code's `… (+N chars)` overflow marker (D-PL3-10) instead of flooding the row. Severity, tally, write-back and lift behave exactly as on the two rows above.
 
 <!-- catalog-state: reconcile-dependency-version-unsatisfied -->
 
@@ -4094,7 +4122,7 @@ Reconcile: 1 warning
 
 ### Apply install failed by a dependency (RESV-06)
 
-The load-time counterpart of the standalone dependency-cascade `{dependency failed}` row. The user declared `hello@mp` in `claude-plugins.json` and reloaded; `hello` declares a dependency the marketplace does not declare, so the cascade fails before `hello`'s own ledger runs. Reconcile drives exactly one orchestrated outcome for `hello@mp` (it does not install the dependency separately), so the two-row standalone form -- a dependency row plus a `{dependency failed}` root row -- collapses onto the ONE row reconcile can render: the requesting plugin's own row carries `{dependency failed}` and the failing dependency's own cause line, sourced from the SAME `DependencyCascadeError` the standalone cascade's dependency row carries (`orchestrators/plugin/install-cascade.messaging.ts::cascadeFailureCause`). Every reason the closed-set dependency-cascade vocabulary can classify a cascade failure with (`{dependency cycle}`, `{dependency marketplace not added}`, `{no matching version}`, `{version conflict}`, ...) reaches this surface the same way; only `{dependency failed}` is shown here. A plugin's own (non-dependency) failure is unaffected and keeps its ordinary reason (e.g. `{not in manifest}`, `{source missing}`) with no cause line. The trailing tally counts the row as one failure. Severity: `error`; no reload-hint.
+The `apply` counterpart of the standalone dependency-cascade `{dependency failed}` row. The user declared `hello@mp` in `claude-plugins.json` and ran `/claude:plugin apply`; `hello` declares a dependency the marketplace does not declare, so the cascade fails before `hello`'s own ledger runs. A normal load only reports the pending install. A load with `autoapply` on runs this `apply` path. Reconcile drives exactly one orchestrated outcome for `hello@mp` (it does not install the dependency separately), so the two-row standalone form -- a dependency row plus a `{dependency failed}` root row -- collapses onto the ONE row reconcile can render: the requesting plugin's own row carries `{dependency failed}` and the failing dependency's own cause line, sourced from the SAME `DependencyCascadeError` the standalone cascade's dependency row carries (`orchestrators/plugin/install-cascade.messaging.ts::cascadeFailureCause`). Every reason the closed-set dependency-cascade vocabulary can classify a cascade failure with (`{dependency cycle}`, `{dependency marketplace not added}`, `{no matching version}`, `{version conflict}`, ...) reaches this surface the same way; only `{dependency failed}` is shown here. A plugin's own (non-dependency) failure is unaffected and keeps its ordinary reason (e.g. `{not in manifest}`, `{source missing}`) with no cause line. The trailing tally counts the row as one failure. Severity: `error`; no reload-hint.
 
 <!-- catalog-state: reconcile-install-dependency-failed -->
 
@@ -4126,7 +4154,7 @@ Reconcile: 2 successes
 
 ### Apply could not install a missing declared dependency (MISS-02)
 
-`/claude:plugin apply` installs a missing declared dependency and the install cascade fails, so the failing dependency reports on its OWN row through the same `plugin-install-failed` outcome and `classifyOrchestratorThrow` path the config-install row uses (D-09-10): a closure or constraint failure the cascade wraps as `DependencyCascadeError` renders `{dependency failed}` with the redacted specific reason on the cause line (`is not declared by its marketplace`, `requires marketplace "mp", which is not added`, `has no release tag satisfying`, ...), and only a failure of the dependency's own ledger keeps its specific token (`{not in manifest}`, `{network unreachable}`, ...). No marketplace is added or cloned to satisfy a declaration (D-03-08). The dependent gets the LOAD-01 `(disabled) {dependency unsatisfied}` row with the install remedy from the re-derived check, or no row at all when it was already down. Nothing is half-materialized (D-03-07, NFR-3); the `apply` completes; and the install is retried on the next `apply` while the declaration stays unsatisfied, each attempt reporting the failure row alone once the dependent is down (D-09-14). Severity: `error`; the trailing tally counts one failure and one warning, and the dependent's disable row brings the reload trailer (D-08).
+`/claude:plugin apply` installs a missing declared dependency and the install cascade fails, so the failing dependency reports on its OWN row through the same `plugin-install-failed` outcome and `classifyOrchestratorThrow` path the config-install row uses (D-09-10): a closure or constraint failure the cascade wraps as `DependencyCascadeError` renders `{dependency failed}` with the redacted specific reason on the cause line (`is not declared by its marketplace`, `requires marketplace "mp", which is not added`, `has no release tag satisfying`, ...), and only a failure of the dependency's own ledger keeps its specific token (`{not in manifest}`, `{network unreachable}`, ...). A partial rollback keeps the dependency's `{rollback partial}` token and the same ordered phase children that `install` renders (MIM-05). No marketplace is added or cloned to satisfy a declaration (D-03-08). The dependent gets the LOAD-01 `(disabled) {dependency unsatisfied}` row with the install remedy from the re-derived check, or no row at all when it was already down. Nothing is half-materialized (D-03-07, NFR-3); the `apply` completes; and the install is retried on the next `apply` while the declaration stays unsatisfied, each attempt reporting the failure row alone once the dependent is down (D-09-14). Severity: `error`; the trailing tally counts one failure and one warning, and the dependent's disable row brings the reload trailer (D-08).
 
 <!-- catalog-state: reconcile-dependency-install-failed -->
 
@@ -4561,7 +4589,7 @@ Marketplace-level failure with no plugin children evaluated. No reload-hint (fai
 
 ### Marketplace update failed (path-source invalid manifest)
 
-Triggered when `marketplace update <name>` refreshes a PATH-source marketplace whose `marketplace.json` is malformed JSON or schema-invalid (ATTR-10 / D-48-B). `loadMarketplaceManifest` throws the typed `InvalidMarketplaceManifestError`; `refreshRecord` wraps it as `MarketplaceUpdateError`, and the `refreshOneMarketplace` catch classifies it via `reasonsFromCascadeError` to `{invalid manifest}`, or to `{unparseable}` for malformed JSON as `list` and `info` read it (MPA-02) -- carried on the synthetic-child failed row (the marketplace header has no `reasons` field for this recipe; the reason rides the child, mirroring `mp-failure-network`). A path-source refresh touches ZERO network (NFR-5). Only a refresh failure is classified. A held state lock renders `{lock held}`. An HTTP answer from the git host renders `{network error}` (see `update-host-http-error`). A refresh failure that no rule names, and any other failure outside the refresh, such as a failed state save, renders the child row with no reason, followed by its cause chain. No reload-hint (failed marketplace does not trigger per D-16-12). Severity: `error`. The summary prefix counts the synthetic child as one plugin operation.
+Triggered when `marketplace update <name>` refreshes a PATH-source marketplace whose `marketplace.json` is malformed JSON or schema-invalid (ATTR-10 / D-48-B). `loadMarketplaceManifest` throws the typed `InvalidMarketplaceManifestError`; `refreshRecord` wraps it as `MarketplaceUpdateError`, and the `refreshOneMarketplace` catch classifies it via `refreshFailureReasons` to `{invalid manifest}`, or to `{unparseable}` for malformed JSON as `list` and `info` read it (MPA-02) -- carried on the synthetic-child failed row (the marketplace header has no `reasons` field for this recipe; the reason rides the child, mirroring `mp-failure-network`). A path-source refresh touches ZERO network (NFR-5). Only a refresh failure is classified. A held state lock renders `{lock held}`. An HTTP answer from the git host renders `{network error}` (see `update-host-http-error`). A refresh failure that no rule names, and any other failure outside the refresh, such as a failed state save, renders the child row with no reason, followed by its cause chain. No reload-hint (failed marketplace does not trigger per D-16-12). Severity: `error`. The summary prefix counts the synthetic child as one plugin operation.
 
 <!-- catalog-state: update-path-invalid-manifest -->
 
@@ -5007,7 +5035,7 @@ Changed and already-correct rows both count as successful plural outcomes.
 
 ### Config files
 
-A named flip changes only its target layer: the base config (`claude-plugins.json`), or the local config (`claude-plugins.local.json`) with `--local` (LAYER-02). When only the other layer declares the marketplace, the flip is refused before anything changes, with the `{marketplace in local layer only}` or `{marketplace in base layer only}` rows documented under [`## /claude:plugin marketplace remove <name>`](#claudeplugin-marketplace-remove-name). A flip row reports the outcome in the target layer. A local entry without an `autoupdate` value has the value it inherits: the base entry's value, or off when the base config does not declare the marketplace or sets no value (MAU-4). So `{already autoupdate}` means the target layer already has the value, its own or inherited, and a flip writes a local value only when it changes the value that applies. When a local entry without a value needs the inherited value and the base config cannot be read, the flip fails with `{invalid manifest}` and writes nothing in that scope. `marketplace list` and `marketplace info` show the value that the two layers merge to, where a local entry's `autoupdate` wins over the base one (D-07). A flip without a name sets the value in the base config of each marketplace that config declares. It writes a local entry only when the value that applies to the entry still differs, so a local entry without a value takes the new base value when the base config declares the marketplace. With `--local`, it changes only the local config.
+A named flip changes only its target layer: the base config (`claude-plugins.json`), or the local config (`claude-plugins.local.json`) with `--local` (LAYER-02). When only the other layer declares the marketplace, the flip is refused before anything changes, with the `{marketplace in local layer only}` or `{marketplace in base layer only}` rows documented under [`## /claude:plugin marketplace remove <name>`](#claudeplugin-marketplace-remove-name). A flip row reports the outcome in the target layer. A base entry without an `autoupdate` value has the default for the marketplace name: on for an official Claude Code marketplace name other than `knowledge-work-plugins` and `first-party-plugins`, off for any other name (MAU-4; D-PL8-07). A local entry without an `autoupdate` value has the value it inherits: the base entry's value, or the default for the name when the base config does not declare the marketplace or sets no value. So `{already autoupdate}` means the target layer already has the value, its own or inherited, and a flip writes a local value only when it changes the value that applies. When a local entry without a value needs the inherited value and the base config cannot be read, the flip fails with `{invalid manifest}` and writes nothing in that scope. `marketplace list` and `marketplace info` show the value that the two layers merge to, where a local entry's `autoupdate` wins over the base one (D-07). A flip without a name sets the value in the base config of each marketplace that config declares. It writes a local entry only when the value that applies to the entry still differs, so a local entry without a value takes the new base value when the base config declares the marketplace. With `--local`, it changes only the local config.
 
 A flip that fails after it has written something reports both in one emission: the rows of the marketplaces it flipped in an earlier scope, or in an earlier file of the same scope, then the failed header with its failed child. A marketplace whose files were only partly written gets no row of its own; the failed row covers it. The failed child carries `{lock held}` for a held state lock, `{invalid manifest}` for an invalid config file, `{permission denied}` when the file system refuses a write, and `{unreadable}` for any other failure, such as a config file the writer refuses to replace.
 
@@ -5086,7 +5114,25 @@ Usage: /claude:plugin <subcommand> [args]
 Subcommands: install, uninstall, update, reinstall, list, bootstrap, import, marketplace
 ```
 
-The exact wording is renderer-/orchestrator-specific; the contract is that `notifyUsageError` is called with a structured `UsageErrorMessage` and the renderer emits the two-section body separated by one blank line. The catalog's expected output mirrors the structural shape (`message` block, blank line, `usage` block).
+The exact usage line is command-specific. An unknown flag and an extra positional argument use these exact message blocks:
+
+```text
+Unknown flag: "--bogus".
+
+Usage: /claude:plugin list [<marketplace>] [--installed] [--available] [--unavailable] [--partial] [--remote] [--scope user|project]
+```
+
+```text
+Too many arguments.
+
+Usage: /claude:plugin help [marketplace]
+```
+
+The shared argument parser applies these messages to `list`/`ls`, `pending`, `import`, `bootstrap`, `browse`, and `help`. The renderer emits the message and usage blocks with one blank line between them.
+
+## State lock failures
+
+`install`, `enable`, `disable`, `update`, `reinstall`, `marketplace add`, and `marketplace remove` report a held scope lock as `{lock held}`. The cause names the scope and lock path, then asks the user to retry after the other operation completes. The command changes nothing. The prune and import sections above show the same byte shape.
 
 ______________________________________________________________________
 
@@ -5326,6 +5372,28 @@ Left in mcp.json:
 ```
 
 Emitted by `notifyMcpMigration` when the step wrote a plugin's servers to `mcp-adapter.json` but could not remove the old entries from `mcp.json`, for example because the file could not be written. The step writes `mcp-adapter.json` first, then `state.json`, then `mcp.json`, so a fault between the writes loses no server: `mcp-adapter.json` and `mcp.json` both hold it for one session. The next `/reload` finds the old entries again, leaves `mcp-adapter.json` unchanged, removes the old entries and reports the move once. A user-scope move also removes the plugin's old-name disable stubs from the project `mcp-adapter.json` before it removes the old entries. When that write fails, for example because a project-scope operation holds the lock, the old entries and the stubs stay, and the row names the `project-scope mcp-adapter.json` in place of `mcp.json`. The row lists the plugin's old names in file order and a detail with no absolute path and no final period of its own. It sorts with the other rows left in `mcp.json`. Severity: `warning`. The byte form is locked by `test/architecture/mcp-migration-notice.test.ts`.
+
+### Background update notice (AUP-03 / D-PL8-10)
+
+<!-- catalog-state: background-update-one -->
+
+```text
+Plugin updated: demo · Run /reload to apply
+```
+
+<!-- catalog-state: background-update-two -->
+
+```text
+Plugins updated: alpha and beta · Run /reload to apply
+```
+
+<!-- catalog-state: background-update-many -->
+
+```text
+Plugins updated: 3 plugins · Run /reload to apply
+```
+
+Emitted once by `notifyBackgroundUpdate` after a background update that moved at least one plugin. A background update runs after the first message of a tui session, once for each extension runtime. The notice names plugins, without their marketplace. A plugin is named once even when it was updated in both scopes or from two marketplaces (D-PL8-21), and names keep the order of the update. Two names are joined with "and". Three or more names are counted instead. Severity: `info`. The notice always asks for `/reload`, because Claude Code reloads a plugin in the running session only for a plugin source kind this extension does not have (D-PL8-11). A background update that moved nothing, failed, or was skipped prints nothing, and its detail goes to the debug log (`PI_CLAUDE_MARKETPLACE_DEBUG=1`). A json or rpc session never runs the background update, so it never receives its `background-update` entry; the payload kind stays in the schema (D-PL8-20, see [`docs/json-output.md`](json-output.md)). The byte form is locked by `test/architecture/background-update-notice.test.ts`, not by the catalog-uat walk, whose parser skips this section.
 
 ______________________________________________________________________
 

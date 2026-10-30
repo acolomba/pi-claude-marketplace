@@ -29,13 +29,13 @@
 //  PluginUpdatePhase3Error with RECOVERY_PLUGIN_REINSTALL_PREFIX hint.
 //  Else: success outcome carries WR-04 stagedAgentNames/stagedMcpServerNames.
 //
-// D-141-03 / D-141-05: the four bridges' staging warnings are READ and split by install's
-// rule through `./shared.ts::splitStagingWarnings`. The skills and commands
-// DISCOVERY half always rides the `updated` outcome's `notes`; the agents and
-// mcp HYGIENE half joins it in cascade mode only. The direct path renders the
-// discovery half through `surfaceDiscoveryWarnings` AFTER the cascade, since
-// the runner that produces a warning finishes long before the row it
-// qualifies exists.
+// D-141-03 / D-PL1-10: the five bridges' tagged staging warnings ride the
+// `updated` outcome's `stagingWarnings`, both halves, in bridge order, in
+// direct and cascade mode alike. Readers split the halves through
+// `partitionStagingWarnings`, the classifier install uses (D-PL1-03). The
+// direct path and reinstall render the discovery half AFTER the cascade,
+// since the runner that produces a warning finishes long before the row it
+// qualifies exists. The cascades render both halves (D-PL1-25).
 //
 // PUP-9 routing:
 //  updateSinglePlugin -- cascade path -- catches into partition='failed'
@@ -65,6 +65,7 @@ import path from "node:path";
 import {
   abortPreparedAgents,
   assertAgentCommitTargets,
+  assertAgentTargetsFree,
   commitPreparedAgents,
   prepareStagePluginAgents,
 } from "../../bridges/agents/index.ts";
@@ -119,7 +120,6 @@ import {
   assertNoCrossPluginConflicts,
   removePluginRecord,
   retiresWorkflowCommand,
-  splitStagingWarnings,
 } from "./shared.ts";
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
@@ -137,6 +137,7 @@ import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { UpdateHooksRouting } from "./update-cascade.ts";
@@ -150,6 +151,7 @@ import type {
   PluginUpdateFailedOutcome,
   PluginUpdateOutcome,
   RevisionMove,
+  DependencyStagingDiagnostic,
   UpdateDependencyRow,
 } from "../types.ts";
 
@@ -158,13 +160,23 @@ import type {
  * produced. `settled` carries a row for each dependency it installed, enabled
  * or moved; `refused` carries the row of the dependency that cannot be met,
  * after the rows of any change the settle made before a step failed.
+ *
+ * D-PL1-16: both arms carry the MCP config notices of the dependencies the
+ * settle installed, omitted when there are none (NREG-01).
  */
 export type UpdateDependencySettlement =
-  | { readonly kind: "settled"; readonly rows: readonly UpdateDependencyRow[] }
+  | {
+      readonly kind: "settled";
+      readonly rows: readonly UpdateDependencyRow[];
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
+      readonly stagingDiagnostics?: readonly DependencyStagingDiagnostic[];
+    }
   | {
       readonly kind: "refused";
       readonly rows: readonly UpdateDependencyRow[];
       readonly cause: Error;
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
+      readonly stagingDiagnostics?: readonly DependencyStagingDiagnostic[];
     };
 
 /**
@@ -202,6 +214,7 @@ export interface ThreePhaseArgsBase {
   readonly local?: boolean;
   readonly partial?: boolean;
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
+  readonly cloneCandidates?: Set<string>;
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
@@ -228,6 +241,13 @@ export interface ThreePhaseArgsBase {
   readonly onCandidate?: (move: RevisionMove) => void;
   /** UPR-03: the installed version, reported before any candidate; see `onCandidate`. */
   readonly onRecord?: NonNullable<PreparePluginUpdateOptions["onRecord"]>;
+  /**
+   * D-PL1-14: receives the tagged staging warnings of the handles prepared so
+   * far, when there are any, so a caller can report them on a failure the
+   * swap throws. The swap reports from a failed prepare, or once after a full
+   * prepare and before the intent mark.
+   */
+  readonly onStagingWarnings?: (warnings: readonly StagingWarning[]) => void;
   /**
    * UPD-DEP-D1: the command's context for a cascade-mode run's credential
    * prompts. A dependency move runs in cascade mode, so its rows return to the
@@ -333,10 +353,10 @@ type PluginPreflight = PreparedPluginUpdate;
  * order; any throw aborts the handles already prepared and appends their
  * cleanup-leak descriptors.
  *
- * D-141-03 / D-141-05: each returned handle carries a `result.warnings`
- * array. Those are read once the swap succeeds, by `collectUpdateWarnings`
- * below -- not here, because a prepare that later fails has no row to hang a
- * warning off.
+ * D-141-03 / D-PL1-02: each returned handle carries a tagged
+ * `result.warnings` array. A throw here reports the warnings of the handles
+ * prepared so far through `reportStagingWarnings` before it rethrows
+ * (D-PL1-14); on success the caller reports the full set (D-PL1-24).
  */
 async function prepareUpdateHandles(
   ops: RemovalOps,
@@ -417,6 +437,7 @@ async function prepareUpdateHandles(
       previousWorkflowNames: record.resources.workflows,
     });
   } catch (err) {
+    reportStagingWarnings(args, handles);
     throw errorWithCleanupFailures(err, await abortPartialHandles(ops, handles, "prepare"));
   }
 
@@ -424,34 +445,37 @@ async function prepareUpdateHandles(
 }
 
 /**
- * D-141-03 / D-141-05: fold the four bridges' staging warnings onto the
- * `updated` outcome, split by install's rule -- the skills and commands
- * DISCOVERY half reaches both modes, the agents and mcp HYGIENE half is
- * orchestrated-only. `args.cascade` is the mode seam; no plumbing flag was
- * added for this.
+ * D-PL1-14 / D-PL1-24: hand the prepared handles' warnings to the caller's
+ * holder; a holder hears nothing when there are none (NREG-01).
+ */
+function reportStagingWarnings(args: ThreePhaseArgsBase, handles: Partial<PrepHandles>): void {
+  const warnings = collectUpdateWarnings(handles);
+  if (warnings.length > 0) {
+    args.onStagingWarnings?.(warnings);
+  }
+}
+
+/**
+ * D-PL1-10: the five bridges' tagged staging warnings for the `updated`
+ * outcome, both halves, in bridge order (skills, commands, agents, mcp,
+ * workflows). No mode seam: each reader takes the half it renders.
+ *
+ * D-PL1-14: it also reads a partial set, the handles a failed prepare had
+ * already prepared.
  *
  * Its own function rather than a few lines inside the finalize window:
  * `prepareUpdateHandles` and that window already sit near the fallow
  * `maxCognitive: 15` ceiling.
  */
-function collectUpdateWarnings(handles: PrepHandles, cascade: boolean): readonly string[] {
-  const { discovery, bridge } = splitStagingWarnings({
-    skills: handles.skills.result.warnings,
-    commands: handles.commands.result.warnings,
-    agents: handles.agents.result.warnings,
-    mcp: handles.mcp.result.warnings,
-  });
-  // WLIF-02: the workflow prepare's warnings join the DISCOVERY half, and they
-  // join it HERE rather than through `splitStagingWarnings`. They describe the
-  // plugin's declared scripts -- a fact a standalone user needs -- not a
-  // hygiene note only the cascade forwards. The shared classifier is left at
-  // four members on purpose: a fifth would drag every other consumer of it
-  // into this change.
-  return Object.freeze([
-    ...discovery,
-    ...handles.workflows.result.warnings,
-    ...(cascade ? bridge : []),
-  ]);
+function collectUpdateWarnings(handles: Partial<PrepHandles>): readonly StagingWarning[] {
+  const ordered = [
+    handles.skills,
+    handles.commands,
+    handles.agents,
+    handles.mcp,
+    handles.workflows,
+  ];
+  return Object.freeze(ordered.flatMap((handle) => handle?.result.warnings ?? []));
 }
 
 async function abortPartialHandles(
@@ -609,6 +633,16 @@ const PHASE3_FAILURE_PHASES = [
 ] as const;
 type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
 
+// D-PL7-08: the stamp is strictly later than the one it replaces, even within
+// one millisecond, so a rival run that read the replaced stamp fails ST-9. A
+// stamp that does not parse, or that is the largest time a Date holds, is
+// replaced by the current time, which still differs from it.
+function nextUpdateStamp(previous: string): string {
+  const now = Date.now();
+  const later = new Date(Math.max(now, Date.parse(previous) + 1));
+  return (Number.isNaN(later.getTime()) ? new Date(now) : later).toISOString();
+}
+
 /**
  * TR-04: pre-commit intent-mark.
  *
@@ -633,10 +667,10 @@ type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
  * rewrites them on the all-success branch.
  *
  * No mutation to `sRecord.version` or `sRecord.resolvedSource` -- those are
- * the finalize step's responsibility. `sRecord.updatedAt` is restamped here
- * so the ST-9 check sees an overlapping run even when the version and the sha
- * stay the same, and `sRecord.resources.workflows` is widened, as CR-02 below
- * says.
+ * the finalize step's responsibility. `sRecord.updatedAt` is restamped here,
+ * strictly later than the stamp it replaces, so the ST-9 check sees an
+ * overlapping run even when the version and the sha stay the same, and
+ * `sRecord.resources.workflows` is widened, as CR-02 below says.
  */
 async function markUpdateInProgress(
   args: ThreePhaseArgs,
@@ -674,7 +708,7 @@ async function markUpdateInProgress(
         });
       }
 
-      sRecord.updatedAt = new Date().toISOString();
+      sRecord.updatedAt = nextUpdateStamp(sRecord.updatedAt);
 
       sRecord.compatibility = {
         installable: false,
@@ -936,8 +970,9 @@ async function refreshHooksCacheAfterUpdate(
  *    `version` stays at `fromVersion`, and `resolvedSource` stays at
  *    the pre-update install path.
  *
- * `sRecord.updatedAt` is set on BOTH branches: even a failed finalize
- * is a truthful "we touched this record" stamp.
+ * `sRecord.updatedAt` is set on BOTH branches, strictly later than the
+ * intent mark's stamp: even a failed finalize is a truthful "we touched this
+ * record" stamp.
  *
  * LAYER-04 / D-MF-03: finalize changes the installation record only. An update
  * never writes a layer config, so a dependency it updates stays undeclared.
@@ -992,7 +1027,9 @@ async function finalizeUpdateRecord(
         applyAllSuccessRecordFields(sRecord, preflight);
       }
 
-      sRecord.updatedAt = new Date().toISOString();
+      // D-PL7-08: a run that read the record during this run's window checks
+      // ST-9 against this stamp, so it must differ from the mark's stamp.
+      sRecord.updatedAt = nextUpdateStamp(sRecord.updatedAt);
     },
     args.stateTransaction,
   );
@@ -1306,6 +1343,7 @@ function composePhase3FailureOutcome(
   failures: NonEmptyUpdatePhase3Failures,
   move: RevisionMove,
   mcpConfigNotices: readonly McpConfigNotice[],
+  stagingWarnings: readonly StagingWarning[],
 ): UpdatePhase3FailedOutcome {
   const { plugin, marketplace } = args;
   // D-18-10: running `reinstall` again repairs a partial replace for either
@@ -1356,6 +1394,8 @@ function composePhase3FailureOutcome(
     declaresWorkflows: false,
     // NREG-01: absent when the MCP commit threw or reported nothing.
     ...(mcpConfigNotices.length > 0 && { mcpConfigNotices }),
+    // D-PL1-14: every prepared handle's warnings; NREG-01, absent when none.
+    ...(stagingWarnings.length > 0 && { stagingWarnings }),
   };
 }
 
@@ -1364,10 +1404,11 @@ function composePhase3FailureOutcome(
  * plugin of the scope already owns, checked against `preflight.state` without
  * the plugin's own record, so an update never conflicts with itself (a plugin
  * moving its skill names from {a,b} to {a,c} would otherwise conflict on
- * "a"). Writes nothing, so UPD-DEP-D1's plan runs it before any dependency
- * moves, and the swap runs it again over the scope the moves left.
+ * "a"). Writes nothing. The swap runs it over the scope the moves left;
+ * `assertUpdateNamesFree` runs it, with the agent-target check, before any
+ * dependency moves.
  */
-export async function assertUpdateNamesFree(
+async function assertNamesFree(
   args: Pick<ThreePhaseArgsBase, "marketplace" | "plugin" | "scope">,
   preflight: Pick<PreparedPluginUpdate, "installable" | "state">,
 ): Promise<Awaited<ReturnType<typeof discoverGeneratedNames>>> {
@@ -1378,6 +1419,21 @@ export async function assertUpdateNamesFree(
     removePluginRecord(preflight.state, args.marketplace, args.plugin),
   );
   return generatedNames;
+}
+
+/**
+ * PI-6, then D-PL4-04: the name check, then a refusal of a new agent target
+ * that holds a file the agents commit would not replace. It writes nothing.
+ * The move judge and the update's WR-C check run it, so an occupied target
+ * refuses before anything lands. It returns nothing, because only the swap
+ * reads the names, through `assertNamesFree`.
+ */
+export async function assertUpdateNamesFree(
+  args: Pick<ThreePhaseArgsBase, "marketplace" | "plugin" | "scope" | "locations">,
+  preflight: Pick<PreparedPluginUpdate, "installable" | "state">,
+): Promise<void> {
+  const names = await assertNamesFree(args, preflight);
+  await assertAgentTargetsFree(args.locations, args, names.agents);
 }
 
 // The three-phase update body sequences preflight, the D-UPD disabled-record
@@ -1404,7 +1460,10 @@ export async function swapPluginUpdate(
   // PI-6 cross-plugin guard: re-check generated names against the SAME-SCOPE
   // state EXCLUDING this plugin's currently-recorded resources.
 
-  const generatedNames = await assertUpdateNamesFree(args, preflight);
+  // The swap checks names only, so a forced reinstall (RINST-01, D-18-15) can
+  // overwrite a user-edited agent of its own. `assertAgentCommitTargets` below
+  // still refuses a file that appeared since the plan.
+  const generatedNames = await assertNamesFree(args, preflight);
   // D-08-12: this verb owns the swap lifecycle, so it constructs the removal
   // operations once and every prepare, commit, and abort step below performs its
   // cleanup through that one collaborator.
@@ -1416,6 +1475,8 @@ export async function swapPluginUpdate(
     generatedNames.agentsDirs,
     generatedNames,
   );
+  // D-PL1-24: reported before the intent-mark window, so its throws carry them.
+  reportStagingWarnings(args, handles);
 
   // ─── Phase 2a: pre-commit intent-mark (TR-04) ─────────────────────────────
   //
@@ -1496,6 +1557,7 @@ export async function swapPluginUpdate(
       phase3aFailures,
       preflightMove(preflight),
       mcpConfigNotices,
+      collectUpdateWarnings(handles),
     );
   }
 
@@ -1545,7 +1607,7 @@ export async function swapPluginUpdate(
     preflight.record.resources.workflows,
     handles.workflows.result.stagedNames,
   );
-  const updateWarnings = collectUpdateWarnings(handles, args.cascade);
+  const stagingWarnings = collectUpdateWarnings(handles);
   await dropPluginCompletionCache(args);
 
   return {
@@ -1562,6 +1624,13 @@ export async function swapPluginUpdate(
     // justified consumer of `PreparedPluginUpdate.constraint`.
     constraint: preflight.constraint,
     declaresWorkflows: handles.workflows.result.stagedNames.length > 0,
+    resourcesChanged: stagedResourcesChanged(preflight.record.resources, [
+      handles.skills.result.stagedNames,
+      handles.commands.result.stagedNames,
+      stagedAgentNames,
+      stagedMcpServerNames,
+      handles.workflows.result.stagedNames,
+    ]),
     // Spread only when non-empty: a clean update's outcome keeps the key ABSENT
     // rather than present-and-empty, so its shape is unchanged (NREG-01).
     ...(degradedKinds.length > 0 && { degradedKinds }),
@@ -1593,9 +1662,9 @@ export async function swapPluginUpdate(
         newlyDegraded: preflight.record.compatibility.unsupported.length === 0,
       },
     }),
-    // D-141-03 / D-141-05: same NREG-01 spread rule as `degradedKinds` -- a
-    // clean update's outcome keeps the key absent.
-    ...(updateWarnings.length > 0 && { notes: updateWarnings }),
+    // D-PL1-10: same NREG-01 spread rule as `degradedKinds` -- a clean
+    // update's outcome keeps the key absent.
+    ...(stagingWarnings.length > 0 && { stagingWarnings }),
     // AFILE-04: same NREG-01 spread rule; the caller that renders the row
     // routes these through `notifyMcpConfigNotices`.
     ...(mcpConfigNotices.length > 0 && { mcpConfigNotices }),
@@ -1633,6 +1702,32 @@ function collectDegradedKinds(handles: PrepHandles): readonly DegradeKind[] {
       ...(handles.commands.result.degraded.length > 0 ? ["command" as const] : []),
     ]),
   );
+}
+
+/**
+ * D-PL1-18: whether the update touched a resource a reload must pick up -- a
+ * skill, prompt, agent, MCP server or workflow, in the record's inventory
+ * before the swap or among the names it staged. Hooks are re-routed in
+ * process, so the record's hooks inventory is not read.
+ */
+function stagedResourcesChanged(
+  before: {
+    readonly skills: readonly string[];
+    readonly prompts: readonly string[];
+    readonly agents: readonly string[];
+    readonly mcpServers: readonly string[];
+    readonly workflows: readonly string[];
+  },
+  staged: readonly (readonly string[])[],
+): boolean {
+  return [
+    before.skills,
+    before.prompts,
+    before.agents,
+    before.mcpServers,
+    before.workflows,
+    ...staged,
+  ].some((names) => names.length > 0);
 }
 
 async function dropPluginCompletionCache(args: ThreePhaseArgs): Promise<void> {

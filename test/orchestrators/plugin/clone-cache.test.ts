@@ -189,6 +189,13 @@ function publicCloneAuth(): GitAuthBundle {
   };
 }
 
+/** The error isomorphic-git throws when the mirror holds no `ref`. */
+function gitNotFound(ref: string): Error {
+  const error = new Error(`Could not find ${ref}.`);
+  error.name = "NotFoundError";
+  return error;
+}
+
 async function freshLocations(t: TestContext): Promise<ScopedLocations> {
   const cwd = await mkdtemp(path.join(tmpdir(), "clone-cache-"));
   t.after(() => rm(cwd, { recursive: true, force: true }));
@@ -241,6 +248,7 @@ void test("D-77-04: a pinned source uses the default git surface without remote 
 void test("PURL-02/04: materializePluginClone clones into staging, checks out the pin, returns a plugin-clones path", async (t) => {
   const locations = await freshLocations(t);
   const { gitOps, state } = createGitOps();
+  const created: string[] = [];
 
   const cloneRoot = await materializePluginClone({
     resolveAuth: publicCloneAuth,
@@ -249,6 +257,7 @@ void test("PURL-02/04: materializePluginClone clones into staging, checks out th
     networkUrl: "https://example.com/repo",
     pin: PIN_40,
     gitOps,
+    onCloneCreated: (key) => created.push(key),
   });
 
   assert.ok(
@@ -259,6 +268,7 @@ void test("PURL-02/04: materializePluginClone clones into staging, checks out th
   assert.equal(state.cloneCalls[0]?.url, "https://example.com/repo");
   assert.equal(state.checkoutCalls.length, 1, "exactly one checkout");
   assert.equal(state.checkoutCalls[0]!.ref, PIN_40, "checkout pins the sha");
+  assert.deepStrictEqual(created, [pluginCloneKey("https://example.com/repo", PIN_40)]);
 });
 
 void test("PURL-04: a second materialize of the same url+sha triggers zero additional clones (dedup)", async (t) => {
@@ -1041,6 +1051,7 @@ function mirrorGitOps(): ReturnType<typeof createGitOps> {
 void test("MIRR-01: mirror ABSENT materializes into staging then renames to plugin-clones/<bare-key>/ and returns HEAD without a refresh", async (t) => {
   const locations = await freshLocations(t);
   const { gitOps, state } = mirrorGitOps();
+  const created: string[] = [];
 
   const { pluginRoot, resolvedSha } = await materializeOrRefreshPluginMirror({
     auth: publicCloneAuth(),
@@ -1048,6 +1059,7 @@ void test("MIRR-01: mirror ABSENT materializes into staging then renames to plug
     cloneUrl: "https://example.com/repo",
     networkUrl: "https://example.com/repo",
     gitOps,
+    onCloneCreated: (key) => created.push(key),
   });
 
   const bareKey = pluginMirrorKey("https://example.com/repo");
@@ -1066,6 +1078,7 @@ void test("MIRR-01: mirror ABSENT materializes into staging then renames to plug
     "no fixed-pin (40-hex) checkout on the mirror create path",
   );
   assert.equal(resolvedSha, MIRROR_HEAD, "resolvedSha comes from resolveRef(HEAD)");
+  assert.deepStrictEqual(created, [bareKey]);
 });
 
 void test("MURL-08 / PURL-04: materializeOrRefreshPluginMirror forwards the caller's wire url and keys the mirror off the identity url", async (t) => {
@@ -1248,6 +1261,7 @@ void test("D-18-04: refresh: false refreshes a declared ref the mirror never fet
     networkUrl: "https://example.com/repo",
     ref: "dev",
     gitOps,
+    resolveTagOid: () => Promise.reject(gitNotFound("refs/tags/dev")),
     refresh: false,
   });
 
@@ -1258,6 +1272,170 @@ void test("D-18-04: refresh: false refreshes a declared ref the mirror never fet
       mirror: { pluginRoot: mirrorRoot, resolvedSha: devSha },
       clones: [],
       fetches: [{ dir: mirrorRoot, remote: "origin", ref: "dev", auth }],
+    },
+  );
+});
+
+void test("GLK-08 / D-PL7-10: refresh: false answers a declared tag from the mirror's local tag, with no network", async (t) => {
+  // arrange
+  const tagSha = "fedcba9876543210fedcba9876543210fedcba98";
+  const locations = await freshLocations(t);
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
+  await mkdir(mirrorRoot, { recursive: true });
+  const { gitOps, state } = createGitOps({
+    head: MIRROR_HEAD,
+    localRefs: { "refs/heads/main": MIRROR_HEAD },
+  });
+  const tagReads: unknown[] = [];
+
+  // act
+  const mirror = await materializeOrRefreshPluginMirror({
+    auth: publicCloneAuth(),
+    locations,
+    cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
+    ref: "v2.0.0",
+    gitOps,
+    resolveTagOid: (opts) => {
+      tagReads.push(opts);
+      return Promise.resolve(tagSha);
+    },
+    refresh: false,
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    { mirror, tagReads, clones: state.cloneCalls, fetches: state.fetchCalls },
+    {
+      mirror: { pluginRoot: mirrorRoot, resolvedSha: tagSha },
+      tagReads: [{ dir: mirrorRoot, name: "v2.0.0", cache: {} }],
+      clones: [],
+      fetches: [],
+    },
+  );
+});
+
+for (const { title, resolveTagOid } of [
+  {
+    title: "a declared ref the mirror holds no tag for",
+    resolveTagOid: () => Promise.reject(gitNotFound("refs/tags/v2.0.0")),
+  },
+  {
+    title: "a declared tag that names no commit",
+    resolveTagOid: () => Promise.resolve(undefined),
+  },
+]) {
+  void test(`GLK-08 / D-PL7-10: refresh: false refreshes ${title}, as a cache miss`, async (t) => {
+    // arrange
+    const tagSha = "fedcba9876543210fedcba9876543210fedcba98";
+    const auth = publicCloneAuth();
+    const locations = await freshLocations(t);
+    const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
+    await mkdir(mirrorRoot, { recursive: true });
+    const { gitOps, state } = createGitOps({
+      head: MIRROR_HEAD,
+      localRefs: { "refs/heads/main": MIRROR_HEAD },
+      remoteRefs: { "v2.0.0": tagSha },
+    });
+
+    // act
+    const mirror = await materializeOrRefreshPluginMirror({
+      auth,
+      locations,
+      cloneUrl: "https://example.com/repo",
+      networkUrl: "https://example.com/repo",
+      ref: "v2.0.0",
+      gitOps,
+      resolveTagOid,
+      refresh: false,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      { mirror, clones: state.cloneCalls, fetches: state.fetchCalls },
+      {
+        mirror: { pluginRoot: mirrorRoot, resolvedSha: tagSha },
+        clones: [],
+        fetches: [{ dir: mirrorRoot, remote: "origin", ref: "v2.0.0", auth }],
+      },
+    );
+  });
+}
+
+void test("GLK-08 / D-PL7-10: refresh: false propagates a local tag read that fails for a reason other than a missing tag", async (t) => {
+  // arrange
+  const readFailure = Object.assign(new Error("EIO: i/o error, read"), { code: "EIO" });
+  const locations = await freshLocations(t);
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
+  await mkdir(mirrorRoot, { recursive: true });
+  const { gitOps, state } = createGitOps({
+    head: MIRROR_HEAD,
+    localRefs: { "refs/heads/main": MIRROR_HEAD },
+  });
+
+  // act & assert
+  await assert.rejects(
+    materializeOrRefreshPluginMirror({
+      auth: publicCloneAuth(),
+      locations,
+      cloneUrl: "https://example.com/repo",
+      networkUrl: "https://example.com/repo",
+      ref: "v2.0.0",
+      gitOps,
+      resolveTagOid: () => Promise.reject(readFailure),
+      refresh: false,
+    }),
+    (error: unknown) => error === readFailure,
+  );
+  assert.deepStrictEqual(
+    { clones: state.cloneCalls, fetches: state.fetchCalls },
+    { clones: [], fetches: [] },
+  );
+});
+
+void test("GLK-08 / D-PL7-10: refresh: false with no declared ref and no default-branch tracking ref refreshes without a tag read", async (t) => {
+  // arrange
+  const auth = publicCloneAuth();
+  const locations = await freshLocations(t);
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
+  await mkdir(mirrorRoot, { recursive: true });
+  const { gitOps: baseGitOps, state } = createGitOps({
+    head: MIRROR_HEAD,
+    localRefs: { "refs/heads/main": MIRROR_HEAD },
+    remoteRefs: { "refs/remotes/origin/main": MIRROR_HEAD },
+  });
+  // The mirror has no default-branch tracking ref until the refresh fetch writes one.
+  const gitOps: GitOps = {
+    ...baseGitOps,
+    resolveRef: (options) =>
+      state.fetchCalls.length === 0 && options.ref === "refs/remotes/origin/HEAD"
+        ? Promise.reject(gitNotFound("refs/remotes/origin/HEAD"))
+        : baseGitOps.resolveRef(options),
+  };
+  const tagReads: unknown[] = [];
+
+  // act
+  const mirror = await materializeOrRefreshPluginMirror({
+    auth,
+    locations,
+    cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
+    gitOps,
+    resolveTagOid: (opts) => {
+      tagReads.push(opts);
+      return Promise.resolve(undefined);
+    },
+    refresh: false,
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    { mirror, tagReads, clones: state.cloneCalls, fetches: state.fetchCalls },
+    {
+      mirror: { pluginRoot: mirrorRoot, resolvedSha: MIRROR_HEAD },
+      tagReads: [],
+      clones: [],
+      fetches: [{ dir: mirrorRoot, remote: "origin", auth }],
     },
   );
 });
@@ -1943,6 +2121,7 @@ void test("materializeMarketplaceTagClone: materializes the tag's tree without m
   const before = await gitStateSnapshot(marketplaceRoot);
   const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
   await git.tag({ fs, dir: marketplaceRoot, ref: "foo--v1.0.0", object: tagOid });
+  const created: string[] = [];
 
   // act
   const tagClone = await materializeMarketplaceTagClone({
@@ -1952,6 +2131,7 @@ void test("materializeMarketplaceTagClone: materializes the tag's tree without m
     marketplaceName: "marketplace",
     pathSource: pathSource("./plugins/foo"),
     tagOid,
+    onCloneCreated: (key) => created.push(key),
   });
 
   // assert
@@ -1966,6 +2146,7 @@ void test("materializeMarketplaceTagClone: materializes the tag's tree without m
 
   const after = await gitStateSnapshot(marketplaceRoot);
   assert.deepEqual(after, before);
+  assert.deepStrictEqual(created, [pluginCloneKey(GITHUB_REPO_URL, tagOid)]);
 });
 
 void test("materializeMarketplaceTagClone: a warm-cache key skips re-copy and re-checkout entirely", async (t) => {
@@ -2231,6 +2412,7 @@ void test("GIT-01: a per-commit copy checks the commit out of the mirror's .git 
   const cloneUrl = "https://example.com/repo";
   const mirrorRoot = await seedMirror(locations, cloneUrl);
   const { gitOps, state } = createGitOps({ remoteRefs: { [PIN_40]: PIN_40 } });
+  const created: string[] = [];
 
   // act
   const result = await materializePluginCommitCopy({
@@ -2240,6 +2422,7 @@ void test("GIT-01: a per-commit copy checks the commit out of the mirror's .git 
     sha: PIN_40,
     gitOps,
     resolveAuth: () => assert.fail("a mirror copy never builds clone auth"),
+    onCloneCreated: (key) => created.push(key),
   });
 
   // assert
@@ -2257,6 +2440,7 @@ void test("GIT-01: a per-commit copy checks the commit out of the mirror's .git 
   );
   assert.strictEqual(state.cloneCalls.length, 0);
   assert.deepStrictEqual(await readdir(path.join(locations.extensionRoot, "sources-staging")), []);
+  assert.deepStrictEqual(created, [pluginCloneKey(cloneUrl, PIN_40)]);
 });
 
 void test("GIT-01: a real per-commit copy holds the commit's tree with relative symlinks and no untracked file", async (t) => {
@@ -2466,21 +2650,32 @@ void test("GIT-04: an unpinned source copies the mirror's commit and anchors its
     ref: "main",
   };
   const auth = publicCloneAuth();
+  const created: string[] = [];
+  const steps = {
+    materializeOrRefreshPluginMirror: (
+      args: Parameters<typeof materializeOrRefreshPluginMirror>[0],
+    ) => {
+      calls.push({ step: "mirror", ref: args.ref, refresh: args.refresh, auth: args.auth });
+      args.onCloneCreated?.("mirror");
+      return Promise.resolve({ pluginRoot: "unused", resolvedSha: PIN_40 });
+    },
+    materializePluginCommitCopy: (args: Parameters<typeof materializePluginCommitCopy>[0]) => {
+      calls.push({ step: "copy", sha: args.sha, auth: args.resolveAuth() });
+      args.onCloneCreated?.("copy");
+      return Promise.resolve(copyRoot);
+    },
+  };
+  await materializeUnpinnedSource(steps, { locations, source, auth, refresh: false });
+  calls.splice(0);
 
   // act
-  const result = await materializeUnpinnedSource(
-    {
-      materializeOrRefreshPluginMirror: (args) => {
-        calls.push({ step: "mirror", ref: args.ref, refresh: args.refresh, auth: args.auth });
-        return Promise.resolve({ pluginRoot: "unused", resolvedSha: PIN_40 });
-      },
-      materializePluginCommitCopy: (args) => {
-        calls.push({ step: "copy", sha: args.sha, auth: args.resolveAuth() });
-        return Promise.resolve(copyRoot);
-      },
-    },
-    { locations, source, auth, refresh: false },
-  );
+  const result = await materializeUnpinnedSource(steps, {
+    locations,
+    source,
+    auth,
+    refresh: false,
+    onCloneCreated: (key) => created.push(key),
+  });
 
   // assert
   assert.deepStrictEqual(result, {
@@ -2492,4 +2687,5 @@ void test("GIT-04: an unpinned source copies the mirror's commit and anchors its
     { step: "mirror", ref: "main", refresh: false, auth },
     { step: "copy", sha: PIN_40, auth },
   ]);
+  assert.deepStrictEqual(created, ["mirror", "copy"]);
 });

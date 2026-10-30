@@ -16,6 +16,11 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
+import {
+  copyManifestBoundary,
+  locateManifestCandidate,
+  sourceManifestBoundary,
+} from "../../domain/manifest-containment.ts";
 import { MANIFEST_CANDIDATES } from "../../domain/manifest-path.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import {
@@ -46,19 +51,23 @@ import {
   PluginInBaseLayerOnlyError,
   PluginInLocalLayerOnlyError,
 } from "../../shared/errors.ts";
-import { notify, notifyDiagnostic } from "../../shared/notification-dispatch.ts";
+import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
-import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
-import { crossScopeFlag, marketplaceInOtherScope } from "../marketplace/shared.ts";
+import {
+  crossScopeFlag,
+  marketplaceInOtherScope,
+  type UnstageOutcome,
+} from "../marketplace/shared.ts";
 
 import { readRecordDeclarations } from "./dependency-index.ts";
 import { garbageCollectWorkflowsStaging } from "./workflows-staging-gc.ts";
 
 import type { MarketplaceStateRecord } from "./dependency-index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
-import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
+import type { ManifestBoundary } from "../../domain/manifest-containment.ts";
+import type { MaterializablePlugin, ResolveContext } from "../../domain/resolver-types.ts";
 import type {
   ConfigLoadResult,
   PluginConfigEntry,
@@ -1212,30 +1221,64 @@ async function manifestCandidateExists(manifestPath: string): Promise<boolean> {
  * EXISTS ends the walk -- if it cannot be read, cannot be parsed, or carries
  * no usable `version`, the answer falls to the marketplace entry, never to a sibling
  * candidate. Never throws (D-23-02 / D-23-03).
+ *
+ * D-PL2-24 / D-PL2-17: each candidate is located inside `boundary`. A link
+ * whose target leaves it, or that cannot be resolved, is a present but
+ * unusable manifest and answers `undefined`; a dangling link is no manifest.
+ * On the install, update and reinstall paths the resolver has refused such a
+ * plugin before this read.
  */
-export async function readDeclaredPluginVersion(pluginRoot: string): Promise<string | undefined> {
+export async function readDeclaredPluginVersion(
+  boundary: ManifestBoundary,
+): Promise<string | undefined> {
   for (const candidate of MANIFEST_CANDIDATES) {
-    const manifestPath = path.join(pluginRoot, candidate);
-
     // eslint-disable-next-line no-await-in-loop -- D-01-07: the first existing manifest candidate wins
-    if (!(await manifestCandidateExists(manifestPath))) {
-      continue;
+    const read = await readVersionCandidate(boundary, path.join(boundary.pluginRoot, candidate));
+    if (read !== undefined) {
+      return read.version;
     }
-
-    let parsed: unknown;
-    try {
-      // eslint-disable-next-line no-await-in-loop -- D-01-07: only the first existing candidate is read
-      parsed = JSON.parse(await readFile(manifestPath, "utf8"));
-    } catch (err) {
-      // Present and unusable: the entry, the commit, or the hash covers it.
-      hookDebugLog(`resolvePluginVersion: plugin.json read/parse failed: ${errorMessage(err)}`);
-      return undefined;
-    }
-
-    return usableDeclaredVersion(parsed);
   }
 
   return undefined;
+}
+
+/** One candidate's declared version, or `undefined` when the candidate is absent. */
+async function readVersionCandidate(
+  boundary: ManifestBoundary,
+  candidatePath: string,
+): Promise<{ readonly version: string | undefined } | undefined> {
+  const location = await locateManifestCandidate(boundary, candidatePath);
+  switch (location.kind) {
+    case "absent":
+      return undefined;
+    case "escapes":
+    case "unresolvable":
+      hookDebugLog(
+        `resolvePluginVersion: plugin manifest not confirmed inside the ${boundary.label}`,
+      );
+      return { version: undefined };
+    case "open":
+      return readVersionAt(location.path);
+  }
+}
+
+async function readVersionAt(
+  manifestPath: string,
+): Promise<{ readonly version: string | undefined } | undefined> {
+  if (!(await manifestCandidateExists(manifestPath))) {
+    return undefined;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readFile(manifestPath, "utf8"));
+  } catch (err) {
+    // Present and unusable: the entry, the commit, or the hash covers it.
+    hookDebugLog(`resolvePluginVersion: plugin.json read/parse failed: ${errorMessage(err)}`);
+    return { version: undefined };
+  }
+
+  return { version: usableDeclaredVersion(parsed) };
 }
 
 /** The `version` a parsed manifest declares when it is a non-empty string. */
@@ -1256,13 +1299,13 @@ function usableDeclaredVersion(parsed: unknown): string | undefined {
  * "If also set in the marketplace entry, `plugin.json` wins."), then the
  * marketplace `entry.version`. Each is accepted iff it is a non-empty string
  * (D-23-03 -- no SemVer enforcement). A read or parse failure falls through to
- * the entry and never throws.
+ * the entry and never throws. `boundary` bounds the manifest read (D-PL2-24).
  */
 export async function resolveDeclaredPluginVersion(
   entry: PluginEntry,
-  pluginRoot: string,
+  boundary: ManifestBoundary,
 ): Promise<string | undefined> {
-  const declaredVersion = await readDeclaredPluginVersion(pluginRoot);
+  const declaredVersion = await readDeclaredPluginVersion(boundary);
   if (declaredVersion !== undefined) {
     return declaredVersion;
   }
@@ -1283,18 +1326,27 @@ export async function resolveDeclaredPluginVersion(
  *
  * The plugin.json read is re-done here independently (D-23-02): the NFR-7
  * discriminated `ResolvedPluginInstallable` union is NOT widened with a
- * `manifest` field.
+ * `manifest` field. D-PL2-17: it is bounded as the resolver bounded it, by
+ * `sourceManifestBoundary` with no pin.
  */
 export async function resolvePluginVersion(
   entry: PluginEntry,
   installable: MaterializablePlugin,
-  marketplaceName: string,
+  marketplace: Pick<ResolveContext, "marketplaceName" | "marketplaceRoot">,
   resolvedSha?: string,
 ): Promise<string> {
   const source = parsePluginSource(entry.source);
-  const declared = await resolveDeclaredPluginVersion(entry, installable.pluginRoot);
+  const declared = await resolveDeclaredPluginVersion(
+    entry,
+    sourceManifestBoundary(
+      entry.source,
+      installable.pluginRoot,
+      marketplace.marketplaceRoot,
+      undefined,
+    ),
+  );
   if (declared !== undefined) {
-    return declaredVersionWithPin(declared, source, marketplaceName);
+    return declaredVersionWithPin(declared, source, marketplace.marketplaceName);
   }
 
   if (resolvedSha !== undefined) {
@@ -1309,6 +1361,7 @@ export async function resolvePluginVersion(
  * tag a dependency's version range selected. A declared version (with GV-01's
  * directory pin) gets the tag commit's first 12 characters appended; with none
  * declared, the version is the tag commit's, as `tagShaVersion` spells it.
+ * A tag's tree is a copy, bounded by its plugin directory (D-PL2-17).
  */
 export async function resolveTagPinnedPluginVersion(
   entry: PluginEntry,
@@ -1317,7 +1370,10 @@ export async function resolveTagPinnedPluginVersion(
   tagCommit: string,
 ): Promise<string> {
   const source = parsePluginSource(entry.source);
-  const declared = await resolveDeclaredPluginVersion(entry, installable.pluginRoot);
+  const declared = await resolveDeclaredPluginVersion(
+    entry,
+    copyManifestBoundary(installable.pluginRoot),
+  );
   return declared === undefined
     ? tagShaVersion(tagCommit, source)
     : withTagCommit(declaredVersionWithPin(declared, source, marketplaceName), tagCommit);
@@ -1559,60 +1615,45 @@ export function removePluginRecord(
   return cloned;
 }
 
+type RecordResources = PluginInstallRecord["resources"];
+
+/**
+ * D-PL5-15: the record field each axis of a cascade's dropped names lives in.
+ * The `satisfies` clause is the exhaustiveness gate: an axis added to
+ * `UnstageOutcome["dropped"]` fails the typecheck here until it is mapped.
+ * TR-03 renames only `commands`, to `prompts`. D-63-04 and WLIF-03: hooks and
+ * workflows are subtracted like the rest, so a partial cascade leaves no row
+ * naming a hook or a workflow envelope it already deleted.
+ */
+const DROPPED_AXIS_FIELDS = {
+  skills: "skills",
+  commands: "prompts",
+  agents: "agents",
+  hooks: "hooks",
+  mcpServers: "mcpServers",
+  workflows: "workflows",
+} as const satisfies Record<keyof UnstageOutcome["dropped"], keyof RecordResources>;
+
 /**
  * I3 / TR-03: subtract a non-AG-5 partial-cascade's dropped artifacts from
  * the state record in place so the persisted row reflects only artifacts
- * still on disk (NFR-3 fail-clean, no ghost record). Shared by the
- * `uninstall` partial-cascade arm and the `disable` partial-cascade arm.
- *
- * The asymmetric `dropped.commands -> resources.prompts` mapping is per
- * TR-03 (cascade primitive naming): the other three axes are name-identical.
+ * still on disk (NFR-3 fail-clean, no ghost record). Shared by every
+ * partial-cascade arm: uninstall, disable, the install cascades, and
+ * `marketplace remove`.
  */
 export function applyPartialCascadeFold(
-  installed: {
-    resources: {
-      skills: string[];
-      prompts: string[];
-      agents: string[];
-      mcpServers: string[];
-      hooks: string[];
-      workflows: string[];
-    };
-  },
-  dropped: {
-    readonly skills: readonly string[];
-    readonly commands: readonly string[];
-    readonly agents: readonly string[];
-    readonly hooks: readonly string[];
-    readonly mcpServers: readonly string[];
-    readonly workflows: readonly string[];
-  },
+  installed: { resources: PluginInstallRecord["resources"] },
+  dropped: UnstageOutcome["dropped"],
 ): void {
-  installed.resources.skills = installed.resources.skills.filter(
-    (n) => !dropped.skills.includes(n),
-  );
-  installed.resources.prompts = installed.resources.prompts.filter(
-    (n) => !dropped.commands.includes(n),
-  );
-  installed.resources.agents = installed.resources.agents.filter(
-    (n) => !dropped.agents.includes(n),
-  );
-  installed.resources.mcpServers = installed.resources.mcpServers.filter(
-    (n) => !dropped.mcpServers.includes(n),
-  );
-  // D-63-04: the cascade primitive (cascadeUnstagePlugin) surfaces
-  // dropped.hooks alongside the other four axes; the partial-cascade fold
-  // must subtract them so a disable / uninstall partial-cascade failure
-  // does not leave a stale hooks entry in the in-memory record.
-  installed.resources.hooks = installed.resources.hooks.filter((n) => !dropped.hooks.includes(n));
-  // WLIF-03: name-identical, unlike the commands-to-prompts mapping. The
-  // parameter shapes are structural, so nothing here is compile-forced -- a
-  // caller passing a wider bundle satisfies a narrower parameter and this
-  // subtraction can go missing in silence. The behavioral case in the owner
-  // test is what holds it in place.
-  installed.resources.workflows = installed.resources.workflows.filter(
-    (n) => !dropped.workflows.includes(n),
-  );
+  // Object.keys widens to string[]; the table's keys are exactly the dropped
+  // axes, which the `satisfies` clause above holds.
+  const axes = Object.keys(DROPPED_AXIS_FIELDS) as Array<keyof typeof DROPPED_AXIS_FIELDS>;
+  for (const axis of axes) {
+    const field = DROPPED_AXIS_FIELDS[axis];
+    installed.resources[field] = installed.resources[field].filter(
+      (name) => !dropped[axis].includes(name),
+    );
+  }
 }
 
 /**
@@ -1743,88 +1784,6 @@ export async function emitMarketplaceNotAddedSignal(args: {
       scope: err.requestedScope,
     })),
   });
-}
-
-/**
- * D-141-03 / D-141-05: split one staging pass's four bridge warning arrays
- * into the DISCOVERY half and the HYGIENE half.
- *
- * Every warning the skills and commands bridges emit describes the SOURCE the
- * plugin author shipped against the artifact set that actually installed --
- * a first-wins skip, an unreadable subdirectory or file, a path that produces
- * no valid name, a skipped subdirectory, or (commands only) one file reached
- * by two declared entries and therefore installed under two names. The last
- * of those reports a surplus rather than a shortfall, so the shared property
- * is not "a skip": it is that the user's own resource count gives no baseline
- * to notice ANY of them. That is why the whole half reaches standalone mode.
- *
- * The agents bridge aggregates index corruptions, per-agent conversion notes
- * and D-07 skips onto ONE array that cannot be split at the call site, so the
- * whole array joins the hygiene channel; mcp rides beside it.
- *
- * Kept here, taking plain string arrays rather than bridge result types, so
- * update and reinstall classify through one function instead of two copies
- * that drift (and so `sonarjs/no-identical-functions` and `fallow dupes` have
- * nothing to find).
- *
- * `install-outcome.ts` does NOT call this. Its ledger phases push each bridge's
- * warnings onto the right array inline, one push per phase, because each
- * phase already holds exactly one bridge's result. It shares the RENDERER
- * below, not this classifier -- so two of the three verbs share the
- * classification and all three share the rendering. A change to the split
- * therefore has to be applied at install's four phase sites by hand.
- */
-export function splitStagingWarnings(warnings: {
-  readonly skills: readonly string[];
-  readonly commands: readonly string[];
-  readonly agents: readonly string[];
-  readonly mcp: readonly string[];
-}): { readonly discovery: readonly string[]; readonly bridge: readonly string[] } {
-  return {
-    discovery: Object.freeze([...warnings.skills, ...warnings.commands]),
-    bridge: Object.freeze([...warnings.agents, ...warnings.mcp]),
-  };
-}
-
-/**
- * D-141-03 / D-141-05: render the discovery half to a standalone user, after
- * the verb's own row.
- *
- * The seam is `notifyDiagnostic`, the same sanctioned second-notify channel
- * the reconcile pass uses; the verb's row itself stays exactly one
- * `MarketplaceNotificationMessage` (IL-2).
- *
- * NFR-9: a discovery warning embeds the absolute component directory it
- * walked, so it goes through `redactAbsolutePaths` before it reaches the
- * user, exactly as the reconcile composer does.
- *
- * WGATE-01: the header counts the lines and states nothing about what became
- * of the components they name. It cannot: two of the families routed into this
- * array report a component that WAS materialized -- a workflow script the host
- * engine will refuse to load, and one that installs under a name it does not
- * declare -- so a header claiming a disposal would contradict the lines
- * directly beneath it. "Note" is the word the read-only `info` surface already
- * prints for the same facts, so the two surfaces name them the same way.
- */
-export function surfaceDiscoveryWarnings(
-  ctx: NotificationContext,
-  run: NotificationRun,
-  args: {
-    readonly plugin: string;
-    readonly verb: "installed" | "updated" | "reinstalled";
-    readonly warnings: readonly string[];
-  },
-): void {
-  if (args.warnings.length === 0) {
-    return;
-  }
-
-  const lines = args.warnings.map((w) => redactAbsolutePaths(w));
-  const header =
-    lines.length === 1
-      ? `Plugin "${args.plugin}" ${args.verb}; 1 declared component has a note.`
-      : `Plugin "${args.plugin}" ${args.verb}; ${lines.length.toString()} declared components have notes.`;
-  notifyDiagnostic(ctx, run, header, lines);
 }
 
 /**

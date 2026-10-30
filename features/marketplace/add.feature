@@ -236,6 +236,62 @@ Feature: Marketplace add
       | source kind | source     |
       | github      | acme/tools |
 
+  Scenario Outline: Adding again a marketplace whose checkout is gone restores it and keeps its installed plugins
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" offers these plugins:
+      | name      | version |
+      | formatter | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install formatter@tools --scope project"
+    Given the project scope has lost the checkout of the marketplace "tools"
+    When the user runs "/claude:plugin marketplace add <source> --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the installation record of the project scope holds these plugins:
+      | id              | version | enabled |
+      | formatter@tools | 1.0.0   | true    |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+
+    @url
+    Examples:
+      | source kind | source                            |
+      | url         | https://{git host}/acme/tools.git |
+
+    @github
+    Examples:
+      | source kind | source     |
+      | github      | acme/tools |
+
+  Scenario Outline: Adding again a local marketplace whose manifest is gone fails as source missing
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" is added to the project scope
+    Given the published source of the marketplace "tools" is removed
+    When the user runs "/claude:plugin marketplace add <source> --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name     | scope   | status | reasons        |
+      | <source> | project | failed | source missing |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
+
+    Examples:
+      | source kind | source                                                    |
+      | dir         | {home}/marketplaces/tools                                 |
+      | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json |
+
   Scenario Outline: Adding a marketplace whose name the scope already holds fails as a duplicate name
     Given the marketplace "tools" is published as a <source kind> source
     Given the marketplace "tools" is added to the project scope
@@ -261,6 +317,68 @@ Feature: Marketplace add
     Examples:
       | source kind | source                            | second source                          |
       | url         | https://{git host}/acme/tools.git | https://{git host}/acme/tools-copy.git |
+
+  Scenario: Adding again a hosted marketplace from the source it was added from changes nothing
+    Given the marketplace "tools" is published as a hosted source
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools/marketplace.json --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status  | reasons       |
+      | tools | project | skipped | already added |
+    Then the git host receives no request
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                                         |
+      | tools | https://{git host}/acme/tools/marketplace.json |
+
+  Scenario: Adding again a hosted marketplace whose stored catalog is gone restores it and keeps its installed plugins
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "tools" is published as a hosted source
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | url         | ghp        | false  |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@tools --scope project"
+    Given the project scope has lost the checkout of the marketplace "tools"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools/marketplace.json --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | ghp@tools | 1.0.0   | true    |
+    Then the git host receives these requests:
+      | method | path                         | status |
+      | GET    | /acme/tools/marketplace.json | 200    |
+
+  Scenario: Adding a hosted marketplace whose name the scope already holds fails as a duplicate name
+    Given the marketplace "tools" is published as a hosted source
+    Given the marketplace "tools" is added to the project scope
+    Given a second marketplace declaring the name "tools" is ready to add from "tools-copy"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools-copy/marketplace.json --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name  | scope   | status | reasons        |
+      | tools | project | failed | duplicate name |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                                         |
+      | tools | https://{git host}/acme/tools/marketplace.json |
+    Then the git host receives these requests:
+      | method | path                              | status |
+      | GET    | /acme/tools-copy/marketplace.json | 200    |
 
   Scenario: Adding again with --local a marketplace that the local layer declares changes nothing
     Given the marketplace "tools" is published as a dir source
@@ -358,3 +476,84 @@ Feature: Marketplace add
       | manifest problem           | source kind | source                            | reason           |
       | is not valid json          | url         | https://{git host}/acme/tools.git | unparseable      |
       | breaks the manifest schema | url         | https://{git host}/acme/tools.git | invalid manifest |
+
+  Scenario: Adding a marketplace installs the missing dependency of an installed plugin that it offers
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | app  | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@other    |
+    Given the marketplace "tools" allows dependencies on the marketplace "other"
+    Given the marketplace "other" is published as a dir source
+    Given the marketplace "other" offers these plugins:
+      | name | version |
+      | lib  | 1.0.0   |
+    When the user runs "/claude:plugin marketplace add {home}/marketplaces/other --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id        | name      | status    | reasons              | scope   | version |
+      | other            | project           | added              | lib@other | lib@other | installed | dependency installed | project | 1.0.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | app@tools | 1.0.0   | true    |
+      | lib@other | 1.0.0   | true    |
+
+  Scenario: Adding a marketplace reports a missing dependency it cannot install as failed, as apply reports it
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | app  | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@other    |
+    Given the marketplace "tools" allows dependencies on the marketplace "other"
+    Given the marketplace "other" is published as a dir source
+    Given the marketplace "other" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | lib  | 1.0.0   | core         |
+    When the user runs "/claude:plugin marketplace add {home}/marketplaces/other --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id        | name      | status | reasons           | scope   | cause chain                                                  | cause truncated | leaks | rollback partial |
+      | other            | project           | added              | lib@other | lib@other | failed | dependency failed | project | Dependency "core@other" is not declared by its marketplace. | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | app@tools | 1.0.0   | true    |
+
+  Scenario: Marketplace add reports post-commit hygiene warnings
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | app  | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@other    |
+    Given the marketplace "tools" allows dependencies on the marketplace "other"
+    Given the marketplace "other" is published as a dir source
+    Given the marketplace "other" offers these plugins:
+      | name | version |
+      | lib  | 1.0.0   |
+    Given the published plugin "lib" of the marketplace "other" has an agent "helper" that sets a color
+    When the user runs "/claude:plugin marketplace add {home}/marketplaces/other --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                               | lines                          |
+      | cascade    | info     | true         |                                                      |                                |
+      | diagnostic | warning  | false        | Plugin "lib" [project] installed; 1 staging warning. | [helper] dropped fields: color |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id        | name      | status    | reasons                                         | scope   | version |
+      | other            | project           | added              | lib@other | lib@other | installed | dependency installed, requires pi-subagents | project | 1.0.0   |

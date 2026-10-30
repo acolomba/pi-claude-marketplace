@@ -366,8 +366,13 @@ export class UnreadableSourceCloneError extends Error {
   readonly absPath: string;
   readonly mpName: string;
   readonly failure: "permission-denied" | "unreadable";
-  constructor(absPath: string, mpName: string, failure: "permission-denied" | "unreadable") {
-    super(`cannot read the source clone at ${absPath}: ${failure}`);
+  constructor(
+    absPath: string,
+    mpName: string,
+    failure: "permission-denied" | "unreadable",
+    options?: ErrorOptions,
+  ) {
+    super(`cannot read the source clone at ${absPath}: ${failure}`, options);
     this.name = "UnreadableSourceCloneError";
     this.absPath = absPath;
     this.mpName = mpName;
@@ -611,6 +616,49 @@ export class TooManyRedirectsError extends Error {
 }
 
 /**
+ * D-PL5-07 / D-PL5-10: the host answered a hosted catalog download with a
+ * status that is not 2xx. `code` and `data.statusCode` have the shape of an
+ * isomorphic-git `HttpError`, so the git host ladder classifies a hosted
+ * status as it classifies a clone's: 401/403, 404/410, or any other status.
+ */
+export class HostedManifestHttpError extends Error implements HttpStatusError {
+  readonly code = "HttpError";
+  readonly data: { readonly statusCode: number };
+  constructor(url: string, statusCode: number) {
+    super(
+      `HTTP ${statusCode} error while downloading marketplace from ${url}. The marketplace file may not exist at this URL.`,
+    );
+    this.name = "HostedManifestHttpError";
+    this.data = { statusCode };
+  }
+}
+
+/**
+ * The shape of isomorphic-git's `HttpError`, which `shared/git-failure-classifiers.ts`
+ * reads without importing the library (D-13). `HostedManifestHttpError`
+ * implements it, so a hosted HTTP status takes the same ladder.
+ */
+export interface HttpStatusError extends Error {
+  readonly code: "HttpError";
+  readonly data?: { readonly statusCode?: unknown };
+}
+
+/**
+ * D-PL5-07 / D-PL5-10: a hosted catalog download that got no usable answer.
+ * `network` is a connection that failed or timed out. `unreadable` is an
+ * answer the download refuses: a body over the size cap, a redirect it does
+ * not follow, or a URL that carries a user name or password.
+ */
+export class HostedManifestFetchError extends Error {
+  readonly failure: "network" | "unreadable";
+  constructor(failure: "network" | "unreadable", message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "HostedManifestFetchError";
+    this.failure = failure;
+  }
+}
+
+/**
  * GHB-01: the cause `platform/git.ts` attaches to a failed network call whose
  * URL the GitHub base override rewrote. `url` is the URL actually fetched.
  */
@@ -676,7 +724,7 @@ export class InvalidGitHubBaseUrlError extends Error {
  * class lets consumers narrow on `instanceof` instead of substring-matching
  * the message text or sniffing for `SyntaxError`:
  *   - `orchestrators/marketplace/add.ts::classifyAddError` and
- *     `orchestrators/marketplace/update.ts::reasonsFromCascadeError` map it
+ *     `orchestrators/marketplace/update.ts::refreshFailureReasons` map it
  *     through `narrowProbeError`: `unparseable` for malformed JSON,
  *     `invalid manifest` for a schema-invalid manifest (ATTR-07, ATTR-10,
  *     MPA-02), so a path-source manifest failure never falls back to the
@@ -692,6 +740,19 @@ export class InvalidMarketplaceManifestError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "InvalidMarketplaceManifestError";
+  }
+}
+
+/**
+ * MKT-01 / D-PL5-02 / D-PL5-27: a manifest declared a name Claude Code reserves
+ * for the anthropics GitHub organization, from another source. The message is
+ * Claude Code's refusal sentence. As an `InvalidMarketplaceManifestError` it
+ * reads `invalid manifest` wherever an add or a refresh failure is classified.
+ */
+export class ReservedMarketplaceNameError extends InvalidMarketplaceManifestError {
+  constructor(refusal: string) {
+    super(refusal);
+    this.name = "ReservedMarketplaceNameError";
   }
 }
 

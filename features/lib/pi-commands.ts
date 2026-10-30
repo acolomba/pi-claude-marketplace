@@ -6,10 +6,12 @@
  * text. A command, or a new session, returns every payload it emits, in
  * emission order, each validated against the published payload schema
  * (DRV-01). State persists between commands through the sandbox directories,
- * as it does between two Pi sessions of one user.
+ * as it does between two Pi sessions of one user. A plain message returns the
+ * payloads that follow it in the session, such as a background update's.
  */
 
 import assert from "node:assert/strict";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { Type } from "typebox";
 import { Compile } from "typebox/compile";
@@ -53,21 +55,36 @@ const COMMANDS_VALIDATOR = Compile(
   }),
 );
 
+// The part of one session entry that the session payloads come from.
+const SESSION_ENTRY = Type.Object({
+  type: Type.String(),
+  customType: Type.Optional(Type.String()),
+  data: Type.Optional(Type.Unknown()),
+});
+
+type SessionEntry = Type.Static<typeof SESSION_ENTRY>;
+
 // The part of Pi's `get_entries` response that the session payloads come from.
 const ENTRIES_VALIDATOR = Compile(
   Type.Object({
     success: Type.Literal(true),
-    data: Type.Object({
-      entries: Type.Array(
-        Type.Object({
-          type: Type.String(),
-          customType: Type.Optional(Type.String()),
-          data: Type.Optional(Type.Unknown()),
-        }),
-      ),
-    }),
+    data: Type.Object({ entries: Type.Array(SESSION_ENTRY) }),
   }),
 );
+
+// The sandbox Pi waits no delay before the background update, so a pass that
+// armed would finish its marketplace refresh and plugin updates and append its
+// notice inside this window. It stays below the 30-second step timeout, so the
+// step ends with the payloads it read instead of a timeout.
+const BACKGROUND_RESULT_WINDOW_MS = 20_000;
+
+const BACKGROUND_RESULT_POLL_MS = 100;
+
+// The first payload after the message does not mean that the background
+// update has finished, so the driver reads on until the payload count has
+// stayed the same for this long. A later payload, such as a second notice,
+// then reaches the step instead of being dropped (DRV-01).
+const BACKGROUND_RESULT_QUIET_MS = 1_000;
 
 // What a request reports beyond its own result: neither an extension error
 // nor a dialog is ever expected.
@@ -92,6 +109,16 @@ function claudePluginPayloads(
       );
       return payload;
     });
+}
+
+// The custom entries of the current session of `pi`, in session order: the
+// entries the extension appends its payloads as.
+async function readCustomEntries(pi: PiProcess): Promise<readonly SessionEntry[]> {
+  const read = await pi.request({ type: "get_entries" });
+  assertQuiet(read);
+  const entries = read.response;
+  assert.ok(ENTRIES_VALIDATOR.Check(entries), JSON.stringify(ENTRIES_VALIDATOR.Errors(entries)));
+  return entries.data.entries.filter((entry) => entry.type === "custom");
 }
 
 /**
@@ -161,10 +188,55 @@ export async function readSession(pi: PiProcess): Promise<SessionReport> {
   const skills = response.data.commands
     .filter((command) => command.source === "skill")
     .map(({ name, description }) => ({ command: `/${name}`, description }));
-  const read = await pi.request({ type: "get_entries" });
-  assertQuiet(read);
-  const entries = read.response;
-  assert.ok(ENTRIES_VALIDATOR.Check(entries), JSON.stringify(ENTRIES_VALIDATOR.Errors(entries)));
-  const custom = entries.data.entries.filter((entry) => entry.type === "custom");
-  return { skills, payloads: claudePluginPayloads(custom) };
+  return { skills, payloads: claudePluginPayloads(await readCustomEntries(pi)) };
+}
+
+/**
+ * Sends `message` as a plain prompt in `pi` and returns every payload that
+ * follows it in the session, in session order, each valid against the payload
+ * schema (DRV-01). The sandbox Pi has no model, so it refuses the prompt, but
+ * only after its input handlers ran, and in a tui session one of them arms the
+ * background update. A background update appends its payloads after Pi has
+ * answered, so this reads the session's entries until at least one payload
+ * follows the message and no new one has arrived for
+ * `BACKGROUND_RESULT_QUIET_MS`. When `BACKGROUND_RESULT_WINDOW_MS` ends first,
+ * it returns the payloads read so far, which can be none: Pi runs over RPC
+ * here, and an RPC session never arms the background update (D-PL8-02).
+ */
+export async function sendMessage(
+  pi: PiProcess,
+  message: string,
+): Promise<readonly NotificationPayload[]> {
+  const before = (await readCustomEntries(pi)).length;
+  const exchange = await pi.request({ type: "prompt", message });
+  assertQuiet(exchange);
+  const { command, success } = exchange.response;
+  assert.deepStrictEqual({ command, success }, { command: "prompt", success: false }, message);
+  // D-PL8-02: Pi refuses the message right after its input handlers return,
+  // and the background update still has file and git work to do before it
+  // can append anything. A payload inside the exchange means the update ran
+  // before Pi answered, not in the background.
+  assert.deepStrictEqual(
+    claudePluginPayloads(exchange.entries),
+    [],
+    `the background update ran before Pi answered the message ${JSON.stringify(message)}`,
+  );
+  const deadline = Date.now() + BACKGROUND_RESULT_WINDOW_MS;
+  let payloads: readonly NotificationPayload[] = [];
+  let quietSince = Date.now();
+  for (;;) {
+    const read = claudePluginPayloads((await readCustomEntries(pi)).slice(before));
+    if (read.length !== payloads.length) {
+      payloads = read;
+      quietSince = Date.now();
+    } else if (payloads.length > 0 && Date.now() - quietSince >= BACKGROUND_RESULT_QUIET_MS) {
+      return payloads;
+    }
+
+    if (Date.now() >= deadline) {
+      return payloads;
+    }
+
+    await delay(BACKGROUND_RESULT_POLL_MS);
+  }
 }

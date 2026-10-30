@@ -21,6 +21,63 @@ Feature: Plugin install
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
 
+  Scenario: A plugin with only a yarn lockfile stays installed with the recorded note
+    Given the published plugin "demo" of the marketplace "fixtures" ships a package.json and the lockfile "yarn.lock"
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                              | lines                                                                                                                        |
+      | cascade    | info     | true         |                                                                     |                                                                                                                              |
+      | diagnostic | warning  | false        | Plugin "demo" [project] installed; 1 declared component has a note. | The packages it lists were not installed, because it uses a yarn or pnpm lockfile, which plugin installs do not support.      |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the plugin "demo" installed in the project scope has no npm packages
+
+  Scenario: A plugin with only a pnpm lockfile stays installed with the recorded note
+    Given the published plugin "demo" of the marketplace "fixtures" ships a package.json and the lockfile "pnpm-lock.yaml"
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                              | lines                                                                                                                        |
+      | cascade    | info     | true         |                                                                     |                                                                                                                              |
+      | diagnostic | warning  | false        | Plugin "demo" [project] installed; 1 declared component has a note. | The packages it lists were not installed, because it uses a yarn or pnpm lockfile, which plugin installs do not support.      |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the plugin "demo" installed in the project scope has no npm packages
+
+  Scenario: A dependency keeps its package note under its own install diagnostic
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the published plugin "lib" of the marketplace "tools" ships a package.json and the lockfile "yarn.lock"
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                             | lines                                                                                                                        |
+      | cascade    | info     | true         |                                                                    |                                                                                                                              |
+      | diagnostic | warning  | false        | Plugin "lib" [project] installed; 1 declared component has a note. | The packages it lists were not installed, because it uses a yarn or pnpm lockfile, which plugin installs do not support.      |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id        | name      | status    | reasons | scope   | version |
+      | tools            | project           | app@tools | app       | installed |         | project | 1.0.0   |
+      | tools            | project           | lib@tools | lib@tools | installed |         | project | 1.0.0   |
+    Then the plugin "lib" installed in the project scope has no npm packages
+
+  Scenario: An install failure redacts its root path
+    Given the published plugin "demo" of the marketplace "fixtures" has an unreadable skill file
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons | scope   | version | cause chain                        | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed |         | project | 1.0.0   | {unreadable skill file copy error} | false           |       |                  |
+    Then the command result contains no absolute sandbox path
+    Then the project scope has no installed plugins
+
   Scenario: A new session offers the skills of the installed plugin
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     When the user starts a new pi session
@@ -66,6 +123,51 @@ Feature: Plugin install
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id               | name    | status | reasons         | scope   | cause chain                                           | cause truncated | leaks | rollback partial |
       | fixtures         | project           | missing@fixtures | missing | failed | not in manifest | project | Plugin "missing" not found in marketplace "fixtures". | false           |       |                  |
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+    Then the project scope has no installed plugins
+
+  Scenario: Installing a plugin whose name breaks the plugin id rule fails as an invalid manifest
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | _x   | 1.0.0   |
+    When the user runs "/claude:plugin install _x@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id          | name | status | reasons          | scope   | cause chain                                                                                                                                                                                                                                                                                            | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | _x@fixtures | _x   | failed | invalid manifest | project | Plugin "_x@fixtures" cannot be installed, because its id is invalid: Each part of a plugin id (plugin@marketplace) may use only the letters a-z and A-Z, digits, ".", "_" and "-", and must start with a letter or digit. Here the plugin's name does not; the marketplace's maintainer can rename it. | false           |       |                  |
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+    Then the project scope has no installed plugins
+
+  Scenario: Installing a plugin whose name holds a zero-width space shows the name escaped in its failed row
+    Given the marketplace "fixtures" offers these plugins:
+      | name       | version |
+      | zero​width | 1.0.0   |
+    When the user runs "/claude:plugin install zero​width@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id                       | name            | status | reasons          | scope   | cause chain                                                                                                                                                                                                                                                                                                         | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | zero\u200bwidth@fixtures | zero\u200bwidth | failed | invalid manifest | project | Plugin "zero\u200bwidth@fixtures" cannot be installed, because its id is invalid: Each part of a plugin id (plugin@marketplace) may use only the letters a-z and A-Z, digits, ".", "_" and "-", and must start with a letter or digit. Here the plugin's name does not; the marketplace's maintainer can rename it. | false           |       |                  |
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+    Then the project scope has no installed plugins
+
+  Scenario: Installing a plugin whose name breaks the plugin id rule and that the marketplace does not offer fails as not in manifest
+    When the user runs "/claude:plugin install _x@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id          | name | status | reasons         | scope   | cause chain                                      | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | _x@fixtures | _x   | failed | not in manifest | project | Plugin "_x" not found in marketplace "fixtures". | false           |       |                  |
     Then the "claude-plugins.json" file of the project scope declares no plugins
     Then the project scope has no installed plugins
 
@@ -305,3 +407,22 @@ Feature: Plugin install
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: Installing a plugin whose manifest links outside its marketplace refuses it and installs nothing
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.2.0   |              |
+    Given the published plugin "app" of the marketplace "tools" links its manifest to a file outside the marketplace
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status      | reasons             |
+      | tools            | project           | app@tools | app  | unavailable | unreadable manifest |
+    Then the project scope has no installed plugins

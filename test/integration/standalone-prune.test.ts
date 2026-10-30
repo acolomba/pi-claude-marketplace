@@ -206,6 +206,9 @@ function registeredCommand(cwd: string) {
       applyReconcile: (): Promise<void> => {
         throw new Error("standalone prune must not run a reconcile apply");
       },
+      installMissingDependencies: (): Promise<never> => {
+        throw new Error("standalone prune must not run the missing-dependency step");
+      },
     },
     hooksRouting,
     createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,

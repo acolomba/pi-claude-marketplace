@@ -8,13 +8,14 @@ import path from "node:path";
 
 import { Given } from "@cucumber/cucumber";
 
+import { redactAbsolutePaths } from "../../../extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts";
 import { runCommand, runCommandPayloads } from "../../lib/pi-commands.ts";
 import {
   invalidateManifest,
   publishConventionalDecoy,
+  publishUnreadableCommandFile,
   publishUnreadableSkillFile,
   restoreUnreadableSkillFile,
-  removePublishedSource,
   rewritePublishedManifest,
   unreadableSkillCopyError,
 } from "../../lib/published-marketplace.ts";
@@ -85,13 +86,6 @@ Given(
 );
 
 Given(
-  "the published source of the marketplace {string} is removed",
-  async function (this: ScenarioWorld, name: string) {
-    await removePublishedSource(this.requirePublished(name));
-  },
-);
-
-Given(
   "the published plugin {string} of the marketplace {string} has an unreadable skill file",
   async function (this: ScenarioWorld, plugin: string, name: string) {
     const published = this.requirePublished(name);
@@ -101,7 +95,25 @@ Given(
     this.onRelease(() => rm(scratch, { recursive: true, force: true }));
     const error = await unreadableSkillCopyError(published, plugin, scratch);
     assert.deepStrictEqual([error.code, error.syscall], ["EACCES", "copyfile"]);
-    this.recordErrorMessage("{unreadable skill file copy error}", error.message);
+    this.recordErrorMessage(
+      "{unreadable skill file copy error}",
+      redactAbsolutePaths(error.message),
+    );
+  },
+);
+
+// Pi reads a command with the same call, so the error it reports is the one
+// this read gets.
+Given(
+  "the published plugin {string} of the marketplace {string} has an unreadable command file",
+  async function (this: ScenarioWorld, plugin: string, name: string) {
+    const file = await publishUnreadableCommandFile(this.requirePublished(name), plugin);
+    const error = await readFile(file, "utf8").then(
+      () => assert.fail(`reading ${file} did not fail`),
+      (reason: unknown) => reason as NodeJS.ErrnoException,
+    );
+    assert.deepStrictEqual([error.code, error.syscall], ["EACCES", "open"]);
+    this.recordErrorMessage("{unreadable command file read error}", error.message);
   },
 );
 

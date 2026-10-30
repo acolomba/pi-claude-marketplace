@@ -18,10 +18,8 @@ import {
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import { createFetchPlugins } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts";
-import {
-  makePresenceProbe,
-  probeManifestEntry,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts";
+import { makePresenceProbe } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts";
+import { resolveListCandidate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-candidate-version.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
@@ -32,6 +30,7 @@ import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
+import { whileStateLockHeld } from "../state-lock.ts";
 
 import type { MarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -64,10 +63,10 @@ void ({} satisfies { readonly retired?: typeof FetchOrchestrator.fetchPlugins })
 /**
  * The composition every case below drives: this module's own factory bound to
  * the real fs-only status capability, stated at one site so each case reads as
- * the command rather than as its assembly. It is the same pair of probes the
+ * the command rather than as its assembly. It is the same pair of reads the
  * production composition binds.
  */
-const fetchPlugins = createFetchPlugins({ makePresenceProbe, probeManifestEntry });
+const fetchPlugins = createFetchPlugins({ makePresenceProbe, resolveListCandidate });
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
 type NotificationSeverity = Parameters<ExtensionContext["ui"]["notify"]>[1];
@@ -411,7 +410,7 @@ test("keeps a path source offline through the production defaults", async () => 
 
     // assert
     assert.deepStrictEqual(boundary.notifications, [
-      { message: "● marketplace [project]\n  ⊘ path-plugin (skipped) {up-to-date}" },
+      { message: "● marketplace [project]\n  ⊘ path-plugin v1.0.0 (skipped) {up-to-date}" },
     ]);
     assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
     assert.deepStrictEqual(await snapshotTree(locations.pluginClonesDir), []);
@@ -602,7 +601,7 @@ test("refreshes an unpinned warm mirror with its ref and leaves state immutable"
 
     // assert
     assert.deepStrictEqual(boundary.notifications, [
-      { message: "● marketplace [project]\n  ○ moving (available)" },
+      { message: "● marketplace [project]\n  ○ moving v3.0.0 (available)" },
     ]);
     assert.deepStrictEqual(cache.calls, [`mirror ${cloneUrl} ref=main auth=example.com`]);
     assert.deepStrictEqual(git.schedule, [
@@ -1277,7 +1276,7 @@ test("derives partially available and unavailable git rows exactly", async () =>
       {
         message: [
           "● marketplace [project]",
-          "  ⊖ partial (partially-available) {lsp}",
+          "  ⊖ partial v1.0.0 (partially-available) {lsp}",
           "  ⊘ missing-subdir (unavailable) {unsupported source}",
           "",
           "Plugin fetch: 2 successes",
@@ -1335,7 +1334,7 @@ test("flags binaries on a fetched git row of an official marketplace", async () 
       {
         message: [
           "● claude-plugins-official [project]",
-          "  ⊖ official (partially-available) {unsupported component}",
+          "  ⊖ official v1.0.0 (partially-available) {unsupported component}",
           "",
           "Plugin fetch: 1 success",
         ].join("\n"),
@@ -1345,7 +1344,7 @@ test("flags binaries on a fetched git row of an official marketplace", async () 
   });
 });
 
-test("reports a successful seam with a still-cold cache as remote", async () => {
+test("GLK-07: a successful seam with a still-cold cache reports remote with the entry version", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://example.com/cold";
@@ -1400,7 +1399,7 @@ test("reports a successful seam with a still-cold cache as remote", async () => 
   });
 });
 
-test("reports available when the cache becomes visible between fresh probes", async () => {
+test("GLK-07: reads the post-fetch row once through list's rule against the warm clone", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://example.com/concurrent";
@@ -1415,12 +1414,12 @@ test("reports available when the cache becomes visible between fresh probes", as
     const cloneRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, pin));
     const credentials = createCredentialOpsFake({ boundary: "memory" });
     const boundary = notificationBoundary("concurrent cache visibility");
-    let postFetchProbeCalls = 0;
+    let postFetchReads = 0;
     const status: FetchStatus = {
       makePresenceProbe,
-      probeManifestEntry() {
-        postFetchProbeCalls += 1;
-        return Promise.resolve("unavailable");
+      async resolveListCandidate(entry, marketplaceContext, statusLocations) {
+        postFetchReads += 1;
+        return resolveListCandidate(entry, marketplaceContext, statusLocations);
       },
     };
     const fetchPluginsWithStatus = createFetchPlugins(status);
@@ -1449,9 +1448,9 @@ test("reports available when the cache becomes visible between fresh probes", as
     });
 
     // assert
-    assert.equal(postFetchProbeCalls, 1);
+    assert.equal(postFetchReads, 1);
     assert.deepStrictEqual(boundary.notifications, [
-      { message: "● marketplace [project]\n  ○ concurrent (available)" },
+      { message: "● marketplace [project]\n  ○ concurrent v1.0.0 (available)" },
     ]);
     assert.deepStrictEqual(await snapshotTree(cloneRoot), [
       {
@@ -1519,10 +1518,10 @@ test("renders fresh status after materialization through the required capability
           return presence;
         };
       },
-      async probeManifestEntry(entry, marketplaceContext, statusLocations) {
-        const classification = await probeManifestEntry(entry, marketplaceContext, statusLocations);
-        sequence.push(`manifest:${classification}`);
-        return classification;
+      async resolveListCandidate(entry, marketplaceContext, statusLocations) {
+        const candidate = await resolveListCandidate(entry, marketplaceContext, statusLocations);
+        sequence.push(`candidate:${candidate.kind}`);
+        return candidate;
       },
     };
     const controlledFetch = createFetchPlugins(status);
@@ -1566,7 +1565,7 @@ test("renders fresh status after materialization through the required capability
     assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     assert.deepStrictEqual(await stagingEntries(locations), []);
     assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
-    assert.deepStrictEqual(sequence, ["presence:not-cached", "materialize", "manifest:available"]);
+    assert.deepStrictEqual(sequence, ["presence:not-cached", "materialize", "candidate:resolved"]);
     verifyNotifications(boundary);
   });
 });
@@ -1700,14 +1699,14 @@ test("cleans failed clone staging and converges on retry", async () => {
     assert.deepStrictEqual(failedBoundary.notifications, [
       {
         message:
-          "A plugin operation has failed.\n\n● marketplace [project]\n  ⊘ retry (failed) {source missing}\n    cause: clone failed",
+          "A plugin operation has failed.\n\n● marketplace [project]\n  ⊘ retry (failed) {network error}\n    cause: clone failed",
         severity: "error",
       },
     ]);
     assert.deepStrictEqual(treeAfterFailure, []);
     assert.deepStrictEqual(stagingAfterFailure, []);
     assert.deepStrictEqual(retryBoundary.notifications, [
-      { message: "● marketplace [project]\n  ○ retry (available)" },
+      { message: "● marketplace [project]\n  ○ retry v1.0.0 (available)" },
     ]);
     assert.deepStrictEqual(await stagingEntries(locations), []);
     assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
@@ -1758,7 +1757,7 @@ test("accepts a concurrent cache winner and removes losing staging", async () =>
 
     // assert
     assert.deepStrictEqual(boundary.notifications, [
-      { message: "● marketplace [project]\n  ○ race (available)" },
+      { message: "● marketplace [project]\n  ○ race v1.0.0 (available)" },
     ]);
     assert.strictEqual(await readFile(path.join(cloneRoot, "winner"), "utf8"), "peer\n");
     assert.deepStrictEqual(await stagingEntries(locations), []);
@@ -1823,12 +1822,12 @@ test("surfaces a cleanup leak and retries safely after permissions are repaired"
     assert.strictEqual(failedBoundary.notifications.length, 1);
     assert.match(
       failedBoundary.notifications[0]?.message ?? "",
-      /^A plugin operation has failed\.\n\n● marketplace \[project\]\n {2}⊘ leak \(failed\) \{source missing\}\n {4}cause: clone interrupted \(additionally: failed to clean up plugin clone staging at .*\/sources-staging\/[0-9a-f-]+: EACCES: permission denied, rmdir '.*\/sources-staging\/[0-9a-f-]+'\) -> clone interrupted$/,
+      /^A plugin operation has failed\.\n\n● marketplace \[project\]\n {2}⊘ leak \(failed\) \{network error\}\n {4}cause: clone interrupted \(additionally: failed to clean up plugin clone staging at [0-9a-f-]+: EACCES: permission denied, rmdir '[0-9a-f-]+'\) -> clone interrupted$/,
     );
     assert.strictEqual(failedBoundary.notifications[0]?.severity, "error");
     assert.notDeepStrictEqual(leakedTree, []);
     assert.deepStrictEqual(retryBoundary.notifications, [
-      { message: "● marketplace [project]\n  ○ leak (available)" },
+      { message: "● marketplace [project]\n  ○ leak v1.0.0 (available)" },
     ]);
     verifyNotifications(failedBoundary);
     verifyNotifications(retryBoundary);
@@ -2191,7 +2190,7 @@ test("retains a warm mirror after refresh failure and converges on retry", async
     ]);
     assert.deepStrictEqual(treeAfterFailure, treeBefore);
     assert.deepStrictEqual(retryBoundary.notifications, [
-      { message: "● marketplace [project]\n  ○ warm-retry (available)" },
+      { message: "● marketplace [project]\n  ○ warm-retry v1.0.0 (available)" },
     ]);
     assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
     assert.deepStrictEqual(await stagingEntries(locations), []);
@@ -2262,7 +2261,7 @@ test("cleans a non-race promotion failure and converges on retry", async () => {
     assert.deepStrictEqual(treeAfterFailure, []);
     assert.deepStrictEqual(stagingAfterFailure, []);
     assert.deepStrictEqual(retryBoundary.notifications, [
-      { message: "● marketplace [project]\n  ○ promotion (available)" },
+      { message: "● marketplace [project]\n  ○ promotion v1.0.0 (available)" },
     ]);
     assert.deepStrictEqual(await stagingEntries(locations), []);
     verifyNotifications(failedBoundary);
@@ -2338,13 +2337,8 @@ test("GIT-03: a held state lock fails the row as lock held and refreshes no mirr
       materializeOrRefreshPluginMirror: () => assert.fail("a held lock never refreshes the mirror"),
     };
     const boundary = notificationBoundary("lock held");
-    const release = await lockfile.lock(locations.extensionRoot, {
-      lockfilePath: locations.stateLockFile,
-      realpath: false,
-    });
-
-    // act
-    try {
+    await whileStateLockHeld(locations, async () => {
+      // act
       await fetchPlugins({
         cloneCacheSeam: seam,
         ctx: boundary.ctx,
@@ -2353,9 +2347,7 @@ test("GIT-03: a held state lock fails the row as lock held and refreshes no mirr
         scope: "project",
         target: { kind: "plugin", marketplace: "marketplace", plugin: "locked" },
       });
-    } finally {
-      await release();
-    }
+    });
 
     // assert
     assert.strictEqual(boundary.notifications.length, 1);
@@ -2365,7 +2357,7 @@ test("GIT-03: a held state lock fails the row as lock held and refreshes no mirr
   });
 });
 
-test("folds a non-Error status read after the locked fetch into a failed row", async () => {
+test("GLK-07: folds a non-Error status read after the locked fetch into list's unavailable row", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const marketplace = await marketplaceRecord({
@@ -2383,7 +2375,8 @@ test("folds a non-Error status read after the locked fetch into a failed row", a
     };
     const fetchWithStatus = createFetchPlugins({
       makePresenceProbe,
-      probeManifestEntry: () => Promise.reject("status unreadable"), // eslint-disable-line @typescript-eslint/prefer-promise-reject-errors
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the non-Error arm is the case under test.
+      resolveListCandidate: () => Promise.reject("status unreadable"),
     });
     const boundary = notificationBoundary("non-Error status");
 
@@ -2398,10 +2391,338 @@ test("folds a non-Error status read after the locked fetch into a failed row", a
     });
 
     // assert
-    assert.match(
-      boundary.notifications[0]?.message ?? "",
-      /odd \(failed\) \{source missing\}\n\s+cause: status unreadable/,
+    assert.deepStrictEqual(boundary.notifications, [
+      { message: "● marketplace [project]\n  ⊘ odd (unavailable) {unreadable}" },
+    ]);
+    verifyNotifications(boundary);
+  });
+});
+
+for (const { title, statusCode, statusText, expectedRow } of [
+  {
+    title:
+      "GLK-01: a host 503 on a mirror refresh fails the row as network error framed by its status and URL",
+    statusCode: 503,
+    statusText: "Service Unavailable",
+    expectedRow: [
+      "  ⊘ refused (failed) {network error}",
+      "    cause: 503 on https://example.com/refused -> HTTP Error: 503 Service Unavailable",
+    ],
+  },
+  {
+    title:
+      "GLK-01: a host 404 on a mirror refresh fails the row as source missing framed by its status and URL",
+    statusCode: 404,
+    statusText: "Not Found",
+    expectedRow: [
+      "  ⊘ refused (failed) {source missing}",
+      "    cause: 404 on https://example.com/refused -> HTTP Error: 404 Not Found",
+    ],
+  },
+  {
+    title:
+      "GLK-01: a host 401 on a mirror refresh fails the row as authentication required with no frame",
+    statusCode: 401,
+    statusText: "Unauthorized",
+    expectedRow: [
+      "  ⊘ refused (failed) {authentication required}",
+      "    cause: HTTP Error: 401 Unauthorized",
+    ],
+  },
+]) {
+  test(title, async () => {
+    await withWorkspace(async ({ cwd }) => {
+      // arrange
+      const cloneUrl = "https://example.com/refused";
+      const marketplace = await marketplaceRecord({
+        cwd,
+        entries: [{ name: "refused", source: { source: "url", url: cloneUrl } }],
+        name: "marketplace",
+        scope: "project",
+      });
+      await saveMarketplaces(cwd, "project", [marketplace]);
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const boundary = notificationBoundary(`host ${statusCode}`);
+      const seam: FetchCloneCacheSeam = {
+        materializeOrRefreshPluginMirror: () =>
+          Promise.reject(
+            Object.assign(new Error(`HTTP Error: ${statusCode} ${statusText}`), {
+              code: "HttpError",
+              data: { statusCode },
+            }),
+          ),
+        materializePluginClone: () => assert.fail("an unpinned source never clones a pin"),
+        resolvePluginPin: () => assert.fail("an unpinned source never resolves a pin"),
+      };
+
+      // act
+      await fetchPlugins({
+        cloneCacheSeam: seam,
+        credentialOps: credentials.credentialOps,
+        ctx: boundary.ctx,
+        cwd,
+        run: boundary.run,
+        scope: "project",
+        target: { kind: "plugin", marketplace: "marketplace", plugin: "refused" },
+      });
+
+      // assert
+      assert.deepStrictEqual(boundary.notifications, [
+        {
+          message: [
+            "A plugin operation has failed.",
+            "",
+            "● marketplace [project]",
+            ...expectedRow,
+          ].join("\n"),
+          severity: "error",
+        },
+      ]);
+      verifyNotifications(boundary);
+    });
+  });
+}
+
+test("D-PL10-11: an unrecognized mirror failure is a redacted network error", async () => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    const cloneUrl = "https://example.com/unknown";
+    const marketplace = await marketplaceRecord({
+      cwd,
+      entries: [{ name: "unknown", source: { source: "url", url: cloneUrl } }],
+      name: "marketplace",
+      scope: "project",
+    });
+    await saveMarketplaces(cwd, "project", [marketplace]);
+    const boundary = notificationBoundary("unknown host failure");
+    const seam: FetchCloneCacheSeam = {
+      materializeOrRefreshPluginMirror: () =>
+        Promise.reject(new Error(`transport failed while opening ${cwd}/private/credential.txt`)),
+      materializePluginClone: () => assert.fail("an unpinned source never clones a pin"),
+      resolvePluginPin: () => assert.fail("an unpinned source never resolves a pin"),
+    };
+
+    // act
+    await fetchPlugins({
+      cloneCacheSeam: seam,
+      ctx: boundary.ctx,
+      cwd,
+      run: boundary.run,
+      scope: "project",
+      target: { kind: "plugin", marketplace: "marketplace", plugin: "unknown" },
+    });
+
+    // assert
+    assert.deepStrictEqual(boundary.notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● marketplace [project]\n  ⊘ unknown (failed) {network error}\n    cause: transport failed while opening credential.txt",
+        severity: "error",
+      },
+    ]);
+    assert.doesNotMatch(boundary.notifications[0]?.message ?? "", new RegExp(cwd));
+    verifyNotifications(boundary);
+  });
+});
+
+for (const { title, sha, expectedLockObservations } of [
+  {
+    title:
+      "GLK-05: an unpinned fetch reads its row inside the scope lock it refreshed the mirror under",
+    sha: undefined,
+    expectedLockObservations: [true],
+  },
+  {
+    title: "GLK-05: a pinned fetch clones and reads its row without taking the scope lock",
+    sha: "c".repeat(40),
+    expectedLockObservations: [false],
+  },
+]) {
+  test(title, async () => {
+    await withWorkspace(async ({ cwd }) => {
+      // arrange
+      const cloneUrl = "https://example.com/locked-read";
+      const marketplace = await marketplaceRecord({
+        cwd,
+        entries: [
+          {
+            name: "locked-read",
+            source: { source: "url", url: cloneUrl, ...(sha === undefined ? {} : { sha }) },
+          },
+        ],
+        name: "marketplace",
+        scope: "project",
+      });
+      const locations = await saveMarketplaces(cwd, "project", [marketplace]);
+      const lockOptions = { lockfilePath: locations.stateLockFile, realpath: false };
+      const lockObservations: boolean[] = [];
+      const fetchWithStatus = createFetchPlugins({
+        makePresenceProbe,
+        async resolveListCandidate(entry, marketplaceContext, statusLocations) {
+          lockObservations.push(await lockfile.check(locations.extensionRoot, lockOptions));
+          return resolveListCandidate(entry, marketplaceContext, statusLocations);
+        },
+      });
+      const seam: FetchCloneCacheSeam = {
+        materializeOrRefreshPluginMirror: () =>
+          Promise.resolve({ pluginRoot: path.join(cwd, "absent"), resolvedSha: "6".repeat(40) }),
+        materializePluginClone: () => Promise.resolve(path.join(cwd, "absent")),
+        resolvePluginPin: () => Promise.resolve({ cloneUrl, pin: sha ?? "unpinned" }),
+      };
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const boundary = notificationBoundary("locked read");
+
+      // act
+      await fetchWithStatus({
+        cloneCacheSeam: seam,
+        credentialOps: credentials.credentialOps,
+        ctx: boundary.ctx,
+        cwd,
+        run: boundary.run,
+        scope: "project",
+        target: { kind: "plugin", marketplace: "marketplace", plugin: "locked-read" },
+      });
+
+      // assert
+      assert.deepStrictEqual(boundary.notifications, [
+        { message: "● marketplace [project]\n  ◌ locked-read (remote)" },
+      ]);
+      assert.deepStrictEqual(lockObservations, expectedLockObservations);
+      assert.strictEqual(await lockfile.check(locations.extensionRoot, lockOptions), false);
+      verifyNotifications(boundary);
+    });
+  });
+}
+
+test("GLK-05: a lock lost after the locked fetch read its row fails the row as lock held", async () => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    const cloneUrl = "https://example.com/lost-lock";
+    const marketplace = await marketplaceRecord({
+      cwd,
+      entries: [{ name: "lost-lock", source: { source: "url", url: cloneUrl } }],
+      name: "marketplace",
+      scope: "project",
+    });
+    const locations = await saveMarketplaces(cwd, "project", [marketplace]);
+    const lockOptions = { lockfilePath: locations.stateLockFile, realpath: false };
+    const fetchWithStatus = createFetchPlugins({
+      makePresenceProbe,
+      async resolveListCandidate(entry, marketplaceContext, statusLocations) {
+        const candidate = await resolveListCandidate(entry, marketplaceContext, statusLocations);
+        await lockfile.unlock(locations.extensionRoot, lockOptions);
+        return candidate;
+      },
+    });
+    const seam: FetchCloneCacheSeam = {
+      materializeOrRefreshPluginMirror: () =>
+        Promise.resolve({ pluginRoot: path.join(cwd, "absent"), resolvedSha: "6".repeat(40) }),
+      materializePluginClone: () => assert.fail("an unpinned fetch never clones by sha"),
+      resolvePluginPin: () => assert.fail("an unpinned fetch never resolves a pin"),
+    };
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const boundary = notificationBoundary("lost lock");
+
+    // act
+    await fetchWithStatus({
+      cloneCacheSeam: seam,
+      credentialOps: credentials.credentialOps,
+      ctx: boundary.ctx,
+      cwd,
+      run: boundary.run,
+      scope: "project",
+      target: { kind: "plugin", marketplace: "marketplace", plugin: "lost-lock" },
+    });
+
+    // assert
+    assert.deepStrictEqual(boundary.notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● marketplace [project]\n  ⊘ lost-lock (failed) {lock held}\n    cause: Lock is already released",
+        severity: "error",
+      },
+    ]);
+    assert.strictEqual(await lockfile.check(locations.extensionRoot, lockOptions), false);
+    verifyNotifications(boundary);
+  });
+});
+
+test("GLK-07: a fetched row shows the version its plugin.json declares over its entry's", async () => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    const cloneUrl = "https://example.com/declared";
+    const pin = "d".repeat(40);
+    const marketplace = await marketplaceRecord({
+      cwd,
+      entries: [
+        { name: "declared", source: { source: "url", url: cloneUrl, sha: pin }, version: "1.0.0" },
+      ],
+      name: "marketplace",
+      scope: "project",
+    });
+    const locations = await saveMarketplaces(cwd, "project", [marketplace]);
+    const cloneRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, pin));
+    const seam: FetchCloneCacheSeam = {
+      materializeOrRefreshPluginMirror: () =>
+        assert.fail("a pinned source never refreshes a mirror"),
+      async materializePluginClone() {
+        await writePluginTree(cloneRoot, "declared", "2.0.0");
+        return cloneRoot;
+      },
+      resolvePluginPin: () => Promise.resolve({ cloneUrl, pin }),
+    };
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const boundary = notificationBoundary("declared version");
+
+    // act
+    await fetchPlugins({
+      cloneCacheSeam: seam,
+      credentialOps: credentials.credentialOps,
+      ctx: boundary.ctx,
+      cwd,
+      run: boundary.run,
+      scope: "project",
+      target: { kind: "plugin", marketplace: "marketplace", plugin: "declared" },
+    });
+
+    // assert
+    assert.deepStrictEqual(boundary.notifications, [
+      { message: "● marketplace [project]\n  ○ declared v2.0.0 (available)" },
+    ]);
+    verifyNotifications(boundary);
+  });
+});
+
+test("GLK-07: a skipped path row shows the version its plugin.json declares over its entry's", async () => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    const marketplace = await marketplaceRecord({
+      cwd,
+      entries: [{ name: "path-plugin", source: "./path-plugin", version: "1.0.0" }],
+      name: "marketplace",
+      scope: "project",
+    });
+    await writePluginTree(
+      path.join(marketplace.marketplaceRoot, "path-plugin"),
+      "path-plugin",
+      "2.0.0",
     );
+    await saveMarketplaces(cwd, "project", [marketplace]);
+    const boundary = notificationBoundary("path declared version");
+
+    // act
+    await fetchPlugins({
+      ctx: boundary.ctx,
+      cwd,
+      run: boundary.run,
+      scope: "project",
+      target: { kind: "plugin", marketplace: "marketplace", plugin: "path-plugin" },
+    });
+
+    // assert
+    assert.deepStrictEqual(boundary.notifications, [
+      { message: "● marketplace [project]\n  ⊘ path-plugin v2.0.0 (skipped) {up-to-date}" },
+    ]);
     verifyNotifications(boundary);
   });
 });

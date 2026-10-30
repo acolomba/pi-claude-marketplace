@@ -9,6 +9,7 @@ import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { McpWrittenFile } from "../../shared/errors-bridges.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 
 /**
  * Top-level shape of an MCP config document: `<scopeRoot>/mcp-adapter.json`,
@@ -72,7 +73,8 @@ export interface StageMcpCommitResult {
   // W-05: callers read `recorded` to populate state.json. Order matches
   // stagedNames.
   readonly recorded: readonly StagedMcpRecord[];
-  readonly warnings: readonly string[];
+  /** D-PL1-02: every mcp warning is a `hygiene` warning. */
+  readonly warnings: readonly StagingWarning[];
   /**
    * AFILE-04 / AFILE-02 / AFILE-06 / AVAR-04: facts about the config file this
    * stage rewrites or leaves alone, for the orchestrator to route to the user:

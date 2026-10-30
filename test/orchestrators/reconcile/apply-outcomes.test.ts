@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import { UninstallRefusedError } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import {
   carriedMcpConfigNotices,
+  carriedStagingWarnings,
   classifyOrchestratorThrow,
   installFailureReasonFields,
   classifyReadPassThrow,
@@ -12,6 +13,7 @@ import {
   MigrateConfigSaveError,
   sourceMismatchOutcomeSubject,
   sourceMismatchOutcomes,
+  stagingDiagnosticsOf,
   type InvalidBlockOutcome,
   type LayerMarketplaceGapOutcome,
   type MpAddedOutcome,
@@ -45,6 +47,10 @@ import {
   PluginShapeError,
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  discoveryWarning,
+  hygieneWarning,
+} from "../../../extensions/pi-claude-marketplace/shared/staging-warnings.ts";
 
 import type { UninstallPluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { ReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
@@ -154,6 +160,15 @@ void ({
   marketplace: "official",
   plugin: "formatter",
   reason: "already installed",
+} satisfies PluginEnableFailedOutcome);
+void ({
+  kind: "plugin-enable-failed",
+  scope: "project",
+  marketplace: "official",
+  plugin: "formatter",
+  reason: "rollback partial",
+  cause: new Error("staging failed"),
+  rollbackPartials: [{ phase: "skills", cause: new Error("undo failed") }],
 } satisfies PluginEnableFailedOutcome);
 void ({
   kind: "plugin-disabled",
@@ -359,9 +374,9 @@ void ({
   scope: "project",
   marketplace: "official",
   plugin: "formatter",
-  reason: "unreadable",
-  // @ts-expect-error install failure causes are DependencyCascadeError, not a bare Error
+  reason: "rollback partial",
   cause: new Error("boom"),
+  rollbackPartials: [{ phase: "skills", cause: new Error("skill rollback denied") }],
 } satisfies PluginInstallFailedOutcome);
 void ({
   kind: "plugin-uninstalled",
@@ -1175,7 +1190,7 @@ describe("dependencyDisabledOutcome", () => {
   test("T-06-05: prints the range the verdict already bounded verbatim", () => {
     // arrange -- the verdict bounds the declared ranges once, so a second
     // bound here would cut the text and replace its true overflow count.
-    const bounded = `>=${"1".repeat(198)}... (+12 chars)`;
+    const bounded = `>=${"1".repeat(198)}… (+12 chars)`;
     const held = {
       scope: "user",
       marketplace: "official",
@@ -1283,5 +1298,143 @@ describe("carriedMcpConfigNotices", () => {
 
     // assert
     assert.deepStrictEqual(carried, {});
+  });
+});
+
+describe("carriedStagingWarnings", () => {
+  test("NREG-01: carries the tagged staging warnings of an outcome that has them", () => {
+    // arrange
+    const warnings = [discoveryWarning("skill skipped"), hygieneWarning("index rebuilt")];
+
+    // act
+    const carried = carriedStagingWarnings({ stagingWarnings: warnings });
+
+    // assert
+    assert.deepStrictEqual(carried, { stagingWarnings: warnings });
+  });
+
+  test("NREG-01: carries nothing for an outcome without staging warnings", () => {
+    // arrange
+    const outcome = {};
+
+    // act
+    const carried = carriedStagingWarnings(outcome);
+
+    // assert
+    assert.deepStrictEqual(carried, {});
+  });
+});
+
+describe("stagingDiagnosticsOf", () => {
+  test("D-PL1-20: projects each catalog move and enable under its header verb, in row order", () => {
+    // arrange
+    const moved = [discoveryWarning("moved skip")];
+    const failed = [discoveryWarning("failed skip")];
+    const grown = [hygieneWarning("grown note")];
+    const outcomes: PerEntryOutcome[] = [
+      { kind: "mp-added", scope: "project", marketplace: "official" },
+      {
+        kind: "plugin-installed",
+        scope: "project",
+        marketplace: "official",
+        plugin: "aardvark",
+        dependencies: [],
+        stagingWarnings: [hygieneWarning("installed note")],
+      },
+      {
+        kind: "plugin-enabled",
+        scope: "user",
+        marketplace: "official",
+        plugin: "alpha",
+      },
+      {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "official",
+        plugin: "beta",
+        row: {
+          status: "updated",
+          name: "beta",
+          from: "1.0.0",
+          to: "1.1.0",
+          dependencies: [],
+          severity: "info",
+          needsReload: true,
+        },
+        stagingWarnings: moved,
+      },
+      {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "official",
+        plugin: "gamma",
+        row: {
+          status: "failed",
+          name: "gamma",
+          reasons: [],
+          severity: "error",
+          needsReload: false,
+        },
+        stagingWarnings: failed,
+      },
+      {
+        kind: "plugin-backfilled",
+        scope: "user",
+        marketplace: "official",
+        plugin: "delta",
+        dependencies: [],
+        installable: true,
+        unsupported: [],
+        stagingWarnings: grown,
+      },
+      {
+        kind: "plugin-disabled",
+        scope: "user",
+        marketplace: "official",
+        plugin: "epsilon",
+      },
+    ];
+
+    // act
+    const diagnostics = stagingDiagnosticsOf(outcomes);
+
+    // assert
+    assert.deepStrictEqual(diagnostics, [
+      {
+        plugin: "aardvark",
+        scope: "project",
+        verb: "installed",
+        warnings: [hygieneWarning("installed note")],
+      },
+      { plugin: "beta", scope: "project", verb: "updated", warnings: moved },
+      { plugin: "gamma", scope: "project", verb: "update failed", warnings: failed },
+      { plugin: "alpha", scope: "user", verb: "enabled", warnings: [] },
+      { plugin: "delta", scope: "user", verb: "updated", warnings: grown },
+    ]);
+  });
+
+  test("D-PL1-07: orders the diagnostics by marketplace block, as the rows are", () => {
+    // arrange
+    const outcomes: PerEntryOutcome[] = [
+      { kind: "plugin-enabled", scope: "user", marketplace: "zeta", plugin: "formatter" },
+      {
+        kind: "plugin-backfilled",
+        scope: "user",
+        marketplace: "alpha",
+        plugin: "linter",
+        dependencies: [],
+        installable: true,
+        unsupported: [],
+      },
+    ];
+
+    // act
+    const diagnostics = stagingDiagnosticsOf(outcomes);
+
+    // assert
+    assert.deepStrictEqual(
+      diagnostics.map(({ plugin }) => plugin),
+      ["linter", "formatter"],
+    );
   });
 });

@@ -10,6 +10,7 @@ import {
   buildReconcileAppliedCascade,
   buildReconcilePendingNotification,
   convergedMoveOutcomes,
+  dependencyInstallRows,
   enabledMoveOutcome,
   isReconcilePlanListEmpty,
   planListNeedsApply,
@@ -18,6 +19,10 @@ import {
   type PendingInstallCandidate,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts";
 import { DependencyCascadeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  discoveryWarning,
+  hygieneWarning,
+} from "../../../extensions/pi-claude-marketplace/shared/staging-warnings.ts";
 
 import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
 import type { PlannedMove } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/convergence.ts";
@@ -1733,6 +1738,90 @@ describe("buildReconcileAppliedCascade", () => {
     });
   });
 
+  for (const kind of ["plugin-install-failed", "plugin-enable-failed"] as const) {
+    test(`carries the rollback phases of a ${kind} row that left them`, () => {
+      // arrange
+      const cause = new Error("mcp-adapter.json could not be read");
+      const rollbackPartials = [
+        { phase: "skills", cause: new Error("EACCES: permission denied, unlink 'data.txt'") },
+        { phase: "agents" },
+      ];
+      const outcomes: readonly PerEntryOutcome[] = [
+        {
+          kind,
+          scope: "project",
+          marketplace: "mp",
+          plugin: "hello",
+          reason: "rollback partial",
+          cause,
+          rollbackPartials,
+        },
+      ];
+
+      // act
+      const cascade = buildReconcileAppliedCascade(outcomes);
+
+      // assert
+      assert.deepStrictEqual(cascade, {
+        kind: "reconcile-applied-cascade",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "hello",
+                reasons: ["rollback partial"],
+                cause,
+                rollbackPartial: rollbackPartials,
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      });
+    });
+  }
+
+  test("MIM-03: gives a plugin-install-failed row with an empty rollback list no phase rows", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        reason: "unreadable",
+        rollbackPartials: [],
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "failed",
+              name: "hello",
+              reasons: ["unreadable"],
+              severity: "error",
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   test("omits the version slot from an uninstall row whose outcome carries no version", () => {
     // arrange
     const outcomes: readonly PerEntryOutcome[] = [
@@ -2014,6 +2103,7 @@ describe("convergedMoveOutcomes", () => {
     const outcomes = convergedMoveOutcomes(DEMO_MOVE, {
       ...UPDATE_BASE,
       partition: "updated",
+      resourcesChanged: true,
       fromVersion: "1.0.0",
       toVersion: "1.1.0",
       stagedAgentNames: [],
@@ -2048,6 +2138,44 @@ describe("convergedMoveOutcomes", () => {
     ]);
   });
 
+  test("PKD-02: an updated move carries its package note as a staging warning", () => {
+    // act
+    const outcomes = convergedMoveOutcomes(DEMO_MOVE, {
+      ...UPDATE_BASE,
+      partition: "updated",
+      resourcesChanged: true,
+      fromVersion: "1.0.0",
+      toVersion: "1.1.0",
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      declaresWorkflows: false,
+      constraint: undefined,
+      stagingWarnings: [discoveryWarning("Plugin dependency install failed (npm): E404")],
+      packageNote: "Plugin dependency install failed (npm): E404",
+    });
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "demo",
+        row: {
+          status: "updated",
+          name: "demo",
+          scope: "project",
+          from: "1.0.0",
+          to: "1.1.0",
+          dependencies: [],
+          severity: "info",
+          needsReload: true,
+        },
+        stagingWarnings: [discoveryWarning("Plugin dependency install failed (npm): E404")],
+      },
+    ]);
+  });
+
   test("D-08: a partial record's move that drops a kind reports the partially-installed row at info", () => {
     // act
     const outcomes = convergedMoveOutcomes(
@@ -2055,6 +2183,7 @@ describe("convergedMoveOutcomes", () => {
       {
         ...UPDATE_BASE,
         partition: "updated",
+        resourcesChanged: true,
         fromVersion: "1.0.0",
         toVersion: "1.1.0",
         stagedAgentNames: [],
@@ -2094,6 +2223,7 @@ describe("convergedMoveOutcomes", () => {
       {
         ...UPDATE_BASE,
         partition: "updated",
+        resourcesChanged: true,
         fromVersion: "1.0.0",
         toVersion: "1.1.0",
         stagedAgentNames: [],
@@ -2132,6 +2262,7 @@ describe("convergedMoveOutcomes", () => {
       {
         ...UPDATE_BASE,
         partition: "updated",
+        resourcesChanged: true,
         fromVersion: "1.0.0",
         toVersion: "1.1.0",
         stagedAgentNames: [],
@@ -2297,6 +2428,45 @@ describe("convergedMoveOutcomes", () => {
     ]);
   });
 
+  test("D-PL1-23: an updated and a failed move carry the runner's tagged staging warnings", () => {
+    // arrange
+    const stagingWarnings = [discoveryWarning("skill skipped"), hygieneWarning("index rebuilt")];
+
+    // act
+    const moved = convergedMoveOutcomes(DEMO_MOVE, {
+      ...UPDATE_BASE,
+      partition: "updated",
+      resourcesChanged: true,
+      fromVersion: "1.0.0",
+      toVersion: "1.1.0",
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      declaresWorkflows: false,
+      constraint: undefined,
+      stagingWarnings,
+    });
+    const failed = convergedMoveOutcomes(DEMO_MOVE, {
+      ...UPDATE_BASE,
+      partition: "failed",
+      notes: [],
+      reasons: ["permission denied"],
+      declaresWorkflows: false,
+      stagingWarnings,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      [...moved, ...failed].map((outcome) => ({
+        status: outcome.row.status,
+        stagingWarnings: outcome.stagingWarnings,
+      })),
+      [
+        { status: "updated", stagingWarnings },
+        { status: "failed", stagingWarnings },
+      ],
+    );
+  });
+
   test("a failed move with no classified reason renders an empty brace", () => {
     // act
     const outcomes = convergedMoveOutcomes(DEMO_MOVE, {
@@ -2325,7 +2495,7 @@ describe("buildReconcilePendingNotification", () => {
     const plans: readonly ReconcilePlan[] = [];
 
     // act
-    const pending = buildReconcilePendingNotification(plans);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
     // assert
     assert.deepStrictEqual(pending, { marketplaces: [] });
@@ -2336,24 +2506,33 @@ describe("buildReconcilePendingNotification", () => {
     const plans = [reconcilePlan("project")];
 
     // act
-    const pending = buildReconcilePendingNotification(plans);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
     // assert
     assert.deepStrictEqual(pending, { marketplaces: [] });
   });
 
-  test("D-20: previews a marketplace add with no child work as a bare will-add header", () => {
+  test("previews a marketplace replacement as an add instead of a source failure", () => {
     // arrange
     const plans = [
       reconcilePlan("project", {
         marketplacesToAdd: [
           { scope: "project", marketplace: "mp", source: "acme/tools", configSource: "base" },
         ],
+        sourceMismatches: [
+          {
+            scope: "project",
+            cause: "source-mismatch",
+            marketplace: "mp",
+            declaredSource: "acme/tools",
+            recordedSource: "acme/old",
+          },
+        ],
       }),
     ];
 
     // act
-    const pending = buildReconcilePendingNotification(plans);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
     // assert
     assert.deepStrictEqual(pending, {
@@ -2384,7 +2563,7 @@ describe("buildReconcilePendingNotification", () => {
     ];
 
     // act
-    const pending = buildReconcilePendingNotification(plans);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
     // assert
     assert.deepStrictEqual(pending, {
@@ -2410,7 +2589,7 @@ describe("buildReconcilePendingNotification", () => {
     ];
 
     // act
-    const pending = buildReconcilePendingNotification(plans);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
     // assert
     assert.deepStrictEqual(pending, {
@@ -2506,7 +2685,7 @@ describe("buildReconcilePendingNotification", () => {
     ];
 
     // act
-    const pending = buildReconcilePendingNotification(plans);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
     // assert
     assert.deepStrictEqual(pending, {
@@ -2595,7 +2774,7 @@ describe("buildReconcilePendingNotification", () => {
       const plans = [reconcilePlan("project", actions)];
 
       // act
-      const pending = buildReconcilePendingNotification(plans);
+      const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
       // assert
       assert.deepStrictEqual(pending, {
@@ -2623,7 +2802,7 @@ describe("buildReconcilePendingNotification", () => {
     ];
 
     // act
-    const pending = buildReconcilePendingNotification(plans);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
     // assert
     assert.deepStrictEqual(pending, {
@@ -2703,7 +2882,7 @@ describe("buildReconcilePendingNotification", () => {
       const plans = [reconcilePlan("project", { sourceMismatches: [mismatch] })];
 
       // act
-      const pending = buildReconcilePendingNotification(plans);
+      const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
       // assert
       assert.deepStrictEqual(pending, {
@@ -2733,7 +2912,7 @@ describe("buildReconcilePendingNotification", () => {
     ];
 
     // act
-    const pending = buildReconcilePendingNotification(plans);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
     // assert
     assert.deepStrictEqual(pending, {
@@ -2781,7 +2960,7 @@ describe("buildReconcilePendingNotification", () => {
     ];
 
     // act
-    const pending = buildReconcilePendingNotification(plans);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
     // assert
     assert.deepStrictEqual(pending, {
@@ -2816,7 +2995,7 @@ describe("buildReconcilePendingNotification", () => {
     ];
 
     // act
-    const pending = buildReconcilePendingNotification(plans);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
     // assert
     assert.deepStrictEqual(pending, {
@@ -2852,7 +3031,7 @@ describe("buildReconcilePendingNotification", () => {
     const forceInstallKeys = new Set<string>(["project\u0000mp\u0000cr"]);
 
     // act
-    const pending = buildReconcilePendingNotification(plans, forceInstallKeys);
+    const pending = buildReconcilePendingNotification(plans, forceInstallKeys, new Map());
 
     // assert
     assert.deepStrictEqual(pending, {
@@ -3023,6 +3202,264 @@ describe("buildReconcilePendingNotification", () => {
     });
   });
 
+  test("D-PL2-02: lists a config install before the moves and a dependency install after them", () => {
+    // arrange
+    const plans = [
+      reconcilePlan("project", {
+        pluginsToInstall: [
+          { scope: "project", plugin: "fresh", marketplace: "mp", configSource: "base" },
+        ],
+        pluginsToDependencyInstall: [
+          {
+            scope: "project",
+            plugin: "extra",
+            marketplace: "mp",
+            ranges: [],
+            requiredBy: "zcore@mp",
+            declarers: ["zcore@mp"],
+          },
+        ],
+      }),
+    ];
+    const convergence = {
+      moves: [
+        {
+          scope: "project",
+          marketplace: "mp",
+          plugin: "zcore",
+          fromVersion: "1.0.0",
+          toVersion: "2.0.0",
+          revisionChanged: true,
+          grew: false,
+          partial: false,
+        },
+      ],
+      holds: [
+        {
+          scope: "project",
+          marketplace: "mp",
+          plugin: "lib",
+          version: "1.0.0",
+          cause: "held by app@mp",
+        },
+      ],
+      declines: [],
+    } as const;
+
+    // act
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), convergence);
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            { status: "will install", name: "fresh" },
+            { status: "will update", name: "zcore", from: "1.0.0", to: "2.0.0" },
+            { status: "will install", name: "extra" },
+            {
+              status: "skipped",
+              name: "lib",
+              version: "1.0.0",
+              reasons: ["dependents constrain"],
+              cause: new Error("held by app@mp"),
+              severity: "warning",
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("D-PL2-16: lists an enable that waits on a dependency install after it and before the holds", () => {
+    // arrange
+    const plans = [
+      reconcilePlan("project", {
+        pluginsToEnable: [{ scope: "project", plugin: "ready", marketplace: "mp" }],
+        pluginsToDependencyInstall: [
+          {
+            scope: "project",
+            plugin: "vault",
+            marketplace: "mp",
+            ranges: [],
+            requiredBy: "app@mp",
+            declarers: ["app@mp"],
+          },
+        ],
+      }),
+    ];
+    const convergence = {
+      moves: [],
+      holds: [
+        { scope: "project", marketplace: "mp", plugin: "lib", version: "1.0.0", cause: "held" },
+      ],
+      declines: [],
+    } as const;
+
+    // act
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), convergence, [
+      { key: "app@mp", enable: { scope: "project", plugin: "app", marketplace: "mp" } },
+    ]);
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            { status: "will enable", name: "ready" },
+            { status: "will install", name: "vault" },
+            { status: "will enable", name: "app" },
+            {
+              status: "skipped",
+              name: "lib",
+              version: "1.0.0",
+              reasons: ["dependents constrain"],
+              cause: new Error("held"),
+              severity: "warning",
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("D-PL2-18: lists a waiting record's move and its enable as two rows after the dependency install, and a deferred move with its enable as one", () => {
+    // arrange
+    const plans = [
+      reconcilePlan("project", {
+        pluginsToDependencyInstall: [
+          {
+            scope: "project",
+            plugin: "cdep",
+            marketplace: "mp",
+            ranges: [],
+            requiredBy: "alib@mp",
+            declarers: ["alib@mp"],
+          },
+        ],
+      }),
+    ];
+    const move = (plugin: string) =>
+      ({
+        scope: "project",
+        marketplace: "mp",
+        plugin,
+        fromVersion: "1.0.0",
+        toVersion: "2.0.0",
+        revisionChanged: true,
+        grew: false,
+        partial: false,
+      }) as const;
+    const convergence = { moves: [move("ready")], holds: [], declines: [] } as const;
+
+    // act
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), convergence, [
+      {
+        key: "alib@mp",
+        move: move("alib"),
+        enable: { scope: "project", plugin: "alib", marketplace: "mp" },
+        waiting: true,
+      },
+      { key: "bapp@mp", move: move("bapp") },
+      {
+        key: "capp@mp",
+        move: move("capp"),
+        enable: { scope: "project", plugin: "capp", marketplace: "mp" },
+      },
+    ]);
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            { status: "will update", name: "ready", from: "1.0.0", to: "2.0.0" },
+            { status: "will install", name: "cdep" },
+            { status: "will update", name: "alib", from: "1.0.0", to: "2.0.0" },
+            { status: "will enable", name: "alib" },
+            { status: "will update", name: "bapp", from: "1.0.0", to: "2.0.0" },
+            { status: "will update", name: "capp", from: "1.0.0", to: "2.0.0" },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("D-PL2-25: lists a record whose installed copy cannot be used as its failed row, after the plan's rows and before the catalog moves", () => {
+    // arrange
+    const plans = [
+      reconcilePlan("project", {
+        pluginsToEnable: [{ scope: "project", plugin: "ready", marketplace: "mp" }],
+      }),
+    ];
+    const convergence = {
+      moves: [
+        {
+          scope: "project",
+          marketplace: "mp",
+          plugin: "zcore",
+          fromVersion: "1.0.0",
+          toVersion: "2.0.0",
+          revisionChanged: true,
+          grew: false,
+          partial: false,
+        },
+      ],
+      holds: [],
+      declines: [],
+    } as const;
+    const cause = new Error("widget copy refused");
+
+    // act
+    const pending = buildReconcilePendingNotification(
+      plans,
+      new Set(),
+      new Map(),
+      convergence,
+      [],
+      [
+        {
+          kind: "plugin-declarer-unreadable",
+          scope: "project",
+          marketplace: "mp",
+          plugin: "widget",
+          reason: "unreadable manifest",
+          cause,
+        },
+      ],
+    );
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            { status: "will enable", name: "ready" },
+            {
+              status: "failed",
+              name: "widget",
+              reasons: ["unreadable manifest"],
+              cause,
+              severity: "warning",
+              needsReload: false,
+            },
+            { status: "will update", name: "zcore", from: "1.0.0", to: "2.0.0" },
+          ],
+        },
+      ],
+    });
+  });
+
   test("D-14 / UPR-02: a same-version move names its commits after the plan's rows", () => {
     // arrange
     const fromCommit = "a".repeat(40);
@@ -3096,7 +3533,7 @@ describe("buildReconcilePendingNotification", () => {
     const forceInstallKeys = new Set<string>(["project\u0000mp\u0000ins"]);
 
     // act
-    const pending = buildReconcilePendingNotification(plans, forceInstallKeys);
+    const pending = buildReconcilePendingNotification(plans, forceInstallKeys, new Map());
 
     // assert
     assert.deepStrictEqual(pending, {
@@ -3321,6 +3758,7 @@ describe("resolvePendingForceInstalls", () => {
     const locate = (): Promise<PendingInstallCandidate> =>
       Promise.resolve({
         marketplaceRoot,
+        marketplaceSource: undefined,
         manifestEntry: { name: "cr", source: "./cr", version: "1.0.0" },
       });
 
@@ -3329,6 +3767,28 @@ describe("resolvePendingForceInstalls", () => {
 
     // assert
     assert.deepStrictEqual(forceInstallKeys, new Set(["project\u0000mp\u0000cr"]));
+  });
+
+  test("leaves a hosted marketplace's relative entry out of the partial installs", async (t) => {
+    // arrange
+    const marketplaceRoot = await mkdtemp(path.join(tmpdir(), "reconcile-hosted-"));
+    t.after(() => rm(marketplaceRoot, { recursive: true, force: true }));
+    await mkdir(path.join(marketplaceRoot, "cr"), { recursive: true });
+    await writeFile(path.join(marketplaceRoot, "cr", ".lsp.json"), "{}", "utf8");
+    const plans = [reconcilePlan("project", { pluginsToInstall: [install] })];
+    const hostedUrl = "https://h.example/acme/tools/marketplace.json";
+    const locate = (): Promise<PendingInstallCandidate> =>
+      Promise.resolve({
+        marketplaceRoot,
+        marketplaceSource: { kind: "hosted", raw: hostedUrl, url: hostedUrl },
+        manifestEntry: { name: "cr", source: "./cr", version: "1.0.0" },
+      });
+
+    // act
+    const forceInstallKeys = await resolvePendingForceInstalls(plans, locate);
+
+    // assert
+    assert.deepStrictEqual(forceInstallKeys, new Set());
   });
 
   test("collects the key of an install whose binaries count for an official marketplace", async (t) => {
@@ -3344,6 +3804,7 @@ describe("resolvePendingForceInstalls", () => {
     const locate = (): Promise<PendingInstallCandidate> =>
       Promise.resolve({
         marketplaceRoot,
+        marketplaceSource: undefined,
         manifestEntry: {
           name: "cr",
           source: "./cr",
@@ -3371,6 +3832,7 @@ describe("resolvePendingForceInstalls", () => {
     const locate = (): Promise<PendingInstallCandidate> =>
       Promise.resolve({
         marketplaceRoot,
+        marketplaceSource: undefined,
         manifestEntry: { name: "cr", source: "./cr", version: "1.0.0" },
       });
 
@@ -3405,6 +3867,7 @@ describe("resolvePendingForceInstalls", () => {
     const locate = (): Promise<PendingInstallCandidate> =>
       Promise.resolve({
         marketplaceRoot: notADirectory,
+        marketplaceSource: undefined,
         manifestEntry: { name: "cr", source: "./cr", version: "1.0.0" },
       });
 
@@ -3425,5 +3888,114 @@ describe("resolvePendingForceInstalls", () => {
 
     // assert
     assert.deepStrictEqual(forceInstallKeys, new Set());
+  });
+});
+
+describe("dependencyInstallRows", () => {
+  test("D-PL2-09: an installed dependency becomes apply's installed row under its full key", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-installed",
+        scope: "project",
+        marketplace: "other",
+        plugin: "lib",
+        version: "1.0.0",
+        dependencies: ["mcp"],
+        dependencyInstalled: true,
+        orphanRewake: true,
+      },
+    ];
+
+    // act
+    const rows = dependencyInstallRows(outcomes);
+
+    // assert
+    assert.deepStrictEqual(rows, [
+      {
+        status: "installed",
+        name: "lib@other",
+        version: "1.0.0",
+        dependencies: ["mcp"],
+        reasons: ["dependency installed", "orphan rewake"],
+        severity: "info",
+        needsReload: true,
+      },
+    ]);
+  });
+
+  test("D-PL2-11: a refused dependency install becomes apply's failed row with its cause, under its full key", () => {
+    // arrange
+    const cause = new DependencyCascadeError(
+      'Dependency "missing@other" is not declared by its marketplace.',
+      "missing@other",
+    );
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "other",
+        plugin: "lib",
+        reason: "dependency failed",
+        cause,
+      },
+    ];
+
+    // act
+    const rows = dependencyInstallRows(outcomes);
+
+    // assert
+    assert.deepStrictEqual(rows, [
+      {
+        status: "failed",
+        name: "lib@other",
+        reasons: ["dependency failed"],
+        cause,
+        severity: "error",
+        needsReload: false,
+      },
+    ]);
+  });
+
+  test("D-PL2-20: a scope read that threw becomes apply's failed state.json row with its cause", () => {
+    // arrange
+    const cause = new Error("state lock held");
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "invalid-block",
+        scope: "project",
+        basename: "state.json",
+        reason: "lock held",
+        cause,
+      },
+    ];
+
+    // act
+    const rows = dependencyInstallRows(outcomes);
+
+    // assert
+    assert.deepStrictEqual(rows, [
+      {
+        status: "failed",
+        name: "state.json",
+        reasons: ["lock held"],
+        cause,
+        severity: "error",
+        needsReload: false,
+      },
+    ]);
+  });
+
+  test("maps an outcome the step does not produce to no row", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      { kind: "plugin-uninstalled", scope: "project", marketplace: "other", plugin: "lib" },
+    ];
+
+    // act
+    const rows = dependencyInstallRows(outcomes);
+
+    // assert
+    assert.deepStrictEqual(rows, []);
   });
 });

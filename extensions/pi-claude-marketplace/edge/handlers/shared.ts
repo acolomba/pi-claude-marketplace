@@ -161,21 +161,3 @@ function isOptionToken(token: string): boolean {
 function isUnacceptedLongFlag(token: string, acceptedFlags: readonly string[]): boolean {
   return token.startsWith("--") && !acceptedFlags.includes(token);
 }
-
-/**
- * Rejects the first long-flag token of a command that accepts no flag beyond
- * what its parser already consumed, as `Unknown flag: "<flag>".`. Returns
- * whether it rejected one.
- */
-export function rejectUnknownFlag(
-  tokens: readonly string[],
-  { ctx, run, usage }: { ctx: ExtensionCommandContext; run: NotificationRun; usage: string },
-): boolean {
-  const flag = tokens.find((token) => token.startsWith("--"));
-  if (flag === undefined) {
-    return false;
-  }
-
-  notifyUsageError(ctx, run, { message: `Unknown flag: "${flag}".`, usage });
-  return true;
-}

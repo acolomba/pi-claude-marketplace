@@ -60,6 +60,7 @@ import type {
   EnableDisablePluginOptions,
   EnableDisablePluginOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
+import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
@@ -1975,7 +1976,7 @@ test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const { statePath, baseConfigPath } = await seedRealDisabledMarketplace(home, {
-      marketplaceName: "claude-plugins-official",
+      marketplaceName: "acme-plugins",
       pluginName: "foo-plugin",
       version: "1.2.3",
     });
@@ -1985,7 +1986,7 @@ test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace
       ctx,
       run: runWithNothingLoaded(),
       cwd,
-      marketplace: "claude-plugins-official",
+      marketplace: "acme-plugins",
       plugin: "foo-plugin",
       enable: true,
       scope: "user",
@@ -2002,7 +2003,7 @@ test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace
     assert.equal(
       notifications[0]!.message,
       [
-        "● claude-plugins-official [user]",
+        "● acme-plugins [user]",
         "  ● foo-plugin v1.2.3 (installed)",
         "",
         "/reload to pick up changes",
@@ -2027,7 +2028,7 @@ test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace
         }
       >;
     };
-    const rec = state.marketplaces["claude-plugins-official"]!.plugins["foo-plugin"]!;
+    const rec = state.marketplaces["acme-plugins"]!.plugins["foo-plugin"]!;
     assert.ok(
       rec.resources.skills.length > 0,
       "resources.skills must be non-empty after a fresh enable (state/disk drift otherwise)",
@@ -2043,7 +2044,7 @@ test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace
     const cfg = await readConfig(baseConfigPath);
     const plugins = (cfg as { plugins?: Record<string, { enabled?: boolean }> }).plugins ?? {};
     assert.equal(
-      plugins["foo-plugin@claude-plugins-official"]?.enabled,
+      plugins["foo-plugin@acme-plugins"]?.enabled,
       true,
       "config entry should carry enabled:true",
     );
@@ -2167,7 +2168,7 @@ test("WLIF-03: disable removes the workflow envelope while the record keeps nami
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const { statePath } = await seedRealDisabledMarketplace(home, {
-      marketplaceName: "claude-plugins-official",
+      marketplaceName: "acme-plugins",
       pluginName: "foo-plugin",
       version: "1.2.3",
       withWorkflow: true,
@@ -2175,7 +2176,7 @@ test("WLIF-03: disable removes the workflow envelope while the record keeps nami
     const args = {
       run: runWithNothingLoaded(),
       cwd,
-      marketplace: "claude-plugins-official",
+      marketplace: "acme-plugins",
       plugin: "foo-plugin",
       scope: "user" as const,
     };
@@ -2191,8 +2192,7 @@ test("WLIF-03: disable removes the workflow envelope while the record keeps nami
       >;
     };
     assert.deepStrictEqual(
-      recordAfterEnable.marketplaces["claude-plugins-official"]?.plugins["foo-plugin"]?.resources
-        .workflows,
+      recordAfterEnable.marketplaces["acme-plugins"]?.plugins["foo-plugin"]?.resources.workflows,
       ["foo-plugin:greet"],
       "precondition: the enable must actually record an envelope",
     );
@@ -2211,7 +2211,7 @@ test("WLIF-03: disable removes the workflow envelope while the record keeps nami
         { plugins: Record<string, { enabled: boolean; resources: { workflows: string[] } }> }
       >;
     };
-    const record = after.marketplaces["claude-plugins-official"]?.plugins["foo-plugin"];
+    const record = after.marketplaces["acme-plugins"]?.plugins["foo-plugin"];
     assert.equal(record?.enabled, false);
     assert.deepStrictEqual(record?.resources.workflows, ["foo-plugin:greet"]);
   });
@@ -2275,7 +2275,7 @@ async function recordedWorkflowNames(statePath: string): Promise<readonly string
       { plugins: Record<string, { resources: { workflows: string[] } }> }
     >;
   };
-  return parsed.marketplaces["claude-plugins-official"]?.plugins["foo-plugin"]?.resources.workflows;
+  return parsed.marketplaces["acme-plugins"]?.plugins["foo-plugin"]?.resources.workflows;
 }
 
 /**
@@ -2294,7 +2294,7 @@ async function seedWorkflowRoundTrip(
   savedDir: string;
 }> {
   const { statePath, mpRoot } = await seedRealDisabledMarketplace(home, {
-    marketplaceName: "claude-plugins-official",
+    marketplaceName: "acme-plugins",
     pluginName: "foo-plugin",
     version: "1.2.3",
   });
@@ -2306,7 +2306,7 @@ async function seedWorkflowRoundTrip(
     args: {
       run: runWithNothingLoaded(),
       cwd,
-      marketplace: "claude-plugins-official",
+      marketplace: "acme-plugins",
       plugin: "foo-plugin",
       scope: "user" as const,
     },
@@ -2445,7 +2445,7 @@ test("WLIF-06: a disable that took an envelope off disk names the reload remedy"
     assert.deepStrictEqual(soleRow(notifications), {
       message:
         "A plugin operation needs attention.\n\n" +
-        "● claude-plugins-official [user]\n" +
+        "● acme-plugins [user]\n" +
         "  ◍ foo-plugin v1.2.3 (disabled) {stale workflow command}\n\n" +
         "/reload to pick up changes",
       severity: "warning",
@@ -2469,7 +2469,7 @@ test("WLIF-06: a disable that retired nothing renders the row it always rendered
     // shape, so the severity assertion is the one that would catch it.
     assert.deepStrictEqual(soleRow(notifications), {
       message:
-        "● claude-plugins-official [user]\n" +
+        "● acme-plugins [user]\n" +
         "  ◍ foo-plugin v1.2.3 (disabled)\n\n" +
         "/reload to pick up changes",
     });
@@ -2498,7 +2498,7 @@ test("WLIF-06: an enable whose source dropped a workflow names the retired comma
     assert.deepStrictEqual(soleRow(notifications), {
       message:
         "A plugin operation needs attention.\n\n" +
-        "● claude-plugins-official [user]\n" +
+        "● acme-plugins [user]\n" +
         "  ● foo-plugin v1.2.3 (installed) " +
         "{stale workflow command, requires pi-dynamic-workflows}\n\n" +
         "/reload to pick up changes",
@@ -2553,7 +2553,7 @@ test("WLIF-06: a name in both the recorded and the staged set retires nothing", 
     assert.deepStrictEqual(soleRow(notifications), {
       message:
         "A plugin operation needs attention.\n\n" +
-        "● claude-plugins-official [user]\n" +
+        "● acme-plugins [user]\n" +
         "  ● foo-plugin v1.2.3 (installed) {requires pi-dynamic-workflows}\n\n" +
         "/reload to pick up changes",
       severity: "warning",
@@ -2754,14 +2754,14 @@ test("ENBL-19: an enable/disable/enable round trip succeeds -- the retained inve
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const { statePath } = await seedRealDisabledMarketplace(home, {
-      marketplaceName: "claude-plugins-official",
+      marketplaceName: "acme-plugins",
       pluginName: "foo-plugin",
       version: "1.2.3",
     });
     const args = {
       run: runWithNothingLoaded(),
       cwd,
-      marketplace: "claude-plugins-official",
+      marketplace: "acme-plugins",
       plugin: "foo-plugin",
       scope: "user" as const,
     };
@@ -2781,7 +2781,7 @@ test("ENBL-19: an enable/disable/enable round trip succeeds -- the retained inve
           { plugins: Record<string, { enabled: boolean; resources: { skills: string[] } }> }
         >;
       };
-      const rec = state.marketplaces["claude-plugins-official"]!.plugins["foo-plugin"]!;
+      const rec = state.marketplaces["acme-plugins"]!.plugins["foo-plugin"]!;
       assert.equal(rec.enabled, false, "the round trip's middle step must leave a DISABLED record");
       return rec.resources.skills;
     };
@@ -2800,7 +2800,7 @@ test("ENBL-19: an enable/disable/enable round trip succeeds -- the retained inve
     assert.equal(
       notifications[0]!.message,
       [
-        "● claude-plugins-official [user]",
+        "● acme-plugins [user]",
         "  ● foo-plugin v1.2.3 (installed)",
         "",
         "/reload to pick up changes",
@@ -2948,7 +2948,7 @@ test("WR-06 / SEV-01: enable of a plugin that stages an agent renders {requires 
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     await seedRealDisabledMarketplace(home, {
-      marketplaceName: "claude-plugins-official",
+      marketplaceName: "acme-plugins",
       pluginName: "foo-plugin",
       version: "1.2.3",
       withAgent: true,
@@ -2959,7 +2959,7 @@ test("WR-06 / SEV-01: enable of a plugin that stages an agent renders {requires 
       ctx,
       run: runWithNothingLoaded(),
       cwd,
-      marketplace: "claude-plugins-official",
+      marketplace: "acme-plugins",
       plugin: "foo-plugin",
       enable: true,
       scope: "user",
@@ -2977,7 +2977,7 @@ test("WR-06 / SEV-01: enable of a plugin that stages an agent renders {requires 
       [
         "A plugin operation needs attention.",
         "",
-        "● claude-plugins-official [user]",
+        "● acme-plugins [user]",
         "  ● foo-plugin v1.2.3 (installed) {requires pi-subagents}",
         "",
         "/reload to pick up changes",
@@ -2990,7 +2990,7 @@ test("WR-06 / SEV-01: the same re-enable with pi-subagents loaded renders no mar
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     await seedRealDisabledMarketplace(home, {
-      marketplaceName: "claude-plugins-official",
+      marketplaceName: "acme-plugins",
       pluginName: "foo-plugin",
       version: "1.2.3",
       withAgent: true,
@@ -3005,7 +3005,7 @@ test("WR-06 / SEV-01: the same re-enable with pi-subagents loaded renders no mar
         workflowEngineLoaded: false,
       }),
       cwd,
-      marketplace: "claude-plugins-official",
+      marketplace: "acme-plugins",
       plugin: "foo-plugin",
       enable: true,
       scope: "user",
@@ -3020,7 +3020,7 @@ test("WR-06 / SEV-01: the same re-enable with pi-subagents loaded renders no mar
     assert.equal(
       notifications[0]!.message,
       [
-        "● claude-plugins-official [user]",
+        "● acme-plugins [user]",
         "  ● foo-plugin v1.2.3 (installed)",
         "",
         "/reload to pick up changes",
@@ -3037,7 +3037,7 @@ test("WR-06 / WARN-01: a re-enable that staged an agent AND degraded a skill com
     // is what keeps either rule from silently replacing the other.
     // arrange
     await seedRealDisabledMarketplace(home, {
-      marketplaceName: "claude-plugins-official",
+      marketplaceName: "acme-plugins",
       pluginName: "foo-plugin",
       version: "1.2.3",
       withAgent: true,
@@ -3049,7 +3049,7 @@ test("WR-06 / WARN-01: a re-enable that staged an agent AND degraded a skill com
       ctx,
       run: runWithNothingLoaded(),
       cwd,
-      marketplace: "claude-plugins-official",
+      marketplace: "acme-plugins",
       plugin: "foo-plugin",
       enable: true,
       scope: "user",
@@ -3065,7 +3065,7 @@ test("WR-06 / WARN-01: a re-enable that staged an agent AND degraded a skill com
       [
         "A plugin operation needs attention.",
         "",
-        "● claude-plugins-official [user]",
+        "● acme-plugins [user]",
         "  ● foo-plugin v1.2.3 (installed) {malformed skill, requires pi-subagents}",
         "",
         "/reload to pick up changes",
@@ -3080,7 +3080,7 @@ test("WR-06 / NREG-01: a re-enable that staged neither agents nor MCP servers re
     // companion, so an unloaded probe must produce no marker and no raise.
     // arrange
     await seedRealDisabledMarketplace(home, {
-      marketplaceName: "claude-plugins-official",
+      marketplaceName: "acme-plugins",
       pluginName: "foo-plugin",
       version: "1.2.3",
     });
@@ -3090,7 +3090,7 @@ test("WR-06 / NREG-01: a re-enable that staged neither agents nor MCP servers re
       ctx,
       run: runWithNothingLoaded(),
       cwd,
-      marketplace: "claude-plugins-official",
+      marketplace: "acme-plugins",
       plugin: "foo-plugin",
       enable: true,
       scope: "user",
@@ -3103,7 +3103,7 @@ test("WR-06 / NREG-01: a re-enable that staged neither agents nor MCP servers re
     assert.equal(
       notifications[0]!.message,
       [
-        "● claude-plugins-official [user]",
+        "● acme-plugins [user]",
         "  ● foo-plugin v1.2.3 (installed)",
         "",
         "/reload to pick up changes",
@@ -3386,7 +3386,7 @@ test("WR-02: a failed plugin row from another surface renders byte-identically -
   notify(ctx, runWithNothingLoaded(), {
     marketplaces: [
       {
-        name: "claude-plugins-official",
+        name: "acme-plugins",
         scope: "user",
         plugins: [
           {
@@ -3409,7 +3409,7 @@ test("WR-02: a failed plugin row from another surface renders byte-identically -
     [
       "A plugin operation has failed.",
       "",
-      "● claude-plugins-official [user]",
+      "● acme-plugins [user]",
       "  ⊘ foo-plugin (failed)",
       "    cause: EACCES: permission denied, mkdir '/home/user/.pi/agent/skills'",
     ].join("\n"),
@@ -3600,9 +3600,77 @@ test("GHB-03: an enable whose ledger left a rollback partial reports it instead 
       reason: "rollback partial",
       error: invalidBase,
       cause: "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme.",
+      rollbackPartials: [{ msg: "skill rollback denied", phase: "skills" }],
     });
   });
 });
+
+const MIM03_MCP_FAILURE = new Error("mcp staging denied");
+
+for (const { title, rollbackPartials, typedFailure: expectedFailure } of [
+  {
+    title: "an orchestrated enable whose rollback could not finish carries the rollback partials",
+    rollbackPartials: [{ msg: "skill rollback denied", phase: "skills" }],
+    typedFailure: {
+      status: "failed",
+      reason: "rollback partial",
+      error: MIM03_MCP_FAILURE,
+      cause: "mcp staging denied",
+      rollbackPartials: [{ msg: "skill rollback denied", phase: "skills" }],
+    },
+  },
+  {
+    title: "an orchestrated enable whose rollback finished carries no rollback partials",
+    rollbackPartials: [],
+    typedFailure: {
+      status: "failed",
+      reason: "unreadable",
+      error: MIM03_MCP_FAILURE,
+      cause: "mcp staging denied",
+    },
+  },
+]) {
+  test(`MIM-03 / D-PL6-11: ${title}`, async () => {
+    await withHermeticHome(async ({ cwd, home }) => {
+      // arrange
+      await seedRealDisabledMarketplace(home, {
+        marketplaceName: "mp",
+        pluginName: "foo",
+        version: "1.2.3",
+      });
+      const transaction: EnableDisableTransaction = {
+        ...REAL_ENABLE_DISABLE_TRANSACTION,
+        runInstallLedger(_state, _locations, _options, capture) {
+          assert.ok(capture !== undefined);
+          capture.version = "1.2.3";
+          capture.rollbackPartials = rollbackPartials;
+          return rejectUnknown(MIM03_MCP_FAILURE);
+        },
+      };
+      const setPluginEnabledForOwner = createSetPluginEnabled(
+        transaction,
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      );
+      const { ctx, notifications } = makeCtx(cwd);
+
+      // act
+      const typedFailure = await setPluginEnabledForOwner({
+        ctx,
+        run: runWithNothingLoaded(),
+        cwd,
+        marketplace: "mp",
+        plugin: "foo",
+        enable: true,
+        scope: "user",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(typedFailure, expectedFailure);
+      assert.deepStrictEqual(notifications, []);
+    });
+  });
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // ENBL idempotency arm
@@ -4645,7 +4713,7 @@ test("orchestrated mode enable-success returns { status: 'enabled', name, versio
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     await seedRealDisabledMarketplace(home, {
-      marketplaceName: "claude-plugins-official",
+      marketplaceName: "acme-plugins",
       pluginName: "foo-plugin",
       version: "1.2.3",
     });
@@ -4655,7 +4723,7 @@ test("orchestrated mode enable-success returns { status: 'enabled', name, versio
       ctx,
       run: runWithNothingLoaded(),
       cwd,
-      marketplace: "claude-plugins-official",
+      marketplace: "acme-plugins",
       plugin: "foo-plugin",
       enable: true,
       scope: "user",
@@ -4721,6 +4789,12 @@ test("orchestrated enable returns every live degradation and companion signal wi
       orphanRewake: true,
       stagedAgents: true,
       stagedMcpServers: true,
+      stagingWarnings: [
+        {
+          kind: "hygiene",
+          message: "[helper] source description was missing or empty -- using fallback",
+        },
+      ],
       status: "enabled",
       unsupported: ["lspServers"],
       version: "1.2.3",
@@ -6086,7 +6160,16 @@ async function writeEdepPluginRoot(
  */
 async function seedEnableCascadeFixture(
   home: string,
-  opts: { readonly declareDependency: boolean; readonly dependencyEnabled?: boolean },
+  opts: {
+    readonly declareDependency: boolean;
+    readonly dependencyEnabled?: boolean;
+    /**
+     * D-PL2-06: record `helper` at a commit whose per-commit clone under the
+     * scope's `plugin-clones/` declares `formatter@tools`, whatever the
+     * catalog tree declares.
+     */
+    readonly installedCopyDeclaresDependency?: true;
+  },
 ): Promise<{
   statePath: string;
   baseConfigPath: string;
@@ -6129,6 +6212,15 @@ async function seedEnableCascadeFixture(
     }),
   );
 
+  const helperClone = path.join(extRoot, "plugin-clones", "acme-helper", "0123456");
+  if (opts.installedCopyDeclaresDependency !== undefined) {
+    await writeEdepPluginRoot(helperClone, {
+      name: "helper",
+      version: "1.0.0",
+      dependencies: [{ name: "formatter", marketplace: "tools" }],
+    });
+  }
+
   const statePath = path.join(extRoot, "state.json");
   const state = {
     schemaVersion: 2,
@@ -6141,11 +6233,17 @@ async function seedEnableCascadeFixture(
         marketplaceRoot: officialRoot,
         manifestPath: officialManifestPath,
         plugins: {
-          helper: edepCascadeRecord({
-            resolvedSource: helperRoot,
-            version: "1.0.0",
-            enabled: false,
-          }),
+          helper: {
+            ...edepCascadeRecord({
+              resolvedSource:
+                opts.installedCopyDeclaresDependency === undefined ? helperRoot : helperClone,
+              version: "1.0.0",
+              enabled: false,
+            }),
+            ...(opts.installedCopyDeclaresDependency !== undefined && {
+              resolvedSha: "0123456789abcdef0123456789abcdef01234567",
+            }),
+          },
         },
       },
       tools: {
@@ -6221,6 +6319,63 @@ test("EDEP-01 / EDEP-03: enabling a plugin turns on its one disabled dependency 
     assert.equal(await fileExists(localConfigPath), false);
     const cfg = (await readConfig(baseConfigPath)) as { plugins?: Record<string, unknown> };
     assert.deepEqual(Object.keys(cfg.plugins ?? {}), ["helper@official"]);
+  });
+});
+
+test("D-PL2-06: enabling a root pinned to a commit turns on the dependency its installed copy declares, though its catalog entry declares none", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEnableCascadeFixture(home, {
+      declareDependency: false,
+      dependencyEnabled: false,
+      installedCopyDeclaresDependency: true,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+    // The fixture's catalog tree is no git checkout, so the ledger
+    // materializes it without the recorded commit; the closure, decided
+    // before any ledger runs, is what this case observes.
+    const enable = createSetPluginEnabled(
+      {
+        ...REAL_ENABLE_DISABLE_TRANSACTION,
+        runInstallLedger(state, locations, { sourcePinOverride: _pin, ...options }, capture) {
+          return REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(
+            state,
+            locations,
+            options,
+            capture,
+          );
+        },
+      },
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+
+    // act
+    await enable({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "helper",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      notifications.map((notification) => notification.message),
+      [
+        [
+          "● official [user]",
+          "  ● formatter@tools v2.1.0 (installed) {dependency enabled}",
+          "  ● helper v1.0.0 (installed)",
+          "",
+          "/reload to pick up changes",
+        ].join("\n"),
+      ],
+    );
+    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(state.marketplaces.official!.plugins.helper!.enabled, true);
+    assert.equal(state.marketplaces.tools!.plugins.formatter!.enabled, true);
   });
 });
 
@@ -6512,6 +6667,25 @@ async function seedEdepGraph(
     scopeRoot,
     mpRoot,
   };
+}
+
+/** Moves `helper` under an outer key that differs from its recorded marketplace name. */
+async function moveHelperToAliasedMarketplace(
+  statePath: string,
+  dependencyDisabled?: true,
+): Promise<void> {
+  const state = JSON.parse(await readFile(statePath, "utf8")) as ExtensionState;
+  const official = state.marketplaces["official"]!;
+  const helper = official.plugins["helper"]!;
+  delete official.plugins["helper"];
+  state.marketplaces["alias"] = {
+    ...official,
+    name: "tools",
+    plugins: {
+      helper: dependencyDisabled === true ? { ...helper, dependencyDisabled } : helper,
+    },
+  };
+  await writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
 }
 
 test("EDEP-01: depth-2 transitivity enables the whole chain in dependency-first order", async () => {
@@ -7988,6 +8162,95 @@ test("EDEP-02: a DISABLED declarer does not block the disable", async () => {
   });
 });
 
+test("EDEP-02: a user-disabled declarer under a mismatched outer key does not block the disable", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEdepGraph(home, [
+      { name: "shared-lib", version: "1.0.0", enabled: true },
+      {
+        name: "helper",
+        version: "1.0.0",
+        dependencies: [{ name: "shared-lib", marketplace: "official" }],
+        enabled: false,
+      },
+    ]);
+    await moveHelperToAliasedMarketplace(statePath);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "shared-lib",
+      enable: false,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● official [user]",
+        "  ◍ shared-lib v1.0.0 (disabled)",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+    );
+    const state = JSON.parse(await readFile(statePath, "utf8")) as ExtensionState;
+    assert.equal(state.marketplaces["official"]!.plugins["shared-lib"]!.enabled, false);
+  });
+});
+
+test("EDEP-02: a dependency-disabled declarer under a mismatched outer key still blocks the disable", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEdepGraph(home, [
+      { name: "shared-lib", version: "1.0.0", enabled: true },
+      {
+        name: "helper",
+        version: "1.0.0",
+        dependencies: [{ name: "shared-lib", marketplace: "official" }],
+        enabled: false,
+      },
+    ]);
+    await moveHelperToAliasedMarketplace(statePath, true);
+    const { transaction, calls } = countingTransaction();
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "shared-lib",
+      enable: false,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● official [user]",
+        "  ⊘ shared-lib (failed) {dependents remain}",
+        "    cause: Disable helper@tools first, then shared-lib@official.",
+      ].join("\n"),
+    );
+    assert.deepEqual(calls, { cascadeUnstage: 0, save: 0 });
+  });
+});
+
 test("EDEP-02: a declarer in the OTHER scope does not block the disable", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
@@ -8966,6 +9229,8 @@ test("GIT-01: enable re-materializes the commit the record names", async () => {
     const record = state.marketplaces["mp"]?.plugins["foo"];
     assert.ok(record !== undefined);
     record["resolvedSha"] = recordedSha;
+    // D-PL2-12: a record pinned to a commit owns a copy under the plugin clones.
+    record["resolvedSource"] = path.join(locationsFor("user", cwd).pluginClonesDir, "foo-copy");
     await writeFile(statePath, JSON.stringify(state), "utf8");
     const pins: (string | undefined)[] = [];
     const transaction: EnableDisableTransaction = {
@@ -9013,6 +9278,8 @@ test("GIT-01 / GV-01: enable keeps the release tag version the record holds", as
     assert.ok(record !== undefined);
     record["version"] = "1.2.3-111111111111";
     record["resolvedSha"] = recordedSha;
+    // D-PL2-12: a record pinned to a commit owns a copy under the plugin clones.
+    record["resolvedSource"] = path.join(locationsFor("user", cwd).pluginClonesDir, "foo-copy");
     record["resolvedVersion"] = "1.2.3";
     await writeFile(statePath, JSON.stringify(state), "utf8");
     const pins: (string | undefined)[][] = [];
@@ -9042,5 +9309,327 @@ test("GIT-01 / GV-01: enable keeps the release tag version the record holds", as
 
     // assert
     assert.deepStrictEqual(pins, [["1.2.3-111111111111", recordedSha, "1.2.3"]]);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// D-PL1-12 / WRN-01: the staging warnings of the enable root.
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * D-PL1-12: give a plugin a second skill whose generated name collides with
+ * its `s1` skill's, so its staging skips one of them with a discovery warning.
+ */
+async function writeCollidingSkill(pluginRoot: string, pluginName: string): Promise<void> {
+  const skillDir = path.join(pluginRoot, "skills", `${pluginName}-s1`);
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: s1\n---\n\nColliding.\n");
+}
+
+/** D-PL1-12: replace the seeded agent with one whose conversion drops a tool. */
+async function writeToolDroppingAgent(pluginRoot: string): Promise<void> {
+  await writeFile(
+    path.join(pluginRoot, "agents", "helper.md"),
+    "---\nname: helper\ndescription: Helps.\ntools: Read, WebFetch\n---\n\nBody.\n",
+  );
+}
+
+test("D-PL1-12: a standalone enable shows the root's skipped skill after its row and before the MCP notices", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { mpRoot } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+      mcpServers: { server1: { command: "node" } },
+    });
+    await writeCollidingSkill(path.join(mpRoot, "plugins", "foo"), "foo");
+    await writeCommentedUserAdapterFile(home);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithMcpAdapterLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● mp [user]\n  ● foo v1.2.3 (installed)\n\n/reload to pick up changes" },
+      {
+        severity: "warning",
+        message:
+          'Plugin "foo" [user] enabled; 1 declared component has a note.\n\nskill source "s1" in "[redacted path]',
+      },
+      USER_COMMENTS_DROPPED_NOTICE,
+    ]);
+  });
+});
+
+test("D-PL1-12: a standalone enable whose only staging warning is hygiene shows no diagnostic", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { mpRoot } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+      withAgent: true,
+    });
+    await writeToolDroppingAgent(path.join(mpRoot, "plugins", "foo"));
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithSoftDeps({
+        piSubagentsLoaded: true,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      }),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● mp [user]\n  ● foo v1.2.3 (installed)\n\n/reload to pick up changes" },
+    ]);
+  });
+});
+
+test("D-PL1-12: a standalone enable whose config write fails after the root committed shows no diagnostic", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { mpRoot } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    await writeCollidingSkill(path.join(mpRoot, "plugins", "foo"), "foo");
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      writeConfigEntries() {
+        return rejectUnknown(new Error("config write denied"));
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        severity: "error",
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● mp [user]",
+          "  ⊘ foo v1.2.3 (failed)",
+          "    cause: config write denied",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("D-PL1-12: a standalone enable shows no diagnostic for a re-enabled dependency whose skills collide", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { mpRoot } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    await writeCollidingSkill(path.join(mpRoot, "plugins", "b"), "b");
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● official [user]",
+          "  ● a v1.0.0 (installed)",
+          "  ● b@official v1.0.0 (installed) {dependency enabled}",
+          "",
+          "/reload to pick up changes",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("D-PL1-12: an orchestrated enable carries both halves of the root's staging warnings and sends nothing", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { mpRoot } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+      withAgent: true,
+    });
+    await writeCollidingSkill(path.join(mpRoot, "plugins", "foo"), "foo");
+    await writeToolDroppingAgent(path.join(mpRoot, "plugins", "foo"));
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "enabled",
+      name: "foo",
+      version: "1.2.3",
+      stagedAgents: true,
+      stagingWarnings: [
+        {
+          kind: "discovery",
+          message: `skill source "s1" in "${path.join(mpRoot, "plugins", "foo", "skills")}" elides to generated name "foo-s1", already produced by skill source "foo-s1"; ignoring duplicate.`,
+        },
+        { kind: "hygiene", message: "[helper] dropped tools: WebFetch" },
+      ],
+    });
+    assert.deepStrictEqual(notifications, []);
+  });
+});
+
+test("D-PL1-12: an orchestrated enable with no staging warning carries no stagingWarnings member", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    const { ctx } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, { status: "enabled", name: "foo", version: "1.2.3" });
+  });
+});
+
+test("D-PL1-12: an orchestrated disable of a plugin whose skills collide carries no stagingWarnings member", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { mpRoot } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    await writeCollidingSkill(path.join(mpRoot, "plugins", "foo"), "foo");
+    const options = {
+      ctx: makeCtx(cwd).ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    } as const;
+    await setPluginEnabled({ ...options, enable: true });
+
+    // act
+    const outcome = await setPluginEnabled({ ...options, enable: false });
+
+    // assert
+    assert.deepStrictEqual(outcome, { status: "disabled", name: "foo", version: "1.2.3" });
+  });
+});
+
+test("D-PL1-12: an orchestrated enable whose save fails after the root's ledger carries no stagingWarnings member", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { mpRoot } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    await writeCollidingSkill(path.join(mpRoot, "plugins", "foo"), "foo");
+    const failure = new Error("state save denied");
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      async withLockedStateTransaction(locations, run) {
+        return withLockedStateTransaction(locations, async (tx) =>
+          run({ state: tx.state, save: () => rejectUnknown(failure) }),
+        );
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabledForOwner({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      reason: "unreadable",
+      error: failure,
+      cause: "state save denied",
+    });
+    assert.deepStrictEqual(notifications, []);
   });
 });

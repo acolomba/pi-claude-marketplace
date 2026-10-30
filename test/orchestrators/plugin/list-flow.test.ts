@@ -53,6 +53,7 @@ import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts"
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
+import type { ParsedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type { ListPluginsOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts";
 import type {
   ExtensionContext,
@@ -224,6 +225,8 @@ interface SeedMarketplaceOpts {
   mpName: string;
   /** When provided, written to <mpRoot>/.claude-plugin/marketplace.json. */
   manifest?: unknown;
+  /** The record's stored source; defaults to a path source. */
+  source?: ParsedSource;
   /** When provided BUT manifest is undefined, manifestPath in state points here (typically a nonexistent file for PL-6 tests). */
   manifestPathOverride?: string;
   /**
@@ -362,7 +365,7 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
   const record: Record<string, unknown> = {
     name: mpName,
     scope,
-    source: pathSource(`./${mpName}-src`),
+    source: opts.source ?? pathSource(`./${mpName}-src`),
     addedFromCwd: cwd,
     manifestPath,
     marketplaceRoot: mpRoot,
@@ -1248,6 +1251,17 @@ test("T-80-08 / D-78-04: an INSTALLED git plugin with a missing clone stays `(in
 // unchanged.
 // ──────────────────────────────────────────────────────────────────────────
 
+/**
+ * D-PL5-28: the anthropics organization's github source, the only source a
+ * marketplace recorded as `claude-plugins-official` loads from.
+ */
+const ANTHROPICS_OFFICIAL_SOURCE = {
+  kind: "github",
+  raw: "anthropics/claude-plugins-official",
+  owner: "anthropics",
+  repo: "claude-plugins-official",
+} satisfies ParsedSource;
+
 test("list flags binaries on candidate and upgrade rows of an official marketplace", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
@@ -1258,6 +1272,7 @@ test("list flags binaries on candidate and upgrade rows of an official marketpla
       scopeRoot: userRoot,
       cwd,
       mpName: "claude-plugins-official",
+      source: ANTHROPICS_OFFICIAL_SOURCE,
       manifest: {
         name: "claude-plugins-official",
         plugins: [
@@ -2890,6 +2905,58 @@ test("FSTAT-01 / D-64-02: the partially-installed row's reasons are the narrowUn
 // PL-6: manifest soft-fail (catalog CMC-22 form: failed-marketplace header)
 // ──────────────────────────────────────────────────────────────────────────
 
+test("D-PL5-32: a hosted marketplace's relative entry lists as unavailable with an unsupported source", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const catalogUrl = "https://h.example/acme/mp1/marketplace.json";
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp1",
+      manifest: { name: "mp1", plugins: [{ name: "root", source: "./", version: "1.0.0" }] },
+      source: { kind: "hosted", raw: catalogUrl, url: catalogUrl },
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await listPlugins({ ctx, run, cwd, scope: "user" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: ["● mp1 [user]", "  ⊘ root v1.0.0 (unavailable) {unsupported source}"].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("D-PL5-28: a marketplace whose manifest now declares a look-alike name renders as a bare failed header", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp1",
+      manifest: { name: "claude-plugins-v2", plugins: [] },
+      installed: { stranded: { version: "9.9.9" } },
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await listPlugins({ ctx, run, cwd, scope: "user" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: "A marketplace operation has failed.\n\n⊘ mp1 [user] (failed)",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
 test("PL-6 / CMC-22: manifest load failure renders the marketplace as a bare V2 failed header (no `{unparseable}` brace; no cause trailer)", async () => {
   // Catalog `unparseable-mp` at docs/output-catalog.md:215-226: emits a
   // BARE `(failed)` header (no reasons brace, no cause trailer) because
@@ -2985,6 +3052,34 @@ test("PL-7 / CMC-05: marketplace with autoupdate=false (or undefined) does NOT r
     // assert
     const out = notifications[0]!.message;
     assert.match(out, /● plain-mp \[user\]/);
+    assert.equal(out.includes("<autoupdate>"), false);
+
+    verify(ctx);
+    verify(ui);
+  });
+});
+
+test("an invalid config layer drops the <autoupdate> marker from an official marketplace", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "claude-plugins-official",
+      manifest: { name: "claude-plugins-official", plugins: [] },
+      source: ANTHROPICS_OFFICIAL_SOURCE,
+    });
+    await writeFile(locationsFor("user", cwd).localConfigJsonPath, "{ invalid", "utf8");
+    const { ctx, run, notifications, ui } = makeCtx();
+
+    // act
+    await listPlugins({ ctx, run, cwd, scope: "user" });
+
+    // assert
+    const out = notifications[0]!.message;
+    assert.match(out, /● claude-plugins-official \[user\]/);
     assert.equal(out.includes("<autoupdate>"), false);
 
     verify(ctx);
@@ -4536,6 +4631,60 @@ test("loadPluginListPayload filters project marketplaces and projects autoupdate
         details: { autoupdate: true },
         plugins: [],
       },
+    ]);
+    verify(ctx);
+  });
+});
+
+test("D-PL8-07: loadPluginListPayload defaults autoupdate by marketplace name in both scopes", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const projectRoot = path.join(cwd, ".pi");
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "project",
+      scopeRoot: projectRoot,
+      cwd,
+      mpName: "claude-plugins-official",
+      manifest: { name: "claude-plugins-official", plugins: [] },
+      source: ANTHROPICS_OFFICIAL_SOURCE,
+    });
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "anthropic-agent-skills",
+      manifest: { name: "anthropic-agent-skills", plugins: [] },
+      source: ANTHROPICS_OFFICIAL_SOURCE,
+    });
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "knowledge-work-plugins",
+      manifest: { name: "knowledge-work-plugins", plugins: [] },
+      source: ANTHROPICS_OFFICIAL_SOURCE,
+    });
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+
+    // act
+    const marketplaces = await loadPluginListPayload({ ctx, cwd });
+
+    // assert
+    assert.deepStrictEqual(marketplaces, [
+      {
+        name: "anthropic-agent-skills",
+        scope: "user",
+        details: { autoupdate: true },
+        plugins: [],
+      },
+      {
+        name: "claude-plugins-official",
+        scope: "project",
+        details: { autoupdate: true },
+        plugins: [],
+      },
+      { name: "knowledge-work-plugins", scope: "user", plugins: [] },
     ]);
     verify(ctx);
   });

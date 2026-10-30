@@ -10,7 +10,8 @@
 // The child environment is an allowlist built from scratch. A prompt that is
 // not an extension command falls through to Pi's model path, and inherited
 // provider credentials would let it reach a real provider over the network.
-// The cucumber run adds a typed git and trust environment and nothing else.
+// The cucumber run adds a typed git and trust environment, plus the background
+// update delay for a scenario's own Pi, and nothing else.
 // `--no-extensions` is never passed, because it also removes `builtin:mcp`.
 import { spawn } from "node:child_process";
 import { realpath } from "node:fs/promises";
@@ -53,6 +54,12 @@ export interface RpcGitEnvironment {
   readonly GIT_CONFIG_NOSYSTEM: "1";
   readonly GIT_CONFIG_GLOBAL: string;
   readonly PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: string;
+  /**
+   * The maximum delay of the background update, set only for a scenario's own
+   * Pi (D-PL8-09). The run's shared Pi never sets it, so its background update
+   * keeps the ten-minute maximum and a new session cancels it.
+   */
+  readonly PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS?: string;
 }
 
 /** What one RPC session runs: the sandbox, the steps in order, and extra extensions. */
@@ -153,7 +160,7 @@ async function resolveLocation(location: string): Promise<string> {
 // ones the child receives, so nothing can swap a location after the check.
 // Pi asks for project trust in every directory under the repository, and the
 // session cancels every dialog, so a location there is refused by name.
-async function resolveSandbox(sandbox: RpcSandbox): Promise<RpcSandbox> {
+export async function resolveRpcSandbox(sandbox: RpcSandbox): Promise<RpcSandbox> {
   const repoRoot = await realpath(REPO_ROOT);
   const tmpRoot = await realpath(tmpdir());
   const resolve = async (location: string): Promise<string> => {
@@ -195,17 +202,23 @@ export function rpcChildEnvironment(
     environment.GIT_CONFIG_NOSYSTEM = git.GIT_CONFIG_NOSYSTEM;
     environment.GIT_CONFIG_GLOBAL = git.GIT_CONFIG_GLOBAL;
     environment.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL = git.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL;
+    if (git.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS !== undefined) {
+      environment.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS =
+        git.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS;
+    }
   }
 
   return environment;
 }
 
-function piArguments(extraExtensions: readonly string[]): string[] {
+export function piArguments(
+  mode: "rpc" | "tui",
+  extraExtensions: readonly string[] = [],
+): string[] {
   const extensions = [EXTENSION_ENTRY, ...extraExtensions];
   return [
     resolvePiRuntime(REPO_ROOT).cliPath,
-    "--mode",
-    "rpc",
+    ...(mode === "rpc" ? ["--mode", "rpc"] : []),
     "--offline",
     "--no-session",
     ...extensions.flatMap((extension) => ["--extension", extension]),
@@ -378,7 +391,7 @@ function spawnPi(
   extraExtensions: readonly string[],
   git?: RpcGitEnvironment,
 ): ChildProcessByStdio<Writable, Readable, Readable> {
-  return spawn(process.execPath, piArguments(extraExtensions), {
+  return spawn(process.execPath, piArguments("rpc", extraExtensions), {
     cwd: sandbox.cwd,
     // Its own process group, so the stops can kill Pi's children too. A dead
     // parent closes stdin, and Pi exits on that.
@@ -414,7 +427,7 @@ function startSession(options: RpcSessionOptions, sandbox: RpcSandbox): SessionS
  * aborted.
  */
 export async function runRpcSession(options: RpcSessionOptions): Promise<RpcSessionResult> {
-  const sandbox = await resolveSandbox(options.sandbox);
+  const sandbox = await resolveRpcSandbox(options.sandbox);
   options.signal?.throwIfAborted();
   return collect(startSession(options, sandbox), options);
 }
@@ -430,7 +443,7 @@ export async function startRpcPi(
   sandbox: RpcSandbox,
   git: RpcGitEnvironment,
 ): Promise<ChildProcessByStdio<Writable, Readable, Readable>> {
-  return spawnPi(await resolveSandbox(sandbox), [], git);
+  return spawnPi(await resolveRpcSandbox(sandbox), [], git);
 }
 
 /** Returns `data.disposition` of a successful prompt response. */

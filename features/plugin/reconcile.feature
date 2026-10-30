@@ -1,10 +1,7 @@
 Feature: Plugin reconcile
 
-  A new session changes no installed plugin. When the configs a user edits by
-  hand ask for a change, it prints the block /claude:plugin pending prints, and
-  /claude:plugin apply makes the change. It also reports the warnings that come
-  back every session. The scenarios run the real extension in a headless Pi and
-  use a local marketplace in place of a published one.
+  A new session reports pending config edits and recurring warnings without
+  changing installed plugins. /claude:plugin apply makes the requested changes.
 
   Background:
     Given the marketplace "fixtures" is published as a dir source

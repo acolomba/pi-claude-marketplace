@@ -211,7 +211,6 @@ La configuración local anula entradas de la configuración base. Para escribir 
 ```text
 /claude:plugin marketplace add upstash/context7 --local
 /claude:plugin install context7-plugin@context7-marketplace --local
-/claude:plugin marketplace autoupdate context7-marketplace --local
 ```
 
 ### Convención de Gitignore
@@ -292,12 +291,21 @@ Elimina un mercado y desinstala sus complementos. Una dependencia que otro compl
 /claude:plugin marketplace rm context7-marketplace
 ```
 
-Activa o desactiva las actualizaciones automáticas de complementos del mercado. Cuando actualizas el mercado manualmente, esta extensión también actualiza los complementos instalados.
+### Actualización automática
+
+`autoupdate` es un ajuste de cada mercado. Controla lo que pasa cuando el mercado se actualiza:
+
+- Si `autoupdate` está activado, la extensión actualiza el mercado y sus complementos instalados en segundo plano. La actualización empieza después del primer mensaje de una sesión `tui`, con un retraso aleatorio de hasta diez minutos. Un `marketplace update` manual también actualiza los complementos instalados del mercado.
+- Si `autoupdate` está desactivado, `marketplace update` solo actualiza la lista de complementos del mercado.
+
+Activa o desactiva `autoupdate` para un mercado.
 
 ```text
 /claude:plugin marketplace autoupdate context7-marketplace
 /claude:plugin marketplace noautoupdate context7-marketplace
 ```
+
+Si un mercado no tiene ajuste de `autoupdate`, `autoupdate` está desactivado. Los mercados oficiales de Claude son la excepción, como en Claude Code. Un mercado oficial es uno cuyo nombre Claude Code reserva para Anthropic, como `claude-plugins-official`. `autoupdate` está activado de forma predeterminada para estos mercados, excepto para `knowledge-work-plugins` y `first-party-plugins`.
 
 ### Complemento
 
@@ -415,17 +423,10 @@ El comando `/claude:plugin install` obtiene automáticamente un complemento remo
 
 ### Bootstrap
 
-`Bootstrap` es una configuración en un solo paso. Agrega el mercado oficial de Anthropic en el ámbito de usuario y habilita `autoupdate`.
+`Bootstrap` es una configuración en un solo paso. Agrega el mercado oficial de Anthropic, `claude-plugins-official`, en el ámbito de usuario. `autoupdate` está activado de forma predeterminada para este mercado. Si el mercado ya está agregado, `bootstrap` no cambia su ajuste de [`autoupdate`](#actualizaci%C3%B3n-autom%C3%A1tica).
 
 ```text
 /claude:plugin bootstrap
-```
-
-Equivale a ejecutar estos comandos:
-
-```text
-/claude:plugin marketplace add anthropics/claude-plugins-official
-/claude:plugin marketplace autoupdate claude-plugins-official
 ```
 
 ### Import

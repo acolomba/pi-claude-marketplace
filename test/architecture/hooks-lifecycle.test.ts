@@ -148,13 +148,13 @@ function assertMutatorFollowedByRebuilder(
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Block A: WR-03 -- install-flow.ts cache mutation -> rebuildRoutingTables
+// Block A: WR-03 -- install-flow-ledger.ts cache mutation -> rebuildRoutingTables
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WR-03 Block A: install flow pairs the cache-mutation site with rebuildRoutingTables in lockstep", async () => {
-  const lines = await readNonCommentLines(INSTALL_REL, "install-flow.ts");
+  const lines = await readNonCommentLines(INSTALL_REL, "install-flow-ledger.ts");
 
-  // install-flow.ts wraps the cache-add in the bridge helper
+  // install-flow-ledger.ts wraps the cache-add in the bridge helper
   // `readAndCachePluginHooks` because the call ALSO performs the disk read
   // + parse of the just-installed `<pluginRoot>/hooks/hooks.json`. The
   // orchestrator invocation site is the helper call
@@ -173,9 +173,15 @@ test("WR-03 Block A: install flow pairs the cache-mutation site with rebuildRout
   );
   assert.ok(
     mutator,
-    `install-flow.ts: no cache-mutation call site found (tried ${HELPER_FORMS.join(", ")})`,
+    `install-flow-ledger.ts: no cache-mutation call site found (tried ${HELPER_FORMS.join(", ")})`,
   );
-  assertMutatorFollowedByRebuilder(lines, mutator, "rebuildRoutingTables(", 20, "install-flow.ts");
+  assertMutatorFollowedByRebuilder(
+    lines,
+    mutator,
+    "rebuildRoutingTables(",
+    20,
+    "install-flow-ledger.ts",
+  );
 });
 
 // ──────────────────────────────────────────────────────────────────────────

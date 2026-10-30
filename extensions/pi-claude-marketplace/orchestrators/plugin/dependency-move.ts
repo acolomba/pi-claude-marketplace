@@ -20,9 +20,12 @@
 // Not a plugin ledger and names no git surface: the preflight and the shared
 // runner reach git through their own seams.
 
+import path from "node:path";
+
+import { MAX_REFUSAL_VERSION_CHARS, truncateForRefusal } from "../../domain/dependency-range.ts";
 import { errorMessage, rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
 import { companionSeverity } from "../../shared/notify-reasons.ts";
-import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
+import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 
 import { plannedRangeVersion } from "./dependency-plan.ts";
 import { materializeLatestVersion } from "./materialize-latest.ts";
@@ -30,7 +33,11 @@ import { isUpdatePreflightOutcome, preparePluginUpdate } from "./update-prefligh
 import { updatedRowFromOutcome } from "./update-row.ts";
 import { assertUpdateNamesFree } from "./update-swap.ts";
 
-import type { DependencyMoveRequest, PlannedDependencyMove } from "./dependency-plan.ts";
+import type {
+  DependencyMoveRequest,
+  PlannedCandidate,
+  PlannedDependencyMove,
+} from "./dependency-plan.ts";
 import type {
   MaterializationPolicy,
   PreparedPluginUpdate,
@@ -41,10 +48,11 @@ import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { SoftDepStatus } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { UpdateDependencyRow } from "../types.ts";
+import type { DependencyStagingDiagnostic, UpdateDependencyRow } from "../types.ts";
 import type { UpdateHooksRouting } from "./update-cascade.ts";
 
 /** The collaborators every dependency move of one operation shares. */
@@ -69,6 +77,8 @@ export interface DependencyMoveContext {
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
+  readonly cloneCacheSeam?: PreparePluginUpdateOptions["cloneCacheSeam"];
+  readonly constraintGate?: PreparePluginUpdateOptions["constraintGate"];
   /** D-10-18: one memo pair per operation, so the judge and the move list a source once. */
   readonly constraintTagMemo: NonNullable<CascadeThreePhaseArgs["constraintTagMemo"]>;
   readonly constraintMarketplaceTagMemo: NonNullable<
@@ -77,10 +87,11 @@ export interface DependencyMoveContext {
   readonly stateTransaction?: LockedStateTransactionDeps;
   /**
    * IN-N4: what a move that changed a git revision collects. The operation's
-   * own sweep runs after its last step, knowing which clones were there
-   * before it started.
+   * own sweep runs after its last step over clones reported during planning.
    */
   readonly cleanupClones: CascadeThreePhaseArgs["cleanupClones"];
+  /** Exact clone keys this planning attempt can collect after its last step. */
+  readonly cloneCandidates: Set<string>;
   /** The soft-dependency snapshot the moved rows stamp severity from. */
   readonly softDeps: SoftDepStatus;
 }
@@ -99,15 +110,43 @@ export function freshDependencyMoveMemos(): DependencyMoveMemos {
   return { constraintTagMemo, constraintMarketplaceTagMemo };
 }
 
-/** One move's verdict: the candidate it would land, or why it cannot move. */
+/**
+ * One move's verdict: the candidate it would land, or why it cannot move.
+ * `updateBlocked` marks a refusal `update` would meet too, because it lands
+ * the same candidate.
+ */
 export type DependencyMoveJudgement =
-  | { readonly ok: true; readonly prepared: PreparedPluginUpdate }
-  | { readonly ok: false; readonly cause: string };
+  | {
+      readonly ok: true;
+      readonly prepared: PreparedPluginUpdate & Pick<PlannedCandidate, "cleanupCloneKeys">;
+    }
+  | { readonly ok: false; readonly cause: string; readonly updateBlocked?: true };
+
+/** The cache entry containing `root`, when it belongs to this scope's plugin cache. */
+function cloneKeyForRoot(root: string, locations: ScopedLocations): string | undefined {
+  const relative = path.relative(locations.pluginClonesDir, root);
+  if (relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
+    return undefined;
+  }
+
+  return relative.split(path.sep)[0];
+}
+
+/** The recorded cache entry a successful move may leave unreferenced. */
+function supersededCloneKeys(
+  prepared: PreparedPluginUpdate,
+  locations: ScopedLocations,
+): readonly string[] {
+  const key = cloneKeyForRoot(prepared.record.resolvedSource, locations);
+  return key === undefined ? [] : [key];
+}
 
 /** What one move did: whether it landed, and the row that reports it. */
 export interface DependencyMoveRun {
   readonly landed: boolean;
   readonly rows: readonly UpdateDependencyRow[];
+  readonly stagingDiagnostics?: readonly DependencyStagingDiagnostic[];
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
 }
 
 function moveArgs(
@@ -125,6 +164,7 @@ function moveArgs(
     env: context.env,
     cascade: true,
     cleanupClones: context.cleanupClones,
+    cloneCandidates: context.cloneCandidates,
     constraintTagMemo: context.constraintTagMemo,
     constraintMarketplaceTagMemo: context.constraintMarketplaceTagMemo,
     requesters: request.requesters,
@@ -135,6 +175,8 @@ function moveArgs(
     ...(context.credentialOps !== undefined && { credentialOps: context.credentialOps }),
     ...(context.deviceFlowHttp !== undefined && { deviceFlowHttp: context.deviceFlowHttp }),
     ...(context.authMemo !== undefined && { authMemo: context.authMemo }),
+    ...(context.cloneCacheSeam !== undefined && { cloneCacheSeam: context.cloneCacheSeam }),
+    ...(context.constraintGate !== undefined && { constraintGate: context.constraintGate }),
     ...(context.stateTransaction !== undefined && { stateTransaction: context.stateTransaction }),
   };
 }
@@ -148,10 +190,24 @@ function refusalCause(
   verdict: Exclude<UpdateRunOutcome, { readonly partition: "updated" }>,
 ): string {
   if (verdict.partition === "unchanged") {
-    return `version ${verdict.toVersion} is the newest version it can move to`;
+    const newest = truncateForRefusal(verdict.toVersion, MAX_REFUSAL_VERSION_CHARS);
+    return `version ${newest} is the newest version it can move to`;
   }
 
   return verdict.notes.join(" ");
+}
+
+/** Why the candidate's names or agent targets are taken, if they are (PI-6, D-PL4-04). */
+async function namesTakenCause(
+  args: CascadeThreePhaseArgs,
+  prepared: PreparedPluginUpdate,
+): Promise<string | undefined> {
+  try {
+    await assertUpdateNamesFree(args, prepared);
+    return undefined;
+  } catch (err) {
+    return errorMessage(err);
+  }
 }
 
 /**
@@ -177,14 +233,27 @@ export async function judgeDependencyMove(
       return { ok: false, cause: refusalCause(prepared) };
     }
 
+    const replacedKeys = supersededCloneKeys(prepared, context.locations);
+    for (const key of replacedKeys) {
+      context.cloneCandidates.add(key);
+    }
+
     // WR-1: a version with no semver form escapes the range that rules the
     // others out, so the plan's own list decides.
     if (request.excludedVersions?.includes(plannedRangeVersion(prepared)) === true) {
-      return { ok: false, cause: `version ${prepared.toVersion} was ruled out by the plan` };
+      const ruledOut = truncateForRefusal(prepared.toVersion, MAX_REFUSAL_VERSION_CHARS);
+      return { ok: false, cause: `version ${ruledOut} was ruled out by the plan` };
     }
 
-    await assertUpdateNamesFree(args, prepared);
-    return { ok: true, prepared };
+    const namesTaken = await namesTakenCause(args, prepared);
+    if (namesTaken !== undefined) {
+      return { ok: false, cause: namesTaken, updateBlocked: true };
+    }
+
+    return {
+      ok: true,
+      prepared: { ...prepared, cleanupCloneKeys: replacedKeys },
+    };
   } catch (err) {
     rethrowInvalidGitHubBaseUrl(err);
     return { ok: false, cause: errorMessage(err) };
@@ -206,6 +275,27 @@ function moveLanded(outcome: UpdateRunOutcome): boolean {
   );
 }
 
+type MovedRow = ReturnType<typeof updatedRowFromOutcome>;
+
+/**
+ * PKD-02 / D-PL9-14: a moved dependency whose package step had something to
+ * say carries the note on its row's cause line, after any range disclosure,
+ * and warns: the move was carried out, short of its packages. A dependency
+ * reaches the user only as a row, so the cause line is its one channel.
+ */
+function withPackageNote(row: MovedRow, note: string | undefined): MovedRow {
+  if (note === undefined) {
+    return row;
+  }
+
+  const noteCause = new Error(redactAbsolutePaths(note));
+  return {
+    ...row,
+    cause: row.cause === undefined ? noteCause : new Error(row.cause.message, { cause: noteCause }),
+    severity: "warning",
+  };
+}
+
 /**
  * The row a move reports, named by the dependency's full key as cascade rows
  * are: the update row of a move that landed, a failed row with what the update
@@ -224,7 +314,7 @@ function moveRow(
       updated: companionSeverity(outcome, context.softDeps),
       partiallyInstalled: companionSeverity(outcome, context.softDeps),
     });
-    return { ...row, name: request.key };
+    return { ...withPackageNote(row, outcome.packageNote), name: request.key };
   }
 
   if (outcome.partition === "unchanged") {
@@ -287,7 +377,32 @@ export async function runDependencyMove(
     { ...context.policy, refreshSource: false },
   );
   const row = moveRow(context, move, outcome);
-  return { landed: moveLanded(outcome), rows: row === undefined ? [] : [row] };
+  // The dependency row owns its package note; forwarding it would also
+  // report it as a component warning of the requesting plugin.
+  const packageNote = outcome.partition === "updated" ? outcome.packageNote : undefined;
+  const stagingWarnings = ("stagingWarnings" in outcome ? outcome.stagingWarnings : []).filter(
+    (warning) => warning.message !== packageNote,
+  );
+  const stagingDiagnostics = [
+    ...(outcome.dependencyStagingDiagnostics ?? []),
+    ...(stagingWarnings.length === 0
+      ? []
+      : [
+          {
+            plugin: move.request.name,
+            scope: context.scope,
+            verb:
+              outcome.partition === "failed" ? ("update failed" as const) : ("updated" as const),
+            warnings: stagingWarnings,
+          },
+        ]),
+  ];
+  return {
+    landed: moveLanded(outcome),
+    rows: row === undefined ? [] : [row],
+    ...(stagingDiagnostics.length > 0 && { stagingDiagnostics }),
+    ...("mcpConfigNotices" in outcome && { mcpConfigNotices: outcome.mcpConfigNotices }),
+  };
 }
 
 /**

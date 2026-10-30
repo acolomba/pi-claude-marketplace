@@ -11,7 +11,6 @@ import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 import { parseArgs } from "../../args.ts";
 import { passThroughFlagNames } from "../../flag-catalog.ts";
-import { rejectUnknownFlag } from "../shared.ts";
 
 import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { NotificationRun } from "../../../shared/notification-run.ts";
@@ -202,6 +201,23 @@ export function parseMapModelArgs(
     partial: flagged.partial,
     ...(parsed.scope !== undefined && { scope: parsed.scope }),
   };
+}
+
+/**
+ * Rejects the first long-flag token of a plugin command that accepts no flag
+ * beyond what its parser already consumed. Returns whether it rejected one.
+ */
+export function rejectUnknownFlag(
+  tokens: readonly string[],
+  { ctx, run, usage }: { ctx: ExtensionCommandContext; run: NotificationRun; usage: string },
+): boolean {
+  const flag = tokens.find((token) => token.startsWith("--"));
+  if (flag === undefined) {
+    return false;
+  }
+
+  notifyUsageError(ctx, run, { message: `Unknown flag: "${flag}".`, usage });
+  return true;
 }
 
 export function parseRequiredPluginMarketplaceRef(

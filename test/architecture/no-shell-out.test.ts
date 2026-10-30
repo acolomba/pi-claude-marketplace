@@ -3,10 +3,58 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
+import { ESLint, Linter } from "eslint";
+import importX from "eslint-plugin-import-x";
+
 import { EXTENSION_ROOT_REL, SHELL_OUT_EXEMPT_TARGETS } from "./gate-targets.ts";
 import { REPO_ROOT } from "./source-scan.ts";
 
 const EXTENSION_ROOT = path.join(REPO_ROOT, EXTENSION_ROOT_REL);
+
+for (const { importer, violations } of [
+  { importer: "orchestrators/plugin/package-install.ts", violations: [] },
+  { importer: "edge/package-install.ts", violations: ["import-x/no-restricted-paths"] },
+  {
+    importer: "orchestrators/other/package-install.ts",
+    violations: ["import-x/no-restricted-paths"],
+  },
+  {
+    importer: "orchestrators/plugin/nested/package-install.ts",
+    violations: ["import-x/no-restricted-paths"],
+  },
+  { importer: "package-install.ts", violations: ["import-x/no-restricted-paths"] },
+  { importer: "edge/commands.ts", violations: ["import-x/no-restricted-paths"] },
+]) {
+  test(`the package runner import gate reports ${violations.length} violations for ${importer}`, async () => {
+    // arrange
+    const filename = path.join(EXTENSION_ROOT, importer);
+    const eslint = new ESLint({ cwd: REPO_ROOT });
+    const config = (await eslint.calculateConfigForFile(filename)) as Linter.Config;
+    const restriction = config.rules?.["import-x/no-restricted-paths"];
+    assert.ok(restriction !== undefined);
+    const runner = path.relative(
+      path.dirname(filename),
+      path.join(EXTENSION_ROOT, "platform/package-manager.ts"),
+    );
+
+    // act
+    const messages = new Linter().verify(
+      `import "./${runner.split(path.sep).join("/")}";`,
+      {
+        files: ["**/*.ts"],
+        plugins: { "import-x": importX },
+        rules: { "import-x/no-restricted-paths": restriction },
+      },
+      { filename },
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      messages.map((message) => message.ruleId),
+      violations,
+    );
+  });
+}
 
 /**
  * D-21 supersession defense (W-8). MA-7 (PRD §5.1.1) requires the extension
@@ -65,13 +113,20 @@ const EXTENSION_ROOT = path.join(REPO_ROOT, EXTENSION_ROOT_REL);
  * -> `ctx.sendMessage` injection); the OS-level concern lives here
  * because no pure-JS equivalent exists for arbitrary plugin-supplied
  * commands AND the registry owns in-memory + persisted (PID table)
- * state for `/reload`-safe SIGKILL. Adding a FOURTH file requires the
+ * state for `/reload`-safe SIGKILL.
+ *
+ * D-PL9-11 / PKD-03 fourth sanctioned site:
+ * extensions/pi-claude-marketplace/platform/package-manager.ts spawns
+ * `npm ci` or `bun install` for a plugin's own packages, the package install
+ * Claude Code runs. No pure-JS equivalent exists. It spawns with `shell: false`
+ * and an argv from the closed lockfile table in
+ * orchestrators/plugin/package-install.ts. Adding a FIFTH file requires the
  * same edit-here + edit-sibling-assertion discipline.
  *
  * The ALLOWED_CHILD_PROCESS_FILES whitelist below is the SOLE permitted use
- * of node:child_process in the extension tree. Adding a fourth file MUST
+ * of node:child_process in the extension tree. Adding a fifth file MUST
  * require an explicit edit here AND an update to the sibling
- * "exactly three files" assertion below, so silent widening is caught in CI.
+ * "exactly four files" assertion below, so silent widening is caught in CI.
  */
 
 const ALLOWED_CHILD_PROCESS_FILES: ReadonlySet<string> = new Set(SHELL_OUT_EXEMPT_TARGETS);
@@ -100,7 +155,7 @@ const FORBIDDEN_PATTERNS: ReadonlyArray<RegExp> = [
 test("no child_process imports outside the platform/git-credential whitelist (D-21)", async () => {
   assert.ok(
     SHELL_OUT_EXEMPT_TARGETS.length > 0,
-    "D-07-03: an empty SHELL_OUT_EXEMPT_TARGETS empties the whitelist, so this walk would flag the three sanctioned sites and prove nothing about the rest of the tree.",
+    "D-07-03: an empty SHELL_OUT_EXEMPT_TARGETS empties the whitelist, so this walk would flag the four sanctioned sites and prove nothing about the rest of the tree.",
   );
 
   const offenders: string[] = [];
@@ -131,21 +186,22 @@ test("no child_process imports outside the platform/git-credential whitelist (D-
   );
 });
 
-// AUTH-06/08/09 + EXEC-01..04 + EXEC-05 / HOOK-06 assertion: the whitelist
-// is exactly the three load-bearing sites named below -- nobody silently
+// AUTH-06/08/09 + EXEC-01..04 + EXEC-05 / HOOK-06 + D-PL9-11 assertion: the
+// whitelist is exactly the four load-bearing sites named below -- nobody silently
 // widened it. If a future change needs another file with node:child_process,
 // it MUST update both SHELL_OUT_EXEMPT_TARGETS in the registry AND this
 // assertion's expected array in the same commit, with a justification recorded
 // in the docstring header. The expectation is spelled relative to the extension
 // root because the full paths are owned by the registry (D-07-05); comparing
 // the whitelist against the same group it was built from would pin nothing.
-test("whitelist: exactly three files may import node:child_process", () => {
+test("whitelist: exactly four files may import node:child_process", () => {
   assert.deepEqual(
     [...ALLOWED_CHILD_PROCESS_FILES].map((rel) => path.relative(EXTENSION_ROOT_REL, rel)).sort(),
     [
       "bridges/hooks/async-rewake/registry.ts",
       "bridges/hooks/dispatch-exec.ts",
       "platform/git-credential.ts",
+      "platform/package-manager.ts",
     ],
   );
 });

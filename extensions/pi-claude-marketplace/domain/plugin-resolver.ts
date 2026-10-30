@@ -27,18 +27,28 @@
 // discovery path is the convention file `<pluginRoot>/hooks/hooks.json`,
 // parsed through `parseHooksConfig` (D-57-04: a parse failure is structural
 // and resolves `unavailable`).
+//
+// MKT-02 / D-PL5-32: a hosted marketplace is one downloaded catalog file with
+// no plugin directory, so every path entry it lists resolves `unavailable`
+// with Claude Code's own reason.
 
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { errorMessage, isErrnoException, PluginShapeError } from "../shared/errors.ts";
 import { PathContainmentError, assertPathInside } from "../shared/path-safety.ts";
-import { SOURCE_DIR_MISSING_NOTE } from "../shared/probe-classifiers.ts";
+import { MANIFEST_ESCAPE_NOTE, SOURCE_DIR_MISSING_NOTE } from "../shared/probe-classifiers.ts";
 
 import { collectStrictComponentPaths, type ComponentPathResolution } from "./component-paths.ts";
 import { PLUGIN_MANIFEST_VALIDATOR, type PluginEntry } from "./components/plugin.ts";
 import { parseDeclaredDependencies } from "./dependencies.ts";
 import { resolveHooks, type HooksResolution } from "./hooks-resolution.ts";
+import {
+  copyManifestBoundary,
+  inPlaceManifestBoundary,
+  locateManifestCandidate,
+  type ManifestBoundary,
+} from "./manifest-containment.ts";
 import { MANIFEST_CANDIDATES } from "./manifest-path.ts";
 import { resolveStrictMcp, type McpResolution } from "./mcp-resolution.ts";
 import { assertSafeName, isReservedRecordKey } from "./name.ts";
@@ -226,13 +236,24 @@ function classifySourceSupport(parsedSource: ParsedSource): SourceSupport {
     case "git-subdir":
       return { kind: "supported", source: parsedSource };
     case "npm":
-      return { kind: "rejected", reason: `unsupported source kind: npm` };
+    case "hosted":
+      return { kind: "rejected", reason: `unsupported source kind: ${parsedSource.kind}` };
     case "unknown":
       return {
         kind: "rejected",
         reason: `unsupported source kind: unknown (${parsedSource.reason})`,
       };
   }
+}
+
+// Claude Code's reason for refusing a relative entry of a url-catalog
+// marketplace, verbatim. The em dash stays escaped as `\u2014` because the
+// fix-unicode-dashes hook rewrites a literal one.
+const HOSTED_PATH_ENTRY_NOTE =
+  "its marketplace entry path does not stay inside the marketplace directory (an absolute, climbing, network-shaped, backslash-containing or link-traversing entry, an entry of a fetched marketplace that resolves or opens outside its tree \u2014 or a relative entry in a url-catalog marketplace, which has no local directory)";
+
+function listedByHostedCatalog(ctx: ResolveContext): boolean {
+  return parsePluginSource(ctx.marketplaceSource).kind === "hosted";
 }
 
 async function sourceEscapeReason(
@@ -270,69 +291,109 @@ async function manifestCandidateIsFile(
   }
 }
 
+/** What one manifest read answers: its parsed manifest, or the structural note. */
+type ManifestRead =
+  { ok: true; manifest: Record<string, unknown> | null } | { ok: false; reason: string };
+
 /**
  * MANF-01 / MANF-02: reads the plugin's own manifest in `MANIFEST_CANDIDATES`
  * order, rejecting unusable candidates rather than trying another file.
  * MANF-05: no manifest at any candidate is a normal outcome, not a failure.
+ *
+ * D-PL2-24 / D-PL2-17: each candidate is located inside `boundary` first. A
+ * link whose target leaves the boundary is the structural `unavailable` note
+ * `MANIFEST_ESCAPE_NOTE` with the boundary's name and no path, like the other
+ * escape notes (D-64-07). A link that cannot be resolved rethrows its error,
+ * the resolver's unreadable-manifest outcome. A dangling link is no manifest.
  */
 async function readManifest(
   ctx: ResolveContext,
-  pluginRoot: string,
-): Promise<{ ok: true; manifest: Record<string, unknown> | null } | { ok: false; reason: string }> {
+  boundary: ManifestBoundary,
+): Promise<ManifestRead> {
   for (const candidate of MANIFEST_CANDIDATES) {
-    const manifestPath = path.join(pluginRoot, candidate);
-
     // D-01-07: ABSENCE is the only fall-through. The first candidate that
     // exists is this plugin's manifest and its read decides the outcome; a
     // present-but-unusable file never hands off to the next candidate.
     // eslint-disable-next-line no-await-in-loop -- D-01-07: the first existing manifest candidate wins
-    if (!(await manifestCandidateIsFile(ctx, manifestPath))) {
-      continue;
-    }
-
-    // Stat and read failures (e.g. EACCES) retain their identity for the
-    // outer probe classifier -- only the parse and validation below are a
-    // real "malformed plugin.json".
-    // eslint-disable-next-line no-await-in-loop -- D-01-07: only the first existing candidate is read
-    const raw = await readFileTextOf(ctx)(manifestPath);
-
-    try {
-      const parsed: unknown = JSON.parse(raw);
-
-      if (!PLUGIN_MANIFEST_VALIDATOR.Check(parsed)) {
-        const detail = PLUGIN_MANIFEST_VALIDATOR.Errors(parsed)
-          .slice(0, 1)
-          .map((error) => `${error.instancePath || "(root)"}: ${error.message}`)
-          .join("");
-        return { ok: false, reason: `malformed plugin.json: ${detail}` };
-      }
-
-      const dependencies = parseDeclaredDependencies(parsed.dependencies);
-      if (!dependencies.ok) {
-        return { ok: false, reason: `malformed plugin.json: ${dependencies.reason}` };
-      }
-
-      return { ok: true, manifest: parsed };
-    } catch (err: unknown) {
-      // D-01-08: this catch only ever sees a JSON.parse syntax error. Schema
-      // rejection and an invalid `dependencies` declaration are direct
-      // `return`s above, inside the same `try`, and never land here. All three
-      // origins still end up observably identical to the caller: each
-      // produces the same `malformed plugin.json: ...` reason on the
-      // `unavailable` arm. A rejected stat (manifestCandidateIsFile rethrows
-      // anything but ENOENT / ENOTDIR) or an unreadable file never lands here
-      // either: both propagate above, so the caller's probe classifier can
-      // name the failure class (D-01-09: neither is read as an absence).
-      return {
-        ok: false,
-        reason: `malformed plugin.json: ${errorMessage(err)}`,
-      };
+    const read = await readManifestCandidate(
+      ctx,
+      boundary,
+      path.join(boundary.pluginRoot, candidate),
+    );
+    if (read !== undefined) {
+      return read;
     }
   }
 
   // D-01-13 / MANF-05: absent at every candidate. A plugin declaring no
   // manifest at all still resolves, and still installs.
   return { ok: true, manifest: null };
+}
+
+/** One candidate's read, or `undefined` when it is absent. */
+async function readManifestCandidate(
+  ctx: ResolveContext,
+  boundary: ManifestBoundary,
+  candidatePath: string,
+): Promise<ManifestRead | undefined> {
+  const location = await locateManifestCandidate(boundary, candidatePath);
+  switch (location.kind) {
+    case "absent":
+      return undefined;
+    case "escapes":
+      return { ok: false, reason: `${MANIFEST_ESCAPE_NOTE} ${boundary.label}` };
+    case "unresolvable":
+      throw location.error;
+    case "open":
+      return readOpenedManifest(ctx, location.path);
+  }
+}
+
+async function readOpenedManifest(
+  ctx: ResolveContext,
+  manifestPath: string,
+): Promise<ManifestRead | undefined> {
+  if (!(await manifestCandidateIsFile(ctx, manifestPath))) {
+    return undefined;
+  }
+
+  // Stat and read failures (e.g. EACCES) retain their identity for the
+  // outer probe classifier -- only the parse and validation below are a
+  // real "malformed plugin.json".
+  const raw = await readFileTextOf(ctx)(manifestPath);
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+
+    if (!PLUGIN_MANIFEST_VALIDATOR.Check(parsed)) {
+      const detail = PLUGIN_MANIFEST_VALIDATOR.Errors(parsed)
+        .slice(0, 1)
+        .map((error) => `${error.instancePath || "(root)"}: ${error.message}`)
+        .join("");
+      return { ok: false, reason: `malformed plugin.json: ${detail}` };
+    }
+
+    const dependencies = parseDeclaredDependencies(parsed.dependencies);
+    if (!dependencies.ok) {
+      return { ok: false, reason: `malformed plugin.json: ${dependencies.reason}` };
+    }
+
+    return { ok: true, manifest: parsed };
+  } catch (err: unknown) {
+    // D-01-08: this catch only ever sees a JSON.parse syntax error. Schema
+    // rejection and an invalid `dependencies` declaration are direct
+    // `return`s above, inside the same `try`, and never land here. All three
+    // origins still end up observably identical to the caller: each
+    // produces the same `malformed plugin.json: ...` reason on the
+    // `unavailable` arm. A rejected stat (manifestCandidateIsFile rethrows
+    // anything but ENOENT / ENOTDIR) or an unreadable file never lands here
+    // either: both propagate above, so the caller's probe classifier can
+    // name the failure class (D-01-09: neither is read as an absence).
+    return {
+      ok: false,
+      reason: `malformed plugin.json: ${errorMessage(err)}`,
+    };
+  }
 }
 
 /**
@@ -392,7 +453,8 @@ function resolveDescription(
 }
 
 type SourcePluginRoot =
-  { kind: "ok"; pluginRoot: string } | { kind: "unavailable"; result: ResolvedPluginUnavailable };
+  | { kind: "ok"; boundary: ManifestBoundary }
+  | { kind: "unavailable"; result: ResolvedPluginUnavailable };
 
 /**
  * PURL-01 / PURL-03: derive the pluginRoot for an already-supported source kind.
@@ -419,6 +481,15 @@ type SourcePluginRoot =
  *
  * `parsedSource` is pre-narrowed by the caller's `sourceUnsupportedReason` gate,
  * so `npm` / `unknown` never reach here.
+ *
+ * D-PL5-32: a hosted catalog has no plugin directory, so the `path` arm of a
+ * marketplace whose recorded source is hosted refuses first, before the
+ * pinned callback and the escape check, with Claude Code's reason.
+ *
+ * D-PL2-17: the verdict carries the manifest boundary with the plugin root.
+ * The unpinned path is read in place, bounded by the plugin and marketplace
+ * directories; the pinned path and every git source are copies, bounded by
+ * the plugin directory.
  */
 async function deriveSourcePluginRoot(
   entry: PluginEntry,
@@ -427,6 +498,13 @@ async function deriveSourcePluginRoot(
   partial: PartialResolution,
 ): Promise<SourcePluginRoot> {
   if (parsedSource.kind === "path") {
+    if (listedByHostedCatalog(ctx)) {
+      return {
+        kind: "unavailable",
+        result: unavailable(entry.name, [...partial.notes, HOSTED_PATH_ENTRY_NOTE]),
+      };
+    }
+
     if (ctx.resolvePathPluginRoot !== undefined && ctx.pathPluginPin !== undefined) {
       const r = await ctx.resolvePathPluginRoot(parsedSource, ctx.pathPluginPin);
       return pluginRootFromResult(entry, partial, r);
@@ -441,7 +519,7 @@ async function deriveSourcePluginRoot(
       };
     }
 
-    return { kind: "ok", pluginRoot };
+    return { kind: "ok", boundary: inPlaceManifestBoundary(pluginRoot, ctx.marketplaceRoot) };
   }
 
   // url | git-subdir | github -- the injected policy owns clone-vs-probe and,
@@ -472,7 +550,7 @@ function pluginRootFromResult(
 ): SourcePluginRoot {
   switch (r.kind) {
     case "materialized":
-      return { kind: "ok", pluginRoot: r.pluginRoot };
+      return { kind: "ok", boundary: copyManifestBoundary(r.pluginRoot) };
     case "escapes":
     case "missing-subdir":
       return {
@@ -566,7 +644,8 @@ async function preflightStages(
     return rooted;
   }
 
-  const pluginRoot = rooted.pluginRoot;
+  const { boundary } = rooted;
+  const pluginRoot = boundary.pluginRoot;
 
   // PR-2 case 3: source dir does not exist.
   if ((await statKindOf(ctx)(pluginRoot)) !== "dir") {
@@ -580,7 +659,7 @@ async function preflightStages(
   }
 
   // PR-2 case 4: malformed plugin.json (best-effort -- absence is OK).
-  const manifestResult = await readManifest(ctx, pluginRoot);
+  const manifestResult = await readManifest(ctx, boundary);
   if (!manifestResult.ok) {
     return {
       kind: "unavailable",

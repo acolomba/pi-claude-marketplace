@@ -229,7 +229,7 @@ test("GATE-01/D-05: pending projection emits no realized-transition row", () => 
   const plans = [pendingPlan()];
 
   // act
-  const message = buildReconcilePendingNotification(plans);
+  const message = buildReconcilePendingNotification(plans, new Set(), new Map());
   const transitionRows = rows(message).filter((plugin) => isTransitionStatus(plugin.status));
 
   // assert

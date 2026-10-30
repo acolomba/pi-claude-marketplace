@@ -6,6 +6,7 @@ import { describe, test } from "node:test";
 
 import {
   findLayerMarketplaceGaps,
+  hasInvalidConfigLayer,
   effectiveAutoapply,
   loadAutoapplyFiles,
   loadMergedScopeConfig,
@@ -907,4 +908,26 @@ describe("loadAutoapplyFiles", () => {
       },
     ]);
   });
+});
+
+describe("hasInvalidConfigLayer", () => {
+  const absent = { status: "absent" } as const;
+  const valid = { status: "valid", filePath: "/c.json", config: {} } as const;
+  const invalid = { status: "invalid", filePath: "/c.json", error: "bad" } as const;
+  const merged = { marketplaces: {}, plugins: {} };
+
+  for (const { name, base, local, expected } of [
+    { name: "absent layers", base: absent, local: absent, expected: false },
+    { name: "valid layers", base: valid, local: valid, expected: false },
+    { name: "an invalid base", base: invalid, local: valid, expected: true },
+    { name: "an invalid local", base: absent, local: invalid, expected: true },
+  ] as const) {
+    test(`is ${expected} for ${name}`, () => {
+      // act
+      const invalidLayerFound = hasInvalidConfigLayer({ merged, base, local });
+
+      // assert
+      assert.strictEqual(invalidLayerFound, expected);
+    });
+  }
 });

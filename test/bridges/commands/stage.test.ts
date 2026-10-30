@@ -593,7 +593,10 @@ test("preserves first-wins discovery warnings on a staged result", async (t) => 
   assert.strictEqual(prepared.kind, "staged");
   assert.deepStrictEqual(prepared.result.stagedNames, ["acme:tools:lint"]);
   assert.deepStrictEqual(prepared.result.warnings, [
-    `command source "tools/lint" in "${commandsRoot}" elides to generated name "acme:tools:lint", already produced by command source "acme-tools/lint"; ignoring duplicate.`,
+    {
+      kind: "discovery",
+      message: `command source "tools/lint" in "${commandsRoot}" elides to generated name "acme:tools:lint", already produced by command source "acme-tools/lint"; ignoring duplicate.`,
+    },
   ]);
   assert.strictEqual(abortLeak, undefined);
 });

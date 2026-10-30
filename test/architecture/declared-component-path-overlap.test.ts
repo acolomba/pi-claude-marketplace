@@ -48,7 +48,7 @@ test("overlapping declared and conventional command roots install each source on
   // act
   const resolved = await resolveStrict(
     { name: "acme", source: "./acme" },
-    { marketplaceRoot, marketplaceName: "third-party" },
+    { marketplaceRoot, marketplaceName: "third-party", marketplaceSource: undefined },
   );
   requireInstallable(resolved);
   const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
@@ -110,7 +110,11 @@ async function discoverPlanted(
   pluginName: string,
 ): Promise<{ generatedNames: string[]; warnings: readonly string[] }> {
   const entry: PluginEntry = { name: pluginName, source: `./${pluginName}` };
-  const resolved = await resolveStrict(entry, { marketplaceRoot, marketplaceName: "third-party" });
+  const resolved = await resolveStrict(entry, {
+    marketplaceRoot,
+    marketplaceName: "third-party",
+    marketplaceSource: undefined,
+  });
   requireInstallable(resolved);
   const discovery = await discoverPluginSkills({ pluginName, resolved });
   return {

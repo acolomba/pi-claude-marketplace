@@ -1,9 +1,7 @@
 Feature: Plugin git source update
 
-  Updating a plugin whose source is a git repository fetches the repository's
-  new revision and installs it. A loopback https git host serves the
-  marketplace and plugin repositories and logs the requests Pi makes.
-  A reinstall installs the revision the cached repository already holds, without a request.
+  An update fetches and installs a git-source plugin's new revision.
+  A reinstall uses the cached revision without another request.
 
   Scenario: Updating a git-source plugin fetches its new revision
     Given the git repository "ghp" holds these plugins:
@@ -35,7 +33,7 @@ Feature: Plugin git source update
     Then the project scope holds these git clones:
       | clone       | origin                           | revision         |
       | marketplace | https://{git host}/acme/gits.git |                  |
-      | plugin      | https://github.com/acme/ghp.git  |                  |
+      | plugin      | https://github.com/acme/ghp.git  | {ghp revision 2} |
       | plugin      | https://github.com/acme/ghp.git  | {ghp revision 2} |
     Then the git-source plugin "ghp" installed in the project scope runs revision 2 of its repository
 
@@ -125,7 +123,7 @@ Feature: Plugin git source update
     Then the git-source plugin "ghp" installed in the project scope runs revision 2 of its repository
     Then the project scope holds these git clones:
       | clone  | origin                          | revision         |
-      | plugin | https://github.com/acme/ghp.git |                  |
+      | plugin | https://github.com/acme/ghp.git | {ghp revision 2} |
       | plugin | https://github.com/acme/ghp.git | {ghp revision 2} |
 
   Scenario: Reinstalling a git-source plugin that a fetch moved to a new commit at the same version names both commits
@@ -150,6 +148,31 @@ Feature: Plugin git source update
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id       | name | status      | reasons | scope   | from  | version | from commit    | to commit      |
       | gits             | project           | ghp@gits | ghp  | reinstalled |         | project | 1.0.0 | 1.0.0   | {ghp commit 1} | {ghp commit 2} |
+    Then the git host receives no request
+    Then the git-source plugin "ghp" installed in the project scope runs revision 2 of its repository
+
+  Scenario: Reinstalling a plugin at a release tag reads the tag from the fetched copy with no request
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the git repository "ghp" has a revision only the tag "v2.0.0" reaches, holding these plugins:
+      | name | version | path |
+      | ghp  | 2.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" names the ref "v2.0.0" for the plugin "ghp"
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project"
+    When the user runs "/claude:plugin reinstall ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status      | reasons | scope   | version |
+      | gits             | project           | ghp@gits | ghp  | reinstalled |         | project | 2.0.0   |
     Then the git host receives no request
     Then the git-source plugin "ghp" installed in the project scope runs revision 2 of its repository
 
@@ -307,7 +330,7 @@ Feature: Plugin git source update
     Then the git-source plugin "ghp" installed in the project scope runs revision 1 of its repository
 
     Examples:
-      | refusal              | reason              | status  | cause chain                                                                  |
-      | answers 404          | source missing      | 404     | HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git           |
-      | drops the connection | network unreachable | dropped | socket hang up, fetched https://{git host}/acme/ghp.git                      |
-      | answers 503          | network error       | 503     | HTTP Error: 503 Service Unavailable, fetched https://{git host}/acme/ghp.git |
+      | refusal              | reason              | status  | cause chain                                                                                                          |
+      | answers 404          | source missing      | 404     | 404 on https://{git host}/acme/ghp.git, HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git           |
+      | drops the connection | network unreachable | dropped | socket hang up, fetched https://{git host}/acme/ghp.git                                                              |
+      | answers 503          | network error       | 503     | 503 on https://{git host}/acme/ghp.git, HTTP Error: 503 Service Unavailable, fetched https://{git host}/acme/ghp.git |

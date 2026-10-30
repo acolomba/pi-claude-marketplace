@@ -12,6 +12,7 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import {
   materializeLatestVersion,
   recordCandidate,
+  reportedStagingWarnings,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -19,10 +20,12 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { discoveryWarning } from "../../../extensions/pi-claude-marketplace/shared/staging-warnings.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { CandidateReport } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts";
+import type { PackageInstallOps } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts";
 import type { MaterializationPolicy } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import type {
   ThreePhaseArgsBase,
@@ -34,6 +37,7 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { McpConfigNotice } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { TestContext } from "node:test";
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
@@ -72,9 +76,14 @@ function recordedPlugin(version: string, pluginRoot: string): PluginRecord {
 async function seedRecordedPlugin(
   t: TestContext,
   versions: { readonly recorded: string; readonly offered: string },
+  placement: "outside" | "contained" = "outside",
 ): Promise<{ readonly base: ThreePhaseArgsBase; readonly pluginRoot: string }> {
   const { cwd } = await createHermeticEnvironment(t, "materialize-latest-");
-  const marketplaceRoot = path.join(cwd, "mp-src");
+  const locations = locationsFor("project", cwd);
+  const marketplaceRoot =
+    placement === "outside"
+      ? path.join(cwd, "mp-src")
+      : path.join(locations.extensionRoot, "sources", "mp");
   const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
   await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
   await mkdir(path.join(pluginRoot, "skills", "tool"), { recursive: true });
@@ -89,7 +98,6 @@ async function seedRecordedPlugin(
     manifestPath,
     JSON.stringify({ name: "mp", plugins: [{ name: "hello", source: "./plugins/hello" }] }),
   );
-  const locations = locationsFor("project", cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
   await saveState(locations.extensionRoot, {
     schemaVersion: 2,
@@ -168,6 +176,7 @@ test("swaps the offered version in and records it in cascade mode", async (t) =>
   // assert
   assert.deepStrictEqual(outcome, {
     partition: "updated",
+    resourcesChanged: true,
     name: "hello",
     fromVersion: "1.0.0",
     toVersion: "1.1.0",
@@ -181,7 +190,7 @@ test("swaps the offered version in and records it in cascade mode", async (t) =>
   const state = await loadState(base.locations.extensionRoot);
   assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello, {
     ...recordedPlugin("1.1.0", pluginRoot),
-    updatedAt: "2026-01-02T00:00:00.000Z",
+    updatedAt: "2026-01-02T00:00:00.001Z",
   });
 });
 
@@ -202,6 +211,7 @@ test("REI-01: a policy that does not skip the recorded revision restores its del
   // assert
   assert.deepStrictEqual(outcome, {
     partition: "updated",
+    resourcesChanged: true,
     name: "hello",
     fromVersion: "1.0.0",
     toVersion: "1.0.0",
@@ -219,7 +229,7 @@ test("REI-01: a policy that does not skip the recorded revision restores its del
   const state = await loadState(base.locations.extensionRoot);
   assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello, {
     ...recordedPlugin("1.0.0", pluginRoot),
-    updatedAt: "2026-01-02T00:00:00.000Z",
+    updatedAt: "2026-01-02T00:00:00.001Z",
   });
 });
 
@@ -299,6 +309,51 @@ test("UPR-03: a candidate report holds the installed version when no candidate w
   assert.deepStrictEqual(report, { move: { fromVersion: "1.0.0" } });
 });
 
+/**
+ * D-PL1-14: give the offered `hello` a second skill whose generated name
+ * collides with `tool`'s, and return the discovery warning its prepare yields.
+ */
+async function seedCollidingSkill(pluginRoot: string) {
+  const skillsDir = path.join(pluginRoot, "skills");
+  await mkdir(path.join(skillsDir, "hello-tool"), { recursive: true });
+  await writeFile(path.join(skillsDir, "hello-tool", "SKILL.md"), "---\nname: tool\n---\n");
+  return {
+    kind: "discovery",
+    message: `skill source "tool" in "${skillsDir}" elides to generated name "hello-tool", already produced by skill source "hello-tool"; ignoring duplicate.`,
+  };
+}
+
+test("D-PL1-14: a candidate report holds the warnings the swap reported", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { base, pluginRoot } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  const warning = await seedCollidingSkill(pluginRoot);
+  const report: CandidateReport = {};
+
+  // act
+  await materializeLatestVersion(
+    { ...base, cascade: true, ...recordCandidate(report) },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.deepStrictEqual(report, {
+    move: { fromVersion: "1.0.0", toVersion: "1.1.0" },
+    stagingWarnings: [warning],
+  });
+});
+
+test("D-PL1-14: reported warnings preserve the absent and present outcome shapes", () => {
+  // arrange
+  const warning = discoveryWarning("duplicate skill");
+
+  // act & assert
+  assert.deepStrictEqual(reportedStagingWarnings({}), {});
+  assert.deepStrictEqual(reportedStagingWarnings({ stagingWarnings: [warning] }), {
+    stagingWarnings: [warning],
+  });
+});
+
 const ZCORE_ROW = {
   status: "installed",
   name: "zcore@mp",
@@ -329,6 +384,7 @@ test("UPD-DEP-D1: settles the new version's dependencies before the swap and rep
   // assert
   assert.deepStrictEqual(outcome, {
     partition: "updated",
+    resourcesChanged: true,
     name: "hello",
     fromVersion: "1.0.0",
     toVersion: "1.1.0",
@@ -474,3 +530,479 @@ test("UPD-DEP-D1: a cascade run authenticates in the command's context when it c
   // assert
   assert.strictEqual(outcome.partition, "updated");
 });
+
+test("D-PL1-14: a swap that fails after the settle carries the warnings it reported and forwards them", async (t) => {
+  // arrange
+  const { base, pluginRoot } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  const warning = await seedCollidingSkill(pluginRoot);
+  const diskFull = new Error("disk full");
+  const report: CandidateReport = {};
+
+  // act
+  const outcome = await materializeLatestVersion(
+    {
+      ...base,
+      cascade: true,
+      ...recordCandidate(report),
+      settleDependencies: () => Promise.resolve({ kind: "settled", rows: [ZCORE_ROW] }),
+      stateTransaction: { saveState: () => Promise.reject(diskFull) },
+    },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "failed",
+    name: "hello",
+    fromVersion: "1.0.0",
+    notes: ["disk full\n\ncause: disk full"],
+    reasons: [],
+    cause: diskFull,
+    dependencyRows: [ZCORE_ROW],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    stagingWarnings: [warning],
+  });
+  assert.deepStrictEqual(report.stagingWarnings, [warning]);
+});
+
+test("D-PL1-14: a swap that fails after the settle before any prepare carries no warnings", async (t) => {
+  // arrange
+  const { base } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  const report: CandidateReport = {};
+  const settleDependencies: UpdateDependencySettler = async (args) => {
+    // A later plugin of the scope now owns the name the candidate's skill generates.
+    const state = await loadState(args.locations.extensionRoot);
+    const mp = state.marketplaces.mp;
+    assert.ok(mp !== undefined);
+    mp.plugins.other = recordedPlugin("1.0.0", "/nonexistent-other");
+    await saveState(args.locations.extensionRoot, state);
+    return { kind: "settled", rows: [ZCORE_ROW] };
+  };
+
+  // act
+  const outcome = await materializeLatestVersion(
+    { ...base, cascade: true, ...recordCandidate(report), settleDependencies },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.ok(outcome.partition === "failed");
+  assert.deepStrictEqual(
+    { stagingWarnings: "stagingWarnings" in outcome, report },
+    { stagingWarnings: false, report: { move: { fromVersion: "1.0.0", toVersion: "1.1.0" } } },
+  );
+});
+
+const SETTLE_NOTICE = {
+  kind: "comments-dropped",
+  scope: "project",
+  file: "mcp.json",
+} satisfies McpConfigNotice;
+const SWAP_NOTICE = {
+  kind: "comments-dropped",
+  scope: "project",
+  file: "mcp-adapter.json",
+} satisfies McpConfigNotice;
+
+test("D-PL1-16: an updated outcome lists the settle's MCP config notices ahead of the swap's own", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { base, pluginRoot } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  await writeFile(
+    path.join(pluginRoot, ".mcp.json"),
+    JSON.stringify({ mcpServers: { server1: { command: "node" } } }),
+  );
+  await mkdir(path.dirname(base.locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(base.locations.mcpAdapterJsonPath, '// mine\n{"mcpServers":{}}\n');
+
+  // act
+  const outcome = await materializeLatestVersion(
+    {
+      ...base,
+      cascade: true,
+      settleDependencies: () =>
+        Promise.resolve({ kind: "settled", rows: [ZCORE_ROW], mcpConfigNotices: [SETTLE_NOTICE] }),
+    },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.ok(outcome.partition === "updated");
+  assert.deepStrictEqual(
+    [outcome.dependencyRows, outcome.mcpConfigNotices],
+    [[ZCORE_ROW], [SETTLE_NOTICE, SWAP_NOTICE]],
+  );
+});
+
+test("D-PL10-16: an updated outcome keeps dependency diagnostics separate from its own warnings", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { base, pluginRoot } = await seedRecordedPlugin(t, {
+    recorded: "1.0.0",
+    offered: "1.1.0",
+  });
+  const ownWarning = await seedCollidingSkill(pluginRoot);
+  const dependencyWarning = discoveryWarning("dependency skill collision");
+
+  // act
+  const outcome = await materializeLatestVersion(
+    {
+      ...base,
+      cascade: true,
+      settleDependencies: () =>
+        Promise.resolve({
+          kind: "settled",
+          rows: [ZCORE_ROW],
+          stagingDiagnostics: [
+            {
+              plugin: "zcore",
+              scope: "project",
+              verb: "installed",
+              warnings: [dependencyWarning],
+            },
+          ],
+        }),
+    },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.ok(outcome.partition === "updated");
+  assert.deepStrictEqual(
+    {
+      dependency: outcome.dependencyStagingDiagnostics,
+      own: outcome.stagingWarnings,
+    },
+    {
+      dependency: [
+        {
+          plugin: "zcore",
+          scope: "project",
+          verb: "installed",
+          warnings: [dependencyWarning],
+        },
+      ],
+      own: [ownWarning],
+    },
+  );
+});
+
+test("D-PL1-16: a settle that reports notices and no rows keeps its notices and adds no dependency rows", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { base } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+
+  // act
+  const outcome = await materializeLatestVersion(
+    {
+      ...base,
+      cascade: true,
+      settleDependencies: () =>
+        Promise.resolve({ kind: "settled", rows: [], mcpConfigNotices: [SETTLE_NOTICE] }),
+    },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      partition: outcome.partition,
+      dependencyRows: Object.hasOwn(outcome, "dependencyRows"),
+      mcpConfigNotices: "mcpConfigNotices" in outcome ? outcome.mcpConfigNotices : undefined,
+    },
+    { partition: "updated", dependencyRows: false, mcpConfigNotices: [SETTLE_NOTICE] },
+  );
+});
+
+test("D-PL1-16: a refused settle's failed outcome carries the notices of the dependencies it installed first", async (t) => {
+  // arrange
+  const { base } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  const cause = new Error("zcore refused");
+
+  // act
+  const outcome = await materializeLatestVersion(
+    {
+      ...base,
+      cascade: true,
+      settleDependencies: () =>
+        Promise.resolve({
+          kind: "refused",
+          rows: [ZCORE_ROW],
+          cause,
+          mcpConfigNotices: [SETTLE_NOTICE],
+        }),
+    },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "failed",
+    name: "hello",
+    fromVersion: "1.0.0",
+    notes: ["zcore refused"],
+    reasons: ["dependency failed"],
+    dependencyRows: [ZCORE_ROW],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    mcpConfigNotices: [SETTLE_NOTICE],
+  });
+});
+
+test("D-PL1-16: a swap that fails after the settle carries the settle's notices", async (t) => {
+  // arrange
+  const { base } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  const diskFull = new Error("disk full");
+
+  // act
+  const outcome = await materializeLatestVersion(
+    {
+      ...base,
+      cascade: true,
+      settleDependencies: () =>
+        Promise.resolve({ kind: "settled", rows: [ZCORE_ROW], mcpConfigNotices: [SETTLE_NOTICE] }),
+      stateTransaction: { saveState: () => Promise.reject(diskFull) },
+    },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "failed",
+    name: "hello",
+    fromVersion: "1.0.0",
+    notes: ["disk full\n\ncause: disk full"],
+    reasons: [],
+    cause: diskFull,
+    dependencyRows: [ZCORE_ROW],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    mcpConfigNotices: [SETTLE_NOTICE],
+  });
+});
+
+const PKD_DEP_LINK = "https://registry.npmjs.org/pkd-dep/-/pkd-dep-1.0.0.tgz";
+
+async function writePackageFiles(pluginRoot: string): Promise<void> {
+  await writeFile(
+    path.join(pluginRoot, "package.json"),
+    JSON.stringify({ name: "hello", dependencies: { "pkd-dep": "1.0.0" } }),
+  );
+  await writeFile(
+    path.join(pluginRoot, "package-lock.json"),
+    JSON.stringify({
+      lockfileVersion: 3,
+      packages: {
+        "": { dependencies: { "pkd-dep": "1.0.0" } },
+        "node_modules/pkd-dep": {
+          version: "1.0.0",
+          resolved: PKD_DEP_LINK,
+          integrity: "sha512-AAAA",
+        },
+      },
+    }),
+  );
+}
+
+// The lockfile npm receives for the plugin's lockfile: the root renamed and
+// the fields that decide the install, as two-space JSON.
+const REWRITTEN_LOCKFILE = [
+  "{",
+  '  "name": "plugin-dependencies",',
+  '  "version": "0.0.0",',
+  '  "lockfileVersion": 3,',
+  '  "requires": true,',
+  '  "packages": {',
+  '    "": {',
+  '      "name": "plugin-dependencies",',
+  '      "version": "0.0.0",',
+  '      "dependencies": {',
+  '        "pkd-dep": "1.0.0"',
+  "      }",
+  "    },",
+  '    "node_modules/pkd-dep": {',
+  '      "version": "1.0.0",',
+  `      "resolved": "${PKD_DEP_LINK}",`,
+  '      "integrity": "sha512-AAAA"',
+  "    }",
+  "  }",
+  "}",
+  "",
+].join("\n");
+
+const PACKAGE_NOTE = `Skipped installing this plugin's dependencies: its folder in the marketplace "mp" is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder.`;
+
+test("D-PL9-07: an update whose new version ships a lockfile carries the package note", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { base, pluginRoot } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  await writePackageFiles(pluginRoot);
+
+  // act
+  const outcome = await materializeLatestVersion({ ...base, cascade: true }, UPDATE_POLICY);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "updated",
+    resourcesChanged: true,
+    name: "hello",
+    fromVersion: "1.0.0",
+    toVersion: "1.1.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+    stagingWarnings: [discoveryWarning(PACKAGE_NOTE)],
+    packageNote: PACKAGE_NOTE,
+  });
+});
+
+test("D-PL9-07: an update that settled its dependencies carries the package note too", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { base, pluginRoot } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  await writePackageFiles(pluginRoot);
+  const settleDependencies: UpdateDependencySettler = () =>
+    Promise.resolve({ kind: "settled", rows: [ZCORE_ROW] });
+
+  // act
+  const outcome = await materializeLatestVersion(
+    { ...base, cascade: true, settleDependencies },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "updated",
+    resourcesChanged: true,
+    name: "hello",
+    fromVersion: "1.0.0",
+    toVersion: "1.1.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+    dependencyRows: [ZCORE_ROW],
+    stagingWarnings: [discoveryWarning(PACKAGE_NOTE)],
+    packageNote: PACKAGE_NOTE,
+  });
+});
+
+interface PackageRunLog {
+  readonly ops: PackageInstallOps;
+  readonly runs: string[];
+}
+
+// Stands in for npm: each run installs pkd-dep into the work dir and logs the
+// lockfile the work dir received.
+function installingPackageOps(): PackageRunLog {
+  const runs: string[] = [];
+  return {
+    runs,
+    ops: {
+      runPackageManager: async (request) => {
+        runs.push(await readFile(path.join(request.cwd, "package-lock.json"), "utf8"));
+        await mkdir(path.join(request.cwd, "node_modules", "pkd-dep"), { recursive: true });
+        await writeFile(path.join(request.cwd, "node_modules", "pkd-dep", "index.js"), "new");
+        return { code: 0, stdout: "", stderr: "", timedOut: false };
+      },
+      runRegistryQuery: () => assert.fail("a lockfile without http links queries no registry"),
+      newWorkDirName: () => "work-1",
+    },
+  };
+}
+
+async function writeInstalledPackages(pluginRoot: string): Promise<void> {
+  await writePackageFiles(pluginRoot);
+  await mkdir(path.join(pluginRoot, "node_modules", "pkd-dep"), { recursive: true });
+  await writeFile(path.join(pluginRoot, "node_modules", "pkd-dep", "index.js"), "old");
+}
+
+const REINSTALL_POLICY = {
+  refreshSource: false,
+  skipSameRevision: false,
+  overwrite: true,
+  searchReleaseTags: true,
+} satisfies MaterializationPolicy;
+const REMATERIALIZE_POLICY = {
+  ...REINSTALL_POLICY,
+  overwrite: false,
+  searchReleaseTags: false,
+} satisfies MaterializationPolicy;
+
+for (const { verb, policy, offered, installs, runs } of [
+  {
+    verb: "an update",
+    policy: UPDATE_POLICY,
+    offered: "1.1.0",
+    installs: "new",
+    runs: [REWRITTEN_LOCKFILE],
+  },
+  {
+    verb: "a converge",
+    policy: { ...UPDATE_POLICY, refreshSource: false, searchReleaseTags: false },
+    offered: "1.1.0",
+    installs: "new",
+    runs: [REWRITTEN_LOCKFILE],
+  },
+  { verb: "a reinstall", policy: REINSTALL_POLICY, offered: "1.0.0", installs: "old", runs: [] },
+  {
+    verb: "a reinstall",
+    policy: REINSTALL_POLICY,
+    offered: "1.1.0",
+    installs: "new",
+    runs: [REWRITTEN_LOCKFILE],
+  },
+  {
+    verb: "a rematerialize",
+    policy: REMATERIALIZE_POLICY,
+    offered: "1.0.0",
+    installs: "old",
+    runs: [],
+  },
+  {
+    verb: "a rematerialize",
+    policy: REMATERIALIZE_POLICY,
+    offered: "1.1.0",
+    installs: "new",
+    runs: [REWRITTEN_LOCKFILE],
+  },
+]) {
+  test(`D-PL9-06: ${verb} from 1.0.0 to ${offered} leaves the plugin with the ${installs} node_modules`, async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+    const { base, pluginRoot } = await seedRecordedPlugin(
+      t,
+      { recorded: "1.0.0", offered },
+      "contained",
+    );
+    await writeInstalledPackages(pluginRoot);
+    const packages = installingPackageOps();
+
+    // act
+    const outcome = await materializeLatestVersion(
+      { ...base, cascade: true },
+      policy,
+      packages.ops,
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      [outcome.partition, Object.hasOwn(outcome, "notes")],
+      ["updated", false],
+    );
+    assert.deepStrictEqual(packages.runs, runs);
+    assert.strictEqual(
+      await readFile(path.join(pluginRoot, "node_modules", "pkd-dep", "index.js"), "utf8"),
+      installs,
+    );
+  });
+}

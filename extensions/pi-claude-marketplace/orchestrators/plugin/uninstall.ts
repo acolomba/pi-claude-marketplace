@@ -32,6 +32,9 @@
 //   D-19-01 -- the underlying rm() still runs, only the user-visible
 //   warning surface is gone. The same cleanup then runs once per removed
 //   member with the same `keepData` (D-05-09).
+//   D-PL9-22: the same cleanup then removes the node_modules that the package
+//   step wrote into the removed record's plugin root, unless another record of
+//   the scope still runs from that root.
 //   PU-8 reload hint: set explicitly on the row (severity: "info",
 //   needsReload: true, D-03/D-06) because uninstalled is a realized,
 //   state-changing transition; notify() aggregates it into the cascade's
@@ -76,6 +79,7 @@ import {
 } from "../../domain/dependency-orphans.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts";
+import { loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { StateLockHeldError, errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
@@ -88,15 +92,19 @@ import {
 } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
-import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
+import {
+  withExistingScopeLock,
+  withLockedStateTransaction,
+} from "../../transaction/with-state-guard.ts";
 import {
   AgentsUnstageFailureError,
   cascadeUnstagePlugin,
   mcpConfigNoticesMember,
 } from "../marketplace/shared.ts";
 
-import { garbageCollectPluginClones } from "./clone-gc.ts";
+import { collectPluginClonesLocked } from "./clone-gc.ts";
 import { buildScopeDeclarationIndex, withoutDisabledHolders } from "./dependency-index.ts";
+import { DEFAULT_PACKAGE_INSTALL_OPS, removeInstalledPackages } from "./package-install.ts";
 import {
   absentTargetReasons,
   applyPartialCascadeFold,
@@ -324,7 +332,7 @@ async function readDeclarers(args: {
     throw new UninstallRefusedError("unreadable", result.cause.message);
   }
 
-  const enabledIndex = withoutDisabledHolders(result.index, args.state);
+  const enabledIndex = withoutDisabledHolders(result.index, result.candidates);
   return { snapshot: result, enabledIndex, dependents: findDependents(args.key, enabledIndex) };
 }
 
@@ -845,6 +853,8 @@ export interface PrunedMember {
   readonly removed: boolean;
   readonly hooksDropped: boolean;
   readonly mcpConfigNotices: readonly McpConfigNotice[];
+  /** D-PL9-22: the member record's `resolvedSource`, its plugin root. */
+  readonly pluginRoot: string;
 }
 
 /**
@@ -905,6 +915,7 @@ async function removeDependencyMember(args: {
       removed: true,
       hooksDropped: true,
       mcpConfigNotices: outcome.mcpConfigNotices ?? [],
+      pluginRoot: member.record.resolvedSource,
     };
   }
 
@@ -920,6 +931,7 @@ async function removeDependencyMember(args: {
     removed: false,
     hooksDropped: outcome.dropped.hooks.length > 0,
     mcpConfigNotices: outcome.mcpConfigNotices ?? [],
+    pluginRoot: member.record.resolvedSource,
   };
 }
 
@@ -1024,6 +1036,7 @@ export async function finalizePrunedMembers(args: {
         marketplace: member.marketplace,
         plugin: member.plugin,
         keepData: args.keepData,
+        pluginRoot: member.pluginRoot,
       });
     }
   }
@@ -1079,10 +1092,40 @@ interface PostUninstallCleanupOptions {
   readonly plugin: string;
   /** DATA-01: true preserves the plugin's data directory; false removes it. */
   readonly keepData: boolean;
+  /**
+   * D-PL9-22: the removed record's `resolvedSource`. The named uninstall
+   * hoists it out of its locked closure, so the type admits `undefined`.
+   */
+  readonly pluginRoot: string | undefined;
 }
 
 /**
- * The three POST-state-commit cleanups, all of them hygienic and all of them
+ * D-PL9-22: removes the step's node_modules from a plugin root that no record
+ * of the saved state runs from any more. A fresh scope lock covers both the
+ * reference check and removal. A failure is debug-logged only (D-19-01).
+ */
+async function removeUnusedPackages(
+  locations: ScopedLocations,
+  pluginRoot: string,
+  pluginRef: string,
+): Promise<void> {
+  try {
+    await withExistingScopeLock(locations, async () => {
+      const state = await loadState(locations.extensionRoot);
+      const inUse = Object.values(state.marketplaces).some((mp) =>
+        Object.values(mp.plugins).some((record) => record.resolvedSource === pluginRoot),
+      );
+      if (!inUse) {
+        await removeInstalledPackages(DEFAULT_PACKAGE_INSTALL_OPS, locations, pluginRoot);
+      }
+    });
+  } catch (err) {
+    hookDebugLog(`uninstall: package removal failed for ${pluginRef}: ${errorMessage(err)}`);
+  }
+}
+
+/**
+ * The four POST-state-commit cleanups, all of them hygienic and all of them
  * swallowed per D-19-01: the underlying side effect still fires, only the
  * user-visible warning surface is gone, because
  * `MarketplaceNotificationMessage` has no field for a soft warning after a
@@ -1100,8 +1143,15 @@ interface PostUninstallCleanupOptions {
  * record references it. The GC derives live keys from the just-committed
  * state, so a shared clone survives while any other plugin still references
  * it. NFR-3: a crash before this leaves an orphan the next idempotent pass
- * removes. `garbageCollectPluginClones` already folds per-dir rm leaks into a
- * returned string[] rather than throwing; the try/catch is belt and braces.
+ * removes. D-PL7-05: the GC runs under a fresh scope lock, taken after the
+ * uninstall's own lock is released. The GC folds per-dir rm leaks into a
+ * returned string[]; the try/catch traces what it throws, such as the
+ * StateLockHeldError of a held lock, which leaves the clone for the next
+ * lifecycle operation.
+ *
+ * D-PL9-22: the node_modules that the package step wrote into the plugin root
+ * goes too, so a later install of the plugin runs the step again. It stays
+ * while another record of the saved state runs from the same root.
  *
  * WLIF-01: the workflow staging sweep runs last. Its trees live under the home
  * directory rather than under any scope root, so no other arm of this cleanup
@@ -1114,6 +1164,7 @@ async function runPostUninstallCleanup({
   marketplace,
   plugin,
   keepData,
+  pluginRoot,
 }: PostUninstallCleanupOptions): Promise<void> {
   try {
     await completionCache.dropMarketplaceCache(
@@ -1151,8 +1202,12 @@ async function runPostUninstallCleanup({
     }
   }
 
+  if (pluginRoot !== undefined) {
+    await removeUnusedPackages(locations, pluginRoot, `${plugin}@${marketplace}`);
+  }
+
   try {
-    await garbageCollectPluginClones(locations);
+    await collectPluginClonesLocked(locations);
   } catch (err) {
     // D-19-01: hygienic cleanup never becomes the primary user-facing path.
     hookDebugLog(`uninstall: clone GC failed for ${plugin}@${marketplace}: ${errorMessage(err)}`);
@@ -1356,6 +1411,8 @@ async function runUninstallOutcome(
   // populate the PluginUninstalledMessage.version slot without re-reading
   // state. Undefined when alreadyGone (no row to render in that case).
   let removedVersion: string | undefined;
+  // D-PL9-22: the removed record's plugin root, for the post-commit cleanup.
+  let removedRoot: string | undefined;
   // TR-03: captured outside the guard so the post-guard branch can
   // emit the PluginFailedMessage for non-AG-5 cascade failures AFTER the
   // shrunken-row save has committed. AG-5 still throws (preserves row);
@@ -1429,6 +1486,7 @@ async function runUninstallOutcome(
       }
 
       removedVersion = installed.version;
+      removedRoot = installed.resolvedSource;
       // LAYER-05 / LAYER-08 / D-MF-03: a skipped decision is the whole
       // uninstall: no cascade, no prune, and no save.
       const decision = await decideRemoval({
@@ -1586,6 +1644,7 @@ async function runUninstallOutcome(
     plugin,
     // DATA-01 / D-02-04: omission is the deletion default.
     keepData,
+    pluginRoot: removedRoot,
   });
   await finalizePrunedMembers({
     members: prunedMembers,

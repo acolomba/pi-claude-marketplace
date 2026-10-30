@@ -42,7 +42,11 @@ test("strict resolution rejects invalid dependencies in the selected manifest", 
   // act
   const resolved = await resolveStrict(
     { name: "host", source: "./host", dependencies: ["entry"] },
-    { marketplaceRoot: temporaryMarketplace, marketplaceName: "third-party" },
+    {
+      marketplaceRoot: temporaryMarketplace,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    },
   );
 
   // assert
@@ -143,6 +147,7 @@ function resolveContext(
   return {
     marketplaceRoot,
     marketplaceName,
+    marketplaceSource: undefined,
     statKind(p: string): Promise<"file" | "dir" | null> {
       const v = files[p];
 
@@ -899,6 +904,7 @@ test("WR-02: hooks/hooks.json EACCES propagates out of resolveStrict (not wrappe
   const context: ResolveContext = {
     marketplaceRoot: marketplaceRoot,
     marketplaceName: "third-party",
+    marketplaceSource: undefined,
     statKind(p: string): Promise<"file" | "dir" | null> {
       if (p === localRoot) {
         return Promise.resolve("dir");
@@ -1811,6 +1817,7 @@ test("WR-03: unreadable reference file (EACCES) propagates out of resolveStrict 
   const context: ResolveContext = {
     marketplaceRoot: marketplaceRoot,
     marketplaceName: "third-party",
+    marketplaceSource: undefined,
     statKind(p: string): Promise<"file" | "dir" | null> {
       if (p === localRoot) {
         return Promise.resolve("dir");
@@ -1881,7 +1888,11 @@ test("MCPR-04 symlink reference (D-14) -> unavailable + note; never reads outsid
     await writeFile(path.join(externalDir, "secret.mcp.json"), WRAPPED_MCP, "utf8");
     await symlink(path.join(externalDir, "secret.mcp.json"), path.join(pluginRoot, "x.mcp.json"));
 
-    const context: ResolveContext = { marketplaceRoot: mpRoot, marketplaceName: "third-party" };
+    const context: ResolveContext = {
+      marketplaceRoot: mpRoot,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    };
 
     // act
     const resolvedPlugin = await resolveStrict(
@@ -1912,7 +1923,11 @@ test("MCPR-04 reference path traversing a non-directory (ENOTDIR) propagates out
     // PathContainmentError). validateReferencePath re-throws it, and it must
     // propagate for the outer probe classifier to key on `.code`.
     await writeFile(path.join(pluginRoot, "afile"), "x", "utf8");
-    const context: ResolveContext = { marketplaceRoot: mpRoot, marketplaceName: "third-party" };
+    const context: ResolveContext = {
+      marketplaceRoot: mpRoot,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    };
 
     // act & assert
     await assert.rejects(
@@ -2899,6 +2914,28 @@ test("PURL-01: npm source stays unavailable with unsupported-source note", async
   assert.strictEqual(resolvedPlugin.state, "unavailable");
   assert.ok(
     resolvedPlugin.notes.includes("unsupported source kind: npm"),
+    `notes: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+});
+
+test("D-PL5-05: hosted source stays unavailable with unsupported-source note", async () => {
+  // arrange
+  const context = gitCtx({
+    kind: "materialized",
+    pluginRoot: CLONE_ROOT,
+    resolvedSha: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "https://h.example/m.json" }),
+    context,
+  );
+
+  // assert
+  assert.strictEqual(resolvedPlugin.state, "unavailable");
+  assert.ok(
+    resolvedPlugin.notes.includes("unsupported source kind: hosted"),
     `notes: ${resolvedPlugin.notes.join(" / ")}`,
   );
 });
@@ -4154,6 +4191,7 @@ test("resolveStrict classifies a real file source through the default stat reade
   const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./plugin-file" }), {
     marketplaceRoot: temporaryMarketplace,
     marketplaceName: "third-party",
+    marketplaceSource: undefined,
   });
 
   // assert
@@ -4167,7 +4205,11 @@ test("resolveStrict classifies a real file source through the default stat reade
 
 test("resolveStrict classifies an existing special-file source through the default stat reader", async () => {
   // arrange
-  const context: ResolveContext = { marketplaceRoot: "/", marketplaceName: "third-party" };
+  const context: ResolveContext = {
+    marketplaceRoot: "/",
+    marketplaceName: "third-party",
+    marketplaceSource: undefined,
+  };
 
   // act
   const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./dev/null" }), context);
@@ -4198,6 +4240,7 @@ test("resolveStrict reads a real manifest through the default file reader", asyn
   const resolvedPlugin = await resolveStrict(pluginEntry(), {
     marketplaceRoot: temporaryMarketplace,
     marketplaceName: "third-party",
+    marketplaceSource: undefined,
   });
 
   // assert
@@ -4228,6 +4271,7 @@ test("resolveStrict falls through a non-directory wrapper to the bare manifest",
   const resolved = await resolveStrict(pluginEntry(), {
     marketplaceRoot: temporaryMarketplace,
     marketplaceName: "third-party",
+    marketplaceSource: undefined,
   });
 
   // assert
@@ -4254,6 +4298,7 @@ for (const code of ["EACCES", "ELOOP", undefined]) {
     const context: ResolveContext = {
       marketplaceRoot,
       marketplaceName: "third-party",
+      marketplaceSource: undefined,
       statKind(filePath) {
         if (filePath === wrappedManifest) {
           return Promise.reject(Object.assign(new Error("stat refused"), { code }));
@@ -4291,6 +4336,7 @@ test("resolveStrict propagates a source containment error below a non-directory 
       resolveStrict(pluginEntry({ source: "./afile/child" }), {
         marketplaceRoot: temporaryMarketplace,
         marketplaceName: "third-party",
+        marketplaceSource: undefined,
       }),
     (error: unknown) =>
       error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOTDIR",
@@ -4311,6 +4357,7 @@ test("resolveStrict propagates a component containment error below a non-directo
       resolveStrict(pluginEntry({ skills: ["afile/child"] }), {
         marketplaceRoot: temporaryMarketplace,
         marketplaceName: "third-party",
+        marketplaceSource: undefined,
       }),
     (error: unknown) =>
       error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOTDIR",
@@ -4347,6 +4394,7 @@ test("resolveStrict propagates a non-Error manifest read rejection (not wrapped 
   const context: ResolveContext = {
     marketplaceRoot,
     marketplaceName: "third-party",
+    marketplaceSource: undefined,
     statKind(filePath) {
       if (filePath === localRoot) {
         return Promise.resolve("dir");
@@ -4411,6 +4459,7 @@ test("resolveStrict propagates a non-Error standalone mcp read rejection (not wr
   const context: ResolveContext = {
     marketplaceRoot,
     marketplaceName: "third-party",
+    marketplaceSource: undefined,
     statKind(filePath) {
       if (filePath === localRoot) {
         return Promise.resolve("dir");
@@ -4625,6 +4674,161 @@ test("parallel strict resolution keep independent deterministic outcomes", async
   }
 });
 
+// The em dash stays escaped as `\u2014` because the fix-unicode-dashes hook
+// rewrites a literal one.
+const HOSTED_ENTRY_REFUSED_NOTE =
+  "its marketplace entry path does not stay inside the marketplace directory (an absolute, climbing, network-shaped, backslash-containing or link-traversing entry, an entry of a fetched marketplace that resolves or opens outside its tree \u2014 or a relative entry in a url-catalog marketplace, which has no local directory)";
+const HOSTED_CATALOG_URL = "https://h.example/acme/tools/marketplace.json";
+const hostedRecordSource = { kind: "hosted", raw: HOSTED_CATALOG_URL, url: HOSTED_CATALOG_URL };
+const demoRoot = pathUnderMarketplace("./plugins/demo");
+
+for (const { label, entrySource, marketplaceSource } of [
+  { label: "./plugins/demo", entrySource: "./plugins/demo", marketplaceSource: hostedRecordSource },
+  { label: "./", entrySource: "./", marketplaceSource: hostedRecordSource },
+  { label: "../demo", entrySource: "../demo", marketplaceSource: hostedRecordSource },
+  { label: "/abs/demo", entrySource: "/abs/demo", marketplaceSource: hostedRecordSource },
+  {
+    label: "./plugins/demo under a string-form hosted source",
+    entrySource: "./plugins/demo",
+    marketplaceSource: HOSTED_CATALOG_URL,
+  },
+]) {
+  test(`MKT-02 / D-PL5-32: a hosted marketplace's path entry ${label} resolves unavailable with Claude Code's reason`, async () => {
+    // arrange
+    const context: ResolveContext = {
+      ...resolveContext(marketplaceRoot, { [marketplaceRoot]: "dir", [demoRoot]: "dir" }),
+      marketplaceSource,
+    };
+
+    // act
+    const resolvedPlugin = await resolveStrict(pluginEntry({ source: entrySource }), context);
+
+    // assert
+    assert.deepStrictEqual(resolvedPlugin, {
+      state: "unavailable",
+      installable: false,
+      name: "p1",
+      notes: [HOSTED_ENTRY_REFUSED_NOTE],
+    });
+  });
+}
+
+test("MKT-02 / D-PL5-32: a hosted marketplace's pinned path entry is refused without materializing the pin", async () => {
+  // arrange
+  const pinnedRoots: string[] = [];
+  const context: ResolveContext = {
+    ...resolveContext(marketplaceRoot, { [CLONE_ROOT]: "dir" }),
+    marketplaceSource: hostedRecordSource,
+    resolvePathPluginRoot(source): Promise<GitPluginRootResult> {
+      pinnedRoots.push(source.raw);
+      return Promise.resolve({
+        kind: "materialized",
+        pluginRoot: CLONE_ROOT,
+        resolvedSha: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+      });
+    },
+    pathPluginPin: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+  };
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./plugins/demo" }), context);
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "unavailable",
+    installable: false,
+    name: "p1",
+    notes: [HOSTED_ENTRY_REFUSED_NOTE],
+  });
+  assert.deepStrictEqual(pinnedRoots, []);
+});
+
+for (const { label, marketplaceSource } of [
+  { label: "a path", marketplaceSource: { kind: "path", raw: marketplaceRoot } },
+  { label: "a github", marketplaceSource: "acme/tools" },
+  { label: "a url", marketplaceSource: "https://h.example/acme/tools.git" },
+  { label: "no", marketplaceSource: undefined },
+]) {
+  test(`MKT-02 / D-PL5-32: a path entry of a marketplace with ${label} recorded source resolves under the marketplace root`, async () => {
+    // arrange
+    const context: ResolveContext = {
+      ...resolveContext(marketplaceRoot, { [demoRoot]: "dir" }),
+      marketplaceSource,
+    };
+
+    // act
+    const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./plugins/demo" }), context);
+
+    // assert
+    assert.deepStrictEqual(resolvedPlugin, {
+      state: "installable",
+      installable: true,
+      name: "p1",
+      pluginRoot: demoRoot,
+      supported: [],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    });
+  });
+}
+
+test("MKT-02 / D-PL5-32: a hosted marketplace's url entry still resolves through the git resolver", async () => {
+  // arrange
+  const context: ResolveContext = {
+    ...gitCtx({
+      kind: "materialized",
+      pluginRoot: CLONE_ROOT,
+      resolvedSha: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+    }),
+    marketplaceSource: hostedRecordSource,
+  };
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: { source: "url", url: "https://gitlab.com/o/p.git" } }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "installable",
+    installable: true,
+    name: "p1",
+    pluginRoot: CLONE_ROOT,
+    supported: [],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  });
+});
+
+test("MKT-02 / D-PL5-32: a hosted marketplace's npm entry keeps its unsupported-source note", async () => {
+  // arrange
+  const context: ResolveContext = {
+    ...resolveContext(marketplaceRoot, {}),
+    marketplaceSource: hostedRecordSource,
+  };
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: { source: "npm", package: "some-plugin" } }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "unavailable",
+    installable: false,
+    name: "p1",
+    notes: ["unsupported source kind: npm"],
+  });
+});
+
 declare const resolvedPluginContract: ResolvedPlugin;
 
 function gateNarrowsForce(): string {
@@ -4641,3 +4845,195 @@ function gateExcludesUnavailable(): void {
 
 void gateNarrowsForce;
 void gateExcludesUnavailable;
+
+/** A marketplace holding the plugin `host`, and a root outside it. */
+async function plantLinkedHost(
+  t: test.TestContext,
+): Promise<{ marketplaceRoot: string; pluginRoot: string; wrapped: string; outside: string }> {
+  const temporaryMarketplace = await mkdtemp(path.join(os.tmpdir(), "linked-manifest-mp-"));
+  const outside = await mkdtemp(path.join(os.tmpdir(), "linked-manifest-outside-"));
+  t.after(() => rm(temporaryMarketplace, { recursive: true, force: true }));
+  t.after(() => rm(outside, { recursive: true, force: true }));
+  const pluginRoot = path.join(temporaryMarketplace, "host");
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  return {
+    marketplaceRoot: temporaryMarketplace,
+    pluginRoot,
+    wrapped: path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    outside,
+  };
+}
+
+const LINKED_HOST_MANIFEST = '{"name":"host","defaultEnabled":false}';
+
+/** The materializable verdict's `defaultEnabled`, or the verdict itself when it is not one. */
+function defaultEnabledOf(resolved: ResolvedPlugin): boolean | ResolvedPlugin {
+  return resolved.state === "unavailable" ? resolved : resolved.defaultEnabled;
+}
+
+test("D-PL2-24: a path plugin reads a manifest linked inside the plugin at its target", async (t) => {
+  // arrange
+  const tree = await plantLinkedHost(t);
+  await writeFile(path.join(tree.pluginRoot, "manifest.json"), LINKED_HOST_MANIFEST);
+  await symlink(path.join(tree.pluginRoot, "manifest.json"), tree.wrapped);
+
+  // act
+  const resolved = await resolveStrict(
+    { name: "host", source: "./host" },
+    {
+      marketplaceRoot: tree.marketplaceRoot,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    },
+  );
+
+  // assert
+  assert.strictEqual(defaultEnabledOf(resolved), false);
+});
+
+test("D-PL2-17: a path plugin read in place reads a manifest linked into its marketplace directory", async (t) => {
+  // arrange
+  const tree = await plantLinkedHost(t);
+  await writeFile(path.join(tree.marketplaceRoot, "shared.json"), LINKED_HOST_MANIFEST);
+  await symlink(path.join(tree.marketplaceRoot, "shared.json"), tree.wrapped);
+
+  // act
+  const resolved = await resolveStrict(
+    { name: "host", source: "./host" },
+    {
+      marketplaceRoot: tree.marketplaceRoot,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    },
+  );
+
+  // assert
+  assert.strictEqual(defaultEnabledOf(resolved), false);
+});
+
+test("D-PL2-24: a path plugin whose manifest links outside its marketplace is unavailable", async (t) => {
+  // arrange
+  const tree = await plantLinkedHost(t);
+  await writeFile(path.join(tree.outside, "plugin.json"), LINKED_HOST_MANIFEST);
+  await symlink(path.join(tree.outside, "plugin.json"), tree.wrapped);
+
+  // act
+  const resolved = await resolveStrict(
+    { name: "host", source: "./host" },
+    {
+      marketplaceRoot: tree.marketplaceRoot,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    },
+  );
+
+  // assert
+  assert.deepStrictEqual(resolved, {
+    state: "unavailable",
+    installable: false,
+    name: "host",
+    notes: ["plugin manifest resolves outside the plugin directory and its marketplace directory"],
+  });
+});
+
+test("D-PL2-24: a path plugin whose manifest link loops rejects with the loop error", async (t) => {
+  // arrange
+  const tree = await plantLinkedHost(t);
+  await symlink(tree.wrapped, tree.wrapped);
+
+  // act & assert
+  await assert.rejects(
+    resolveStrict(
+      { name: "host", source: "./host" },
+      {
+        marketplaceRoot: tree.marketplaceRoot,
+        marketplaceName: "third-party",
+        marketplaceSource: undefined,
+      },
+    ),
+    { code: "ELOOP" },
+  );
+});
+
+test("D-01-06: a dangling wrapped manifest link falls through to the bare manifest", async (t) => {
+  // arrange
+  const tree = await plantLinkedHost(t);
+  await symlink(path.join(tree.pluginRoot, "missing.json"), tree.wrapped);
+  await writeFile(path.join(tree.pluginRoot, "plugin.json"), LINKED_HOST_MANIFEST);
+
+  // act
+  const resolved = await resolveStrict(
+    { name: "host", source: "./host" },
+    {
+      marketplaceRoot: tree.marketplaceRoot,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+    },
+  );
+
+  // assert
+  assert.strictEqual(defaultEnabledOf(resolved), false);
+});
+
+test("D-PL2-17: a git plugin whose manifest links outside its plugin directory is unavailable", async (t) => {
+  // arrange
+  const tree = await plantLinkedHost(t);
+  await writeFile(path.join(tree.marketplaceRoot, "shared.json"), LINKED_HOST_MANIFEST);
+  await symlink(path.join(tree.marketplaceRoot, "shared.json"), tree.wrapped);
+
+  // act
+  const resolved = await resolveStrict(
+    { name: "host", source: { source: "github", repo: "acme/host" } },
+    {
+      marketplaceRoot: tree.outside,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+      resolveGitPluginRoot: () =>
+        Promise.resolve({
+          kind: "materialized",
+          pluginRoot: tree.pluginRoot,
+          resolvedSha: "0123456789abcdef0123456789abcdef01234567",
+        }),
+    },
+  );
+
+  // assert
+  assert.deepStrictEqual(resolved, {
+    state: "unavailable",
+    installable: false,
+    name: "host",
+    notes: ["plugin manifest resolves outside the plugin directory"],
+  });
+});
+
+test("D-PL2-17: a pinned path plugin is a copy whose manifest may not link into the marketplace", async (t) => {
+  // arrange
+  const tree = await plantLinkedHost(t);
+  await writeFile(path.join(tree.marketplaceRoot, "shared.json"), LINKED_HOST_MANIFEST);
+  await symlink(path.join(tree.marketplaceRoot, "shared.json"), tree.wrapped);
+
+  // act
+  const resolved = await resolveStrict(
+    { name: "host", source: "./host" },
+    {
+      marketplaceRoot: tree.marketplaceRoot,
+      marketplaceName: "third-party",
+      marketplaceSource: undefined,
+      pathPluginPin: "0123456789abcdef0123456789abcdef01234567",
+      resolvePathPluginRoot: () =>
+        Promise.resolve({
+          kind: "materialized",
+          pluginRoot: tree.pluginRoot,
+          resolvedSha: "0123456789abcdef0123456789abcdef01234567",
+        }),
+    },
+  );
+
+  // assert
+  assert.deepStrictEqual(resolved, {
+    state: "unavailable",
+    installable: false,
+    name: "host",
+    notes: ["plugin manifest resolves outside the plugin directory"],
+  });
+});

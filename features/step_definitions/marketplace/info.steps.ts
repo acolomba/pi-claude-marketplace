@@ -1,14 +1,15 @@
 /**
- * @fileoverview Marketplace-info fixtures that add same-name sources to
- * separate scopes without replacing the world's primary publication.
+ * @fileoverview Marketplace-info fixtures for separate scope sources and
+ * tampered stored names.
  */
 
 import assert from "node:assert/strict";
-import { rm } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
-import { fieldRecord, flatten } from "../../lib/field-rows.ts";
+import { fieldRecord, flatten, isPlainObject } from "../../lib/field-rows.ts";
 import { expectedInfoFields } from "../../lib/marketplace-info-fields.ts";
 import { runCommand } from "../../lib/pi-commands.ts";
 import { publishMarketplaceIn, requireFreeRoot } from "../../lib/published-marketplace.ts";
@@ -45,6 +46,25 @@ Given(
       `/claude:plugin marketplace add ${second.source} --scope ${secondScope}`,
     );
     assert.strictEqual(secondResult.severity, "info", JSON.stringify(secondResult));
+  },
+);
+
+Given(
+  "the marketplace {string} info record in the {word} scope has the stored name {string}",
+  async function (this: ScenarioWorld, name: string, scope: string, storedName: string) {
+    const file = path.join(this.scopeRoot(scope), "pi-claude-marketplace", "state.json");
+    const state: unknown = JSON.parse(await readFile(file, "utf8"));
+    assert.ok(isPlainObject(state) && "marketplaces" in state);
+    assert.ok(isPlainObject(state.marketplaces));
+    const marketplaces: Record<string, unknown> = { ...state.marketplaces };
+    const record = marketplaces[name];
+    assert.ok(isPlainObject(record));
+    const tampered = {
+      ...state,
+      marketplaces: { ...marketplaces, [name]: { ...record, name: storedName } },
+    };
+    await writeFile(file, JSON.stringify(tampered));
+    assert.deepStrictEqual(JSON.parse(await readFile(file, "utf8")), tampered);
   },
 );
 

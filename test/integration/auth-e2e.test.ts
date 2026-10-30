@@ -189,9 +189,10 @@ test("orchestrated print marketplace add retains the typed refusal and cleans st
   // assert
   assert.ok(outcome.status === "failed");
   assertPrintRefusal(outcome.error);
+  // D-PL5-16: an unclassified refusal reads `unreadable`, not `unparseable`.
   assert.deepStrictEqual(outcome, {
     status: "failed",
-    reason: "unparseable",
+    reason: "unreadable",
     error: outcome.error,
     cause:
       "Device-flow authentication is unavailable in print mode. Retry with --mode json or interactive Pi.",

@@ -32,12 +32,10 @@
 //  PluginUpdatePhase3Error with RECOVERY_PLUGIN_REINSTALL_PREFIX hint.
 //  Else: success outcome carries WR-04 stagedAgentNames/stagedMcpServerNames.
 //
-// D-141-03 / D-141-05: the four bridges' staging warnings are READ (they were
-// not, so every one of them was dark on this path) and split by install's
-// rule through `./shared.ts::splitStagingWarnings`. The skills and commands
-// DISCOVERY half always rides the `updated` outcome's `notes`; the agents and
-// mcp HYGIENE half joins it in cascade mode only. The direct path renders the
-// discovery half through `surfaceDiscoveryWarnings` AFTER the cascade, since
+// D-141-03 / D-PL1-10: the five bridges' tagged staging warnings ride the
+// `updated` outcome's `stagingWarnings`, both halves, in bridge order. The
+// direct path takes the discovery half through `partitionStagingWarnings`, the
+// classifier install uses (D-PL1-03), and renders it AFTER the cascade, since
 // the runner that produces a warning finishes long before the row it
 // qualifies exists.
 //
@@ -62,9 +60,11 @@
 // resolveScopeFromState). MUST NOT import from
 // orchestrators/marketplace/{add,remove,list,update,autoupdate}.ts.
 
+import { networkCloneUrl } from "../../domain/clone-key.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { BridgeStagingError } from "../../shared/errors-bridges.ts";
+import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
+import { AgentTargetOccupiedError, BridgeStagingError } from "../../shared/errors-bridges.ts";
 import {
   CleanupContextError,
   cleanupFailuresFromError,
@@ -72,25 +72,33 @@ import {
   DependencyDeclarationsUnreadableError,
   InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
+  MarketplaceUpdateError,
   PluginInBaseLayerOnlyError,
   PluginInLocalLayerOnlyError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
   rethrowInvalidGitHubBaseUrl,
+  StateLockCompromisedError,
   StateLockHeldError,
 } from "../../shared/errors.ts";
-import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { classifyGitFailure } from "../../shared/git-failure-classifiers.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import { notifyUpdateNoOpWithContext, notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
+import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
+import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildGitHubAuth } from "../auth-host.ts";
 import { DEFAULT_GIT_OPS, refreshGitHubClone, refreshUrlClone } from "../marketplace/shared.ts";
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 
-import { garbageCollectPluginClones } from "./clone-gc.ts";
-import { materializeLatestVersion, recordCandidate } from "./materialize-latest.ts";
+import { collectPluginClonesLocked } from "./clone-gc.ts";
+import {
+  materializeLatestVersion,
+  recordCandidate,
+  reportedStagingWarnings,
+} from "./materialize-latest.ts";
 import {
   emitMarketplaceNotAddedSignal,
   keepLocalLayerTargets,
@@ -98,8 +106,11 @@ import {
   namedPluginLayerRefusal,
   resolveInstalledMarketplaceTarget,
   resolveInstalledPluginTarget,
-  surfaceDiscoveryWarnings,
 } from "./shared.ts";
+import {
+  surfaceCascadeStagingDiagnostics,
+  surfaceStagingDiagnostics,
+} from "./staging-diagnostics.ts";
 import { composeUpdateCascade } from "./update-cascade.ts";
 import { UPDATE_MATERIALIZATION } from "./update-preflight.ts";
 import { revisionVersionSlot } from "./update-row.ts";
@@ -123,7 +134,7 @@ import type {
 } from "./update-swap.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
-import type { ParsedSource } from "../../domain/source.ts";
+import type { GitHubSource, ParsedSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { RemoteTag } from "../../platform/git.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
@@ -139,6 +150,8 @@ import type {
   PluginUpdateOutcome,
 } from "../types.ts";
 import type { CandidateReport } from "./materialize-latest.ts";
+import type { StagingDiagnostic } from "./staging-diagnostics.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 
 /** Runs one prepared update target for the update flow. */
 type UpdatePluginRunner = (args: ThreePhaseArgs) => Promise<UpdateRunOutcome>;
@@ -151,12 +164,53 @@ type UpdateCascadeComposer = (
   cardinality: "single" | "plural",
   abortedByFailure?: boolean,
 ) => void;
+
+/**
+ * UPD-11 / D-PL7-02: the 404 rule of a marketplace refresh. A plugin update
+ * refreshes its marketplace as `marketplace update` does, so a 404 or 410
+ * from the host is `network error`, not `source missing`.
+ */
+const MARKETPLACE_REFRESH_RULE: Parameters<typeof classifyGitFailure>[1] = {
+  notFound: "network error",
+};
+
+/**
+ * GLK-01 / D-PL7-03 / D-PL7-14: runs one marketplace refresh. When the git
+ * host answered with an HTTP status, the failure is rethrown as a
+ * `MarketplaceUpdateError` whose message is the status on the URL the fetch
+ * sent, as `marketplace update` frames it, so that frame leads the cause
+ * line. Every other failure is rethrown unchanged.
+ *
+ * GLK-04: the refresh writes the marketplace `.git`, so it runs under the
+ * scope lock that `marketplace update` and the update preflight's tag copy
+ * take on that `.git`. The direct update syncs a marketplace only after the
+ * previous target's run has released every lock it took, so this one does
+ * not nest. A held lock throws StateLockHeldError, which reads `lock held`.
+ */
+async function refreshFramed(
+  locations: ScopedLocations,
+  source: GitHubSource | UrlSource,
+  refresh: () => Promise<void>,
+): Promise<void> {
+  try {
+    await withExistingScopeLock(locations, () => refresh());
+  } catch (err) {
+    const frame = classifyGitFailure(err, MARKETPLACE_REFRESH_RULE, networkCloneUrl(source))?.frame;
+    if (frame === undefined) {
+      throw err;
+    }
+
+    throw new MarketplaceUpdateError(frame, { cause: err });
+  }
+}
+
 /**
  * PUP-2 syncCloneOnce memoization -- one refresh per (scope, marketplace)
  * pair. Path-source marketplaces are noops (NFR-5: no network for path
  * sources); GitHub- and url-source marketplaces refresh via gitOps.fetch +
  * forceUpdateRef + checkout (the D-14 sequence), as `marketplace update`
- * does. Throws on git-side failures.
+ * does. Throws on git-side failures; a git host's HTTP answer is framed as
+ * `marketplace update` frames it (`refreshFramed`).
  *
  * AUTH-02: the fetch carries the same host-keyed auth bundle as `marketplace
  * update` (github.com or the GitHub override host for GitHub sources, the
@@ -198,20 +252,27 @@ function makeSyncCloneOnce(
         ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
         ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
       });
-      await refreshGitHubClone(cloneDir, source.ref, gitOps, undefined, auth);
+      await refreshFramed(locations, source, () =>
+        refreshGitHubClone(cloneDir, source.ref, gitOps, undefined, auth),
+      );
     } else if (source.kind === "url") {
-      await refreshUrlClone({
-        cloneDir: await locations.sourceCloneDir(mpName),
-        source,
-        gitOps,
-        ctx: opts.ctx,
-        run: opts.run,
-        credentialOps,
-        ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
-        ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
-      });
+      const cloneDir = await locations.sourceCloneDir(mpName);
+      await refreshFramed(locations, source, () =>
+        refreshUrlClone({
+          cloneDir,
+          source,
+          gitOps,
+          ctx: opts.ctx,
+          run: opts.run,
+          credentialOps,
+          ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+          ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+        }),
+      );
     }
     // path-source: NFR-5 noop. The manifest is re-read per-plugin.
+    // hosted catalog: nothing to sync here; `marketplace update` and autoupdate
+    // refresh it, not `plugin update`.
   };
 }
 
@@ -273,7 +334,7 @@ function buildDirectThreePhaseArgs(
     // would be listed once per target instead of once per run.
     constraintTagMemo,
     constraintMarketplaceTagMemo,
-    cleanupClones: garbageCollectPluginClones,
+    cleanupClones: collectPluginClonesLocked,
     ...recordCandidate(report),
     notifyPhaseFailure: (error, failures) => {
       notifyDirectFailure({
@@ -380,8 +441,9 @@ async function updatePluginsWith(
         // failed-row identity (Option B) so the cause-chain trailer renders.
         pluginName: t.marketplace,
         err,
+        unknownGitFailure: true,
       });
-      abortUpdateBatch(ctx, run, outcomes, cardinality, composeCascade);
+      abortUpdateBatch(ctx, run, outcomes, cardinality, composeCascade, []);
       return;
     }
 
@@ -420,7 +482,9 @@ async function updatePluginsWith(
         err,
         report,
       });
-      abortUpdateBatch(ctx, run, outcomes, cardinality, composeCascade);
+      abortUpdateBatch(ctx, run, outcomes, cardinality, composeCascade, [
+        updateFailedDiagnostic(t.plugin, t.scope, report),
+      ]);
       return;
     }
 
@@ -444,7 +508,15 @@ async function updatePluginsWith(
     // throw and are handled by the `catch` block above, never reaching
     // this branch.
     if (isPhase3aAggregateFailure(outcome)) {
-      abortUpdateBatch(ctx, run, outcomes, cardinality, composeCascade, outcome);
+      abortUpdateBatch(
+        ctx,
+        run,
+        outcomes,
+        cardinality,
+        composeCascade,
+        [updateFailedDiagnostic(t.plugin, t.scope, outcome)],
+        outcome,
+      );
       return;
     }
 
@@ -459,31 +531,83 @@ async function updatePluginsWith(
 /**
  * D-141-03 / D-141-05: render each updated plugin's discovery warnings after
  * the cascade the rows live in -- the user reads the row, then the detail
- * that qualifies it.
+ * that qualifies it. The header names the target's scope (D-PL1-05).
  *
- * `cascade` is false on this path, so `collectUpdateWarnings` put the
- * discovery half on `notes` and nothing else; the hygiene half never reaches
- * here. That is the same property install's standalone arm relies on.
+ * `stagingWarnings` carries both halves (D-PL1-10). The direct update shows
+ * only the root's discovery half (D-141-03, D-19-01). D-PL10-12 is the
+ * dependency exception: a dependency diagnostic shows both halves because
+ * the dependency move is part of the direct update's cascade.
  *
- * Deliberately NOT called from `abortUpdateBatch`: an aborted batch has a
- * failure to explain, and a skipped-component note is noise against it.
+ * D-PL1-14: a `failed` outcome the batch kept renders with `update failed`.
+ *
+ * D-PL1-07: the diagnostics follow the rows. `composeUpdateCascade` orders its
+ * marketplace blocks by `compareByNameThenScope` and keeps outcome order inside
+ * a block, so a stable sort on the same key gives the row order.
+ *
+ * Deliberately NOT called from `abortUpdateBatch`: the targets that succeeded
+ * before an abort render no diagnostic, and only the failed target's renders
+ * there (D-PL1-22).
  */
 function surfaceUpdateDiscoveryWarnings(
   ctx: NotificationContext,
   run: NotificationRun,
-  outcomes: readonly { readonly outcome: PluginUpdateOutcome }[],
+  outcomes: readonly UpdateCascadeOutcome[],
 ): void {
-  for (const { outcome } of outcomes) {
-    if (outcome.partition !== "updated" || outcome.notes === undefined) {
-      continue;
-    }
-
-    surfaceDiscoveryWarnings(ctx, run, {
-      plugin: outcome.name,
-      verb: "updated",
-      warnings: outcome.notes,
-    });
+  const inRowOrder = [...outcomes].sort((left, right) =>
+    compareByNameThenScope(
+      { name: left.target.marketplace, scope: left.target.scope },
+      { name: right.target.marketplace, scope: right.target.scope },
+    ),
+  );
+  for (const update of inRowOrder) {
+    const { outcome } = update;
+    const dependencyDiagnostics =
+      outcome.partition === "updated" || outcome.partition === "failed"
+        ? (outcome.dependencyStagingDiagnostics ?? [])
+        : [];
+    surfaceCascadeStagingDiagnostics(ctx, run, dependencyDiagnostics);
+    surfaceStagingDiagnostics(ctx, run, updateStagingDiagnostic(update));
   }
+}
+
+/**
+ * D-PL1-07 / D-PL1-14: the staging diagnostic of an updated or failed
+ * outcome; none for any other partition.
+ */
+function updateStagingDiagnostic({ target, outcome }: UpdateCascadeOutcome): StagingDiagnostic[] {
+  switch (outcome.partition) {
+    case "updated":
+      return [
+        {
+          plugin: outcome.name,
+          scope: target.scope,
+          verb: "updated",
+          warnings: outcome.stagingWarnings ?? [],
+        },
+      ];
+    case "failed":
+      return [updateFailedDiagnostic(outcome.name, target.scope, outcome)];
+    case "skipped":
+    case "unchanged":
+      return [];
+  }
+}
+
+/**
+ * D-PL1-14: the `update failed` diagnostic of one target, from the warnings
+ * its failed outcome or its report holder carries.
+ */
+function updateFailedDiagnostic(
+  plugin: string,
+  scope: Scope,
+  carrier: { readonly stagingWarnings?: readonly StagingWarning[] },
+): StagingDiagnostic {
+  return {
+    plugin,
+    scope,
+    verb: "update failed",
+    warnings: carrier.stagingWarnings ?? [],
+  };
 }
 
 /**
@@ -494,6 +618,10 @@ function surfaceUpdateDiscoveryWarnings(
  *
  * Unlike `surfaceUpdateDiscoveryWarnings`, this also runs on every abort path,
  * because the rewrite has already happened to the user's file.
+ *
+ * D-PL1-23: a `failed` outcome the batch kept carries the notices of the
+ * dependencies its settle installed before it refused (WRN-06). A phase-3a
+ * failure never joins `outcomes`, so its notices render once, from `failed`.
  */
 function surfaceUpdateMcpConfigNotices(
   ctx: NotificationContext,
@@ -502,7 +630,9 @@ function surfaceUpdateMcpConfigNotices(
   failed?: UpdatePhase3FailedOutcome,
 ): void {
   const notices = outcomes.flatMap(({ outcome }) =>
-    outcome.partition === "updated" ? (outcome.mcpConfigNotices ?? []) : [],
+    outcome.partition === "updated" || outcome.partition === "failed"
+      ? (outcome.mcpConfigNotices ?? [])
+      : [],
   );
   notifyMcpConfigNotices(ctx, run, [...notices, ...(failed?.mcpConfigNotices ?? [])]);
 }
@@ -610,6 +740,11 @@ function isPhase3aAggregateFailure(
  * `failed` is the phase-3a aggregate outcome, when the abort came from one.
  * Its MCP notices follow the cascade, because its MCP commit may have
  * rewritten the file before a later bridge failed.
+ *
+ * D-PL1-14 / D-PL1-22: `failedDiagnostics` holds the failed target's staging
+ * diagnostic, which renders after the cascade and before the MCP notices; the
+ * targets that succeeded before the abort render none. D-PL10-12 keeps the
+ * failed outcome's dependency diagnostics ahead of that root diagnostic.
  */
 function abortUpdateBatch(
   ctx: NotificationContext,
@@ -617,12 +752,15 @@ function abortUpdateBatch(
   outcomes: readonly UpdateCascadeOutcome[],
   cardinality: "single" | "plural",
   composeCascade: UpdateCascadeComposer,
+  failedDiagnostics: readonly StagingDiagnostic[],
   failed?: UpdatePhase3FailedOutcome,
 ): void {
   if (outcomes.length > 0) {
     composeCascade(ctx, run, outcomes, cardinality, true);
   }
 
+  surfaceCascadeStagingDiagnostics(ctx, run, failed?.dependencyStagingDiagnostics ?? []);
+  surfaceStagingDiagnostics(ctx, run, failedDiagnostics);
   surfaceUpdateMcpConfigNotices(ctx, run, outcomes, failed);
 }
 
@@ -675,7 +813,7 @@ async function updateSinglePluginWith(
     // and not beside the binding.
     constraintTagMemo: constraintMemos.tagMemo,
     constraintMarketplaceTagMemo: constraintMemos.marketplaceTagMemo,
-    cleanupClones: garbageCollectPluginClones,
+    cleanupClones: collectPluginClonesLocked,
   });
 }
 
@@ -701,7 +839,7 @@ function convergePluginWith(
     // D-26 / WCONV-01: only a record already installed partial admits a
     // partial candidate; a clean record's consent guard declines it.
     partial: target.partial,
-    cleanupClones: target.cleanupClones ?? garbageCollectPluginClones,
+    cleanupClones: target.cleanupClones ?? collectPluginClonesLocked,
   });
 }
 
@@ -714,7 +852,7 @@ function convergePluginWith(
  */
 async function runCascadeTarget(
   runner: UpdatePluginRunner,
-  args: Omit<CascadeThreePhaseArgs, "onCandidate" | "onRecord">,
+  args: Omit<CascadeThreePhaseArgs, "onCandidate" | "onRecord" | "onStagingWarnings">,
 ): Promise<PluginUpdateOutcome> {
   const report: CandidateReport = {};
   try {
@@ -723,7 +861,11 @@ async function runCascadeTarget(
     // GHB-03: an invalid GitHub base override fails the command that runs
     // the cascade.
     rethrowInvalidGitHubBaseUrl(err);
-    return cascadeFailureOutcome(args.plugin, report, err);
+    // D-PL1-14: the warnings of the handles the swap prepared before it threw.
+    return {
+      ...cascadeFailureOutcome(args.plugin, report, err),
+      ...reportedStagingWarnings(report),
+    };
   }
 }
 
@@ -733,8 +875,10 @@ async function runCascadeTarget(
  * the whole batch. `notes` is consumed outside the notify path so the MSG-CC-1
  * trailer is composed inline here.
  *
- * Pre-narrow to a closed-set `Reason` so the cascade consumer reads the typed
- * producer value directly instead of reparsing its display note.
+ * GLK-02 / D-PL7-04: the reason comes from the ladder the direct path uses
+ * (`classifyUpdateFailure`), so the cascade row names the reason the direct
+ * row names. D-PL7-12: a reason from the git, errno, or fallback arm carries
+ * the error as the row's cause, as the direct row does.
  */
 function cascadeFailureOutcome(
   plugin: string,
@@ -742,6 +886,10 @@ function cascadeFailureOutcome(
   err: unknown,
 ): PluginUpdateOutcome {
   const cleanupFailures = cleanupFailuresFromError(err);
+  const failure = classifyUpdateFailure(err);
+  const rawCause = err instanceof Error ? err : undefined;
+  const cause =
+    !failure.typed && failure.reason === "network error" ? redactCauseChain(rawCause) : rawCause;
   const base: PluginUpdateOutcome = {
     partition: "failed",
     name: plugin,
@@ -749,14 +897,16 @@ function cascadeFailureOutcome(
     // before one.
     ...report.move,
     notes: [composeErrorWithCauseChain(err)],
+    ...(!failure.typed && cause !== undefined && { cause }),
     ...(cleanupFailures.length > 0 && {
       cause: err as Error,
       cleanupFailures,
     }),
-    // FLR-02: a held state lock renders its cause chain, as on the direct
-    // path; D-18-17: so does an unreadable dependency walk, whose message
-    // names the record it could not read.
+    // FLR-02: a held or lost state lock renders its cause chain, as on the
+    // direct path; D-18-17: so does an unreadable dependency walk, whose
+    // message names the record it could not read.
     ...((err instanceof StateLockHeldError ||
+      err instanceof StateLockCompromisedError ||
       err instanceof DependencyDeclarationsUnreadableError) && { cause: err }),
     // CMC-13: required booleans on every
     // PluginUpdateOutcome partition. `(failed)` rows do NOT render
@@ -765,59 +915,135 @@ function cascadeFailureOutcome(
     declaresMcp: false,
     declaresWorkflows: false,
   };
-  return { ...base, reasons: reasonsFromTypedError(err) };
+  const primary = err instanceof CleanupContextError ? err.primary : err;
+  return {
+    ...base,
+    reasons: primary instanceof AgentTargetOccupiedError ? [] : [failure.reason],
+  };
 }
 
 /**
- * Map an exported-workflow error to a closed-set `Reason[]` for cascade-failure
- * outcomes. Typed facts (a held state lock, FLR-02, the concurrency errors,
- * and an unreadable dependency walk, D-18-17) and errno codes win; the
- * permissive fallback is `not in manifest`.
+ * GLK-02 / D-PL7-04: the one failure ladder of `update`, shared by the direct
+ * path and the cascade paths (autoupdate and apply's converge). A cleanup
+ * leak is narrowed to its primary error. A typed error names its own reason
+ * (`typedUpdateFailReason`); any other error goes through
+ * `untypedUpdateFailReason`. `typed` tells the cascade that the reason came
+ * from a typed error, whose row carries a cause only where
+ * `cascadeFailureOutcome` names one.
  */
-function reasonsFromTypedError(err: unknown): readonly ContentReason[] {
+function classifyUpdateFailure(
+  err: unknown,
+  unknownGitFailure = false,
+): {
+  readonly reason: ContentReason;
+  readonly typed: boolean;
+} {
   const primary = err instanceof CleanupContextError ? err.primary : err;
-  if (primary instanceof StateLockHeldError) {
-    return ["lock held"] as const;
+  const typedReason = typedUpdateFailReason(primary);
+  return typedReason === undefined
+    ? { reason: untypedUpdateFailReason(primary, unknownGitFailure), typed: false }
+    : { reason: typedReason, typed: true };
+}
+
+/**
+ * D-PL7-02: a plugin clone access reads a repository the record names, so a
+ * host 404 or 410 means the source is gone.
+ */
+const PLUGIN_CLONE_RULE: Parameters<typeof classifyGitFailure>[1] = {
+  notFound: "source missing",
+};
+
+/**
+ * The reason of a failure no typed error names: the git host's answer under
+ * the plugin-clone rule first, then the errno (D-13: a bridge's staging
+ * error reads its filesystem cause), then `unreadable manifest`.
+ */
+function untypedUpdateFailReason(primary: unknown, unknownGitFailure: boolean): ContentReason {
+  return (
+    classifyGitFailure(primary, {
+      ...PLUGIN_CLONE_RULE,
+      ...(unknownGitFailure && { unknown: "network error" as const }),
+    })?.reason ?? errnoFailReason(failureErrno(primary))
+  );
+}
+
+/**
+ * D-13: the errno behind a failure. A bridge that could not stage a file
+ * names the file in its own message and carries the filesystem error as its
+ * cause, so a source the runner cannot read reads `permission denied`.
+ */
+function failureErrno(error: unknown): string | undefined {
+  const carrier = error instanceof BridgeStagingError ? error.cause : error;
+  return (carrier as NodeJS.ErrnoException | undefined)?.code;
+}
+
+function errnoFailReason(code: string | undefined): ContentReason {
+  switch (code) {
+    case "EACCES":
+    case "EPERM":
+      return "permission denied";
+    case "ENOENT":
+    case "ENOTDIR":
+      return "source missing";
+    // A local file the update could not read or write, such as a directory in
+    // place of mcp-adapter.json: naming the marketplace manifest would blame
+    // the wrong file (the marketplace/shared.ts errno precedent).
+    case "EISDIR":
+    case "EIO":
+    case "EBADF":
+      return "unreadable";
+    case undefined:
+    default:
+      return "unreadable manifest";
+  }
+}
+
+/**
+ * The reason a typed failure names, or `undefined` for an error no typed
+ * identity matches. FLR-01: a held state lock is `"lock held"`, as the other
+ * plugin commands report it. A lock lost while the update held it reads the
+ * same, as `fetch` reports it.
+ */
+function typedUpdateFailReason(primary: unknown): ContentReason | undefined {
+  if (primary instanceof StateLockHeldError || primary instanceof StateLockCompromisedError) {
+    return "lock held";
+  }
+
+  if (primary instanceof MarketplaceNotFoundError) {
+    return "not found";
+  }
+
+  // GLK-01: a framed marketplace refresh reads the host's answer under the
+  // marketplace-refresh rule.
+  if (primary instanceof MarketplaceUpdateError) {
+    return classifyGitFailure(primary.cause, MARKETPLACE_REFRESH_RULE)?.reason;
+  }
+
+  if (primary instanceof PluginUpdatePhase3Error) {
+    return "rollback partial";
   }
 
   if (primary instanceof PluginUpdateConcurrencyError) {
-    return [
-      primary.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled",
-    ] as const;
+    return primary.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled";
+  }
+
+  if (primary instanceof InvalidMarketplaceManifestError) {
+    return "invalid manifest";
+  }
+
+  if (primary instanceof PluginInLocalLayerOnlyError) {
+    return "plugin in local layer only";
+  }
+
+  if (primary instanceof PluginInBaseLayerOnlyError) {
+    return "plugin in base layer only";
   }
 
   if (primary instanceof DependencyDeclarationsUnreadableError) {
-    return ["unreadable"] as const;
+    return "unreadable";
   }
 
-  // errno-bearing FS errors map to the matching
-  // closed Reason instead of falling through to the consumer's
-  // legacy notes-substring parse (which would land on the permissive
-  // `not in manifest` default for both narrowSkipReasons and
-  // narrowFailReasons).
-  if (primary instanceof Error) {
-    const code = cascadeErrno(primary);
-    if (code === "EACCES" || code === "EPERM") {
-      return ["permission denied"] as const;
-    }
-
-    if (code === "ENOENT" || code === "ENOTDIR") {
-      return ["source missing"] as const;
-    }
-  }
-
-  return ["not in manifest"] as const;
-}
-
-/**
- * D-13: the errno behind a cascade failure. A bridge that could not stage a
- * file names the file in its own message and carries the filesystem error as
- * its cause, so a source the runner cannot read reads `permission denied`
- * rather than the permissive fallback.
- */
-function cascadeErrno(error: Error): string | undefined {
-  const carrier = error instanceof BridgeStagingError ? error.cause : error;
-  return (carrier as NodeJS.ErrnoException | undefined)?.code;
+  return undefined;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -836,13 +1062,14 @@ interface NotifyDirectFailureArgs {
   readonly scope: Scope;
   readonly pluginName: string;
   readonly err: unknown;
+  /** The throw came directly from the marketplace git refresh boundary. */
+  readonly unknownGitFailure?: boolean;
   /**
    * Optional override that pins the closed-set Reason on the synthetic
    * PluginFailedMessage. Used by the phase-3 aggregate path where the
    * `"rollback partial"` reason is the catalog form (510-522). Omitted
    * for direct-path enumerate / syncClone / phase-2 failures, which
-   * route through `narrowDirectFailReason` for a best-fit Reason from
-   * the typed error.
+   * take their Reason from the shared `classifyUpdateFailure` ladder.
    */
   readonly reasonOverride?: ContentReason;
   /**
@@ -862,8 +1089,11 @@ interface NotifyDirectFailureArgs {
 
 function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
   const { ctx, run, marketplace, scope, pluginName, err } = args;
-  const cause = err instanceof Error ? err : new Error(String(err));
-  const reasons: readonly ContentReason[] = [args.reasonOverride ?? narrowDirectFailReason(cause)];
+  const rawCause = err instanceof Error ? err : new Error(String(err));
+  const failure = classifyUpdateFailure(rawCause, args.unknownGitFailure === true);
+  const cause =
+    !failure.typed && failure.reason === "network error" ? redactCauseChain(rawCause) : rawCause;
+  const reasons = directFailReasons(args.reasonOverride, rawCause, args.unknownGitFailure === true);
   // WR-05: row-level `scope` is OMITTED -- it always matched the
   // marketplace block's `scope` at every callsite below, and
   // `renderScopeBracket` (shared/notification-grammar.ts) suppresses the
@@ -912,91 +1142,23 @@ function rollbackPartialCauseSlot(p: UpdatePhase3Failure): { readonly cause: Err
 }
 
 /**
- * Narrow a direct-path failure's typed error to a closed-set `Reason` for
- * the synthetic `PluginFailedMessage`. Order: the typed identities of
- * `typedDirectFailReason` first (a held state lock among them), errno /
- * stable transport fields second, honest generic fallback last.
- * The fallback `"unreadable manifest"` mirrors the marketplace/update.ts
- * narrowFailReason precedent for unknown error shapes.
+ * D-PL4-09: an occupied agent target has no closed-set reason, so its row
+ * carries none, as the install row for the same refusal does, and its cause
+ * names the file. Every other failure narrows to one reason.
  */
-function narrowDirectFailReason(err: Error): ContentReason {
-  // Phase-3 aggregate failures are surfaced via reasonOverride; here we
-  // handle the enumerate / syncClone / phase-2 paths only.
-  const primary = err instanceof CleanupContextError ? err.primary : err;
-
-  const typedReason = typedDirectFailReason(primary);
-  if (typedReason !== undefined) {
-    return typedReason;
+function directFailReasons(
+  reasonOverride: ContentReason | undefined,
+  cause: Error,
+  unknownGitFailure: boolean,
+): readonly ContentReason[] {
+  if (reasonOverride !== undefined) {
+    return [reasonOverride];
   }
 
-  const transportReason = classifyGitTransportFailure(primary);
-  if (transportReason !== undefined) {
-    return transportReason;
-  }
-
-  return narrowErrnoFailReason((primary as NodeJS.ErrnoException).code);
-}
-
-function narrowErrnoFailReason(code: string | undefined): ContentReason {
-  switch (code) {
-    case "EACCES":
-    case "EPERM":
-      return "permission denied";
-    case "ENOENT":
-    case "ENOTDIR":
-      return "source missing";
-    // A local file the update could not read or write, such as a directory in
-    // place of mcp-adapter.json: naming the marketplace manifest would blame
-    // the wrong file (the marketplace/shared.ts errno precedent).
-    case "EISDIR":
-    case "EIO":
-    case "EBADF":
-      return "unreadable";
-    case undefined:
-    default:
-      return "unreadable manifest";
-  }
-}
-
-/**
- * The reason a typed direct-path failure names, or `undefined` for an error
- * no typed identity matches. FLR-01: a held state lock is `"lock held"`, as
- * the other plugin commands report it.
- */
-function typedDirectFailReason(primary: Error): ContentReason | undefined {
-  if (primary instanceof StateLockHeldError) {
-    return "lock held";
-  }
-
-  if (primary instanceof MarketplaceNotFoundError) {
-    return "not found";
-  }
-
-  if (primary instanceof PluginUpdatePhase3Error) {
-    return "rollback partial";
-  }
-
-  if (primary instanceof PluginUpdateConcurrencyError) {
-    return primary.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled";
-  }
-
-  if (primary instanceof InvalidMarketplaceManifestError) {
-    return "invalid manifest";
-  }
-
-  if (primary instanceof PluginInLocalLayerOnlyError) {
-    return "plugin in local layer only";
-  }
-
-  if (primary instanceof PluginInBaseLayerOnlyError) {
-    return "plugin in base layer only";
-  }
-
-  if (primary instanceof DependencyDeclarationsUnreadableError) {
-    return "unreadable";
-  }
-
-  return undefined;
+  const primary = cause instanceof CleanupContextError ? cause.primary : cause;
+  return primary instanceof AgentTargetOccupiedError
+    ? []
+    : [classifyUpdateFailure(cause, unknownGitFailure).reason];
 }
 
 /**
@@ -1032,7 +1194,7 @@ function notifyBareFormEnumerateFailure(args: {
   readonly cardinality: "single" | "plural";
 }): void {
   const { ctx, run, scope, err } = args;
-  const reasons: readonly ContentReason[] = [narrowDirectFailReason(err)];
+  const reasons: readonly ContentReason[] = [classifyUpdateFailure(err).reason];
   // WR-05: row-level `scope` is OMITTED -- the marketplace block carries
   // the same scope, and `renderScopeBracket` suppresses the per-row
   // bracket in that case. Matches the omit convention used by

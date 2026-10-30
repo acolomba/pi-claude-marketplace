@@ -221,7 +221,7 @@ const SITE_CASES = [
   {
     // Tier C: `composeInstalledRow` is module-private; a full install is the
     // only public surface that reaches it.
-    site: "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts",
+    site: "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts",
     drive: async (engineLoaded) =>
       withHermeticEnvironment("wf-marker-", async ({ cwd }) => {
         // arrange
@@ -342,6 +342,7 @@ const SITE_CASES = [
                   {
                     constraint: undefined,
                     partition: "updated",
+                    resourcesChanged: true,
                     name: "hello",
                     fromVersion: "1.0.0",
                     toVersion: "2.0.0",

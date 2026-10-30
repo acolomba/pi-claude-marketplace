@@ -1,5 +1,5 @@
-// D-08-07 (OWNKEY-01): plugin and marketplace names that are also
-// `Object.prototype` members work end to end. Every case runs the
+// D-08-07 (OWNKEY-01): plugin names that are also `Object.prototype` members
+// work end to end. Every case runs the
 // `/claude:plugin` command handler, which reaches the production operations
 // (`createInstallOperation`, `createEnableOperation`,
 // `createUninstallOperation`, `getPluginInfo`, `listPlugins`), or the real
@@ -8,9 +8,10 @@
 // - A plugin named `constructor` installs, lists, shows, disables, enables and
 //   uninstalls, and state.json holds it as an own key after each save.
 // - It updates, and removing its marketplace uninstalls it.
-// - A reload whose claude-plugins.json declares `constructor@mp` or
-//   `hello@constructor` installs it, and an import of `constructor@mp`
-//   installs it and writes its config entry.
+// - A reload whose claude-plugins.json declares `constructor@mp` installs it,
+//   and an import of `constructor@mp` installs it and writes its config entry.
+// - A marketplace named `constructor` is refused on add (D-PL5-28), so a reload
+//   that declares `hello@constructor` records nothing.
 // - A marketplace that also declares `__proto__` installs its other plugins,
 //   and it lists `__proto__` as unavailable. An install of `__proto__` is
 //   refused and changes no file.
@@ -29,7 +30,10 @@ import {
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { registerClaudePluginCommand } from "../../extensions/pi-claude-marketplace/edge/register.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
-import { createApplyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import {
+  createApplyReconcile,
+  createScopeDependencyInstall,
+} from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
@@ -106,6 +110,10 @@ function registeredCommand(cwd: string): (args: string) => Promise<NotifyRecord[
       gitOps: createGitOpsFake({ boundary: "memory" }).gitOps,
       beginPluginUpdateRun: pluginUpdates.beginPluginUpdateRun,
       applyReconcile: createApplyReconcile({ loadState }),
+      installMissingDependencies: createScopeDependencyInstall(
+        { loadState },
+        { hooksRouting, completionCache },
+      ),
     },
     hooksRouting,
     pluginUpdates.updatePlugins,
@@ -214,45 +222,73 @@ test("D-08-07: a plugin named constructor installs, lists, shows, disables, enab
   });
 });
 
-for (const { marketplace, plugins, plugin } of [
-  { marketplace: "mp", plugins: ["constructor", "hello"], plugin: "constructor" },
-  { marketplace: "constructor", plugins: ["hello"], plugin: "hello" },
-]) {
-  test(`D-08-07: a reload whose config declares ${plugin}@${marketplace} installs it as an own record`, async () => {
-    await withHermeticEnvironment("reserved-record-keys-reload-", async ({ cwd }) => {
-      // arrange
-      const marketplaceRoot = await seedMarketplace(cwd, marketplace, plugins);
-      await mkdir(path.join(cwd, ".pi"), { recursive: true });
-      await writeFile(
-        path.join(cwd, ".pi", "claude-plugins.json"),
-        JSON.stringify({
-          schemaVersion: 1,
-          marketplaces: { [marketplace]: { source: marketplaceRoot } },
-          plugins: { [`${plugin}@${marketplace}`]: {} },
-        }),
-      );
-      const { ctx, notifications } = makeCtx(cwd);
-      const applyReconcile = createApplyReconcile({ loadState });
+/** Declares `plugin@marketplace` in the project config and runs the real apply. */
+async function applyDeclared(
+  cwd: string,
+  marketplace: string,
+  plugins: readonly string[],
+  plugin: string,
+): Promise<NotifyRecord[]> {
+  const marketplaceRoot = await seedMarketplace(cwd, marketplace, plugins);
+  await mkdir(path.join(cwd, ".pi"), { recursive: true });
+  await writeFile(
+    path.join(cwd, ".pi", "claude-plugins.json"),
+    JSON.stringify({
+      schemaVersion: 1,
+      marketplaces: { [marketplace]: { source: marketplaceRoot } },
+      plugins: { [`${plugin}@${marketplace}`]: {} },
+    }),
+  );
+  const { ctx, notifications } = makeCtx(cwd);
+  const applyReconcile = createApplyReconcile({ loadState });
+  await applyReconcile({
+    ctx,
+    run: openNotificationRun(makeMockPi([]).pi, { kind: "load" }),
+    cwd,
+    completionCache: createCompletionCache(),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+  });
+  return notifications;
+}
 
-      // act
-      await applyReconcile({
-        ctx,
-        run: openNotificationRun(makeMockPi([]).pi, { kind: "load" }),
-        cwd,
-        completionCache: createCompletionCache(),
-        hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
-      });
+test("D-08-07: a reload whose config declares constructor@mp installs it as an own record", async () => {
+  await withHermeticEnvironment("reserved-record-keys-reload-", async ({ cwd }) => {
+    // act
+    const notifications = await applyDeclared(cwd, "mp", ["constructor", "hello"], "constructor");
 
-      // assert
-      assert.deepStrictEqual(notifications, [
-        {
-          message: `● ${marketplace} [project] (added)\n  ● ${plugin} v1.0.0 (installed)\n\nReconcile: 2 successes\n\n/reload to pick up changes`,
-        },
-      ]);
-      assert.deepStrictEqual(await recordedPlugins(cwd, marketplace), [[plugin, "1.0.0", true]]);
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project] (added)\n  ● constructor v1.0.0 (installed)\n\nReconcile: 2 successes\n\n/reload to pick up changes",
+      },
+    ]);
+    assert.deepStrictEqual(await recordedPlugins(cwd, "mp"), [["constructor", "1.0.0", true]]);
+  });
+});
+
+test("D-PL5-28: a reload whose config declares hello@constructor refuses the marketplace and records nothing", async () => {
+  await withHermeticEnvironment("reserved-record-keys-reload-refused-", async ({ cwd }) => {
+    // act
+    const notifications = await applyDeclared(cwd, "constructor", ["hello"], "hello");
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n" +
+          "⊘ constructor [project] (failed) {invalid manifest}\n" +
+          "  ⊘ hello (failed) {unreadable}\n\n" +
+          "Reconcile: 2 failures",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await loadState(locationsFor("project", cwd).extensionRoot), {
+      schemaVersion: 3,
+      marketplaces: {},
     });
   });
-}
+});
 
 test("D-08-07: a plugin named constructor updates, and removing its marketplace uninstalls it", async () => {
   await withHermeticEnvironment("reserved-record-keys-update-", async ({ cwd }) => {
@@ -391,8 +427,9 @@ test("D-08-07: a marketplace that declares __proto__ installs hello, lists __pro
         message:
           "A plugin operation has failed.\n\n● hostile [project]\n" +
           "  ⊘ __proto__ (failed) {invalid manifest}\n" +
-          '    cause: Plugin "__proto__@hostile" declares an unusable dependency ' +
-          "(root: expected <plugin>@<marketplace>).",
+          '    cause: Plugin "__proto__@hostile" cannot be installed, because its id is invalid: ' +
+          'Each part of a plugin id (plugin@marketplace) may use only the letters a-z and A-Z, digits, ".", "_" and "-", ' +
+          "and must start with a letter or digit. Here the plugin's name does not; the marketplace's maintainer can rename it.",
         severity: "error",
       },
     ]);

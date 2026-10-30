@@ -19,8 +19,8 @@ Feature: Marketplace state lock
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id                | name     | status | reasons   | scope   | cause chain                                                                                                                                                                                | cause truncated | leaks | rollback partial |
-      | fixtures         | project           | failed             | fixtures@fixtures | fixtures | failed | lock held | project | Another pi-claude-marketplace operation is in progress for project scope ({project dir}/.pi/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
+      | marketplace name | marketplace scope | marketplace status | id       | name     | status | reasons   | scope   | cause chain                                                                                                                                                                                | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | failed             | fixtures | fixtures | failed | lock held | project | Another pi-claude-marketplace operation is in progress for project scope ({project dir}/.pi/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name     | source                       |
       | fixtures | {home}/marketplaces/fixtures |
@@ -49,8 +49,8 @@ Feature: Marketplace state lock
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id                | name     | status | reasons   | scope | cause chain                                                                                                                                                                       | cause truncated | leaks | rollback partial |
-      | fixtures         | user              | failed             | fixtures@fixtures | fixtures | failed | lock held | user  | Another pi-claude-marketplace operation is in progress for user scope ({agent dir}/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
+      | marketplace name | marketplace scope | marketplace status | id       | name     | status | reasons   | scope | cause chain                                                                                                                                                                       | cause truncated | leaks | rollback partial |
+      | fixtures         | user              | failed             | fixtures | fixtures | failed | lock held | user  | Another pi-claude-marketplace operation is in progress for user scope ({agent dir}/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
     Then the "claude-plugins.json" file of the user scope declares these marketplaces:
       | name     | source                       |
       | fixtures | {home}/marketplaces/fixtures |
@@ -79,8 +79,8 @@ Feature: Marketplace state lock
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id                | name     | status | reasons   | scope   | cause chain                                                                                                                                                                                | cause truncated | leaks | rollback partial |
-      | fixtures         | project           | failed             | fixtures@fixtures | fixtures | failed | lock held | project | Another pi-claude-marketplace operation is in progress for project scope ({project dir}/.pi/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
+      | marketplace name | marketplace scope | marketplace status | id       | name     | status | reasons   | scope   | cause chain                                                                                                                                                                                | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | failed             | fixtures | fixtures | failed | lock held | project | Another pi-claude-marketplace operation is in progress for project scope ({project dir}/.pi/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name     | source                       |
       | fixtures | {home}/marketplaces/fixtures |
@@ -109,8 +109,8 @@ Feature: Marketplace state lock
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id                | name     | status | reasons   | scope | cause chain                                                                                                                                                                       | cause truncated | leaks | rollback partial |
-      | fixtures         | user              | failed             | fixtures@fixtures | fixtures | failed | lock held | user  | Another pi-claude-marketplace operation is in progress for user scope ({agent dir}/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
+      | marketplace name | marketplace scope | marketplace status | id       | name     | status | reasons   | scope | cause chain                                                                                                                                                                       | cause truncated | leaks | rollback partial |
+      | fixtures         | user              | failed             | fixtures | fixtures | failed | lock held | user  | Another pi-claude-marketplace operation is in progress for user scope ({agent dir}/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
     Then the "claude-plugins.json" file of the user scope declares these marketplaces:
       | name     | source                       |
       | fixtures | {home}/marketplaces/fixtures |

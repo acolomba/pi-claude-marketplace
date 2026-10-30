@@ -850,6 +850,33 @@ const MCP_MIGRATION_PAYLOAD = Type.Object(
   { additionalProperties: false },
 );
 
+/** AUP-03 / D-PL8-10: one install a background update moved (D-PL8-16). */
+const BACKGROUND_UPDATE_PLUGIN = Type.Object(
+  {
+    name: Type.String(),
+    marketplace: Type.String(),
+    scope: SCOPE,
+    fromVersion: Type.Optional(Type.String()),
+    toVersion: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
+/**
+ * AUP-03 / D-PL8-10: the plugins one background update moved, one row per
+ * updated install in update order. It always asks for a reload (D-PL8-11), and
+ * an update that moved nothing emits no payload.
+ */
+const BACKGROUND_UPDATE_PAYLOAD = Type.Object(
+  {
+    ...RAW_ENVELOPE_FIELDS,
+    needsReload: Type.Literal(true),
+    kind: Type.Literal("background-update"),
+    plugins: Type.Array(BACKGROUND_UPDATE_PLUGIN, { minItems: 1 }),
+  },
+  { additionalProperties: false },
+);
+
 /**
  * WIRE-01 / D-01..D-03: the one payload union, keyed by `kind`. Kinds appear
  * in their declared order. D-12: production reads only its static type.
@@ -876,6 +903,7 @@ export const NOTIFICATION_PAYLOAD_SCHEMA = Type.Union([
   PLUGIN_PATH_SKIPPED_PAYLOAD,
   MCP_CONFIG_NOTICES_PAYLOAD,
   MCP_MIGRATION_PAYLOAD,
+  BACKGROUND_UPDATE_PAYLOAD,
   Type.Object(
     {
       schemaVersion: Type.Literal(1),

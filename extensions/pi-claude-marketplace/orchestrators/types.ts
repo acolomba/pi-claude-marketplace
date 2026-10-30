@@ -10,7 +10,9 @@
 import { type ContentReason } from "../shared/notification-types.ts";
 
 import type { ScopedLocations } from "../persistence/locations.ts";
+import type { NotificationContext } from "../platform/pi-api.ts";
 import type { CleanupFailure } from "../shared/errors.ts";
+import type { NotificationRun } from "../shared/notification-run.ts";
 import type {
   McpConfigNotice,
   PluginFailedMessage,
@@ -19,6 +21,7 @@ import type {
   PluginUpdatedMessage,
 } from "../shared/notification-types.ts";
 import type { DegradeKind } from "../shared/notify-reasons.ts";
+import type { DiscoveryWarning, StagingWarning } from "../shared/staging-warnings.ts";
 import type { Scope } from "../shared/types.ts";
 import type { RollbackPartial } from "../transaction/phase-ledger.ts";
 import type { LedgerDegradationSignals } from "./plugin/shared.ts";
@@ -87,6 +90,12 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly stagedAgentNames: readonly string[];
   readonly stagedMcpServerNames: readonly string[];
   /**
+   * D-PL1-18: mirrors the shared runner's `resourcesChanged`. The reinstall
+   * row keeps `needsReload: true` (the byte-pinned D-03/D-06 row), so no
+   * renderer reads it.
+   */
+  readonly resourcesChanged: boolean;
+  /**
    * CMC-13: per-row soft-dep predicate inputs. `true` iff
    * the plugin's resolved manifest declared the kind AND it was actually
    * staged at reinstall time (the orchestrator already tracks
@@ -126,13 +135,13 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly degradedKinds?: readonly DegradeKind[];
   readonly notes?: readonly string[];
   /**
-   * D-141-03 / D-141-05: the DISCOVERY half of this reinstall's staging
-   * warnings, unprefixed, carried separately from `notes`.
+   * D-141-03 / D-PL1-11: the DISCOVERY half of this reinstall's staging
+   * warnings, typed, carried separately from `notes`.
    *
-   * `notes` folds the discovery half and the maintenance warnings behind a
+   * `notes` folds the discovery messages and the maintenance warnings behind a
    * `warning: ` prefix for orchestrated consumers, so a reader cannot tell
-   * them apart again. The agents and MCP hygiene half is not carried: the
-   * shared swap drops it in direct mode, as it does for `update`.
+   * them apart again. The hygiene half is not carried: reinstall takes only
+   * the discovery half of the shared runner's `stagingWarnings`.
    * `reinstallPlugins` needs exactly the discovery half to render after its
    * cascade, and the boundary forces the carrier: the warnings originate
    * inside the shared runner while the rows are not rendered until
@@ -151,7 +160,7 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    * Omitted when empty, so a clean reinstall's outcome shape is unchanged
    * (NREG-01).
    */
-  readonly discoveryWarnings?: readonly string[];
+  readonly discoveryWarnings?: readonly DiscoveryWarning[];
   /**
    * AFILE-04 / AFILE-02: the MCP config file notices from this reinstall's
    * MCP commit. The outcome carries them because the rows render after the
@@ -239,6 +248,12 @@ export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
    * Omitted when there are none (NREG-01).
    */
   readonly mcpConfigNotices?: readonly McpConfigNotice[];
+  /**
+   * D-PL1-11 / D-PL1-14: the DISCOVERY half of the staging warnings the
+   * failed reinstall prepared before it failed, rendered after the cascade
+   * with `reinstall failed`. Omitted when empty (NREG-01).
+   */
+  readonly discoveryWarnings?: readonly DiscoveryWarning[];
 }
 
 export type ReinstallPluginOutcome =
@@ -294,6 +309,14 @@ export interface RevisionMove {
   readonly toCommit?: string;
 }
 
+/** One dependency's staging warnings, kept with the row owner that produced them. */
+export interface DependencyStagingDiagnostic {
+  readonly plugin: string;
+  readonly scope: Scope;
+  readonly verb: "installed" | "updated" | "update failed";
+  readonly warnings: readonly StagingWarning[];
+}
+
 export interface PluginUpdateBase {
   readonly name: string;
   /**
@@ -313,6 +336,8 @@ export interface PluginUpdateBase {
    * (NREG-01).
    */
   readonly dependencyRows?: readonly UpdateDependencyRow[];
+  /** D-PL10-16: dependency warnings retain their member identity through an update. */
+  readonly dependencyStagingDiagnostics?: readonly DependencyStagingDiagnostic[];
 }
 
 /** UPD-DEP-D1: a dependency a move changed, with the row that reports it. */
@@ -377,6 +402,13 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
    */
   readonly stagedAgentNames: readonly string[];
   readonly stagedMcpServerNames: readonly string[];
+  /**
+   * D-PL1-18: true when the record's inventory before the swap or the staged
+   * inventory after it holds any skill, prompt, agent, MCP server or workflow,
+   * because a reload must pick those up. Hooks are re-routed in process and do
+   * not count.
+   */
+  readonly resourcesChanged: boolean;
   /**
    * WLIF-06: the update's new version withdrew or renamed at least one workflow
    * the record named, so the command that envelope registered is still live for
@@ -444,30 +476,30 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
     readonly newlyDegraded: boolean;
   };
   /**
-   * D-141-03 / D-141-05: the bridge staging warnings this update produced,
-   * already split -- the discovery half always, plus the hygiene half in
-   * cascade mode only. Mirrors the optional `notes?` that
-   * `ReinstallReinstalledOutcome` carries.
+   * D-PL1-10: the bridge staging warnings this update's prepare produced, both
+   * halves, tagged, in bridge order (skills, commands, agents, mcp,
+   * workflows). The direct update and reinstall render the discovery half
+   * after their rows (D-PL1-07, D-141-03); the cascades render both halves
+   * (D-PL1-25).
    *
-   * This partition needs the carrier because the update path puts a boundary
+   * The outcome is the carrier because the update path puts a boundary
    * between a warning and the row it qualifies: the warnings originate inside
    * the three-phase runner, while the direct path renders no row until
    * `renderUpdateCascadeAndNotify` at the very end of `updatePlugins`. A
    * diagnostic fired from inside the runner would print the detail BEFORE
-   * that row, so the outcome is the only thing that crosses the boundary.
+   * that row.
    *
    * Omitted when empty, so a clean update's outcome shape is unchanged
    * (NREG-01).
-   *
-   * NOT dead. `update.ts::surfaceUpdateDiscoveryWarnings` reads this field on
-   * this partition to render the standalone diagnostic, and the cascade
-   * consumers carry it onward. What no consumer does is NARROW it to a
-   * closed-set `Reason` the way the `skipped` and `failed` arms do -- the two
-   * `notes` narrowers (`narrowSkipReasons`, `narrowFailReasons`) are each
-   * typed on their own partition's arm, so a cascade ROW renderer never
-   * reads this one.
    */
-  readonly notes?: readonly string[];
+  readonly stagingWarnings?: readonly StagingWarning[];
+  /**
+   * PKD-02 / D-PL9-14: the package step's note, which `stagingWarnings` also
+   * holds as a discovery warning. Every verb renders it from there (D-PL1-07,
+   * D-PL1-25); dependency moves render no staging warnings, so they read this
+   * field alone. Omitted when the step had nothing to say (NREG-01).
+   */
+  readonly packageNote?: string;
   /**
    * D-10-17a: the constraint gate's disclosure, forwarded from the
    * preflight's `PreparedPluginUpdate.constraint` by a plain assignment --
@@ -578,6 +610,13 @@ export interface PluginUpdateFailedOutcome extends PluginUpdateBase {
    * there are none (NREG-01).
    */
   readonly mcpConfigNotices?: readonly McpConfigNotice[];
+  /**
+   * D-PL1-10 / D-PL1-14: the tagged staging warnings of the handles the
+   * failed update prepared, both halves, in bridge order. The direct update
+   * renders the discovery half after the failure row, and the cascades render
+   * both halves (D-PL1-25). Omitted when empty (NREG-01).
+   */
+  readonly stagingWarnings?: readonly StagingWarning[];
 }
 
 /**
@@ -609,6 +648,63 @@ export type PluginUpdateFn = (
   marketplace: string,
   scope: Scope,
 ) => Promise<PluginUpdateOutcome>;
+
+/**
+ * D-PL2-09: a row the missing-dependency step reports after a marketplace
+ * add: one `(installed) {dependency installed}` row per materialized member,
+ * the `(failed)` row of a refused install (D-PL2-11), or the `state.json`
+ * `(failed)` row of a scope read that threw (D-PL2-20).
+ */
+export type ScopeDependencyInstallRow = PluginInstalledMessage | PluginFailedMessage;
+
+/** D-PL2-09: one scope's missing-dependency step, as the add that ran it asks for it. */
+export interface ScopeDependencyInstallRequest {
+  readonly ctx: NotificationContext;
+  readonly run: NotificationRun;
+  /** The scope the command targeted; the step reads and installs in it only (SC-1, D-29). */
+  readonly scope: Scope;
+  readonly cwd: string;
+  /** Keeps the planned installs the caller serves, such as those of the added marketplace. */
+  readonly select: (install: {
+    readonly plugin: string;
+    readonly marketplace: string;
+    readonly declarers: readonly string[];
+  }) => boolean;
+}
+
+/**
+ * D-PL2-09: the rows of the installs the step ran, or of its read that threw
+ * (D-PL2-20), and the MCP config notices its installs produced.
+ */
+export interface ScopeDependencyInstallResult {
+  readonly rows: readonly ScopeDependencyInstallRow[];
+  readonly stagingDiagnostics?: readonly {
+    readonly plugin: string;
+    readonly scope: Scope;
+    readonly verb:
+      | "installed"
+      | "updated"
+      | "reinstalled"
+      | "enabled"
+      | "install failed"
+      | "update failed"
+      | "reinstall failed";
+    readonly warnings: readonly StagingWarning[];
+  }[];
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
+}
+
+/**
+ * D-PL2-09 / D-PL2-10 function-injection seam: `apply`'s missing-dependency
+ * step over one scope. `marketplace add`, `bootstrap` and the autoupdate
+ * cascade receive it as a parameter, because BLOCK C and the
+ * add -> operations -> install-outcome -> add cycle forbid them to import
+ * `reconcile/apply.ts`, which ships the real operation. The extension
+ * factory (`index.ts`) wires it through `createScopeDependencyInstall`.
+ */
+export type ScopeDependencyInstallFn = (
+  request: ScopeDependencyInstallRequest,
+) => Promise<ScopeDependencyInstallResult>;
 
 /**
  * D-26: one catalog move `apply` materializes. `cwd` is explicit, because the
@@ -719,7 +815,7 @@ export type InstallPluginOutcome =
        * `LedgerDegradationSignals` member, so the COMPAT-01 key-set pin is
        * undisturbed.
        */
-      readonly version?: string;
+      readonly version: string;
       /** Post-commit warnings collected in orchestrated mode instead of firing individually. */
       readonly postCommitWarnings?: readonly string[];
       /**

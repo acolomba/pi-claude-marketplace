@@ -87,6 +87,7 @@ const [
   MARKETPLACE_ADD_FILE,
   MARKETPLACE_UPDATE_FILE,
   GIT_AUTH_CALLBACKS_FILE,
+  HOSTED_MANIFEST_FETCH_FILE,
 ] = CREDENTIAL_LEAK_TARGETS;
 
 /**
@@ -105,6 +106,7 @@ const DECLARED_MODULE_ORDER: ReadonlyArray<string> = [
   "orchestrators/marketplace/add.ts",
   "orchestrators/marketplace/update.ts",
   "platform/git-auth-callbacks.ts",
+  "platform/hosted-manifest-fetch.ts",
 ];
 
 const STATE_WRITE_FILES: ReadonlyArray<string> = [
@@ -430,6 +432,39 @@ test("AUTH-09: domain/github-auth.ts never interpolates a token in an Error mess
 
   assertNoCredentialInLiterals(GITHUB_AUTH_FILE, stripped, ERROR_LITERAL_CALL_SITE);
   await scanDeviceCodeCalls();
+});
+
+/**
+ * D-PL5-07: a request member or a header name that would send something of
+ * the user's: a `headers`, `credentials`, `authorization`, or `cookie` key or
+ * shorthand member, an `authorization` or `cookie` string, or a property of
+ * that name. Reading `response.headers` stays allowed.
+ */
+const REQUEST_CREDENTIAL_MEMBER =
+  /\b(?:headers|credentials|authorization|cookie)\s*:|[{,]\s*(?:headers|credentials)\s*[,}]|["'`](?:authorization|cookie)["'`]|\.(?:credentials|authorization|cookie)\b/i;
+
+test("AUTH-09 / D-PL5-07: platform/hosted-manifest-fetch.ts sends no header, credential, or cookie", async () => {
+  const absPath = path.join(REPO_ROOT, HOSTED_MANIFEST_FETCH_FILE);
+  const exists = await access(absPath).then(
+    () => true,
+    () => false,
+  );
+  assert.ok(
+    exists,
+    `D-07-03: ${HOSTED_MANIFEST_FETCH_FILE} is declared in CREDENTIAL_LEAK_TARGETS but does not resolve, so the scan below would report success having opened nothing.`,
+  );
+
+  const stripped = stripComments(await readFile(absPath, "utf8"));
+  assert.match(
+    stripped,
+    /\bfetch\(/,
+    `D-07-03: ${HOSTED_MANIFEST_FETCH_FILE} calls no fetch, so this scan passes over nothing. Re-aim it at the module that downloads a hosted catalog.`,
+  );
+  assert.doesNotMatch(
+    stripped,
+    REQUEST_CREDENTIAL_MEMBER,
+    `AUTH-09 / D-PL5-07 violation: ${HOSTED_MANIFEST_FETCH_FILE} names a request header, credential, or cookie`,
+  );
 });
 
 test("AUTH-09: describeDeviceCodeErrorBody never references a credential field", async () => {
@@ -862,6 +897,22 @@ const PLANTED_CREDENTIAL_SITES: ReadonlyArray<{
         kind: "plugin-path-skipped",
         scope: "user",
         reason: `clone ${USERINFO_URL} failed`,
+      }),
+  },
+  {
+    site: "a background update row's name and version",
+    planted: USERINFO,
+    probe: () =>
+      probeRawSurface({
+        kind: "background-update",
+        plugins: [
+          {
+            name: USERINFO_URL,
+            marketplace: "tools",
+            scope: "user",
+            toVersion: `${USERINFO_URL}#1.1.0`,
+          },
+        ],
       }),
   },
   {

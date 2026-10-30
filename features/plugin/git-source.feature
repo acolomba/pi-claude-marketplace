@@ -199,6 +199,42 @@ Feature: Plugin git source
       | drops the connection | network unreachable | dropped | socket hang up, fetched https://{git host}/acme/ghp.git                      |
       | answers 503          | network error       | 503     | HTTP Error: 503 Service Unavailable, fetched https://{git host}/acme/ghp.git |
 
+  Scenario Outline: An install fails on a constrained dependency as <reason> when the git host <refusal> while its tags are read and installs nothing
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | ghp@^1.0.0   |
+      | ghp  | 1.0.0   |              |
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the git host <refusal> for the plugin "ghp"
+    When the user runs "/claude:plugin install app@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | Some plugin operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name     | status | reasons           | scope   | leaks | rollback partial | cause chain                                                           | cause truncated |
+      | gits             | project           | app@gits | app      | failed | dependency failed | project |       |                  |                                                                       |                 |
+      | gits             | project           | ghp@gits | ghp@gits | failed | <reason>          | project |       |                  | Dependency "ghp@gits" could not be checked against ^1.0.0 (<reason>). | false           |
+    Then the git host receives these requests:
+      | method | path                                            | status   |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | <status> |
+    Then the project scope has no installed plugins
+    Then the project scope holds no git clones
+
+    Examples:
+      | refusal              | reason              | status  |
+      | answers 404          | source missing      | 404     |
+      | drops the connection | network unreachable | dropped |
+      | answers 503          | network error       | 503     |
+
   Scenario: Apply reports a declared plugin whose clone the git host refuses as source missing
     Given the git repository "ghp" holds these plugins:
       | name | version | path |
@@ -357,11 +393,11 @@ Feature: Plugin git source
       | gits             | project           | demo@gits | demo | uninstalled |         | project | 1.0.0   |
     Then the project scope holds these git clones:
       | clone  | origin                           | revision          |
-      | plugin | https://{git host}/acme/urlp.git |                   |
+      | plugin | https://{git host}/acme/urlp.git | {urlp revision 1} |
       | plugin | https://{git host}/acme/urlp.git | {urlp revision 1} |
     Then the git-source plugin "urlp" installed in the project scope runs revision 1 of its repository
 
-  Scenario: A git-source plugin that declares no version records the first 12 hex digits of its commit
+  Scenario: Installation records expose git revisions
     Given the git repository "ghp" holds these plugins:
       | name | version | path |
       | ghp  | 1.0.0   |      |
@@ -375,6 +411,9 @@ Feature: Plugin git source
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version          |
       | gits             | project           | ghp@gits | ghp  | installed |         | project | {ghp revision 2} |
+    Then the installation record of the project scope holds these plugins:
+      | id       | version          | enabled |
+      | ghp@gits | {ghp revision 2} | true    |
     When the user runs "/claude:plugin list --scope project"
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version          |
@@ -419,7 +458,7 @@ Feature: Plugin git source
     Given the git repository "dirp" holds these plugins:
       | name | version | path |
       | dirp | 1.0.0   |      |
-    Given the marketplace "anthropic-plugin-directory" is published as a dir source
+    Given the marketplace "anthropic-plugin-directory" is published by the anthropics organization
     Given the marketplace "anthropic-plugin-directory" offers these plugins from git repositories:
       | name | source kind | repository | pinned |
       | dirp | github      | dirp       | true   |
@@ -437,7 +476,7 @@ Feature: Plugin git source
     Given the git repository "dirp" holds these plugins:
       | name | version | path |
       | dirp | 1.0.0   |      |
-    Given the marketplace "anthropic-plugin-directory" is published as a dir source
+    Given the marketplace "anthropic-plugin-directory" is published by the anthropics organization
     Given the marketplace "anthropic-plugin-directory" offers these plugins from git repositories:
       | name | source kind | repository | pinned |
       | dirp | github      | dirp       | true   |
@@ -447,3 +486,30 @@ Feature: Plugin git source
     Then the result lists these plugins:
       | marketplace name           | marketplace scope | id                              | name | status    | reasons | scope   | version                 |
       | anthropic-plugin-directory | project           | dirp@anthropic-plugin-directory | dirp | installed |         | project | 1.0.0-{dirp revision 1} |
+
+  Scenario: Installing a git-source plugin whose manifest links outside its plugin directory refuses it and installs nothing
+    Given the git repository "app" holds these plugins:
+      | name | version | path | dependencies |
+      | app  | 1.0.0   |      | lib          |
+    Given the git repository "app" links the manifest of the plugin "app" to a file outside the repository
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | lib  | 1.2.0   |              |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | app  | url         | app        | true   |
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status      | reasons             |
+      | tools            | project           | app@tools | app  | unavailable | unreadable manifest |
+    Then the project scope has no installed plugins
+    Then the project scope holds these git clones:
+      | clone  | origin                          | revision         |
+      | plugin | https://{git host}/acme/app.git | {app revision 2} |

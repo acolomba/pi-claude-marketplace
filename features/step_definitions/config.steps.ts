@@ -2,13 +2,16 @@
  * @fileoverview Steps about the configs a user owns in a scope: the base config
  * `claude-plugins.json` and the local config `claude-plugins.local.json`.
  *
- * Three setup steps each write one layer config, to model a hand edit or a
+ * Setup steps each write one layer config, to model a hand edit or a
  * version-control update. One writes the `plugins` member and one the
  * `marketplaces` member, each keeping the config's other members; the
  * marketplaces step expands the run tokens in each source. The third writes
- * the whole text, which can leave the file broken. Every other step only
- * reads, so this module writes nothing else and deletes nothing. `holds this text` compares the raw text of a config, so
- * a scenario can show that a broken config stayed as it was.
+ * the whole text, which can leave the file broken. A fourth delays that edit
+ * until an npm response, so an install sees a config edit between dependency
+ * transactions. Every other step only reads, so this module writes nothing
+ * else and deletes nothing. `holds this text` compares the raw text of a
+ * config, while the byte snapshot steps prove a no-op leaves both the base
+ * config and installation record untouched.
  *
  * A missing file fails every step that reads one; it never reads as zero
  * declarations. A file whose `marketplaces` map is empty declares that no
@@ -40,12 +43,20 @@ import {
 } from "../lib/layer-config.ts";
 import { expandTokens } from "../lib/run-tokens.ts";
 
-import type { ScenarioWorld } from "../support/world.ts";
+import type { ScenarioWorld, ScopeBytes } from "../support/world.ts";
 
 const CONFIG_FILES: ReadonlySet<string> = new Set([
   "claude-plugins.json",
   "claude-plugins.local.json",
 ]);
+
+async function scopeBytes(world: ScenarioWorld, scope: string): Promise<ScopeBytes> {
+  const scopeRoot = world.scopeRoot(scope);
+  return {
+    config: await readFile(path.join(scopeRoot, "claude-plugins.json")),
+    state: await readFile(path.join(scopeRoot, "pi-claude-marketplace", "state.json")),
+  };
+}
 
 function configFilePath(world: ScenarioWorld, fileName: string, scope: string): string {
   if (!CONFIG_FILES.has(fileName)) {
@@ -155,6 +166,13 @@ Given(
 );
 
 Given(
+  "the config and installation record bytes of the {word} scope are remembered",
+  async function (this: ScenarioWorld, scope: string) {
+    this.rememberedScopeBytes.set(scope, await scopeBytes(this, scope));
+  },
+);
+
+Given(
   "a config in scope {word} and layer {word}, with these marketplaces:",
   async function (this: ScenarioWorld, scope: string, layer: string, table: DataTable) {
     const file = layerConfigPath(this, scope, layer);
@@ -180,6 +198,17 @@ Given(
   },
 );
 
+Given(
+  "the local config of the project scope changes to this text while the npm registry serves {string}:",
+  function (this: ScenarioWorld, name: string, text: string) {
+    const file = layerConfigPath(this, "project", "local");
+    this.requireNpmRegistry().beforeNextResponse(name, async () => {
+      await writeLayerText(file, text);
+      assert.strictEqual(await readFile(file, "utf8"), text);
+    });
+  },
+);
+
 Then(
   "the {string} file of the {word} scope declares these marketplaces:",
   async function (this: ScenarioWorld, fileName: string, scope: string, table: DataTable) {
@@ -190,6 +219,15 @@ Then(
       "marketplaces",
       "name",
     );
+  },
+);
+
+Then(
+  "the config and installation record bytes of the {word} scope are unchanged",
+  async function (this: ScenarioWorld, scope: string) {
+    const remembered = this.rememberedScopeBytes.get(scope);
+    assert.ok(remembered !== undefined, `the ${scope} scope bytes were not remembered`);
+    assert.deepStrictEqual(await scopeBytes(this, scope), remembered);
   },
 );
 

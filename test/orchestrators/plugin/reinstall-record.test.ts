@@ -417,6 +417,7 @@ describe("reinstallOutcomeFromRun", () => {
     // arrange
     const run: UpdateRunOutcome = {
       partition: "updated",
+      resourcesChanged: true,
       name: "hello",
       fromVersion: "1.0.0",
       toVersion: "1.1.0",
@@ -426,7 +427,7 @@ describe("reinstallOutcomeFromRun", () => {
       declaresMcp: true,
       declaresWorkflows: false,
       constraint: undefined,
-      notes: ["skill tool could not be read"],
+      stagingWarnings: [{ kind: "discovery", message: "skill tool could not be read" }],
     };
 
     // act
@@ -435,6 +436,7 @@ describe("reinstallOutcomeFromRun", () => {
     // assert
     assert.deepStrictEqual(outcome, {
       partition: "reinstalled",
+      resourcesChanged: true,
       name: "hello",
       marketplace: "mp",
       scope: "project",
@@ -452,6 +454,7 @@ describe("reinstallOutcomeFromRun", () => {
     // arrange
     const run: UpdateRunOutcome = {
       partition: "updated",
+      resourcesChanged: true,
       name: "hello",
       fromVersion: "1.0.0",
       toVersion: "1.0.0",
@@ -471,6 +474,7 @@ describe("reinstallOutcomeFromRun", () => {
     // assert
     assert.deepStrictEqual(outcome, {
       partition: "reinstalled",
+      resourcesChanged: true,
       name: "hello",
       marketplace: "mp",
       scope: "project",
@@ -490,6 +494,7 @@ describe("reinstallOutcomeFromRun", () => {
     // arrange
     const run: UpdateRunOutcome = {
       partition: "updated",
+      resourcesChanged: true,
       name: "hello",
       fromVersion: "1.0.0",
       toVersion: "1.1.0",
@@ -511,6 +516,7 @@ describe("reinstallOutcomeFromRun", () => {
     // assert
     assert.deepStrictEqual(outcome, {
       partition: "reinstalled",
+      resourcesChanged: true,
       name: "hello",
       marketplace: "mp",
       scope: "project",
@@ -533,6 +539,7 @@ describe("reinstallOutcomeFromRun", () => {
     // arrange
     const run: UpdateRunOutcome = {
       partition: "updated",
+      resourcesChanged: true,
       name: "hello",
       fromVersion: "1.0.0",
       toVersion: "1.0.0",
@@ -552,6 +559,7 @@ describe("reinstallOutcomeFromRun", () => {
     // assert
     assert.deepStrictEqual(outcome, {
       partition: "reinstalled",
+      resourcesChanged: true,
       name: "hello",
       marketplace: "mp",
       scope: "project",
@@ -566,6 +574,44 @@ describe("reinstallOutcomeFromRun", () => {
       declaresWorkflows: false,
     });
   });
+
+  for (const resourcesChanged of [true, false]) {
+    test(`D-PL1-18: a swapped candidate reporting resourcesChanged ${resourcesChanged} is reinstalled with the same value`, () => {
+      // arrange
+      const run: UpdateRunOutcome = {
+        partition: "updated",
+        resourcesChanged,
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        constraint: undefined,
+      };
+
+      // act
+      const outcome = reinstallOutcomeFromRun(RUN_TARGET, run, undefined);
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "reinstalled",
+        resourcesChanged,
+        name: "hello",
+        marketplace: "mp",
+        scope: "project",
+        version: "1.1.0",
+        fromVersion: "1.0.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+      });
+    });
+  }
 
   test("ENBL-05: an unchanged run is an already-disabled skip", () => {
     // arrange
@@ -675,6 +721,58 @@ describe("reinstallOutcomeFromRun", () => {
       reasons: ["source missing"],
       cause,
     });
+  });
+
+  test("D-PL1-14: a failed run with tagged warnings carries their discovery half", () => {
+    // arrange
+    const discovery = { kind: "discovery", message: "skill source collides" } as const;
+    const run: UpdateRunOutcome = {
+      partition: "failed",
+      name: "hello",
+      fromVersion: "1.0.0",
+      notes: ["disk full"],
+      reasons: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+      stagingWarnings: [{ kind: "hygiene", message: "[bot] dropped tools: WebFetch" }, discovery],
+    };
+
+    // act
+    const outcome = reinstallOutcomeFromRun(RUN_TARGET, run, undefined);
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      partition: "failed",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      fromVersion: "1.0.0",
+      notes: ["disk full"],
+      reasons: [],
+      discoveryWarnings: [discovery],
+    });
+  });
+
+  test("D-PL1-14: a failed run with only hygiene warnings carries no discovery warnings", () => {
+    // arrange
+    const run: UpdateRunOutcome = {
+      partition: "failed",
+      name: "hello",
+      fromVersion: "1.0.0",
+      notes: ["disk full"],
+      reasons: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+      stagingWarnings: [{ kind: "hygiene", message: "[bot] dropped tools: WebFetch" }],
+    };
+
+    // act
+    const outcome = reinstallOutcomeFromRun(RUN_TARGET, run, undefined);
+
+    // assert
+    assert.strictEqual("discoveryWarnings" in outcome, false);
   });
 
   test("D-18-10: a commit failure carries the captured aggregate error and one child per failed bridge", () => {

@@ -18,6 +18,7 @@ import type {
   AutoapplyConfigFile,
   AutoapplyFileValue,
   AutoapplyStatusSurface,
+  BackgroundUpdatePlugin,
   MarketplaceDetails,
   MarketplaceInfoCascadeMessage,
   MarketplaceInfoMessage,
@@ -1312,6 +1313,19 @@ function composeAutoapplyStatusText(surface: AutoapplyStatusSurface): string {
 }
 
 /**
+ * AUP-03 / D-PL8-10: Claude Code's background update notice with Pi's reload
+ * command (D-PL8-11). D-PL8-21: names are deduplicated by the bare plugin name
+ * in first-seen order, as Claude Code does, so a plugin updated in both scopes
+ * or from two marketplaces is named once; two names are joined with "and",
+ * three or more are counted.
+ */
+function composeBackgroundUpdateText(plugins: readonly BackgroundUpdatePlugin[]): string {
+  const names = [...new Set(plugins.map((plugin) => plugin.name))];
+  const subject = names.length <= 2 ? names.join(" and ") : `${names.length} plugins`;
+  return `${names.length === 1 ? "Plugin" : "Plugins"} updated: ${subject} · Run /reload to apply`;
+}
+
+/**
  * D-15: formats one resolved raw surface as its notify arguments. Every raw kind
  * passes its severity explicitly, read from `RAW_SURFACE_SEVERITY` (PMOD-01) or,
  * for the migration notice, from its resolved severity, so each emitting arm
@@ -1370,5 +1384,8 @@ export function formatRawSurface(surface: ResolvedRawSurface): NotifyArguments |
       const text = composeMcpMigrationText(surface.rows, surface.notices);
       return [surface.needsReload ? `${text}\n${RELOAD_HINT_TRAILER}` : text, surface.severity];
     }
+
+    case "background-update":
+      return [composeBackgroundUpdateText(surface.plugins), RAW_SURFACE_SEVERITY[surface.kind]];
   }
 }

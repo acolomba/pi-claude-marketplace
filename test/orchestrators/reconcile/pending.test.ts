@@ -18,7 +18,7 @@
 // no-mutation assertions from racing a fire-and-forget write.
 
 import assert from "node:assert/strict";
-import fs, { chmod, mkdir, readdir, readFile, utimes, writeFile } from "node:fs/promises";
+import fs, { chmod, mkdir, readdir, readFile, symlink, utimes, writeFile } from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 import { test } from "node:test";
@@ -489,7 +489,7 @@ test("MSG-GR-3: a failed configuration block sorts among the plan blocks by name
   verifyBoundary();
 });
 
-test("APL-04 / D-14: a list whose only row is a source mismatch carries no apply trailer", async (t) => {
+test("previews a changed marketplace source as a replacement that needs apply", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "mismatch-only");
   await writeUnder(
@@ -509,13 +509,30 @@ test("APL-04 / D-14: a list whose only row is a source mismatch carries no apply
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "A marketplace operation has failed.\n\n" +
-        "⊘ mp [project] (failed) {source mismatch}\n\n" +
-        "Reconcile pending: 1 failure",
-      severity: "error",
+        "● mp [project] (will add)\n\n" +
+        "Reconcile pending: 1 success\n\n/claude:plugin apply to make these changes",
     },
   ]);
   verifyBoundary();
+});
+
+test("treats the official fallback as current when another source is recorded", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "official-fallback");
+  await writeUnder(
+    project.baseConfigJsonPath,
+    configBytes("claude-plugins-official", "anthropics/claude-plugins-official", []),
+  );
+  await writeUnder(
+    project.stateJsonPath,
+    stateBytes("claude-plugins-official", "acme/tools", path.join(cwd, "mp-root"), []),
+  );
+
+  // act
+  const report = await composePendingReport({ cwd, scopes: ["project"] });
+
+  // assert
+  assert.deepStrictEqual(report, { marketplaces: [], retained: {}, needsApply: false });
 });
 
 test("MIG-01: an absent base config plans against the state projection instead of an empty desired state", async (t) => {
@@ -989,7 +1006,7 @@ const dependencyRows = [
         { key: "lib@tools", enabled: true },
       ],
     },
-    expected: pendingList(["● vault (will install)", "◍ app (will disable)"]),
+    expected: pendingList(["◍ app (will disable)", "● vault (will install)"]),
   },
   {
     condition: "a dependency the user disabled, the config enables and the check holds down",
@@ -1008,11 +1025,16 @@ const dependencyRows = [
         { key: "core@tools", enabled: true },
       ],
     },
-    expected: pendingList([
-      "● vault (will install)",
-      "◍ app (will disable)",
-      "● core (will enable)",
-    ]),
+    expected: pendingList(["● vault (will install)", "● core (will enable)"]),
+  },
+  {
+    condition: "a plugin the check holds down whose missing dependency the same apply installs",
+    seed: {
+      offered: { app: { version: "1.0.0", dependencies: ["vault"] }, vault: { version: "1.0.0" } },
+      recorded: { app: { version: "1.0.0", enabled: false, dependencyDisabled: true } },
+      declared: [{ key: "app@tools", enabled: true }],
+    },
+    expected: pendingList(["● vault (will install)", "● app (will enable)"]),
   },
   {
     condition: "a dependency the config disables",
@@ -1137,6 +1159,48 @@ const catalogMoveRows = [
     ]),
   },
   {
+    condition:
+      "a move whose newer dependency declares a plugin the scope lacks, moved before that install (D-PL2-02)",
+    seed: {
+      offered: {
+        widget: { version: "1.1.0", dependencies: ["zcore@^2.0.0"] },
+        zcore: { version: "2.0.0", dependencies: ["extra"] },
+        extra: { version: "1.0.0" },
+      },
+      recorded: { widget: { version: "1.0.0" }, zcore: { version: "1.0.0" } },
+      declared: [
+        { key: "widget@tools", enabled: true },
+        { key: "zcore@tools", enabled: true },
+      ],
+    },
+    expected: pendingList([
+      "● zcore v1.0.0 → v2.0.0 (will update)",
+      "● widget v1.0.0 → v1.1.0 (will update)",
+      "● extra (will install)",
+    ]),
+  },
+  {
+    condition:
+      "a missing dependency that needs a version the catalog moves to, installed after the moves (D-PL2-02)",
+    seed: {
+      offered: {
+        widget: { version: "1.1.0", dependencies: ["newdep"] },
+        newdep: { version: "1.0.0", dependencies: ["ycore@^2.0.0"] },
+        ycore: { version: "2.0.0" },
+      },
+      recorded: { widget: { version: "1.0.0" }, ycore: { version: "1.0.0" } },
+      declared: [
+        { key: "widget@tools", enabled: true },
+        { key: "ycore@tools", enabled: true },
+      ],
+    },
+    expected: pendingList([
+      "● widget v1.0.0 → v1.1.0 (will update)",
+      "● ycore v1.0.0 → v2.0.0 (will update)",
+      "● newdep (will install)",
+    ]),
+  },
+  {
     condition: "a recorded plugin at the catalog version",
     seed: {
       offered: { demo: { version: "1.0.0" } },
@@ -1189,6 +1253,113 @@ test("APL-02 / D-14: composePendingReport counts a catalog move alone as a chang
         name: "tools",
         scope: "project",
         plugins: [{ status: "will update", name: "demo", from: "1.0.0", to: "1.1.0" }],
+      },
+    ],
+    retained: {},
+    needsApply: true,
+  });
+});
+
+test("D-PL2-16: composePendingReport lists an enable that waits on a planned install after it", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "compose-after-install");
+  await stageDependencyScope(cwd, project, {
+    offered: { app: { version: "1.0.0", dependencies: ["vault"] }, vault: { version: "1.0.0" } },
+    recorded: { app: { version: "1.0.0", enabled: false, dependencyDisabled: true } },
+    declared: [{ key: "app@tools", enabled: true }],
+  });
+
+  // act
+  const report = await composePendingReport({ cwd, scopes: ["project"] });
+
+  // assert
+  assert.deepStrictEqual(report, {
+    marketplaces: [
+      {
+        name: "tools",
+        scope: "project",
+        plugins: [
+          { status: "will install", name: "vault" },
+          { status: "will enable", name: "app" },
+        ],
+      },
+    ],
+    retained: {},
+    needsApply: true,
+  });
+});
+
+test("WR-07 / D-PL2-18: composePendingReport lists a waiting record's move, its enable, then a move that declares it, after the install it waits on", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "compose-after-install-moves");
+  const offered = {
+    alib: { version: "2.0.0", dependencies: ["cdep"] },
+    bapp: { version: "2.0.0", dependencies: ["alib@^2.0.0"] },
+    cdep: { version: "1.0.0" },
+  };
+  await stageDependencyScope(cwd, project, {
+    offered,
+    recorded: {
+      alib: { version: "1.0.0", enabled: false, dependencyDisabled: true },
+      bapp: { version: "1.0.0" },
+    },
+    declared: [
+      { key: "alib@tools", enabled: true },
+      { key: "bapp@tools", enabled: true },
+    ],
+  });
+  await stageOfferedPlugins(project, offered);
+
+  // act
+  const report = await composePendingReport({ cwd, scopes: ["project"] });
+
+  // assert
+  assert.deepStrictEqual(report, {
+    marketplaces: [
+      {
+        name: "tools",
+        scope: "project",
+        plugins: [
+          { status: "will install", name: "cdep" },
+          { status: "will update", name: "alib", from: "1.0.0", to: "2.0.0" },
+          { status: "will enable", name: "alib" },
+          { status: "will update", name: "bapp", from: "1.0.0", to: "2.0.0" },
+        ],
+      },
+    ],
+    retained: {},
+    needsApply: true,
+  });
+});
+
+test("WR-07 / D-PL2-18: composePendingReport lists the move and then the enable of a record a config enables after the install it waits on", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "compose-after-install-enable");
+  const offered = {
+    app: { version: "1.1.0", dependencies: ["vault"] },
+    vault: { version: "1.0.0" },
+  };
+  await stageDependencyScope(cwd, project, {
+    offered,
+    recorded: { app: { version: "1.0.0", enabled: false } },
+    declared: [{ key: "app@tools", enabled: true }],
+  });
+  await stageOfferedPlugins(project, offered);
+
+  // act
+  const report = await composePendingReport({ cwd, scopes: ["project"] });
+
+  // assert
+  assert.deepStrictEqual(report, {
+    marketplaces: [
+      {
+        name: "tools",
+        scope: "project",
+        plugins: [
+          { status: "will install", name: "vault" },
+          { status: "will update", name: "app", from: "1.0.0", to: "1.1.0" },
+          { status: "will enable", name: "app" },
+        ],
       },
     ],
     retained: {},
@@ -1345,6 +1516,92 @@ test("D-12: composePendingReport does not count a range hold as a change apply m
     retained: {},
     needsApply: false,
   });
+});
+
+/**
+ * Records `plugin` of `tools` at a per-commit copy under the plugin clones
+ * whose manifest links to a file in the project directory, outside its plugin
+ * directory, so its installed copy cannot be used.
+ */
+async function pinToEscapingCopy(
+  locations: ScopedLocations,
+  cwd: string,
+  plugin: string,
+): Promise<void> {
+  const copy = path.join(locations.pluginClonesDir, `${plugin}-copy`);
+  const outside = path.join(cwd, "outside-plugin.json");
+  await writeUnder(outside, JSON.stringify({ name: plugin, version: "1.0.0" }));
+  await mkdir(path.join(copy, ".claude-plugin"), { recursive: true });
+  await symlink(outside, path.join(copy, ".claude-plugin", "plugin.json"));
+  const state = JSON.parse(await readFile(locations.stateJsonPath, "utf8")) as {
+    readonly marketplaces: {
+      readonly tools: { readonly plugins: Record<string, Record<string, unknown>> };
+    };
+  };
+  state.marketplaces.tools.plugins[plugin] = {
+    ...state.marketplaces.tools.plugins[plugin],
+    resolvedSource: copy,
+    resolvedSha: "a".repeat(40),
+  };
+  await writeFile(locations.stateJsonPath, JSON.stringify(state, null, 2), "utf8");
+}
+
+/** D-PL2-25 / REC-05: the one row pending lists for `widget`'s refused copy. */
+const REFUSED_WIDGET_COPY_PENDING = {
+  message:
+    "A plugin operation needs attention.\n" +
+    "\n" +
+    "● tools [project]\n" +
+    "  ⊘ widget (failed) {unreadable manifest}\n" +
+    "    cause: cannot read the dependencies of widget@tools: its own manifest is present but cannot be read\n" +
+    "\n" +
+    "Reconcile pending: 1 warning",
+  severity: "warning",
+};
+
+test("D-PL2-25: pending lists an enabled record whose installed copy cannot be used as the row apply reports", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "refused-copy-steady");
+  const offered = { widget: { version: "1.0.0" } };
+  await stageDependencyScope(cwd, project, {
+    offered,
+    recorded: { widget: { version: "1.0.0" } },
+    declared: [{ key: "widget@tools", enabled: true }],
+  });
+  await stageOfferedPlugins(project, offered);
+  await pinToEscapingCopy(project, cwd, "widget");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+
+  // assert
+  assert.deepStrictEqual(notifications, [REFUSED_WIDGET_COPY_PENDING]);
+  verifyBoundary();
+});
+
+test("D-PL2-25: pending lists a refused installed copy that ends the catalog moves once, with no move", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "refused-copy-moves");
+  const offered = { widget: { version: "1.1.0" }, zcore: { version: "2.0.0" } };
+  await stageDependencyScope(cwd, project, {
+    offered,
+    recorded: { widget: { version: "1.0.0" }, zcore: { version: "1.0.0" } },
+    declared: [
+      { key: "widget@tools", enabled: true },
+      { key: "zcore@tools", enabled: true },
+    ],
+  });
+  await stageOfferedPlugins(project, offered);
+  await pinToEscapingCopy(project, cwd, "widget");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+
+  // assert
+  assert.deepStrictEqual(notifications, [REFUSED_WIDGET_COPY_PENDING]);
+  verifyBoundary();
 });
 
 test("D-05-07: a declarer whose manifest cannot be read plans no dependency row", async (t) => {

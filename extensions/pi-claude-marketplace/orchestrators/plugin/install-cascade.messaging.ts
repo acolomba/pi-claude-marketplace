@@ -1,3 +1,4 @@
+import { MAX_REFUSAL_VERSION_CHARS, truncateForRefusal } from "../../domain/dependency-range.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import {
   DependencyCascadeError,
@@ -5,12 +6,28 @@ import {
   InstallMarketplaceAddError,
 } from "../../shared/errors.ts";
 import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
-import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
+import { printable } from "../../shared/notification-mcp.ts";
+import {
+  companionSeverity,
+  malformedReasonsForKinds,
+  skipSeverity,
+} from "../../shared/notify-reasons.ts";
+import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
+import {
+  redactAbsolutePaths,
+  redactCauseChain,
+  redactedRollbackPartials,
+} from "../../shared/redact-absolute-paths.ts";
 
 import { INSTALL_CONTEXT } from "./install.messaging.ts";
 
-import type { CascadeConstraintFailure, CascadeSkippedMember } from "./install-cascade.ts";
+import type {
+  CascadeConstraintFailure,
+  CascadeSkippedMember,
+  Unmaterialized,
+} from "./install-cascade.ts";
 import type { InstallMsg } from "./install.messaging.ts";
+import type { LedgerDegradationSignals } from "./shared.ts";
 import type { DependencyClosureResult } from "../../domain/dependency-closure.ts";
 import type { SoftDepStatus } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
@@ -18,6 +35,7 @@ import type {
   ContentReason,
   PluginFailedMessage,
   PluginInstalledMessage,
+  PluginPartiallyInstalledMessage,
   PluginSkippedMessage,
   PluginUpdatedMessage,
 } from "../../shared/notification-types.ts";
@@ -56,7 +74,10 @@ import type { UpdateDependencyRow } from "../types.ts";
  *   Failure attribution (RESV-06). The row carrying the reason is the
  *   DEPENDENCY's. The requesting plugin still gets its own row, stamped
  *   `{dependency failed}`, so the command the user typed is visibly accounted
- *   for instead of vanishing behind a dependency's name.
+ *   for instead of vanishing behind a dependency's name. Every other member
+ *   the install would have installed and did not gets the same
+ *   `{dependency failed}` row with no cause, as Claude Code names every member
+ *   on success (CAS-01, D-PL3-02).
  *
  * Every value a row interpolates is a token-allowlisted plugin key, a bounded
  * rendered constraint, a recorded version, a validator field path, or a
@@ -109,9 +130,14 @@ export const CASCADE_CONTEXT = {
 } as const satisfies CommandContext<CascadeMemberStatus>;
 
 /** One member the cascade materialized, as the row composer needs to read it. */
-export interface CascadeInstalledRow {
+export interface CascadeInstalledRow extends Pick<
+  LedgerDegradationSignals,
+  "orphanRewake" | "degradedKinds"
+> {
   readonly key: string;
   readonly version: string;
+  /** Unsupported kinds omitted by this member's partial installation. */
+  readonly unsupported?: readonly string[];
   readonly declaresAgents: boolean;
   readonly declaresMcp: boolean;
   readonly declaresWorkflows: boolean;
@@ -142,18 +168,28 @@ export interface CascadeInstalledRow {
  * text rendering of it, so its cause chain reaches the user intact -- the row is
  * reporting exactly the failure a single-plugin install of that dependency would
  * have reported.
+ *
+ * A `closure` or `constraint` failure may list the members the install would
+ * have installed and did not (CAS-01). The list is optional here because a
+ * subject built outside the cascade has none to give.
  */
 export type CascadeFailureSubject =
   | {
       readonly kind: "closure";
-      readonly failure: Extract<DependencyClosureResult, { readonly ok: false }>;
+      readonly failure: Extract<DependencyClosureResult, { readonly ok: false }> &
+        Partial<Unmaterialized>;
     }
-  | { readonly kind: "constraint"; readonly failure: CascadeConstraintFailure }
+  | {
+      readonly kind: "constraint";
+      readonly failure: CascadeConstraintFailure & Partial<Unmaterialized>;
+    }
   | {
       readonly kind: "member";
       readonly key: string;
       readonly error: Error;
+      readonly version?: string;
       readonly rollbackPartials: readonly RollbackPartial[];
+      readonly unmaterialized?: readonly string[];
     };
 
 /** The subject key, brace and cause one cascade failure resolves to. */
@@ -198,37 +234,47 @@ function stagedDependencies(member: CascadeInstalledRow): readonly Dependency[] 
 export function composeCascadeMemberRow(
   member: CascadeInstalledRow,
   probe: SoftDepStatus,
-): PluginInstalledMessage {
-  return {
+): PluginInstalledMessage | PluginPartiallyInstalledMessage {
+  // A member either re-enables its record or resolves a fresh copy.
+  const reasons: ContentReason[] = [];
+  if (member.reEnabledFromRecord) {
+    reasons.push("already installed", "dependency enabled");
+  } else if (member.fellBackToCurrentCopy) {
+    reasons.push("dependency current copy");
+  }
+
+  if (member.orphanRewake === true) {
+    reasons.push("orphan rewake");
+  }
+
+  const malformed = malformedReasonsForKinds(member.degradedKinds);
+  reasons.push(...malformed);
+  const row: PluginInstalledMessage = {
     status: "installed",
     name: member.key,
     dependencies: stagedDependencies(member),
     version: member.version,
-    // TAGS-02 / D-07-03: the fallback names itself on the row but never
-    // touches severity -- that stays exactly what `companionSeverity`
-    // computes, so a member with an unloaded companion still reports the
-    // genuine SEV-01 degradation the fallback must not paper over.
-    ...(member.fellBackToCurrentCopy && { reasons: ["dependency current copy"] as const }),
-    // D-08-02: a member re-materialized through its own disabled record
-    // reports both what was already true and what this command is
-    // responsible for, on the same split the promotion row's own
-    // `["already installed", "dependency promoted"]` pair already sets out
-    // -- never alongside the fallback token above, since a member is either
-    // freshly resolved (possibly falling back) or already-installed and
-    // disabled, never both.
-    ...(member.reEnabledFromRecord && {
-      reasons: ["already installed", "dependency enabled"] as const,
-    }),
-    severity: companionSeverity(
-      {
-        declaresAgents: member.declaresAgents,
-        declaresMcp: member.declaresMcp,
-        declaresWorkflows: member.declaresWorkflows,
-      },
-      probe,
-    ),
+    ...(reasons.length > 0 && { reasons }),
+    severity:
+      malformed.length > 0
+        ? "warning"
+        : companionSeverity(
+            {
+              declaresAgents: member.declaresAgents,
+              declaresMcp: member.declaresMcp,
+              declaresWorkflows: member.declaresWorkflows,
+            },
+            probe,
+          ),
     needsReload: true,
   };
+  return member.unsupported === undefined
+    ? row
+    : {
+        ...row,
+        status: "partially-installed",
+        reasons: [...(row.reasons ?? []), ...narrowUnsupportedKinds(member.unsupported)],
+      };
 }
 
 /**
@@ -285,11 +331,21 @@ export function composeCascadeMemberRows(args: {
   return sortRows(rows, args.scope);
 }
 
+/** D-PL3-14: Claude Code's wording for the half of an id that breaks the token rule. */
+const INVALID_ID_HALVES = {
+  plugin: "the plugin's name does not; the marketplace's maintainer can rename it",
+  marketplace: "the marketplace's name does not; the marketplace's maintainer can rename it",
+  both: "they do not; the marketplace's maintainer can rename both",
+} as const satisfies Record<
+  Extract<DependencyClosureResult, { readonly reason: "invalid-root-id" }>["invalidPart"],
+  string
+>;
+
 /**
  * The subject, brace and cause a closure failure resolves to.
  *
  * The exhaustive `switch` deliberately has no runtime default: under
- * `noImplicitReturns`, a future fifth `DependencyClosureResult` failure reason
+ * `noImplicitReturns`, any future `DependencyClosureResult` failure reason
  * makes this function fail typecheck instead of falling through to a `default`
  * arm no case can ever reach.
  */
@@ -351,24 +407,61 @@ function closureFailureFacts(
           failure.key,
         ),
       };
+    case "invalid-root-id":
+      // CAS-02 / D-PL3-04: the id is outside the token allowlist by
+      // definition, so it is printed with its control and format characters
+      // escaped (D-PL3-14).
+      return {
+        key: failure.key,
+        reasons: ["invalid manifest"],
+        cause: new DependencyCascadeError(
+          `Plugin "${printable(failure.key)}" cannot be installed, because its id is invalid: Each part of a plugin id (plugin@marketplace) may use only the letters a-z and A-Z, digits, ".", "_" and "-", and must start with a letter or digit. Here ${INVALID_ID_HALVES[failure.invalidPart]}.`,
+          failure.key,
+        ),
+      };
   }
+}
+
+/**
+ * RESV-05 / UPD-DEP-D1: the sentence for an installed copy outside the range.
+ * When a move was judged and the plugin the user named declares the
+ * dependency itself, the cause ends with Claude Code's next step, as Claude
+ * Code adds it only under that condition (CAS-06, D-PL3-11). A refusal
+ * `update` would meet too, such as a taken agent target, gets no hint. The hint names
+ * only the dependency key, which the walk checked against the token allowlist.
+ * The recorded version is cut at 64 code units, as Claude Code cuts every
+ * version a refusal quotes (CAS-07, D-PL3-12).
+ */
+function installedUnsatisfiedCause(
+  failure: Extract<CascadeConstraintFailure, { readonly why: "installed-unsatisfied" }>,
+  rootKey: string,
+): string {
+  const recorded = truncateForRefusal(failure.recordedVersion, MAX_REFUSAL_VERSION_CHARS);
+  const head = `Dependency "${failure.key}" is installed at version ${recorded}, which does not satisfy ${failure.range}`;
+  if (failure.moveRefusal === undefined) {
+    return `${head}.`;
+  }
+
+  const refused = `${head}, and cannot move: ${failure.moveRefusal}`;
+  if (failure.updateBlocked === true || failure.declaredBy?.includes(rootKey) !== true) {
+    return refused;
+  }
+
+  const separator = failure.moveRefusal.endsWith(".") ? "" : ".";
+  return `${refused}${separator} To look for a version in range, run /claude:plugin update ${failure.key}.`;
 }
 
 /** The two `range-conflict` arms, which differ in subject rather than in fact. */
 function rangeConflictFacts(
   failure: Extract<CascadeConstraintFailure, { readonly kind: "range-conflict" }>,
+  rootKey: string,
 ): CascadeFailureFacts {
   return failure.why === "installed-unsatisfied"
     ? {
         key: failure.key,
         version: failure.recordedVersion,
         reasons: ["already installed", "version conflict"],
-        cause: new DependencyCascadeError(
-          failure.moveRefusal === undefined
-            ? `Dependency "${failure.key}" is installed at version ${failure.recordedVersion}, which does not satisfy ${failure.range}.`
-            : `Dependency "${failure.key}" is installed at version ${failure.recordedVersion}, which does not satisfy ${failure.range}, and cannot move: ${failure.moveRefusal}`,
-          failure.key,
-        ),
+        cause: new DependencyCascadeError(installedUnsatisfiedCause(failure, rootKey), failure.key),
       }
     : {
         key: failure.key,
@@ -388,10 +481,13 @@ function rangeConflictFacts(
  * this function fail typecheck instead of falling through to a `default` arm
  * no case can ever reach.
  */
-function constraintFailureFacts(failure: CascadeConstraintFailure): CascadeFailureFacts {
+function constraintFailureFacts(
+  failure: CascadeConstraintFailure,
+  rootKey: string,
+): CascadeFailureFacts {
   switch (failure.kind) {
     case "range-conflict":
-      return rangeConflictFacts(failure);
+      return rangeConflictFacts(failure, rootKey);
     case "no-matching-tag":
       return {
         key: failure.key,
@@ -449,7 +545,9 @@ function constraintFailureFacts(failure: CascadeConstraintFailure): CascadeFailu
  * directly would repeat its message as two consecutive links, because
  * `causeChainTrailer` renders a link's own message before walking its cause.
  * Skipping to `subject.error`'s cause keeps the rendered cause-chain trailer
- * byte-identical to `subject.error`'s own.
+ * the same as `subject.error`'s own, except that every absolute path is cut to
+ * its basename, as a dependency move's failure row cuts it (T-03-48): a
+ * dependency's ledger error can name a path inside the scope's staging area.
  */
 function memberCause(
   subject: Extract<CascadeFailureSubject, { readonly kind: "member" }>,
@@ -459,10 +557,11 @@ function memberCause(
     return subject.error;
   }
 
+  const cause = redactCauseChain(subject.error.cause);
   return new DependencyCascadeError(
-    subject.error.message,
+    redactAbsolutePaths(subject.error.message),
     subject.key,
-    subject.error.cause === undefined ? undefined : { cause: subject.error.cause },
+    cause === undefined ? undefined : { cause },
   );
 }
 
@@ -497,7 +596,7 @@ function failureFacts(subject: CascadeFailureSubject, rootKey: string): CascadeF
   }
 
   if (subject.kind === "constraint") {
-    return constraintFailureFacts(subject.failure);
+    return constraintFailureFacts(subject.failure, rootKey);
   }
 
   // The member resolved cleanly and its own six-phase ledger then failed, so
@@ -510,6 +609,7 @@ function failureFacts(subject: CascadeFailureSubject, rootKey: string): CascadeF
     key: subject.key,
     reasons: memberReasons(subject),
     cause: memberCause(subject, rootKey),
+    ...(subject.version !== undefined && { version: subject.version }),
     ...(subject.rollbackPartials.length > 0 && { rollbackPartials: subject.rollbackPartials }),
   };
 }
@@ -526,40 +626,97 @@ export function cascadeFailureCause(subject: CascadeFailureSubject, rootKey: str
   return failureFacts(subject, rootKey).cause;
 }
 
+/** CAS-01: the members a subject lists as never installed; none when it carries no list. */
+function unmaterializedOf(subject: CascadeFailureSubject): readonly string[] {
+  const listed =
+    subject.kind === "member" ? subject.unmaterialized : subject.failure.unmaterialized;
+  return listed ?? [];
+}
+
+/**
+ * CAS-01 / D-PL3-02: one cause-less `{dependency failed}` row per member the
+ * install would have installed and did not. The failing member, the root, and
+ * every `moved` key are excluded, because each already has its row (D-PL3-15).
+ */
+export function composeUnmaterializedRows(
+  keys: readonly string[],
+  reported: readonly string[],
+): PluginFailedMessage[] {
+  const seen = new Set(reported);
+  return keys
+    .filter((key) => {
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.add(key);
+      return true;
+    })
+    .map((key) => ({
+      status: "failed",
+      name: key,
+      reasons: ["dependency failed"],
+      severity: "error",
+      needsReload: false,
+    }));
+}
+
+/**
+ * The requesting plugin's row name. An id that breaks the token rule may hold
+ * control or format characters, so its row name is escaped as its cause is
+ * (D-PL3-14).
+ */
+function rootRowName(subject: CascadeFailureSubject, rootName: string): string {
+  return subject.kind === "closure" && subject.failure.reason === "invalid-root-id"
+    ? printable(rootName)
+    : rootName;
+}
+
 /**
  * RESV-06: the failing dependency as the row's subject, with the requesting
- * plugin's own row beside it.
+ * plugin's own row beside it, and a `{dependency failed}` row with no cause for
+ * every other member the install would have installed and did not (CAS-01,
+ * D-PL3-01).
  *
- * The second row is omitted when the failing subject IS the requesting plugin
- * (an unusable declaration on its own manifest, or its own ledger throwing),
- * because there is no dependency to distinguish it from and one subject cannot
- * be the reason for itself.
+ * The requesting plugin's second row is omitted when the failing subject IS
+ * the requesting plugin (an unusable declaration on its own manifest, or its
+ * own ledger throwing), because there is no dependency to distinguish it from
+ * and one subject cannot be the reason for itself.
+ *
+ * `moved` holds the moved rows the caller appends beside these rows; the key
+ * each one names gets no second, `{dependency failed}` row (D-PL3-15).
  */
 export function composeCascadeFailureMessage(args: {
   readonly scope: Scope;
   readonly rootKey: string;
   readonly rootName: string;
   readonly subject: CascadeFailureSubject;
+  readonly moved?: readonly { readonly name: string }[];
 }): readonly CascadeMsg[] {
   const facts = failureFacts(args.subject, args.rootKey);
+  const redactedCause = new Error(redactAbsolutePaths(facts.cause.message), {
+    cause: redactCauseChain(facts.cause.cause),
+  });
   const isRoot = facts.key === args.rootKey;
   const failed: PluginFailedMessage = {
     status: "failed",
-    name: isRoot ? args.rootName : facts.key,
+    name: isRoot ? rootRowName(args.subject, args.rootName) : facts.key,
     reasons: facts.reasons,
     ...(facts.version !== undefined && { version: facts.version }),
     ...(facts.rollbackPartials !== undefined && {
-      rollbackPartial: facts.rollbackPartials.map((partial) => ({
-        phase: partial.phase,
-        ...(partial.cause !== undefined && { cause: partial.cause }),
-      })),
+      rollbackPartial: redactedRollbackPartials(facts.rollbackPartials),
     }),
-    cause: facts.cause,
+    cause: redactedCause,
     severity: "error",
     needsReload: false,
   };
+  const members = composeUnmaterializedRows(unmaterializedOf(args.subject), [
+    facts.key,
+    args.rootKey,
+    ...(args.moved ?? []).map((row) => row.name),
+  ]);
   if (isRoot) {
-    return [failed];
+    return sortRows([failed, ...members], args.scope);
   }
 
   const root: PluginFailedMessage = {
@@ -569,5 +726,5 @@ export function composeCascadeFailureMessage(args: {
     severity: "error",
     needsReload: false,
   };
-  return sortRows([failed, root], args.scope);
+  return sortRows([failed, root, ...members], args.scope);
 }

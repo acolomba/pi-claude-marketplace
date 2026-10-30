@@ -14,9 +14,11 @@ import {
   loadVisibleMarketplaces,
   crossScopeFlag,
   foldUnstageNotices,
+  fsErrnoReason,
   lacksStoredCredential,
   marketplaceFailureRows,
   marketplaceInOtherScope,
+  marketplaceNotAddedMessage,
   marketplaceLayerVerdict,
   narrowCascadeFailure,
   recordedManifestPath,
@@ -101,6 +103,25 @@ void ({
   ok: true,
   dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [], workflows: [] },
 } satisfies UnstageOutcome);
+
+test("marketplaceNotAddedMessage omits optional fields when both scopes miss", () => {
+  assert.deepStrictEqual(marketplaceNotAddedMessage({ name: "tools", scope: undefined }), {
+    kind: "marketplace-not-added",
+    name: "tools",
+  });
+});
+
+test("marketplaceNotAddedMessage includes the requested scope and cross-scope hint", () => {
+  assert.deepStrictEqual(
+    marketplaceNotAddedMessage({ name: "tools", scope: "user", presentInOtherScope: true }),
+    {
+      kind: "marketplace-not-added",
+      name: "tools",
+      scope: "user",
+      presentInOtherScope: true,
+    },
+  );
+});
 
 function createGitOps(scenario: GitScenario): {
   readonly gitOps: GitOps;
@@ -2323,7 +2344,33 @@ for (const { title, cause, expected } of [
   });
 }
 
-test("marketplaceFailureRows puts the reason and the cause on one failed child of the failed header", () => {
+for (const { code, expected } of [
+  { code: "EACCES", expected: "permission denied" },
+  { code: "EPERM", expected: "permission denied" },
+  { code: "ENOENT", expected: "source missing" },
+  { code: "ENOTDIR", expected: "source missing" },
+  { code: "EBADF", expected: "unreadable" },
+  { code: "EIO", expected: "unreadable" },
+  { code: "EISDIR", expected: "unreadable" },
+  { code: "ECONNABORTED", expected: undefined },
+  { code: undefined, expected: undefined },
+] satisfies readonly {
+  readonly code: string | undefined;
+  readonly expected: ReturnType<typeof fsErrnoReason>;
+}[]) {
+  test(`fsErrnoReason maps ${String(code)} to ${String(expected)}`, () => {
+    // arrange
+    const errnoCode = code;
+
+    // act
+    const reason = fsErrnoReason(errnoCode);
+
+    // assert
+    assert.equal(reason, expected);
+  });
+}
+
+test("marketplaceFailureRows puts the reason and the cause on one failed marketplace-subject child of the failed header", () => {
   // arrange
   const cause = new Error("lock is held");
 
@@ -2343,6 +2390,7 @@ test("marketplaceFailureRows puts the reason and the cause on one failed child o
           name: "tools",
           reasons: ["lock held"],
           cause,
+          marketplaceSubject: true,
           severity: "error",
           needsReload: false,
         },

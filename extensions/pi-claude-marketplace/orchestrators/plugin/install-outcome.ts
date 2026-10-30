@@ -16,7 +16,7 @@
 //       PI-7:                deriveInstallVersion -- pin override, then
 //                            `shared.ts::resolvePluginVersion` (plugin.json >
 //                            entry.version > git sha > hash, VER-01)
-//       runPhases(phases, ctx)                             // D-01 7-phase ledger
+//       runPhases(phases, ctx)                             // D-01 8-phase ledger
 //       format rollback result, capture rows, throw error  // D-02 PI-14 bypass
 //   })
 //
@@ -75,6 +75,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 
 import {
+  assertAgentTargetsFree,
   commitPreparedAgents,
   prepareStagePluginAgents,
   unstagePluginAgents,
@@ -102,8 +103,14 @@ import {
   unstagePluginWorkflows,
 } from "../../bridges/workflows/index.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
-import { recordedVersionSatisfies } from "../../domain/dependency-range.ts";
+import {
+  MAX_DIRECTORY_PIN_FIELD_CHARS,
+  recordedVersionSatisfies,
+  truncateForRefusal,
+} from "../../domain/dependency-range.ts";
+import { sourceManifestBoundary } from "../../domain/manifest-containment.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { assertRecordedMarketplaceName } from "../../domain/name.ts";
 import {
   requirePartialInstallable,
   requireInstallable,
@@ -114,14 +121,18 @@ import {
   ConcurrentInstallError,
   DirectoryPinUnsatisfiedError,
   errorMessage,
+  errorWithManualRecovery,
   InstallMarketplaceAddError,
   InvalidMarketplaceManifestError,
+  ManualRecoveryError,
   PluginShapeError,
 } from "../../shared/errors.ts";
-import { type RemovalOps } from "../../shared/fs-utils.ts";
+import { pathExists, type RemovalOps } from "../../shared/fs-utils.ts";
 import { type DegradeKind } from "../../shared/notify-reasons.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
+import { PathContainmentError } from "../../shared/path-safety.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
+import { hygieneWarning, partitionStagingWarnings } from "../../shared/staging-warnings.ts";
 import {
   runPhases,
   type Phase,
@@ -147,6 +158,11 @@ import { materializeMarketplaceTagClone } from "./clone-cache.ts";
 import { discoverGeneratedNames } from "./discover-names.ts";
 import { probeInstallClone, type InstallCloneCacheSeam } from "./install-clone-probe.ts";
 import {
+  createPackagesPhase,
+  DEFAULT_PACKAGE_INSTALL_OPS,
+  type PackageInstallOps,
+} from "./package-install.ts";
+import {
   assertNoCrossPluginConflicts,
   readDeclaredPluginVersion,
   removePluginRecord,
@@ -163,14 +179,20 @@ import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PreparedWorkflowsStaging } from "../../bridges/workflows/index.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
+import type { ManifestBoundary } from "../../domain/manifest-containment.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
-import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
+import type { MaterializablePlugin, ResolveContext } from "../../domain/resolver-types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type {
+  DiscoveryWarning,
+  HygieneWarning,
+  StagingWarning,
+} from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { InstallPluginOutcome } from "../types.ts";
 
@@ -232,6 +254,8 @@ export interface InstallLedgerOptions {
   readonly provenance?: PluginInstallRecord["provenance"];
   readonly allowExistingRecord?: boolean;
   readonly cloneCacheSeam?: InstallCloneCacheSeam;
+  /** Exact clone-cache keys created by the current dependency-planning attempt. */
+  readonly cloneCandidates?: Set<string>;
   readonly cloneProbe?: typeof probeInstallClone;
   /**
    * D-07-06: materializes a `path` source at `sourcePinOverride`'s tag oid.
@@ -282,12 +306,20 @@ export interface InstallLedgerOptions {
 /** Transaction operation required by the guard-free ledger. */
 export interface InstallLedgerTransaction {
   readonly runPhases: typeof runPhases;
+  /** D-PL9-12: the package step's ports; absent, the real package manager runs. */
+  readonly packageInstallOps?: PackageInstallOps;
 }
 
-/** Failure details captured before a formatted ledger error is rethrown. */
+/**
+ * Failure details captured before a formatted ledger error is rethrown.
+ *
+ * D-PL1-13: `stagingWarnings` holds the tagged warnings the phases that ran
+ * before the failure collected, both halves; it is absent when there are none.
+ */
 export interface InstallFailureCapture {
   rollbackPartials: readonly RollbackPartial[];
   version: string | undefined;
+  stagingWarnings?: readonly StagingWarning[];
 }
 
 // SKILL-01 / CMD-01 / WARN-01: one frontmatter-parse degrade record. Shared by
@@ -342,8 +374,8 @@ export interface InstallLedgerSummary {
    * materialization as having placed nothing.
    */
   readonly stagedWorkflowNames: readonly string[];
-  readonly bridgeWarnings: readonly string[];
-  readonly discoveryWarnings: readonly string[];
+  readonly bridgeWarnings: readonly HygieneWarning[];
+  readonly discoveryWarnings: readonly DiscoveryWarning[];
   readonly agentForeignFailures: readonly AgentForeignFailureRow[];
   /**
    * AFILE-04 / AFILE-02: the MCP config file facts the mcp phase reported,
@@ -358,7 +390,7 @@ export type InstallLedgerResult =
   | { readonly kind: "marketplace-absent" };
 
 /**
- * Local context type for the 7-phase ledger. Carries every value the
+ * Local context type for the 8-phase ledger. Carries every value the
  * phases read or mutate. Per D-01 corollary "second-consumer rule" this
  * shape is NOT promoted to `orchestrators/types.ts` until/unless another
  * orchestrator needs it.
@@ -415,22 +447,20 @@ interface InstallLedgerContext {
   // `onPlaced` callback. Required rather than optional so the state phase's
   // record composition cannot forget the axis.
   stagedWorkflowNames: readonly string[];
-  // Aggregated soft warnings from the bridges (e.g. agents bridge cleanup leaks).
-  bridgeWarnings: string[];
-  // D-07 discovery warnings from the skills, commands and workflows bridges.
-  // Each names ONE declared component and what became of it: either an
-  // artifact the plugin author shipped that this install did not materialize
-  // (a duplicate generated name, an unreadable subdirectory, a source path
-  // that produces no valid name), or -- WGATE-01 -- one it DID materialize
-  // with a caveat, such as a workflow script the host engine will refuse to
-  // load. The second half is why the rendered header claims no disposal.
-  //
-  // The agents bridge is not a feeder: it mixes three kinds of warning onto
-  // one result field and rides `bridgeWarnings` instead. Kept apart from that
-  // array because D-19-01 as amended surfaces these in standalone mode and
-  // the hygiene warnings beside them stay suppressed.
-  discoveryWarnings: string[];
-  // Bridge-side per-record AG-5 foreign-content rows -- routed to notifyWarning post-success.
+  // D-PL1-03: the hygiene half of the bridges' tagged warnings (mcp
+  // warnings, agents index corruptions and conversion notes) plus every
+  // commit cleanup leak. D-19-01: standalone mode never renders them.
+  bridgeWarnings: HygieneWarning[];
+  // D-07 discovery warnings, the discovery half of the bridges' tagged
+  // warnings (D-PL1-02). Each names ONE declared component and what became of
+  // it: either an artifact the plugin author shipped that this install did not
+  // materialize (a duplicate generated name, an unreadable subdirectory, a
+  // source path that produces no valid name), or -- WGATE-01 -- one it DID
+  // materialize with a caveat, such as a workflow script the host engine will
+  // refuse to load. The second half is why the rendered header claims no
+  // disposal. D-19-01 as amended surfaces these in standalone mode.
+  discoveryWarnings: DiscoveryWarning[];
+  // Bridge-side per-record AG-5 foreign-content rows -- surfaced as a `postCommitWarnings` entry in orchestrated mode.
   agentForeignFailures: AgentForeignFailureRow[];
   // AFILE-04 / AFILE-02: MCP config file facts from the mcp phase.
   mcpConfigNotices: McpConfigNotice[];
@@ -482,7 +512,7 @@ type InstallLedgerContextResult =
 async function deriveInstallVersion(args: {
   entry: PluginEntry;
   installable: MaterializablePlugin;
-  marketplaceName: string;
+  marketplace: Pick<ResolveContext, "marketplaceName" | "marketplaceRoot">;
   resolvedSha: string | undefined;
   pinVersionOverride: string | undefined;
   resolvedVersion: string | undefined;
@@ -495,7 +525,7 @@ async function deriveInstallVersion(args: {
     return resolveTagPinnedPluginVersion(
       args.entry,
       args.installable,
-      args.marketplaceName,
+      args.marketplace.marketplaceName,
       args.resolvedSha,
     );
   }
@@ -505,7 +535,7 @@ async function deriveInstallVersion(args: {
   return resolvePluginVersion(
     args.entry,
     args.installable,
-    args.marketplaceName,
+    args.marketplace,
     isGitSource ? args.resolvedSha : undefined,
   );
 }
@@ -692,6 +722,8 @@ async function preflightInstallResolve(
       readonly entry: PluginEntry;
       readonly installable: MaterializablePlugin;
       readonly resolvedSha: string | undefined;
+      /** The target record's marketplace root, which bounds an in-place manifest read. */
+      readonly marketplaceRoot: string;
     }
 > {
   const { marketplace, plugin } = opts;
@@ -722,6 +754,8 @@ async function preflightInstallResolve(
   // PI-2 cached-manifest read -- NO network, no gitOps. PI-3: the entry must
   // exist in the manifest plugins[] array.
   const manifest = await loadCachedMarketplaceManifest(targetMp.manifestPath);
+  // D-PL5-28: Claude Code installs nothing from a marketplace it refuses.
+  assertRecordedMarketplaceName(targetMp.name, targetMp.source as ParsedSource, manifest.name);
   // The loader validated every entry against PLUGIN_ENTRY_SCHEMA as part of
   // MARKETPLACE_SCHEMA, so the chosen entry needs no second check.
   const entry = manifest.plugins.find((p) => p.name === plugin);
@@ -743,6 +777,7 @@ async function preflightInstallResolve(
   const resolved = await resolveStrict(entry, {
     marketplaceRoot: targetMp.marketplaceRoot,
     marketplaceName: marketplace,
+    marketplaceSource: targetMp.source,
     resolveGitPluginRoot: async (gitSource) => {
       const clone = await (opts.cloneProbe ?? probeInstallClone)({
         // RESV-03: a pinned dependency materializes the exact commit its
@@ -762,6 +797,7 @@ async function preflightInstallResolve(
           ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
           ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
         },
+        ...(opts.cloneCandidates !== undefined && { cloneCandidates: opts.cloneCandidates }),
       });
       resolvedSha = clone.resolvedSha;
       return clone.result;
@@ -781,6 +817,9 @@ async function preflightInstallResolve(
           marketplaceName: targetMp.name,
           pathSource,
           tagOid: pin,
+          ...(opts.cloneCandidates !== undefined && {
+            onCloneCreated: (key: string) => opts.cloneCandidates?.add(key),
+          }),
         });
         if (result.kind === "materialized") {
           resolvedSha = result.resolvedSha;
@@ -801,7 +840,16 @@ async function preflightInstallResolve(
   }
 
   if (opts.directoryPin !== undefined) {
-    await assertDirectoryPinSatisfied(entry.name, resolved.pluginRoot, opts.directoryPin);
+    await assertDirectoryPinSatisfied(
+      entry.name,
+      sourceManifestBoundary(
+        entry.source,
+        resolved.pluginRoot,
+        targetMp.marketplaceRoot,
+        opts.sourcePinOverride,
+      ),
+      opts.directoryPin,
+    );
   }
 
   // After the gate `resolved` is narrowed to the materializable union
@@ -809,47 +857,67 @@ async function preflightInstallResolve(
   // The `partially-available` arm carries only supported kinds in
   // componentPaths, so the shared materialize phases degrade it naturally
   // (D-65-02, no partial branch).
-  return { kind: "ready", entry, installable: resolved, resolvedSha };
+  return {
+    kind: "ready",
+    entry,
+    installable: resolved,
+    resolvedSha,
+    marketplaceRoot: targetMp.marketplaceRoot,
+  };
+}
+
+/** Cuts a directory-pin refusal field as Claude Code does (D-PL3-09). */
+function cutPinField(text: string): string {
+  return truncateForRefusal(text, MAX_DIRECTORY_PIN_FIELD_CHARS);
 }
 
 /**
  * GV-01: Claude Code checks the `plugin.json` version of a plugin directory
  * copy against its dependents' range after the fetch, and refuses the install
- * when it falls outside or declares none.
+ * when it falls outside or declares none. `boundary` is the one the resolver
+ * read the copy's manifest within (D-PL2-17), so a manifest it refused
+ * declares no version here either.
+ *
+ * D-PL3-09: the refusal's fields arrive cut as Claude Code cuts them, because
+ * `shared/` cannot import the cut from `domain/`. The cascade already cut the
+ * joined ranges, and the requirer count has no cap.
  */
 async function assertDirectoryPinSatisfied(
   plugin: string,
-  pluginRoot: string,
+  boundary: ManifestBoundary,
   pin: DirectoryPinRange,
 ): Promise<void> {
-  const manifestVersion = await readDeclaredPluginVersion(pluginRoot);
+  const manifestVersion = await readDeclaredPluginVersion(boundary);
   if (manifestVersion !== undefined && recordedVersionSatisfies(manifestVersion, pin.range)) {
     return;
   }
 
   throw new DirectoryPinUnsatisfiedError({
-    plugin,
-    manifestVersion,
+    plugin: cutPinField(plugin),
+    manifestVersion: manifestVersion === undefined ? undefined : cutPinField(manifestVersion),
     ranges: pin.declared,
-    requiredBy: pin.requiredBy.map((key) => key.replace(/@[^@]*$/u, "")),
+    requiredBy: pin.requiredBy.map((key) => cutPinField(key.replace(/@[^@]*$/u, ""))),
   });
 }
 
 /**
  * UPD-DEP-D1: whether the ledger would install one plugin, decided with no
  * write: the PI-15 / PI-3 / PI-4 preflight behind the same installability
- * gate, then the PI-6 name check. It runs over a copy of `state`, and a
- * marketplace only the user scope records is read from the user record rather
- * than added (D-MF-04), so a refused plan adds nothing. A git source clones on
- * a cache miss, as the install it previews would. Throws what the ledger
- * would throw; a marketplace neither scope records resolves quietly, since
- * the ledger reports it.
+ * gate, then the PI-6 name check, then the D-PL4-04 refusal of an agent
+ * target that holds a file the agents commit would not replace. It runs over
+ * a copy of `state`, and a marketplace only the user scope records is read
+ * from the user record rather than added (D-MF-04), so a refused plan adds
+ * nothing. A git source clones on a cache miss, as the install it previews
+ * would. Throws what the ledger would throw. Answers the commit its
+ * preflight resolved, which the install then pins (D-PL4-01), or `undefined`
+ * when the source resolved none (a path source with no pin) or when the
+ * marketplace is one neither scope records, since the ledger reports it.
  */
 export async function previewInstall(
   state: ExtensionState,
   locations: ScopedLocations,
   opts: InstallLedgerOptions,
-): Promise<void> {
+): Promise<string | undefined> {
   const preview = structuredClone(state);
   if (ownValue(preview.marketplaces, opts.marketplace) === undefined) {
     const source = await resolveInstallMarketplaceSource({
@@ -865,7 +933,7 @@ export async function previewInstall(
 
   const preflight = await preflightInstallResolve(preview, locations, opts);
   if (preflight.kind === "marketplace-absent") {
-    return;
+    return undefined;
   }
 
   const generatedNames = await discoverGeneratedNames(opts.plugin, preflight.installable);
@@ -874,6 +942,12 @@ export async function previewInstall(
     generatedNames,
     removePluginRecord(preview, opts.marketplace, opts.plugin),
   );
+  await assertAgentTargetsFree(
+    locations,
+    { marketplace: opts.marketplace, plugin: opts.plugin },
+    generatedNames.agents,
+  );
+  return preflight.resolvedSha;
 }
 
 /**
@@ -887,7 +961,7 @@ const DEFAULT_INSTALL_LEDGER_TRANSACTION: InstallLedgerTransaction = Object.free
 
 /**
  * CR-01: the guard-FREE install ledger body -- the
- * complete PI-15 / PI-3 / PI-2 / PI-4 / PI-6 / PI-7 + 7-phase ledger
+ * complete PI-15 / PI-3 / PI-2 / PI-4 / PI-6 / PI-7 + 8-phase ledger
  * sequence.
  *
  * Locking contract: the CALLER owns the per-scope state lock and the
@@ -941,6 +1015,17 @@ export async function runInstallLedger(
   return { kind: "installed", summary: toInstallLedgerSummary(result.installCtx) };
 }
 
+/** D-PL1-13: keep a failed ledger's collected warnings, when it has any. */
+function captureStagingWarnings(
+  capture: InstallFailureCapture,
+  context: InstallLedgerContext,
+): void {
+  const warnings = [...context.discoveryWarnings, ...context.bridgeWarnings];
+  if (warnings.length > 0) {
+    capture.stagingWarnings = warnings;
+  }
+}
+
 /** Project the completed ledger context onto its caller-facing summary. */
 function toInstallLedgerSummary(context: InstallLedgerContext): InstallLedgerSummary {
   return {
@@ -965,6 +1050,56 @@ function toInstallLedgerSummary(context: InstallLedgerContext): InstallLedgerSum
 }
 
 /**
+ * D-PL1-03: classifies a bridge result's tagged warnings onto the context's
+ * two channels, keeping bridge order inside each.
+ */
+function collectStagingWarnings(
+  context: InstallLedgerContext,
+  warnings: readonly StagingWarning[],
+): void {
+  const { discovery, hygiene } = partitionStagingWarnings(warnings);
+  context.discoveryWarnings.push(...discovery);
+  context.bridgeWarnings.push(...hygiene);
+}
+
+/**
+ * AS-7 / D-PL6-20: the error a failed skills undo throws. A containment
+ * refusal passes through unchanged, so the ledger still rethrows it (PI-14).
+ * Any other failure becomes a `ManualRecoveryError` that lists each staged
+ * skill directory still on disk, in place of the bridge error, whose own cause
+ * it keeps so the rendered chain shows the failure once. With
+ * no directory left, or when probing for them fails, the bridge error passes
+ * through, so a probe failure never hides the real unstage failure.
+ */
+async function skillsUndoError(
+  err: unknown,
+  locations: ScopedLocations,
+  names: readonly string[],
+): Promise<Error> {
+  if (err instanceof PathContainmentError) {
+    return err;
+  }
+
+  const dirs = names.map((name) => path.join(locations.skillsTargetDir, name));
+  try {
+    const present = await Promise.all(dirs.map((dir) => pathExists(dir)));
+    const leftovers = dirs.filter((_, index) => present[index] === true);
+    if (leftovers.length === 0) {
+      return errorWithManualRecovery(err, []);
+    }
+
+    const { cause } = errorWithManualRecovery(err, []);
+    return new ManualRecoveryError(
+      errorMessage(err),
+      leftovers,
+      cause === undefined ? undefined : { cause },
+    );
+  } catch {
+    return errorWithManualRecovery(err, []);
+  }
+}
+
+/**
  * The ledger body proper, under the contract documented on `runInstallLedger`.
  * Hands back the working `InstallLedgerContext` to this module's public-result
  * projection. Module-private: only the declaring module holds the mutable
@@ -984,7 +1119,7 @@ async function runInstallLedgerBody(
     return { kind: "marketplace-absent" };
   }
 
-  const { entry, installable, resolvedSha } = preflight;
+  const { entry, installable, resolvedSha, marketplaceRoot } = preflight;
 
   // Generated-name discovery (PI-6 input). Walks the bridges' discover.ts
   // to enumerate source artifacts under componentPaths, then applies the
@@ -1019,7 +1154,7 @@ async function runInstallLedgerBody(
   const version = await deriveInstallVersion({
     entry,
     installable,
-    marketplaceName: marketplace,
+    marketplace: { marketplaceName: marketplace, marketplaceRoot },
     resolvedSha,
     pinVersionOverride: opts.pinVersionOverride,
     resolvedVersion: opts.resolvedVersion,
@@ -1062,7 +1197,7 @@ async function runInstallLedgerBody(
   };
 
   // D-01 literal-array discipline: each phase is a single Phase<InstallLedgerContext>
-  // value; the ledger sees a 7-element constant array.
+  // value; the ledger sees an 8-element constant array.
   const skillsPhase: Phase<InstallLedgerContext> = {
     name: "skills",
     do: async (c) => {
@@ -1088,13 +1223,11 @@ async function runInstallLedgerBody(
         c.frontmatterDegradations.push({ kind: "skill", ...d });
       }
 
-      // The skills bridge puts its discovery warnings, and nothing else, on
-      // this array (D-141-03).
-      c.discoveryWarnings.push(...prep.result.warnings);
+      collectStagingWarnings(c, prep.result.warnings);
 
       const leak = await commitPreparedSkills(opts.removalOps, prep);
       if (leak !== undefined) {
-        c.bridgeWarnings.push(leak);
+        c.bridgeWarnings.push(hygieneWarning(leak));
       }
     },
     undo: async (c) => {
@@ -1104,10 +1237,14 @@ async function runInstallLedgerBody(
 
       // Commit already succeeded -- the dirs are at the target path.
       // unstage* by name removes them.
-      await unstagePluginSkills({
-        locations: c.locations,
-        previousSkillNames: c.stagedSkillNames,
-      });
+      try {
+        await unstagePluginSkills({
+          locations: c.locations,
+          previousSkillNames: c.stagedSkillNames,
+        });
+      } catch (err) {
+        throw await skillsUndoError(err, c.locations, c.stagedSkillNames);
+      }
     },
   };
 
@@ -1132,12 +1269,11 @@ async function runInstallLedgerBody(
         c.frontmatterDegradations.push({ kind: "command", ...d });
       }
 
-      // As with skills, this array carries discovery warnings only.
-      c.discoveryWarnings.push(...prep.result.warnings);
+      collectStagingWarnings(c, prep.result.warnings);
 
       const leak = await commitPreparedCommands(opts.removalOps, prep);
       if (leak !== undefined) {
-        c.bridgeWarnings.push(leak);
+        c.bridgeWarnings.push(hygieneWarning(leak));
       }
     },
     undo: async (c) => {
@@ -1176,16 +1312,12 @@ async function runInstallLedgerBody(
         cwd: c.cwd,
       });
       c.agentsPrep = prep;
-      // The agents bridge aggregates THREE kinds on one array: agents-index
-      // corruptions, per-agent frontmatter conversion notes, and D-07
-      // duplicate-name skips. Only the last is a discovery truncation, and
-      // the three are not separable here, so the whole array rides the
-      // hygiene channel (D-19-01) rather than the D-141-03 one, keeping
-      // every kind surfaced instead of any getting silently dropped.
-      c.bridgeWarnings.push(...prep.result.warnings);
+      // The agents bridge tags its D-07 duplicate-name skips discovery and
+      // its index corruptions and conversion notes hygiene (D-PL1-02).
+      collectStagingWarnings(c, prep.result.warnings);
       const leak = await commitPreparedAgents(opts.removalOps, prep);
       if (leak !== undefined) {
-        c.bridgeWarnings.push(leak);
+        c.bridgeWarnings.push(hygieneWarning(leak));
       }
 
       c.stagedAgentNames = prep.result.recorded.map((r) => r.generatedName);
@@ -1193,7 +1325,7 @@ async function runInstallLedgerBody(
       // bridge -- they surface via `failed[]`. AS-7: keep them out of
       // the rollback path (the install of new agents succeeded; the
       // foreign rows are a separate problem the user can address by
-      // hand). Routed to notifyWarning post-state-commit below.
+      // hand). Surfaced as a post-commit warning below.
       for (const f of prep.result.failed) {
         c.agentForeignFailures.push({ generatedName: f.generatedName, reason: f.reason });
       }
@@ -1282,9 +1414,8 @@ async function runInstallLedgerBody(
       const result = prep.result;
       c.stagedMcpServerNames = result.recorded.map((r) => r.generatedName);
       // MCP staging soft warnings (malformed declared env, non-object entry)
-      // ride the same bridgeWarnings channel as the other bridges' leak
-      // strings instead of being dropped.
-      c.bridgeWarnings.push(...result.warnings);
+      // are tagged hygiene, so they join the commit leaks (D-PL1-02).
+      collectStagingWarnings(c, result.warnings);
       c.mcpConfigNotices.push(...result.notices);
       // AMIG-02: the replace removed the plugin's marked entries from the
       // scope's mcp.json after writing mcp-adapter.json; its notices describe
@@ -1340,30 +1471,21 @@ async function runInstallLedgerBody(
       // not the array.
       c.workflowsPrep = prep;
       c.stagedWorkflowNames = [];
-      // D-141-03 / WGATE-01: the bridge's array joins the DISCOVERY half, and it
-      // joins it HERE rather than through `splitStagingWarnings`, which is the
-      // call `update.ts` already makes for the same array and the same reason.
-      // Every string in it describes the plugin's DECLARED scripts -- which ones
-      // were not installed, which were installed but the engine will refuse to
-      // load -- and that is a fact a standalone user needs, not a hygiene note
-      // only the cascade forwards. `bridgeWarnings` is gated on `orchestrated`,
-      // so a standalone install would render none of it. The shared classifier
-      // stays at four members: a fifth would drag every other consumer of it
-      // into this change.
+      // D-141-03 / WGATE-01: the workflows bridge tags every warning
+      // discovery (D-PL1-02). Each one describes the plugin's DECLARED
+      // scripts -- which ones were not installed, which were installed but the
+      // engine will refuse to load -- a fact a standalone user needs.
       //
-      // Pushed at the prepare, matching `agentsPhase` -- the other bridge whose
-      // WARNINGS come off the prepare rather than off the commit's return, and
-      // the shape this one follows. (`mcpPhase` pushes after its commit because
-      // its warnings are a member of the commit's result.)
+      // Collected at the prepare, as `agentsPhase` does: both bridges' warnings
+      // come off the prepare rather than off the commit's return. (`mcpPhase`
+      // collects after its commit because its warnings are a member of the
+      // commit's result.)
       //
-      // WR-04: the position buys ordering consistency, NOT survival. A phase
-      // throw unwinds `runPhases` and the whole `InstallLedgerContext` is
-      // discarded, so these warnings are lost on the failure path wherever the
-      // push sits. Both arrays are read by `collectPostCommitWarnings`, run
-      // after the ledger returned and the state record committed, and neither
-      // is a member of `InstallLedgerSummary`. That is true of every bridge's
-      // warnings alike, not of this one, so it is not repaired here.
-      c.discoveryWarnings.push(...prep.result.warnings);
+      // WR-04: the position buys ordering consistency. Survival of a later
+      // phase's throw comes from `captureStagingWarnings`, which copies every
+      // warning collected so far onto the failure capture (D-PL1-13),
+      // whichever phase collected it.
+      collectStagingWarnings(c, prep.result.warnings);
       const leak = await commitPreparedWorkflows(prep, {
         // The whole body is one assignment that cannot throw. The commit
         // invokes this callback on the failure paths too, so anything that
@@ -1373,7 +1495,7 @@ async function runInstallLedgerBody(
         },
       });
       if (leak !== undefined) {
-        c.bridgeWarnings.push(leak);
+        c.bridgeWarnings.push(hygieneWarning(leak));
       }
     },
     undo: async (c) => {
@@ -1521,10 +1643,17 @@ async function runInstallLedgerBody(
     // by the unwinding closure.
   };
 
+  // D-PL9-05: after the six bridge phases, so a bridge failure never spends the
+  // network; before state, so a state failure reaches its undo.
+  const packagesPhase = createPackagesPhase(
+    transaction.packageInstallOps ?? DEFAULT_PACKAGE_INSTALL_OPS,
+  );
+
   // D-01 literal-array; order is part of the contract -- never refactor
   // to a dynamic builder. D-63-01: hooks slot lands between agents and mcp.
+  // D-PL9-05: the packages slot lands between workflows and state.
   // The PRD-fixed sequence is
-  // [skills, commands, agents, hooks, mcp, workflows, state].
+  // [skills, commands, agents, hooks, mcp, workflows, packages, state].
   const phases: readonly Phase<InstallLedgerContext>[] = [
     skillsPhase,
     commandsPhase,
@@ -1532,6 +1661,7 @@ async function runInstallLedgerBody(
     hooksPhase,
     mcpPhase,
     workflowsPhase,
+    packagesPhase,
     statePhase,
   ];
 
@@ -1544,6 +1674,7 @@ async function runInstallLedgerBody(
     if (capture !== undefined) {
       capture.rollbackPartials = rollback.rollbackPartials;
       capture.version = ctxLocal.version;
+      captureStagingWarnings(capture, ctxLocal);
     }
 
     throw rollback.error;

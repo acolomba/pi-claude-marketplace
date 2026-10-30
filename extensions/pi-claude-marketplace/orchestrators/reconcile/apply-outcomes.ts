@@ -28,6 +28,7 @@
 import path from "node:path";
 
 import { isRenderablePluginKey } from "../../domain/dependencies.ts";
+import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import {
   DependencyCascadeError,
   DirectoryPinUnsatisfiedError,
@@ -52,9 +53,11 @@ import type { ReconcileAppliedMsg } from "./reconcile.messaging.ts";
 import type { ReconcilePlan } from "./types.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { DeclarerReadFailure } from "../plugin/dependency-index.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
+import type { StagingDiagnostic } from "../plugin/staging-diagnostics.ts";
 import type { UninstallRefusedError } from "../plugin/uninstall.ts";
 
 export interface OutcomeBase {
@@ -157,6 +160,7 @@ export interface PluginInstalledOutcome
    * surfacing channel.
    */
   readonly postCommitWarnings?: readonly string[];
+  readonly stagingWarnings?: readonly StagingWarning[];
 }
 
 /**
@@ -184,6 +188,12 @@ export interface PluginBackfilledOutcome
   extends PluginOutcomeBase, Pick<EnableDegradationSignals, "orphanRewake" | "degradedKinds"> {
   readonly kind: "plugin-backfilled";
   readonly version?: string;
+  /**
+   * D-PL1-09: the staging warnings of the materialization behind this row,
+   * both halves; `apply` renders both halves (D-PL1-25). Set only when
+   * non-empty (NREG-01).
+   */
+  readonly stagingWarnings?: readonly StagingWarning[];
   readonly dependencies: readonly Dependency[];
   readonly installable: boolean;
   /**
@@ -209,26 +219,38 @@ export interface PluginInstallFailedOutcome extends PluginOutcomeBase {
    */
   readonly reasons?: readonly ContentReason[];
   /**
-   * RESV-06: set ONLY when the failure is attributable to a DEPENDENCY
-   * (`reason === "dependency failed"`) -- the projection surfaces it as the
-   * row's cause-chain trailer, mirroring `plugin-uninstall-failed.cause`
-   * (D-05-16). Every other failed install leaves it unset.
+   * The row's cause-chain trailer, mirroring `plugin-uninstall-failed.cause`
+   * (D-05-16). RESV-06 sets it when the failure is attributable to a
+   * DEPENDENCY (`reason === "dependency failed"`). MIM-03 also sets it, as a
+   * redacted rebuild of the install error, when the failed install left
+   * rollback partials. Every other failed install leaves it unset.
    *
-   * Redacted at the apply.ts push site (T-55-02-02 / T-53-02-02): the
-   * closure/constraint arms build their message from `name@marketplace` keys
-   * and version constraints (never a path), but a dependency's own ledger
-   * failure can carry one anywhere in its cause chain. `apply.ts`'s
-   * `redactedDependencyCascadeError` rebuilds the value's message AND its
-   * full nested cause chain (via `shared/redact-absolute-paths.ts`'s
-   * `redactCauseChain`) with every link redacted, since the renderer's
-   * depth-5 `causeChainTrailer` walker (`shared/errors.ts`) does not redact
-   * on its own.
+   * Redacted at the apply.ts push site (T-55-02-02 / T-53-02-02, D-PL6-12):
+   * the closure/constraint arms build their message from `name@marketplace`
+   * keys and version constraints (never a path), but a ledger failure can
+   * carry one anywhere in its cause chain. `apply.ts`'s
+   * `redactedDependencyCascadeError` and `shared/redact-absolute-paths.ts`'s
+   * `redactCauseChain` rebuild the value's message AND its full nested cause
+   * chain with every link redacted, since the renderer's depth-5
+   * `causeChainTrailer` walker (`shared/errors.ts`) does not redact on its
+   * own.
    *
    * GV-01: a plugin directory dependency whose listed copy falls outside its
    * dependents' ranges carries Claude Code's refusal (`version conflict`),
    * built from names, ranges and a version, never a path.
    */
-  readonly cause?: DependencyCascadeError | DirectoryPinUnsatisfiedError;
+  readonly cause?: Error;
+  /**
+   * MIM-03 / D-PL6-05: the undo steps the failed install could not finish,
+   * shaped as `PluginFailedMessage.rollbackPartial`, so the row shows
+   * install's per-phase rows. Each phase cause is redacted at the apply.ts
+   * push site (D-PL6-12), and the raw ledger `msg` never reaches it. Omitted
+   * when every undo finished (NREG-01).
+   */
+  readonly rollbackPartials?: readonly {
+    readonly phase: string;
+    readonly cause?: Error;
+  }[];
 }
 
 /** Plugin uninstall success outcome. */
@@ -285,12 +307,22 @@ export interface PluginUninstallFailedOutcome extends PluginOutcomeBase {
 export interface PluginEnabledOutcome extends PluginOutcomeBase, EnableDegradationSignals {
   readonly kind: "plugin-enabled";
   readonly version?: string;
+  /**
+   * D-PL1-09: the staging warnings of the materialization behind this row,
+   * both halves; `apply` renders both halves (D-PL1-25). Set only when
+   * non-empty (NREG-01).
+   */
+  readonly stagingWarnings?: readonly StagingWarning[];
 }
 
 /** Plugin enable failure outcome. */
 export interface PluginEnableFailedOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-enable-failed";
   readonly reason: Reason;
+  /** The redacted failure chain when an enable leaves work to recover manually. */
+  readonly cause?: Error;
+  /** Failed undo steps, with every cause redacted at the apply boundary. */
+  readonly rollbackPartials?: readonly { readonly phase: string; readonly cause?: Error }[];
 }
 
 /**
@@ -534,6 +566,12 @@ export interface PluginDeclarerUnreadableOutcome extends PluginOutcomeBase {
 export interface PluginConvergedOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-converged";
   readonly row: ReconcileAppliedMsg;
+  /**
+   * D-PL1-09: the staging warnings of the materialization behind this row,
+   * both halves; `apply` renders both halves (D-PL1-25). Set only when
+   * non-empty (NREG-01).
+   */
+  readonly stagingWarnings?: readonly StagingWarning[];
 }
 
 /**
@@ -853,4 +891,72 @@ export function carriedMcpConfigNotices(carrier: {
   return carrier.mcpConfigNotices === undefined
     ? {}
     : { mcpConfigNotices: carrier.mcpConfigNotices };
+}
+
+/**
+ * D-PL1-09: lift an orchestrated outcome's staging warnings onto the reconcile
+ * outcome built from it, as `carriedMcpConfigNotices` does for the notices.
+ * The orchestrated outcomes set the member only when non-empty, so an absent
+ * member stays absent (NREG-01).
+ */
+export function carriedStagingWarnings(carrier: {
+  readonly stagingWarnings?: readonly StagingWarning[];
+}): Pick<PluginEnabledOutcome, "stagingWarnings"> {
+  return carrier.stagingWarnings === undefined ? {} : { stagingWarnings: carrier.stagingWarnings };
+}
+
+/**
+ * D-PL1-20: the staging diagnostic of every catalog move and enable `apply`
+ * made. A converged move renders under `updated`, or `update failed` when its
+ * row failed; a backfill under `updated`; an enable under `enabled`. Every
+ * other outcome staged nothing of its own here.
+ *
+ * D-PL1-07: the diagnostics follow the rows. `buildReconcileAppliedCascade`
+ * orders its marketplace blocks by `compareByNameThenScope` and keeps outcome
+ * order inside a block, so a stable sort on the same key gives the row order.
+ */
+export function stagingDiagnosticsOf(outcomes: readonly PerEntryOutcome[]): StagingDiagnostic[] {
+  return outcomes
+    .filter(isStagingOutcome)
+    .sort((left, right) =>
+      compareByNameThenScope(
+        { name: left.marketplace, scope: left.scope },
+        { name: right.marketplace, scope: right.scope },
+      ),
+    )
+    .map(stagingDiagnosticOf);
+}
+
+type StagingOutcome =
+  PluginInstalledOutcome | PluginConvergedOutcome | PluginBackfilledOutcome | PluginEnabledOutcome;
+
+function isStagingOutcome(outcome: PerEntryOutcome): outcome is StagingOutcome {
+  return (
+    outcome.kind === "plugin-installed" ||
+    outcome.kind === "plugin-converged" ||
+    outcome.kind === "plugin-backfilled" ||
+    outcome.kind === "plugin-enabled"
+  );
+}
+
+function stagingDiagnosticOf(outcome: StagingOutcome): StagingDiagnostic {
+  return {
+    plugin: outcome.plugin,
+    scope: outcome.scope,
+    verb: stagingVerbOf(outcome),
+    warnings: outcome.stagingWarnings ?? [],
+  };
+}
+
+function stagingVerbOf(outcome: StagingOutcome): StagingDiagnostic["verb"] {
+  switch (outcome.kind) {
+    case "plugin-installed":
+      return "installed";
+    case "plugin-converged":
+      return outcome.row.status === "failed" ? "update failed" : "updated";
+    case "plugin-backfilled":
+      return "updated";
+    case "plugin-enabled":
+      return "enabled";
+  }
 }

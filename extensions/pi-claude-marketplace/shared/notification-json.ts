@@ -15,6 +15,7 @@ import type {
 } from "./notification-resolve.ts";
 import type { NotificationOrigin } from "./notification-run.ts";
 import type {
+  BackgroundUpdatePlugin,
   MarketplaceDetails,
   MarketplaceInfoMessage,
   McpMigrationRow,
@@ -168,9 +169,10 @@ function wirePresentation(
 /**
  * D-01 / D-02: the payload of one resolved raw surface. Its severity comes from
  * `RAW_SURFACE_SEVERITY`, the table the text strategy reads (PMOD-01), except
- * the migration notice's, which resolve decides. Only the migration notice can
- * need a reload, as resolve decides. A raw kind carries no `summary`; the
- * rewake summary is copied verbatim into `text` (D-08).
+ * the migration notice's, which resolve decides. The migration notice needs a
+ * reload when resolve says so, and the background update notice always does
+ * (D-PL8-11); every other raw kind never does. A raw kind carries no
+ * `summary`; the rewake summary is copied verbatim into `text` (D-08).
  */
 function wireRawSurface(
   surface: ResolvedRawSurface,
@@ -240,7 +242,25 @@ function wireRawSurface(
         kind: surface.kind,
         notices: surface.notices.map((notice) => wireNotice(notice)),
       };
+    case "background-update":
+      return {
+        ...envelope,
+        needsReload: true,
+        kind: surface.kind,
+        plugins: surface.plugins.map((plugin) => wireBackgroundUpdatePlugin(plugin)),
+      };
   }
+}
+
+/** D-PL8-10 / D-03: one updated install, field by field (WIRE-04). */
+function wireBackgroundUpdatePlugin(plugin: BackgroundUpdatePlugin) {
+  return {
+    name: plugin.name,
+    marketplace: plugin.marketplace,
+    scope: plugin.scope,
+    ...(plugin.fromVersion === undefined ? {} : { fromVersion: plugin.fromVersion }),
+    toVersion: plugin.toVersion,
+  };
 }
 
 /** AFILE-04: one config notice, field by field. */
@@ -446,8 +466,9 @@ function wireRow(row: ResolvedRow, mp: ResolvedMarketplace) {
 
 /**
  * WIRE-04 / WIRE-06: a row's id, in one of three forms. A row whose subject is
- * a marketplace (ADD-10: the child row of a failed `marketplace add`) uses its
- * name alone, because it names no plugin. A cascade member row is named by its
+ * a marketplace (ADD-10 / D-PL5-12: the row of a failed `marketplace add`,
+ * `info`, `remove`, `update`, or autoupdate) uses its name alone, because it
+ * names no plugin. A cascade member row is named by its
  * `<plugin>@<marketplace>` key (RESV-06), which names a dependency's own
  * marketplace, so a name that carries an `@` is already the id. Any other row
  * joins its name, `@`, and the block name, verbatim. The name is the redacted
@@ -518,14 +539,18 @@ function wirePluginInfo(message: PluginInfoMessage) {
 
 /**
  * WIRE-04 / WIRE-06: one plugin-info row. `id` is the plugin name, `@`, and the
- * marketplace name. `componentsResolved` selects the arm; only a resolved row
- * carries `components`.
+ * marketplace name, except on a row whose subject is the marketplace
+ * (D-PL5-12), whose id is its name alone. `componentsResolved` selects the arm;
+ * only a resolved row carries `components`.
  */
 function wirePluginInfoRow(plugin: PluginInfoRow, message: PluginInfoMessage) {
   const fields = {
     status: plugin.status,
     name: plugin.name,
-    id: `${plugin.name}@${message.marketplaceName}`,
+    id:
+      plugin.marketplaceSubject === true
+        ? plugin.name
+        : `${plugin.name}@${message.marketplaceName}`,
     reasons: plugin.reasons === undefined ? [] : [...plugin.reasons],
     ...wireScope(plugin, message.marketplaceScope),
     ...versionField(plugin.version),

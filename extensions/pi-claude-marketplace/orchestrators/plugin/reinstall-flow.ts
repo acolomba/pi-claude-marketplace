@@ -11,12 +11,13 @@
 // notify() owns severity, the reload-hint trailer, and the cause-chain.
 // Manual-recovery rows are folded into the cascade `plugins[]` array as
 // `PluginManualRecoveryMessage` entries rather than emitted separately.
-// D-141-03 / D-141-05: the shared swap carries only the DISCOVERY half of the
-// staging warnings (skills, commands, workflows) in direct mode, as it does
-// for a direct `update`; they reach both modes. The maintenance warnings stay
-// orchestrated-only, because MarketplaceNotificationMessage has no field for
-// one and a standalone user has nothing to do about it (D-19-01). The side
-// effects behind them (dropMarketplaceCache + rm) run either way.
+// D-141-03 / D-PL1-11: the shared swap carries both halves of the staging
+// warnings, typed, on its `stagingWarnings` (D-PL1-10). Reinstall takes the
+// DISCOVERY half from them, and it reaches both modes. The maintenance
+// warnings stay orchestrated-only, because MarketplaceNotificationMessage has
+// no field for one and a standalone user has nothing to do about it (D-19-01).
+// The side effect behind them, the plugin-data rm, runs either way; the
+// completion cache drop happens once, in the shared swap (D-PL1-17).
 //
 // The discovery diagnostic is emitted by whichever function renders the row
 // it qualifies, always after that row. The USER-INVOKED entrypoint reaches
@@ -27,9 +28,9 @@
 // each reinstalled outcome. The self-rendering `render !== "none"` arm emits
 // no discovery diagnostic at all -- no production caller reaches it, so it
 // carries no copy of the call to drift out of step with this one. Its
-// outcomes also leave `discoveryWarnings` undefined, which is a separate
-// fact: it is what would keep `surfaceReinstallDiscoveryWarnings` from
-// double-rendering, not the reason that arm is silent.
+// reinstalled outcome leaves `discoveryWarnings` undefined. A failed outcome
+// carries the member on both arms (D-PL1-11), so the arm is silent because it
+// never calls the renderer, not because its outcomes hold nothing to render.
 //
 // The user-invoked reinstall is the only production path. Its single-plugin
 // operation is the one `operations.ts::createReinstallOperation` binds, and
@@ -54,11 +55,13 @@ import {
 } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
+import { partitionStagingWarnings } from "../../shared/staging-warnings.ts";
 import { type LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
 
-import { garbageCollectPluginClones } from "./clone-gc.ts";
+import { collectPluginClonesLocked } from "./clone-gc.ts";
 import { materializeLatestVersion, recordCandidate } from "./materialize-latest.ts";
 import {
+  discoveryWarningsMember,
   recordReinstallOutcome,
   reinstallOutcomeFromRun,
   reinstallReasonsFromError,
@@ -75,8 +78,8 @@ import {
   keepLocalLayerTargets,
   MarketplaceNotAddedSignal,
   namedPluginLayerRefusal,
-  surfaceDiscoveryWarnings,
 } from "./shared.ts";
+import { surfaceStagingDiagnostics } from "./staging-diagnostics.ts";
 
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
@@ -85,12 +88,14 @@ import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type { DiscoveryWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { ReinstallFailedOutcome, ReinstallPluginOutcome, RevisionMove } from "../types.ts";
+import type { ReinstallFailedOutcome, ReinstallPluginOutcome } from "../types.ts";
 import type { CandidateReport } from "./materialize-latest.ts";
 import type { ReinstallPhaseFailure } from "./reinstall-record.ts";
 import type { ReinstallPluginsTarget, ReinstallTargetSelection } from "./reinstall-targets.ts";
+import type { StagingDiagnostic } from "./staging-diagnostics.ts";
 import type { MaterializationPolicy, UpdateCloneCacheSeam } from "./update-preflight.ts";
 import type { RmOptions } from "node:fs";
 
@@ -252,8 +257,8 @@ export function createNodeReinstallPlugins(reinstallPlugin: ReinstallPluginFn): 
 /** What one reinstall reached, before maintenance and rendering. */
 interface ReinstallReached {
   readonly outcome: ReinstallPluginOutcome;
-  /** D-141-03: the discovery half of the staging warnings; reaches both modes. */
-  readonly discoveryWarnings: readonly string[];
+  /** D-141-03 / D-PL1-11: the discovery half of the staging warnings; reaches both modes. */
+  readonly discoveryWarnings: readonly DiscoveryWarning[];
   /**
    * AFILE-04: the MCP commit's file notices. Empty unless the MCP commit ran:
    * on a reinstalled plugin, or on a failure after the commit rewrote the file.
@@ -286,7 +291,7 @@ async function reinstallPluginWith(
     // GHB-03 / D-18-16: an invalid GitHub base override fails the command,
     // warm cache or not.
     rethrowInvalidGitHubBaseUrl(err);
-    return failReinstall(owners, opts, err, render, candidate.move);
+    return failReinstall(owners, opts, err, render, candidate);
   }
 
   const { outcome } = reached;
@@ -302,13 +307,11 @@ async function reinstallPluginWith(
     return outcome;
   }
 
-  const maintenanceWarnings = await runPostSuccessMaintenance(
-    opts,
-    locations,
-    bindings.completionCache,
-  );
+  const maintenanceWarnings = await runPostSuccessMaintenance(opts, locations);
   if (render === "none") {
-    const notes = [...reached.discoveryWarnings, ...maintenanceWarnings].map(
+    // D-PL1-11: `notes` keeps its orchestrated string fold of the discovery
+    // messages and the maintenance warnings.
+    const notes = [...reached.discoveryWarnings.map((w) => w.message), ...maintenanceWarnings].map(
       (w) => `warning: ${w}`,
     );
     // NREG-01: each carrier key stays absent when it is empty, so a clean
@@ -326,8 +329,8 @@ async function reinstallPluginWith(
 
   // IN-01 / D-19-01: the maintenance warnings are NOT surfaced -- there is no
   // clean MarketplaceNotificationMessage representation for a post-success
-  // soft warning. The underlying side effects (cache drop + data-dir rm) still
-  // fire above; the orchestrated-mode `notes` field at the `render === "none"`
+  // soft warning. The underlying side effect (the data-dir rm) still fires
+  // above; the orchestrated-mode `notes` field at the `render === "none"`
   // arm still carries the warning strings for consumers outside the notify
   // path. The DISCOVERY warnings are the D-141-03 exception, but this arm does
   // not render them either: no production caller reaches it, and
@@ -411,7 +414,7 @@ async function runReinstall(
       // D-18-06 / BFILL-01: reinstall is partial-capable, so a still-partial
       // plugin re-materializes in place.
       partial: true,
-      cleanupClones: garbageCollectPluginClones,
+      cleanupClones: collectPluginClonesLocked,
       // D-18-10: the commit or finalize failure is reinstall's own outcome to
       // render, so the callback only captures it.
       notifyPhaseFailure: (error, failures) => {
@@ -423,7 +426,10 @@ async function runReinstall(
   );
   return {
     outcome: reinstallOutcomeFromRun(target, run, phaseFailure),
-    discoveryWarnings: run.partition === "updated" ? (run.notes ?? []) : [],
+    discoveryWarnings:
+      run.partition === "updated"
+        ? partitionStagingWarnings(run.stagingWarnings ?? []).discovery
+        : [],
     mcpConfigNotices:
       run.partition === "updated" || run.partition === "failed" ? (run.mcpConfigNotices ?? []) : [],
   };
@@ -439,62 +445,55 @@ const defaultRemoveDataDir: RemoveDataDirFn = async (dataDir) => {
 };
 
 /**
- * D-18-05: the non-fatal cleanup after a reinstalled outcome. It drops the
- * marketplace's completion cache and removes the plugin-data directory, and
- * returns one deferral warning per step that failed.
+ * D-18-05: the non-fatal cleanup after a reinstalled outcome. It removes the
+ * plugin-data directory and returns one deferral warning when that fails. The
+ * shared swap already dropped the marketplace's completion cache (D-PL1-17).
  */
 async function runPostSuccessMaintenance(
   opts: ReinstallPluginOptions,
   locations: ScopedLocations,
-  completionCache: CompletionCache,
 ): Promise<readonly string[]> {
-  const { scope, marketplace, plugin } = opts;
-  const warnings: string[] = [];
-  try {
-    await completionCache.dropMarketplaceCache(
-      await locations.pluginCacheFile(marketplace),
-      scope,
-      marketplace,
-    );
-  } catch (error) {
-    warnings.push(
-      `Plugin "${plugin}" reinstalled; completion cache refresh deferred: ${errorMessage(error)}`,
-    );
-  }
-
+  const { marketplace, plugin } = opts;
   const dataDir = await locations.pluginDataDir(marketplace, plugin);
   const removeDataDir = opts.removeDataDir ?? defaultRemoveDataDir;
   try {
     await removeDataDir(dataDir, { recursive: true, force: true });
   } catch (error) {
-    warnings.push(
+    return [
       `Plugin "${plugin}" reinstalled; data cleanup deferred at ${dataDir}: ${errorMessage(error)}`,
-    );
+    ];
   }
 
-  return Object.freeze(warnings);
+  return [];
 }
 
 /**
  * Composes a thrown reinstall's failed outcome and, unless the caller renders,
  * its row. The row comes from the same mapper the bulk cascade uses, so the
  * standalone and bulk failure rows cannot differ.
+ *
+ * D-PL1-14: the outcome carries the discovery half of the warnings `candidate`
+ * holds, the handles the swap prepared before it threw.
  */
 function failReinstall(
   owners: ReinstallFlowOwners,
   opts: ReinstallPluginOptions,
   err: unknown,
   render: "default" | "none",
-  move?: Partial<RevisionMove>,
+  candidate: CandidateReport,
 ): ReinstallFailedOutcome {
-  const outcome = owners.recordReinstallOutcome({
-    partition: "failed",
-    name: opts.plugin,
-    marketplace: opts.marketplace,
-    scope: opts.scope,
-    error: err,
-    ...(move !== undefined && { move }),
-  });
+  const { move } = candidate;
+  const outcome: ReinstallFailedOutcome = {
+    ...owners.recordReinstallOutcome({
+      partition: "failed",
+      name: opts.plugin,
+      marketplace: opts.marketplace,
+      scope: opts.scope,
+      error: err,
+      ...(move !== undefined && { move }),
+    }),
+    ...discoveryWarningsMember(candidate.stagingWarnings),
+  };
   if (render !== "none") {
     renderReinstallPartitionAndNotify(opts.ctx, opts.run, [outcome], "single");
   }
@@ -616,32 +615,52 @@ function surfaceReinstallMcpConfigNotices(
 /**
  * D-141-03 / D-141-05: render each reinstalled plugin's discovery warnings
  * after the cascade its row lives in -- the user reads the row, then the
- * detail that qualifies it. Mirrors `update.ts::surfaceUpdateDiscoveryWarnings`.
+ * detail that qualifies it. Mirrors `update-flow.ts::surfaceUpdateDiscoveryWarnings`.
  *
- * This loop, not the `render !== "none"` arm of `reinstallPlugin`, is what a
- * user-invoked reinstall reaches: the edge handler calls `reinstallPlugins`
- * for every target form, and this function drives `reinstallPlugin` with
- * `render: "none"`.
+ * It renders through the list renderer `surfaceStagingDiagnostics`
+ * (D-PL1-07). This function, not the `render !== "none"` arm of
+ * `reinstallPlugin`, is what a user-invoked reinstall reaches: the edge
+ * handler calls `reinstallPlugins` for every target form, and this function
+ * drives `reinstallPlugin` with `render: "none"`.
  *
  * The hygiene half never arrives here: only the DISCOVERY half rides
- * `discoveryWarnings`, while `notes` keeps the flat fold for orchestrated
- * consumers.
+ * `discoveryWarnings`, typed (D-PL1-11), while `notes` keeps the flat fold
+ * for orchestrated consumers.
  */
 function surfaceReinstallDiscoveryWarnings(
   ctx: NotificationContext,
   run: NotificationRun,
   outcomes: readonly ReinstallPluginOutcome[],
 ): void {
-  for (const outcome of outcomes) {
-    if (outcome.partition !== "reinstalled" || outcome.discoveryWarnings === undefined) {
-      continue;
-    }
+  surfaceStagingDiagnostics(ctx, run, outcomes.flatMap(reinstallStagingDiagnostic));
+}
 
-    surfaceDiscoveryWarnings(ctx, run, {
-      plugin: outcome.name,
-      verb: "reinstalled",
-      warnings: outcome.discoveryWarnings,
-    });
+/**
+ * D-PL1-07 / D-PL1-14: the staging diagnostic of a reinstalled or failed
+ * outcome; none for a skipped one.
+ */
+function reinstallStagingDiagnostic(outcome: ReinstallPluginOutcome): StagingDiagnostic[] {
+  switch (outcome.partition) {
+    case "reinstalled":
+      return [
+        {
+          plugin: outcome.name,
+          scope: outcome.scope,
+          verb: "reinstalled",
+          warnings: outcome.discoveryWarnings ?? [],
+        },
+      ];
+    case "failed":
+      return [
+        {
+          plugin: outcome.name,
+          scope: outcome.scope,
+          verb: "reinstall failed",
+          warnings: outcome.discoveryWarnings ?? [],
+        },
+      ];
+    case "skipped":
+      return [];
   }
 }
 

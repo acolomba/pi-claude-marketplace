@@ -23,10 +23,12 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { DependencyCascadeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { withExistingScopeLock } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
+import { holdStateLock } from "../state-lock.ts";
 
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type { DependencyCaller } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts";
@@ -123,6 +125,7 @@ describe("dependencyMoveContext", () => {
     };
     const run = runWithNothingLoaded();
     const memos = freshDependencyMoveMemos();
+    const cloneCandidates = new Set<string>();
     const authMemo = new Map<string, AuthAttemptResult>();
     const commandAuth = auth();
     const caller: DependencyCaller = {
@@ -141,6 +144,7 @@ describe("dependencyMoveContext", () => {
       caller,
       policy: INSTALL_MOVE_MATERIALIZATION,
       memos,
+      cloneCandidates,
     });
 
     // assert
@@ -156,6 +160,7 @@ describe("dependencyMoveContext", () => {
       authMemo,
       ...commandAuth,
       ...memos,
+      cloneCandidates,
     });
     assert.strictEqual(typeof cleanupClones, "function");
   });
@@ -174,6 +179,7 @@ describe("dependencyMoveContext", () => {
     };
     const run = runWithNothingLoaded();
     const memos = freshDependencyMoveMemos();
+    const cloneCandidates = new Set<string>();
 
     // act
     const context = dependencyMoveContext({
@@ -182,6 +188,7 @@ describe("dependencyMoveContext", () => {
       caller: { ctx: CTX, run },
       policy: RECONCILE_MOVE_MATERIALIZATION,
       memos,
+      cloneCandidates,
     });
 
     // assert
@@ -193,6 +200,7 @@ describe("dependencyMoveContext", () => {
       softDeps: run.softDeps,
       notification: { ctx: CTX, run },
       ...memos,
+      cloneCandidates,
     });
   });
 
@@ -212,6 +220,7 @@ describe("dependencyMoveContext", () => {
       caller: { ctx: CTX, run: runWithNothingLoaded() },
       policy: INSTALL_MOVE_MATERIALIZATION,
       memos: freshDependencyMoveMemos(),
+      cloneCandidates: new Set(),
     });
 
     // act
@@ -319,17 +328,19 @@ describe("updateCaller", () => {
 });
 
 describe("planCloneSweep", () => {
-  test("UPD-DEP-D1 / IN-N4: removes the clones the operation left unreferenced and keeps the ones unreferenced before it", async (t) => {
+  test("removes a replaced clone without deleting a mirror fetched after planning", async (t) => {
     // arrange
     const { cwd } = await createHermeticEnvironment(t, "dependency-bindings-sweep-");
     const locations = locationsFor("project", cwd);
-    const live = path.join(locations.pluginClonesDir, "111111111111-aaaaaaaaaaaa");
-    await mkdir(path.join(locations.pluginClonesDir, "fetched"), { recursive: true });
+    const replacedKey = "111111111111-aaaaaaaaaaaa";
+    const live = path.join(locations.pluginClonesDir, replacedKey);
     await mkdir(live, { recursive: true });
     await saveState(locations.extensionRoot, stateWith({ lib: gitRecord(live) }));
-    const sweep = await planCloneSweep(locations);
-    await mkdir(path.join(locations.pluginClonesDir, "planned"), { recursive: true });
+    const sweep = await planCloneSweep(locations, new Set([replacedKey]));
     await saveState(locations.extensionRoot, stateWith({}));
+    await withExistingScopeLock(locations, () =>
+      mkdir(path.join(locations.pluginClonesDir, "fetched"), { recursive: true }),
+    );
 
     // act
     await sweep();
@@ -343,7 +354,7 @@ describe("planCloneSweep", () => {
     const { cwd } = await createHermeticEnvironment(t, "dependency-bindings-sweep-fail-");
     const locations = locationsFor("project", cwd);
     await saveState(locations.extensionRoot, { schemaVersion: 2, marketplaces: {} });
-    const sweep = await planCloneSweep(locations);
+    const sweep = await planCloneSweep(locations, new Set());
     await rm(locations.pluginClonesDir, { recursive: true, force: true });
     await writeFile(locations.pluginClonesDir, "not a directory");
 
@@ -351,26 +362,65 @@ describe("planCloneSweep", () => {
     await assert.doesNotReject(sweep());
   });
 
-  test("IN-N5: removes nothing when the clones cannot be listed before the plan", async (t) => {
+  test("keeps every cache entry when the plan owns none", async (t) => {
     // arrange
-    const { cwd } = await createHermeticEnvironment(t, "dependency-bindings-sweep-list-");
+    const { cwd } = await createHermeticEnvironment(t, "dependency-bindings-sweep-empty-");
     const locations = locationsFor("project", cwd);
-    await saveState(locations.extensionRoot, { schemaVersion: 2, marketplaces: {} });
-    await writeFile(locations.pluginClonesDir, "not a directory");
-    const sweep = await planCloneSweep(locations);
-    await rm(locations.pluginClonesDir, { force: true });
-    await mkdir(path.join(locations.pluginClonesDir, "planned"), { recursive: true });
+    await saveState(locations.extensionRoot, stateWith({}));
+    await mkdir(path.join(locations.pluginClonesDir, "fetched"), { recursive: true });
+    const sweep = await planCloneSweep(locations, new Set());
 
     // act
     await sweep();
 
     // assert
-    assert.deepStrictEqual(await readdir(locations.pluginClonesDir), ["planned"]);
+    assert.deepStrictEqual(await readdir(locations.pluginClonesDir), ["fetched"]);
+  });
+
+  test("keeps an owned clone while state still references it", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "dependency-bindings-sweep-live-");
+    const locations = locationsFor("project", cwd);
+    const liveKey = "111111111111-aaaaaaaaaaaa";
+    const live = path.join(locations.pluginClonesDir, liveKey);
+    await mkdir(live, { recursive: true });
+    await saveState(locations.extensionRoot, stateWith({ lib: gitRecord(live) }));
+    const sweep = await planCloneSweep(locations, new Set([liveKey]));
+
+    // act
+    await sweep();
+
+    // assert
+    assert.deepStrictEqual(await readdir(locations.pluginClonesDir), [liveKey]);
+  });
+
+  test("GLK-03 / D-PL7-05: a scope lock held while the sweep runs leaves every clone and the sweep resolves", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "dependency-bindings-sweep-held-sweep-");
+    const locations = locationsFor("project", cwd);
+    await saveState(locations.extensionRoot, stateWith({}));
+    await mkdir(path.join(locations.pluginClonesDir, "fetched"), { recursive: true });
+    const sweep = await planCloneSweep(locations, new Set(["planned"]));
+    await mkdir(path.join(locations.pluginClonesDir, "planned"), { recursive: true });
+    const release = await holdStateLock(locations);
+
+    // act
+    try {
+      await sweep();
+    } finally {
+      await release();
+    }
+
+    // assert
+    assert.deepStrictEqual((await readdir(locations.pluginClonesDir)).sort(), [
+      "fetched",
+      "planned",
+    ]);
   });
 });
 
 describe("dependencyRefusal", () => {
-  test("keeps only the failing dependency's row and the error naming it", () => {
+  test("keeps only the failing dependency's row and a typed error naming it", () => {
     // act
     const refusal = dependencyRefusal({ rootKey: "widget@mp", scope: "project" })({
       kind: "constraint",
@@ -378,22 +428,37 @@ describe("dependencyRefusal", () => {
     });
 
     // assert
-    const cause = new DependencyCascadeError(
-      'Dependency "base@mp" has no release tag satisfying ^3.0.0.',
-      "base@mp",
-    );
-    assert.deepStrictEqual(refusal, {
-      rows: [
-        {
-          status: "failed",
-          name: "base@mp",
-          reasons: ["no matching version"],
-          cause,
-          severity: "error",
-          needsReload: false,
+    assert.ok(refusal.cause instanceof DependencyCascadeError);
+    assert.deepStrictEqual(
+      {
+        rows: refusal.rows.map((row) => ({
+          ...row,
+          cause:
+            row.status !== "failed" || row.cause === undefined
+              ? undefined
+              : { name: row.cause.name, message: row.cause.message },
+        })),
+        cause: { message: refusal.cause.message, key: refusal.cause.key },
+      },
+      {
+        rows: [
+          {
+            status: "failed",
+            name: "base@mp",
+            reasons: ["no matching version"],
+            cause: {
+              name: "Error",
+              message: 'Dependency "base@mp" has no release tag satisfying ^3.0.0.',
+            },
+            severity: "error",
+            needsReload: false,
+          },
+        ],
+        cause: {
+          message: 'Dependency "base@mp" has no release tag satisfying ^3.0.0.',
+          key: "base@mp",
         },
-      ],
-      cause,
-    });
+      },
+    );
   });
 });

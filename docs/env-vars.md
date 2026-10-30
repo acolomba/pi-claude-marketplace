@@ -1,6 +1,6 @@
 # Environment variables
 
-How the Claude plugin environment variables Claude Code exposes are delivered to plugin components once a plugin is installed under Pi. The table register mirrors [`docs/hooks-compatibility.md`](hooks-compatibility.md): a **Claude Code** ground-truth column against Pi's delivery. Claims here are transcribed from the shipped bridge sources, not from upstream docs. For the content and hook rows, the Claude Code ground truth was verified against the Claude Code v2.1.212 binary and a live session env (DOC-06). The MCP rows follow Claude Code 2.1.291 and pi-mcp-adapter 5.2.0, as [MCP compatibility](mcp-compatibility.md#variables) describes them.
+How the Claude plugin environment variables Claude Code exposes are delivered to plugin components once a plugin is installed under Pi. The table register mirrors [`docs/hooks-compatibility.md`](hooks-compatibility.md): a **Claude Code** ground-truth column against Pi's delivery. Claims here are transcribed from the shipped bridge sources, not from upstream docs. For the content and hook rows, the Claude Code ground truth was verified against the Claude Code v2.1.212 binary and a live session env (DOC-06). The MCP rows follow Claude Code 2.1.291 and pi-mcp-adapter 5.2.0, as [MCP compatibility](mcp-compatibility.md#variables) describes them. The variables that the extension reads to control its background plugin update are in [Variables that control the background update](#variables-that-control-the-background-update).
 
 ## Delivery mechanisms
 
@@ -185,6 +185,58 @@ Pi sets `AI_AGENT=pi` on its own process at start, before any extension code run
 ### Withheld credentials
 
 The install writes no environment value into `mcp-adapter.json`. Claude Code withholds some credentials from plugin servers, and this extension applies the same deny-list to the five fields that it expands (AVAR-05). The install never leaves a withheld reference for pi-mcp-adapter to expand, so a value set later does not reach the server through that field. The deny-list covers references in these fields only. A stdio server still inherits Pi's full process environment, so a credential set in Pi's environment reaches it by inheritance. See [Withheld credentials](mcp-compatibility.md#withheld-credentials).
+
+## Variables that control the background update
+
+The sections above cover the variables that the extension delivers to plugin components. This section covers the variables that the extension reads itself, and the default autoupdate setting of each marketplace. The Claude Code ground truth was checked against the Claude Code 2.1.310 binary and its documentation.
+
+### When the background update runs
+
+In an interactive session, the extension updates plugins in the background, as Claude Code does. The background update arms on the first message that you send in a session. A message is a prompt that is not an extension command. Only the `tui` mode arms the background update, as Claude Code updates in its interactive mode only. The `rpc`, `print`, and `json` modes never arm it.
+
+After the first message, the extension waits a random delay of up to ten minutes. Then it refreshes each marketplace whose autoupdate is on, and it updates the plugins installed from that marketplace, as `/claude:plugin marketplace update` does. The background update uses stored git credentials only and never prompts.
+
+The background update runs once in each extension runtime. `/reload` and a new, resumed, or forked session start a new runtime, and the new runtime arms again on its own first message. Claude Code runs the update once in each process. Pi gives an extension no hook for the lifetime of the process, so this extension cannot do the same.
+
+A `/claude:plugin` command, `/reload`, or a new, resumed, or forked session waits for the active background step. This can be a marketplace refresh or a plugin update. After 30 seconds, the extension starts to cancel that step's network transfer and keeps the command or session waiting until the step finishes. The canceled step fails cleanly, while changes completed earlier in the pass remain. The background update then stops for the rest of the runtime. Quitting Pi does not wait.
+
+### Opt-out variables
+
+The extension reads these variables when the background update arms. A truthy value is `1`, `true`, `yes`, or `on`, in any case, with the spaces around it removed.
+
+| Variable                                              | Claude Code        | Pi rule                                                                                                                                                                                                                                           |
+| ----------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DISABLE_UPDATES`                                     | Same name and rule | A truthy value turns the background update off.                                                                                                                                                                                                   |
+| `DISABLE_AUTOUPDATER`                                 | Same name and rule | A truthy value turns the background update off.                                                                                                                                                                                                   |
+| `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`            | Same name and rule | Any value that is not empty turns the background update off.                                                                                                                                                                                      |
+| `FORCE_AUTOUPDATE_PLUGINS`                            | Same name and rule | A truthy value keeps the background update on, also when one of the three variables above turns it off.                                                                                                                                           |
+| `PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS` (pi-only) | --                 | A whole number of milliseconds from `0` to `2147483647` replaces the ten-minute maximum of the random delay. `0` runs the background update right after the first message. The extension ignores any other value and uses the ten-minute maximum. |
+
+Claude Code reads `DISABLE_UPDATES` and `FORCE_AUTOUPDATE_PLUGINS` through its own boolean parser. The exact spellings that this parser accepts were not confirmed, so the extension applies the truthy rule above to them. The limit of `2147483647` is the longest delay that Node can schedule. A Pi-only delay variable exists so that a test or an operator does not have to wait up to ten minutes.
+
+### Default autoupdate setting of a marketplace
+
+Claude Code takes the first value that is set, in this order:
+
+1. The `autoUpdate` value of the marketplace entry in `extraKnownMarketplaces`, in the Claude Code settings.
+2. The `autoUpdate` value of the marketplace entry in `known_marketplaces.json`.
+3. The default. The default is on for the official marketplace names of Claude Code, except `knowledge-work-plugins` and `first-party-plugins`. It is also on for the `claudeai` and `pluginDirectory` sources. It is off for all other marketplaces.
+
+This extension takes the first value that is set, in this order:
+
+1. The `autoupdate` value of the marketplace entry in the local configuration file of the scope (`claude-plugins.local.json`).
+2. The `autoupdate` value of the marketplace entry in the base configuration file of the scope (`claude-plugins.json`).
+3. The default of Claude Code for the marketplace name. The extension changes the name to lower case first, as Claude Code does. The default is on for the official marketplace names of Claude Code, except `knowledge-work-plugins` and `first-party-plugins`. It is off for all other marketplaces.
+
+Pi has no claude.ai source and no plugin-directory source, so the default for those two sources does not apply here. `/claude:plugin bootstrap` writes no `autoupdate` value for `claude-plugins-official`, because the default already turns autoupdate on. `/claude:plugin marketplace autoupdate` and `/claude:plugin marketplace noautoupdate` set the value.
+
+### Claude Code settings that the extension does not read
+
+These Claude Code settings have no Pi meaning, or the extension keeps its own behavior:
+
+- The `autoUpdates` setting in the global configuration of Claude Code. When it is `false`, Claude Code also turns the background update off. Pi has no Claude Code global configuration.
+- `CLAUDE_CODE_AUTOUPDATER_DISABLED_BY_HOST`. A host that runs Claude Code sets it, and it also turns the background update off. Pi has no such host setting.
+- The hidden toggle. Claude Code hides the auto-update toggle of `/plugin` when the background update is off. Here, `marketplace autoupdate` and `marketplace noautoupdate` stay available, because the value also selects the plugins that a manual `marketplace update` updates.
 
 ## Not delivered (out of scope)
 

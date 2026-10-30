@@ -82,7 +82,7 @@ import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { noStatusSnapshot } from "../platform/mcp-status-seed.ts";
 
-import { buildInstalledPluginRecord } from "./handlers/marketplace-seed.ts";
+import { buildInstalledPluginRecord, seedAutoupdateConfig } from "./handlers/marketplace-seed.ts";
 import { createJsonCapture } from "./json-capture.ts";
 import { createNotificationBoundary, expectSoftDepProbes } from "./notification-boundary.ts";
 
@@ -145,8 +145,8 @@ type PiRegistrar = Omit<ExtensionAPI, "registerTool"> & {
 };
 
 const EXPECTED_TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|autoapply|enable|disable|import|browse|marketplace|help> ...\n" +
-  "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
+  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|autoapply|enable|disable|import|browse|marketplace|market|help> ...\n" +
+  "  bootstrap                                          add anthropics/claude-plugins-official to user scope\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
   "  prune [--scope user|project] [--dry-run]\n" +
@@ -162,7 +162,7 @@ const EXPECTED_TOP_LEVEL_USAGE =
   "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  import [--scope user|project]\n" +
   "  browse\n" +
-  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
+  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...   (alias: market)\n" +
   "  help [marketplace]";
 
 interface HermeticScope {
@@ -187,6 +187,9 @@ interface CommandProbes {
   readonly createRecoveryId?: () => string;
   readonly appendAttempts?: number;
   readonly updatePlugins?: UpdatePluginsFn;
+  /** Replaces the plugin-update run and the missing-dependency step of the dependency bag. */
+  readonly cascade?: Pick<EdgeDeps, "beginPluginUpdateRun" | "installMissingDependencies">;
+  readonly runForeground?: (command: () => Promise<void>) => Promise<void>;
 }
 
 interface WrapperUnderTest {
@@ -355,6 +358,8 @@ async function seedPrunableScope(scope: Scope, cwd: string): Promise<ExtensionSt
  * The injected dependency bag. The git operations are a memory-boundary fake and
  * the three orchestrator entrypoints refuse to run: no case here dispatches a
  * subcommand that reaches them, so a call is a defect rather than a fixture gap.
+ * The missing-dependency step installs nothing, because the registered
+ * `marketplace add` runs it.
  */
 function createEdgeDeps(
   completionCache: CompletionCache,
@@ -372,6 +377,7 @@ function createEdgeDeps(
     applyReconcile: (): Promise<void> => {
       throw new Error("the registration glue must not run a reconcile apply");
     },
+    installMissingDependencies: () => Promise.resolve({ rows: [], mcpConfigNotices: [] }),
     importClaudeSettings:
       importClaudeSettings ??
       ((): Promise<ClaudeImportExecutionResult> => {
@@ -421,7 +427,7 @@ function registerCommandWithCache(
 
   registerClaudePluginCommand(
     pi,
-    createEdgeDeps(completionCache, importClaudeSettings, gitOps),
+    { ...createEdgeDeps(completionCache, importClaudeSettings, gitOps), ...probes.cascade },
     hooksRouting,
     probes.updatePlugins ??
       createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,
@@ -430,6 +436,7 @@ function registerCommandWithCache(
       ...(probes.createRecoveryId === undefined
         ? {}
         : { createRecoveryId: probes.createRecoveryId }),
+      ...(probes.runForeground === undefined ? {} : { runForeground: probes.runForeground }),
     },
   );
 
@@ -676,7 +683,7 @@ for (const mode of ["json", "rpc"]) {
             plugin: {
               status: "failed",
               name: "demo",
-              id: "demo@demo",
+              id: "demo",
               scope,
               reasons: ["unparseable"],
               componentsResolved: false,
@@ -1676,6 +1683,84 @@ for (const mode of ["", "JSON", " json", "rpc ", "ｊｓｏｎ", "jsоn", "unkno
   });
 }
 
+test("runs the routed command inside the supplied foreground runner", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "foreground-runner");
+  const capture = createJsonCapture();
+  const log: string[] = [];
+  const { registration, verifyRegistrar } = registerCommandUnderTest({
+    runs: 1,
+    capture: {
+      entrySink: {
+        appendEntry: (customType, payload) => {
+          log.push("append");
+          capture.entrySink.appendEntry(customType, payload);
+        },
+      },
+    },
+    createInvocationId: () => "help-run",
+    runForeground: async (command) => {
+      log.push("enter");
+      await command();
+      log.push("exit");
+    },
+  });
+  const ctx = {
+    mode: "json",
+    cwd,
+    get ui() {
+      return capture.ui;
+    },
+  };
+
+  // act
+  await Reflect.apply(registration.handler, undefined, ["help", ctx]);
+
+  // assert
+  assert.deepStrictEqual(log, ["enter", "append", "exit"]);
+  assert.deepStrictEqual(capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        kind: "usage-info",
+        severity: "info",
+        needsReload: false,
+        origin: { kind: "command", commandId: "plugin help", invocationId: "help-run" },
+        usage: EXPECTED_TOP_LEVEL_USAGE,
+      },
+    },
+  ]);
+  capture.assertValid();
+  verifyRegistrar();
+});
+
+test("refuses an unsupported mode before it enters the foreground runner", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "foreground-mode");
+  const log: string[] = [];
+  const { registration, verifyRegistrar } = registerCommandUnderTest({
+    runs: 0,
+    runForeground: async (command) => {
+      log.push("enter");
+      await command();
+    },
+  });
+  const ctx = { mode: "unknown", cwd };
+
+  // act & assert
+  assert.throws(
+    () => Reflect.apply(registration.handler, undefined, ["help", ctx]),
+    (error: unknown) => {
+      assert.ok(error instanceof UnsupportedModeError);
+      assert.strictEqual(error.mode, "unknown");
+      return true;
+    },
+  );
+  assert.deepStrictEqual(log, []);
+  verifyRegistrar();
+});
+
 test("a stale command mode getter prevents routing and inventory reads", async (t) => {
   // arrange
   const { cwd } = await createHermeticScope(t, "stale-mode");
@@ -1848,7 +1933,8 @@ describe("registerClaudePluginCommand", () => {
           message: `● mp [${scope}]\n  ○ orphan v1.0.0 (uninstalled) {dependency pruned}\n\n/reload to pick up changes`,
         },
       ]);
-      assert.strictEqual(lockSpy.mock.callCount(), 1);
+      // The state guard, then separate scope locks for package and clone cleanup.
+      assert.strictEqual(lockSpy.mock.callCount(), 3);
       verifyBoundary();
       verifyRegistrar();
     });
@@ -2013,7 +2099,7 @@ describe("registerClaudePluginCommand", () => {
     peer.verifyRegistrar();
   });
 
-  test("runs registered bootstrap through the supplied lifecycle cache and both real children", async (t) => {
+  test("runs registered bootstrap through the supplied lifecycle cache and the real add", async (t) => {
     // arrange
     const { cwd } = await createHermeticScope(t, "bootstrap-owner");
     t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-02-03T04:05:06.000Z") });
@@ -2049,7 +2135,7 @@ describe("registerClaudePluginCommand", () => {
       () => Promise.resolve([{ name: "peer-stale", status: "available" }]),
     );
     await rm(path.dirname(path.dirname(pluginCachePath)), { force: true, recursive: true });
-    // The one run is the only probe: add and autoupdate render from it.
+    // The one run is the only probe: the add renders from it.
     const owner = registerCommandWithCache(
       completionCache,
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
@@ -2065,15 +2151,15 @@ describe("registerClaudePluginCommand", () => {
       .times(1);
     when(() => ctx.mode)
       .thenReturn("tui")
-      .times(4);
+      .times(3);
     when(() => ctx.ui)
       .thenReturn(ui)
-      .times(2);
+      .times(1);
     when(() => ui.notify)
       .thenReturn((message, severity) => {
         notifications.push(severity === undefined ? { message } : { message, severity });
       })
-      .times(2);
+      .times(1);
 
     // act
     await owner.registration.handler("bootstrap", ctx);
@@ -2095,7 +2181,6 @@ describe("registerClaudePluginCommand", () => {
     // assert
     assert.deepStrictEqual(notifications, [
       { message: "● claude-plugins-official [user] (added)" },
-      { message: "● claude-plugins-official [user] <autoupdate>" },
     ]);
     assert.deepStrictEqual(await loadState(userLocations.extensionRoot), {
       schemaVersion: 3,
@@ -2122,11 +2207,9 @@ describe("registerClaudePluginCommand", () => {
       schemaVersion: 1,
       marketplaces: {
         "claude-plugins-official": {
-          autoupdate: true,
           source: "anthropics/claude-plugins-official",
         },
       },
-      plugins: {},
     });
     assert.deepStrictEqual(userTree, [
       "claude-plugins.json",
@@ -2439,6 +2522,113 @@ test("rebuilds completion rows through the cache that owns a successful register
   verify(ui);
   owner.verifyRegistrar();
   peer.verifyRegistrar();
+});
+
+test("D-PL2-10: the registered marketplace update runs the supplied missing-dependency step after its autoupdate", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "update-dependency-step");
+  const marketplace = "autoupdated";
+  const sourceRoot = path.join(cwd, "marketplaces", marketplace);
+  await mkdir(path.join(sourceRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(sourceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: marketplace,
+      owner: { name: "registration owner" },
+      plugins: [{ name: "hello", source: "./plugins/hello", version: "1.0.0" }],
+    }),
+    "utf8",
+  );
+  const locations = locationsFor("project", cwd);
+  const record = marketplaceRecordIn(cwd, marketplace);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 2,
+    marketplaces: {
+      [marketplace]: {
+        ...record,
+        plugins: {
+          hello: {
+            version: "1.0.0",
+            resolvedSource: path.join(sourceRoot, "plugins", "hello"),
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: [],
+            },
+            enabled: true,
+            provenance: "explicit",
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  });
+  await seedAutoupdateConfig(locations, marketplace, true);
+  const updates: string[] = [];
+  const steps: { readonly scope: Scope; readonly cwd: string }[] = [];
+  const owner = registerCommandWithCache(
+    createCompletionCache(),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    undefined,
+    {
+      runs: 1,
+      cascade: {
+        beginPluginUpdateRun: () => (plugin) => {
+          updates.push(plugin);
+          return Promise.resolve({
+            partition: "unchanged",
+            name: plugin,
+            fromVersion: "1.0.0",
+            toVersion: "1.0.0",
+            declaresAgents: false,
+            declaresMcp: false,
+            constraint: undefined,
+            declaresWorkflows: false,
+          });
+        },
+        installMissingDependencies: (request) => {
+          steps.push({ scope: request.scope, cwd: request.cwd });
+          return Promise.resolve({ rows: [], mcpConfigNotices: [] });
+        },
+      },
+    },
+  );
+  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  const ui = mock<NotificationUi>({ exactParams: true, name: "command UI" });
+  const notifications: Notification[] = [];
+  when(() => ctx.cwd)
+    .thenReturn(cwd)
+    .times(1);
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(3);
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(1);
+  when(() => ui.notify)
+    .thenReturn((message, severity) => {
+      notifications.push(severity === undefined ? { message } : { message, severity });
+    })
+    .times(1);
+
+  // act
+  await owner.registration.handler(`marketplace update ${marketplace} --scope project`, ctx);
+
+  // assert
+  assert.deepStrictEqual(updates, ["hello"]);
+  assert.deepStrictEqual(steps, [{ scope: "project", cwd }]);
+  assert.deepStrictEqual(notifications, [
+    { message: "● autoupdated [project] (updated)\n  ⊘ hello (skipped) {up-to-date}" },
+  ]);
+  verify(ctx);
+  verify(ui);
+  owner.verifyRegistrar();
 });
 
 test("rebuilds completion rows through the cache that owns a successful registered install", async (t) => {
@@ -3252,44 +3442,50 @@ const COMMAND_ARGUMENT_CASES = [
   },
   {
     verb: "marketplace help",
+    aliases: ["market help"],
     operand: "",
     usage: "marketplace help",
     surplus: "marketplace help takes no arguments.",
   },
   {
     verb: "marketplace add",
+    aliases: ["market add"],
     operand: "./fixture-marketplace",
     usage: "marketplace add <source> [--scope user|project] [--local]",
   },
   {
     verb: "marketplace remove",
-    aliases: ["marketplace rm"],
+    aliases: ["marketplace rm", "market remove", "market rm"],
     operand: "official",
     usage: "marketplace <remove|rm> <name> [--scope user|project] [--local]",
   },
   {
     verb: "marketplace list",
-    aliases: ["marketplace ls"],
+    aliases: ["marketplace ls", "market list", "market ls"],
     operand: "",
     usage: "marketplace <list|ls> [--scope user|project]",
   },
   {
     verb: "marketplace info",
+    aliases: ["market info"],
     operand: "official",
     usage: "marketplace info <name> [--scope user|project]",
   },
   {
     verb: "marketplace update",
+    aliases: ["market update"],
     operand: "official",
     usage: "marketplace update [<name>] [--scope user|project]",
   },
   {
     verb: "marketplace autoupdate",
+    aliases: ["market autoupdate"],
     operand: "official",
     usage: "marketplace autoupdate [<name>] [--scope user|project] [--local]",
   },
   {
     verb: "marketplace noautoupdate",
+    aliases: ["market noautoupdate"],
     operand: "official",
     usage: "marketplace noautoupdate [<name>] [--scope user|project] [--local]",
   },
@@ -3299,8 +3495,9 @@ test("argument rejection cases cover every routed command and alias", () => {
   // arrange
   const exercised = COMMAND_ARGUMENT_CASES.flatMap(({ verb, aliases = [] }) => [verb, ...aliases]);
   const routed = [
-    ...TOP_LEVEL_SUBCOMMANDS.filter((verb) => verb !== "marketplace"),
+    ...TOP_LEVEL_SUBCOMMANDS.filter((verb) => verb !== "marketplace" && verb !== "market"),
     ...MARKETPLACE_SUBCOMMANDS.map((verb) => `marketplace ${verb}`),
+    ...MARKETPLACE_SUBCOMMANDS.map((verb) => `market ${verb}`),
   ];
 
   // act & assert

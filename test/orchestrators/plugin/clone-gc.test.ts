@@ -4,12 +4,16 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
+import lockfile from "proper-lockfile";
+
 import {
-  garbageCollectPluginClones,
-  listUnreferencedPluginClones,
+  collectPluginCloneCandidatesLocked,
+  collectPluginClonesLocked,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { StateLockHeldError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { holdStateLock } from "../state-lock.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -81,6 +85,13 @@ async function seedCloneDirectories(
   }
 }
 
+function stateLockHeld(locations: ScopedLocations): Promise<boolean> {
+  return lockfile.check(locations.extensionRoot, {
+    lockfilePath: locations.stateLockFile,
+    realpath: false,
+  });
+}
+
 async function cloneEntries(locations: ScopedLocations): Promise<string[]> {
   try {
     return (await readdir(locations.pluginClonesDir)).sort();
@@ -93,7 +104,53 @@ async function cloneEntries(locations: ScopedLocations): Promise<string[]> {
   }
 }
 
-describe("garbageCollectPluginClones", () => {
+describe("collectPluginClonesLocked", () => {
+  test("GLK-03 / D-PL7-05: refuses while another holder has the scope lock and deletes nothing", async (t) => {
+    // arrange
+    const locations = await freshLocations(t);
+    await seedState(locations, {});
+    await seedCloneDirectories(locations, ["stale-clone"]);
+    const release = await holdStateLock(locations);
+    let caught: unknown;
+
+    // act
+    try {
+      await collectPluginClonesLocked(locations);
+    } catch (error) {
+      caught = error;
+    } finally {
+      await release();
+    }
+
+    // assert
+    assert.ok(caught instanceof StateLockHeldError);
+    assert.strictEqual(caught.scope, "project");
+    assert.strictEqual(caught.lockPath, locations.stateLockFile);
+    assert.deepStrictEqual(await cloneEntries(locations), ["stale-clone"]);
+  });
+
+  test("GLK-03 / D-PL7-05: deletes the unreferenced clone, keeps the referenced one, and releases the lock", async (t) => {
+    // arrange
+    const locations = await freshLocations(t);
+    await seedState(locations, {
+      alpha: marketplace(locations, "alpha", {
+        live: pluginRecord({
+          resolvedSource: path.join(locations.pluginClonesDir, "live-clone"),
+          resolvedSha: SHA_ALPHA,
+        }),
+      }),
+    });
+    await seedCloneDirectories(locations, ["live-clone", "stale-clone"]);
+
+    // act
+    const leaks = await collectPluginClonesLocked(locations);
+
+    // assert
+    assert.deepStrictEqual(leaks, []);
+    assert.deepStrictEqual(await cloneEntries(locations), ["live-clone"]);
+    assert.strictEqual(await stateLockHeld(locations), false);
+  });
+
   test("preserves SHA-backed clone roots and removes stale directories", async (t) => {
     // arrange
     const locations = await freshLocations(t);
@@ -114,7 +171,7 @@ describe("garbageCollectPluginClones", () => {
     await seedCloneDirectories(locations, ["alpha-live", "beta-live", "gamma-stale"]);
 
     // act
-    const leaks = await garbageCollectPluginClones(locations);
+    const leaks = await collectPluginClonesLocked(locations);
 
     // assert
     assert.deepStrictEqual(leaks, []);
@@ -147,7 +204,7 @@ describe("garbageCollectPluginClones", () => {
     await seedCloneDirectories(locations, ["shared-live"]);
 
     // act
-    const leaks = await garbageCollectPluginClones(locations);
+    const leaks = await collectPluginClonesLocked(locations);
 
     // assert
     assert.deepStrictEqual(leaks, []);
@@ -167,7 +224,7 @@ describe("garbageCollectPluginClones", () => {
     await seedCloneDirectories(locations, ["unprotected-clone"]);
 
     // act
-    const leaks = await garbageCollectPluginClones(locations);
+    const leaks = await collectPluginClonesLocked(locations);
 
     // assert
     assert.deepStrictEqual(leaks, []);
@@ -192,7 +249,7 @@ describe("garbageCollectPluginClones", () => {
     await seedCloneDirectories(locations, ["alpha-stale", "beta-stale"]);
 
     // act
-    const leaks = await garbageCollectPluginClones(locations);
+    const leaks = await collectPluginClonesLocked(locations);
 
     // assert
     assert.deepStrictEqual(leaks, []);
@@ -205,7 +262,7 @@ describe("garbageCollectPluginClones", () => {
     await seedState(locations, {});
 
     // act
-    const leaks = await garbageCollectPluginClones(locations);
+    const leaks = await collectPluginClonesLocked(locations);
 
     // assert
     assert.deepStrictEqual(leaks, []);
@@ -221,7 +278,7 @@ describe("garbageCollectPluginClones", () => {
 
     // act
     try {
-      await garbageCollectPluginClones(locations);
+      await collectPluginClonesLocked(locations);
     } catch (error) {
       caught = error;
     }
@@ -240,8 +297,8 @@ describe("garbageCollectPluginClones", () => {
     await seedCloneDirectories(locations, ["alpha-stale", "beta-stale"]);
 
     // act
-    const firstLeaks = await garbageCollectPluginClones(locations);
-    const secondLeaks = await garbageCollectPluginClones(locations);
+    const firstLeaks = await collectPluginClonesLocked(locations);
+    const secondLeaks = await collectPluginClonesLocked(locations);
 
     // assert
     assert.deepStrictEqual(firstLeaks, []);
@@ -259,7 +316,7 @@ describe("garbageCollectPluginClones", () => {
 
     // act
     try {
-      await garbageCollectPluginClones(locations);
+      await collectPluginClonesLocked(locations);
     } catch (error) {
       caught = error;
     }
@@ -293,7 +350,7 @@ describe("garbageCollectPluginClones", () => {
 
     // act
     try {
-      await garbageCollectPluginClones(locations);
+      await collectPluginClonesLocked(locations);
     } catch (error) {
       caught = error;
     }
@@ -325,7 +382,7 @@ describe("garbageCollectPluginClones", () => {
     await seedCloneDirectories(locations, ["formatter-tag-live"]);
 
     // act
-    const leaks = await garbageCollectPluginClones(locations);
+    const leaks = await collectPluginClonesLocked(locations);
 
     // assert
     assert.deepStrictEqual(leaks, []);
@@ -347,7 +404,7 @@ describe("garbageCollectPluginClones", () => {
     await seedCloneDirectories(locations, ["formatter-tag-live"]);
 
     // act
-    const leaks = await garbageCollectPluginClones(locations);
+    const leaks = await collectPluginClonesLocked(locations);
 
     // assert
     assert.deepStrictEqual(leaks, []);
@@ -387,7 +444,7 @@ describe("garbageCollectPluginClones", () => {
       `The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received 'blocked-${key}\\x00path'`;
 
     // act
-    const leaks = await garbageCollectPluginClones(failureLocations);
+    const leaks = await collectPluginClonesLocked(failureLocations);
 
     // assert
     assert.deepStrictEqual(leaks, [
@@ -422,7 +479,7 @@ describe("garbageCollectPluginClones", () => {
     ]);
 
     // act
-    const leaks = await garbageCollectPluginClones(locations);
+    const leaks = await collectPluginClonesLocked(locations);
 
     // assert
     assert.deepStrictEqual(leaks, []);
@@ -436,43 +493,35 @@ describe("garbageCollectPluginClones", () => {
     await seedCloneDirectories(locations, ["fetched-mirror", "plan-stale"]);
 
     // act
-    const leaks = await garbageCollectPluginClones(locations, new Set(["fetched-mirror"]));
+    const leaks = await collectPluginClonesLocked(locations, new Set(["fetched-mirror"]));
 
     // assert
     assert.deepStrictEqual(leaks, []);
     assert.deepStrictEqual(await cloneEntries(locations), ["fetched-mirror"]);
   });
-});
 
-describe("listUnreferencedPluginClones", () => {
-  test("UPD-DEP-D1: lists the clone keys on disk that no record references", async (t) => {
+  test("collects only unreferenced candidates", async (t) => {
     // arrange
     const locations = await freshLocations(t);
+    const live = "aaaaaaaaaaaa-111111111111";
     await seedState(locations, {
       mp: marketplace(locations, "mp", {
-        live: pluginRecord({
-          resolvedSource: path.join(locations.pluginClonesDir, "live-clone"),
+        installed: pluginRecord({
+          resolvedSource: path.join(locations.pluginClonesDir, live),
           resolvedSha: SHA_ALPHA,
         }),
       }),
     });
-    await seedCloneDirectories(locations, ["live-clone", "fetched-mirror", "stale"]);
+    await seedCloneDirectories(locations, [live, "owned-stale", "unrelated-warm"]);
 
     // act
-    const keys = await listUnreferencedPluginClones(locations);
+    const leaks = await collectPluginCloneCandidatesLocked(
+      locations,
+      new Set([live, "owned-stale"]),
+    );
 
     // assert
-    assert.deepStrictEqual([...keys].sort(), ["fetched-mirror", "stale"]);
-  });
-
-  test("UPD-DEP-D1: lists nothing when the clone cache is absent", async (t) => {
-    // arrange
-    const locations = await freshLocations(t);
-
-    // act
-    const keys = await listUnreferencedPluginClones(locations);
-
-    // assert
-    assert.deepStrictEqual(keys, new Set());
+    assert.deepStrictEqual(leaks, []);
+    assert.deepStrictEqual(await cloneEntries(locations), [live, "unrelated-warm"]);
   });
 });

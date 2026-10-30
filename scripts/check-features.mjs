@@ -239,6 +239,10 @@ function isAllowedFile(parts) {
   const name = parts.at(-1);
   const depth = parts.length;
 
+  if (parts.join("/") === "lib/pi-tui-pty.py") {
+    return true;
+  }
+
   if (parts[0] === "step_definitions") {
     return depth <= 3 && name.endsWith(".steps.ts");
   }

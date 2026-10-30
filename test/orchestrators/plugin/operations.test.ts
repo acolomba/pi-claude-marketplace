@@ -33,6 +33,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { StateLockHeldError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { noStatusSnapshot } from "../../platform/mcp-status-seed.ts";
@@ -355,6 +356,59 @@ test("constructs the dependency-install operation without using its owners or st
   verify(completionCache);
 });
 
+test("a missing-dependency install refused by a held scope lock succeeds after release", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "dependency-operation-lock-");
+  await seedHooksDeclaringPlugin({
+    cwd,
+    marketplace: "mp",
+    plugin: "dep",
+    hooksJson: { PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hi" }] }] },
+  });
+  const locations = locationsFor("project", cwd);
+  const before = await readFile(locations.stateJsonPath, "utf8");
+  const installMissingDependency = createDependencyInstallOperation(
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    createCompletionCache(),
+  );
+  const { ctx, run, notifications } = makeCtx();
+  const request = {
+    ctx,
+    run,
+    scope: "project",
+    cwd,
+    marketplace: "mp",
+    plugin: "dep",
+    ranges: [],
+    requiredBy: "app@mp",
+    declarers: ["app@mp"],
+  } as const;
+  const release = await lockfile.lock(locations.extensionRoot, {
+    lockfilePath: locations.stateLockFile,
+    realpath: false,
+    retries: 0,
+    stale: 10_000,
+    update: 2_000,
+  });
+
+  // act
+  const blocked = await installMissingDependency(request);
+  const afterBlocked = await readFile(locations.stateJsonPath, "utf8");
+  await release();
+  const retry = await installMissingDependency(request);
+
+  // assert
+  assert.ok(blocked.status === "failed");
+  assert.ok(blocked.error instanceof StateLockHeldError);
+  assert.strictEqual(afterBlocked, before);
+  assert.equal(retry.status, "installed");
+  assert.deepStrictEqual(
+    Object.keys((await loadState(locations.extensionRoot)).marketplaces.mp?.plugins ?? {}),
+    ["dep"],
+  );
+  assert.deepStrictEqual(notifications, []);
+});
+
 test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing table without /reload", async (t) => {
   // arrange
   t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 0, 1) });
@@ -573,7 +627,8 @@ test("the composed prune operation removes an orphan in the default user scope",
         "● mp [user]\n  ○ orphan v1.0.0 (uninstalled) {dependency pruned}\n\n/reload to pick up changes",
     },
   ]);
-  assert.strictEqual(lockSpy.mock.callCount(), 1);
+  // The state guard, then separate scope locks for package and clone cleanup.
+  assert.strictEqual(lockSpy.mock.callCount(), 3);
   assert.strictEqual(fetchSpy.mock.callCount(), 0);
 });
 
@@ -627,7 +682,8 @@ test("the composed prune operation removes only the selected project orphan", as
     },
   ]);
   assert.strictEqual(cacheDropSpy.mock.callCount(), 1);
-  assert.strictEqual(lockSpy.mock.callCount(), 1);
+  // The state guard, then separate scope locks for package and clone cleanup.
+  assert.strictEqual(lockSpy.mock.callCount(), 3);
   assert.strictEqual(fetchSpy.mock.callCount(), 0);
 });
 
@@ -870,6 +926,7 @@ test("reinstallPlugin replaces the staged artifacts in place and re-routes the p
   // assert
   assert.deepStrictEqual(outcome, {
     partition: "reinstalled",
+    resourcesChanged: false,
     name: "p1",
     marketplace: "mp",
     scope: "project",
@@ -902,7 +959,7 @@ test("reinstallPlugin replaces the staged artifacts in place and re-routes the p
     enabled: true,
     provenance: "explicit",
     installedAt: "2026-01-01T00:00:00.000Z",
-    updatedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.002Z",
   });
 
   // The replaced config is the dispatch input, so its complete bytes are the
@@ -953,6 +1010,7 @@ test("D-26: convergePlugin moves the plugin to the catalog version in place and 
   // assert
   assert.deepStrictEqual(outcome, {
     partition: "updated",
+    resourcesChanged: false,
     name: "p1",
     fromVersion: "0.0.1",
     toVersion: "0.0.2",
@@ -1068,7 +1126,7 @@ test("fetchPlugins answers a warm pinned source from the bound status capability
 
   // assert
   assert.deepStrictEqual(boundary.notifications, [
-    { message: "● mp [project]\n  ⊘ p1 (skipped) {up-to-date}" },
+    { message: "● mp [project]\n  ⊘ p1 v2.0.0 (skipped) {up-to-date}" },
   ]);
 
   // Derive-not-persist: fetch's only write is the clone seam's, and the warm

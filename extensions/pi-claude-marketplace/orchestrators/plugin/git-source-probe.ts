@@ -35,11 +35,7 @@ import {
 } from "./plugin-state-classifier.ts";
 
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
-import type {
-  GitPluginRootResult,
-  ResolveContext,
-  ResolvedPlugin,
-} from "../../domain/resolver-types.ts";
+import type { GitPluginRootResult, ResolveContext } from "../../domain/resolver-types.ts";
 
 export type ManifestEntry = MarketplaceManifest["plugins"][number];
 
@@ -264,7 +260,10 @@ export function makeRecordedShaPresenceProbe(
  */
 export async function probeManifestEntry(
   entry: ManifestEntry,
-  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
+  marketplaceContext: Pick<
+    ResolveContext,
+    "marketplaceRoot" | "marketplaceName" | "marketplaceSource"
+  >,
   locations: ScopedLocations,
 ): Promise<ManifestEntryClassification> {
   const parsedSource = parsePluginSource(entry.source);
@@ -296,32 +295,5 @@ export async function probeManifestEntry(
     return classifyManifestEntry(await resolveStrict(entry, marketplaceContext));
   } catch {
     return "unavailable";
-  }
-}
-
-/**
- * PURL-08 / D-78-04 / CR-01: resolve an upgrade CANDIDATE manifest entry against
- * the WARM clone cache via the fs-only presence probe, so a git-source upgrade
- * candidate resolves without cloning. A cold cache yields `not-cached` -> the
- * resolver's git arm maps it to `unavailable{not installed}`, and the shared
- * classifier's CR-01 degrade folds that back to the plain `(upgradable)` row --
- * an installed git plugin with a missing clone never regresses to
- * `(unavailable)`. A `resolveStrict` throw returns `undefined` (the CR-01
- * probe-failure degrade). The presence probe never spawns git nor hits the
- * network.
- */
-export async function probeUpgradeCandidate(
-  entry: ManifestEntry,
-  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
-  locations: ScopedLocations,
-): Promise<ResolvedPlugin | undefined> {
-  const ctx: ResolveContext = {
-    ...marketplaceContext,
-    resolveGitPluginRoot: makePresenceProbe(locations),
-  };
-  try {
-    return await resolveStrict(entry, ctx);
-  } catch {
-    return undefined;
   }
 }

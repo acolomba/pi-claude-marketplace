@@ -41,7 +41,10 @@
 //     the candidate version the one version rule derives offline
 //     (plugin.json, then the entry, then the tree's commit version for an
 //     undeclared git plugin), falling back to the entry version when no
-//     candidate resolves (VER-01, VER-02). NOT semver.
+//     candidate resolves (VER-01, VER-02). NOT semver. Claude Code's `list`
+//     shows no upgrade state for any source, so this state is a recorded
+//     divergence, kept for git sources too because `fetch` exists to feed it
+//     (D-PL3-07).
 //   - PL-6 manifest soft-fail: per-marketplace manifest load failure
 //     surfaces as a `(failed)` MarketplaceNotificationMessage with
 //     `status: "failed"` and `plugins: []`. No marketplace-level cause
@@ -57,7 +60,13 @@
 
 import { lookupDeclaredPlugin, type ManifestLookup } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
-import { loadMergedScopeConfig, type MergedConfig } from "../../persistence/config-merge.ts";
+import { assertRecordedMarketplaceName } from "../../domain/name.ts";
+import { effectiveMarketplaceAutoupdate } from "../../domain/official-marketplaces.ts";
+import {
+  hasInvalidConfigLayer,
+  loadMergedScopeConfig,
+  type MergedConfig,
+} from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -74,7 +83,7 @@ import {
 } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { narrowProbeError as sharedNarrowProbeError } from "../../shared/probe-classifiers.ts";
-import { crossScopeFlag } from "../marketplace/shared.ts";
+import { crossScopeFlag, marketplaceNotAddedMessage } from "../marketplace/shared.ts";
 import { collectMarketplaceRecordsByScope } from "../scope-fanout.ts";
 
 import { availableRowMessage, type FilterBucket } from "./list-candidate-row.ts";
@@ -87,6 +96,7 @@ import {
 } from "./list-orphan-fold.ts";
 import { LIST_CONTEXT, type ListMsg } from "./list.messaging.ts";
 
+import type { ParsedSource } from "../../domain/source.ts";
 import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -349,6 +359,7 @@ async function enumerateMarketplacePlugins(args: {
       pluginScope,
       marketplaceScope,
       marketplaceRoot: mpRecord.marketplaceRoot,
+      marketplaceSource: mpRecord.source,
       marketplaceName: mpName,
       record,
       lookup: manifestLookupFor(scopedManifest, pluginName),
@@ -390,7 +401,11 @@ async function enumerateMarketplacePlugins(args: {
     // eslint-disable-next-line no-await-in-loop -- bounded by the manifest's uninstalled entries, one row each
     const { message: row, bucket } = await availableRowMessage(
       manifestEntry,
-      { marketplaceRoot: mpRecord.marketplaceRoot, marketplaceName: mpName },
+      {
+        marketplaceRoot: mpRecord.marketplaceRoot,
+        marketplaceName: mpName,
+        marketplaceSource: mpRecord.source,
+      },
       locationsFor(pluginScope, opts.cwd),
       ownValue(pluginScopeConfig.plugins, `${manifestEntry.name}@${mpName}`)?.entry.enabled,
     );
@@ -456,6 +471,8 @@ async function loadMarketplaceManifestSoftly(
 ): Promise<ScopedManifest> {
   try {
     const manifest = await loadManifestSoftly(mpRecord.manifestPath);
+    // D-PL5-28: a marketplace Claude Code refuses reads as a failed one.
+    assertRecordedMarketplaceName(mpRecord.name, mpRecord.source as ParsedSource, manifest.name);
     return { ok: true, manifest };
   } catch (err) {
     // BOUND-03 / D-95-05: the failure stays off every rendered row (the
@@ -657,14 +674,16 @@ export async function loadPluginListPayload(
   // D-13-19: read both scopes' state.
   const userLocations = locationsFor("user", opts.cwd);
   const projectLocations = locationsFor("project", opts.cwd);
-  const [userState, projectState, userMerged, projectMerged] = await Promise.all([
+  const [userState, projectState, userOutcome, projectOutcome] = await Promise.all([
     loadState(userLocations.extensionRoot),
     loadState(projectLocations.extensionRoot),
     // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config).
     // Pre-compute the merged view per scope ONCE before the fold loops below.
-    loadMergedScopeConfig(userLocations).then((r) => r.merged),
-    loadMergedScopeConfig(projectLocations).then((r) => r.merged),
+    loadMergedScopeConfig(userLocations),
+    loadMergedScopeConfig(projectLocations),
   ]);
+  const userMerged = userOutcome.merged;
+  const projectMerged = projectOutcome.merged;
 
   const blocks: BuiltMarketplace[] = [];
 
@@ -689,7 +708,12 @@ export async function loadPluginListPayload(
       mpName,
       mpScope: "project",
       mpRecord,
-      autoupdate: ownValue(projectMerged.marketplaces, mpName)?.entry.autoupdate ?? false,
+      autoupdate:
+        !hasInvalidConfigLayer(projectOutcome) &&
+        effectiveMarketplaceAutoupdate(
+          mpName,
+          ownValue(projectMerged.marketplaces, mpName)?.entry.autoupdate,
+        ),
       scopeConfig: projectMerged,
       extraPlugins: [],
     });
@@ -716,7 +740,12 @@ export async function loadPluginListPayload(
       mpName,
       mpScope: "user",
       mpRecord,
-      autoupdate: ownValue(userMerged.marketplaces, mpName)?.entry.autoupdate ?? false,
+      autoupdate:
+        !hasInvalidConfigLayer(userOutcome) &&
+        effectiveMarketplaceAutoupdate(
+          mpName,
+          ownValue(userMerged.marketplaces, mpName)?.entry.autoupdate,
+        ),
       scopeConfig: userMerged,
       extraPlugins: folded,
       excludeFromAvailable: foldedNames,
@@ -799,16 +828,19 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
   const { ctx, run } = opts;
   try {
     if (opts.marketplace !== undefined && !(await marketplaceAdded(opts, opts.marketplace))) {
-      notify(ctx, run, {
-        kind: "marketplace-not-added",
-        name: opts.marketplace,
-        ...(opts.scope !== undefined && { scope: opts.scope }),
-        ...(await crossScopeFlag({
-          cwd: opts.cwd,
-          marketplace: opts.marketplace,
+      notify(
+        ctx,
+        run,
+        marketplaceNotAddedMessage({
+          name: opts.marketplace,
           scope: opts.scope,
-        })),
-      });
+          ...(await crossScopeFlag({
+            cwd: opts.cwd,
+            marketplace: opts.marketplace,
+            scope: opts.scope,
+          })),
+        }),
+      );
       return;
     }
 

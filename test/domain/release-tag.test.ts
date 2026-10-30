@@ -9,12 +9,13 @@ import {
 import type { ReleaseTagCandidate } from "../../extensions/pi-claude-marketplace/domain/release-tag.ts";
 
 describe("selectHighestSatisfyingTag", () => {
-  test("picks the highest satisfying candidate among several this plugin's own", () => {
+  test("picks the highest satisfying candidate among several for this plugin", () => {
     // arrange
     const candidates: readonly ReleaseTagCandidate[] = [
       { name: "formatter--v1.0.0", oid: "a" },
       { name: "formatter--v2.1.0", oid: "b" },
-      { name: "formatter--v3.0.0", oid: "c" },
+      { name: "formatter--v2.5.0", oid: "c" },
+      { name: "formatter--v3.0.0", oid: "d" },
     ];
 
     // act
@@ -27,9 +28,9 @@ describe("selectHighestSatisfyingTag", () => {
     // assert
     assert.deepStrictEqual(selected, {
       kind: "pinned",
-      tag: "formatter--v2.1.0",
-      oid: "b",
-      version: "2.1.0",
+      tag: "formatter--v2.5.0",
+      oid: "c",
+      version: "2.5.0",
     });
   });
 
@@ -45,7 +46,7 @@ describe("selectHighestSatisfyingTag", () => {
     );
 
     // assert
-    assert.deepStrictEqual(selected, { kind: "no-matching-tag", range: "*" });
+    assert.deepStrictEqual(selected, { kind: "no-matching-tag" });
   });
 
   test("a candidate whose remainder after the prefix is not valid semver is skipped, not an error", () => {
@@ -97,12 +98,12 @@ describe("selectHighestSatisfyingTag", () => {
     });
   });
 
-  test("an empty candidate list yields the no-match arm carrying the rendered range", () => {
+  test("an empty candidate list yields the no-match arm", () => {
     // act
     const selected = selectHighestSatisfyingTag([], `formatter${RELEASE_TAG_SEPARATOR}`, "^1.0.0");
 
     // assert
-    assert.deepStrictEqual(selected, { kind: "no-matching-tag", range: "^1.0.0" });
+    assert.deepStrictEqual(selected, { kind: "no-matching-tag" });
   });
 
   test("a candidate whose name does not carry the plugin's own prefix is not a candidate", () => {
@@ -117,7 +118,7 @@ describe("selectHighestSatisfyingTag", () => {
     );
 
     // assert
-    assert.deepStrictEqual(selected, { kind: "no-matching-tag", range: "*" });
+    assert.deepStrictEqual(selected, { kind: "no-matching-tag" });
   });
 
   test("a candidate whose version does not satisfy the range is not a candidate", () => {
@@ -132,13 +133,11 @@ describe("selectHighestSatisfyingTag", () => {
     );
 
     // assert
-    assert.deepStrictEqual(selected, { kind: "no-matching-tag", range: "^2.0.0" });
+    assert.deepStrictEqual(selected, { kind: "no-matching-tag" });
   });
 
-  test("prefix matching is case-sensitive with no Unicode normalization", () => {
-    // arrange: a name differing only by case is not the same prefix -- the
-    // identical comparison the remote probe performs
-    // (String.prototype.startsWith).
+  test("prefix matching is case-sensitive", () => {
+    // arrange
     const candidates: readonly ReleaseTagCandidate[] = [{ name: "Formatter--v1.0.0", oid: "x" }];
 
     // act
@@ -149,6 +148,24 @@ describe("selectHighestSatisfyingTag", () => {
     );
 
     // assert
-    assert.deepStrictEqual(selected, { kind: "no-matching-tag", range: "*" });
+    assert.deepStrictEqual(selected, { kind: "no-matching-tag" });
+  });
+
+  test("prefix matching does not normalize Unicode", () => {
+    // arrange
+    const pluginName = "formátter";
+    const candidates: readonly ReleaseTagCandidate[] = [
+      { name: `${pluginName.normalize("NFD")}--v1.0.0`, oid: "x" },
+    ];
+
+    // act
+    const selected = selectHighestSatisfyingTag(
+      candidates,
+      `${pluginName.normalize("NFC")}${RELEASE_TAG_SEPARATOR}`,
+      "*",
+    );
+
+    // assert
+    assert.deepStrictEqual(selected, { kind: "no-matching-tag" });
   });
 });

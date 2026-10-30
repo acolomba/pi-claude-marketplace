@@ -123,7 +123,10 @@ function probeFailureRow(manifestEntry: ManifestPluginEntry, probeErr: unknown):
  */
 export async function availableRowMessage(
   manifestEntry: ManifestPluginEntry,
-  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
+  marketplaceContext: Pick<
+    ResolveContext,
+    "marketplaceRoot" | "marketplaceName" | "marketplaceSource"
+  >,
   locations: ScopedLocations,
   declaredEnabled: boolean | undefined,
 ): Promise<CandidateRow> {

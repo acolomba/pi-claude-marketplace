@@ -164,6 +164,7 @@ test("returns a materialized pinned cache result and its resolved sha", async (t
     sha: SHA,
   };
   const calls: string[] = [];
+  const cloneCandidates = new Set<string>();
   const seam: InstallCloneCacheSeam = {
     resolvePluginPin() {
       calls.push("resolve");
@@ -172,6 +173,7 @@ test("returns a materialized pinned cache result and its resolved sha", async (t
     materializePluginClone(options) {
       calls.push("materialize");
       assert.ok(options.resolveAuth() !== undefined);
+      options.onCloneCreated?.("created-clone");
       return Promise.resolve(cloneRoot);
     },
     materializeOrRefreshPluginMirror() {
@@ -183,7 +185,13 @@ test("returns a materialized pinned cache result and its resolved sha", async (t
   };
 
   // act
-  const outcome = await probeInstallClone({ source, seam, locations, auth: auth() });
+  const outcome = await probeInstallClone({
+    source,
+    seam,
+    locations,
+    auth: auth(),
+    cloneCandidates,
+  });
 
   // assert
   assert.deepStrictEqual(outcome, {
@@ -191,6 +199,7 @@ test("returns a materialized pinned cache result and its resolved sha", async (t
     resolvedSha: SHA,
   });
   assert.deepStrictEqual(calls, ["resolve", "materialize"]);
+  assert.deepStrictEqual(cloneCandidates, new Set(["created-clone"]));
 });
 
 test("NFR-5: a pinned GitHub source the seam finds warm never reads an invalid base", async (testContext) => {
@@ -252,7 +261,7 @@ test("sends the pinned clone the identity url and the typed wire url", async (te
     },
     // The bundle carries closures, so the recorded call keeps only the two
     // comparable fields: the bound host and the injected credential ops.
-    materializePluginClone({ resolveAuth, ...cloneOptions }) {
+    materializePluginClone({ resolveAuth, onCloneCreated: _onCloneCreated, ...cloneOptions }) {
       const bundle = resolveAuth();
       calls.push({
         ...cloneOptions,
@@ -305,14 +314,18 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
     materializePluginClone() {
       return Promise.reject(new Error("unexpected pinned materialization"));
     },
-    materializeOrRefreshPluginMirror({ auth: bundle, ...mirrorOptions }) {
+    materializeOrRefreshPluginMirror({
+      auth: bundle,
+      onCloneCreated: _onCloneCreated,
+      ...mirrorOptions
+    }) {
       calls.push({
         ...mirrorOptions,
         auth: { credentialOps: bundle?.credentialOps, host: bundle?.host },
       });
       return Promise.resolve({ pluginRoot: mirrorRoot, resolvedSha: SHA });
     },
-    materializePluginCommitCopy({ resolveAuth, ...copyOptions }) {
+    materializePluginCommitCopy({ resolveAuth, onCloneCreated: _onCloneCreated, ...copyOptions }) {
       const bundle = resolveAuth();
       calls.push({
         ...copyOptions,

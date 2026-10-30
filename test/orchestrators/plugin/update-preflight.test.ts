@@ -68,6 +68,14 @@ const CONVERGE_POLICY = {
   searchReleaseTags: false,
 } satisfies MaterializationPolicy;
 
+/**
+ * D-PL2-12: these fixtures record a commit with a copy outside the plugin
+ * clones, which the production gate refuses as an unreadable declarer. A case
+ * about the refresh itself, not the gate, admits it with this gate.
+ */
+const ADMITTING_GATE: PreparePluginUpdateOptions["constraintGate"] = () =>
+  Promise.resolve({ kind: "unconstrained" });
+
 function pluginRecord(version: string, enabled = true): PluginRecord {
   return {
     version,
@@ -89,12 +97,14 @@ function pluginRecord(version: string, enabled = true): PluginRecord {
 }
 
 interface SeedOptions {
+  readonly contained?: boolean;
   /** A function receives the seeded plugin root, for a record at the candidate's own root. */
   readonly installed?: PluginRecord | ((pluginRoot: string) => PluginRecord);
   readonly declared?: boolean;
   readonly version?: string;
   readonly source?: unknown;
   readonly marketplaceName?: string;
+  readonly marketplaceSource?: unknown;
   readonly pluginJson?: Record<string, unknown>;
 }
 
@@ -106,7 +116,11 @@ async function seedUpdate(options: SeedOptions = {}): Promise<{
 }> {
   const marketplaceName = options.marketplaceName ?? "mp";
   const cwd = await mkdtemp(path.join(tmpdir(), "update-preflight-"));
-  const marketplaceRoot = path.join(cwd, "marketplace");
+  const locations = locationsFor("project", cwd);
+  const marketplaceRoot =
+    options.contained === true
+      ? path.join(locations.extensionRoot, "sources", marketplaceName)
+      : path.join(cwd, "marketplace");
   const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
   await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
   await mkdir(path.join(pluginRoot, "skills", "tool"), { recursive: true });
@@ -133,7 +147,6 @@ async function seedUpdate(options: SeedOptions = {}): Promise<{
             ],
     }),
   );
-  const locations = locationsFor("project", cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
   const installed =
     typeof options.installed === "function" ? options.installed(pluginRoot) : options.installed;
@@ -143,7 +156,7 @@ async function seedUpdate(options: SeedOptions = {}): Promise<{
       [marketplaceName]: {
         name: marketplaceName,
         scope: "project",
-        source: pathSource("./marketplace"),
+        source: options.marketplaceSource ?? pathSource("./marketplace"),
         addedFromCwd: cwd,
         manifestPath,
         marketplaceRoot,
@@ -160,6 +173,7 @@ async function prepare(
     readonly partial?: boolean;
     readonly policy?: MaterializationPolicy;
     readonly cloneCacheSeam?: UpdateCloneCacheSeam;
+    readonly cloneCandidates?: Set<string>;
     readonly constraintGate?: PreparePluginUpdateOptions["constraintGate"];
     readonly pathPinProbe?: PreparePluginUpdateOptions["pathPinProbe"];
     readonly constraintTagMemo?: PreparePluginUpdateOptions["constraintTagMemo"];
@@ -183,6 +197,7 @@ async function prepare(
     ...(options.partial === true && { partial: true }),
     policy: options.policy ?? UPDATE_POLICY,
     ...(options.cloneCacheSeam !== undefined && { cloneCacheSeam: options.cloneCacheSeam }),
+    ...(options.cloneCandidates !== undefined && { cloneCandidates: options.cloneCandidates }),
     ...(options.constraintGate !== undefined && { constraintGate: options.constraintGate }),
     ...(options.pathPinProbe !== undefined && { pathPinProbe: options.pathPinProbe }),
     ...(options.constraintTagMemo !== undefined && {
@@ -610,7 +625,6 @@ test("keeps an unsupported candidate skipped with and without partial permission
       ),
     ),
   );
-
   // act
   const strictOutcome = await prepare(strictSeed);
   const partialOutcome = await prepare(partialSeed, { partial: true });
@@ -621,6 +635,34 @@ test("keeps an unsupported candidate skipped with and without partial permission
     assert.strictEqual(outcome.partition, "skipped");
     assert.deepStrictEqual(outcome.reasons, ["no longer installable"]);
   }
+});
+
+test("D-PL5-32: skips a relative entry of a hosted marketplace as no longer installable", async (t) => {
+  // arrange
+  const catalogUrl = "https://h.example/acme/mp/marketplace.json";
+  const seed = await seedUpdate({
+    installed: pluginRecord("1.0.0"),
+    source: "./",
+    marketplaceSource: { kind: "hosted", raw: catalogUrl, url: catalogUrl },
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+
+  // act
+  const outcome = await prepare(seed);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "skipped",
+    name: "hello",
+    fromVersion: "1.0.0",
+    notes: [
+      'Plugin "hello" is no longer installable: its marketplace entry path does not stay inside the marketplace directory (an absolute, climbing, network-shaped, backslash-containing or link-traversing entry, an entry of a fetched marketplace that resolves or opens outside its tree \u2014 or a relative entry in a url-catalog marketplace, which has no local directory)',
+    ],
+    reasons: ["no longer installable"],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  });
 });
 
 test("SRC-01: fails a path source whose directory is missing as source missing at the installed version", async (t) => {
@@ -708,6 +750,90 @@ test("refreshes a disabled pin without materializing its recorded resources", as
   assert.strictEqual(refreshed?.enabled, false);
 });
 
+test("invalidates owned packages before saving a disabled revision change in the same root", async (t) => {
+  // arrange
+  const seed = await seedUpdate({
+    contained: true,
+    installed: (pluginRoot) => ({ ...pluginRecord("1.0.0", false), resolvedSource: pluginRoot }),
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const modules = path.join(seed.pluginRoot, "node_modules");
+  await mkdir(modules);
+  await writeFile(path.join(modules, ".pi-claude-marketplace"), "owned");
+  await writeFile(path.join(modules, "old-package"), "1.0.0");
+
+  // act
+  const outcome = await prepare(seed);
+  const refreshed = (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "skipped",
+    name: "hello",
+    notes: [],
+    reasons: ["already disabled"],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  });
+  assert.strictEqual(refreshed?.version, "2.0.0");
+  assert.strictEqual(refreshed?.enabled, false);
+  assert.strictEqual(fs.existsSync(modules), false);
+});
+
+test("keeps the old disabled revision when its packages cannot be invalidated and retries later", async (t) => {
+  // arrange
+  const seed = await seedUpdate({
+    contained: true,
+    installed: (pluginRoot) => ({ ...pluginRecord("1.0.0", false), resolvedSource: pluginRoot }),
+  });
+  t.after(async () => {
+    await chmod(seed.pluginRoot, 0o755);
+    await rm(seed.cwd, { force: true, recursive: true });
+  });
+  const modules = path.join(seed.pluginRoot, "node_modules");
+  await mkdir(modules);
+  await writeFile(path.join(modules, ".pi-claude-marketplace"), "owned");
+  await chmod(seed.pluginRoot, 0o555);
+
+  // act & assert
+  await assert.rejects(prepare(seed), { code: "EACCES" });
+  assert.strictEqual(
+    (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello?.version,
+    "1.0.0",
+  );
+  assert.strictEqual(fs.existsSync(modules), true);
+  await chmod(seed.pluginRoot, 0o755);
+  await prepare(seed);
+  assert.strictEqual(
+    (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello?.version,
+    "2.0.0",
+  );
+  assert.strictEqual(fs.existsSync(modules), false);
+});
+
+test("keeps owned packages when a disabled refresh changes only compatibility", async (t) => {
+  // arrange
+  const seed = await seedUpdate({
+    contained: true,
+    installed: (pluginRoot) => ({
+      ...pluginRecord("2.0.0", false),
+      resolvedSource: pluginRoot,
+      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    }),
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const modules = path.join(seed.pluginRoot, "node_modules");
+  await mkdir(modules);
+  await writeFile(path.join(modules, ".pi-claude-marketplace"), "owned");
+
+  // act
+  await prepare(seed);
+
+  // assert
+  assert.strictEqual(await readFile(path.join(modules, ".pi-claude-marketplace"), "utf8"), "owned");
+});
+
 test("D-18-05: reinstall's policy skips a disabled record as already disabled without writing its pin", async (t) => {
   // arrange
   const seed = await seedUpdate({ installed: pluginRecord("1.0.0", false) });
@@ -740,7 +866,7 @@ test("WR-01: refreshing a disabled path-source pin drops a stale resolvedSha the
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
 
   // act
-  await prepare(seed);
+  await prepare(seed, { constraintGate: ADMITTING_GATE });
 
   // assert
   const refreshed = (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
@@ -791,7 +917,7 @@ test("WR-02: clears a stale resolvedSha even when nothing else about the disable
   await saveState(seed.locations.extensionRoot, state);
 
   // act
-  await prepare(seed);
+  await prepare(seed, { constraintGate: ADMITTING_GATE });
 
   // assert
   const refreshed = (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
@@ -898,30 +1024,42 @@ test("prepares pinned and unpinned URL clones with their exact resolved sha", as
   t.after(() =>
     Promise.all([pinned.cwd, unpinned.cwd].map((cwd) => rm(cwd, { force: true, recursive: true }))),
   );
+  const cloneCandidates = new Set<string>();
   const pinnedSeam: UpdateCloneCacheSeam = {
     resolvePluginPin: () =>
       Promise.resolve({
         cloneUrl: "https://example.com/pinned",
         pin: pinnedSha,
       }),
-    materializePluginClone: () => Promise.resolve(pinned.pluginRoot),
+    materializePluginClone: (options) => {
+      options.onCloneCreated?.("pinned-clone");
+      return Promise.resolve(pinned.pluginRoot);
+    },
     materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
     materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
   };
   const unpinnedSeam: UpdateCloneCacheSeam = {
     resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
     materializePluginClone: () => Promise.reject(new Error("unexpected immutable clone")),
-    materializeOrRefreshPluginMirror: () =>
-      Promise.resolve({
+    materializeOrRefreshPluginMirror: (options) => {
+      options.onCloneCreated?.("mirror-clone");
+      return Promise.resolve({
         pluginRoot: unpinned.pluginRoot,
         resolvedSha: unpinnedSha,
-      }),
-    materializePluginCommitCopy: () => Promise.resolve(unpinned.pluginRoot),
+      });
+    },
+    materializePluginCommitCopy: (options) => {
+      options.onCloneCreated?.("commit-clone");
+      return Promise.resolve(unpinned.pluginRoot);
+    },
   };
 
   // act
-  const pinnedPrepared = await prepare(pinned, { cloneCacheSeam: pinnedSeam });
-  const unpinnedPrepared = await prepare(unpinned, { cloneCacheSeam: unpinnedSeam });
+  const pinnedPrepared = await prepare(pinned, { cloneCacheSeam: pinnedSeam, cloneCandidates });
+  const unpinnedPrepared = await prepare(unpinned, {
+    cloneCacheSeam: unpinnedSeam,
+    cloneCandidates,
+  });
 
   // assert
   assert.ok(!("partition" in pinnedPrepared));
@@ -931,6 +1069,10 @@ test("prepares pinned and unpinned URL clones with their exact resolved sha", as
   assert.ok(!("partition" in unpinnedPrepared));
   assert.strictEqual(unpinnedPrepared.resolvedSha, unpinnedSha);
   assert.strictEqual(unpinnedPrepared.toVersion, "2.0.0");
+  assert.deepStrictEqual(
+    cloneCandidates,
+    new Set(["pinned-clone", "mirror-clone", "commit-clone"]),
+  );
 });
 
 test("UPDT-01 / GV-01: a tag-pinned update records the declared version with the tag's commit, and the tag's semver apart", async (t) => {
@@ -1352,8 +1494,10 @@ test("UPDT-01: a path-source pin materializes through the marketplace's own tag 
   const seed = await seedUpdate({ installed: pluginRecord("1.0.0"), version: "1.2.0" });
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
   const pinOid = "path-tag-oid";
+  const cloneCandidates = new Set<string>();
   const calls: Parameters<NonNullable<PreparePluginUpdateOptions["pathPinProbe"]>>[0][] = [];
   const pathPinProbe: PreparePluginUpdateOptions["pathPinProbe"] = (args) => {
+    args.onCloneCreated?.("path-clone");
     calls.push(args);
     return Promise.resolve({
       kind: "materialized",
@@ -1373,7 +1517,7 @@ test("UPDT-01: a path-source pin materializes through the marketplace's own tag 
     });
 
   // act
-  const prepared = await prepare(seed, { constraintGate, pathPinProbe });
+  const prepared = await prepare(seed, { constraintGate, pathPinProbe, cloneCandidates });
 
   // assert -- the SAME facts the marketplace record already carries, and the
   // pin's own oid as `tagOid`; never a re-derived marketplace URL.
@@ -1385,6 +1529,7 @@ test("UPDT-01: a path-source pin materializes through the marketplace's own tag 
   assert.strictEqual(calls[0]?.marketplaceRoot, path.join(seed.cwd, "marketplace"));
   assert.strictEqual(calls[0]?.marketplaceName, "mp");
   assert.deepStrictEqual(calls[0]?.marketplaceSource, pathSource("./marketplace"));
+  assert.deepStrictEqual(cloneCandidates, new Set(["path-clone"]));
 });
 
 test("UPDT-01: without an injected pathPinProbe, a path-source pin uses the real marketplace-tag clone", async (t) => {
@@ -1424,6 +1569,69 @@ test("UPDT-01: without an injected pathPinProbe, a path-source pin uses the real
   assert.ok(!("partition" in prepared));
   assert.strictEqual(prepared.resolvedSha, oid);
   assert.strictEqual(prepared.toVersion, `1.2.0-${oid.slice(0, 12)}`);
+});
+
+const pathPinGate: PreparePluginUpdateOptions["constraintGate"] = () =>
+  Promise.resolve({
+    kind: "admits",
+    range: "^1.0.0",
+    holders: [],
+    pin: { oid: "path-tag-oid", version: "1.2.0" },
+    fellBackToCurrentCopy: false,
+    disclosure: "already the highest version the combined range admits",
+  });
+
+test("GLK-04: a tag-pinned path update copies the marketplace tag while it holds the scope lock", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0"), version: "1.2.0" });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const lockObservations: boolean[] = [];
+  const pathPinProbe: PreparePluginUpdateOptions["pathPinProbe"] = async () => {
+    lockObservations.push(
+      await lockfile.check(seed.locations.extensionRoot, {
+        lockfilePath: seed.locations.stateLockFile,
+        realpath: false,
+      }),
+    );
+    return { kind: "materialized", pluginRoot: seed.pluginRoot, resolvedSha: "path-tag-oid" };
+  };
+
+  // act
+  const prepared = await prepare(seed, { constraintGate: pathPinGate, pathPinProbe });
+
+  // assert
+  assert.ok(!("partition" in prepared));
+  assert.strictEqual(prepared.resolvedSha, "path-tag-oid");
+  assert.deepStrictEqual(lockObservations, [true]);
+  assert.strictEqual(
+    await lockfile.check(seed.locations.extensionRoot, {
+      lockfilePath: seed.locations.stateLockFile,
+      realpath: false,
+    }),
+    false,
+  );
+});
+
+test("GLK-04: a tag-pinned path update fails as lock held and copies nothing while another holder has the scope lock", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0"), version: "1.2.0" });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const pathPinProbe: PreparePluginUpdateOptions["pathPinProbe"] = () =>
+    assert.fail("the tag copy ran while another holder had the scope lock");
+  const release = await lockfile.lock(seed.locations.extensionRoot, {
+    lockfilePath: seed.locations.stateLockFile,
+    realpath: false,
+  });
+
+  // act & assert
+  try {
+    await assert.rejects(
+      prepare(seed, { constraintGate: pathPinGate, pathPinProbe }),
+      StateLockHeldError,
+    );
+  } finally {
+    await release();
+  }
 });
 
 test("D-10-17: an unconstrained update supplies no path pin to the resolver", async (t) => {
@@ -1816,6 +2024,8 @@ test("D-18-11: an enabled record at the same version under another root is prepa
 const offline = Object.assign(new Error("offline"), { code: "ENETUNREACH" });
 const refusedWith = (status: number, message: string): Error =>
   new git.Errors.HttpError(status, message, "");
+const notFound = refusedWith(404, "Not Found");
+const unavailable = refusedWith(503, "Service Unavailable");
 const challenge = refusedWith(401, "Unauthorized");
 const leakedChallenge = new CleanupLeakError(challenge, "clone tmp left at /tmp/x");
 
@@ -1827,16 +2037,16 @@ for (const { title, error, reasons, cause } of [
     cause: offline,
   },
   {
-    title: "a 404 fails as source missing",
-    error: refusedWith(404, "Not Found"),
+    title: "a 404 fails as source missing with a cause that names the status and URL",
+    error: notFound,
     reasons: ["source missing"],
-    cause: "same",
+    cause: new Error("404 on https://example.com/private", { cause: notFound }),
   },
   {
-    title: "a 503 fails as network error",
-    error: refusedWith(503, "Service Unavailable"),
+    title: "a 503 fails as network error with a cause that names the status and URL",
+    error: unavailable,
     reasons: ["network error"],
-    cause: "same",
+    cause: new Error("503 on https://example.com/private", { cause: unavailable }),
   },
   {
     title: "an authentication challenge fails bare as authentication required",
@@ -1864,7 +2074,6 @@ for (const { title, error, reasons, cause } of [
       materializeOrRefreshPluginMirror: () => Promise.reject(error),
       materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
     };
-    const expectedCause = cause === "same" ? error : cause;
 
     // act
     const outcome = await prepare(seed, { cloneCacheSeam });
@@ -1876,7 +2085,7 @@ for (const { title, error, reasons, cause } of [
       fromVersion: "sha-000000000000",
       notes: [error.message],
       reasons,
-      ...(expectedCause !== undefined && { cause: expectedCause }),
+      ...(cause !== undefined && { cause }),
       declaresAgents: false,
       declaresMcp: false,
       declaresWorkflows: false,
@@ -1963,6 +2172,7 @@ test("swallows disabled clone cleanup failure after persisting the new pin", asy
 
   // act
   const outcome = await prepare(seed, {
+    constraintGate: ADMITTING_GATE,
     cloneCacheSeam,
     cleanupClones: () => Promise.reject(new Error("cleanup failed")),
   });
@@ -1995,6 +2205,7 @@ test("cleans obsolete clones after persisting a disabled git pin", async (t) => 
 
   // act
   await prepare(seed, {
+    constraintGate: ADMITTING_GATE,
     cloneCacheSeam,
     cleanupClones: () => {
       cleanupCalls += 1;
@@ -2018,6 +2229,7 @@ test("WR-05: sweeps clones when a disabled refresh clears the record's resolvedS
 
   // act
   await prepare(seed, {
+    constraintGate: ADMITTING_GATE,
     cleanupClones: () => {
       cleanupCalls += 1;
       return Promise.resolve();
@@ -2407,7 +2619,7 @@ for (const { label, recordedSha, partition } of [
     };
 
     // act
-    const outcome = await prepare(seed, { cloneCacheSeam });
+    const outcome = await prepare(seed, { cloneCacheSeam, constraintGate: ADMITTING_GATE });
 
     // assert
     assert.strictEqual("partition" in outcome ? outcome.partition : undefined, partition);
@@ -2448,7 +2660,7 @@ for (const { label, recordedSha, source } of [
     };
 
     // act
-    const outcome = await prepare(seed, { cloneCacheSeam });
+    const outcome = await prepare(seed, { cloneCacheSeam, constraintGate: ADMITTING_GATE });
 
     // assert
     assert.ok(!("partition" in outcome));

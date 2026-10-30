@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, test } from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -6,8 +9,12 @@ import { probeDependencyTags } from "../../../extensions/pi-claude-marketplace/o
 import { probeMarketplaceTags } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
 import { evaluateUpdateConstraint } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { DependencyDeclarationsUnreadableError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  DependencyDeclarationsUnreadableError,
+  StateLockHeldError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
+import { whileStateLockHeld } from "../state-lock.ts";
 
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type {
@@ -221,16 +228,82 @@ describe("evaluateUpdateConstraint", () => {
     });
   });
 
-  test("without an injected seam, the gate composes the real declaration walk", async () => {
+  test("an empty scope needs no declaration walk", async (t) => {
     // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "update-constraint-empty-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const locations = locationsFor("project", root);
     const state: ExtensionState = { schemaVersion: 2, marketplaces: {} };
 
     // act
-    const verdict = await evaluateUpdateConstraint(options({ state }));
+    const verdict = await evaluateUpdateConstraint(options({ state, locations }));
 
     // assert
     assert.deepStrictEqual(verdict, { kind: "unconstrained" });
   });
+
+  test("a sole installed target needs no declaration lock", async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "update-constraint-target-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const locations = locationsFor("project", root);
+    await mkdir(locations.extensionRoot, { recursive: true });
+
+    // act
+    const verdict = await whileStateLockHeld(locations, () =>
+      evaluateUpdateConstraint(options({ locations })),
+    );
+
+    // assert
+    assert.deepStrictEqual(verdict, { kind: "unconstrained" });
+  });
+
+  for (const { title, excludedVersions, expectedVerdict } of [
+    {
+      title: "requesters replace their installed declarations and still probe path tags",
+      excludedVersions: [],
+      expectedVerdict: {
+        kind: "admits",
+        range: "1.0.0",
+        holders: [{ key: "app@other", range: "1.0.0", disabled: false }],
+        fellBackToCurrentCopy: true,
+        disclosure: 'constrained to the combined range (1.0.0) -- required by "app@other"',
+      },
+    },
+    {
+      title: "requesters still respect excluded versions without a declaration lock",
+      excludedVersions: ["1.0.0"],
+      expectedVerdict: {
+        kind: "held",
+        cause: 'the declared ranges admit no version in common (1.0.0) -- required by "app@other"',
+      },
+    },
+  ]) {
+    test(title, async (t) => {
+      // arrange
+      const root = await mkdtemp(path.join(tmpdir(), "update-constraint-requester-"));
+      t.after(() => rm(root, { recursive: true, force: true }));
+      const locations = locationsFor("project", root);
+      await mkdir(locations.extensionRoot, { recursive: true });
+      const state = stateOf({ mp: { target: pluginRecord() }, other: { app: pluginRecord() } });
+
+      // act
+      const verdict = await whileStateLockHeld(locations, () =>
+        evaluateUpdateConstraint(
+          options({
+            locations,
+            state,
+            marketplaceRoot: root,
+            requesters: [{ key: "app@other", ranges: ["1.0.0"] }],
+            excludedVersions,
+          }),
+        ),
+      );
+
+      // assert
+      assert.deepStrictEqual(verdict, expectedVerdict);
+    });
+  }
 
   for (const { title, cause } of [
     {
@@ -881,5 +954,78 @@ describe("evaluateUpdateConstraint", () => {
     assert.ok(first.kind === "held");
     assert.ok(second.kind === "admits");
     assert.deepStrictEqual(second.pin, { oid: "oid-1.0.0", version: "1.0.0" });
+  });
+
+  test("refuses a held scope lock, then retries using the installed copy's constraint", async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "update-constraint-gate-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const locations = locationsFor("project", root);
+    const marketplaceRoot = path.join(root, "mp");
+    const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+    await mkdir(path.dirname(manifestPath), { recursive: true });
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        name: "mp",
+        plugins: [
+          { name: "app", source: "./plugins/app" },
+          { name: "kit", source: "./plugins/kit", dependencies: ["target@^2.0.0"] },
+          { name: "target", source: "./plugins/target", version: "2.0.0" },
+        ],
+      }),
+    );
+    const appClone = path.join(locations.pluginClonesDir, "acme-app", "0123456");
+    await mkdir(path.join(appClone, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(appClone, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "app", dependencies: ["target@^1.0.0"] }),
+    );
+    const state: ExtensionState = {
+      schemaVersion: 2,
+      marketplaces: {
+        mp: {
+          ...stateOf({ mp: {} }).marketplaces.mp!,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            app: pluginRecord({
+              resolvedSource: appClone,
+              resolvedSha: "0123456789abcdef0123456789abcdef01234567",
+            }),
+            kit: pluginRecord(),
+            target: pluginRecord(),
+          },
+        },
+      },
+    };
+
+    const constraintOptions = options({
+      state,
+      locations,
+      marketplaceRoot,
+      entry: { name: "target", source: pathSource("./plugins/target") },
+    });
+
+    // act
+    await whileStateLockHeld(locations, () =>
+      assert.rejects(
+        () => evaluateUpdateConstraint(constraintOptions),
+        (error: unknown) => {
+          assert.ok(error instanceof StateLockHeldError);
+          assert.strictEqual(error.scope, "project");
+          assert.strictEqual(error.lockPath, locations.stateLockFile);
+          return true;
+        },
+      ),
+    );
+    const verdict = await evaluateUpdateConstraint(constraintOptions);
+
+    // assert
+    assert.deepStrictEqual(verdict, {
+      kind: "held",
+      cause:
+        'the declared ranges admit no version in common (^1.0.0, ^2.0.0) -- required by "app@mp", "kit@mp"',
+    });
   });
 });

@@ -13,6 +13,8 @@ import { redactCredentials } from "./redact-credentials.ts";
 import type { Dependency } from "./concerns/soft-dep.ts";
 import type { SerializedCauseChain } from "./errors.ts";
 import type {
+  BackgroundUpdatePlugin,
+  BackgroundUpdateSurface,
   CascadeNotificationMessage,
   MarketplaceNotAddedMessage,
   MarketplaceNotificationMessage,
@@ -278,8 +280,9 @@ export interface ResolvedRollbackPhase {
  * row, or the constraint disclosure of an `updated` or `reinstalled` row
  * (D-10-13 / D-10-17a).
  * `cause` is absent when the row carries no cause. `leaks` names the paths the
- * user must clean up by hand. `rollbackPartial` lists the phases whose undo
- * failed; it is empty on a manual-recovery row.
+ * user must clean up by hand: those of the row's cause, then those of each
+ * rollback phase's cause (D-PL6-20). `rollbackPartial` lists the phases whose
+ * undo failed; it is empty on a manual-recovery row.
  */
 export interface ResolvedFailure {
   readonly cause?: SerializedCauseChain;
@@ -570,9 +573,14 @@ function resolveFailure(
   rollbackPartial: NonNullable<PluginFailedMessage["rollbackPartial"]>,
 ): ResolvedFailure {
   const chain = serializeCauseChain(cause);
+  // A path two causes leak is listed once.
+  const leaks = new Set([
+    ...manualRecoveryLeaks(cause),
+    ...rollbackPartial.flatMap((entry) => manualRecoveryLeaks(entry.cause)),
+  ]);
   return {
     ...(chain === undefined ? {} : { cause: chain }),
-    leaks: manualRecoveryLeaks(cause).map((leak) => redactCredentials(leak)),
+    leaks: [...leaks].map((leak) => redactCredentials(leak)),
     rollbackPartial: rollbackPartial.map((entry) => {
       const phaseChain = serializeCauseChain(entry.cause);
       return phaseChain === undefined
@@ -624,6 +632,7 @@ export const RAW_SURFACE_SEVERITY = {
   "stop-override-cap": "warning",
   "reconcile-aborted": "error",
   "plugin-path-skipped": "warning",
+  "background-update": "info",
 } as const satisfies Record<Exclude<RawSurface["kind"], "mcp-migration">, Severity>;
 
 /** D-13: a reconcile abort whose live cause has been serialized to text. */
@@ -661,6 +670,8 @@ export type ResolvedRawSurface =
  * header and lines can carry a thrown message, so each passes through
  * `redactCredentials`. The MCP kinds carry names and details read from plugin
  * and config files, so every free-text field of theirs passes through it too.
+ * A `background-update` carries plugin names, marketplace names, and versions
+ * read from records and catalogs, so each of those passes through it as well.
  * The usage text is static help and stays as written. Every other kind comes
  * back as the same object.
  */
@@ -697,6 +708,8 @@ export function resolveRawSurface(surface: RawSurface): ResolvedRawSurface {
       };
     case "mcp-migration":
       return resolveMcpMigration(surface);
+    case "background-update":
+      return resolveBackgroundUpdate(surface);
     case "usage-info":
     case "autoapply-status":
     case "device-flow-prompt":
@@ -954,6 +967,23 @@ function isWarningNotice(notice: RenderedMcpConfigNotice): boolean {
     notice.kind === "credentials-blanked" ||
     notice.kind === "tool-rules-unenforced"
   );
+}
+
+// PMOD-04: names and versions come from records and catalogs, so each string
+// field is redacted; `fromVersion` stays absent when the row has none.
+function resolveBackgroundUpdate(surface: BackgroundUpdateSurface): BackgroundUpdateSurface {
+  return {
+    kind: "background-update",
+    plugins: surface.plugins.map((plugin): BackgroundUpdatePlugin => ({
+      name: redactCredentials(plugin.name),
+      marketplace: redactCredentials(plugin.marketplace),
+      scope: plugin.scope,
+      ...(plugin.fromVersion === undefined
+        ? {}
+        : { fromVersion: redactCredentials(plugin.fromVersion) }),
+      toVersion: redactCredentials(plugin.toVersion),
+    })),
+  };
 }
 
 /**

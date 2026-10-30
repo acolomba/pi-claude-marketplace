@@ -60,10 +60,16 @@ import {
   type PluginInfoReader,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
-import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import {
+  locationsFor,
+  type ScopedLocations,
+} from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { softDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import { InvalidGitHubBaseUrlError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  InvalidGitHubBaseUrlError,
+  StateLockCompromisedError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
   buildInstalledPluginRecord,
   materializeMarketplaceTree,
@@ -81,7 +87,9 @@ import {
 } from "../../platform/pi-inventory-seed.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
+import { whileStateLockHeld } from "../state-lock.ts";
 
+import type { ParsedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type * as InfoOrchestrator from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
 import type { McpStatusReader } from "../../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
@@ -387,6 +395,8 @@ interface SeedPathMarketplaceOpts {
   readonly cwd: string;
   readonly mpName: string;
   readonly manifest: { name: string; plugins: readonly Record<string, unknown>[] };
+  /** The record's stored source; defaults to a path source. */
+  readonly source?: ParsedSource;
   /**
    * Installed plugin records. `disabled: true` seeds the ENBL-02
    * empty-resources marker (recorded-but-disabled); the default seeds a
@@ -465,7 +475,7 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
   const record: Record<string, unknown> = {
     name: mpName,
     scope,
-    source: pathSource(`./${mpName}-src`),
+    source: opts.source ?? pathSource(`./${mpName}-src`),
     addedFromCwd: cwd,
     manifestPath,
     marketplaceRoot: mpRoot,
@@ -806,6 +816,65 @@ test("VER-02: a partially available path plugin shows the version its plugin.jso
   });
 });
 
+test("D-PL5-32: a hosted marketplace's relative entry reads unavailable with an unsupported source", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const catalogUrl = "https://h.example/acme/mp/marketplace.json";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "root", source: "./", version: "1.0.0" }] },
+      source: { kind: "hosted", raw: catalogUrl, url: catalogUrl },
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "root", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ⊘ root v1.0.0 (unavailable) {unsupported source}",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("D-PL5-32: an installed plugin whose hosted entry now names a relative path reads installed with an unsupported source", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const catalogUrl = "https://h.example/acme/mp/marketplace.json";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "root", source: "./", version: "1.0.0" }] },
+      source: { kind: "hosted", raw: catalogUrl, url: catalogUrl },
+      installed: { root: { version: "1.0.0" } },
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "root", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● root v1.0.0 (installed) {unsupported source}",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
 test("SRC-01 / VER-02: a path plugin whose directory is missing reads source missing at the entry version", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
@@ -991,6 +1060,48 @@ test("INFO-05: external source (npm) emits `    components: not resolved` marker
   });
 });
 
+test("D-PL5-05: a hosted plugin source emits `    components: not resolved` like an external source", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "remote",
+            source: "https://h.example/remote/marketplace.json",
+            version: "1.0.0",
+            description: "Remote plugin sourced from a hosted catalog URL.",
+          },
+        ],
+      },
+      installed: { remote: { version: "1.0.0" } },
+    });
+
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "remote", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● remote v1.0.0 (installed)",
+          "    Remote plugin sourced from a hosted catalog URL.",
+          "    components: not resolved",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // (e) both-scopes fan-out -- project-first per MSG-GR-3 / INFO-03.
 // ---------------------------------------------------------------------------
@@ -1143,6 +1254,48 @@ test("UXG-08: missing plugin in known marketplace emits `⊘ <plugin> (failed) {
         "  ⊘ ghost (failed) {not in manifest}",
       ].join("\n"),
     );
+  });
+});
+
+test("D-PL5-28: info on a plugin of a marketplace recorded under a reserved name fails as an invalid manifest", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "claude-plugins-official",
+      manifest: {
+        name: "claude-plugins-official",
+        plugins: [{ name: "real", source: "./real", version: "1.0.0" }],
+      },
+      installablePluginDirs: ["real"],
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({
+      ctx,
+      run,
+      marketplace: "claude-plugins-official",
+      plugin: "real",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          // D-PL8-07: an official name defaults autoupdate on.
+          "● claude-plugins-official [user] <autoupdate>",
+          "  ⊘ real (failed) {invalid manifest}",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
   });
 });
 
@@ -5528,6 +5681,17 @@ test("RSTA-04: installed git-source plugin with a WARM mirror resolves its compo
   });
 });
 
+/**
+ * D-PL5-28: the anthropics organization's github source, the only source a
+ * marketplace recorded as `claude-plugins-official` loads from.
+ */
+const ANTHROPICS_OFFICIAL_SOURCE = {
+  kind: "github",
+  raw: "anthropics/claude-plugins-official",
+  owner: "anthropics",
+  repo: "claude-plugins-official",
+} satisfies ParsedSource;
+
 test("info flags binaries on an uninstalled path plugin of an official marketplace", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
@@ -5537,6 +5701,7 @@ test("info flags binaries on an uninstalled path plugin of an official marketpla
       scopeRoot: userRoot,
       cwd,
       mpName: "claude-plugins-official",
+      source: ANTHROPICS_OFFICIAL_SOURCE,
       manifest: {
         name: "claude-plugins-official",
         plugins: [
@@ -5580,6 +5745,7 @@ test("info flags binaries on an installed path plugin of an official marketplace
       scopeRoot: userRoot,
       cwd,
       mpName: "claude-plugins-official",
+      source: ANTHROPICS_OFFICIAL_SOURCE,
       manifest: {
         name: "claude-plugins-official",
         plugins: [
@@ -5625,6 +5791,7 @@ test("info flags binaries on an uninstalled warm git plugin of an official marke
       scopeRoot: userRoot,
       cwd,
       mpName: "claude-plugins-official",
+      source: ANTHROPICS_OFFICIAL_SOURCE,
       manifest: {
         name: "claude-plugins-official",
         plugins: [
@@ -5669,6 +5836,7 @@ test("info keeps an installed warm git plugin with binaries unresolved for an of
       scopeRoot: userRoot,
       cwd,
       mpName: "claude-plugins-official",
+      source: ANTHROPICS_OFFICIAL_SOURCE,
       manifest: {
         name: "claude-plugins-official",
         plugins: [
@@ -6479,6 +6647,75 @@ test("FTCH-06: info --fetch folds a UserCanceledError (denied/expired Device Flo
     assert.match(msg, /components: not resolved/, msg);
   });
 });
+
+for (const { title, statusCode, installed, expectedRow } of [
+  {
+    title: "GLK-01: info --fetch reads a host 404 on a not-installed plugin as source missing",
+    statusCode: 404,
+    installed: {},
+    expectedRow: "  ◌ gplug v1.0.0 (remote) {source missing}",
+  },
+  {
+    title: "GLK-01: info --fetch reads a host 503 on a not-installed plugin as network error",
+    statusCode: 503,
+    installed: {},
+    expectedRow: "  ◌ gplug v1.0.0 (remote) {network error}",
+  },
+  {
+    title: "GLK-01: info --fetch appends source missing to an installed plugin's row on a host 404",
+    statusCode: 404,
+    installed: { gplug: { version: "1.0.0" } },
+    expectedRow: "  ● gplug v1.0.0 (installed) {source missing}",
+  },
+]) {
+  test(title, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      await seedPathMarketplace({
+        scope: "user",
+        scopeRoot: path.join(home, ".pi", "agent"),
+        cwd,
+        mpName: "mp",
+        manifest: {
+          name: "mp",
+          plugins: [{ name: "gplug", source: "https://example.com/repo", version: "1.0.0" }],
+        },
+        installed,
+      });
+      const hostAnswer = Object.assign(new Error(`HTTP Error: ${statusCode}`), {
+        code: "HttpError",
+        data: { statusCode },
+      });
+      const { gitOps } = createGitOps({ cloneThrows: hostAnswer });
+      const { credOps: credentialOps } = createCredentialOps();
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await getPluginInfo({
+        ctx,
+        run,
+        marketplace: "mp",
+        plugin: "gplug",
+        scope: "user",
+        cwd,
+        fetch: true,
+        cloneCacheSeam: fetchSeamWith(gitOps),
+        credentialOps,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "● mp [user] <no autoupdate>",
+            expectedRow,
+            "    components: not resolved",
+          ].join("\n"),
+        },
+      ]);
+    });
+  });
+}
 
 // ---------------------------------------------------------------------------
 // OUT-03: the author-declared install-time claim on the info surface.
@@ -9300,7 +9537,7 @@ for (const { label, createObstacle, expected } of [
       await mkdir(path.join(root, ".claude-plugin"));
       await symlink(devNull, path.join(root, ".claude-plugin", "plugin.json"));
     },
-    expected: "  ○ host (available)\n    dependencies: bare-dep@mp",
+    expected: "  ⊘ host (unavailable) {unreadable manifest}",
   },
   {
     label: "a directory instead of plugin.json",
@@ -10167,14 +10404,10 @@ test("GIT-03: `info --fetch` of a not-installed git plugin under a held state lo
       materializePluginClone: () => assert.fail("a held lock never clones"),
       materializeOrRefreshPluginMirror: () => assert.fail("a held lock never refreshes the mirror"),
     };
-    const release = await lockfile.lock(locations.extensionRoot, {
-      lockfilePath: locations.stateLockFile,
-      realpath: false,
-    });
     const { ctx, run, notifications } = makeCtx();
 
-    // act
-    try {
+    await whileStateLockHeld(locations, async () => {
+      // act
       await getPluginInfo({
         ctx,
         run,
@@ -10185,13 +10418,19 @@ test("GIT-03: `info --fetch` of a not-installed git plugin under a held state lo
         fetch: true,
         cloneCacheSeam: seam,
       });
-    } finally {
-      await release();
-    }
+    });
 
     // assert
     assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /gplug v1\.0\.0 \(failed\) \{lock held\}/);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● mp [user] <no autoupdate>",
+        "  ⊘ gplug v1.0.0 (failed) {lock held}",
+      ].join("\n"),
+    );
   });
 });
 
@@ -10216,14 +10455,10 @@ test("GIT-03: `info --fetch` of an installed git plugin under a held state lock 
       materializePluginClone: () => assert.fail("a held lock never clones"),
       materializeOrRefreshPluginMirror: () => assert.fail("a held lock never refreshes the mirror"),
     };
-    const release = await lockfile.lock(locations.extensionRoot, {
-      lockfilePath: locations.stateLockFile,
-      realpath: false,
-    });
     const { ctx, run, notifications } = makeCtx();
 
-    // act
-    try {
+    await whileStateLockHeld(locations, async () => {
+      // act
       await getPluginInfo({
         ctx,
         run,
@@ -10234,12 +10469,295 @@ test("GIT-03: `info --fetch` of an installed git plugin under a held state lock 
         fetch: true,
         cloneCacheSeam: seam,
       });
-    } finally {
-      await release();
-    }
+    });
 
     // assert
     assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /gplug v1\.0\.0 \(failed\) \{lock held\}/);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● mp [user] <no autoupdate>",
+        "  ⊘ gplug v1.0.0 (failed) {lock held}",
+      ].join("\n"),
+    );
+  });
+});
+
+for (const { title, installed } of [
+  {
+    title:
+      "GLK-05: `info --fetch` of a not-installed git plugin whose lock is lost fails as lock held",
+    installed: {},
+  },
+  {
+    title:
+      "GLK-05: `info --fetch` of an installed git plugin whose lock is lost fails as lock held",
+    installed: { gplug: { version: "1.0.0" } },
+  },
+]) {
+  test(title, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      const userRoot = path.join(home, ".pi", "agent");
+      await seedPathMarketplace({
+        scope: "user",
+        scopeRoot: userRoot,
+        cwd,
+        mpName: "mp",
+        manifest: {
+          name: "mp",
+          plugins: [{ name: "gplug", source: "https://example.com/repo", version: "1.0.0" }],
+        },
+        installed,
+      });
+      const locations = locationsFor("user", cwd);
+      const lost = new StateLockCompromisedError("user", locations.stateLockFile);
+      const seam: InfoCloneCacheSeam = {
+        resolvePluginPin: () => Promise.reject(lost),
+        materializePluginClone: () => Promise.reject(lost),
+        materializeOrRefreshPluginMirror: () => Promise.reject(lost),
+      };
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await getPluginInfo({
+        ctx,
+        run,
+        marketplace: "mp",
+        plugin: "gplug",
+        scope: "user",
+        cwd,
+        fetch: true,
+        cloneCacheSeam: seam,
+      });
+
+      // assert
+      assert.equal(notifications.length, 1);
+      assert.equal(
+        notifications[0]!.message,
+        [
+          "A plugin operation has failed.",
+          "",
+          "● mp [user] <no autoupdate>",
+          "  ⊘ gplug v1.0.0 (failed) {lock held}",
+        ].join("\n"),
+      );
+    });
+  });
+}
+
+/**
+ * GLK-05: a reader that records, before each plugin file read, whether the
+ * scope's state lock is held, then reads the file for real.
+ */
+function lockObservingReader(locations: ScopedLocations): {
+  readonly reader: PluginInfoReader;
+  readonly lockObservations: boolean[];
+} {
+  const lockObservations: boolean[] = [];
+  const reader: PluginInfoReader = {
+    ...NODE_READER,
+    async readTextFile(filePath) {
+      lockObservations.push(
+        await lockfile.check(locations.extensionRoot, {
+          lockfilePath: locations.stateLockFile,
+          realpath: false,
+        }),
+      );
+      return NODE_READER.readTextFile(filePath);
+    },
+  };
+  return { reader, lockObservations };
+}
+
+/** GLK-05: the fixture repository every locked-read case clones. */
+async function seedLockedReadRepository(cwd: string): Promise<string> {
+  const fixtureRepoDir = path.join(cwd, "repo-fixture");
+  await mkdir(path.join(fixtureRepoDir, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(fixtureRepoDir, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "gplug" }),
+  );
+  await mkdir(path.join(fixtureRepoDir, "skills", "fetched-skill"), { recursive: true });
+  await writeFile(
+    path.join(fixtureRepoDir, "skills", "fetched-skill", "SKILL.md"),
+    `---\nname: fetched-skill\n---\n\nHello.\n`,
+  );
+  return fixtureRepoDir;
+}
+
+const LOCKED_READ_HEAD = "fedcba9876543210fedcba9876543210fedcba98";
+
+for (const { title, source, installed, expectedRow, expectedLockObservations } of [
+  {
+    title:
+      "GLK-05: info --fetch of a not-installed unpinned plugin reads its row inside the scope lock",
+    source: "https://example.com/repo.git",
+    installed: {},
+    expectedRow: "  ○ gplug v1.0.0 (available)",
+    expectedLockObservations: [true],
+  },
+  {
+    title:
+      "GLK-05: info --fetch of an installed unpinned plugin reads its row inside the scope lock",
+    source: "https://example.com/repo.git",
+    installed: { gplug: { version: "1.0.0" } },
+    expectedRow: "  ● gplug v1.0.0 (installed)",
+    expectedLockObservations: [true],
+  },
+  {
+    title: "GLK-05: a pinned info --fetch reads its row without taking the scope lock",
+    source: {
+      source: "url",
+      url: "https://example.com/repo.git",
+      sha: "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+    },
+    installed: {},
+    expectedRow: "  ○ gplug v1.0.0 (available)",
+    expectedLockObservations: [false],
+  },
+]) {
+  test(title, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      const fixtureSourceDir = await seedLockedReadRepository(cwd);
+      await seedPathMarketplace({
+        scope: "user",
+        scopeRoot: path.join(home, ".pi", "agent"),
+        cwd,
+        mpName: "mp",
+        manifest: { name: "mp", plugins: [{ name: "gplug", source, version: "1.0.0" }] },
+        installed,
+      });
+      const locations = locationsFor("user", cwd);
+      const { reader, lockObservations } = lockObservingReader(locations);
+      const { gitOps } = createGitOps({
+        fixtureSourceDir,
+        head: LOCKED_READ_HEAD,
+        localRefs: { "refs/heads/main": LOCKED_READ_HEAD },
+        remoteRefs: { "refs/remotes/origin/HEAD": LOCKED_READ_HEAD },
+      });
+      const { credOps: credentialOps } = createCredentialOps();
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await withDefaultMcpStatus(createGetPluginInfo(reader))({
+        ctx,
+        run,
+        marketplace: "mp",
+        plugin: "gplug",
+        scope: "user",
+        cwd,
+        fetch: true,
+        cloneCacheSeam: fetchSeamWith(gitOps),
+        credentialOps,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: ["● mp [user] <no autoupdate>", expectedRow, "    skills: fetched-skill"].join(
+            "\n",
+          ),
+        },
+      ]);
+      assert.deepStrictEqual([...new Set(lockObservations)], expectedLockObservations);
+      assert.strictEqual(
+        await lockfile.check(locations.extensionRoot, {
+          lockfilePath: locations.stateLockFile,
+          realpath: false,
+        }),
+        false,
+      );
+    });
+  });
+}
+
+test("GLK-05: bare info of an installed unpinned plugin reads its warm row without taking the scope lock", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "gplug", source: "https://example.com/repo.git", version: "1.0.0" }],
+      },
+      installed: { gplug: { version: "1.0.0" } },
+    });
+    await seedWarmMirror({
+      scope: "user",
+      cwd,
+      cloneUrl: "https://example.com/repo",
+      pluginJson: { name: "gplug" },
+      componentFiles: ["skills/warm-skill/SKILL.md"],
+    });
+    const locations = locationsFor("user", cwd);
+    const { reader, lockObservations } = lockObservingReader(locations);
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await withDefaultMcpStatus(createGetPluginInfo(reader))({
+      ctx,
+      run,
+      marketplace: "mp",
+      plugin: "gplug",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● gplug v1.0.0 (installed)",
+          "    skills: warm-skill",
+        ].join("\n"),
+      },
+    ]);
+    assert.deepStrictEqual([...new Set(lockObservations)], [false]);
+  });
+});
+
+test("D-78-04: bare info of an installed git plugin whose warm manifest cannot be read keeps the recorded row with no reason", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const cloneUrl = "https://example.com/installed-unreadable";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "gplug", source: cloneUrl, version: "1.0.0" }] },
+      installed: { gplug: { version: "1.0.0" } },
+    });
+    await seedWarmMirror({ scope: "user", cwd, cloneUrl, pluginJson: { name: "gplug" } });
+    const mirrorDir = await locationsFor("user", cwd).pluginCloneDir(pluginMirrorKey(cloneUrl));
+    const manifestPath = path.join(mirrorDir, ".claude-plugin", "plugin.json");
+    const permissionError = Object.assign(new Error("case-owned readFile failure"), {
+      code: "EACCES",
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await withFsPromiseFault("readFile", manifestPath, permissionError, async (getInfo) => {
+      await getInfo({ ctx, run, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● gplug v1.0.0 (installed)",
+          "    components: not resolved",
+        ].join("\n"),
+      },
+    ]);
   });
 });

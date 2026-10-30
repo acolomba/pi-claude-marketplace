@@ -96,8 +96,9 @@ import {
   withLockedStateTransaction,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
-import { garbageCollectPluginClones } from "../plugin/clone-gc.ts";
+import { collectPluginClonesLocked } from "../plugin/clone-gc.ts";
 import { buildScopeDeclarationIndex, withoutDisabledHolders } from "../plugin/dependency-index.ts";
+import { applyPartialCascadeFold } from "../plugin/shared.ts";
 
 import { composeHeldRemovalCause, REMOVE_CONTEXT, type RemoveRowMsg } from "./remove.messaging.ts";
 import {
@@ -119,8 +120,9 @@ import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { ScopeDeclarationIndexResult } from "../plugin/dependency-index.ts";
 
-type RecordedSourceKind = "github" | "url" | "path" | "unknown";
+type RecordedSourceKind = "github" | "url" | "hosted" | "path" | "unknown";
 
 /**
  * AFILE-04: an orchestrated removal whose state transaction threw after its
@@ -437,25 +439,12 @@ async function cascadePluginsInPlace(args: {
     // D-03: outcome.cause is set when ok===false (see UnstageOutcome).
     const cause = outcome.cause ?? new Error(`unknown cascade failure for ${pluginName}`);
 
-    // TR-03: non-AG-5 partial-failure filters resources.* by outcome.dropped.*
-    // so the persisted row reflects only artifacts still on disk.
-    // AG-5 (AgentsUnstageFailureError) preserves the row INTACT.
+    // TR-03 / D-PL5-15: a non-AG-5 partial failure subtracts every dropped
+    // axis, so the persisted row names only artifacts still on disk (WLIF-03:
+    // a stale workflow name would steer the next removal). AG-5
+    // (AgentsUnstageFailureError) keeps the row intact.
     if (!(cause instanceof AgentsUnstageFailureError)) {
-      const dropped = outcome.dropped;
-      plugin.resources.skills = plugin.resources.skills.filter((n) => !dropped.skills.includes(n));
-      plugin.resources.prompts = plugin.resources.prompts.filter(
-        (n) => !dropped.commands.includes(n),
-      );
-      plugin.resources.agents = plugin.resources.agents.filter((n) => !dropped.agents.includes(n));
-      plugin.resources.mcpServers = plugin.resources.mcpServers.filter(
-        (n) => !dropped.mcpServers.includes(n),
-      );
-      // WLIF-03: workflow envelopes live outside every scope root, so a row
-      // still naming one the cascade deleted would drive the NEXT removal at a
-      // name it no longer owns.
-      plugin.resources.workflows = plugin.resources.workflows.filter(
-        (n) => !dropped.workflows.includes(n),
-      );
+      applyPartialCascadeFold(plugin, outcome.dropped);
     }
 
     failedPlugins.push({ name: pluginName, cause });
@@ -718,7 +707,7 @@ async function readRetentionIndex(args: {
   readonly plan: RemovePlan;
   readonly locations: ScopedLocations;
   readonly read: typeof buildScopeDeclarationIndex;
-}): Promise<DeclarationIndex | undefined> {
+}): Promise<Extract<ScopeDeclarationIndexResult, { readonly ok: true }> | undefined> {
   const layerUninstalls = args.plan.layerOnly && args.plan.entries.length > 0;
   if (!layerUninstalls && !Object.values(args.record.plugins).some(isDependencyRecord)) {
     return undefined;
@@ -729,7 +718,7 @@ async function readRetentionIndex(args: {
     throw new DeclarationIndexStop(result.cause);
   }
 
-  return result.index;
+  return result;
 }
 
 /** One plugin a layer remove would uninstall while staying plugins declare it. */
@@ -895,11 +884,15 @@ async function runRemoveLockBody(args: {
 
   const src = record.source as { kind?: unknown };
   const sourceKind: RecordedSourceKind | undefined =
-    src.kind === "github" || src.kind === "url" || src.kind === "path" || src.kind === "unknown"
+    src.kind === "github" ||
+    src.kind === "url" ||
+    src.kind === "hosted" ||
+    src.kind === "path" ||
+    src.kind === "unknown"
       ? src.kind
       : undefined;
 
-  const index = await readRetentionIndex({
+  const indexResult = await readRetentionIndex({
     state: tx.state as ExtensionState,
     record,
     plan,
@@ -908,7 +901,9 @@ async function runRemoveLockBody(args: {
   });
   refuseHeldRemovals(
     plan,
-    index === undefined ? undefined : withoutDisabledHolders(index, tx.state as ExtensionState),
+    indexResult === undefined
+      ? undefined
+      : withoutDisabledHolders(indexResult.index, indexResult.candidates),
     opts.name,
   );
 
@@ -923,8 +918,8 @@ async function runRemoveLockBody(args: {
     mcpConfigNotices,
   };
   await cascadePluginsInPlace({ ...removal, entries: plan.entries });
-  if (index !== undefined) {
-    await cascadeDependencies({ ...removal, plan, index });
+  if (indexResult !== undefined) {
+    await cascadeDependencies({ ...removal, plan, index: indexResult.index });
   }
 
   // MR-7: a failed plugin keeps the record and writes no config.
@@ -1157,8 +1152,9 @@ function surfaceRemoveStop(
 }
 
 /**
- * MR-7 / MURL-04: the marketplace data dir and, for github and url sources, the
- * `sources/<name>/` clone of a marketplace whose state record is gone.
+ * MR-7 / MURL-04 / D-PL5-06: the marketplace data dir and, for github, url,
+ * and hosted sources, the `sources/<name>/` checkout or stored catalog of a
+ * marketplace whose state record is gone.
  */
 async function removeMarketplaceFootprint(
   locations: ScopedLocations,
@@ -1167,7 +1163,7 @@ async function removeMarketplaceFootprint(
 ): Promise<void> {
   await removePath(locations.marketplaceDataDir(name));
 
-  if (sourceKind === "github" || sourceKind === "url") {
+  if (sourceKind === "github" || sourceKind === "url" || sourceKind === "hosted") {
     await removePath(locations.sourceCloneDir(name));
   }
 }
@@ -1197,9 +1193,11 @@ async function removeMarketplaceFootprint(
  * reference. It runs post-commit, so it derives live clone keys from the
  * just-committed state -- the removed plugins' records are gone, so their
  * clones are unreferenced and swept, while a clone still referenced by a
- * surviving marketplace's plugin survives. The helper is fs-only, so no git
- * surface widens (NFR-5), and NFR-3 holds: a crash before this leaves an
- * orphan the next idempotent pass removes.
+ * surviving marketplace's plugin survives. D-PL7-05: the GC takes a fresh
+ * scope lock after the remove's own lock is released, and a held lock skips
+ * it (traced, D-19-01). It names no git surface, so none widens (NFR-5), and
+ * NFR-3 holds: a crash before this leaves an orphan the next idempotent pass
+ * removes.
  */
 async function runPostRemoveCleanup(args: {
   readonly locations: ScopedLocations;
@@ -1235,7 +1233,7 @@ async function runPostRemoveCleanup(args: {
   }
 
   try {
-    await garbageCollectPluginClones(locations);
+    await collectPluginClonesLocked(locations);
   } catch (err) {
     // D-19-01: hygienic cleanup never becomes the primary user-facing path.
     hookDebugLog(`post-remove plugin-clone GC failed: ${errorMessage(err)}`);

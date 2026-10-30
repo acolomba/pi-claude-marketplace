@@ -9,9 +9,10 @@
 // them. The marketplace HEADER line (`(added)` / `(failed) {<reason>}`) is
 // rendered centrally by the `renderMpHeader` seam that `notifyWithContext` ->
 // `emitContextCascade` reuses, so its forms carry no local status declaration.
-// The one child row `marketplace add` emits is the `failed` row that carries the
-// fetched-URL cause under the GitHub base override (GHB-01), so `failed` is the
-// only plugin status in the policy map.
+// Its child rows are the `failed` row that carries the fetched-URL cause under
+// the GitHub base override (GHB-01) and the rows of the missing-dependency step
+// a standalone add runs: `installed` for each dependency it installed and
+// `failed` for one it could not install (D-PL2-09, D-PL2-11).
 
 import type { CommandContext } from "../../shared/notify-context.ts";
 
@@ -20,5 +21,6 @@ export const ADD_CONTEXT = {
   Messaging: { label: "Marketplace add" },
   rowPolicies: {
     failed: { markers: false, contentReasons: true },
+    installed: { markers: true, contentReasons: true },
   },
-} as const satisfies CommandContext<"failed">;
+} as const satisfies CommandContext<"failed" | "installed">;
