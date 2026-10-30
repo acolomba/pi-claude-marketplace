@@ -4,14 +4,14 @@
 //
 // Delegates to `bootstrapClaudePlugin`, threading `deps.gitOps` and the
 // missing-dependency step (D-PL2-09) through.
-// Idempotent end-to-end -- both composed orchestrators are idempotent.
+// Idempotent end-to-end, as the composed `marketplace add` is.
 //
 // The bootstrap subcommand takes NO positional arguments and rejects
 // `--scope` explicitly: bootstrap always targets user scope. Its direct
 // parser retains the command-specific diagnostics for forbidden arguments.
 //
 // IL-2: all user-visible output flows through `shared/notification-dispatch.ts`. The
-// composed orchestrators emit the success rows and a failed add's row (with
+// composed add emits the success row and a failed add's row (with
 // its reason and cause, as `marketplace add` renders it). An error that is not
 // an add precondition still THROWS, so the handler wraps
 // `bootstrapClaudePlugin` in a catch that routes it through the `notify` path
@@ -19,8 +19,8 @@
 // channel. A throw of the missing-dependency step after the add committed is
 // the exception: it reaches the command, as it does for `marketplace add`.
 //
-// D-05: the router's run renders the add, the autoupdate flip, and the
-// handler's own failed row from one soft-dependency snapshot.
+// D-05: the router's run renders the add and the handler's own failed row
+// from one soft-dependency snapshot.
 
 import {
   bootstrapClaudePlugin,
@@ -90,9 +90,8 @@ export function makeBootstrapHandler(
       }
 
       // `bootstrapClaudePlugin` renders every add precondition failure itself
-      // (ATTR-07), so only an error outside that closed set, or a failure of
-      // the autoupdate step after a successful add, reaches here, and it still
-      // needs routing through the notify path as a failed marketplace row
+      // (ATTR-07), so only an error outside that closed set reaches here, and
+      // it still needs routing through the notify path as a failed marketplace row
       // (IL-2). The row stamps caller `severity: "error"` (SEV-02). The
       // marketplace-level row carries no cause chain -- SNM-10 confines
       // `cause` to plugin-level variants.

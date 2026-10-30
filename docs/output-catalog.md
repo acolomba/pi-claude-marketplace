@@ -2658,7 +2658,7 @@ Single-shot setup of `anthropics/claude-plugins-official` in user scope. The mar
 ● claude-plugins-official [user] (added)
 ```
 
-The bootstrap path is a marketplace add; the marketplace status `added` carries the `(added)` header arm. No reload-hint: a marketplace record is not a Pi-visible resource (SNM-33 / D-22-01). The official name `claude-plugins-official` has autoupdate on by default (D-PL8-07), so bootstrap's autoupdate step writes no value and reports `{already autoupdate}` unless `claude-plugins.json` sets the value off (D-PL8-19). The v2 state-change header arm (`added`) does not carry the `<autoupdate>` marker -- the marker only appears on the list-surface header form (`mp.status === undefined`, `mp.details.autoupdate === true`). Subsequent `marketplace list` renders the marketplace with the marker.
+The bootstrap path is a marketplace add; the marketplace status `added` carries the `(added)` header arm. No reload-hint: a marketplace record is not a Pi-visible resource (SNM-33 / D-22-01). The official name `claude-plugins-official` has autoupdate on by default (D-PL8-07), so bootstrap writes no autoupdate value, and a value that `claude-plugins.json` already holds stays as it is. The v2 state-change header arm (`added`) does not carry the `<autoupdate>` marker -- the marker only appears on the list-surface header form (`mp.status === undefined`, `mp.details.autoupdate === true`). Subsequent `marketplace list` renders the marketplace with the marker.
 
 ### Re-run when already bootstrapped
 
@@ -2668,7 +2668,7 @@ The bootstrap path is a marketplace add; the marketplace status `added` carries 
 ● claude-plugins-official [user] (skipped) {already added}
 ```
 
-When the marketplace already exists with the same source, the add step is the `marketplace add` no-op (MPA-01): it changes nothing and renders `(skipped) {already added}`. The autoupdate step then renders its own row. No reload-hint. Severity: info.
+When the marketplace already exists with the same source, the add step is the `marketplace add` no-op (MPA-01): it changes nothing and renders `(skipped) {already added}`. It leaves the autoupdate value as it is. No reload-hint. Severity: info.
 
 ______________________________________________________________________
 

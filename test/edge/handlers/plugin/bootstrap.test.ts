@@ -8,7 +8,7 @@
 // failure cases reach `notify()`, and D-05 renders every one of those emissions
 // from the run the handler receives. Every count here was measured against the
 // real module through a counting context before a line was written: the workflow
-// emits twice (add, then autoupdate) and the failure conversion emits once, and
+// emits once (the add) and the failure conversion emits once, and
 // the handler reads `ctx.cwd` exactly once on the path that reaches the workflow
 // and never on a rejection path.
 //
@@ -267,7 +267,7 @@ function describeClones(clones: readonly GitCloneCall[], stagingRoot: string): G
 test("clones through the injected git port into the user scope at the accepted arity", async (t) => {
   // arrange
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "accepted");
-  const { ctx, verifyBoundary } = createNotificationBoundary(2, { value: cwd, reads: 1 });
+  const { ctx, verifyBoundary } = createNotificationBoundary(1, { value: cwd, reads: 1 });
   const git = createGitPort(sourceTree);
   const bootstrapHandler = makeBootstrapHandler(createBootstrapDeps(git.gitOps));
 
@@ -283,7 +283,7 @@ test("clones through the injected git port into the user scope at the accepted a
 test("D-PL2-09: forwards the missing-dependency step, which the workflow runs once in the user scope", async (t) => {
   // arrange
   const { cwd, sourceTree } = await createHermeticScope(t, "dependency-step");
-  const { ctx, verifyBoundary } = createNotificationBoundary(2, { value: cwd, reads: 1 });
+  const { ctx, verifyBoundary } = createNotificationBoundary(1, { value: cwd, reads: 1 });
   const git = createGitPort(sourceTree);
   const requests: { readonly scope: Scope; readonly cwd: string }[] = [];
   const bootstrapHandler = makeBootstrapHandler(
@@ -429,7 +429,7 @@ test("converts a thrown bootstrap failure into one failed marketplace row carryi
 test("WR-02: lets a missing-dependency step that throws after the add committed fail the command with that error, not a failed row", async (t) => {
   // arrange
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "step-throws");
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2, {
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: cwd,
     reads: 1,
   });
@@ -446,7 +446,6 @@ test("WR-02: lets a missing-dependency step that throws after the add committed 
   );
   assert.deepStrictEqual(notifications, [
     { message: `● ${BOOTSTRAP_MARKETPLACE_NAME} [user] (added)` },
-    { message: `● ${BOOTSTRAP_MARKETPLACE_NAME} [user] <autoupdate> {already autoupdate}` },
   ]);
   assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();

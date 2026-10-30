@@ -96,7 +96,7 @@ test("executes a selected list route without selecting its handler again", async
 
 const EXPECTED_TOP_LEVEL_USAGE =
   "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|autoapply|enable|disable|import|browse|marketplace|market|help> ...\n" +
-  "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
+  "  bootstrap                                          add anthropics/claude-plugins-official to user scope\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
   "  prune [--scope user|project] [--dry-run]\n" +

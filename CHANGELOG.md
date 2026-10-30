@@ -6,6 +6,7 @@
 
   - After your first message in the terminal UI, Pi updates the plugins of each autoupdate marketplace in the background. One notice names them and asks for `/reload`. `DISABLE_AUTOUPDATER` and Claude Code's other opt-out variables turn this off.
   - Claude Code's official marketplaces now have autoupdate on by default. A config file that Pi cannot read turns autoupdate off for its whole scope.
+  - `bootstrap` now only adds the official marketplace. It keeps the autoupdate setting you chose for it.
   - A plugin with `package.json` and a `package-lock.json`, `npm-shrinkwrap.json`, or `bun.lock` gets its npm or bun packages on install and update, as in Claude Code. A failed or refused package install leaves the plugin installed, with a note.
   - `uninstall` and `prune` remove the packages that Pi installed for a plugin.
   - `marketplace add` accepts an https URL to a hosted `marketplace.json`, and `marketplace update` downloads it again. A plugin that a hosted marketplace lists by a relative path is unavailable, as in Claude Code.

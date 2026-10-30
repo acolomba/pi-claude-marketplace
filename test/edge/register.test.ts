@@ -146,7 +146,7 @@ type PiRegistrar = Omit<ExtensionAPI, "registerTool"> & {
 
 const EXPECTED_TOP_LEVEL_USAGE =
   "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|autoapply|enable|disable|import|browse|marketplace|market|help> ...\n" +
-  "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
+  "  bootstrap                                          add anthropics/claude-plugins-official to user scope\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
   "  prune [--scope user|project] [--dry-run]\n" +
@@ -2099,7 +2099,7 @@ describe("registerClaudePluginCommand", () => {
     peer.verifyRegistrar();
   });
 
-  test("runs registered bootstrap through the supplied lifecycle cache and both real children", async (t) => {
+  test("runs registered bootstrap through the supplied lifecycle cache and the real add", async (t) => {
     // arrange
     const { cwd } = await createHermeticScope(t, "bootstrap-owner");
     t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-02-03T04:05:06.000Z") });
@@ -2135,7 +2135,7 @@ describe("registerClaudePluginCommand", () => {
       () => Promise.resolve([{ name: "peer-stale", status: "available" }]),
     );
     await rm(path.dirname(path.dirname(pluginCachePath)), { force: true, recursive: true });
-    // The one run is the only probe: add and autoupdate render from it.
+    // The one run is the only probe: the add renders from it.
     const owner = registerCommandWithCache(
       completionCache,
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
@@ -2151,15 +2151,15 @@ describe("registerClaudePluginCommand", () => {
       .times(1);
     when(() => ctx.mode)
       .thenReturn("tui")
-      .times(4);
+      .times(3);
     when(() => ctx.ui)
       .thenReturn(ui)
-      .times(2);
+      .times(1);
     when(() => ui.notify)
       .thenReturn((message, severity) => {
         notifications.push(severity === undefined ? { message } : { message, severity });
       })
-      .times(2);
+      .times(1);
 
     // act
     await owner.registration.handler("bootstrap", ctx);
@@ -2181,7 +2181,6 @@ describe("registerClaudePluginCommand", () => {
     // assert
     assert.deepStrictEqual(notifications, [
       { message: "● claude-plugins-official [user] (added)" },
-      { message: "● claude-plugins-official [user] <autoupdate> {already autoupdate}" },
     ]);
     assert.deepStrictEqual(await loadState(userLocations.extensionRoot), {
       schemaVersion: 3,
