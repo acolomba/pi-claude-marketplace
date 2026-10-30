@@ -12,6 +12,7 @@ import { backgroundUpdateNoticeTexts } from "../../lib/pi-tui.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
+// Pi prints this only while the hermetic home configures no model provider.
 const MESSAGE_REFUSED = "No API key found for the selected model.";
 
 // A Pi's environment, PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS included, is

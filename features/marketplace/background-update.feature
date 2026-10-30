@@ -228,6 +228,10 @@ Feature: Marketplace background update
       """
     When the user sends the message "hello" in the tui session
     Then the tui session reports no notice
+    When the user runs "/claude:plugin list"
+    Then the result lists these plugins:
+      | marketplace name        | marketplace scope | id                           | name | status    | reasons | scope   | version |
+      | claude-plugins-official | project           | demo@claude-plugins-official | demo | installed |         | project | 1.0.0   |
     Then the "claude-plugins.local.json" file of the project scope holds this text:
       """
       { "schemaVersion": 1,
