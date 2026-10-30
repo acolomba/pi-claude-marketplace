@@ -12,6 +12,8 @@ import { backgroundUpdateNoticeTexts } from "../../lib/pi-tui.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
+const MESSAGE_REFUSED = "No API key found for the selected model.";
+
 // A Pi's environment, PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS included, is
 // fixed when it starts, so the scenario gets a Pi of its own. Its startup load
 // reads the configs, so the step comes before the steps that write them.
@@ -102,8 +104,12 @@ Then(
   },
 );
 
+// Pi runs its input handlers, which arm the background pass with a delay of 0 ms in these
+// scenarios, before it refuses the message for want of a model. Waiting for that refusal
+// starts the quiet window after the pass has been armed or declined, not before.
 Then("the tui session reports no notice", async function (this: ScenarioWorld): Promise<void> {
   const tui = this.requireTuiSession();
+  await tui.waitForText(MESSAGE_REFUSED, 15_000);
   await tui.waitForQuiet(2_000, 15_000);
   assert.deepStrictEqual(backgroundUpdateNoticeTexts(tui.text), []);
   this.markTuiNoticesCompared();

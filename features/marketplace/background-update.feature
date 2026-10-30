@@ -189,6 +189,28 @@ Feature: Marketplace background update
       | marketplace name | marketplace scope | marketplace details autoupdate | id         | name | status    | reasons | scope   | version |
       | tools            | project           | true                           | demo@tools | demo | installed |         | project | 1.10.0  |
 
+  Scenario: A readable config layer lets the TUI update an official marketplace
+    Given pi runs with the background update delay "0"
+    Given the marketplace "claude-plugins-official" is published by the anthropics organization
+    Given the marketplace "claude-plugins-official" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "claude-plugins-official" is added to the project scope
+    Given the user has run "/claude:plugin install demo@claude-plugins-official --scope project"
+    Given the marketplace "claude-plugins-official" offers these plugins:
+      | name | version |
+      | demo | 1.10.0  |
+    Given a config in scope project and layer local, with this text:
+      """
+      { "schemaVersion": 1 }
+      """
+    When the user sends the message "hello" in the tui session
+    Then the tui session reports the notice "Plugin updated: demo · Run /reload to apply"
+    When the user runs "/claude:plugin list"
+    Then the result lists these plugins:
+      | marketplace name        | marketplace scope | marketplace details autoupdate | id                           | name | status    | reasons | scope   | version |
+      | claude-plugins-official | project           | true                           | demo@claude-plugins-official | demo | installed |         | project | 1.10.0  |
+
   Scenario: An unreadable config layer keeps the TUI from updating even an official marketplace
     Given pi runs with the background update delay "0"
     Given the marketplace "claude-plugins-official" is published by the anthropics organization
