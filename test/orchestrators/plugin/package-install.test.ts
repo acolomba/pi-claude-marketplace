@@ -1665,6 +1665,84 @@ describe("installUpdatedPackages", () => {
     );
   });
 
+  describe("D-PL9-04: a replaced node_modules that cannot be moved back", () => {
+    const RESTORE_FAILURE = "EXDEV: restore refused";
+
+    test("keeps the parked tree and names it when the move in and the restore both fail", async (t) => {
+      // arrange
+      const seeded = await seedPlugin(t, filesWithOldModule());
+      const parked = path.join(seeded.workDir, "previous-node_modules");
+      const ops: PackageInstallOps = {
+        ...opsWith(async (request) => {
+          await mkdir(path.join(request.cwd, "node_modules"));
+          return SUCCESS;
+        }),
+        moveTree: async (from, to) => {
+          if (from.endsWith(path.join("work-1", "node_modules"))) {
+            throw new Error("EPERM: move in refused");
+          }
+
+          if (from === parked) {
+            throw new Error(RESTORE_FAILURE);
+          }
+
+          await rename(from, to);
+        },
+      };
+
+      // act
+      const hookedOutcome = await installUpdatedPackages(ops, updatedOutcome(), {
+        ...seeded.target,
+        force: true,
+      });
+
+      // assert
+      const note = `Plugin dependency install failed (npm): EPERM: move in refused; the previous node_modules could not be moved back (${RESTORE_FAILURE}) and was kept at ${parked}`;
+      assert.deepStrictEqual(hookedOutcome, {
+        ...updatedOutcome(),
+        stagingWarnings: [discoveryWarning(note)],
+        packageNote: note,
+      });
+      assert.strictEqual(
+        await readFile(path.join(parked, "old-dep", "index.js"), "utf8"),
+        MODULE_TEXT,
+      );
+    });
+
+    test("keeps the parked tree and names it when the package manager wrote none and the restore fails", async (t) => {
+      // arrange
+      const seeded = await seedPlugin(t, filesWithOldModule());
+      const parked = path.join(seeded.workDir, "previous-node_modules");
+      const ops: PackageInstallOps = {
+        ...opsWith(answeringRunner(SUCCESS)),
+        moveTree: async (from, to) => {
+          if (from === parked) {
+            throw new Error(RESTORE_FAILURE);
+          }
+
+          await rename(from, to);
+        },
+      };
+
+      // act
+      const hookedOutcome = await installUpdatedPackages(ops, updatedOutcome(), {
+        ...seeded.target,
+        force: true,
+      });
+
+      // assert
+      const note = `Plugin dependency install failed (npm): the previous node_modules could not be moved back (${RESTORE_FAILURE}) and was kept at ${parked}`;
+      assert.strictEqual(
+        hookedOutcome.partition === "updated" ? hookedOutcome.packageNote : undefined,
+        note,
+      );
+      assert.strictEqual(
+        await readFile(path.join(parked, "old-dep", "index.js"), "utf8"),
+        MODULE_TEXT,
+      );
+    });
+  });
+
   test("D-PL9-04: restores the replaced node_modules when the package manager wrote none", async (t) => {
     // arrange
     const seeded = await seedPlugin(t, filesWithOldModule());

@@ -25,7 +25,8 @@
 // the plugin root by rename: sources-staging and both clone roots sit under the
 // extension root, on one filesystem. A node_modules it replaces waits inside
 // the work dir, is moved back when the new one cannot move in, and is deleted
-// with the work dir after a success. The work dir is removed afterwards.
+// with the work dir after a success. The work dir is removed afterwards, except
+// when that move back fails: the work dir then stays, and the note names it.
 //
 // D-PL9-14 / D-19-01: every note goes to discoveryWarnings, because
 // bridgeWarnings never reaches a standalone user. A failed package install is
@@ -151,6 +152,8 @@ export interface PackageInstallOps {
   /** Runs `npm config get registry`, under its own, shorter limit. */
   readonly runRegistryQuery: PackageManagerRunner;
   readonly newWorkDirName: () => string;
+  /** Moves a tree by rename; `fs.rename` when absent. */
+  readonly moveTree?: (from: string, to: string) => Promise<void>;
 }
 
 /**
@@ -425,12 +428,29 @@ function ignoreFailure(): undefined {
   return undefined;
 }
 
+/**
+ * D-PL9-04: the move back of a replaced node_modules failed, so the work dir
+ * holds the only copy and must outlive the step. The message names where it is.
+ */
+class ParkedModulesLeftError extends Error {
+  constructor(parkedModules: string, restoreError: unknown, moveError?: unknown) {
+    const moved = moveError === undefined ? "" : `${errorMessage(moveError)}; `;
+    super(
+      `${moved}the previous node_modules could not be moved back (${errorMessage(restoreError)}) and was kept at ${parkedModules}`,
+      { cause: restoreError },
+    );
+    this.name = "ParkedModulesLeftError";
+  }
+}
+
 // D-PL9-04: a replaced node_modules waits in the work dir, never in the plugin
 // root, where the content hash walk would read it.
 async function moveNodeModules(
   workDir: string,
   inputs: PackageInstallInputs,
+  ops: PackageInstallOps,
 ): Promise<PackageStepOutcome> {
+  const move = ops.moveTree ?? rename;
   // D-PL9-22: a tree that cannot take the marker moves in unmarked, and
   // uninstall then keeps it; a missing tree reaches the arm below.
   await writeFile(
@@ -440,25 +460,27 @@ async function moveNodeModules(
   const liveModules = path.join(inputs.pluginRoot, "node_modules");
   const parkedModules = path.join(workDir, "previous-node_modules");
   if (inputs.replacesNodeModules) {
-    await rename(liveModules, parkedModules);
+    await move(liveModules, parkedModules);
   }
 
   try {
-    await rename(path.join(workDir, "node_modules"), liveModules);
+    await move(path.join(workDir, "node_modules"), liveModules);
   } catch (error: unknown) {
     // A package set that installs nothing leaves no node_modules to move.
     if (isErrnoException(error) && error.code === "ENOENT") {
       if (inputs.replacesNodeModules) {
-        await rename(parkedModules, liveModules);
+        await move(parkedModules, liveModules).catch((restoreError: unknown) => {
+          throw new ParkedModulesLeftError(parkedModules, restoreError);
+        });
       }
 
       return NOTHING_DONE;
     }
 
     if (inputs.replacesNodeModules) {
-      // The failed move is the note the user sees; a restore that fails too
-      // is not reported, and running update again repeats the install.
-      await rename(parkedModules, liveModules).catch(ignoreFailure);
+      await move(parkedModules, liveModules).catch((restoreError: unknown) => {
+        throw new ParkedModulesLeftError(parkedModules, restoreError, error);
+      });
     }
 
     throw error;
@@ -554,7 +576,7 @@ async function runInWorkDir(
     return { note: failedNote(row.command, failureDetail(run)), createdNodeModules: false };
   }
 
-  return moveNodeModules(workDir, inputs);
+  return moveNodeModules(workDir, inputs, ops);
 }
 
 async function installInWorkDir(
@@ -579,6 +601,17 @@ async function installInWorkDir(
   return runInWorkDir(workDir, inputs, ops);
 }
 
+// Claude Code ignores a failed removal too: a leftover work dir costs disk
+// only, and the install itself has already succeeded or failed. A run settled
+// at its deadline may leave the package manager writing here; the removal then
+// fails or races it, and the plugin root stays untouched, because a timed-out
+// run moves nothing.
+async function removeWorkDir(workDir: string, keep: boolean): Promise<void> {
+  if (!keep) {
+    await rm(workDir, { recursive: true, force: true }).catch(ignoreFailure);
+  }
+}
+
 async function runInstallStage(
   inputs: PackageInstallInputs,
   locations: ScopedLocations,
@@ -586,16 +619,17 @@ async function runInstallStage(
 ): Promise<PackageStepOutcome> {
   try {
     const workDir = await locations.sourcesStagingDir(ops.newWorkDirName());
-    try {
-      return await installInWorkDir(workDir, inputs, ops);
-    } finally {
-      // Claude Code ignores a failed removal too: a leftover work dir costs
-      // disk only, and the install itself has already succeeded or failed.
-      // A run settled at its deadline may leave the package manager writing
-      // here; the removal then fails or races it, and the plugin root stays
-      // untouched, because a timed-out run moves nothing.
-      await rm(workDir, { recursive: true, force: true }).catch(ignoreFailure);
-    }
+    // The work dir stays when it holds the only copy of the old node_modules.
+    return await installInWorkDir(workDir, inputs, ops).then(
+      async (outcome) => {
+        await removeWorkDir(workDir, false);
+        return outcome;
+      },
+      async (error: unknown) => {
+        await removeWorkDir(workDir, error instanceof ParkedModulesLeftError);
+        throw error;
+      },
+    );
   } catch (error: unknown) {
     return { note: failedNote(inputs.row.command, errorMessage(error)), createdNodeModules: false };
   }
