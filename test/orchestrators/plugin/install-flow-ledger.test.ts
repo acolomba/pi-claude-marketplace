@@ -2568,10 +2568,8 @@ test("DFEN-08: a declared-true entry and a silent entry render identical install
       assert.equal(gammaNotifications[0]?.severity, undefined);
 
       // The parity claim itself, stated apart from the whole-body literals.
-      // Before the field was consumed it was an unknown key under the lenient
-      // manifest tolerance and therefore inert, so a declared-true entry and a
-      // silent entry were LITERALLY the same input -- which is what makes these
-      // literals the pre-`defaultEnabled` row form as well.
+      // A declared-true entry installs enabled, the same as a silent entry, so
+      // both render the same row.
       const rowFor = (notifications: NotifyRecord[], name: string): string =>
         (notifications[0]?.message ?? "")
           .split("\n")

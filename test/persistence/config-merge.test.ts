@@ -924,10 +924,10 @@ describe("hasInvalidConfigLayer", () => {
   ] as const) {
     test(`is ${expected} for ${name}`, () => {
       // act
-      const result = hasInvalidConfigLayer({ merged, base, local });
+      const invalidLayerFound = hasInvalidConfigLayer({ merged, base, local });
 
       // assert
-      assert.strictEqual(result, expected);
+      assert.strictEqual(invalidLayerFound, expected);
     });
   }
 });

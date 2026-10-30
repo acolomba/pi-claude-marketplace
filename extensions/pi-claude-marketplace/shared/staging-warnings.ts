@@ -11,22 +11,27 @@
  * orchestrators classify by tag through `partitionStagingWarnings` alone.
  */
 
+/** A declared component that staging skipped or degraded. */
 export interface DiscoveryWarning {
   readonly kind: "discovery";
   readonly message: string;
 }
 
+/** Bookkeeping trouble such as an index corruption or a cleanup leak. */
 export interface HygieneWarning {
   readonly kind: "hygiene";
   readonly message: string;
 }
 
+/** A staging warning tagged by the channel that renders it. */
 export type StagingWarning = DiscoveryWarning | HygieneWarning;
 
+/** Tags a message as a discovery warning. */
 export function discoveryWarning(message: string): DiscoveryWarning {
   return { kind: "discovery", message };
 }
 
+/** Tags a message as a hygiene warning. */
 export function hygieneWarning(message: string): HygieneWarning {
   return { kind: "hygiene", message };
 }

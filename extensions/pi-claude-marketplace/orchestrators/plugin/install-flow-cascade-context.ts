@@ -95,10 +95,8 @@ export type InstallLedgerCallerOptions = Pick<
 /**
  * Assemble the `InstallLedgerOptions` for ONE cascade member from the
  * entrypoint options, spreading each optional field only when defined
- * (exactOptionalPropertyTypes). Extracted from `installPlugin`'s guard closure
- * so the conditional-spread ladder does not inflate that closure's cognitive
- * complexity. `ctx` is always threaded so the git-source clone probe can wire
- * the auth notify seam (PROV-03).
+ * (exactOptionalPropertyTypes). `ctx` is always threaded so the git-source
+ * clone probe can wire the auth notify seam (PROV-03).
  *
  * The entrypoint options divide in two, and the split is the contract.
  *

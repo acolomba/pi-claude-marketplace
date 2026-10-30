@@ -10422,7 +10422,15 @@ test("GIT-03: `info --fetch` of a not-installed git plugin under a held state lo
 
     // assert
     assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /gplug v1\.0\.0 \(failed\) \{lock held\}/);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● mp [user] <no autoupdate>",
+        "  ⊘ gplug v1.0.0 (failed) {lock held}",
+      ].join("\n"),
+    );
   });
 });
 
@@ -10465,7 +10473,15 @@ test("GIT-03: `info --fetch` of an installed git plugin under a held state lock 
 
     // assert
     assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /gplug v1\.0\.0 \(failed\) \{lock held\}/);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● mp [user] <no autoupdate>",
+        "  ⊘ gplug v1.0.0 (failed) {lock held}",
+      ].join("\n"),
+    );
   });
 });
 
@@ -10519,7 +10535,15 @@ for (const { title, installed } of [
 
       // assert
       assert.equal(notifications.length, 1);
-      assert.match(notifications[0]!.message, /gplug v1\.0\.0 \(failed\) \{lock held\}/);
+      assert.equal(
+        notifications[0]!.message,
+        [
+          "A plugin operation has failed.",
+          "",
+          "● mp [user] <no autoupdate>",
+          "  ⊘ gplug v1.0.0 (failed) {lock held}",
+        ].join("\n"),
+      );
     });
   });
 }

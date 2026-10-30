@@ -8190,7 +8190,15 @@ test("EDEP-02: a user-disabled declarer under a mismatched outer key does not bl
 
     // assert
     assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /\(disabled\)/);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● official [user]",
+        "  ◍ shared-lib v1.0.0 (disabled)",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+    );
     const state = JSON.parse(await readFile(statePath, "utf8")) as ExtensionState;
     assert.equal(state.marketplaces["official"]!.plugins["shared-lib"]!.enabled, false);
   });
@@ -8229,8 +8237,16 @@ test("EDEP-02: a dependency-disabled declarer under a mismatched outer key still
 
     // assert
     assert.equal(notifications.length, 1);
-    assert.match(notifications[0]!.message, /\{dependents remain\}/);
-    assert.match(notifications[0]!.message, /Disable helper@tools first/);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● official [user]",
+        "  ⊘ shared-lib (failed) {dependents remain}",
+        "    cause: Disable helper@tools first, then shared-lib@official.",
+      ].join("\n"),
+    );
     assert.deepEqual(calls, { cascadeUnstage: 0, save: 0 });
   });
 });

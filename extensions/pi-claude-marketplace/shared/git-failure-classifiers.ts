@@ -154,7 +154,7 @@ function isRemoteNotFound(error: Error): boolean {
  * only when `remoteUrl` is passed, because a reason token cannot carry either
  * (UPD-11, ADD-10). `remoteUrl` is rebuilt to the URL the fetch sent: the
  * fetch already went out, so the GitHub base override is valid here. Returns
- * Returns undefined for non-Errors and errors with an unrecognized code, so
+ * undefined for non-Errors and errors with an unrecognized code, so
  * each caller keeps its own filesystem fallthrough. The error behind a
  * cleanup leak is the one classified (INR-02).
  */

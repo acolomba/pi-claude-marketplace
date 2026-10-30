@@ -1343,7 +1343,7 @@ async function installPluginWithTransaction(
         // RESV-01 / RESV-05 / RESV-06: the requesting plugin's row goes through the
         // cascade composer together with one row per closure member. A plugin that
         // declared nothing hands the composer two empty lists, so its block is the
-        // single row it always was, byte for byte.
+        // single requesting-plugin row.
         notifyWithContext(
           ctx,
           run,

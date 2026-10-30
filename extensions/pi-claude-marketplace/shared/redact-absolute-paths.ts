@@ -97,13 +97,12 @@ function redactQuotedAbsolutePaths(text: string): string {
       continue;
     }
 
-    const end = delimiter;
-    const candidate = text.slice(match.index + 1, end);
+    const candidate = text.slice(match.index + 1, delimiter);
     if (isQuotedAbsolutePathCandidate(candidate)) {
       if (isQuotedPathBoundary(text[delimiter + 1]) && !/[/\\]/u.test(text.slice(delimiter + 1))) {
         redacted +=
           text.slice(copiedThrough, match.index) + quote + pathBasename(candidate) + quote;
-        copiedThrough = end + quote.length;
+        copiedThrough = delimiter + quote.length;
       } else {
         redacted += text.slice(copiedThrough, match.index) + quote + REDACTED_PATH;
         copiedThrough = text.length;
@@ -212,7 +211,7 @@ export function redactedRollbackPartials(
 ): { readonly phase: string; readonly cause?: Error }[] {
   return partials.map((partial) => {
     const cause = redactCauseChain(partial.cause);
-    return { phase: partial.phase, ...(cause !== undefined && { cause }) };
+    return { phase: partial.phase, ...(cause === undefined ? {} : { cause }) };
   });
 }
 

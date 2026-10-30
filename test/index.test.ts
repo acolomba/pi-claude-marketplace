@@ -2269,18 +2269,17 @@ function countBackgroundTimers(t: TestContext): {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const mockedSetTimeout = globalThis.setTimeout;
   const delays: number[] = [];
-  let unrefCount = 0;
+  const unrefSpies: { readonly mock: { callCount: () => number } }[] = [];
   t.mock.method(globalThis, "setTimeout", (callback: () => void, delay: number) => {
     delays.push(delay);
     const timer = mockedSetTimeout(callback, delay);
-    const unref = timer.unref.bind(timer);
-    t.mock.method(timer, "unref", () => {
-      unrefCount += 1;
-      return unref();
-    });
+    unrefSpies.push(t.mock.method(timer, "unref"));
     return timer;
   });
-  return { delays, unrefCount: () => unrefCount };
+  return {
+    delays,
+    unrefCount: () => unrefSpies.reduce((count, spy) => count + spy.mock.callCount(), 0),
+  };
 }
 
 function backgroundContext(

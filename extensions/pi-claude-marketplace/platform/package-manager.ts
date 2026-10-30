@@ -56,6 +56,7 @@ export interface PackageManagerProcess {
   ): void;
 }
 
+/** The options the launcher receives: no shell, piped output, and no stdin. */
 export interface PackageManagerSpawnOptions {
   readonly cwd: string;
   readonly env: NodeJS.ProcessEnv;
@@ -65,6 +66,7 @@ export interface PackageManagerSpawnOptions {
   readonly detached: boolean;
 }
 
+/** Starts one process. Throws when it cannot start one. */
 export type PackageManagerSpawn = (
   command: string,
   args: readonly string[],
@@ -78,6 +80,7 @@ export type PackageManagerSpawn = (
  */
 export const NODE_PACKAGE_MANAGER_SPAWN = spawn as PackageManagerSpawn;
 
+/** One package-manager command to run. */
 export interface PackageManagerRequest {
   readonly command: string;
   readonly args: readonly string[];
@@ -88,6 +91,7 @@ export interface PackageManagerRequest {
   readonly signal?: AbortSignal;
 }
 
+/** What happened to a run; `error` is set when the process could not start. */
 export interface PackageManagerRun {
   readonly code: number | null;
   readonly stdout: string;
@@ -96,6 +100,7 @@ export interface PackageManagerRun {
   readonly error?: Error;
 }
 
+/** Runs one request and resolves with what happened; never rejects. */
 export type PackageManagerRunner = (request: PackageManagerRequest) => Promise<PackageManagerRun>;
 
 /** The platform facts a launch reads. */

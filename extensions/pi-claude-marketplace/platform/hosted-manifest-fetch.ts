@@ -243,20 +243,20 @@ async function readCappedBody(response: Response, url: string): Promise<Uint8Arr
 }
 
 /** The typed error of a download that failed for a reason this module did not raise. */
-function downloadFailure(err: unknown, url: string): Error {
-  if (err instanceof HostedManifestFetchError || err instanceof HostedManifestHttpError) {
-    return err;
+function downloadFailure(error: unknown, url: string): Error {
+  if (error instanceof HostedManifestFetchError || error instanceof HostedManifestHttpError) {
+    return error;
   }
 
-  if (err instanceof Error && err.name === "TimeoutError") {
+  if (error instanceof Error && error.name === "TimeoutError") {
     return new HostedManifestFetchError(
       "network",
       `Request timed out while downloading marketplace from ${url}`,
-      { cause: err },
+      { cause: error },
     );
   }
 
-  return new HostedManifestFetchError("network", `Could not connect to ${url}`, { cause: err });
+  return new HostedManifestFetchError("network", `Could not connect to ${url}`, { cause: error });
 }
 
 /**
@@ -299,7 +299,7 @@ export async function fetchHostedManifest(url: string): Promise<Uint8Array> {
     }
 
     return await readCappedBody(response, url);
-  } catch (err) {
-    throw downloadFailure(err, url);
+  } catch (error: unknown) {
+    throw downloadFailure(error, url);
   }
 }

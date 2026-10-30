@@ -8,10 +8,10 @@
  * marketplaces step expands the run tokens in each source. The third writes
  * the whole text, which can leave the file broken. A fourth delays that edit
  * until an npm response, so an install sees a config edit between dependency
- * transactions. Every other step only
- * reads, so this module writes nothing else and deletes nothing. `holds this
- * text` compares the raw text of a config, while the byte snapshot steps prove
- * a no-op leaves both the base config and installation record untouched.
+ * transactions. Every other step only reads, so this module writes nothing
+ * else and deletes nothing. `holds this text` compares the raw text of a
+ * config, while the byte snapshot steps prove a no-op leaves both the base
+ * config and installation record untouched.
  *
  * A missing file fails every step that reads one; it never reads as zero
  * declarations. A file whose `marketplaces` map is empty declares that no
@@ -43,19 +43,12 @@ import {
 } from "../lib/layer-config.ts";
 import { expandTokens } from "../lib/run-tokens.ts";
 
-import type { ScenarioWorld } from "../support/world.ts";
+import type { ScenarioWorld, ScopeBytes } from "../support/world.ts";
 
 const CONFIG_FILES: ReadonlySet<string> = new Set([
   "claude-plugins.json",
   "claude-plugins.local.json",
 ]);
-
-interface ScopeBytes {
-  readonly config: Buffer;
-  readonly state: Buffer;
-}
-
-const rememberedScopeBytes = new WeakMap<ScenarioWorld, ReadonlyMap<string, ScopeBytes>>();
 
 async function scopeBytes(world: ScenarioWorld, scope: string): Promise<ScopeBytes> {
   const scopeRoot = world.scopeRoot(scope);
@@ -175,9 +168,7 @@ Given(
 Given(
   "the config and installation record bytes of the {word} scope are remembered",
   async function (this: ScenarioWorld, scope: string) {
-    const remembered = new Map(rememberedScopeBytes.get(this));
-    remembered.set(scope, await scopeBytes(this, scope));
-    rememberedScopeBytes.set(this, remembered);
+    this.rememberedScopeBytes.set(scope, await scopeBytes(this, scope));
   },
 );
 
@@ -234,7 +225,7 @@ Then(
 Then(
   "the config and installation record bytes of the {word} scope are unchanged",
   async function (this: ScenarioWorld, scope: string) {
-    const remembered = rememberedScopeBytes.get(this)?.get(scope);
+    const remembered = this.rememberedScopeBytes.get(scope);
     assert.ok(remembered !== undefined, `the ${scope} scope bytes were not remembered`);
     assert.deepStrictEqual(await scopeBytes(this, scope), remembered);
   },

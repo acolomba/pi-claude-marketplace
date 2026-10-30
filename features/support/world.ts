@@ -48,6 +48,12 @@ const STEP_TIMEOUT_MS = 30_000;
 
 setDefaultTimeout(STEP_TIMEOUT_MS);
 
+/** The bytes of a scope's base config and installation record. */
+export interface ScopeBytes {
+  readonly config: Buffer;
+  readonly state: Buffer;
+}
+
 export class ScenarioWorld extends World {
   results: readonly NotificationPayload[] | undefined = undefined;
   // What produced `results`: a command or a new session.
@@ -69,6 +75,8 @@ export class ScenarioWorld extends World {
   uncomparedTuiNotices = false;
   backgroundForegroundWaitMs: number | undefined = undefined;
   backgroundRequestWindow: RequestWindow | undefined = undefined;
+  // The scope bytes the config steps remembered, by scope.
+  readonly rememberedScopeBytes = new Map<string, ScopeBytes>();
   private readonly completionSets = new Map<string, readonly PluginCompletion[]>();
   private readonly uncomparedCompletionSets = new Set<string>();
   // Cucumber builds the world before any `Before()` hook, so the

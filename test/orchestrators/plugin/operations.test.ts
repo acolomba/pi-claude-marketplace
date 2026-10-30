@@ -33,6 +33,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { StateLockHeldError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { noStatusSnapshot } from "../../platform/mcp-status-seed.ts";
@@ -397,11 +398,8 @@ test("a missing-dependency install refused by a held scope lock succeeds after r
   const retry = await installMissingDependency(request);
 
   // assert
-  assert.equal(blocked.status, "failed");
-  if (blocked.status === "failed") {
-    assert.equal(blocked.error.name, "StateLockHeldError");
-  }
-
+  assert.ok(blocked.status === "failed");
+  assert.ok(blocked.error instanceof StateLockHeldError);
   assert.strictEqual(afterBlocked, before);
   assert.equal(retry.status, "installed");
   assert.deepStrictEqual(

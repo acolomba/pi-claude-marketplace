@@ -4,10 +4,10 @@
  * marketplaces: arming one repository or catalog to fail, to redirect, or to
  * require a credential, serving a catalog of a given size, letting it serve
  * again, the GitHub base address pi runs with, the credential a user stores
- * for the host, and the requests the host receives. A step names a repository through the `git repository` parameter
- * type, by the marketplace or the plugin it serves; a hosted marketplace names
- * the directory its catalog is served under. Every arm is released with its
- * scenario (HOST-03).
+ * for the host, and the requests the host receives. A step names a repository
+ * through the `git repository` parameter type, by the marketplace or the
+ * plugin it serves; a hosted marketplace names the directory its catalog is
+ * served under. Every arm is released with its scenario (HOST-03).
  */
 
 import assert from "node:assert/strict";

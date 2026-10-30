@@ -7874,7 +7874,7 @@ for (const { mode, outcome, notifications } of [
         const captured = makeCtx();
 
         // act
-        const result = await uninstallWithFreshOwner({
+        const uninstallOutcome = await uninstallWithFreshOwner({
           ctx: captured.ctx,
           run: captured.run,
           scope: "project",
@@ -7885,7 +7885,7 @@ for (const { mode, outcome, notifications } of [
         });
 
         // assert
-        assert.deepStrictEqual(result, outcome);
+        assert.deepStrictEqual(uninstallOutcome, outcome);
         assert.deepStrictEqual(captured.notifications, notifications);
         assert.deepStrictEqual(await sortedEntries(pluginRoot), ["plugin.json"]);
         assert.deepStrictEqual(

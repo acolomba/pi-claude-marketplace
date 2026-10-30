@@ -2375,7 +2375,8 @@ test("GLK-07: folds a non-Error status read after the locked fetch into list's u
     };
     const fetchWithStatus = createFetchPlugins({
       makePresenceProbe,
-      resolveListCandidate: () => Promise.reject("status unreadable"), // eslint-disable-line @typescript-eslint/prefer-promise-reject-errors
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the non-Error arm is the case under test.
+      resolveListCandidate: () => Promise.reject("status unreadable"),
     });
     const boundary = notificationBoundary("non-Error status");
 

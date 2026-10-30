@@ -23,9 +23,9 @@
 // that holds only the rewritten package.json and lockfile, so the plugin's own
 // .npmrc or bunfig.toml is never read. On success its node_modules moves into
 // the plugin root by rename: sources-staging and both clone roots sit under the
-// extension root, on one filesystem. A node_modules it replaces waits inside the work
-// dir, is moved back when the new one cannot move in, and is deleted with the
-// work dir after a success. The work dir is removed afterwards.
+// extension root, on one filesystem. A node_modules it replaces waits inside
+// the work dir, is moved back when the new one cannot move in, and is deleted
+// with the work dir after a success. The work dir is removed afterwards.
 //
 // D-PL9-14 / D-19-01: every note goes to discoveryWarnings, because
 // bridgeWarnings never reaches a standalone user. A failed package install is
@@ -73,6 +73,7 @@ import type {
 import type { DiscoveryWarning } from "../../shared/staging-warnings.ts";
 import type { Phase } from "../../transaction/phase-ledger.ts";
 
+/** Runs `step` under an abort signal that the caller owns. */
 export type AbortScopedRun = <T>(signal: AbortSignal, step: () => Promise<T>) => Promise<T>;
 
 const packageInstallAbortScope = new AsyncLocalStorage<AbortSignal>();

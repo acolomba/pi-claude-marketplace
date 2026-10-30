@@ -1056,369 +1056,113 @@ describe("presentNotification", () => {
     assert.ok(!Object.values(presentation).some((field) => field instanceof Error));
   });
 
-  test("fails closed before later quoted diagnostic text", () => {
-    // arrange
-    const message = {
-      kind: "prune-committed-warning",
-      scope: "project",
-      cause: new Error("open '/tmp/private/file.json' failed; see docs/errors 'E_READ'"),
-    } satisfies PruneCommittedWarningMessage;
+  for (const { title, createCause, causeChain } of [
+    {
+      title: "fails closed before later quoted diagnostic text",
+      createCause: () =>
+        new Error("open '/tmp/private/file.json' failed; see docs/errors 'E_READ'"),
+      causeChain: ["open '[redacted path]"],
+    },
+    {
+      title: "fails closed for ambiguous quote boundaries in a presented prune cause",
+      createCause: () =>
+        new Error("unlink '/tmp/O' Mary Jane/秘密/secret.json'", {
+          cause: new Error("open '/tmp/private/file.json' docs/errors 'E_READ'"),
+        }),
+      causeChain: ["unlink '[redacted path]", "open '[redacted path]"],
+    },
+    {
+      title: "fails closed before a punctuation-prefixed quoted value",
+      createCause: () => new Error("open '/tmp/private/file.json' docs/errors '.hidden'"),
+      causeChain: ["open '[redacted path]"],
+    },
+    {
+      title: "fails closed for multi-quote paths in a presented prune cause",
+      createCause: () =>
+        new Error("open '/tmp/O' Brien's files/秘密/secret.json'", {
+          cause: new Error("open '\\\\server\\private\\O' Mary Jane\\秘密\\secret.json '"),
+        }),
+      causeChain: ["open '[redacted path]", "open '[redacted path]"],
+    },
+    {
+      title: "fails closed for an embedded quote before Unicode space",
+      createCause: () => new Error("open '/tmp/O'\u00a0Brien/秘密/secret.json'"),
+      causeChain: ["open '[redacted path]"],
+    },
+    {
+      title: "elides prose after an unclosed path in a presented prune cause",
+      createCause: () => new Error("open '/tmp/private/file.json failed; see docs/errors"),
+      causeChain: ["open '[redacted path]"],
+    },
+    {
+      title: "fails closed for an unclosed spaced path in a presented prune cause",
+      createCause: () => new Error("open '/tmp/O Brien/private/secret.json"),
+      causeChain: ["open '[redacted path]"],
+    },
+    {
+      title: "fails closed for a path before unmatched quotes in a presented prune cause",
+      createCause: () =>
+        new Error("open '/tmp/private/file.json' docs/errors 'x/y' tail 'unclosed"),
+      causeChain: ["open '[redacted path]"],
+    },
+    {
+      title: "fails closed for ambiguous quote chains in a presented prune cause",
+      createCause: () =>
+        new Error("open '/tmp/O' Brien/private/secret.json", {
+          cause: new Error("open '/tmp/private/file.json' help/guide '"),
+        }),
+      causeChain: ["open '[redacted path]", "open '[redacted path]"],
+    },
+    {
+      title: "fails closed for an embedded path quote before a balanced value",
+      createCause: () => new Error("open '/tmp/O' Brien/private/secret.json 'x'"),
+      causeChain: ["open '[redacted path]"],
+    },
+    {
+      title: "fails closed when a later quoted value resembles a local path delimiter",
+      createCause: () => new Error("open '/tmp/private/file.json' value 'x/y' docs/errors '"),
+      causeChain: ["open '[redacted path]"],
+    },
+    {
+      title: "fails closed for separator-adjacent quotes in a presented prune cause",
+      createCause: () => new Error(String.raw`open "\\server\private\"cache\secret.json"`),
+      causeChain: ['open "[redacted path]'],
+    },
+    {
+      title: "fails closed for an errno arrow separator in a presented prune cause",
+      createCause: () =>
+        new Error(
+          String.raw`ENOENT: no such file or directory, copyfile '\\server\private\source' -> 'source-tail' -> '\\server\private\destination'`,
+        ),
+      causeChain: ["ENOENT: no such file or directory, copyfile '[redacted path]'"],
+    },
+  ]) {
+    test(title, () => {
+      // arrange
+      const message = {
+        kind: "prune-committed-warning",
+        scope: "project",
+        cause: createCause(),
+      } satisfies PruneCommittedWarningMessage;
 
-    // act
-    const presentation = presentNotification(runWithAllLoaded(), message);
+      // act
+      const presentation = presentNotification(runWithAllLoaded(), message);
 
-    // assert
-    assert.deepStrictEqual(presentation, {
-      kind: "prune-committed-warning",
-      envelope: {
-        severity: "warning",
-        summary: "Prune committed; finalization needs attention.",
-        needsReload: true,
-        needsApply: false,
-        noOp: false,
-      },
-      scope: "project",
-      cause: {
-        causeChain: ["open '[redacted path]"],
-        truncated: false,
-      },
+      // assert
+      assert.deepStrictEqual(presentation, {
+        kind: "prune-committed-warning",
+        envelope: {
+          severity: "warning",
+          summary: "Prune committed; finalization needs attention.",
+          needsReload: true,
+          needsApply: false,
+          noOp: false,
+        },
+        scope: "project",
+        cause: { causeChain, truncated: false },
+      });
     });
-  });
-
-  test("fails closed for ambiguous quote boundaries in a presented prune cause", () => {
-    // arrange
-    const message = {
-      kind: "prune-committed-warning",
-      scope: "project",
-      cause: new Error("unlink '/tmp/O' Mary Jane/秘密/secret.json'", {
-        cause: new Error("open '/tmp/private/file.json' docs/errors 'E_READ'"),
-      }),
-    } satisfies PruneCommittedWarningMessage;
-
-    // act
-    const presentation = presentNotification(runWithAllLoaded(), message);
-
-    // assert
-    assert.deepStrictEqual(presentation, {
-      kind: "prune-committed-warning",
-      envelope: {
-        severity: "warning",
-        summary: "Prune committed; finalization needs attention.",
-        needsReload: true,
-        needsApply: false,
-        noOp: false,
-      },
-      scope: "project",
-      cause: { causeChain: ["unlink '[redacted path]", "open '[redacted path]"], truncated: false },
-    });
-  });
-
-  test("fails closed before a punctuation-prefixed quoted value", () => {
-    // arrange
-    const message = {
-      kind: "prune-committed-warning",
-      scope: "project",
-      cause: new Error("open '/tmp/private/file.json' docs/errors '.hidden'"),
-    } satisfies PruneCommittedWarningMessage;
-
-    // act
-    const presentation = presentNotification(runWithAllLoaded(), message);
-
-    // assert
-    assert.deepStrictEqual(presentation, {
-      kind: "prune-committed-warning",
-      envelope: {
-        severity: "warning",
-        summary: "Prune committed; finalization needs attention.",
-        needsReload: true,
-        needsApply: false,
-        noOp: false,
-      },
-      scope: "project",
-      cause: { causeChain: ["open '[redacted path]"], truncated: false },
-    });
-  });
-
-  test("fails closed for multi-quote paths in a presented prune cause", () => {
-    // arrange
-    const message = {
-      kind: "prune-committed-warning",
-      scope: "project",
-      cause: new Error("open '/tmp/O' Brien's files/秘密/secret.json'", {
-        cause: new Error("open '\\\\server\\private\\O' Mary Jane\\秘密\\secret.json '"),
-      }),
-    } satisfies PruneCommittedWarningMessage;
-
-    // act
-    const presentation = presentNotification(runWithAllLoaded(), message);
-
-    // assert
-    assert.deepStrictEqual(presentation, {
-      kind: "prune-committed-warning",
-      envelope: {
-        severity: "warning",
-        summary: "Prune committed; finalization needs attention.",
-        needsReload: true,
-        needsApply: false,
-        noOp: false,
-      },
-      scope: "project",
-      cause: {
-        causeChain: ["open '[redacted path]", "open '[redacted path]"],
-        truncated: false,
-      },
-    });
-  });
-
-  test("fails closed for an embedded quote before Unicode space", () => {
-    // arrange
-    const message = {
-      kind: "prune-committed-warning",
-      scope: "project",
-      cause: new Error("open '/tmp/O'\u00a0Brien/秘密/secret.json'"),
-    } satisfies PruneCommittedWarningMessage;
-
-    // act
-    const presentation = presentNotification(runWithAllLoaded(), message);
-
-    // assert
-    assert.deepStrictEqual(presentation, {
-      kind: "prune-committed-warning",
-      envelope: {
-        severity: "warning",
-        summary: "Prune committed; finalization needs attention.",
-        needsReload: true,
-        needsApply: false,
-        noOp: false,
-      },
-      scope: "project",
-      cause: { causeChain: ["open '[redacted path]"], truncated: false },
-    });
-  });
-
-  test("elides prose after an unclosed path in a presented prune cause", () => {
-    // arrange
-    const message = {
-      kind: "prune-committed-warning",
-      scope: "project",
-      cause: new Error("open '/tmp/private/file.json failed; see docs/errors"),
-    } satisfies PruneCommittedWarningMessage;
-
-    // act
-    const presentation = presentNotification(runWithAllLoaded(), message);
-
-    // assert
-    assert.deepStrictEqual(presentation, {
-      kind: "prune-committed-warning",
-      envelope: {
-        severity: "warning",
-        summary: "Prune committed; finalization needs attention.",
-        needsReload: true,
-        needsApply: false,
-        noOp: false,
-      },
-      scope: "project",
-      cause: {
-        causeChain: ["open '[redacted path]"],
-        truncated: false,
-      },
-    });
-  });
-
-  test("fails closed for an unclosed spaced path in a presented prune cause", () => {
-    // arrange
-    const message = {
-      kind: "prune-committed-warning",
-      scope: "project",
-      cause: new Error("open '/tmp/O Brien/private/secret.json"),
-    } satisfies PruneCommittedWarningMessage;
-
-    // act
-    const presentation = presentNotification(runWithAllLoaded(), message);
-
-    // assert
-    assert.deepStrictEqual(presentation, {
-      kind: "prune-committed-warning",
-      envelope: {
-        severity: "warning",
-        summary: "Prune committed; finalization needs attention.",
-        needsReload: true,
-        needsApply: false,
-        noOp: false,
-      },
-      scope: "project",
-      cause: { causeChain: ["open '[redacted path]"], truncated: false },
-    });
-  });
-
-  test("fails closed for a path before unmatched quotes in a presented prune cause", () => {
-    // arrange
-    const message = {
-      kind: "prune-committed-warning",
-      scope: "project",
-      cause: new Error("open '/tmp/private/file.json' docs/errors 'x/y' tail 'unclosed"),
-    } satisfies PruneCommittedWarningMessage;
-
-    // act
-    const presentation = presentNotification(runWithAllLoaded(), message);
-
-    // assert
-    assert.deepStrictEqual(presentation, {
-      kind: "prune-committed-warning",
-      envelope: {
-        severity: "warning",
-        summary: "Prune committed; finalization needs attention.",
-        needsReload: true,
-        needsApply: false,
-        noOp: false,
-      },
-      scope: "project",
-      cause: {
-        causeChain: ["open '[redacted path]"],
-        truncated: false,
-      },
-    });
-  });
-
-  test("fails closed for ambiguous quote chains in a presented prune cause", () => {
-    // arrange
-    const message = {
-      kind: "prune-committed-warning",
-      scope: "project",
-      cause: new Error("open '/tmp/O' Brien/private/secret.json", {
-        cause: new Error("open '/tmp/private/file.json' help/guide '"),
-      }),
-    } satisfies PruneCommittedWarningMessage;
-
-    // act
-    const presentation = presentNotification(runWithAllLoaded(), message);
-
-    // assert
-    assert.deepStrictEqual(presentation, {
-      kind: "prune-committed-warning",
-      envelope: {
-        severity: "warning",
-        summary: "Prune committed; finalization needs attention.",
-        needsReload: true,
-        needsApply: false,
-        noOp: false,
-      },
-      scope: "project",
-      cause: {
-        causeChain: ["open '[redacted path]", "open '[redacted path]"],
-        truncated: false,
-      },
-    });
-  });
-
-  test("fails closed for an embedded path quote before a balanced value", () => {
-    // arrange
-    const message = {
-      kind: "prune-committed-warning",
-      scope: "project",
-      cause: new Error("open '/tmp/O' Brien/private/secret.json 'x'"),
-    } satisfies PruneCommittedWarningMessage;
-
-    // act
-    const presentation = presentNotification(runWithAllLoaded(), message);
-
-    // assert
-    assert.deepStrictEqual(presentation, {
-      kind: "prune-committed-warning",
-      envelope: {
-        severity: "warning",
-        summary: "Prune committed; finalization needs attention.",
-        needsReload: true,
-        needsApply: false,
-        noOp: false,
-      },
-      scope: "project",
-      cause: { causeChain: ["open '[redacted path]"], truncated: false },
-    });
-  });
-
-  test("fails closed when a later quoted value resembles a local path delimiter", () => {
-    // arrange
-    const message = {
-      kind: "prune-committed-warning",
-      scope: "project",
-      cause: new Error("open '/tmp/private/file.json' value 'x/y' docs/errors '"),
-    } satisfies PruneCommittedWarningMessage;
-
-    // act
-    const presentation = presentNotification(runWithAllLoaded(), message);
-
-    // assert
-    assert.deepStrictEqual(presentation, {
-      kind: "prune-committed-warning",
-      envelope: {
-        severity: "warning",
-        summary: "Prune committed; finalization needs attention.",
-        needsReload: true,
-        needsApply: false,
-        noOp: false,
-      },
-      scope: "project",
-      cause: { causeChain: ["open '[redacted path]"], truncated: false },
-    });
-  });
-
-  test("fails closed for separator-adjacent quotes in a presented prune cause", () => {
-    // arrange
-    const message = {
-      kind: "prune-committed-warning",
-      scope: "project",
-      cause: new Error(String.raw`open "\\server\private\"cache\secret.json"`),
-    } satisfies PruneCommittedWarningMessage;
-
-    // act
-    const presentation = presentNotification(runWithAllLoaded(), message);
-
-    // assert
-    assert.deepStrictEqual(presentation, {
-      kind: "prune-committed-warning",
-      envelope: {
-        severity: "warning",
-        summary: "Prune committed; finalization needs attention.",
-        needsReload: true,
-        needsApply: false,
-        noOp: false,
-      },
-      scope: "project",
-      cause: { causeChain: ['open "[redacted path]'], truncated: false },
-    });
-  });
-
-  test("fails closed for an errno arrow separator in a presented prune cause", () => {
-    // arrange
-    const message = {
-      kind: "prune-committed-warning",
-      scope: "project",
-      cause: new Error(
-        String.raw`ENOENT: no such file or directory, copyfile '\\server\private\source' -> 'source-tail' -> '\\server\private\destination'`,
-      ),
-    } satisfies PruneCommittedWarningMessage;
-
-    // act
-    const presentation = presentNotification(runWithAllLoaded(), message);
-
-    // assert
-    assert.deepStrictEqual(presentation, {
-      kind: "prune-committed-warning",
-      envelope: {
-        severity: "warning",
-        summary: "Prune committed; finalization needs attention.",
-        needsReload: true,
-        needsApply: false,
-        noOp: false,
-      },
-      scope: "project",
-      cause: {
-        causeChain: ["ENOENT: no such file or directory, copyfile '[redacted path]'"],
-        truncated: false,
-      },
-    });
-  });
+  }
 
   test("presents a prune warning whose cause is absent with no cause member", () => {
     // arrange

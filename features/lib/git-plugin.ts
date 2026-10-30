@@ -300,7 +300,7 @@ export function readGitPluginOffers(table: DataTable): GitPluginOffer[] {
       kind: parseGitPluginSourceKind(String(row["source kind"])),
       repository: String(row.repository),
       pinned: parsePinned(String(row.pinned)),
-      ...(dependencies.length > 0 && { dependencies }),
+      ...(dependencies.length > 0 ? { dependencies } : {}),
     };
   });
 }
@@ -340,7 +340,7 @@ export function gitPluginEntry(
   return {
     name: offer.name,
     source: gitPluginSource(offer, repository, host, plugin.path),
-    ...(offer.dependencies !== undefined && { dependencies: offer.dependencies }),
+    ...(offer.dependencies === undefined ? {} : { dependencies: offer.dependencies }),
   };
 }
 

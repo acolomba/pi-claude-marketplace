@@ -383,6 +383,17 @@ describe("classifyGitFailure", () => {
       assert.deepStrictEqual(classification, expected);
     });
   }
+
+  test("D-PL5-10: classifies a hosted HTTP status through the git host ladder", () => {
+    // arrange
+    const failure = new HostedManifestHttpError("https://example.com/m.json", 404);
+
+    // act
+    const classification = classifyGitFailure(failure, MARKETPLACE_ADD_RULE);
+
+    // assert
+    assert.deepStrictEqual(classification, { reason: "source missing" });
+  });
 });
 
 describe("classifyGitHostFailure", () => {
@@ -424,26 +435,17 @@ describe("hostHttpFailureFrame", () => {
   });
 });
 
-test("D-PL5-10: classifies a hosted HTTP status through the git host ladder", () => {
-  // arrange
-  const failure = new HostedManifestHttpError("https://example.com/m.json", 404);
+describe("hostedFetchFailureReason", () => {
+  for (const { failure, reason } of [
+    { failure: "network", reason: "network unreachable" },
+    { failure: "unreadable", reason: "unreadable" },
+  ] as const) {
+    test(`D-PL5-10: maps a ${failure} hosted download failure to ${reason}`, () => {
+      // act
+      const mapped = hostedFetchFailureReason(failure);
 
-  // act
-  const classification = classifyGitFailure(failure, MARKETPLACE_ADD_RULE);
-
-  // assert
-  assert.deepStrictEqual(classification, { reason: "source missing" });
+      // assert
+      assert.strictEqual(mapped, reason);
+    });
+  }
 });
-
-for (const { failure, reason } of [
-  { failure: "network", reason: "network unreachable" },
-  { failure: "unreadable", reason: "unreadable" },
-] as const) {
-  test(`D-PL5-10: maps a ${failure} hosted download failure to ${reason}`, () => {
-    // act
-    const mapped = hostedFetchFailureReason(failure);
-
-    // assert
-    assert.strictEqual(mapped, reason);
-  });
-}

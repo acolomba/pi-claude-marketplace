@@ -12016,10 +12016,11 @@ for (const { title, failure, expectedReason, expectedCause } of [
   });
 }
 
-test("NREG-01: a clean update outcome omits the notes key entirely", async () => {
+test("NREG-01: a clean update outcome omits the stagingWarnings key entirely", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-nreg-");
     try {
+      // arrange
       await seedPathMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -12027,20 +12028,22 @@ test("NREG-01: a clean update outcome omits the notes key entirely", async () =>
         manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
         installedVersions: { hello: "1.0.0" },
       });
-
       const prevCwd = process.cwd();
       process.chdir(cwd);
       let outcome;
+
+      // act
       try {
-        // The cascade arm folds BOTH halves onto `notes`, so it is the arm
-        // where an unconditional spread would be hardest to notice.
+        // The cascade arm carries BOTH halves on `stagingWarnings`, so it is the
+        // arm where an unconditional spread would be hardest to notice.
         outcome = await updateSinglePlugin("hello", "mp", "project");
       } finally {
         process.chdir(prevCwd);
       }
 
+      // assert
       assert.equal(outcome.partition, "updated");
-      assert.ok(!Object.hasOwn(outcome, "notes"), JSON.stringify(outcome));
+      assert.ok(!Object.hasOwn(outcome, "stagingWarnings"), JSON.stringify(outcome));
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

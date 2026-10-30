@@ -629,8 +629,9 @@ test("D-PL1-16: an updated outcome lists the settle's MCP config notices ahead o
   );
 
   // assert
+  assert.ok(outcome.partition === "updated");
   assert.deepStrictEqual(
-    outcome.partition === "updated" && [outcome.dependencyRows, outcome.mcpConfigNotices],
+    [outcome.dependencyRows, outcome.mcpConfigNotices],
     [[ZCORE_ROW], [SETTLE_NOTICE, SWAP_NOTICE]],
   );
 });
@@ -668,16 +669,12 @@ test("D-PL10-16: an updated outcome keeps dependency diagnostics separate from i
   );
 
   // assert
+  assert.ok(outcome.partition === "updated");
   assert.deepStrictEqual(
-    outcome.partition === "updated"
-      ? {
-          dependency:
-            "dependencyStagingDiagnostics" in outcome
-              ? outcome.dependencyStagingDiagnostics
-              : undefined,
-          own: outcome.stagingWarnings,
-        }
-      : undefined,
+    {
+      dependency: outcome.dependencyStagingDiagnostics,
+      own: outcome.stagingWarnings,
+    },
     {
       dependency: [
         {
@@ -941,23 +938,43 @@ const REMATERIALIZE_POLICY = {
   searchReleaseTags: false,
 } satisfies MaterializationPolicy;
 
-for (const { verb, policy, offered, installs } of [
-  { verb: "an update", policy: UPDATE_POLICY, offered: "1.1.0", installs: "new" },
+for (const { verb, policy, offered, installs, runs } of [
+  {
+    verb: "an update",
+    policy: UPDATE_POLICY,
+    offered: "1.1.0",
+    installs: "new",
+    runs: [REWRITTEN_LOCKFILE],
+  },
   {
     verb: "a converge",
     policy: { ...UPDATE_POLICY, refreshSource: false, searchReleaseTags: false },
     offered: "1.1.0",
     installs: "new",
+    runs: [REWRITTEN_LOCKFILE],
   },
-  { verb: "a reinstall", policy: REINSTALL_POLICY, offered: "1.0.0", installs: "old" },
-  { verb: "a reinstall", policy: REINSTALL_POLICY, offered: "1.1.0", installs: "new" },
+  { verb: "a reinstall", policy: REINSTALL_POLICY, offered: "1.0.0", installs: "old", runs: [] },
+  {
+    verb: "a reinstall",
+    policy: REINSTALL_POLICY,
+    offered: "1.1.0",
+    installs: "new",
+    runs: [REWRITTEN_LOCKFILE],
+  },
   {
     verb: "a rematerialize",
     policy: REMATERIALIZE_POLICY,
     offered: "1.0.0",
     installs: "old",
+    runs: [],
   },
-  { verb: "a rematerialize", policy: REMATERIALIZE_POLICY, offered: "1.1.0", installs: "new" },
+  {
+    verb: "a rematerialize",
+    policy: REMATERIALIZE_POLICY,
+    offered: "1.1.0",
+    installs: "new",
+    runs: [REWRITTEN_LOCKFILE],
+  },
 ]) {
   test(`D-PL9-06: ${verb} from 1.0.0 to ${offered} leaves the plugin with the ${installs} node_modules`, async (t) => {
     // arrange
@@ -982,7 +999,7 @@ for (const { verb, policy, offered, installs } of [
       [outcome.partition, Object.hasOwn(outcome, "notes")],
       ["updated", false],
     );
-    assert.deepStrictEqual(packages.runs, installs === "new" ? [REWRITTEN_LOCKFILE] : []);
+    assert.deepStrictEqual(packages.runs, runs);
     assert.strictEqual(
       await readFile(path.join(pluginRoot, "node_modules", "pkd-dep", "index.js"), "utf8"),
       installs,

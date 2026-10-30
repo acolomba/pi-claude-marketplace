@@ -74,7 +74,7 @@ async function headRevision(checkout: string): Promise<string> {
   try {
     return (await readFile(path.join(gitDirectory, ref), "utf8")).trim().slice(0, 12);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
       throw error;
     }
   }

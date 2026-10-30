@@ -26,6 +26,7 @@ const READY_TEXT = "Warning: No models available.";
 const DEFAULT_READY_MS = 15_000;
 const DEFAULT_STOP_MS = 5_000;
 
+/** What `PiTuiSession.start` needs: the sandbox, the git environment, and the time limits. */
 export interface PiTuiOptions {
   readonly sandbox: RpcSandbox;
   readonly git: RpcGitEnvironment;
@@ -34,6 +35,7 @@ export interface PiTuiOptions {
   readonly stopMs?: number;
 }
 
+/** Whether the child terminal is interactive and the TUI has rendered its first screen. */
 export interface PiTuiReadiness {
   readonly isatty: boolean;
   readonly ready: boolean;
