@@ -291,17 +291,14 @@ Elimina un mercado y desinstala sus complementos. Una dependencia que otro compl
 /claude:plugin marketplace rm context7-marketplace
 ```
 
-Para activar o desactivar las actualizaciones automáticas de un mercado, consulta [Actualización automática](#actualizaci%C3%B3n-autom%C3%A1tica).
-
 ### Actualización automática
 
 `autoupdate` es un ajuste de cada mercado. Controla lo que pasa cuando el mercado se actualiza:
 
-- Si `autoupdate` está activado, `marketplace update` también actualiza los complementos instalados del mercado.
+- Si `autoupdate` está activado, la extensión actualiza el mercado y sus complementos instalados en segundo plano. La actualización empieza después del primer mensaje de una sesión `tui`, con un retraso aleatorio de hasta diez minutos. Un `marketplace update` manual también actualiza los complementos instalados del mercado.
 - Si `autoupdate` está desactivado, `marketplace update` solo actualiza la lista de complementos del mercado.
-- Si `autoupdate` está activado, la extensión también actualiza el mercado en segundo plano. La actualización empieza después del primer mensaje de una sesión `tui`, tras un retraso aleatorio de hasta diez minutos.
 
-Activa o desactiva `autoupdate` para un mercado. El comando escribe el ajuste en `claude-plugins.json`. Para escribirlo en la [configuración local](#la-configuraci%C3%B3n-local), agrega `--local`.
+Activa o desactiva `autoupdate` para un mercado.
 
 ```text
 /claude:plugin marketplace autoupdate context7-marketplace

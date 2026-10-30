@@ -302,17 +302,14 @@ Remove a marketplace and uninstall its plugins. A dependency that another plugin
 /claude:plugin marketplace rm context7-marketplace
 ```
 
-To turn automatic updates on or off for a marketplace, see [Autoupdate](#autoupdate).
-
 ### Autoupdate
 
 Autoupdate is a setting for each marketplace. It controls what happens when the marketplace updates:
 
-- If autoupdate is on, `marketplace update` also updates the installed plugins of the marketplace.
+- If autoupdate is on, the extension updates the marketplace and its installed plugins in the background. The update starts after the first message of a `tui` session, with a random delay of up to ten minutes. A manual `marketplace update` also updates the installed plugins of the marketplace.
 - If autoupdate is off, `marketplace update` refreshes only the list of plugins in the marketplace.
-- If autoupdate is on, the extension also updates the marketplace in the background. The update starts after the first message of a `tui` session, after a random delay of up to ten minutes.
 
-Turn autoupdate on or off for one marketplace. The command writes the setting to `claude-plugins.json`. To write it to the [local config](#the-local-config) instead, add `--local`.
+Turn autoupdate on or off for one marketplace.
 
 ```text
 /claude:plugin marketplace autoupdate context7-marketplace
