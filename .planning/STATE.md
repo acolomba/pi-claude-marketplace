@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
 milestone: plugin-lifecycle
-milestone_name: Marketplace and Plugin Lifecycle Backlog
 status: Awaiting next milestone
 stopped_at: Milestone plugin-lifecycle archived; PR #290 open
-last_updated: "2026-10-29T15:38:02.091Z"
-last_activity: 2026-10-29
-last_activity_desc: Milestone plugin-lifecycle shipped as PR #290
-state_head: 9694856225de1b51168c6acffeff962209409a1c
+last_updated: "2026-10-30T21:47:45.831Z"
+last_activity: 2026-10-30
+last_activity_desc: Completed quick task 261030-ogp: bootstrap runs only marketplace add
+state_head: 841e3dc291afe6ad9e6923585167f046e2a0b569
 progress:
   total_phases: 11
   completed_phases: 11
   total_plans: 80
   completed_plans: 80
   percent: 100
+milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 Phase: Milestone plugin-lifecycle complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-29 — Milestone plugin-lifecycle shipped as PR #290
+Last activity: 2026-10-30 - Completed quick task 261030-ogp: bootstrap runs only marketplace add
 
 ### mcp-4 closeout
 
@@ -186,6 +186,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-gvt | GV-01: record plugins at a range-selected release tag as Claude Code does, the tag semver kept as resolvedVersion | 2026-10-26 | 2638b001 | complete | [261026-gvt-record-plugins-at-release-tags-as-claude-code](./quick/261026-gvt-record-plugins-at-release-tags-as-claude-code/) |
 | 261026-glv | GV-01: an update with no tag drops the tag commit from the record; plugin directory plugins pick no release tag and their listed copy answers the range | 2026-10-26 | 33c9ac69 | complete | [261026-glv-match-claude-code-on-untagged-updates-an](./quick/261026-glv-match-claude-code-on-untagged-updates-an/) |
 | 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
+| 261030-ogp | bootstrap runs only marketplace add | 2026-10-30 | 841e3dc2 | complete | [261030-ogp-bootstrap-runs-only-marketplace-add](./quick/261030-ogp-bootstrap-runs-only-marketplace-add/) |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
