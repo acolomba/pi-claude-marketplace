@@ -460,7 +460,7 @@ interface InstallLedgerContext {
   // refuse to load. The second half is why the rendered header claims no
   // disposal. D-19-01 as amended surfaces these in standalone mode.
   discoveryWarnings: DiscoveryWarning[];
-  // Bridge-side per-record AG-5 foreign-content rows -- routed to notifyWarning post-success.
+  // Bridge-side per-record AG-5 foreign-content rows -- surfaced as a `postCommitWarnings` entry in orchestrated mode.
   agentForeignFailures: AgentForeignFailureRow[];
   // AFILE-04 / AFILE-02: MCP config file facts from the mcp phase.
   mcpConfigNotices: McpConfigNotice[];
@@ -1325,7 +1325,7 @@ async function runInstallLedgerBody(
       // bridge -- they surface via `failed[]`. AS-7: keep them out of
       // the rollback path (the install of new agents succeeded; the
       // foreign rows are a separate problem the user can address by
-      // hand). Routed to notifyWarning post-state-commit below.
+      // hand). Surfaced as a post-commit warning below.
       for (const f of prep.result.failed) {
         c.agentForeignFailures.push({ generatedName: f.generatedName, reason: f.reason });
       }

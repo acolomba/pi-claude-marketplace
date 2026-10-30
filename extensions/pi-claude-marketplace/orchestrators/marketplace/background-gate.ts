@@ -9,7 +9,7 @@
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
 
-/** The two sides of the gate, declared as properties so callers can pass them by reference. */
+/** The gate's foreground and background operations, declared as properties so callers can pass them by reference. */
 export interface BackgroundGate {
   /** Runs one command after the background step in flight, if any, has ended. */
   readonly runForeground: (command: () => Promise<void>) => Promise<void>;

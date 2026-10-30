@@ -107,10 +107,8 @@ import type { InstallPluginOutcome, MovedDependency } from "../types.ts";
  *   row stamps severity from `run.softDeps`, and `notify()` composes the
  *   reload hint and the soft-dep markers from the same snapshot (D-05).
  *   Use for direct `/claude:plugin install`.
- *   Per D-19-01 there are no post-state-commit `notifyWarning` sites: the
- *   user-visible warning surface for mkdir / cache-refresh /
- *   agentForeignFailures / bridgeWarnings / PI-13 deps note is absent in
- *   standalone mode (the underlying side effects still fire).
+ *   Per D-19-01 standalone mode surfaces no separate post-commit warnings;
+ *   the side effects still run.
  * - `"orchestrated"`: suppresses all notifications, returns the typed
  *   outcome, and collects post-commit warnings in
  *   `outcome.postCommitWarnings`. The import cascade caller injects each

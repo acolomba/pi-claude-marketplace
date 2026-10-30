@@ -133,7 +133,7 @@ export interface StageAgentsCommitResult {
   /**
    * W-08 / B-08: prepare-time AG-5 foreign content surfaces here, NOT via
    * throw, per D-06 corollary. Empty when no foreign content found. The
-   * orchestrator routes these to notifyWarning.
+   * orchestrator reports these as post-commit warnings.
    */
   readonly failed: readonly UnstageAgentFailure[];
 }

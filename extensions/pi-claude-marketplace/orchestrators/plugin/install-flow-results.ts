@@ -1019,9 +1019,14 @@ export type InstallTransactionOutcome =
   | { kind: "dependency-moves" }
   | { kind: "marketplace-absent" }
   | {
-      kind: "refused";
-      refusal: MarketplaceInLocalLayerOnlyError | MarketplaceSourceUndeclarableError;
-      reason: "marketplace in local layer only" | "unsupported source";
+      readonly kind: "refused";
+      readonly refusal: MarketplaceInLocalLayerOnlyError;
+      readonly reason: "marketplace in local layer only";
+    }
+  | {
+      readonly kind: "refused";
+      readonly refusal: MarketplaceSourceUndeclarableError;
+      readonly reason: "unsupported source";
     }
   | {
       kind: "declared";
