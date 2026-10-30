@@ -213,7 +213,6 @@ The local config overrides entries from the base config. To write to the local c
 ```text
 /claude:plugin marketplace add upstash/context7 --local
 /claude:plugin install context7-plugin@context7-marketplace --local
-/claude:plugin marketplace autoupdate context7-marketplace --local
 ```
 
 ### Gitignore convention
@@ -303,12 +302,24 @@ Remove a marketplace and uninstall its plugins. A dependency that another plugin
 /claude:plugin marketplace rm context7-marketplace
 ```
 
-Toggle marketplace plugin auto-updates. When you update the marketplace manually, this extension also updates the installed plugins. When autoupdate is on, a background update runs after the first message of a tui session, with a random delay of up to ten minutes. Official Claude marketplaces have autoupdate on by default, except `knowledge-work-plugins` and `first-party-plugins`.
+To turn automatic updates on or off for a marketplace, see [Autoupdate](#autoupdate).
+
+### Autoupdate
+
+Autoupdate is a setting for each marketplace. It controls what happens when the marketplace updates:
+
+- If autoupdate is on, `marketplace update` also updates the installed plugins of the marketplace.
+- If autoupdate is off, `marketplace update` refreshes only the list of plugins in the marketplace.
+- If autoupdate is on, the extension also updates the marketplace in the background. The update starts after the first message of a `tui` session, after a random delay of up to ten minutes.
+
+Turn autoupdate on or off for one marketplace. The command writes the setting to `claude-plugins.json`. To write it to the [local config](#the-local-config) instead, add `--local`.
 
 ```text
 /claude:plugin marketplace autoupdate context7-marketplace
 /claude:plugin marketplace noautoupdate context7-marketplace
 ```
+
+If a marketplace has no autoupdate setting, autoupdate is off. Official Claude marketplaces are the exception, as in Claude Code. An official marketplace is one with a name that Claude Code reserves for Anthropic, such as `claude-plugins-official`. Autoupdate is on by default for these marketplaces, except for `knowledge-work-plugins` and `first-party-plugins`.
 
 ### Plugin
 
@@ -456,17 +467,10 @@ The `/claude:plugin install` command automatically fetches a remote plugin.
 
 ### Bootstrap
 
-Bootstrap is a one-step setup. It adds the official Anthropic marketplace in the user scope and makes sure autoupdate is on. The official marketplace has autoupdate on by default, so bootstrap writes no value and reports `{already autoupdate}`.
+Bootstrap is a one-step setup. It adds the official Anthropic marketplace, `claude-plugins-official`, in the user scope. Autoupdate is on by default for this marketplace. If the marketplace is already added, bootstrap does not change its [autoupdate](#autoupdate) setting.
 
 ```text
 /claude:plugin bootstrap
-```
-
-It runs these commands:
-
-```text
-/claude:plugin marketplace add anthropics/claude-plugins-official
-/claude:plugin marketplace autoupdate claude-plugins-official
 ```
 
 ### Import
