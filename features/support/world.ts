@@ -100,6 +100,7 @@ export class ScenarioWorld extends World {
   private scenarioPi: PiProcess | undefined = undefined;
   private tuiSession: PiTuiSession | undefined = undefined;
   private tuiEnvironment: RpcGitEnvironment | undefined = undefined;
+  private readonly tuiVariables: Record<string, string> = {};
 
   /**
    * The Pi the steps talk to: the one this scenario started with
@@ -453,6 +454,15 @@ export class ScenarioWorld extends World {
     await this.usePiWith(environment);
   }
 
+  /** Adds a variable to the environment of the TUI session this scenario starts. */
+  setTuiVariable(name: string, value: string): void {
+    if (this.tuiSession !== undefined) {
+      throw new Error("the TUI session already started in this scenario");
+    }
+
+    this.tuiVariables[name] = value;
+  }
+
   /** Starts one contained production TUI and registers its release before waiting for readiness. */
   async startTuiSession(): Promise<PiTuiSession> {
     if (this.tuiSession !== undefined) {
@@ -463,6 +473,7 @@ export class ScenarioWorld extends World {
     const tui = await PiTuiSession.start({
       sandbox: run.sandbox,
       git: this.tuiEnvironment ?? run.piEnvironment,
+      variables: this.tuiVariables,
     });
     this.onRelease(() => tui.stop());
     this.tuiSession = tui;

@@ -22,6 +22,14 @@ Given(
   },
 );
 
+// The variable reaches only the TUI session, whose Pi reads it when the first message arrives.
+Given(
+  "the tui session starts with the environment variable {string} set to {string}",
+  function (this: ScenarioWorld, name: string, value: string): void {
+    this.setTuiVariable(name, value);
+  },
+);
+
 When("the user starts a tui session", async function (this: ScenarioWorld): Promise<void> {
   await this.startTuiSession();
 });
@@ -93,6 +101,13 @@ Then(
     this.markTuiNoticesCompared();
   },
 );
+
+Then("the tui session reports no notice", async function (this: ScenarioWorld): Promise<void> {
+  const tui = this.requireTuiSession();
+  await tui.waitForQuiet(2_000, 15_000);
+  assert.deepStrictEqual(backgroundUpdateNoticeTexts(tui.text), []);
+  this.markTuiNoticesCompared();
+});
 
 Then(
   "the tui session reports the notice {string}",

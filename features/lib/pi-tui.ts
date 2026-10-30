@@ -30,6 +30,8 @@ const DEFAULT_STOP_MS = 5_000;
 export interface PiTuiOptions {
   readonly sandbox: RpcSandbox;
   readonly git: RpcGitEnvironment;
+  /** Variables added to the child's environment after the allowlisted ones. */
+  readonly variables?: Readonly<Record<string, string>>;
   readonly signal?: AbortSignal;
   readonly readyMs?: number;
   readonly stopMs?: number;
@@ -166,7 +168,7 @@ export class PiTuiSession {
     const child = spawn("python3", [PTY_BRIDGE, "--", process.execPath, ...piArguments("tui")], {
       cwd: sandbox.cwd,
       detached: true,
-      env: rpcChildEnvironment(sandbox, options.git),
+      env: { ...rpcChildEnvironment(sandbox, options.git), ...options.variables },
       stdio: ["pipe", "pipe", "pipe"],
     });
     return new PiTuiSession(child, options.stopMs ?? DEFAULT_STOP_MS, options.signal);

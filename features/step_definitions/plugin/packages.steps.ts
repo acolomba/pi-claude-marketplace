@@ -211,3 +211,26 @@ Then(
     assert.strictEqual(existsSync(modules), false, `${modules} exists`);
   },
 );
+
+// The plugin folder of a marketplace clone has no record to name it once the
+// plugin is uninstalled, so the step reads it where the clone keeps it and
+// requires the plugin's own package.json there, so a wrong path cannot pass.
+Then(
+  "the folder of the plugin {string} in the marketplace {string} of the {word} scope has no npm packages",
+  function (this: ScenarioWorld, plugin: string, marketplace: string, scope: string) {
+    const folder = path.join(
+      this.scopeRoot(scope),
+      "pi-claude-marketplace",
+      "sources",
+      marketplace,
+      "plugins",
+      plugin,
+    );
+    assert.strictEqual(existsSync(path.join(folder, "package.json")), true, `${folder} is empty`);
+    assert.strictEqual(
+      existsSync(path.join(folder, "node_modules")),
+      false,
+      `${folder} has packages`,
+    );
+  },
+);

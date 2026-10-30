@@ -600,3 +600,22 @@ Feature: Plugin package dependencies
     Then the plugin "pkp" installed in the project scope has these npm packages:
       | name    | version |
       | pkd-dep | 2.0.0   |
+
+  Scenario: Uninstalling a plugin removes the npm packages installed for it
+    Given the npm registry serves these packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | pkp  | 1.0.0   |
+    Given the published plugin "pkp" of the marketplace "tools" depends on these npm packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install pkp@tools --scope project"
+    When the user runs "/claude:plugin uninstall pkp@tools --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status      | reasons | scope   | version |
+      | tools            | project           | pkp@tools | pkp  | uninstalled |         | project | 1.0.0   |
+    Then the folder of the plugin "pkp" in the marketplace "tools" of the project scope has no npm packages
