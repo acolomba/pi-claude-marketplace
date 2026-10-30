@@ -29,6 +29,7 @@ import {
   NODE_PACKAGE_MANAGER_HOST,
   NODE_PACKAGE_MANAGER_SPAWN,
 } from "../../../extensions/pi-claude-marketplace/platform/package-manager.ts";
+import { redactAbsolutePaths } from "../../../extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts";
 import { discoveryWarning } from "../../../extensions/pi-claude-marketplace/shared/staging-warnings.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
@@ -1667,6 +1668,14 @@ describe("installUpdatedPackages", () => {
 
   describe("D-PL9-04: a replaced node_modules that cannot be moved back", () => {
     const RESTORE_FAILURE = "EXDEV: restore refused";
+    const parkedNote = (outcome: UpdateRunOutcome): string => {
+      assert.ok("packageNote" in outcome);
+      assert.ok(typeof outcome.packageNote === "string");
+
+      return outcome.packageNote;
+    };
+
+    const PARKED_LOCATION = "pi-claude-marketplace/sources-staging/work-1/previous-node_modules";
 
     test("keeps the parked tree and names it when the move in and the restore both fail", async (t) => {
       // arrange
@@ -1697,7 +1706,7 @@ describe("installUpdatedPackages", () => {
       });
 
       // assert
-      const note = `Plugin dependency install failed (npm): EPERM: move in refused; the previous node_modules could not be moved back (${RESTORE_FAILURE}) and was kept at ${parked}`;
+      const note = `Plugin dependency install failed (npm): the previous node_modules was kept at ${PARKED_LOCATION}; EPERM: move in refused; the previous node_modules could not be moved back (${RESTORE_FAILURE})`;
       assert.deepStrictEqual(hookedOutcome, {
         ...updatedOutcome(),
         stagingWarnings: [discoveryWarning(note)],
@@ -1707,6 +1716,68 @@ describe("installUpdatedPackages", () => {
         await readFile(path.join(parked, "old-dep", "index.js"), "utf8"),
         MODULE_TEXT,
       );
+    });
+
+    test("names the parked tree by a path that survives path redaction", async (t) => {
+      // arrange
+      const seeded = await seedPlugin(t, filesWithOldModule());
+      const parked = path.join(seeded.workDir, "previous-node_modules");
+      const ops: PackageInstallOps = {
+        ...opsWith(answeringRunner(SUCCESS)),
+        moveTree: async (from, to) => {
+          if (from === parked) {
+            throw new Error(RESTORE_FAILURE);
+          }
+
+          await rename(from, to);
+        },
+      };
+
+      // act
+      const hookedOutcome = await installUpdatedPackages(ops, updatedOutcome(), {
+        ...seeded.target,
+        force: true,
+      });
+
+      // assert
+      const packageNote = parkedNote(hookedOutcome);
+      assert.ok(packageNote.includes(`kept at ${PARKED_LOCATION};`));
+      assert.strictEqual(redactAbsolutePaths(packageNote), packageNote);
+    });
+
+    test("keeps the parked location in the bounded note when both errors are very long", async (t) => {
+      // arrange
+      const seeded = await seedPlugin(t, filesWithOldModule());
+      const parked = path.join(seeded.workDir, "previous-node_modules");
+      const longReason = (label: string): string => `${label}: ${"x".repeat(600)}`;
+      const ops: PackageInstallOps = {
+        ...opsWith(async (request) => {
+          await mkdir(path.join(request.cwd, "node_modules"));
+          return SUCCESS;
+        }),
+        moveTree: async (from, to) => {
+          if (from.endsWith(path.join("work-1", "node_modules"))) {
+            throw new Error(longReason("EPERM"));
+          }
+
+          if (from === parked) {
+            throw new Error(longReason("EXDEV"));
+          }
+
+          await rename(from, to);
+        },
+      };
+
+      // act
+      const hookedOutcome = await installUpdatedPackages(ops, updatedOutcome(), {
+        ...seeded.target,
+        force: true,
+      });
+
+      // assert
+      const packageNote = parkedNote(hookedOutcome);
+      assert.ok(packageNote.includes(`kept at ${PARKED_LOCATION};`));
+      assert.ok(packageNote.length <= 500);
     });
 
     test("keeps the parked tree and names it when the package manager wrote none and the restore fails", async (t) => {
@@ -1731,11 +1802,12 @@ describe("installUpdatedPackages", () => {
       });
 
       // assert
-      const note = `Plugin dependency install failed (npm): the previous node_modules could not be moved back (${RESTORE_FAILURE}) and was kept at ${parked}`;
-      assert.strictEqual(
-        hookedOutcome.partition === "updated" ? hookedOutcome.packageNote : undefined,
-        note,
-      );
+      const note = `Plugin dependency install failed (npm): the previous node_modules was kept at ${PARKED_LOCATION}; the previous node_modules could not be moved back (${RESTORE_FAILURE})`;
+      assert.deepStrictEqual(hookedOutcome, {
+        ...updatedOutcome(),
+        stagingWarnings: [discoveryWarning(note)],
+        packageNote: note,
+      });
       assert.strictEqual(
         await readFile(path.join(parked, "old-dep", "index.js"), "utf8"),
         MODULE_TEXT,

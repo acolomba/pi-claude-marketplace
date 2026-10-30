@@ -430,17 +430,29 @@ function ignoreFailure(): undefined {
 
 /**
  * D-PL9-04: the move back of a replaced node_modules failed, so the work dir
- * holds the only copy and must outlive the step. The message names where it is.
+ * holds the only copy and must outlive the step. The failure note names where
+ * it is, from `parkedModules`.
  */
 class ParkedModulesLeftError extends Error {
+  readonly parkedModules: string;
+
   constructor(parkedModules: string, restoreError: unknown, moveError?: unknown) {
     const moved = moveError === undefined ? "" : `${errorMessage(moveError)}; `;
     super(
-      `${moved}the previous node_modules could not be moved back (${errorMessage(restoreError)}) and was kept at ${parkedModules}`,
+      `${moved}the previous node_modules could not be moved back (${errorMessage(restoreError)})`,
       { cause: restoreError },
     );
     this.name = "ParkedModulesLeftError";
+    this.parkedModules = parkedModules;
   }
+}
+
+// The location leads the note and is relative to the scope root: display
+// surfaces reduce an absolute path to its basename, and the bounded note
+// cuts the tail, where long errno messages would push the location out.
+function parkedModulesDetail(error: ParkedModulesLeftError, locations: ScopedLocations): string {
+  const kept = path.relative(locations.scopeRoot, error.parkedModules).split(path.sep).join("/");
+  return `the previous node_modules was kept at ${kept}; ${error.message}`;
 }
 
 // D-PL9-04: a replaced node_modules waits in the work dir, never in the plugin
@@ -606,10 +618,8 @@ async function installInWorkDir(
 // at its deadline may leave the package manager writing here; the removal then
 // fails or races it, and the plugin root stays untouched, because a timed-out
 // run moves nothing.
-async function removeWorkDir(workDir: string, keep: boolean): Promise<void> {
-  if (!keep) {
-    await rm(workDir, { recursive: true, force: true }).catch(ignoreFailure);
-  }
+async function removeWorkDir(workDir: string): Promise<void> {
+  await rm(workDir, { recursive: true, force: true }).catch(ignoreFailure);
 }
 
 async function runInstallStage(
@@ -619,19 +629,26 @@ async function runInstallStage(
 ): Promise<PackageStepOutcome> {
   try {
     const workDir = await locations.sourcesStagingDir(ops.newWorkDirName());
-    // The work dir stays when it holds the only copy of the old node_modules.
-    return await installInWorkDir(workDir, inputs, ops).then(
-      async (outcome) => {
-        await removeWorkDir(workDir, false);
-        return outcome;
-      },
-      async (error: unknown) => {
-        await removeWorkDir(workDir, error instanceof ParkedModulesLeftError);
-        throw error;
-      },
-    );
+    let outcome: PackageStepOutcome;
+    try {
+      outcome = await installInWorkDir(workDir, inputs, ops);
+    } catch (error: unknown) {
+      // The work dir stays when it holds the only copy of the old node_modules.
+      if (!(error instanceof ParkedModulesLeftError)) {
+        await removeWorkDir(workDir);
+      }
+
+      throw error;
+    }
+
+    await removeWorkDir(workDir);
+    return outcome;
   } catch (error: unknown) {
-    return { note: failedNote(inputs.row.command, errorMessage(error)), createdNodeModules: false };
+    const detail =
+      error instanceof ParkedModulesLeftError
+        ? parkedModulesDetail(error, locations)
+        : errorMessage(error);
+    return { note: failedNote(inputs.row.command, detail), createdNodeModules: false };
   }
 }
 
