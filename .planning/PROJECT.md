@@ -49,7 +49,7 @@ upstream parity, records decisions with IDs, and reports every uncertain
 choice to the parent session for the user to review.
 
 **Outcome:** completed 2026-10-29 -- 64/64 requirements, 11 phases, 80 plans.
-The final exact-tree gate passed 1,146 Cucumber scenarios, 11,787 steps, 16
+The final exact-tree gate passed 1,151 Cucumber scenarios, 11,854 steps, 16
 hooks, and 309 direct-coverage records. The audit found no blockers: 11/11
 phases, 12/12 integration groups, and 10/10 end-to-end flows pass. The audit
 status is `tech_debt` only for the accepted HOSTED-DNS-01 residual carried by

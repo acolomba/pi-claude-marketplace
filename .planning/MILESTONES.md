@@ -6,7 +6,7 @@
 
 **Phases completed:** 11 phases, 80 plans, 121 tasks
 
-**Delivered:** Closed the 64-requirement marketplace and plugin lifecycle backlog across warning transport, reconciliation, dependency cascades, resolver pinning, marketplace and import parity, git failure and lock discipline, background autoupdate, package dependencies, lifecycle coverage, and final cleanup. The exact executable tree passes 1,146 Cucumber scenarios, 11,787 steps, 16 hooks, and 309 direct-coverage records.
+**Delivered:** Closed the 64-requirement marketplace and plugin lifecycle backlog across warning transport, reconciliation, dependency cascades, resolver pinning, marketplace and import parity, git failure and lock discipline, background autoupdate, package dependencies, lifecycle coverage, and final cleanup. The exact executable tree passes 1,151 Cucumber scenarios, 11,854 steps, 16 hooks, and 309 direct-coverage records.
 
 **Closeout:** Audit `tech_debt`, no blockers: 64/64 requirements, 11/11 phases, 12/12 integration groups, and 10/10 flows. HOSTED-DNS-01 remains accepted under D-PL5-31. [Roadmap](milestones/plugin-lifecycle-ROADMAP.md), [requirements](milestones/plugin-lifecycle-REQUIREMENTS.md), [audit](milestones/plugin-lifecycle-MILESTONE-AUDIT.md), and [phase records](milestones/plugin-lifecycle-phases/).
 

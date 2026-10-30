@@ -10,7 +10,7 @@
 ### What Was Built
 
 - Closed the marketplace and plugin lifecycle backlog across warning transport, pending/apply ordering, dependency cascades and resolver pins, marketplace/import parity, git failures and locking, background autoupdate, and package dependency installation.
-- Added or tightened lifecycle behavior proofs, ending with 1,146 Cucumber scenarios, 11,787 steps, 16 hooks, and 309 direct-coverage records on the exact executable tree.
+- Added or tightened lifecycle behavior proofs, ending with 1,151 Cucumber scenarios, 11,854 steps, 16 hooks, and 309 direct-coverage records on the exact executable tree.
 - Split the install flow into directly covered planning, ledger, cascade-context, result, and dependency-ledger owners while preserving the public composition root.
 
 ### What Worked
@@ -1114,7 +1114,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | mcp-4 | not recorded | Full `npm run check` green with both peer roots (pi-mcp-adapter 5.2.0, pi-subagents 0.74.0); fallow audit `pass` with 0 introduced groups; all review ledgers `open: 0` |
 | json-output | 10,228 (corpus run) | 3,149-record text corpus and output catalog byte-identical apart from ledgered exceptions; wire schema validated against all 260 catalog examples; real headless Pi at 0.87.1 and the 0.86.1 floor |
 | lifecycle-coverage | 825 scenarios | Every plugin lifecycle verb driven through a real headless Pi; path, GitHub, URL, and git-subdir source coverage |
-| plugin-lifecycle | 1,146 scenarios / 11,787 steps | 16 hooks and 309 direct-coverage records; all 64 requirements and 11 phase verifications current on the closeout tree |
+| plugin-lifecycle | 1,151 scenarios / 11,854 steps | 16 hooks and 309 direct-coverage records; all 64 requirements and 11 phase verifications current on the closeout tree |
 
 ### Top Lessons (Verified Across Milestones)
 

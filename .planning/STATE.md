@@ -3,7 +3,7 @@ gsd_state_version: "1.0"
 milestone: plugin-lifecycle
 milestone_name: Marketplace and Plugin Lifecycle Backlog
 status: Awaiting next milestone
-stopped_at: Phase 11 complete — all phases complete
+stopped_at: Milestone plugin-lifecycle archived; PR #290 open
 last_updated: "2026-10-29T15:38:02.091Z"
 last_activity: 2026-10-29
 last_activity_desc: Milestone plugin-lifecycle shipped as PR #290
