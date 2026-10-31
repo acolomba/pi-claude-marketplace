@@ -33,7 +33,7 @@ It installs the npm dependencies, including the pinned Pi version, and these too
 
 ### Claude Code cloud sessions
 
-A Claude Code cloud session runs in a VM that differs from a developer machine. The VM has no pipx and no Node 24. It runs as root. Its network policy blocks the Go toolchain download that the trufflehog hook needs, and the GitHub proxy cannot fetch the Git LFS objects of this repository. When `CLAUDE_CODE_REMOTE` is `true`, which the VM sets and a developer machine never does, `scripts/init.sh` sources `scripts/cloud-env.sh`, which covers these differences. Its header lists each change.
+A Claude Code cloud session runs in a VM that differs from a developer machine. The VM has no pipx, and the Node on its PATH is 22. It runs as root. Its network policy blocks the Go toolchain download that the trufflehog hook needs, and the GitHub proxy cannot fetch the Git LFS objects of this repository. When `CLAUDE_CODE_REMOTE` is `true`, which the VM sets and a developer machine never does, `scripts/init.sh` sources `scripts/cloud-env.sh`, which covers these differences. Its header lists each change.
 
 Set the setup script of the environment to the script below. The environment dialog opens from the cloud environment menu in the title bar of the session, under Edit. The setup script does not run inside the clone, so the path is absolute: the VM clones the repository to `/home/user/pi-claude-marketplace`.
 
