@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [0.21.0] - 2026-10-30
+## [0.21.0] - 2026-10-31
 
 - Autoupdate marketplaces now update in the background, plugins get their npm or bun packages, and more commands match Claude Code. (#290)
 
