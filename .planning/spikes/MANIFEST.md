@@ -330,6 +330,13 @@ a model turn at all?
   (spike 028).
 - Workflow checks run against pi-dynamic-workflows 3.14.0 or later, the
   first release that reads `PI_CODING_AGENT_DIR` (spike 028).
+- The milestone also aligns SessionStart and SessionEnd with Claude Code
+  2.1.316: Pi `new` is sent as `clear`, `compact` fires SessionStart on Pi's
+  `session_compact`, and `clear`, `compact`, and `fork` matchers are admitted
+  (spike 028).
+- A `user-invocable: false` skill stays listed and runnable as
+  `/skill:<name>`; record it as a divergence licensed by the Pi capability
+  gap and report the gap to Pi (spike 028).
 
 ## Spikes
 

@@ -200,5 +200,9 @@ for the same session id and reason (SSDEDUP-01 in the backlog).
 - SessionStart `compact`: fire SessionStart with `source: "compact"` on Pi's
   `session_compact` and admit `compact` matchers. Supersedes that part of
   D-58-06.
-- SessionStart `fork`: not yet decided. Parity default applies.
-- Pi `new` as `clear`: open; the user asked why it matters.
+- SessionStart `fork`: admit `fork` matchers (Pi sends the same value).
+- Pi `new` maps to `clear`: SessionStart `source` and SessionEnd `reason`
+  send `clear`, and `clear` matchers are admitted. Supersedes those parts of
+  D-58-06 and D-60-04.
+- The `fork`, `compact`, and `clear` changes join the component-behavior
+  milestone, each with a scenario on the faux-model harness.

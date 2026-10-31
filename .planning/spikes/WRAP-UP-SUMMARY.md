@@ -276,3 +276,47 @@
   boundary probe run from the wrong directory that reported "No issues
   found". Neither surfaced as a failing command; both were caught by
   internal inconsistency. Recorded in CONVENTIONS.md as a standing check.
+
+## Session: 2026-10-31 (Component behavior without an LLM)
+
+**Date:** 2026-10-31
+**Spikes processed:** 1
+**Feature areas:** Component behavior without an LLM
+**Skill output:** `./.claude/skills/spike-findings-pi-claude-marketplace/`
+(gitignored; `references/component-behavior-without-llm.md` holds the
+blueprint)
+
+Spikes 021-027 (workflows bridge) were not wrapped in this session. Their
+milestone has shipped, and their READMEs remain the record.
+
+### Processed Spikes
+
+| #   | Name               | Type     | Verdict     | Feature Area                      |
+| --- | ------------------ | -------- | ----------- | --------------------------------- |
+| 028 | model-free-harness | standard | ✓ VALIDATED | Component behavior without an LLM |
+
+### Key Findings
+
+- Every bridged component kind can be checked after a real `/claude:plugin`
+  install in a headless RPC Pi with pi-subagents, pi-mcp-adapter, and
+  pi-dynamic-workflows loaded, through each host's own surfaces: RPC
+  `get_commands`, companion commands, `pi.getAllTools()`, hook side effects,
+  stub MCP server traffic, and workflow run records.
+- Pi ships a scripted model (`@earendil-works/pi-ai/providers/faux`) that an
+  extension registers with `pi.registerProvider`. It moves most of the
+  "needs an authenticated LLM" work into reach now: expanded prompt
+  templates and skills, PreToolUse on a scripted `bash` call, a full MCP tool
+  round trip, and a foreground agent run whose child gets the agent body as
+  its system prompt.
+- Still out of reach: whether a real model picks a skill on its own,
+  background agent runs (pi-subagents 0.74.0 needs host packages this Pi does
+  not ship), and workflows whose scripts call agents.
+- Side findings, all decided: the double SessionStart is Pi's double bind
+  (earendil-works/pi#10470), fixed in the bridge by #294. A `user-invocable:
+  false` skill stays listed, recorded as a Pi-gap divergence. SessionStart
+  and SessionEnd move to Claude Code 2.1.316 values (`new` as `clear`,
+  `compact` on `session_compact`, `fork` matchers admitted) in the coming
+  component milestone.
+- Method finding: a missing workflow command looked like a bridge bug and was
+  an engine below the 3.14.0 floor. Check the companion version against the
+  project's declared floor before suspecting the bridge.
