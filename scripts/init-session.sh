@@ -21,9 +21,12 @@ fi
 # a hook that exits 0 does not.
 if [[ ${CLAUDE_CODE_REMOTE-} == true ]]; then
     log=$top/node_modules/.init.log
-    # set -E lets the sourced functions inherit the trap
+    # The trap writes to a copy of the hook's stdout, because the failing
+    # command can have redirected its own. set -E extends the trap to the
+    # sourced functions.
+    exec 3>&1
     set -E
-    trap 'echo "scripts/init-session.sh: aborted at line $LINENO. See $log"; exit 0' ERR
+    trap 'echo "scripts/init-session.sh: aborted at line $LINENO. See $log" >&3; exit 0' ERR
     cd -- "$top"
     source scripts/cloud-env.sh
     mkdir -p node_modules
