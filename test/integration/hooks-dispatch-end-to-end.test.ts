@@ -141,6 +141,9 @@ function buildProjectScopeStateWithHooksPlugin(): ExtensionState {
   };
 }
 
+// The session_start handler reads the session id to drop a repeated start.
+const E2E_SESSION = { getSessionId: () => "hooks-e2e-session" };
+
 const HOOKS_JSON_BYTES = JSON.stringify(
   {
     description: "Learning mode hook",
@@ -197,7 +200,11 @@ test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and 
     const { pi, registrations } = makeMockPi();
     // ctx.cwd is read by the session_start handler's lazy project hydrate;
     // carry the real project cwd so the hydrate resolves the right scope root.
-    const placeholderCtx = { cwd: projectCwd, mode: "print" } as unknown as ExtensionContext;
+    const placeholderCtx = {
+      cwd: projectCwd,
+      mode: "print",
+      sessionManager: E2E_SESSION,
+    } as unknown as ExtensionContext;
     await hooksHydration.registerHooksBridge(pi, {
       cwd: projectCwd,
       executor: injectedExecutor,
@@ -275,7 +282,11 @@ test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_
     // reads <agentDir>/.pi/... which is empty, so the SessionStart bucket
     // is empty at boot.
     const { pi, registrations } = makeMockPi();
-    const placeholderCtx = { cwd: projectCwd, mode: "print" } as unknown as ExtensionContext;
+    const placeholderCtx = {
+      cwd: projectCwd,
+      mode: "print",
+      sessionManager: E2E_SESSION,
+    } as unknown as ExtensionContext;
     await hooksHydration.registerHooksBridge(pi, {
       cwd: agentDir,
       executor: injectedExecutor,
@@ -332,7 +343,11 @@ test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pr
     await mkdir(bootCwd, { recursive: true });
 
     const { pi, registrations } = makeMockPi();
-    const placeholderCtx = { cwd: projectCwd, mode: "print" } as unknown as ExtensionContext;
+    const placeholderCtx = {
+      cwd: projectCwd,
+      mode: "print",
+      sessionManager: E2E_SESSION,
+    } as unknown as ExtensionContext;
     await hooksHydration.registerHooksBridge(pi, {
       cwd: bootCwd,
       executor: injectedExecutor,
@@ -394,7 +409,10 @@ test("HOOK-E2E-04: a throwing lazy project hydrate never blocks SessionStart dis
     // with before the lazy hydrate existed, so the catch is what keeps a Pi
     // build that omits `cwd` from degrading a broken hydrate into a dead
     // SessionStart.
-    const ctxWithoutCwd = { mode: "print" } as unknown as ExtensionContext;
+    const ctxWithoutCwd = {
+      mode: "print",
+      sessionManager: E2E_SESSION,
+    } as unknown as ExtensionContext;
 
     // Awaited bare rather than through assert.doesNotReject: a regression
     // here should surface the real ERR_INVALID_ARG_TYPE stack, not a

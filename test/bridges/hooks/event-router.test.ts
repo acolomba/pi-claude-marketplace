@@ -2570,6 +2570,77 @@ test("SessionStart contains a dispatch failure after preparing both directories"
   assert.deepStrictEqual(messages, []);
 });
 
+test("SessionStart runs once when Pi repeats the same session start", async (t) => {
+  // arrange
+  const { root, projectRoot } = await makeSessionStartFixture(t);
+  const { pi, registrations } = makeRecordingPi();
+  const runtime = createHooksRuntime();
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    cwd: projectRoot,
+    executor: (entry, event, ctx) => {
+      const { reason } = event as { reason: string };
+      dispatched.push(`${ctx.sessionManager.getSessionId()} ${reason} ${entry.scope}`);
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+  const sessionStart = registeredHandler(registrations, "session_start");
+  const context = makeContext(projectRoot, root);
+  const otherSession = new Proxy(context, {
+    get(target, property, receiver): unknown {
+      return property === "sessionManager"
+        ? SessionManager.inMemory(root, { id: "router-other-session" })
+        : Reflect.get(target, property, receiver);
+    },
+  });
+  const sessionId = context.sessionManager.getSessionId();
+
+  // act
+  await sessionStart({ type: "session_start", reason: "new" }, context);
+  await sessionStart({ type: "session_start", reason: "new" }, context);
+  await sessionStart({ type: "session_start", reason: "reload" }, context);
+  await sessionStart({ type: "session_start", reason: "reload" }, otherSession);
+
+  // assert
+  assert.deepStrictEqual(dispatched, [
+    `${sessionId} new project`,
+    `${sessionId} new user`,
+    `${sessionId} reload project`,
+    `${sessionId} reload user`,
+    "router-other-session reload project",
+    "router-other-session reload user",
+  ]);
+});
+
+test("SessionStart runs a repeat whose first event was skipped for its mode", async (t) => {
+  // arrange
+  const { root, projectRoot } = await makeSessionStartFixture(t);
+  const { pi, registrations } = makeRecordingPi();
+  const runtime = createHooksRuntime();
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    cwd: projectRoot,
+    executor: (entry) => {
+      dispatched.push(entry.scope);
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+  const sessionStart = registeredHandler(registrations, "session_start");
+  const context = makeContext(projectRoot, root);
+  const unknownMode = new Proxy(context, {
+    get(target, property, receiver): unknown {
+      return property === "mode" ? "unknown" : Reflect.get(target, property, receiver);
+    },
+  });
+
+  // act
+  await sessionStart({ type: "session_start", reason: "new" }, unknownMode);
+  await sessionStart({ type: "session_start", reason: "new" }, context);
+
+  // assert
+  assert.deepStrictEqual(dispatched, ["project", "user"]);
+});
+
 test(
   "session_start lazily hydrates project routes and drains their context on the next agent turn",
   { concurrency: false },

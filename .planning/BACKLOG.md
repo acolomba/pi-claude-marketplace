@@ -4132,6 +4132,8 @@ Decision: report it to Pi, add a dedupe in the extension, or accept it. Claude C
 
 Recommendation (triage, 2026-10-26): report the double load to Pi with a minimal reproduction (one extension that counts its `resources_discover` calls in a new RPC session). Do not add an extension-side dedupe first. A dedupe hides a host bug and needs state that lives across two bindings. When Pi fixes it, change the doubled rows in the scenarios.
 
+Update (2026-10-31): Pi tracks the cause as [earendil-works/pi#10470](https://github.com/earendil-works/pi/issues/10470) (open). The hooks bridge now dedupes `SessionStart` only; the doubled load rows remain. See SSDEDUP-01.
+
 ## ~~IMPNAME-01: `import` fails `{duplicate name}` for a marketplace recorded under another name~~ -- CLOSED
 
 **CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 6 (PR #286). Disposition: fixed. Import reuses the recorded source silently and each `p@<settings name>` fails as not added, as Claude Code does (D-PL6-17, D-PL6-18; D-PL6-02 and D-PL6-10 superseded).
@@ -4531,3 +4533,11 @@ reconcile, and reinstall rows carry the note only (09-RESEARCH.md section 7).
 
 Found by the Phase 9 review (WR-03): a kept clone's old node_modules made the
 next install skip the package step.
+
+## SSDEDUP-01: remove the SessionStart dedupe once Pi fixes its double bind
+
+Added 2026-10-31. Pi's RPC `new_session`, `switch_session`, `fork`, and `clone` bind extensions twice, so one registration sees the same `session_start` twice (spike 028; upstream [earendil-works/pi#10470](https://github.com/earendil-works/pi/issues/10470), open, still present in Pi 1.4.0). The cause is in `modes/rpc/rpc-mode.js`: each of those handlers calls `rebindSession()` after the runtime's own `setRebindSession` callback has already rebound. Interactive `/new` binds once.
+
+The hooks bridge now drops a repeat of the last `session_start` with the same session id and reason in one registration (`bridges/hooks/event-router.ts`), so a plugin's `SessionStart` hook runs once per session, as in Claude Code. `features/plugin/session-start-hooks.feature` covers it.
+
+Trigger: a Pi release that closes #10470. Users on an older Pi still need the dedupe, so delete it only when the `@earendil-works/pi-coding-agent` peer floor (now `>=1.0.0`) rises to that release. Then delete the dedupe and its two `SessionStart runs ...` cases in `test/bridges/hooks/event-router.test.ts`, keep the feature (it must still pass), and settle DBLEMIT-01's doubled rows.

@@ -424,7 +424,11 @@ test("same-runtime reload makes every retained registration inert before argumen
   assert.strictEqual(typeof liveSessionStart, "function");
   const liveResult = (liveSessionStart as (...args: unknown[]) => unknown)(
     { type: "session_start", reason: "startup" },
-    { cwd: projectRoot, mode: "print" },
+    {
+      cwd: projectRoot,
+      mode: "print",
+      sessionManager: { getSessionId: () => "lifecycle-session" },
+    },
   );
 
   // assert
