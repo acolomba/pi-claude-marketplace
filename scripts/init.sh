@@ -5,8 +5,7 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 
 export PATH="$PATH:$HOME/.local/bin:$(npm prefix --global)/bin"
 
-# a Claude Code cloud session VM lacks tools a developer machine has and
-# needs a few settings; scripts/cloud-env.sh says which and why
+# a Claude Code cloud VM needs a few settings; see scripts/cloud-env.sh
 lfs_install_flags=""
 if [[ ${CLAUDE_CODE_REMOTE-} == true ]]; then
     source scripts/cloud-env.sh
@@ -17,8 +16,7 @@ export GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never
 # shellcheck disable=SC2086 -- the flags are words
 git lfs install --local $lfs_install_flags
 
-# pre-commit: pipx on a developer machine; the Claude Code cloud VM ships uv
-# but no pipx
+# pre-commit, with pipx or uv
 if ! command -v pre-commit >/dev/null 2>&1; then
     if command -v pipx >/dev/null 2>&1; then
         pipx install pre-commit
@@ -27,7 +25,7 @@ if ! command -v pre-commit >/dev/null 2>&1; then
         uv tool install pre-commit
         PATH="$PATH:$(uv tool dir --bin)"
     else
-        echo "scripts/init.sh: install pipx or uv first; neither is on PATH" >&2
+        echo "scripts/init.sh: install pipx or uv first" >&2
         exit 1
     fi
 fi
@@ -68,5 +66,5 @@ npx fallow agent install --harness claude --harness codex --without hooks --with
 # normalize AGENTS.md
 pre-commit run --files AGENTS.md || true
 
-# init-session.sh keys on this marker
+# marks a completed run
 touch node_modules/.init-done
