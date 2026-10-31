@@ -40,8 +40,6 @@ Set the setup script of the cloud environment to:
 /home/user/pi-claude-marketplace/scripts/init.sh
 ```
 
-On the VM, `scripts/init.sh` and the SessionStart hook read `CLAUDE_CODE_REMOTE` and source `scripts/cloud-env.sh`. It puts Node 24 behind a wrapper that lets `chmod` deny root, which needs `setpriv`, and it sets `SKIP=trufflehog`, because the network policy blocks that hook. The hook exports those settings into the session, runs `init.sh` until one run completes in the clone, and refreshes `node_modules` after that. It reports a failure on its stdout and logs to `node_modules/.init.log`. When you run pre-commit by hand, keep the exported value: `SKIP=npm-check${SKIP:+,$SKIP} pre-commit run --files <changed files>`. CI runs trufflehog, so a secret committed in a cloud session is caught after the push.
-
 ## Running Pi against the checkout
 
 ```bash
