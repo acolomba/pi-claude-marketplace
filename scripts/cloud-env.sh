@@ -81,12 +81,10 @@ chmod +x "$node_link"
 hash -r
 
 # The setup script is cached only when it finishes in about five minutes, so
-# on a first install the pre-commit hook environments build in the background
-# while scripts/init.sh installs the rest. Its final pre-commit run waits on
-# the store lock if they are still building.
-if [[ ! -e node_modules/.init-done ]]; then
-    if ! command -v pre-commit >/dev/null 2>&1; then
-        uv tool install pre-commit
-    fi
+# on a first install with pre-commit already present, its hook environments
+# build in the background while scripts/init.sh installs the rest. The final
+# pre-commit run of scripts/init.sh waits on the store lock if they are still
+# building. scripts/init.sh installs pre-commit itself when it is absent.
+if [[ ! -e node_modules/.init-done ]] && command -v pre-commit >/dev/null 2>&1; then
     (pre-commit run --files CONTRIBUTING.md >/dev/null 2>&1 &)
 fi
