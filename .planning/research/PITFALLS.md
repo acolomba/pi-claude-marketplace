@@ -1,411 +1,565 @@
 # Pitfalls Research
 
-**Domain:** Brownfield Pi extension: a cucumber behavioral suite for every `/claude:plugin marketplace` command, driven through a real headless Pi in RPC mode against local stand-ins (path, direct `marketplace.json`, loopback HTTPS `git http-backend`, and GitHub sources redirected by a new `GITHUB_BASE_URL`). Milestone `marketplace-features`.
-**Researched:** 2026-10-15
-**Confidence:** HIGH for everything read in this tree's source (`tests/e2e/_rpc.ts`, `features/**`, `orchestrators/auth-host.ts`, `domain/auth-registry.ts`, `orchestrators/marketplace/{add,update}.ts`, `domain/clone-key.ts`, `platform/git.ts`, `shared/redact-absolute-paths.ts`, `shared/notification-wire.ts`, `node_modules/isomorphic-git`, `node_modules/simple-get`) and in the archived any-git-host UAT (`.planning/milestones/ws-git-hosts-2026-10-01/.../01-UAT.md`, `02-UAT.md`). HIGH for the upstream-parity fact (grep of the installed Claude Code 2.1.296 binary: GitHub clone URLs are the literal `https://github.com/${repo}.git`, and no `GITHUB_BASE_URL` string exists). MEDIUM for `git http-backend` CGI behavior (from the spike and the earlier canaries, not re-read in git's source). MEDIUM for the Terraform `GITHUB_BASE_URL` collision (web search; the research seam rates that tier LOW, but two independent sources agree). LOW for macOS/LibreSSL behavior (not checked).
+**Domain:** Brownfield Pi extension. Milestone `component-features`: cucumber scenarios for every bridged Claude component kind (skills, commands, agents, hooks, MCP servers, workflows), observed through Pi's and the companions' own surfaces in a headless RPC Pi scripted by Pi's faux model. The milestone also raises Pi to 1.4.0, pi-mcp-adapter to 7.0.0, and pi-subagents to 0.84.0, adds `@quintinshaw/pi-dynamic-workflows` 3.15 as an optional peer, and fixes SessionStart/SessionEnd parity.
+**Researched:** 2026-10-31
+**Confidence:** HIGH overall. Most findings come from this tree's source (`features/lib/pi-process.ts`, `features/support/pi-process.ts`, `features/lib/pi-commands.ts`, `test/e2e/_rpc.ts`, `scripts/install-test-peers.mjs`, `scripts/check-features.mjs`, `eslint.config.js`, `.github/workflows/ci.yml`, `extensions/pi-claude-marketplace/{platform/pi-api.ts,bridges/hooks/event-router.ts,domain/components/hook-events.ts}`) and from the published tarballs of `pi-mcp-adapter@7.0.0`, `pi-subagents@0.84.0`, `@quintinshaw/pi-dynamic-workflows@3.15.0`, `@earendil-works/pi-coding-agent@1.4.0`, and `@earendil-works/pi-ai@1.4.0`, read from `npm pack` in a scratch directory. Pi 1.3.0 docs (`node_modules/@earendil-works/pi-coding-agent/docs/security.md`, `rpc.md`) are HIGH. Upstream Claude Code facts come from the spike-028 binary grep of 2.1.316 (HIGH) and from code.claude.com/docs/en/hooks (WebFetch, which the confidence seam rates LOW when unverified; it agrees with the binary grep on every value checked, so MEDIUM). The claim that Claude Code starts plugin MCP servers without a project-approval prompt is MEDIUM and needs `claude-code-compat-research`.
 
-## Phase vocabulary used below
+## Phase vocabulary
 
-The roadmap does not exist yet. This file names phases by concern, in the order the pitfalls suggest:
+The roadmap does not exist yet. The pitfalls below name phases by concern:
 
 | Tag | Concern |
 | --- | --- |
-| **OVERRIDE** | `GITHUB_BASE_URL` in production code, with its unit tests (D-MF-01) |
-| **STAND-IN** | `features/lib/` loopback HTTPS git server: openssl cert, `node:https` CGI wrapper around `git http-backend`, request log, arming (401/404/5xx/drop), fixture repos |
-| **RUN** | Pi run plumbing: env for the child (`NODE_EXTRA_CA_CERTS`, `GITHUB_BASE_URL`, git isolation), per-worker lifetime, the `Before()` reset |
-| **DRIVER** | `features/lib/pi-commands.ts`: non-cascade payload kinds, one payload per marketplace from bare `update`, normalizing run tokens (paths, ports, timestamps) |
-| **SCENARIOS** | `features/marketplace/*.feature` and their step modules |
-| **GATE** | `npm run check` duration, CI job, unused-step check, milestone close |
+| **HARNESS** | Phase 1, first half: the companion Pi, the faux model, the probe extension, the stub MCP server, the hook recorder, fixture builders, shared steps, the reset, and the CI job |
+| **VERSIONS** | Phase 1, second half: Pi 1.4.0, pi-mcp-adapter 7.x, pi-subagents 0.84, pi-dynamic-workflows 3.15, and every test, doc, and lockfile that pins the old floors |
+| **SKILLS**, **COMMANDS**, **AGENTS**, **HOOKS**, **MCP**, **WORKFLOWS** | The six parallel component phases. HOOKS also owns the SessionStart/SessionEnd parity fix |
+| **CLOSE** | Merge order, combined-tree gates, re-verification, milestone audit |
+
+---
 
 ## Critical Pitfalls
 
-### Pitfall 1: A 401 scenario consults the developer's real git credential helper
+### Pitfall 1: Putting the faux model or the companions on the run's shared Pi breaks existing scenarios in random order
 
 **What goes wrong:**
-On a 401, `platform/git-auth-callbacks.ts::onAuth` runs `git credential fill` (5 s timeout, `orchestrators/auth-host.ts`). `platform/git-credential.ts` spawns it with `{ ...process.env, GIT_TERMINAL_PROMPT: "0" }`, so the subprocess inherits Pi's environment. `tests/e2e/_rpc.ts::childEnvironment` builds that environment from scratch, with `HOME`, `PI_CODING_AGENT_DIR`, `PI_OFFLINE`, and `PATH`. A sandboxed `HOME` keeps `~/.gitconfig` and `$HOME/.config/git/config` out. Nothing keeps the **system** config out. On this machine `/etc/gitconfig` exists (it holds git-lfs filters only). Homebrew and Apple git on macOS put `credential.helper=osxkeychain` in their system config, and some Linux images put `libsecret` there. With such a helper, a 401 scenario reads the developer's keychain for `127.0.0.1:<port>`. If a scenario then reaches `onAuthFailure` on a Device Flow host, it runs `git credential reject` and **erases a real stored credential**. Pitfall 3 shows how a Device Flow host can be bound while the override is set.
+Today each worker has one long-lived Pi with no model and no companions (`features/support/pi-process.ts`). Three existing contracts depend on that:
+
+1. `sendMessage()` in `features/lib/pi-commands.ts:206-214` asserts that Pi refuses a plain prompt (`{ command: "prompt", success: false }`) "because the sandbox Pi has no model". `features/marketplace/background-update.feature` uses it in 8 places. With a model set, Pi runs a turn instead, and the step fails.
+2. The `Before()` reset asserts `skills: []` and `payloads: []` after `new_session`. pi-subagents and the workflow engine ship skills and prompts (`"pi": { "skills": [...] }` in both package manifests), and the adapter can contribute skill paths through `resources_discover`. Any of these makes the reset fail.
+3. Lifecycle-coverage scenarios prove that a missing optional peer degrades an install (`{requires pi-subagents}`, `{requires pi-mcp-adapter}`). With the companions loaded, those rows change.
+
+The worst part is the order dependence. RPC `set_model` changes the session model in memory. The reset empties the agent directory and starts a new session, but nothing unsets the model. With `order: random` and `parallel: 8`, a worker that ran one faux scenario then fails an unrelated background-update scenario. The failure moves between runs.
 
 **Why it happens:**
-"HOME is sandboxed" feels like full isolation. Git has three config levels, and only `GIT_CONFIG_NOSYSTEM` turns off the system level. A credential helper also reaches state outside `HOME`: a keychain, a D-Bus secret service, or a cache socket.
+The run's Pi is the one piece of module state the cucumber rules allow (`.agents/skills/cucumber/rules/world-and-stand-ins.md`), so the easy move is to add `--extension` flags to `startRpcPi`.
 
 **How to avoid:**
-- Add `GIT_CONFIG_NOSYSTEM: "1"` to the Pi child environment. Also set `GIT_CONFIG_GLOBAL` to a path inside the sandbox (or `/dev/null`) so a future `XDG_CONFIG_HOME` leak cannot reach the real global config. Build the environment from scratch; never spread `process.env`.
-- To give a scenario a stored credential, have its `Given` write `<sandbox home>/.gitconfig` with `credential.helper=store --file=<sandbox home>/.git-credentials`, plus a `https://user:token@127.0.0.1:<port>` line. Git rereads both files on every `git credential` spawn, so the setup is per scenario, and the `Before()` reset deletes it. Do not use `GIT_CONFIG_COUNT/KEY/VALUE` as the UAT canaries did: Pi's env is fixed at start, so that would apply the helper to every scenario in the worker.
-- `_rpc.ts` is shared with `tests/e2e`. Extend it with an optional `extraEnv` (an allowlist the caller passes) rather than forking it. The new git-isolation variables are safe defaults for e2e too.
+- Start a second long-lived Pi per worker, the companion Pi. It loads the faux extension, the probe extension, and the three companions. Give it its own `BeforeAll()`/`Before()`/`AfterAll()` in its own support module, named after it, under the same slow-process exception. Keep the run's Pi exactly as it is.
+- Start the companion Pi lazily, on the first scenario that needs it, so the workers that never run a component scenario do not pay for it.
+- Give the companion Pi its own reset baseline. Its `Before()` states the exact set of companion-owned commands, tools, and skills that an empty sandbox shows, and asserts that set, not an empty list.
+- Set the faux model in the companion Pi's start-up (or in each reset) and never on the run's Pi.
 
 **Warning signs:**
-A 401 scenario passes locally on Linux and fails on a macOS laptop, or the reverse. A 401 scenario takes 5 s (a helper is blocking until the credential timeout). `git credential` shows up in a process listing during a run.
+A background-update scenario fails only in some runs. The reset fails with a non-empty `skills` list. A `{requires pi-subagents}` row fails.
 
-**Phase to address:** RUN (env), SCENARIOS (credential `Given`).
+**Phase to address:** HARNESS.
 
 ---
 
-### Pitfall 2: `GITHUB_BASE_URL` is wired into the clone URL only, so auth, leftover recovery, and update stay bound to github.com
+### Pitfall 2: The RPC driver drops every record that arrives outside an in-flight request
 
 **What goes wrong:**
-The GitHub host and wire URL are hard-coded in **14 files**: `domain/{clone-key,source}.ts`, `orchestrators/auth-host.ts`, `orchestrators/marketplace/add.ts`, `platform/git.ts`, and nine `orchestrators/plugin/*` probes and flows. `orchestrators/marketplace/update.ts:398` also builds `` `https://github.com/${owner}/${repo}.git` `` inline, so a grep for `networkCloneUrl`/`GITHUB_HOST` misses it. If only `networkCloneUrl` honors the override:
-- `hostFromCloneUrl(_, "github")` and `add.ts:974` still return `"github.com"`. The `onAuth` host guard compares the bound host `github.com` with the URL host `127.0.0.1:<port>` and **cancels before the helper is queried** (UAT test 8). So a 401 on a GitHub source always fails as `{authentication required}`. A GitHub Enterprise user with a stored credential could never authenticate.
-- `originMatchesSource` (MA-12 leftover-clone recovery, `domain/clone-key.ts`) parses the recorded `origin`. Under the override that is `https://127.0.0.1:<port>/o/r.git`, which parses as kind `url`, not `github`. So `marketplace add` refuses its own leftover GitHub clone.
-- `refreshGitHubClone` fetches from the clone's recorded `origin`, not from a freshly built URL. `marketplace update` therefore "works" under the override even when update's own wiring is missing. A scenario passes for the wrong reason, and a user who changes or unsets the variable keeps fetching from the old base.
+`PiProcess.handleLine()` (`features/lib/pi-process.ts`) returns at once when `this.pending === undefined`. A `prompt` that starts a model turn gets its `response` first, with `data.disposition` (Pi docs `rpc.md:67`), and the turn's events come after it. So the current driver throws away `agent_end`, `agent_settled`, `tool_execution_*`, and every custom entry appended later. That includes the `pi-dynamic-workflows:progress` entries, which spike 028 named as the only workflow result that reaches RPC. The `idle` getter also ignores a running turn: a scenario that ends while the faux model is still mid-turn leaves Pi "idle". The next scenario's `new_session` then races the old turn, and the old turn's late output lands in the new scenario.
+
+Spike 028 hit this as "a prompt sent while the previous turn still runs is queued as a follow-up". It worked around it with fixed sleeps (`setTimeout(r, 1500)` after start and after each turn in `faux.ts`), and the spike waited for the first `agent_end`, which its own README says is wrong.
 
 **Why it happens:**
-The happy-path clone scenario is the first one written, and it passes as soon as the wire URL changes. Every other GitHub-specific site is reached only by auth, recovery, or update scenarios.
+The driver was built for extension commands. Pi runs an extension command to completion before it answers, so every entry arrives before the response. Model turns do not work that way.
 
 **How to avoid:**
-- Introduce one seam that returns `{ base URL, host }` for GitHub sources (default `https://github.com`, host `github.com`). Route all 14 sites and the inline literal through it. Then add a grep gate, or a `tests/architecture` source walk, that fails on a new `"github.com"` literal outside the seam and `auth-registry.ts`.
-- Keep the source **identity** as `owner/repo`. Never store the override URL in `state.json` and never compare identities with it. Make `originMatchesSource` accept an origin under the configured base as the same GitHub repo.
-- Bind auth to the override's `host:port`. `findProviderForHost("127.0.0.1:<port>")` returns `undefined`, so the bundle is `stored-credential` and Device Flow never runs. That is the correct and safe outcome (Pitfall 3).
-- Write scenarios that only a complete wiring passes: a GitHub source behind a 401 with a stored credential (it must authenticate), leftover-clone recovery for a GitHub source, and `update` after `add`. Each asserts the stand-in's request log.
+- Keep one always-on record log per scenario in the companion Pi's driver. A request opens a window on it. It does not own the only listener.
+- Read `disposition` from the `prompt` response. When it is `"handled"`, no run started. Otherwise, wait for `agent_settled` (not `agent_end`) on the log, with a named timeout. Pi 1.4 adds `aborted` to `agent_settled`, so assert that it is `false`.
+- Make `idle` false from `agent_start` until `agent_settled`. The reset replaces a Pi that is not idle, as it already does for a pending request.
+- Never sleep for a fixed time. Wait on a record or a log line, with a deadline.
 
 **Warning signs:**
-A GitHub 401 scenario shows exactly one unauthenticated request and no authenticated retry. `rg 'github\.com' extensions/` returns sites the change did not touch.
+A scenario passes alone and fails in the full run. A slash command looks unregistered. A step reads a workflow result that is `undefined`. The spike's `SPIKE_SETTLE_MS` idea reappears as a constant.
 
-**Phase to address:** OVERRIDE (seam, unit tests), SCENARIOS (the three proofs above).
+**Phase to address:** HARNESS.
 
 ---
 
-### Pitfall 3: Device Flow fires against the real github.com and hangs the step
+### Pitfall 3: The faux script is one queue per process, and the spike's version hides a short or long script
 
 **What goes wrong:**
-If the override leaves the bound host as `github.com` and the host guard is ever loosened (for example, to "fix" the auth cancel in Pitfall 2), `findProviderForHost("github.com")` returns `GITHUB_PROVIDER`. Its `deviceCodeUrl` and `tokenUrl` are literal `https://github.com/login/...`, and `initiateDeviceFlow` calls the global `fetch`. In RPC mode `ctx.mode` is `"rpc"`, not `"print"`, so `DeviceFlowUnavailableError` is not thrown. The extension emits a `device-flow-prompt` payload and polls github.com for up to the code's lifetime. `PI_OFFLINE=1` and `--offline` affect only Pi's own model and package fetches (`pi-coding-agent/dist/main.js:452`), not the extension's `fetch` or isomorphic-git. The scenario reaches the public network and blocks until the 30 s step timeout. Then the `Before()` hook replaces Pi, and the run gets 30 s slower.
+The spike's `faux-extension.ts` reads `$SPIKE_FAUX_SCRIPT` once, when the extension loads. It queues 50 response factories for the whole process, and when the script runs out it answers `{ text: "done" }`. In a long-lived Pi that serves many scenarios:
+
+- Scenario A's unused steps are played to scenario B.
+- After 50 model calls in a worker, every later call fails, in whatever scenario happens to be the 51st.
+- A script with too few steps still "passes", because the model says "done" and the turn ends cleanly.
+- An in-process subagent child takes the next step from the same queue (spike gotcha), so a script that forgets the child's step plays the child's step to the parent.
 
 **Why it happens:**
-Device Flow is gated by host, not by environment. Overriding the clone base without the host makes `github.com` look like the target of a request that goes elsewhere.
+The spike ran one process per experiment, so a process-global queue was harmless there.
 
 **How to avoid:**
-- Key Device Flow on the host actually contacted, which is the override's host (Pitfall 2). Under the override, Device Flow runs only when the override's host is `github.com` itself. Normalize `https://github.com`, `https://github.com/`, `https://www.github.com`, and `:443` the way `domain/source.ts` already does, and treat them as "unset".
-- Treat Device Flow as out of scope for the suite, and say so in the feature description. It needs the GitHub OAuth endpoints, which no stand-in replaces.
-- Never use `github.com` or `gitlab.com` URLs as **url** sources in a scenario that reaches the network. `gitlab.com` has its own Device Flow and is not covered by the override. A parse-level refusal scenario may name them only when parsing fails before any I/O.
+- Arm the script per scenario through a command of the faux extension (or an RPC custom command) that calls `setResponses()`. Never read it from the environment.
+- Do not add a fallback. pi-ai 1.4's faux core already fails with "No more faux responses queued" (`dist/providers/faux.js:361`). Let that error fail the scenario.
+- At the end of each `When`, and again in the reset, assert `getPendingResponseCount() === 0`. A script must be used up exactly.
+- Write a child agent's steps into the script in call order, and name in the step text which steps are the child's.
 
 **Warning signs:**
-A `device-flow-prompt` payload appears (`runCommand` then fails on "exactly one payload"). A scenario sits at about 30 s. An `extension_error` mentions `fetch failed`.
+The model's last message in a log is "done". Failures cluster after a fixed number of faux scenarios in one worker. A subagent scenario passes with the child doing nothing.
 
-**Phase to address:** OVERRIDE, SCENARIOS.
+**Phase to address:** HARNESS. Every component phase follows the rule.
 
 ---
 
-### Pitfall 4: The `GITHUB_BASE_URL` name is already in use, so "unset means unchanged" is false for real users
+### Pitfall 4: Faux-model scenarios that assert what the script told the model to do
 
 **What goes wrong:**
-D-MF-01 justifies the divergence by saying it "changes nothing for a user who never sets it". The Terraform GitHub provider reads `GITHUB_BASE_URL` as its **API** endpoint. GitHub Enterprise users export values such as `https://ghe.example.com/api/v3/` in their shells and CI. The Elixir `git_store` library also reads it, with default `https://api.github.com`. A Pi user with that export would have every GitHub source cloned from `https://ghe.example.com/api/v3//owner/repo.git`, or from `https://api.github.com/owner/repo.git`. The clones fail, and nothing in the output points at an environment variable they set for another tool. Claude Code 2.1.296 has no such override, so the user's upstream experience never prepared them for it.
+The cucumber review asks: "Would a plausible wrong implementation still pass the scenario?" (`.agents/skills/cucumber/SKILL.md`). A faux scenario is tautological when its `Then` reads back the script:
+
+| Tautological `Then` | Wrong implementation that still passes | Discriminating `Then` |
+| --- | --- | --- |
+| "the model called `bash`" | Hooks bridge never registered PreToolUse | The hook recorder holds one PreToolUse record whose stdin has `tool_name: "Bash"`, the translated `tool_input`, `hook_event_name`, `CLAUDE_PLUGIN_ROOT`, and `CLAUDE_PROJECT_DIR`. A second hook with a non-matching matcher has no record |
+| "the model's reply was `echo:ping`" (the script wrote that text) | MCP server never spawned | The stub MCP log holds `initialize`, `tools/list`, and `tools/call` with `{"text":"ping"}`, and the tool result the model was shown is `echo:ping` |
+| "the `subagent` tool returned exit 0" | Agent bridge wrote an empty body, or the wrong tools | The child's model call shows the agent body as its system prompt, and the child's tool list is exactly `read`, `grep` |
+| "`/kit:greet Ada` ran" | `$ARGUMENTS` not expanded | The user message the faux model received is exactly `Greet Ada warmly.` |
+| "the skill was offered" | Skill body truncated or frontmatter leaked | The model received the skill body in its `<skill>` block, compared whole |
+| "`mcp__plugin_kit_stub__echo` is listed" | The tool came from the adapter's `mcp-cache.json`, and the server never connected | The stub log shows `initialize` and `tools/list` in this scenario's window |
+
+Two more forms of the same mistake:
+
+- **Expected values from production code.** A step that builds an expected name with the extension's own name helper (`domain/name.ts`) proves nothing. Write the expected name as a literal in the feature file: `kit:greet`, `skill:kit-hello`, `kit:reviewer`, `mcp__plugin_kit_stub__echo`, `kit:demo`.
+- **Partial recorder reads.** The spike's faux log cuts `lastUser` to 2,000 characters and `system` to 6,000. A comparison against a cut value is a partial comparison. The steps rules require whole values (`rules/steps.md`: "comparing whole values ... No `assert.ok(x.includes(...))`"). Record whole values, and compare a named, whole field.
 
 **Why it happens:**
-The name was chosen for readability, without checking the ambient namespace.
+The faux model makes a turn deterministic, so the turn's own transcript looks like evidence. It only shows that the script ran.
 
 **How to avoid:**
-- Raise it with the user before OVERRIDE is planned. Per the project's upstream-parity constraint, a divergence beyond the recorded decision goes back to the user as a question. The likely fix is a project-prefixed name, such as `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`, recorded as an amendment to D-MF-01.
-- Whatever the name, validate the value once, at read time, with the same rules the source parser applies. Require `https://` (the parser rejects `http://`, and the GitHub arm builds its wire URL from `owner/repo` without re-parsing, so an `http://` override would otherwise reach isomorphic-git in cleartext). Reject userinfo (`https://user:token@host`), because the URL lands in rows and cause chains. Reject a query and a fragment. Strip one trailing slash, and keep a path prefix (`https://host/git` becomes `https://host/git/owner/repo.git`).
-- An invalid value fails the command with a typed error that names the variable. It never falls back silently to github.com.
+- The HARNESS phase provides observation stand-ins that sit on the host side of each bridge: the hook recorder (stdin, environment, argv, exit), the stub MCP server's request log, the faux model's call log (whole messages, tools, system prompt, per call), and the probe extension (`getAllTools()`, `getActiveTools()`, `getCommands()`).
+- Every component scenario names, in its title, the bridge behavior it proves. Its `Then` reads one of those stand-ins, never the script.
+- Each component phase adds at least one negative control per kind: a matcher that must not fire, a disabled plugin whose command must not expand, an uninstalled agent that `subagent {action:"list"}` must not list.
+- Record a red proof before each product fix, as marketplace-features did (`*-RED.json`): the scenario fails on the old code.
 
 **Warning signs:**
-A request path with `//` or `/api/v3/` in the stand-in log. The error rows show a URL the user never typed.
+A `Then` step's text repeats a value that appears in the faux script table of the same scenario. A scenario still passes after you stub out the bridge it names.
 
-**Phase to address:** OVERRIDE (decision amendment, validation, unit tests for each refused form).
+**Phase to address:** HARNESS (stand-ins and step vocabulary). SKILLS, COMMANDS, AGENTS, HOOKS, MCP, WORKFLOWS (each scenario).
 
 ---
 
-### Pitfall 5: The stand-in's port and CA are pinned into Pi's environment at start, but the code treats the server as a per-scenario fake
+### Pitfall 5: The reset leaves companion state that the next scenario can see
 
 **What goes wrong:**
-Node reads `NODE_EXTRA_CA_CERTS` once at process start. `GITHUB_BASE_URL` carries the port. Pi is started once per worker, so the server's port and CA must exist before `PiProcess.start` and must outlive every scenario in the worker. Three ways this breaks:
-1. **Hook order.** Cucumber runs `BeforeAll`/`Before` hooks in load order, and `features/support/**/*.ts` loads alphabetically. A `support/git-server.ts` registers its hooks before `support/pi-process.ts`. That works by accident until a file is renamed. Its `Before()` would also reset the request log before `pi-process.ts` replaces a busy Pi, so the killed Pi's late request lands in the next scenario's log.
-2. **Replacement.** `Before()` restarts a busy Pi with `PiProcess.start(run.sandbox)`. If the extra env is not part of the run record, the replacement Pi has no CA and no override. Every later GitHub scenario in that worker then goes to the real github.com, or fails TLS with a self-signed error.
-3. **The cucumber rule.** `world-and-stand-ins.md` allows exactly one piece of module-level state: the slow process under test. A second module-level server is a review BLOCKER ("module-level state outside the slow-process exception").
+The `Before()` reset empties HOME, the agent directory, and the project, then starts a new session. With components installed, that order leaks:
+
+- **Hooks.** The previous scenario's routing table still holds its plugin's hooks. On `new_session`, Pi's `session_shutdown` fires SessionEnd for the old plugin after its files are gone. The spawn fails or, worse, a recorder that is still on disk appends a record that the next scenario reads.
+- **MCP.** The adapter stops its servers in `session_shutdown` (`pi-mcp-adapter/index.ts:1842`), but its initialization runs after `session_start` asynchronously. A stub that started late, or one in a `lazy-keep-alive` lifecycle, can outlive the reset and append to a log file that the reset just removed, so the file reappears.
+- **Workflows.** `/kit:demo` runs in the background (spike 028). A run that is still going when the reset empties the agent directory recreates `<agentDir>/workflows/...` under the next scenario.
+- **Agents.** A background (`async: true`) subagent runs as a separate process, and pi-subagents writes its run state to a temp directory (see Pitfall 6). A detached child with its own process group survives `killProcessGroup()`.
+- **Adapter files.** `mcp-cache.json` and `mcp-last-seen-version.json` live in the agent directory (`metadata-cache.ts:42`, `upgrade-notice.ts:17`). They are removed with it, but the adapter's in-memory state is only rebuilt on the next `session_start`.
 
 **Why it happens:**
-The skill's model is "a fake per scenario", and here a fake's identity (port and CA) is baked into the long-lived process.
+The existing reset only proves facts about this extension: no plugin, marketplace, skill, payload, or git host traffic. The companions were never loaded.
 
 **How to avoid:**
-- Make the listener and CA part of the existing `PiRun` record in `support/pi-process.ts`: `{ root, sandbox, marketplacesRoot, gitServer, env, pi }`. One `BeforeAll` starts the server, then Pi with `env`. One `Before()` replaces Pi if busy (with the same `env`), **then** waits for the server's in-flight CGI children to drain, **then** resets the served repos, arming, and request log, **then** empties the sandbox. Asserting the reset should cover the server too: no repos, no arming, an empty log.
-- The per-scenario state (repos, arming, log) belongs to the world. Steps reach it through the world, and releases go through `this.onRelease()`.
-- Record the extension of the slow-process exception in `.agents/skills/cucumber/rules/world-and-stand-ins.md` in the same phase: "a stand-in whose address or trust the slow process fixes at start lives in the same run record". Otherwise every review will flag it.
-- Never fix the problem with `NODE_TLS_REJECT_UNAUTHORIZED=0` or a plain-HTTP stand-in. The first turns off TLS checks for all of Pi and prints a warning on stderr. The second is refused by the parser anyway.
+- In the companion Pi's `Before()`: wait until the previous turn has settled, stop any workflow or subagent run through the companion's own control surface, start the new session, and only then empty the sandbox. Or empty first and accept a failed spawn, but in that case put every recorder log in a per-scenario directory whose name the world chooses, so a late write from scenario A can never land in scenario B's file.
+- Then assert the clean state through the stand-ins: the probe lists only the baseline commands and tools, the faux queue is empty, the stub MCP pid file shows no live process, the hook recorder directory holds no record, and the workflow engine reports no active run.
+- Keep `order: random` (`rules/world-and-stand-ins.md`), so a reset that leaks fails.
 
 **Warning signs:**
-GitHub scenarios fail only after an earlier scenario in the same worker timed out. A request appears in the log of a scenario that made none. Pi's stderr shows `Warning: Ignoring extra certs from ...` (the CA file is missing or was written after start).
+A recorder log holds a record whose session id belongs to no step of the scenario. `ps` after a run shows `node stub-mcp` processes. The sandbox root cannot be removed in `AfterAll()` (`ENOTEMPTY`) because something keeps writing into it.
 
-**Phase to address:** RUN, STAND-IN.
+**Phase to address:** HARNESS.
 
 ---
 
-### Pitfall 6: Scenarios that a wrong implementation still passes
+### Pitfall 6: Companions write outside the sandbox, or reach the network
 
 **What goes wrong:**
-This is the skill's first review question, and marketplace commands invite it in five places:
-- **Network proof is missing.** `marketplace add owner/repo` is "added" whether the clone came from the stand-in, the real github.com (override not applied), or a leftover clone. Only the stand-in's request log tells them apart. In the same way, `list`, `info`, and `remove` must make **zero** requests (NFR-5), and nothing checks that unless a `Then` asserts an empty log.
-- **Normalizing too much.** The result carries a random port and absolute temp paths: `marketplace-info.source.url`, `source.absPath` (unredacted by design, NFR-9), the row subject of a failed URL add, and `connect ECONNREFUSED 127.0.0.1:<port>` in cause chains. A projection that replaces any `127.0.0.1:\d+` or any `/tmp/...` with a placeholder also hides a request to the wrong port, or a path into the wrong scope.
-- **Dropping fields.** `details.lastUpdatedAt` is a timestamp. Adding it to `UNSTATED_FIELDS` in `command.steps.ts` (next to `origin`) makes it disappear from every comparison, so a regression that stops stamping it, or stamps it on a failed update, passes.
-- **Payload count is loose.** A bare `marketplace update` emits one payload per marketplace, in sorted order (`orchestrators/marketplace/update.ts:261-287`). It can also emit an extra `mcp-config-notices` payload. A driver that accepts "at least one" or "any order" lets a skipped marketplace through.
-- **Kind is loose.** A driver that validates against the whole `NOTIFICATION_PAYLOAD_SCHEMA` union passes a `usage-error` where a `marketplace-info` was expected.
+The child environment is an allowlist: `HOME`, `PI_CODING_AGENT_DIR`, `PI_OFFLINE=1`, `PATH`, plus the git and trust variables (`test/e2e/_rpc.ts:189-211`). `TMPDIR` is not on it, so Node's `os.tmpdir()` in Pi resolves to `/tmp`:
+
+- pi-subagents 0.84 writes `join(tmpdir(), \`pi-subagents-${resolveTempScopeId()}\`)` (the `/tmp/pi-subagents-uid-0` the milestone noted), plus `pi-subagent-session-*`, `pi-subagents-tracked-diff-*`, and `pi-worktree-index-*` (bundle grep). All 8 workers, every run, and the developer's own Pi share these directories. The cucumber skill calls a leak of this kind a BLOCKER.
+- A fixture plugin that ships `package.json` with dependencies and a lockfile makes `install` run the plugin's package manager (D-PL9-10), which reaches the npm registry unless the scenario uses the npm registry stand-in.
+- An MCP fixture whose `command` is `npx` goes through the adapter's `npx-resolver.ts`. An `http` or `sse` MCP fixture can start OAuth discovery, and the adapter depends on `open`, which starts a browser.
+- Adapter 7.0 semantic search uses the model logins Pi has. With `PI_OFFLINE=1` and no credentials it falls back to word search, but a test that sets `settings.semanticSearch` would try a classifier.
+
+The rest is already contained by `HOME`: the adapter's `~/.config/mcp/mcp.json`, `~/.claude.json` imports, and `~/.agents/mcp.json`; the engine's legacy `~/.pi/workflows`, which only engines below 3.14 read (spike 028); `<agentDir>/mcp.log` (adapter 5.4).
 
 **Why it happens:**
-Run-specific values force some normalization, and the easiest normalizer is a regex. Comparing whole results against tables pushes writers to drop the awkward fields.
+The allowlist was written for this extension, which never uses a temp directory that it does not name itself.
 
 **How to avoid:**
-- Substitute **exact** run tokens only: the server's exact origin string, the exact sandbox and marketplaces roots. Replace them in both directions (in the command a step sends and in the result it projects) with named, visible placeholders. Document the placeholders once in each feature description (for example, "`<git server>` stands for the loopback HTTPS stand-in"). A value that contains a different port stays raw and fails the comparison.
-- Compare `lastUpdatedAt` by property, not by dropping it: present and inside the window between the `When` starting and returning, or absent. Spell the expectation as a cell value such as `set by this update`.
-- The driver takes the expected payload kind (and, for bare `update`, the expected count), validates against that kind's schema, and asserts the exact sequence of kinds.
-- Give every network scenario a `Then the git server received these requests:` table (method, path, query, and whether it carried credentials, never the credential value). Give every `list`/`info`/`remove` scenario on a git source `Then the git server received no requests`.
+- Add `TMPDIR=<run root>/tmp` to the companion Pi's environment. Create that directory in `BeforeAll()` and empty it in the reset. `_rpc.ts:161-171` already refuses a temp directory inside the repository, so keep the run root outside it.
+- Make the stub MCP server a dependency-free stdio JSON-RPC server, started as `node <absolute path>`, as the spike's `stub-mcp.mjs` is. No `npx`, and no `@modelcontextprotocol/sdk`.
+- Fixture plugins ship no `package.json` dependencies, unless a scenario is about package installs and uses `features/lib/npm-registry.ts`.
+- Add no `http` MCP fixture without a loopback stand-in for it.
+- Add one hermeticity check to the reset: list `/tmp` entries that match `pi-subagents-*` before and after a scenario, and fail on a new one.
 
 **Warning signs:**
-A projection helper containing `replace(/\d+/` or `/tmp`. A growing `UNSTATED_FIELDS`. A GitHub scenario with no request-log `Then`.
+`ls /tmp | grep pi-subagent` grows during a run. A scenario takes 30 seconds and then fails with a DNS or `ECONNREFUSED` cause.
 
-**Phase to address:** DRIVER (tokens, kinds, counts), SCENARIOS (request-log Thens), GATE (review against the skill's first question).
+**Phase to address:** HARNESS (environment and stand-ins). AGENTS and MCP (fixtures).
 
 ---
 
-### Pitfall 7: Host git configuration leaks into the stand-in and the fixtures
+### Pitfall 7: Project trust silently hides project-scope MCP servers and agents in RPC
 
 **What goes wrong:**
-The cucumber worker runs with the developer's real `HOME` and environment; only Pi is sandboxed. So `git init`, `git commit`, and `git http-backend` spawned from `features/lib/` read the real `~/.gitconfig` and `/etc/gitconfig`:
-- `commit.gpgsign=true` makes fixture commits hang on pinentry or fail.
-- `init.defaultBranch` makes HEAD `master` on one machine and `main` on another. Scenarios that show a ref, or that check out the default branch, then differ between laptop and CI.
-- `/etc/gitconfig` here sets `filter.lfs.required=true`, and `transfer.hideRefs`, `uploadpack.*`, `core.hooksPath`, `safe.directory`, and `url.<base>.insteadOf` all change what `upload-pack` serves or what a commit does.
-- Inherited `GIT_DIR`, `GIT_WORK_TREE`, or `GIT_INDEX_FILE` (set when anything runs under a git hook) make fixture commands operate **on this repository**.
-- Commit SHAs change on every run unless author and committer dates are pinned.
+Spike 028 installed `kit@fixtures --scope user` only (`run.ts:54-55`). Project scope writes to `<cwd>/.pi/mcp-adapter.json` and `<cwd>/.pi/agents/` (`persistence/locations.ts:208-212`). In an RPC Pi:
+
+- pi-mcp-adapter 7.0 `applyProjectServerTrust()` blocks every project server when Pi does not trust the project, and when the project is trusted but the server is not approved, because RPC is not interactive (`project-server-trust.ts:278`). The only RPC way in is a user-level `settings.projectServers: "allow"`. Adapter 5.3.0 is the release that made RPC skip unapproved project servers instead of hanging (CHANGELOG 5.3.0).
+- pi-subagents ignores project agents in an untrusted project (0.84 CHANGELOG: "In a project you have not trusted, agent lookup ... already ignored what was in them").
+- Pi's own trust: RPC cannot show the trust prompt, so with the default `defaultProjectTrust: "ask"` protected project resources are skipped (`docs/security.md:75-80`).
+
+So a project-scope MCP or agent scenario sees "no server" or "no agent", and the cause looks like a bridge bug.
+
+There is also a parity question. In Claude Code, an enabled plugin's MCP servers start without the project `.mcp.json` approval prompt (MEDIUM, verify). Here, the bridge writes a project-scope plugin's server into a file that the adapter treats as an unapproved project server, so it never starts in RPC and asks in the TUI. That may be a product gap, not a harness problem.
 
 **Why it happens:**
-The spike ran on one machine with one config, and the stand-in reuses the worker's environment by default (`spawn` without `env`).
+The existing suite never needed trust: skills and prompts reach Pi through this extension's `resources_discover`, which trust does not gate.
 
 **How to avoid:**
-Use one function in `features/lib/` that builds the git environment from scratch for **both** fixture commands and the CGI. Include: `PATH`, `HOME=<empty dir under the run root>`, `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=/dev/null`, fixed `GIT_AUTHOR_NAME/EMAIL/DATE` and `GIT_COMMITTER_*`, and nothing else from `process.env`. Pass `-c init.defaultBranch=main` (or `git init -b main`) and `-c commit.gpgsign=false`. For the CGI, add only `GIT_PROJECT_ROOT`, `GIT_HTTP_EXPORT_ALL=1`, and the CGI variables from the request.
+- The HARNESS phase decides how the companion Pi trusts its project (`--approve`, `trust.json` in the sandbox agent directory, or `defaultProjectTrust: "always"` in the sandbox settings) and writes the decision down. It applies to the companion Pi only, never to the run's Pi.
+- The MCP phase researches the upstream contract for plugin MCP servers and project approval with `claude-code-compat-research` before writing project-scope scenarios. If the adapter's gate is a divergence, record it with an ID and its license (a Pi or companion capability gap), or take it to the user.
+- Include an untrusted-project scenario per kind where trust matters, so the divergence is pinned and not hidden by the harness setting.
 
 **Warning signs:**
-A fixture `Given` passes locally and times out in CI, or the reverse. A ref column reads `master` on one machine. `git status` in the repository shows unexpected changes after a run.
+`/mcp` shows the server as `blocked`. `subagent {action:"list"}` lists the user-scope agent but not the project-scope one. Scenarios pass at user scope and fail at project scope.
 
-**Phase to address:** STAND-IN.
+**Phase to address:** HARNESS (trust setup). MCP and AGENTS (parity research and scenarios).
 
 ---
 
-### Pitfall 8: CGI wrapper edge cases crash the worker or hang the scenario
+### Pitfall 8: pi-mcp-adapter 7.0 changes behavior that the conformance tests pin to 5.2
 
 **What goes wrong:**
-About 25 lines served the spike's happy path. The failure paths are where it breaks:
-- **No timeout anywhere.** `platform/git.ts` sets no request timeout, and `simple-get` times out only when `opts.timeout` is set. If "drop the connection" is built as "accept and never answer", the command waits until the 30 s step timeout, then Pi is replaced. Each such scenario costs 30 s and leaves a busy Pi.
-- **EPIPE kills the worker.** When the client or a drop arm closes the socket while `git http-backend` is still writing (or the wrapper is still writing to its stdin), an unhandled `'error'` on `child.stdin`/`child.stdout`/`res` throws. In a cucumber worker that ends every remaining scenario of that worker.
-- **Header parsing.** `http-backend` prints `Status: 404 Not Found` only on errors. On success there is no `Status` line and the status is 200. Headers end at the first blank line (`\r\n\r\n`; also accept `\n\n`). That boundary can fall across two stdout chunks. The body is binary pack data and must never be decoded as text.
-- **Request body.** isomorphic-git 1.42.3 buffers the upload-pack request so that it can send `Content-Length` (`index.cjs:10325`), and it never gzips request bodies. Pass `CONTENT_LENGTH` and `CONTENT_TYPE` through. If a request does arrive with `Content-Encoding: gzip`, pass it as `HTTP_CONTENT_ENCODING`; `http-backend` inflates it itself. Never decompress it in the wrapper.
-- **Missing `QUERY_STRING`.** Without `service=git-upload-pack`, `http-backend` falls back to the dumb protocol and isomorphic-git fails with a confusing error.
-- **Orphans.** A CGI child whose request was aborted keeps running unless it is killed on `req` `'close'`.
-- **Wrong interface.** `server.listen(0)` with no host binds every interface. The skill requires loopback only.
+The integration tests run this extension's written MCP values through the adapter's own functions at the declared floor (`test/integration/pi-mcp-adapter-peer.ts`). The functions they import still exist in 7.0 (`dist/utils.js`, `dist/mcp-auth-flow.js`, `dist/mcp-auth-fetch.js`, `dist/config.js`, `dist/types.js`, all checked), so the tests will load. What changes is the answer:
+
+- **`${VAR:-default}` expansion.** 7.0's `interpolateEnvVars` expands `${NAME:-default}` (`dist/utils.js:122-128`; CHANGELOG 7.0.0 "Added", #878). 5.2 left it as written. `adapter-expansion-conformance.test.ts` checks 462,790 values, including `${A:-}` and `${A:-{env}` tokens, plus credential forms such as `${NAME:-fallback}`, against "what Claude Code would send". The bridge's substitution (`bridges/mcp/substitute.ts`) was designed against 5.2's literal handling. With 7.0, a value that the bridge writes for the adapter to expand may now be expanded twice, or differently, and the property test reports mismatches.
+- **Pinned contracts.** `test/architecture/peer-floor.test.ts` asserts the exact ranges `>=0.74.0` and `>=5.2.0 <6`, and that the lock root mirrors them. `test/bridges/mcp/adapter-entry.test.ts` pins `ServerEntry` and `OAuthConfig` to `pi-mcp-adapter@5.2.0` with a `dist.shasum`. `bridges/mcp/adapter-doc.ts` documents 5.2.0's loader grammar. `test/live-uat/mcp-adapter-canary.mjs` pins `ADAPTER_VERSION = "5.2.0"`.
+- **6.0 changes.** `mcpScript` is gone. Every cached tool the model can reach through `mcp` is also a Pi deferred tool named `mcp__<server>__<tool>`, the same naming Pi's `builtin:mcp` uses. Observed output shapes are saved to `mcp-cache.json` by every session.
+- **7.0 changes.** MCP Tasks (`"protocolVersion": "auto"`) return a tool result later as a new message. Semantic search settings moved from `settings.jev` to `settings.semanticSearch`.
+
+Verified unchanged: the status channel `pi-mcp-adapter/status/v1`, snapshot version `1`, and the seven-value `McpServerRuntimeStatus` union that `platform/mcp-status.ts` copies verbatim.
+
+**Why it happens:**
+The upper bound `<6` existed to keep untested majors out. Raising it to 7 imports two majors of changes at once.
 
 **How to avoid:**
-- Implement "drop" as an immediate `req.socket.destroy()`. Never offer a "hang" arm. If a stall is ever needed, it needs a client timeout first, and that is a production change.
-- Attach `'error'` handlers to every stream. On `req` `'close'`, kill the child and settle the request's log entry.
-- Parse with a small state machine: buffer until the blank line, split headers, take `Status`, then pipe the rest as raw bytes. Cover it with direct unit tests, because `features/lib/` code is otherwise exercised only end to end.
-- Listen on `127.0.0.1` explicitly, use the literal `127.0.0.1` in URLs (`localhost` may resolve to `::1` first on some systems), and put `IP:127.0.0.1` in the certificate's subjectAltName. Node does not fall back to the CN for an IP host.
-- Make the 401 arm answer with `WWW-Authenticate: Basic realm="..."`. Record whether each request carried `Authorization`, never its value.
+- In VERSIONS, read the 5.3.0 to 7.0.0 changelog entries against each pinned contract above before you change the range. List each one as kept, changed with a fix, or newly recorded as a divergence.
+- Re-derive the expansion design for `:-` defaults with Claude Code as the reference: Claude Code expands `${VAR:-default}` in `.mcp.json`. Decide whether the bridge should now leave such a value for the adapter, and change `substitute.ts` and its unit tests together. Run the property test and read every reported mismatch. Do not raise a tolerance.
+- Re-check ADET-02 (`platform/pi-api.ts:239-256`): it reads `sourceInfo.source` and the `mcp-adapter` command, so 6.0's deferred `mcp__*` tools do not confuse it, but add a unit case that has both the adapter's deferred tools and `builtin:mcp` tools.
+- Keep MCP fixtures without `protocolVersion: "auto"`, so a tool call returns in the same turn.
 
 **Warning signs:**
-`Error: write EPIPE` in cucumber output followed by many failed scenarios from one worker. A scenario that takes about 30 s. `git-http-backend` processes left after a run.
+`adapter-expansion-conformance.test.ts` reports `REPORTED_MISMATCHES` lines after the floor raise. `peer-floor.test.ts` fails. An MCP scenario's header value differs from Claude Code's for a `:-` default.
 
-**Phase to address:** STAND-IN.
+**Phase to address:** VERSIONS.
 
 ---
 
-### Pitfall 9: Asserting runtime-, platform-, and version-specific error text
+### Pitfall 9: The version raise touches many pinned places, and missing one breaks a gate that runs only in CI
 
 **What goes wrong:**
-Whole-result comparison forces the `cause chain` column into failure tables. The cause text for network failures comes from Node, OpenSSL, and isomorphic-git, and it drifts:
-- Node 26 (the local `node`) appends the path to fs errno messages; Node 24 (CI) and 22 do not. This is memory `node-errno-message-drift-local-vs-ci`, PR #250. The suite runs under whatever `node` runs `npx`, and Pi runs under the same `process.execPath`, so local and CI produce different text.
-- TLS wording changed between OpenSSL versions (`self signed certificate` vs `self-signed certificate`), and Node 24 and 26 bundle different OpenSSL versions.
-- `connect ECONNREFUSED 127.0.0.1:<port>`, `socket hang up`, and `read ECONNRESET` depend on timing and carry the random port.
-- The host has OpenSSL 4.0.3; ubuntu-latest has 3.0.x. CLI flags used to generate the certificate (`-nodes` vs `-noenc`, `-addext`) differ between them, and from LibreSSL on macOS (LOW confidence on the macOS details).
+The floors appear in more places than `package.json`:
+
+| Place | What pins it |
+| --- | --- |
+| `package.json` `peerDependencies`, `devDependencies` (`@earendil-works/pi-coding-agent ^1.0.0`, `pi-tui ^1.0.0`) and `package-lock.json` | Ranges and the installed dev Pi (1.3.0 today) |
+| `scripts/install-test-peers.mjs` (`peerNames = ["pi-mcp-adapter", "pi-subagents"]`) and `test/integration/optional-peer.ts` | Which peers the cache holds; the workflow engine is missing |
+| `--before=<cutoff>` in `install-test-peers.mjs` | The newest floor's publish time; a new peer moves it |
+| `test/e2e/pi-peer-floor/package.json` and its lock | Pi `1.0.0` for the e2e floor test. `npm run check` does not run e2e, so only PR CI catches a stale fixture |
+| `test/architecture/peer-floor.test.ts` | Exact range strings |
+| `README.md` lines 38-41 and `README.es.md` | Documented floors; the `readme` skill requires the two to stay in sync |
+| `AGENTS.md` and `PROJECT.md` constraints | "Pi API ... pinned to `>=1.0.0`" (NFR-11), "`pi-mcp-adapter` (optional peer dep `>=5.2.0 <6`)" in `.planning/codebase/STACK.md` |
+| `test/live-uat/mcp-adapter-canary.mjs` | `ADAPTER_VERSION = "5.2.0"` |
+| `.github/workflows/ci.yml` `behavioral` job | Runs `npm ci --ignore-scripts` then `npm run test:cucumber`, and never runs `install-test-peers.mjs`, so the companion Pi has no companions in CI |
+
+Two more traps:
+
+- The faux extension imports `@earendil-works/pi-ai/providers/faux`. `pi-ai` is not a declared dependency of this repository, so the import either relies on hoisting or on Pi's extension-loader aliases. Pi 1.4.0 fixed exactly this class of bug for `@earendil-works/pi-ai/models` ("exposing the subpath through the extension loader aliases"), which shows that a subpath can be missing. Declare `@earendil-works/pi-ai` as a dev dependency at the Pi version, and prove the import loads inside Pi in a harness scenario.
+- pi-subagents 0.84 declares `@earendil-works/pi-ai >=1.2.0`. pi-mcp-adapter 7.0 declares `@earendil-works/pi-ai` up to `^1.0.0` and `zod`. The peer cache installs with `--omit=peer`, so these resolve from the repository's `node_modules`. If the dev Pi stays at 1.3 while the floor says 1.4, the harness tests a Pi that no user is told to run.
+
+**Why it happens:**
+Each pin was added by a different milestone for a good reason, and no list ties them together.
 
 **How to avoid:**
-- Use reasons (`authentication required`, `source missing`, ...) as the asserted behavior. Where a cause chain must appear, pin only messages the extension or isomorphic-git composes (`HTTP Error: 401 Unauthorized`, `NO_STORED_CREDENTIAL_CAUSE`). For runtime text, read the wording back from the runtime in the step (trigger the same failing call, as five unit suites already do), or substitute the exact port token (Pitfall 6).
-- Do not write scenarios that depend on TLS failure text. The CA is trusted by design; a "bad certificate" scenario adds runtime-specific text and protects nothing in the extension.
-- Generate the certificate with flags that both OpenSSL 3.0 and 4.x accept (`req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -noenc -days 1 -subj /CN=127.0.0.1 -addext subjectAltName=IP:127.0.0.1`). Check the flags against `openssl version` on ubuntu-latest in the STAND-IN phase. Do not commit a key and certificate instead: the filesystem-mode TruffleHog hook flags private keys.
-- Before pushing, run the suite once with `/usr/bin/node` (22) or a Node 24 binary.
+- Do the whole raise in VERSIONS, in one plan, from the table above. No component phase edits `package.json`, `package-lock.json`, or a peer pin.
+- Add `node scripts/install-test-peers.mjs` before `test:cucumber` in the npm script and in the `behavioral` CI job, as `test:integration` already does.
+- Add the workflow engine to `peerNames` and to `optional-peer.ts`, and keep it out of `dependencies`, `devDependencies`, and the lockfile (PIFL-03).
+- Load each companion through the entry its package manifest names (`pi-subagents`: `./bundle/index.js`; the engine: `extensions/workflow.ts`), not the paths the spike used (`index.js`, `dist/pi-extension.js`). Record that `--extension` loads the extension only, not the package's skills and prompts.
+- Run the e2e floor test locally once (`npm --prefix test/e2e/pi-peer-floor ci --ignore-scripts && npm run test:e2e`) before the handoff.
 
 **Warning signs:**
-The behavioral CI job fails on a cause-chain cell while the local run passes. A cell contains `ECONN`, `socket`, or a port number.
+`behavioral` passes locally and fails in CI with "holds no pi-subagents". A Dependabot PR conflicts with the phase branch on `package-lock.json`. `peer-floor.test.ts` fails in a component phase's worktree.
 
-**Phase to address:** DRIVER (read-back helpers), SCENARIOS, STAND-IN (openssl flags).
+**Phase to address:** VERSIONS. CLOSE re-checks the e2e job.
 
 ---
 
-### Pitfall 10: Refused-form scenarios that would reach the public network if the parser regressed
+### Pitfall 10: Shared steps that land in the harness phase fail `check:features` until a component phase uses them
 
 **What goes wrong:**
-Parse-level scenarios for `http://`, `ssh://`, `git@host:`, `/tree/` URLs, and bad shorthand usually use realistic hosts, such as `http://example.com/repo.git` or `git@github.com:o/r.git`. If a regression lets one of them through the parser, the scenario sends a real DNS lookup and connection before it fails. It may also fail for the wrong reason (`source missing`), which a loose `Then` accepts.
+`npm run check:features`, part of `check:static` and the pre-commit hook, fails on an unused step. Plugin-lifecycle 09-02 hit it: "`npm run check:features` failed with `unused step definition \"the npm registry receives no request\"`. In Task 2 no scenario uses the step. Only Task 3's hook scenario does." Lifecycle-coverage 16-01: "The `declares no version` step was written here and moved to plan 02, which first uses it (the feature gate fails on an unused step)."
+
+This milestone wants a harness phase that provides the shared steps, then six phases that use them. A harness that ships steps only the later phases use cannot commit.
+
+Two more gate rules constrain the harness files:
+
+- `scripts/check-features.mjs` `isAllowedFile()` admits only `.ts` files (at most three levels deep) under `features/{step_definitions,support,lib}`, `.feature` files one level deep, and the single `lib/pi-tui-pty.py`. The spike's `stub-mcp.mjs`, a shell hook recorder, or a JSON faux script file under `features/` fails the layout check.
+- A feature lives in `features/<function>/<capability>.feature`. Six new function directories (or new files under `features/plugin/`) need names that the layout rules accept.
+
+**Why it happens:**
+The gate is designed so that every step has a user, and the foundation-first plan splits the step from its user.
 
 **How to avoid:**
-- Point refused forms at the stand-in: `http://127.0.0.1:<port>/...`, `ssh://127.0.0.1:<port>/...`. A regression then shows up as a request in the log, or as a TLS client error on the HTTPS listener. Record `'tlsClientError'` and raw connections as attempts, and give these scenarios a `Then the git server received no requests`.
-- Assert the exact `usage-error`/`failed` row, including the parser's message (`D-76-01` wording from `domain/source.ts:91`). The message comes from this extension, so it is stable.
+- Follow lifecycle-coverage's seed pattern (01-04 and 01-05: "the enable seed (Phase 2 owns the file after this phase)"). The HARNESS phase writes one seed scenario per component kind in the feature file that the kind's phase will own. Each seed uses the shared steps for its kind. Ownership of the file passes to that phase.
+- Write the stub MCP server, the hook recorder, and the faux and probe extensions as `.ts` modules under `features/lib/`, or have a fixture builder write them into the sandbox at run time. Node runs `.ts` natively, and Pi loads a `.ts` extension.
+- Extend the `## Parallel work` ownership table in `.agents/skills/cucumber/rules/layout.md` with the new shared modules and the six phases' module names before the component phases start.
 
-**Phase to address:** SCENARIOS.
+**Warning signs:**
+The harness phase's first commit fails the hook with "unused step definition". Someone proposes skipping the hook (`--no-verify` is forbidden by AGENTS.md).
+
+**Phase to address:** HARNESS.
+
+---
+
+### Pitfall 11: Six parallel phases collide on shared product files and on the harness
+
+**What goes wrong:**
+Every component phase covers "removal and replacement through uninstall, disable, and update". Those paths live in a few shared files: `orchestrators/plugin/uninstall.ts`, `enable-disable.ts`, `update-flow.ts`, `install-outcome.ts`, the `*.messaging.ts` builders, `shared/notification-*.ts`, and `domain/plugin-resolver.ts`. The bug policy says a scenario that exposes a product bug fixes it in the same phase. Six phases that each fix a removal bug in the same file will conflict.
+
+Evidence from earlier milestones:
+
+- Lifecycle-coverage 15-VERIFICATION: "The merge conflicted in `update-flow.ts`, `install.messaging.ts` and `enable-disable.ts`", which made that phase's verification stale.
+- Marketplace-features retrospective: "Phases 1-7 and 9 read `stale` at close because later phases touched shared fixtures and orchestrators; all 12 needed a re-verify pass."
+- Plugin-lifecycle retrospective: "Later integration work made eight phase reports stale."
+- Lifecycle-coverage 03-VERIFICATION: a fixed 50 ms wait in `test/edge/handlers/plugin/browse.test.ts:373` failed "under load average ~82", which is what a dozen parallel sessions running `npm run check` produce.
+
+**Why it happens:**
+The bridges are separate fallow zones (`bridges-skills`, `bridges-mcp`, and so on), so the phases look independent. The orchestrators and the notification code are shared.
+
+**How to avoid:**
+- In the roadmap, name an owner for each shared product file. A component phase that finds a bug in a file it does not own records it with a failing scenario tagged for the owner, or routes the fix through one designated phase, rather than editing the file.
+- Freeze the harness files (`features/support/**`, `features/lib/**`, `cucumber.json`, `scripts/check-features.mjs`, the shared step modules) after HARNESS. A component phase that needs a shared step defines it in its own verb module with verb-named text (layout.md D-08), and the move to a topic module is a follow-up commit.
+- Merge in a fixed order and re-verify each phase after the merge that touches its files, not at milestone close.
+- Treat a test that uses a fixed wait as a bug when it fails under parallel load.
+
+**Warning signs:**
+Two phase branches both modify `uninstall.ts`. A phase's VERIFICATION.md goes stale after a sibling merge. A step text from one phase's module appears in another phase's module (an ambiguous step).
+
+**Phase to address:** Roadmap (ownership). HARNESS (freeze). CLOSE (merge order and re-verification).
+
+---
+
+### Pitfall 12: The SessionStart/SessionEnd parity fix breaks existing tests and has unlicensed corners
+
+**What goes wrong:**
+The decisions of 2026-10-31 (spike 028 README): Pi `new` goes out as `clear` in SessionStart `source` and SessionEnd `reason`; SessionStart fires with `source: "compact"` on Pi's `session_compact`; `clear`, `compact`, and `fork` matchers are admitted. What that touches and what it leaves open:
+
+- **Existing behavior tests assert `new`.** `features/plugin/session-start-hooks.feature` has two scenarios whose tables list `source | new`. Unit tests assert it too: `test/bridges/hooks/payloads/session-start.test.ts:110` (`source: "new"`), `session-end.test.ts:73-86`, and `event-router.test.ts:2599-2638`. These change in the same commit as the fix, and the feature file's owner must be the HOOKS phase.
+- **The dedupe drops a second compaction.** SSDEDUP-01 (`event-router.ts:915-924`) keeps one key, `<sessionId>\0<reason>`, and drops a repeat of the last one. Two compactions in one session give the same key `<id>\0compact`, so the second SessionStart `compact` is dropped. Claude Code fires on every compaction.
+- **SessionEnd matchers.** `NON_TOOL_EVENT_CLOSED_SETS.SessionEnd` is empty (`hook-events.ts:266`). The decision says "`clear` matchers are admitted" without naming SessionEnd. Upstream SessionEnd reasons are `clear | resume | logout | prompt_input_exit | other` (docs), plus `bypass_permissions_disabled` in the binary. Pi's `quit`, `reload`, and `fork` would still go out verbatim, and upstream never sends them. No decision licenses that. It goes to the user.
+- **SessionStart `reload`.** Pi `reload` still goes out as `source: "reload"`. Spike 028 lists this as gap 4 with no decision.
+- **Order with PostCompact.** Pi's `session_compact` would now drive both PostCompact (PDEF-08) and SessionStart `compact`. The docs do not state the upstream order. Check the 2.1.316 binary before choosing one.
+- **The faux model must script the compaction.** RPC `compact` asks the model for a summary, so the script needs a summary step, and a session with too little content may refuse to compact.
+- **Install outcomes change.** A plugin whose hooks used a `clear`, `compact`, or `fork` matcher installed with that hook dropped (TOOL-02) and needed `--partial`. After the fix it installs whole. An existing installation keeps the dropped hook until update or reinstall. Decide whether `pending`/`apply` should report that, and write it in the CHANGELOG.
+
+**Why it happens:**
+D-58-06 and D-60-04 were recorded before upstream added `fork` and before anyone compared Pi `new` with Claude `/clear`.
+
+**How to avoid:**
+- HOOKS owns `session-start-hooks.feature`, the payload modules, `hook-events.ts`, and the dedupe in one phase.
+- Change the dedupe key so it drops only the duplicate bind of one Pi event (pi#10470), for example by tagging each Pi event once, and add a scenario with two compactions in one session.
+- Before planning, put the SessionEnd mapping (`quit`, `reload`, `fork`), SessionEnd `clear` matcher admission, SessionStart `reload`, and the PostCompact order to the user as one batch, each with the binary evidence.
+
+**Warning signs:**
+A compaction scenario passes with one compaction and nobody tried two. A plan says "map the remaining reasons to `other`" without a decision ID.
+
+**Phase to address:** HOOKS.
+
+---
+
+### Pitfall 13: Writing expected behavior from memory, or from what the companion does
+
+**What goes wrong:**
+Each component phase plans from "Claude Code's documented and observed behavior". Two failure modes:
+
+- **Memory.** The plugin-system contract moves quickly: `fork` arrived after D-58-06, `${VAR:-default}` support in the adapter arrived in 7.0, and SessionStart output gained `initialUserMessage`, `watchPaths`, `sessionTitle`, and `reloadSkills` (docs). A plan written from memory pins old behavior.
+- **The companion as the oracle.** A scenario that checks what pi-subagents does with an agent file is a check of pi-subagents, not of the bridge. Spike 028 found that `model: sonnet` "did not reach the agent file without `--map-model`, and the child ran on the session model". A scenario that asserts "the child ran on `faux/faux-1`" pins a fallback, not Claude Code's behavior, where the agent would run on Sonnet.
+
+**Why it happens:**
+The faux harness makes any observable value easy to assert, whether or not it is the contract.
+
+**How to avoid:**
+- Each phase runs `claude-code-compat-research` against the 2.1.316 binary and the docs for its kind before planning, and cites the evidence in CONTEXT.md, as lifecycle-coverage did (2.1.309).
+- A scenario whose expected value comes from the companion and differs from Claude Code needs a divergence ID and its license (a recorded decision, or a Pi or companion capability gap), or goes to the user.
+- Record the `user-invocable: false` divergence (Pi capability gap) with an ID, and report it to Pi, as the milestone states.
+
+**Warning signs:**
+A CONTEXT.md decision with no upstream citation. A scenario title that names a companion behavior ("pi-subagents falls back to the session model").
+
+**Phase to address:** SKILLS, COMMANDS, AGENTS, HOOKS, MCP, WORKFLOWS.
+
+---
+
+### Pitfall 14: CI time and runner load
+
+**What goes wrong:**
+The `behavioral` job has `timeout-minutes: 10` and runs `parallel: 8` on a GitHub `ubuntu-latest` runner (4 vCPUs). The suite already has 1,151 scenarios with one Pi per worker. A companion Pi per worker adds 8 more Pi processes, each loading pi-subagents (about 1-2 s of load, per its changelog), the adapter (whose first initialization can take seconds on a cold metadata cache: "about 2.6 seconds later on the first session that has to fetch it" with 100 servers), and the engine. Each faux scenario adds model turns, in-process subagent child sessions, MCP stub spawns, and hook subprocesses. The default step timeout is 30 s (`features/support/world.ts:47`), which a subagent run plus an MCP connect can exceed on a loaded runner. This repository has no recorded wall-clock baseline for the cucumber job.
+
+**Why it happens:**
+Each phase adds a few scenarios, and no phase owns the total.
+
+**How to avoid:**
+- In HARNESS, measure the current `test:cucumber` wall clock locally and in CI, and set a time budget per component phase.
+- Start the companion Pi lazily (Pitfall 1). Consider serializing the companion scenarios with `setParallelCanAssign` if runner CPU is the limit.
+- Use named step timeouts with a comment that says why (`rules/world-and-stand-ins.md`), never a raised global default.
+- If the job nears its limit, change `timeout-minutes` deliberately in the same PR, or split the job by path, rather than letting it time out.
+- Keep background agent runs (`async: true`) out of scope, as spike 028 advised, until the host package set and the faux provider in a separate child process are proven.
+
+**Warning signs:**
+Step timeouts that appear only in CI. The `behavioral` job's duration grows by more than a minute per merged phase.
+
+**Phase to address:** HARNESS (budget and measurement). CLOSE (final check).
+
+---
 
 ## Moderate Pitfalls
 
-### Pitfall 11: Sandbox reset misses state outside the three sandbox directories
+### Listing comparisons drown in companion noise
 
-**What goes wrong:**
-The `Before()` hook empties `home`, `agent`, and `project`. Marketplace clones (`<scopeRoot>/pi-claude-marketplace/...`) and `plugin-clones/` live inside those directories, so they are reset. The new pieces are not: served bare repos, the request log, and arming. Neither are the marketplace sources under `marketplacesRoot`, which today rely on each scenario's `onRelease`. Other leftovers carry state too: a timed-out scenario's in-flight `git http-backend`, and an armed 5xx left by a failed scenario that never reached its release. Because the run order is random, the leak shows up as a different flaky scenario on each run.
+The companion Pi lists commands, tools, and agents that are not the plugin's: the adapter's `mcp` tool and `mcp-adapter` command, the engine's `workflow`, `workflow_control`, `workflows`, `effort`, `ultracode`, `deep-research`, `code-review`, `adversarial-review`, `multi-perspective`, and `codebase-audit` commands, pi-subagents' built-in agents, and the harness's own faux and probe commands. A scenario that checks "the list includes `kit:greet`" is a partial check. A scenario that compares the whole list breaks whenever a companion adds a command. Filter by a criterion that the step text states and that comes from the plugin (for example, entries whose `sourceInfo.path` lies inside the installed plugin's root), then compare that filtered set whole. **Phase:** HARNESS (the step), all component phases.
 
-**How to avoid:**
-The reset asserts emptiness of everything a scenario can create: no skills, no marketplaces (today), no served repos, an empty request log, no arming, and no CGI children. Keep `order: random`. Use a fresh repo name per scenario only if a scenario cannot be made independent otherwise; the reset should make that unnecessary.
+### MCP tools listed before, or without, a connection
 
-**Phase to address:** RUN.
+The adapter starts asynchronously after `session_start`, so a probe right after `new_session` can miss the tools. It can also list a tool from `mcp-cache.json` when the server never connected. With `directTools: "search"`, or as a 6.0 deferred tool, `mcp__plugin_kit_stub__echo` is registered but inactive, so a direct call fails with "not found" (spike 028 step 5). Wait on the stub log for `tools/list` rather than polling the tool list, call through the `mcp` proxy, and assert the stub log. **Phase:** MCP.
 
-### Pitfall 12: In-process caches carry one scenario's manifest into the next command
+### Workflow results do not reach RPC
 
-**What goes wrong:**
-`domain/manifest-cache.ts` keys entries by `(mtimeMs, size)` and documents that "a same-size rewrite within the filesystem's mtime resolution can collide". The existing fixture rewrites `"version":"1.0.0"` to `"1.1.0"`, which has the same size. Pi loads extensions with `moduleCache: false`, so `new_session` builds a fresh cache. Within one scenario, though, `add` followed by a rewrite and `update` uses one cache instance. On a filesystem with coarse timestamps (some CI overlay setups), `update` can read the stale manifest.
+The engine logs "no thenable send function" over RPC (spike 028). The result is in the run's `.events.jsonl` and in `pi-dynamic-workflows:progress` custom entries, which the current driver drops (Pitfall 2). The script body uses `return`, not `export default` (spike step 3, a fixture mistake). Engine floors below 3.14 ignore `PI_CODING_AGENT_DIR`. Scripts that call agents need a model in the engine's child agents and are out of scope. **Phase:** WORKFLOWS.
 
-**How to avoid:**
-Path-source update scenarios should change the manifest's size as well (for example `1.0.0` to `1.10.0`), or start a session between the rewrite and the `When`. Git-source scenarios are unaffected, because they reread from a fresh fetch.
+### pi-subagents 0.84 reads agent frontmatter differently
 
-**Phase to address:** SCENARIOS.
+0.84 reads a quoted tool name without its quotes and reads a block that has a blank line inside it in full (CHANGELOG). A misspelled `subagents.agentOverrides` field now fails loading. Re-check the frontmatter that `bridges/agents/frontmatter.ts` writes, which is line-based, against these rules with a scenario per field form. **Phase:** AGENTS.
 
-### Pitfall 13: Step text spelled to the rules, but the rules' gates are not wired
+### Pi binds extensions twice on RPC `new_session`
 
-**What goes wrong:**
-- `npm run test:cucumber` fails on undefined and ambiguous steps but **passes with unused ones**. `npx cucumber-js --dry-run --format usage` lists `UNUSED`, but nothing in `npm run check` or CI runs it. An abandoned step survives every gate.
-- Ambiguity creeps in with generic parameters. `the marketplace {string} is added to the {word} scope` (path source) next to a new `the {word} marketplace {string} is added ...` can match the same text, or tempt a writer to fold the source kind into `{word}`, where `the github marketplace` and `the git marketplace` read alike.
-- The rules require lower-case step text after the keyword, no `And`/`But`, every `Given` before the first `When`, and `Background:` with `Given` only. No linter checks any of them; only review does.
-- `features/**` is under `npm run lint`, and fallow's `health` (cognitive complexity 15) and `dupes` (threshold 3) also see it. A CGI parser or a projection helper written as one function trips the complexity gate. Parallel table projections in several step modules trip dupes.
+pi#10470 still applies to Pi 1.4.0 (its changelog does not mention it). This extension dedupes SessionStart (SSDEDUP-01), and the session driver keeps both reconcile payloads, which scenarios state. The companions are bound twice too. The adapter guards with `lifecycleGeneration`. Check that a hook recorder sees one SessionStart per session in the companion Pi, and state the count in each hooks scenario. **Phase:** HOOKS.
 
-**How to avoid:**
-Add a script (for example `test:cucumber:usage`) that runs the dry-run usage report and fails on `UNUSED`, and chain it into `check:static` or the behavioral CI job. A small source walk for `^\s*(And|But) ` and upper-case step text in `features/**/*.feature` is cheap and worth having. Name source kinds in fixed phrases ("a local directory", "a git repository served over https", "the github repository") rather than `{word}`.
+### Hook subprocess timing
 
-**Phase to address:** GATE (first phase that adds a step), SCENARIOS.
+Hooks run as child processes, and SessionEnd runs during shutdown. Have the recorder append one JSON line per run with a single `appendFileSync` call, and have the step wait until the expected number of records exists or a deadline passes. A sleep is not a wait. **Phase:** HARNESS (recorder), HOOKS.
 
-### Pitfall 14: The driver's `assertQuiet` and single-payload rule do not fit marketplace commands
+### Pi extension modules under `features/lib/` break conventions
 
-**What goes wrong:**
-`runCommand` asserts exactly one `cascade` payload, no dialogs, and no extension errors. Marketplace commands emit `marketplace-info`, `marketplace-info-cascade`, `marketplace-not-added`, and `usage-error`. A bare `update` emits one payload per marketplace. `remove` and `update` may add a cascade onto installed plugins, and possibly `mcp-config-notices`. Loosening `runCommand` in place weakens the existing plugin scenarios.
+A Pi extension needs a default export, and this repository uses named exports and marks the two loader-read default exports with `fallow-ignore` (`.planning/codebase/CONVENTIONS.md`). Type-aware strict linting rejects the spike's `any` types. Write the faux, probe, and recorder extensions to the same lint bar as other `features/lib` code, typed against Pi's published types. **Phase:** HARNESS.
 
-**How to avoid:**
-Keep `runCommand` strict. Add `runCommandExpecting(pi, command, kinds: readonly Kind[])`, which validates each payload against its own kind's schema and returns them in order, with the generic `When the user runs {string}` steps passing the expected kinds through a typed `Then` (the `Then` names what it reads: `the result is the marketplace info:`). Keep `assertQuiet` everywhere.
+### A bug found in a companion is not this repository's bug
 
-**Phase to address:** DRIVER.
-
-### Pitfall 15: `npm run check` and the behavioral CI job get slower than they look
-
-**What goes wrong:**
-Today the suite runs 13 scenarios in 4.8 s wall time on 28 cores (measured 2026-10-15). `npm run check` already takes about 73 s and runs cucumber serially between integration and direct coverage. ubuntu-latest has 4 vCPUs. With `parallel: 8`, eight Pi processes, eight servers, and per-request `git http-backend` spawns oversubscribe it. The `behavioral` job has a 10-minute timeout, and a few 30 s step timeouts (Pitfall 8) or Pi replacements multiply quickly.
-
-**How to avoid:**
-Budget each git scenario at under 1 s locally. Keep `drop` immediate. Build each fixture repo once per scenario, with one commit (a pack, not many loose objects; `/tmp` is a 1M-inode tmpfs, memory `tmp-inode-exhaustion-enospc`). Measure the job's duration in CI at the end of STAND-IN and again at the end of SCENARIOS. Consider `parallel: 4` on CI if it is faster there. Note that the pre-commit `npm-check` hook runs `check:commit`, which does **not** run cucumber. A features-only commit is green at commit time and can still fail `npm run check`.
-
-**Phase to address:** GATE, STAND-IN.
+Spike 028 already found two (the chord peer on Pi 1.2, the workflow-dir rule below engine 3.14). When a scenario fails because of a companion, record it, report it upstream, and choose a floor or a recorded divergence. Do not change the bridge to work around another package's bug unless the user agrees. **Phase:** all component phases.
 
 ## Minor Pitfalls
 
-### Pitfall 16: `lastUpdatedAt`, SHAs, and refs differ per run
-
-Fixture commits without pinned dates produce new SHAs on every run, and `lastUpdatedAt` is wall-clock time. Pin the dates (Pitfall 7) and compare timestamps by window (Pitfall 6).
-
-### Pitfall 17: The run root can land in a place the sandbox check refuses
-
-`_rpc.ts::resolveSandbox` refuses sandbox locations inside the repository or outside `realpath(tmpdir())`. The served repos and CA file have no such check. Keep them under the same `mkdtemp` run root, so `AfterAll` removes everything in one `rm`. A crashed worker leaves `pi-cm-features-*` behind; find and clean those when `/tmp` inodes run low.
-
-### Pitfall 18: Credential-carrying redirects in stand-in arming
-
-`platform/git.ts` follows redirects itself and drops credentials across origin (scheme, host, port), as fixed in any-git-host G-01-4. If the stand-in grows a "redirect" arm, keep every target on loopback (another `127.0.0.1` port). A redirect to a public host would leave the machine.
+- **Upgrade notice.** The adapter writes `mcp-last-seen-version.json` to the agent directory and shows a notice only when an older version was recorded before (`upgrade-notice.ts:15-47`). An empty sandbox shows nothing. A fixture that pre-seeds the agent directory from a real one would show it.
+- **`mcp.log`.** The adapter appends server log messages to `<agentDir>/mcp.log` (5.4.0). Do not compare whole agent-directory listings.
+- **Live UAT canaries.** `test/live-uat/*.mjs` pins adapter 5.2.0. They are operator-run and outside `npm run check`, so they will not fail; update the constants with the raise.
+- **README translations.** `README.es.md` must change with `README.md` (the `readme` skill).
+- **Status union.** Do not "update" `platform/mcp-status.ts` for 7.0: the union is unchanged.
 
 ## Technical Debt Patterns
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Regex normalization of ports and temp paths in the projection | One helper replaces every run-specific value | Hides wrong-port and wrong-scope regressions (Pitfall 6) | Never; substitute exact run tokens |
-| Adding `lastUpdatedAt` to `UNSTATED_FIELDS` | Tables stay static | A dropped or wrong timestamp passes | Never; compare by window |
-| Spreading `process.env` into the CGI or Pi env | Fewer variables to list | Host git config and credentials leak (Pitfalls 1, 7) | Never |
-| `NODE_TLS_REJECT_UNAUTHORIZED=0` instead of a CA | No openssl dependency | Turns off TLS checks for all of Pi, warns on stderr, and can hide a real TLS regression | Never |
-| Overriding only `networkCloneUrl` | The happy-path scenario passes on day one | Auth, recovery, and update stay on github.com (Pitfall 2) | Never |
-| A separate module-level server outside `PiRun` | Matches the "one module per stand-in" layout | Breaks the slow-process rule, hook order, and replacement env (Pitfall 5) | Never; extend `PiRun` and amend the rule |
-| Committing a fixed test certificate | Avoids openssl in CI | TruffleHog flags the key, and the certificate expires | Never |
+| Load the companions into the run's Pi | One process per worker | Order-dependent failures in existing scenarios (Pitfall 1) | Never |
+| Fixed sleeps instead of `agent_settled` and log waits | Spike-speed harness | Flaky under CI load, slow everywhere | Never |
+| Faux fallback reply when the script runs out | Scenarios "pass" | Short scripts hide missing behavior | Never |
+| Compare a list with `includes` | Robust to companion changes | Partial check; the review rules make it a BLOCKER | Never; filter and compare whole |
+| Grant project trust in the harness and test only trusted projects | Project-scope scenarios work | Hides a likely parity gap for plugin MCP servers (Pitfall 7) | Only with an untrusted-project scenario beside it |
+| `async: false` for every agent run | Works today | Background agent behavior stays unchecked | This milestone, with the gap recorded |
+| Raise the CI job timeout instead of measuring | Green CI | Hides scenario cost growth | Only with a measured baseline in the same PR |
 
 ## Integration Gotchas
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| `git http-backend` | Missing `GIT_HTTP_EXPORT_ALL`, `QUERY_STRING`, or `GIT_PROJECT_ROOT`; inheriting the worker env | Build the CGI env from scratch; pass `CONTENT_LENGTH`/`CONTENT_TYPE`/`HTTP_CONTENT_ENCODING` through |
-| `git credential` (spawned by the extension) | Relying on sandboxed `HOME` alone | `GIT_CONFIG_NOSYSTEM=1` plus `GIT_CONFIG_GLOBAL` in the Pi env; a per-scenario `.gitconfig` with `credential.helper=store` |
-| `NODE_EXTRA_CA_CERTS` | Writing the CA after Pi starts; forgetting it on Pi replacement | Generate before `PiProcess.start`; keep the env on `PiRun` |
-| Device Flow (`domain/github-auth.ts`) | Leaving the bound host `github.com` under the override | Bind to the override's `host:port`; no provider means no Device Flow |
-| isomorphic-git over a stalled socket | Arming a "hang" | Destroy the socket; there is no client timeout |
-| Cucumber hooks | Two support modules with order-dependent `Before()` hooks | One `Before()` in `support/pi-process.ts` sequences replace, drain, reset |
-| `localhost` | Using the name in URLs and the certificate | Literal `127.0.0.1` and an `IP:` SAN |
+| Pi faux provider | Read the script from env once per process | Arm per scenario with `setResponses()`, assert `getPendingResponseCount() === 0` |
+| Pi RPC `prompt` | Treat the response as the end of the turn | Read `disposition`; wait for `agent_settled` with `aborted: false` |
+| Pi `set_model` | Set it on the shared Pi | Set it only on the companion Pi |
+| pi-mcp-adapter | Expect project servers in RPC | Trust plus `projectServers: "allow"`, or record the divergence |
+| pi-mcp-adapter | Assert tool names from a listing | Assert the stub log's `initialize`, `tools/list`, `tools/call` |
+| pi-subagents | Background (`async: true`) children in scenarios | `async: false`; children share the faux queue in process |
+| pi-subagents | Leave `TMPDIR` unset | `TMPDIR` inside the run root |
+| Workflow engine | Wait for a result over RPC | Read progress entries from the always-on log or the run's `.events.jsonl` |
+| Hooks bridge | One dedupe key per session and reason | Dedupe the duplicate bind only; allow repeated compactions |
 
 ## Performance Traps
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| Stall-type failure arms | About 30 s per scenario, Pi replaced | Immediate `socket.destroy()` | First scenario that uses it |
-| Oversubscribed CI runner | Behavioral job near its 10-minute timeout | Measure; consider `parallel: 4` on CI | About 60+ git scenarios on 4 vCPUs |
-| Loose-object fixtures | `/tmp` inode exhaustion, ENOSPC on `mkdtemp` | One commit per repo; clean the run root | Repeated local runs with crashed workers |
-| Helper timeout on 401 | 5 s per auth challenge | Isolate git config so `fill` misses fast | Any machine with a slow system helper |
+| Eager companion Pi in every worker | Slower start, more memory | Start it on first use | At 8 workers on a 4-vCPU runner |
+| Cold adapter metadata cache per scenario | Seconds per MCP scenario | Keep stub tool lists tiny; one server per fixture | With many MCP scenarios |
+| Subagent child sessions in process | Codemode worker queueing (Pi 1.4: two workers by default, 60 s wait) | No codemode in fixtures; one child per scenario | With parallel children |
+| Fixed sleeps | Every scenario costs the sleep | Event waits | Immediately |
 
 ## Security Mistakes
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Reaching the system credential helper from a scenario | Reads, or with `reject` erases, a developer's real credential | Pitfall 1 isolation |
-| Accepting `http://` or userinfo in the override | Cleartext credentials; a token echoed into rows and cause chains | Validate the override at read time (Pitfall 4) |
-| Binding the stand-in to all interfaces | Exposes the test git server to the LAN during runs | `listen(0, "127.0.0.1")` |
-| Logging `Authorization` values in the request log | Test credentials in CI logs; a habit that copies to real canaries | Record presence only |
-| Loosening the `onAuth` host guard to make GitHub 401 scenarios pass | Reopens the cross-host credential leak fixed in any-git-host | Fix the bound host instead (Pitfall 2) |
-
-## UX Pitfalls
-
-| Pitfall | User Impact | Better Approach |
-|---------|-------------|-----------------|
-| A stray `GITHUB_BASE_URL` (Terraform) silently redirects clones | Every GitHub marketplace fails with a confusing URL | Project-prefixed name, or validation that names the variable (Pitfall 4) |
-| An invalid override falls back to github.com | The user thinks the override works and is cloning from public GitHub | Fail with a typed error that names the variable |
-| The override changes after `add` | `update` keeps fetching from the old base (it uses the clone's recorded origin) | Document this, or re-point `origin` when the base changes; decide in OVERRIDE |
+| Shared `/tmp/pi-subagents-*` | Cross-run and developer-session leaks | `TMPDIR` in the sandbox |
+| `npx` or `http` MCP fixtures | Network, browser launch (`open`) | Stdio `node` stub only |
+| Fixture `package.json` with dependencies | npm registry access (D-PL9-10) | No dependencies, or the npm registry stand-in |
+| Inherited environment in a new Pi | Real credentials reach the companions | Keep `_rpc.ts`'s allowlist; add only named variables |
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **Override:** every one of the 14 files plus `marketplace/update.ts:398` goes through one seam. Verify with `rg 'github\.com' extensions/`.
-- [ ] **Override:** a GitHub 401 with a stored credential authenticates. Verify that the request log shows an unauthenticated then an authenticated request.
-- [ ] **Hermeticity:** a scenario run with `credential.helper=!echo LEAK` in a throwaway `/etc/gitconfig` (or a temp `GIT_CONFIG_SYSTEM`) never sees it. This is a negative control run once by hand, not committed (the repo's "a gate's run over the real tree is its only committed proof" rule).
-- [ ] **NFR-5:** every `list`/`info`/`remove` scenario on a git source asserts an empty request log.
-- [ ] **Reset:** the `Before()` assertion covers repos, log, arming, and CGI children, not only skills and marketplaces.
-- [ ] **Replacement:** a scenario that times out mid-clone leaves the next scenario in that worker green (force one by hand once).
-- [ ] **Unused steps:** the dry-run usage report shows no `UNUSED`, and a script enforces it.
-- [ ] **Node 24:** the suite passes under Node 24, not only the local Node 26.
+- [ ] **Faux scenario:** its `Then` reads a host-side stand-in, not the script, and a negative control exists for the kind.
+- [ ] **Faux scenario:** the script is used up exactly (`getPendingResponseCount() === 0`).
+- [ ] **Companion Pi reset:** asserts the baseline command, tool, and skill set, no live stub process, no active workflow run, and an empty recorder directory.
+- [ ] **Hermeticity:** no new `/tmp/pi-subagents-*` entry after a full run.
+- [ ] **Project scope:** each kind where trust matters has a trusted and an untrusted scenario, or a recorded decision says why not.
+- [ ] **Version raise:** every row of the Pitfall 9 table is changed, the `behavioral` CI job installs the peers, and the e2e floor test passed once.
+- [ ] **Adapter conformance:** the 462,790-value property test passes against 7.0 with zero mismatches.
+- [ ] **Hooks parity:** `session-start-hooks.feature` says `clear`; two compactions give two SessionStart records; the SessionEnd and `reload` questions have user answers.
+- [ ] **Each divergence:** has an ID and a license in PROJECT.md or the phase CONTEXT.md.
+- [ ] **CI:** the `behavioral` job's duration is recorded and inside its timeout with margin.
 
 ## Recovery Strategies
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Real credential erased by `reject` | HIGH (user data) | Re-store it with `git credential approve`; then add the env isolation before any further run |
-| Override wired partially | MEDIUM | Introduce the seam, route the remaining sites, add the grep gate |
-| Stand-in crashes a worker (EPIPE) | LOW | Add the stream error handlers; rerun |
-| Flaky reset leak | MEDIUM | Run the suite with `--order random:<seed>` from the failing CI log to reproduce; extend the reset assertion |
+| Faux on the shared Pi (1) | MEDIUM | Move the extensions to a companion Pi module; rerun the full suite twice with different seeds |
+| Dropped records (2) | MEDIUM | Add the always-on log; replace sleeps with waits; rerun the faux scenarios 10 times |
+| Tautological scenarios (4) | HIGH | Re-review every component feature against the table in Pitfall 4; add stand-in assertions and negative controls |
+| Reset leaks (5) | MEDIUM | Reorder the reset; add the clean-state assertions; run with `order: random` repeatedly |
+| Conformance drift (8) | MEDIUM | Re-derive `substitute.ts` for `:-`; update unit tests and the property test |
+| Parallel conflicts (11) | MEDIUM | Merge in order; re-verify each touched phase right after its merge |
 
 ## Pitfall-to-Phase Mapping
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| 1 Credential helper leak | RUN | Negative control with a planted system helper; scenarios pass on a clean sandbox |
-| 2 Partial override wiring | OVERRIDE | `rg` shows one seam; GitHub 401, recovery, and update scenarios |
-| 3 Device Flow to github.com | OVERRIDE | Unit test: an override host gets a `stored-credential` bundle |
-| 4 Name collision and validation | OVERRIDE (user decision first) | Unit tests for `http://`, userinfo, trailing slash, path prefix, API-style value |
-| 5 Server lifetime vs Pi env | RUN, STAND-IN | One `PiRun`; amended cucumber rule; forced-timeout check |
-| 6 Wrong implementation passes | DRIVER, SCENARIOS | Review question 1 on every feature; request-log Thens |
-| 7 Host git config in fixtures/CGI | STAND-IN | Run with a hostile `~/.gitconfig` (gpgsign, defaultBranch=master) once by hand |
-| 8 CGI edge cases | STAND-IN | Direct unit tests of the header parser; drop-arm scenario under 1 s |
-| 9 Runtime-specific text | DRIVER, SCENARIOS | Suite passes under Node 24 and Node 26 |
-| 10 Refused forms reaching the network | SCENARIOS | Empty request log in each refusal scenario |
-| 11 Reset gaps | RUN | Extended reset assertion; random order |
-| 12 Manifest cache collision | SCENARIOS | Version rewrites change the size |
-| 13 Unused or ambiguous steps | GATE | Usage script in the gate |
-| 14 Driver payload kinds | DRIVER | Plugin scenarios stay green with strict `runCommand` |
-| 15 Check duration | GATE | CI job time recorded at two checkpoints |
+| 1 Faux and companions on the shared Pi | HARNESS | Full suite green twice with different random seeds; background-update scenarios unchanged |
+| 2 Dropped records, idle during a turn | HARNESS | A seed scenario reads `agent_settled` and a progress entry; no sleep in `features/` |
+| 3 Faux queue per process | HARNESS | Reset asserts an empty queue; a too-short script fails |
+| 4 Tautological scenarios | HARNESS, each component phase | Review question 1 of the cucumber skill answered per scenario; red proofs for fixes |
+| 5 Reset leaks | HARNESS | Clean-state assertions in the companion `Before()` |
+| 6 Hermeticity | HARNESS, AGENTS, MCP | No new `/tmp` entries; stub log shows no network fixture |
+| 7 Project trust | HARNESS, MCP, AGENTS | Trusted and untrusted scenarios; parity evidence in CONTEXT.md |
+| 8 Adapter 7.0 behavior | VERSIONS | Conformance and architecture tests green against the 7.0 floor |
+| 9 Pinned floors and CI job | VERSIONS | Table rows all changed; PR CI `behavioral` and e2e jobs green |
+| 10 Unused-step gate and file families | HARNESS | One seed scenario per kind; `check:features` green on the harness commit |
+| 11 Parallel collisions | Roadmap, HARNESS, CLOSE | Ownership table; per-merge re-verification |
+| 12 Hooks parity corners | HOOKS | Updated feature and unit tests; user answers recorded with IDs |
+| 13 Memory or companion as oracle | All component phases | Upstream citations in each CONTEXT.md; divergence IDs |
+| 14 CI time | HARNESS, CLOSE | Recorded baseline and final duration |
+
+## Research Flags for Phases
+
+- **MCP:** needs `claude-code-compat-research` on plugin MCP servers versus project approval, and on `${VAR:-default}` handling, before planning.
+- **HOOKS:** needs the binary checked for the PostCompact/SessionStart order and the SessionEnd reason mapping; needs user answers (Pitfall 12).
+- **AGENTS:** needs a check of pi-subagents 0.84's agent-file parser against the bridge's frontmatter output, and of project-agent trust.
+- **WORKFLOWS:** standard after spike 028; confirm the progress-entry shape against 3.15's source.
+- **SKILLS, COMMANDS:** standard patterns; low research need beyond the `user-invocable` divergence record.
 
 ## Sources
 
-- In-tree source, read 2026-10-15: `tests/e2e/_rpc.ts` (`childEnvironment`, `resolveSandbox`), `features/**`, `extensions/pi-claude-marketplace/{orchestrators/auth-host.ts, domain/auth-registry.ts, domain/source.ts, domain/clone-key.ts, domain/manifest-cache.ts, orchestrators/marketplace/add.ts, orchestrators/marketplace/update.ts, platform/git.ts, platform/git-credential.ts, shared/redact-absolute-paths.ts, shared/notification-wire.ts}`. HIGH.
-- `node_modules/isomorphic-git` 1.42.3 (`index.cjs:10325`, buffered upload-pack body with Content-Length, no request gzip) and `node_modules/simple-get/index.js:74` (timeout only when set). HIGH.
-- `node_modules/@earendil-works/pi-coding-agent/dist/main.js:452` (`PI_OFFLINE` scope) and `core/extensions/loader.js:473` (`moduleCache: false`). HIGH.
-- `.planning/milestones/ws-git-hosts-2026-10-01/milestones/any-git-host-phases/01-private-repos-on-any-git-host/01-UAT.md` (credential helper via `GIT_CONFIG_*`, host guard, the port-redirect leak G-01-4, the Device Flow debug wording for non-registry hosts) and `02-.../02-UAT.md` (verbatim-only endpoint canary with `NODE_EXTRA_CA_CERTS`). HIGH.
-- Claude Code 2.1.296 binary grep: GitHub clone URL literals `https://github.com/${repo}.git`; no `GITHUB_BASE_URL`. HIGH.
-- Project memory: `ci-race-test-flake-cluster`, `tmp-inode-exhaustion-enospc`, `node-errno-message-drift-local-vs-ci`, `subagent-tests-must-use-hermetic-home`, `green-runs-that-checked-nothing`, `dont-test-what-a-gate-already-guards`, `live-canary-scratch-engine-route`. HIGH (project-recorded).
-- `GITHUB_BASE_URL` in other tools: [Terraform GitHub provider docs (mirror)](https://docs.w3cub.com/terraform/providers/github/index), [GHE commit setting it to `/api/v3/`](https://github.e.it.census.gov/CSVD/ghe-runners/commit/aaf9b61ea5acac4176a4167ffc35593bfac0f0b0), [Elixir git_store config](https://git-store.hexdocs.pm/1.0.0/git_store/github_config.html), [Codespaces default env vars (`GITHUB_SERVER_URL`/`GITHUB_API_URL`)](https://docs.github.com/en/codespaces/developing-in-a-codespace/default-environment-variables-for-your-codespace). MEDIUM.
-- Local host facts: `/etc/gitconfig` present (git-lfs filters, `filter.lfs.required=true`), git 2.55.0, OpenSSL 4.0.3, `/usr/libexec/git-core/git-http-backend`; current suite 13 scenarios in 4.8 s wall. HIGH for this machine only.
+- Spike 028: `.planning/spikes/028-model-free-harness/README.md`, `faux-extension.ts`, `faux.ts`, `run.ts` (HIGH)
+- Cucumber rules: `.agents/skills/cucumber/SKILL.md`, `rules/{layout,steps,world-and-stand-ins}.md`; `scripts/check-features.mjs:238-256`; `eslint.config.js:386-513` (HIGH)
+- Harness code: `features/lib/pi-process.ts` (`handleLine`, `idle`), `features/support/pi-process.ts` (`Before()` reset), `features/lib/pi-commands.ts:162-214`, `features/support/world.ts:47`, `test/e2e/_rpc.ts:156-224` (HIGH)
+- Peers and CI: `scripts/install-test-peers.mjs`, `test/integration/{optional-peer,pi-mcp-adapter-peer}.ts`, `test/architecture/peer-floor.test.ts`, `test/bridges/mcp/adapter-entry.test.ts`, `test/integration/adapter-expansion-conformance.test.ts`, `test/e2e/pi-peer-floor/package.json`, `.github/workflows/ci.yml` (`behavioral`, 10 min), `README.md:38-41` (HIGH)
+- Product code: `platform/pi-api.ts:178-256` (RH-3, WDEP-01, ADET-02), `bridges/hooks/event-router.ts:910-924` (SSDEDUP-01), `domain/components/hook-events.ts:212-279` (D-58-06), `persistence/locations.ts:208-212`, `platform/mcp-status.ts:40` (HIGH)
+- `pi-mcp-adapter@7.0.0` tarball: `CHANGELOG.md` 5.3.0-7.0.0, `dist/utils.js:122-128`, `project-server-trust.ts:265-330`, `index.ts:1664-1873`, `upgrade-notice.ts`, `metadata-cache.ts:42`, `agent-dir.ts`, `types.ts:22-29` (HIGH)
+- `pi-subagents@0.84.0` tarball: `package.json`, `CHANGELOG.md` 0.74-0.84, `bundle/` tmpdir and `runner-aliases.js` (HIGH)
+- `@quintinshaw/pi-dynamic-workflows@3.15.0` tarball: `package.json` (`pi.extensions`), `dist/workflow-paths.js` (HIGH)
+- `@earendil-works/pi-coding-agent@1.4.0` CHANGELOG (1.4.0, `agent_settled.aborted`, `session_compact` reason) and Pi 1.3.0 `docs/{security,rpc,cli}.md` (HIGH)
+- `@earendil-works/pi-ai@1.4.0` `dist/providers/faux.{js,d.ts}` (HIGH)
+- Past milestones: `.planning/RETROSPECTIVE.md` (plugin-lifecycle, lifecycle-coverage, marketplace-features); `lifecycle-coverage-phases/15-.../15-VERIFICATION.md:62`, `03-.../03-VERIFICATION.md:140`, `16-.../16-01-SUMMARY.md`, `01-suite-foundation/01-0{1,4,5}-SUMMARY.md`; `plugin-lifecycle-phases/09-.../09-02-SUMMARY.md:110`, `07-.../07-02-SUMMARY.md:147` (HIGH)
+- Claude Code: 2.1.316 binary grep in spike 028 (HIGH); https://code.claude.com/docs/en/hooks for SessionStart matchers and SessionEnd reasons (MEDIUM, agrees with the binary)
 
 ---
-*Pitfalls research for: marketplace behavioral tests (marketplace-features)*
-*Researched: 2026-10-15*
+*Pitfalls research for: component-features (component behavioral tests and companion version raise)*
+*Researched: 2026-10-31*
