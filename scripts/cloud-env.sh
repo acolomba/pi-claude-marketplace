@@ -2,7 +2,8 @@
 # Sourced, never run: the settings a Claude Code cloud session VM needs. Two
 # callers source it when CLAUDE_CODE_REMOTE is true, the variable the VM
 # carries and a developer machine never does: scripts/init.sh, which the
-# environment's setup script runs before Claude Code launches, and
+# environment's setup script runs by absolute path before Claude Code
+# launches, and
 # scripts/init-session.sh, on every session start and resume. See "Claude Code
 # cloud sessions" in CONTRIBUTING.md.
 #

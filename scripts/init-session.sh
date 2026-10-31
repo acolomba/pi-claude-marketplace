@@ -33,7 +33,7 @@ if [[ ${CLAUDE_CODE_REMOTE-} == true && -n ${CLAUDE_ENV_FILE-} ]]; then
     mkdir -p node_modules
     scripts/init.sh >node_modules/.init.log 2>&1 ||
         echo "scripts/init.sh failed; see $top/node_modules/.init.log" >&2
-    echo "scripts/init-session.sh: installed Node 24, pre-commit, npm dependencies, GSD, skills, codegraph, and fallow after Claude Code launched. GSD's subagents (gsd-planner, gsd-executor, ...) and the codegraph and fallow MCP servers are available from the next session on; in this one, /gsd-* commands that spawn subagents fail, so use \`codegraph explore\` and \`npx fallow\` from the shell. To have everything at launch, set the environment's setup script to \`bash scripts/init.sh\` (see CONTRIBUTING.md). Log: $top/node_modules/.init.log"
+    echo "scripts/init-session.sh: installed Node 24, pre-commit, npm dependencies, GSD, skills, codegraph, and fallow after Claude Code launched. GSD's subagents (gsd-planner, gsd-executor, ...) and the codegraph and fallow MCP servers are available from the next session on; in this one, /gsd-* commands that spawn subagents fail, so use \`codegraph explore\` and \`npx fallow\` from the shell. To have everything at launch, set the environment's setup script to \`bash $top/scripts/init.sh\` (see CONTRIBUTING.md). Log: $top/node_modules/.init.log"
     exit 0
 fi
 
