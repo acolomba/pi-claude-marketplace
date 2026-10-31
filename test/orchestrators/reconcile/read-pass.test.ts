@@ -30,6 +30,7 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
@@ -80,9 +81,10 @@ async function createProjectScope(t: TestContext, label: string): Promise<Projec
     project: locationsFor("project", cwd),
     marketplaceRoot: path.join(cwd, "mp-src"),
     setMode: async (entry, mode) => {
-      // A mode does not bind uid 0, so the EACCES never happens under root.
-      if (typeof process.getuid === "function" && process.getuid() === 0) {
-        throw new Error("permission cases cannot run as root");
+      // A mode does not bind uid 0 with its default capabilities, so the EACCES
+      // never happens.
+      if (!(await chmodDeniesThisProcess())) {
+        throw new Error(`a mode does not deny this process. ${CHMOD_DENIAL_HINT}`);
       }
 
       changed.push(entry);

@@ -5,14 +5,31 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 
 export PATH="$PATH:$HOME/.local/bin:$(npm prefix --global)/bin"
 
+# empty outside a Claude Code cloud VM. There, scripts/cloud-env.sh sets it
+# and installs what the VM lacks.
+lfs_install_flags=""
+if [[ ${CLAUDE_CODE_REMOTE-} == true ]]; then
+    source scripts/cloud-env.sh
+    cloud_env_install
+fi
+
 # git
 export GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never
-git lfs install --local
+# shellcheck disable=SC2086 -- the variable holds zero or more flags
+git lfs install --local $lfs_install_flags
 
-# pre-commit
+# pre-commit, with pipx or uv
 if ! command -v pre-commit >/dev/null 2>&1; then
-    pipx install pre-commit
-    PATH="$PATH:$(pipx environment --value PIPX_BIN_DIR)"
+    if command -v pipx >/dev/null 2>&1; then
+        pipx install pre-commit
+        PATH="$PATH:$(pipx environment --value PIPX_BIN_DIR)"
+    elif command -v uv >/dev/null 2>&1; then
+        uv tool install pre-commit
+        PATH="$PATH:$(uv tool dir --bin)"
+    else
+        echo "scripts/init.sh: install pipx or uv first" >&2
+        exit 1
+    fi
 fi
 
 pre-commit install
@@ -48,8 +65,9 @@ rm -f .claude/CLAUDE.md
 # no longer refreshes on fallow upgrades.
 npx fallow agent install --harness claude --harness codex --without hooks --without guide --approve
 
-# normalize AGENTS.md
-pre-commit run --files AGENTS.md || true
+# normalize AGENTS.md; a fixer that changes it exits 1 too
+pre-commit run --files AGENTS.md ||
+    echo "scripts/init.sh: pre-commit changed AGENTS.md or failed; see git diff AGENTS.md" >&2
 
-# init-session.sh keys on this marker
+# init-session.sh and cloud-env.sh read this marker
 touch node_modules/.init-done

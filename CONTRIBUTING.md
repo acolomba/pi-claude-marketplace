@@ -17,7 +17,7 @@ Prerequisites:
 
 - [npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm/)
 - [git-lfs](https://git-lfs.com/)
-- [pipx](https://pipx.pypa.io/stable/)
+- [pipx](https://pipx.pypa.io/stable/) or [uv](https://docs.astral.sh/uv/)
 
 Run this command to set up development tools and dependencies in a fresh clone or worktree.
 
@@ -30,6 +30,15 @@ It installs the npm dependencies, including the pinned Pi version, and these too
 - [pre-commit](https://pre-commit.com/#installation)
 - [gsd-core](https://github.com/open-gsd/gsd-core)
 - [codegraph](https://github.com/colbymchenry/codegraph)
+
+### Claude Code cloud sessions
+
+Set the setup script of the cloud environment to:
+
+```bash
+#!/bin/bash
+/home/user/pi-claude-marketplace/scripts/init.sh
+```
 
 ## Running Pi against the checkout
 
@@ -49,7 +58,7 @@ npm run test:cucumber  # behavioral tests under features/
 npm run check:static   # typecheck, lint, fallow, format check, and gate scripts, in parallel
 npm run lint:fix       # ESLint with autofixes
 npm run format         # Prettier autoformat
-SKIP=npm-check pre-commit run --all-files
+SKIP=npm-check${SKIP:+,$SKIP} pre-commit run --all-files
 ```
 
 When a commit stages a file that the build or CI reads, the pre-commit hook runs `npm run check:commit`. It runs the static checks, the unit tests that have no source pair, and direct coverage for the staged source-test pairs only, so it is not a full check. Run `npm run check` before you open a pull request and after a merge, because a merge does not run the hook.

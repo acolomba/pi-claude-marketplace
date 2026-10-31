@@ -16,12 +16,12 @@
     ],
     "SessionStart": [
       {
-        "matcher": "startup",
+        "matcher": "startup|resume",
         "hooks": [
           {
             "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/init-session.sh",
-            "timeout": 900
+            "timeout": 1200
           }
         ]
       }

@@ -10,6 +10,7 @@ import {
   McpConfigFileError,
   McpUnstagePartialError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
+import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
 
 async function createScope(
   t: TestContext,
@@ -32,10 +33,11 @@ async function lockedLink(
   filePath: string,
   bytes: string,
 ): Promise<string> {
-  // A 0o555 directory stays writable for uid 0, so the write this helper
-  // exists to refuse would succeed. Refuse up front and name the environment.
-  if (typeof process.getuid === "function" && process.getuid() === 0) {
-    throw new Error("lockedLink cannot deny root; run this suite as a non-root user");
+  // A 0o555 directory stays writable for uid 0 with its default capabilities,
+  // so the write this helper exists to refuse would succeed. Refuse up front and
+  // name the environment.
+  if (!(await chmodDeniesThisProcess())) {
+    throw new Error(`lockedLink cannot deny this process. ${CHMOD_DENIAL_HINT}`);
   }
 
   const lockedDirectory = path.join(cwd, "locked");

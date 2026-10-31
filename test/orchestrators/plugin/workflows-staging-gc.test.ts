@@ -9,6 +9,7 @@ import {
   scanRetainedWorkflowsStaging,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
@@ -77,14 +78,15 @@ async function backdate(target: string): Promise<void> {
 }
 
 /**
- * WR-08: `chmod` denial is inert for uid 0 -- a 0o444/0o555 mode restricts
- * nothing for root, so `lstat` and `rm` both succeed and the case fails against
- * the sweep logic instead of naming the environment. Refuse up front, matching
- * `denyWrites` in test/orchestrators/reconcile/apply.test.ts.
+ * WR-08: `chmod` denial is inert for uid 0 with its default capabilities. A
+ * 0o444/0o555 mode restricts nothing for it, so `lstat` and `rm` both succeed
+ * and the case fails against the sweep logic instead of naming the
+ * environment. Refuse up front, matching `denyWrites` in
+ * test/orchestrators/reconcile/apply.test.ts.
  */
-function requireNonRoot(): void {
-  if (typeof process.getuid === "function" && process.getuid() === 0) {
-    throw new Error("chmod-based denial cannot deny root; run this suite as a non-root user");
+async function requireChmodDenial(): Promise<void> {
+  if (!(await chmodDeniesThisProcess())) {
+    throw new Error(`chmod-based denial is inert for this process. ${CHMOD_DENIAL_HINT}`);
   }
 }
 
@@ -193,7 +195,7 @@ test("skips an aged staging entry that is not a directory", async (t) => {
 
 test("records a leak for a staging entry it cannot inspect", async (t) => {
   // arrange
-  requireNonRoot();
+  await requireChmodDenial();
   const { locations } = await createStagingScope(t, "workflows-staging-gc-unreadable-");
   await seedStagingTree(locations, "unreachable", { aged: true });
   // Read-but-not-search: `readdir` reports the entry and the per-entry `lstat`
@@ -214,7 +216,7 @@ test("records a leak for a staging entry it cannot inspect", async (t) => {
 
 test("continues past a staging tree it cannot remove and names it once", async (t) => {
   // arrange
-  requireNonRoot();
+  await requireChmodDenial();
   const { locations } = await createStagingScope(t, "workflows-staging-gc-leak-");
   const blocked = await seedStagingTree(locations, "aaa-blocked", { aged: true });
   const locked = path.join(blocked, "locked");
@@ -336,7 +338,7 @@ test("WR-05: keeps an aged staging tree whose .previous cannot be read", async (
   // `chmod 0o000` stands in for the transient EMFILE/EIO window that cannot be
   // provoked deterministically. `bbb-swept` holds the skip to the one entry
   // whose `.previous/` is ambiguous.
-  requireNonRoot();
+  await requireChmodDenial();
   const { locations } = await createStagingScope(t, "workflows-staging-gc-unreadable-prev-");
   const retained = await seedStagingTree(locations, "aaa-retained", { aged: false });
   const displaced = path.join(retained, ".previous");
@@ -489,7 +491,7 @@ test("WR-06: skips a staging entry it cannot inspect and still resolves", async 
   // the permission sits on their shared parent -- a single-entry inspection
   // failure is a race with no deterministic vehicle. What is pinned here is
   // that the failure is skipped rather than thrown out of a read-only command.
-  requireNonRoot();
+  await requireChmodDenial();
   const { locations } = await createStagingScope(t, "workflows-staging-scan-unreadable-");
   const retained = await seedStagingTree(locations, "aaa-retained", { aged: false });
   await displace(retained, 1);
@@ -577,7 +579,7 @@ test("WR-05: reports a retained tree whose .previous cannot be read, with no cou
   // answer -- it reports the tree -- but it cannot state a count it never read,
   // so the count is ABSENT rather than zero. `chmod 0o000` stands in for the
   // transient EMFILE/EIO window that cannot be provoked deterministically.
-  requireNonRoot();
+  await requireChmodDenial();
   const { locations } = await createStagingScope(t, "workflows-staging-scan-unreadable-prev-");
   const retained = await seedStagingTree(locations, "aaa-retained", { aged: false });
   const displaced = await displace(retained, 1);
@@ -599,7 +601,7 @@ test("WR-02: the sweep's leak list and retention decisions survive the shared re
   // distinguishes -- retained for displaced envelopes, unremovable, ordinary
   // orphan -- swept in one pass, so a reader that answered any of the three
   // differently would move either the leak list or the surviving set.
-  requireNonRoot();
+  await requireChmodDenial();
   const { locations } = await createStagingScope(t, "workflows-staging-gc-refactor-");
   const retained = await seedStagingTree(locations, "aaa-retained", { aged: false });
   await displace(retained, 1);

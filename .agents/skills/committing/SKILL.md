@@ -13,7 +13,7 @@ Commit messages and PR titles follow the [Conventional Commits specification](ht
 
 ## Procedure
 
-While editing, run owner tests or one pair's direct coverage. Before committing, run `SKIP=npm-check pre-commit run --files <changed files>` to apply fixers and linters. It takes seconds. A linter warning fails it too, because yamllint runs with `--strict`. Restage fixes and repeat until clean. To run them on every file, as the CI Lint workflow does, use `SKIP=npm-check pre-commit run --all-files`.
+While editing, run owner tests or one pair's direct coverage. Before committing, run `SKIP=npm-check${SKIP:+,$SKIP} pre-commit run --files <changed files>` to apply fixers and linters. It takes seconds. The `${SKIP:+,$SKIP}` part keeps the `SKIP=trufflehog` that a Claude Code cloud session exports, because the session's network policy blocks the Go toolchain that the trufflehog hook needs. A linter warning fails the command too, because yamllint runs with `--strict`. Restage fixes and repeat until clean. To run them on every file, as the CI Lint workflow does, use `SKIP=npm-check${SKIP:+,$SKIP} pre-commit run --all-files`.
 
 Then run `git commit` in the foreground with the longest tool timeout available. Never background it and poll with sleep/grep loops. If a run can outlast the tool's foreground limit, background it once and wait for the completion notification. The commit hook runs the npm checks; do not run ESLint, type checking, or tests immediately beforehand. A failed hook means no commit happened: fix, restage, and commit again, without `--amend` (it would alter the previous commit) or `--no-verify`.
 

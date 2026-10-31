@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Internal: the repository now sets itself up in a Claude Code cloud session, and the tests that use `chmod` run there. (#293)
+
 ## [0.21.0] - 2026-10-31
 
 - Autoupdate marketplaces now update in the background, plugins get their npm or bun packages, and more commands match Claude Code. (#290)

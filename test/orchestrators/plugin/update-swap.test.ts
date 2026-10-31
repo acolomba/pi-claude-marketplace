@@ -23,6 +23,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { AgentTargetOccupiedError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { PluginUpdateConcurrencyError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
@@ -1688,9 +1689,10 @@ test("AMIG-02: a swap removes the plugin's marked mcp.json entries after the MCP
 });
 
 test("AMIG-02: a legacy removal that fails records an mcp phase failure and keeps both entries", async (t) => {
-  // A 0o555 directory stays writable for uid 0, so the removal would succeed.
-  if (typeof process.getuid === "function" && process.getuid() === 0) {
-    throw new Error("this case cannot deny root; run this suite as a non-root user");
+  // A 0o555 directory stays writable for uid 0 with its default capabilities,
+  // so the removal would succeed.
+  if (!(await chmodDeniesThisProcess())) {
+    throw new Error(`this case cannot deny this process. ${CHMOD_DENIAL_HINT}`);
   }
 
   await withHermeticHome(async () => {

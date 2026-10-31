@@ -34,6 +34,7 @@ import {
   saveState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../chmod-denial.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { noStatusSnapshot } from "../platform/mcp-status-seed.ts";
 
@@ -118,10 +119,11 @@ async function lockedLink(
   filePath: string,
   bytes: string,
 ): Promise<string> {
-  // A 0o555 directory stays writable for uid 0, so the write this helper
-  // exists to refuse would succeed. Refuse up front and name the environment.
-  if (typeof process.getuid === "function" && process.getuid() === 0) {
-    throw new Error("lockedLink cannot deny root; run this suite as a non-root user");
+  // A 0o555 directory stays writable for uid 0 with its default capabilities,
+  // so the write this helper exists to refuse would succeed. Refuse up front and
+  // name the environment.
+  if (!(await chmodDeniesThisProcess())) {
+    throw new Error(`lockedLink cannot deny this process. ${CHMOD_DENIAL_HINT}`);
   }
 
   const lockedDirectory = path.join(cwd, "locked");
