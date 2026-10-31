@@ -23,7 +23,7 @@ import {
 import { buildScopeSatisfactionVerdict } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts";
 import { emptyReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { chmodDeniesThisProcess } from "../../chmod-denial.ts";
+import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { seedWarmMirror } from "../plugin/warm-mirror-seed.ts";
@@ -1643,14 +1643,12 @@ test("D-PL2-12 / D-PL2-25: the installed-copy reader fails closed on a copy unde
 });
 
 test("D-PL2-25: the installed-copy reader fails closed on a pinned copy whose path cannot be inspected", async (t) => {
-  // arrange
   if (!(await chmodDeniesThisProcess())) {
-    t.skip(
-      "a mode does not deny this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
-    );
+    t.skip(`a mode does not deny this process. ${CHMOD_DENIAL_HINT}`);
     return;
   }
 
+  // arrange
   const fixture = await createFixture(t, "copy-reader-fault");
   const locked = path.join(fixture.locations.pluginClonesDir, "widget-copy");
   await mkdir(path.join(locked, "inner"), { recursive: true });

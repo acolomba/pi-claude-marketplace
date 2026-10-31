@@ -29,7 +29,7 @@ import {
   pendingReconcile,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { chmodDeniesThisProcess } from "../../chmod-denial.ts";
+import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
@@ -1916,11 +1916,10 @@ test("D-06: composePendingReport reads only the scopes it is given", async (t) =
 
 test("I5 / T-53-02-02: an unreadable config's cause names its basename and no absolute path", async (t) => {
   // arrange
-  // A mode does not bind the usual uid 0, so the EACCES never happens under root.
+  // A mode does not bind uid 0 with its default capabilities, so the EACCES
+  // never happens.
   if (!(await chmodDeniesThisProcess())) {
-    throw new Error(
-      "a mode does not deny this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
-    );
+    throw new Error(`a mode does not deny this process. ${CHMOD_DENIAL_HINT}`);
   }
 
   const { cwd, project } = await createHermeticScopes(t, "compose-unreadable");

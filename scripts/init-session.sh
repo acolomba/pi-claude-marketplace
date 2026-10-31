@@ -2,38 +2,59 @@
 set -euo pipefail
 
 # The desktop app runs SessionStart hooks from the main checkout and passes
-# the session's worktree as the input's cwd. A run by hand has no input.
-cwd=$(node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).cwd' 2>/dev/null) || cwd=$PWD
+# the session's worktree as the input's cwd, so the worktree comes from the
+# input. A run by hand has no input, and an input without cwd prints the
+# string `undefined`.
+cwd=$(node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).cwd ?? ""' 2>/dev/null) || cwd=$PWD
+[[ -n $cwd && $cwd != undefined && $cwd != null ]] || cwd=$PWD
 
-top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
+if ! top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null); then
+    if [[ ${CLAUDE_CODE_REMOTE-} == true ]]; then
+        echo "scripts/init-session.sh: $cwd is not in a git repository. Nothing set up."
+    fi
+    exit 0
+fi
 
-# A Claude Code cloud VM: apply its settings, export them for the session's
-# Bash commands, and run init.sh unless a run has completed in this clone.
+# A Claude Code cloud VM: export its settings for the session's Bash commands
+# first, then install, then run init.sh unless a run has completed in this
+# clone. Every message goes to stdout: stdout reaches the session, stderr of
+# a hook that exits 0 does not.
 if [[ ${CLAUDE_CODE_REMOTE-} == true ]]; then
+    log=$top/node_modules/.init.log
+    # set -E lets the sourced functions inherit the trap
+    set -E
+    trap 'echo "scripts/init-session.sh: aborted at line $LINENO. See $log"; exit 0' ERR
     cd -- "$top"
     source scripts/cloud-env.sh
-    # Claude Code sources this file before each Bash command of the session.
-    # The hook's own exports end with the hook.
+    mkdir -p node_modules
     if [[ -z ${CLAUDE_ENV_FILE-} ]]; then
-        echo "scripts/init-session.sh: CLAUDE_ENV_FILE is unset. Run 'source scripts/cloud-env.sh' before Node commands."
-    elif ! grep -qsF "$wrapper_dir" "$CLAUDE_ENV_FILE"; then
+        echo "scripts/init-session.sh: CLAUDE_ENV_FILE is unset. Run 'source scripts/cloud-env.sh' from the repository root before Node commands."
+    elif ! grep -qsF "$cloud_env_marker" "$CLAUDE_ENV_FILE"; then
         cloud_session_exports >>"$CLAUDE_ENV_FILE"
     fi
 
-    # shellcheck disable=SC2086 -- the flags are words
-    git lfs install --local $lfs_install_flags >/dev/null
-    if [[ -e node_modules/.init-done ]]; then
-        npm install --no-audit --no-fund >/dev/null
+    if ! cloud_env_install >>"$log" 2>&1; then
+        echo "scripts/cloud-env.sh failed. See $log"
+        tail -n 5 "$log"
         exit 0
     fi
 
-    # stdout reaches the session; stderr of a hook that exits 0 does not
-    mkdir -p node_modules
-    if scripts/init.sh >node_modules/.init.log 2>&1; then
+    if [[ -e node_modules/.init-done ]]; then
+        # shellcheck disable=SC2086 -- the variable holds zero or more flags
+        if ! { git lfs install --local $lfs_install_flags && npm install --no-audit --no-fund; } >>"$log" 2>&1; then
+            echo "scripts/init-session.sh: the node_modules refresh failed. See $log"
+        fi
+
+        exit 0
+    fi
+
+    if scripts/init.sh >>"$log" 2>&1; then
         echo "scripts/init-session.sh ran scripts/init.sh. Subagents and MCP servers load at the next session."
     else
-        echo "scripts/init.sh failed; see $top/node_modules/.init.log"
+        echo "scripts/init.sh failed. See $log"
+        tail -n 5 "$log"
     fi
+
     exit 0
 fi
 
@@ -45,4 +66,4 @@ fi
 
 mkdir -p "$top/node_modules"
 "$top/scripts/init.sh" >"$top/node_modules/.init.log" 2>&1 ||
-    echo "scripts/init.sh failed; see $top/node_modules/.init.log"
+    echo "scripts/init.sh failed. See $top/node_modules/.init.log"

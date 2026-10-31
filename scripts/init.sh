@@ -5,15 +5,17 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 
 export PATH="$PATH:$HOME/.local/bin:$(npm prefix --global)/bin"
 
-# a Claude Code cloud VM needs a few settings; see scripts/cloud-env.sh
+# empty outside a Claude Code cloud VM. There, scripts/cloud-env.sh sets it
+# and installs what the VM lacks.
 lfs_install_flags=""
 if [[ ${CLAUDE_CODE_REMOTE-} == true ]]; then
     source scripts/cloud-env.sh
+    cloud_env_install
 fi
 
 # git
 export GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never
-# shellcheck disable=SC2086 -- the flags are words
+# shellcheck disable=SC2086 -- the variable holds zero or more flags
 git lfs install --local $lfs_install_flags
 
 # pre-commit, with pipx or uv
@@ -63,8 +65,9 @@ rm -f .claude/CLAUDE.md
 # no longer refreshes on fallow upgrades.
 npx fallow agent install --harness claude --harness codex --without hooks --without guide --approve
 
-# normalize AGENTS.md
-pre-commit run --files AGENTS.md || true
+# normalize AGENTS.md; a fixer that changes it exits 1 too
+pre-commit run --files AGENTS.md ||
+    echo "scripts/init.sh: pre-commit changed AGENTS.md or failed; see git diff AGENTS.md" >&2
 
 # init-session.sh and cloud-env.sh read this marker
 touch node_modules/.init-done

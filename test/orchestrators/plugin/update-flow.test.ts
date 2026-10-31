@@ -65,7 +65,7 @@ import {
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
-import { chmodDeniesThisProcess } from "../../chmod-denial.ts";
+import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
@@ -14480,9 +14480,7 @@ test("D-13: a source file convergePlugin cannot read fails the move as permissio
         installedVersions: { hello: "1.0.0" },
       });
       if (!(await chmodDeniesThisProcess())) {
-        throw new Error(
-          "an unreadable file cannot deny this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
-        );
+        throw new Error(`an unreadable file cannot deny this process. ${CHMOD_DENIAL_HINT}`);
       }
 
       const unreadable = path.join(marketplaceRoot, "plugins", "hello", "commands", "deploy.md");

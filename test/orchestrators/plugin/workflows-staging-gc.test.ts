@@ -9,7 +9,7 @@ import {
   scanRetainedWorkflowsStaging,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { chmodDeniesThisProcess } from "../../chmod-denial.ts";
+import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
@@ -78,16 +78,15 @@ async function backdate(target: string): Promise<void> {
 }
 
 /**
- * WR-08: `chmod` denial is inert for the usual uid 0 -- a 0o444/0o555 mode
- * restricts nothing for it, so `lstat` and `rm` both succeed and the case fails
- * against the sweep logic instead of naming the environment. Refuse up front,
- * matching `denyWrites` in test/orchestrators/reconcile/apply.test.ts.
+ * WR-08: `chmod` denial is inert for uid 0 with its default capabilities. A
+ * 0o444/0o555 mode restricts nothing for it, so `lstat` and `rm` both succeed
+ * and the case fails against the sweep logic instead of naming the
+ * environment. Refuse up front, matching `denyWrites` in
+ * test/orchestrators/reconcile/apply.test.ts.
  */
 async function requireChmodDenial(): Promise<void> {
   if (!(await chmodDeniesThisProcess())) {
-    throw new Error(
-      "chmod-based denial is inert for this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
-    );
+    throw new Error(`chmod-based denial is inert for this process. ${CHMOD_DENIAL_HINT}`);
   }
 }
 

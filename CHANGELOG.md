@@ -2,9 +2,7 @@
 
 ## [Unreleased]
 
-- Internal: a Claude Code cloud session now sets up the repository and runs GSD. (#293)
-
-  - The tests that deny access with `chmod` now probe whether the mode denies the process.
+- Internal: the repository now sets itself up in a Claude Code cloud session, and the tests that use `chmod` run there. (#293)
 
 ## [0.21.0] - 2026-10-31
 

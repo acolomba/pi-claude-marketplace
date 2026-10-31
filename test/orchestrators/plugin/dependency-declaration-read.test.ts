@@ -12,7 +12,7 @@ import {
   readInstalledCopyDeclaration,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-declaration-read.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { chmodDeniesThisProcess } from "../../chmod-denial.ts";
+import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
 
 import type { ClosureLookupResult } from "../../../extensions/pi-claude-marketplace/domain/dependency-closure.ts";
 import type { ManifestPluginEntry } from "../../../extensions/pi-claude-marketplace/domain/manifest-lookup.ts";
@@ -1327,11 +1327,10 @@ test("D-PL2-17: a candidate with no marketplace record is a copy, so its entry a
 async function deniedManifestDirectoryCopy(
   testContext: TestContext,
 ): Promise<{ readonly root: string; readonly pluginRoot: string }> {
-  // A 0o000 directory stays readable for the usual uid 0, so the EACCES never happens.
+  // A 0o000 directory stays readable for uid 0 with its default capabilities,
+  // so the EACCES never happens.
   if (!(await chmodDeniesThisProcess())) {
-    throw new Error(
-      "a denied directory cannot deny this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
-    );
+    throw new Error(`a denied directory cannot deny this process. ${CHMOD_DENIAL_HINT}`);
   }
 
   const root = await mkdtemp(path.join(tmpdir(), "installed-copy-denied-"));

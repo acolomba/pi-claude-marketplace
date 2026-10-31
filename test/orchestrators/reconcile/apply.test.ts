@@ -89,7 +89,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
-import { chmodDeniesThisProcess } from "../../chmod-denial.ts";
+import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
@@ -302,14 +302,12 @@ async function createHermeticScopes(t: TestContext, label: string): Promise<Herm
     project: locationsFor("project", cwd),
     user: locationsFor("user", cwd),
     denyWrites: async (directory: string): Promise<void> => {
-      // A 0o555 directory stays writable for the usual uid 0, so under root
-      // the EACCES this helper exists to provoke never happens and the case
-      // fails against the reconcile logic instead of naming the environment.
-      // Refuse up front.
+      // A 0o555 directory stays writable for uid 0 with its default capabilities.
+      // The EACCES this helper exists to provoke then never happens, and the
+      // case fails against the reconcile logic instead of naming the
+      // environment. Refuse up front.
       if (!(await chmodDeniesThisProcess())) {
-        throw new Error(
-          "denyWrites cannot deny this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
-        );
+        throw new Error(`denyWrites cannot deny this process. ${CHMOD_DENIAL_HINT}`);
       }
 
       denied.push(directory);
@@ -2406,9 +2404,7 @@ describe("applyReconcile", () => {
     });
     const commandFile = path.join(marketplaceRoot, "plugins", "bar", "commands", "deploy.md");
     if (!(await chmodDeniesThisProcess())) {
-      t.skip(
-        "cannot deny reads for this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
-      );
+      t.skip(`cannot deny reads for this process. ${CHMOD_DENIAL_HINT}`);
       return;
     }
 
@@ -8785,9 +8781,7 @@ const REFUSED_WIDGET_COPY_NOTIFICATION = {
 /** Leaves a file nobody may read in `plugin`'s skill, so its move fails to copy it. */
 async function unreadableSkill(marketplaceRoot: string, plugin: string): Promise<void> {
   if (!(await chmodDeniesThisProcess())) {
-    throw new Error(
-      "an unreadable file cannot stop this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
-    );
+    throw new Error(`an unreadable file cannot stop this process. ${CHMOD_DENIAL_HINT}`);
   }
 
   await writeFile(
@@ -9749,9 +9743,7 @@ describe("applyReconcile catalog convergence", () => {
     // arrange -- as the restored-copy case, with a plugin-clones directory
     // nobody may list, so the deferred cleanup fails.
     if (!(await chmodDeniesThisProcess())) {
-      throw new Error(
-        "a directory mode cannot stop this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
-      );
+      throw new Error(`a directory mode cannot stop this process. ${CHMOD_DENIAL_HINT}`);
     }
 
     const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
@@ -10322,9 +10314,7 @@ describe("applyReconcile catalog convergence", () => {
     });
     const unreadable = path.join(marketplaceRoot, "plugins", "alpha", "commands", "deploy.md");
     if (!(await chmodDeniesThisProcess())) {
-      throw new Error(
-        "an unreadable file cannot deny this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
-      );
+      throw new Error(`an unreadable file cannot deny this process. ${CHMOD_DENIAL_HINT}`);
     }
 
     // An unreadable file still unlinks, so the tree removal needs no restore.
@@ -10597,9 +10587,7 @@ describe("applyReconcile catalog convergence", () => {
       },
     );
     if (!(await chmodDeniesThisProcess())) {
-      throw new Error(
-        "an unreadable file cannot deny this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
-      );
+      throw new Error(`an unreadable file cannot deny this process. ${CHMOD_DENIAL_HINT}`);
     }
 
     // An unreadable file still unlinks, so the tree removal needs no restore.

@@ -17,7 +17,7 @@ import {
   McpServerKeyCollisionError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { ManualRecoveryError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { chmodDeniesThisProcess } from "../../chmod-denial.ts";
+import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { PreparedMcpStaging } from "../../../extensions/pi-claude-marketplace/bridges/mcp/types.ts";
@@ -64,12 +64,11 @@ async function lockedLink(
   filePath: string,
   bytes: string,
 ): Promise<string> {
-  // A 0o555 directory stays writable for the usual uid 0, so the write this helper
-  // exists to refuse would succeed. Refuse up front and name the environment.
+  // A 0o555 directory stays writable for uid 0 with its default capabilities,
+  // so the write this helper exists to refuse would succeed. Refuse up front and
+  // name the environment.
   if (!(await chmodDeniesThisProcess())) {
-    throw new Error(
-      "lockedLink cannot deny this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
-    );
+    throw new Error(`lockedLink cannot deny this process. ${CHMOD_DENIAL_HINT}`);
   }
 
   const lockedDirectory = path.join(cwd, "locked");
