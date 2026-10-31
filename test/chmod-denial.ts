@@ -3,7 +3,7 @@
 // and such a mode denies nothing to the usual uid 0, which holds
 // CAP_DAC_OVERRIDE and CAP_DAC_READ_SEARCH. It denies every other user, and a
 // uid 0 whose bounding set dropped both capabilities, which is how the Claude
-// Code cloud VM runs Node (scripts/init-cloud.sh). So the suites probe the
+// Code cloud VM runs Node (scripts/cloud-env.sh). So the suites probe the
 // condition itself instead of the uid.
 
 import { access, chmod, constants, mkdtemp, rm, writeFile } from "node:fs/promises";

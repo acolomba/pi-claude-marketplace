@@ -33,17 +33,17 @@ It installs the npm dependencies, including the pinned Pi version, and these too
 
 ### Claude Code cloud sessions
 
-A Claude Code cloud session runs in a VM that differs from a developer machine. The VM has no pipx and no Node 24. It runs as root. Its network policy blocks the Go toolchain download that the trufflehog hook needs, and the GitHub proxy cannot fetch the Git LFS objects of this repository. `scripts/init-cloud.sh` covers these differences, then runs `scripts/init.sh`. Its header lists each change.
+A Claude Code cloud session runs in a VM that differs from a developer machine. The VM has no pipx and no Node 24. It runs as root. Its network policy blocks the Go toolchain download that the trufflehog hook needs, and the GitHub proxy cannot fetch the Git LFS objects of this repository. When `CLAUDE_CODE_REMOTE` is `true`, which the VM sets and a developer machine never does, `scripts/init.sh` sources `scripts/cloud-env.sh`, which covers these differences. Its header lists each change.
 
-Set the setup script of the environment to this command. The environment dialog opens from the cloud environment menu in the title bar of the session, under Edit.
+Set the setup script of the environment to the same command that a developer runs. The environment dialog opens from the cloud environment menu in the title bar of the session, under Edit.
 
 ```bash
-bash scripts/init-cloud.sh
+bash scripts/init.sh
 ```
 
 The setup script runs in the clone before Claude Code launches, and the VM is cached with its result. GSD and its subagents, the codegraph and fallow MCP servers, and the pre-commit hooks are then in place when the session starts.
 
-The SessionStart hook in `.claude/settings.json` runs the same script in every cloud session. After the setup script, the hook only refreshes `node_modules`. Without the setup script, the hook installs everything after Claude Code has launched. Claude Code reads subagent definitions and starts MCP servers only at launch, so GSD's subagents and the two MCP servers are not available before the next session.
+The SessionStart hook in `.claude/settings.json` runs `scripts/init-session.sh` on every start and resume. In a cloud session, the hook exports the VM settings for the session's Bash commands and refreshes `node_modules`. Without the setup script, the hook installs everything after Claude Code has launched. Claude Code reads subagent definitions and starts MCP servers only at launch, so GSD's subagents and the two MCP servers are not available before the next session.
 
 A cloud session exports `SKIP=trufflehog`. When you skip more hooks, keep it: `SKIP=npm-check${SKIP:+,$SKIP} pre-commit run --files <changed files>`. The CI Lint workflow runs trufflehog.
 

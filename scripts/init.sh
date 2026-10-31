@@ -5,9 +5,17 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 
 export PATH="$PATH:$HOME/.local/bin:$(npm prefix --global)/bin"
 
+# a Claude Code cloud session VM lacks tools a developer machine has and
+# needs a few settings; scripts/cloud-env.sh says which and why
+lfs_install_flags=""
+if [[ ${CLAUDE_CODE_REMOTE-} == true ]]; then
+    source scripts/cloud-env.sh
+fi
+
 # git
 export GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never
-git lfs install --local
+# shellcheck disable=SC2086 -- the flags are words
+git lfs install --local $lfs_install_flags
 
 # pre-commit: pipx on a developer machine; the Claude Code cloud VM ships uv
 # and pip but no pipx
