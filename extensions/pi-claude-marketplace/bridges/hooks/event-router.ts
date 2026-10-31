@@ -907,9 +907,21 @@ async function registerHooksBridgeWith(
         pi,
         opts.executor,
       );
+      // Pi's RPC session replacement (new_session, switch_session, fork,
+      // clone) binds extensions twice, so this registration sees the same
+      // session_start twice (earendil-works/pi#10470). Claude Code runs
+      // SessionStart once per session, so a repeat of the last event for the
+      // same session id is dropped.
+      let lastSessionStart: string | undefined = undefined;
       return async (event, ctx) => {
         try {
           requireNotificationMode(ctx.mode);
+          const sessionStart = `${ctx.sessionManager.getSessionId()}\u0000${event.reason}`;
+          if (sessionStart === lastSessionStart) {
+            return;
+          }
+
+          lastSessionStart = sessionStart;
           try {
             await hydrateProjectScopeForCwdWith(reader, ctx.cwd, routingState, generationIsCurrent);
           } catch (err) {

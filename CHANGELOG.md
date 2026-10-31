@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- A plugin's `SessionStart` hook now runs once when an RPC client starts, switches, forks, or clones a session, as in Claude Code. (#294)
 - Internal: the repository now sets itself up in a Claude Code cloud session, and the tests that use `chmod` run there. (#293)
 
 ## [0.21.0] - 2026-10-31
