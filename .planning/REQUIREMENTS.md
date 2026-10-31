@@ -148,14 +148,72 @@ Deferred to a milestone with a real model provider.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| VER-01 | Phase 1 | Pending |
+| VER-02 | Phase 1 | Pending |
+| VER-03 | Phase 1 | Pending |
+| VER-04 | Phase 1 | Pending |
+| VER-05 | Phase 1 | Pending |
+| VER-06 | Phase 1 | Pending |
+| HAR-01 | Phase 1 | Pending |
+| HAR-02 | Phase 1 | Pending |
+| HAR-03 | Phase 1 | Pending |
+| HAR-04 | Phase 1 | Pending |
+| HAR-05 | Phase 1 | Pending |
+| HAR-06 | Phase 1 | Pending |
+| HAR-07 | Phase 1 | Pending |
+| HAR-08 | Phase 1 | Pending |
+| DEC-01 | Phase 1 | Pending |
+| DEC-02 | Phase 1 | Pending |
+| CI-01 | Phase 1 | Pending |
+| SKL-01 | Phase 2 | Pending |
+| SKL-02 | Phase 2 | Pending |
+| SKL-03 | Phase 2 | Pending |
+| SKL-04 | Phase 2 | Pending |
+| SKL-05 | Phase 2 | Pending |
+| SKL-06 | Phase 2 | Pending |
+| CMD-01 | Phase 3 | Pending |
+| CMD-02 | Phase 3 | Pending |
+| CMD-03 | Phase 3 | Pending |
+| CMD-04 | Phase 3 | Pending |
+| CMD-05 | Phase 3 | Pending |
+| AGT-01 | Phase 4 | Pending |
+| AGT-02 | Phase 4 | Pending |
+| AGT-03 | Phase 4 | Pending |
+| AGT-04 | Phase 4 | Pending |
+| AGT-05 | Phase 4 | Pending |
+| AGT-06 | Phase 4 | Pending |
+| AGT-07 | Phase 4 | Pending |
+| HOOK-01 | Phase 5 | Pending |
+| HOOK-02 | Phase 5 | Pending |
+| HOOK-03 | Phase 5 | Pending |
+| HOOK-04 | Phase 5 | Pending |
+| HOOK-05 | Phase 5 | Pending |
+| HOOK-06 | Phase 5 | Pending |
+| HOOK-07 | Phase 5 | Pending |
+| HOOK-08 | Phase 5 | Pending |
+| HOOK-09 | Phase 5 | Pending |
+| MCP-01 | Phase 6 | Pending |
+| MCP-02 | Phase 6 | Pending |
+| MCP-03 | Phase 6 | Pending |
+| MCP-04 | Phase 6 | Pending |
+| MCP-05 | Phase 6 | Pending |
+| MCP-06 | Phase 6 | Pending |
+| MCP-07 | Phase 6 | Pending |
+| MCP-08 | Phase 6 | Pending |
+| WFL-01 | Phase 7 | Pending |
+| WFL-02 | Phase 7 | Pending |
+| WFL-03 | Phase 7 | Pending |
+| WFL-04 | Phase 7 | Pending |
+| WFL-05 | Phase 7 | Pending |
+| XK-01 | Phase 4 | Pending |
 
 **Coverage:**
 
 - v1 requirements: 58 total
-- Mapped to phases: 0
-- Unmapped: 58
+- Mapped to phases: 58
+- Unmapped: 0
 
 ---
 
 *Requirements defined: 2026-10-31*
-*Last updated: 2026-10-31 after initial definition*
+*Last updated: 2026-10-31 after roadmap creation (7 phases)*

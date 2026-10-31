@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: component-features
 milestone_name: Component Behavioral Tests
 status: planning
-last_updated: "2026-10-31T22:26:02.785Z"
+last_updated: "2026-10-31T23:24:59.000Z"
 last_activity: 2026-10-31
 progress:
-  total_phases: 0
+  total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,19 +17,26 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-29 after plugin-lifecycle completion)
+See: `.planning/PROJECT.md` (updated 2026-10-31 at component-features start)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Planning the next milestone
+**Current focus:** component-features Phase 1 -- Harness and Version Raise (its discuss step settles the pre-fan-out decisions, DEC-01, before Phases 2-7 fan out)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-10-31 — Milestone component-features started
+Phase: 1 of 7 (Harness and Version Raise)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-31 — Roadmap created: 7 phases, 58/58 requirements mapped
+
+Progress: [░░░░░░░░░░] 0%
+
+Phase 1 is the only prerequisite. After it merges to `claude/quirky-planck-hhm592`,
+Phases 2-7 (Skills, Slash Commands, Agents, Hooks, MCP Servers, Workflows) run
+in parallel, each in its own session and worktree. Suggested merge order:
+Workflows, MCP Servers, Agents, Skills, Slash Commands, Hooks.
 
 
 ### mcp-4 closeout
@@ -789,6 +796,11 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ### Roadmap Evolution
 
+- component-features roadmap created 2026-10-31: Phase 1 (Harness and
+  Version Raise, with the pre-fan-out decisions in its discuss step) then
+  Phases 2-7, one per component kind, in parallel; no suite-close phase, the
+  parent applies each phase's collected CHANGELOG, README, README.es,
+  PROJECT, and BACKLOG lines at merge
 - lifecycle-coverage roadmap created 2026-10-22: Phase 1 (Suite Foundation)
   then Phases 2-15 in parallel, each owning disjoint feature files and step
   modules
@@ -809,6 +821,16 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ### Blockers/Concerns
 
+- [component-features] Phases 2-7 must not start before Phase 1 records the
+  pre-fan-out decisions (FG-01..FG-06, FG-10, FG-14, project trust, FG-33)
+  and merges; no scenario may pin an unlicensed gap before the user decides.
+- [component-features] pi-mcp-adapter 7.0.0 expands `${NAME:-default}`, so a
+  bridge literal such as `${ANTHROPIC_API_KEY:-}` can resolve to a secret until
+  Phase 1 fixes `bridges/mcp/adapter-escape.ts` and re-proves the conformance
+  property (VER-04).
+- [component-features] Parallel phases share append-only closed sets, the
+  `soft-dep.ts` arms, and reviewed clone pairs; rerun `npx fallow dupes` after
+  the second merge and re-verify a phase after any merge that touches its files.
 - [lifecycle-coverage] Parallel Phases 2-15 own disjoint `features/` files,
   but a product fix can touch production code or `CHANGELOG.md` that another
   phase also changes; the later merge resolves the overlap and re-runs
@@ -823,6 +845,6 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ## Session Continuity
 
-Last session: 2026-10-28T11:38:54.366Z
-Stopped at: Phase 11 complete — all phases complete
+Last session: 2026-10-31
+Stopped at: component-features roadmap created; next is `/gsd-discuss-phase 1`
 Resume file: None
