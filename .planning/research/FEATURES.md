@@ -1,282 +1,378 @@
 # Feature Research
 
-**Domain:** Behavioral (cucumber) test suite for the `/claude:plugin marketplace` command family, run through a real headless Pi in RPC mode against local stand-ins
-**Milestone:** `marketplace-features`
-**Researched:** 2026-10-15
-**Confidence:** HIGH for code-derived behavior (every row below was read from the source, not the docs); MEDIUM for the flagged doc and upstream conflicts, which need an operator decision; LOW only where marked.
+**Domain:** Behavioral (cucumber) coverage of the six bridged Claude plugin component kinds -- skills, commands, agents, hooks, MCP servers, workflows -- observed through Pi and its companions after a real `/claude:plugin install`, with Claude Code as the reference and Pi's faux model in place of an authenticated LLM (milestone `component-features`).
+**Researched:** 2026-10-31
+**Confidence:** MEDIUM-HIGH overall. HIGH where the 2.1.316 binary was grepped and the extension code was read; MEDIUM where only the docs state the upstream behavior; each row carries its own level.
 
-> **How to read this file.** A "feature" here is a *user-visible marketplace behavior the suite must prove*. Each row gives the behavior, the observable JSON result, the source kinds it applies to, and the requirement IDs it covers. The rows are candidate requirements. The proposed IDs use the prefix `MF-<cmd>-NN` so they do not collide with existing IDs such as `INFO-01`.
->
-> **Source kinds:** `dir` = local directory, `file` = direct `marketplace.json` path, `url` = https git URL served by the loopback `git http-backend` stand-in, `gh` = GitHub (`owner/repo`, `https://github.com/o/r`) routed to the stand-in through `GITHUB_BASE_URL`. `any` = all four.
->
-> **Observable vocabulary:** `kind` is the payload kind. `status` and `reasons` are the marketplace-block values, or the plugin-row values when marked "row". `sev` is severity. `reload` is `needsReload`. All values are native wire tokens from `shared/notification-wire.ts` and `docs/json-output.md`.
->
-> **Source-of-truth rule applied:** where code and docs disagree, the row states what the code does, and the conflict is listed under "Doc and code conflicts" so the roadmap can decide whether a scenario should pin current behavior or wait for a fix.
+## How to read this file
+
+**Evidence tags.** `[bin]` = grep of `/opt/claude-code/bin/claude`, `claude --version` = **2.1.316**, run 2026-10-31. `[doc:<page>]` = https://code.claude.com/docs/en/<page>, retrieved 2026-10-31. `[pi]` = Pi 1.3.0 source and docs in `node_modules/@earendil-works/pi-coding-agent` (1.4.0 checked where named). `[repo]` = a path in this repository. Decision and requirement IDs (SK-2, D-07, ANAME-01, ...) are recorded licenses.
+
+**Disposition codes.**
+
+| Code | Meaning |
+|------|---------|
+| MATCH | The extension does what Claude Code does |
+| DIV(id) | Recorded divergence; `id` is the license |
+| PIGAP | Pi capability gap licenses it (recorded or obvious) |
+| **GAP** | UNRECORDED gap: upstream behavior with no license -- needs a user decision |
+| **CONTRA** | A recorded decision or doc contradicts current upstream evidence |
+| **EDGE** | Unrecorded edge case or doc drift worth a decision or a scenario |
+| **BUG** | Unlicensed divergence the bug policy says to fix in the phase |
+
+**Observation tiers.** `MF` = model-free: RPC `get_commands`, the probe extension (`pi.getAllTools()`, `pi.getCommands()`), companion slash commands, a hook recorder file, the stub MCP server log, the workflow engine's `.events.jsonl`, `/claude:plugin` output. `FX` = needs a faux-model turn (spike 028 `faux-extension.ts`). `RM` = needs a real model; out of scope this milestone. `TUI` = only the interactive TUI shows it (the `features/lib/pi-tui.ts` PTY driver).
+
+---
+
+## Decisions Needed (gaps, contradictions, edge cases)
+
+These have no recorded license. Each one blocks or shapes at least one scenario. The kind sections below give the evidence. Suggested owner = the component phase whose discuss step should settle it.
+
+| ID | Kind | Finding | Upstream (evidence) | Extension today (evidence) | Suggested question to the user | Conf |
+|----|------|---------|--------------------|---------------------------|--------------------------------|------|
+| FG-01 | commands | **CONTRA/GAP: positional arguments are 0-based upstream, 1-based in Pi.** A Claude command written `$1` gets the *second* argument upstream and the *first* under Pi. | `$N` = `$ARGUMENTS[N]`, 0-based; `$0` is the first argument; a missing index stays literal [bin: `T2e`, `/\$(\d+)(?!\w)/` -> `G(N)`; doc:skills "String substitutions"] | Commands pass through byte-identical; Pi `substituteArgs` uses `args[N-1]`, and a missing index becomes `""` [pi: `dist/core/prompt-templates.js`; repo: `bridges/commands/stage.ts`] | Rewrite placeholders at install time (`$0`->`$1`, `$N`->`$(N+1)`, `$ARGUMENTS[N]`->`$(N+1)`), or record a Pi-gap divergence? | HIGH |
+| FG-02 | commands | **GAP: arguments are dropped when the body has no placeholder.** | Appends `\n\nARGUMENTS: <args>` when nothing was substituted [bin: `T2e` tail `!Se&&r&&n`; doc:skills] | Pi substitutes only; it adds nothing, so `/plugin:cmd foo` loses `foo` [pi: `substituteArgs`] | Append `ARGUMENTS: $ARGUMENTS` at install time to bodies with no placeholder? | HIGH |
+| FG-03 | commands, skills | **GAP: other substitution forms.** `$ARGUMENTS[N]`, named `$name` from `arguments:`, `\$` escape, `${CLAUDE_SESSION_ID}`, `${CLAUDE_EFFORT}`. Pi-only `${1:-x}`, `$@`, `${@:N}` expand under Pi but stay literal upstream. | [bin: `T2e`; `ARGUMENTS: ... ${CLAUDE_SESSION_ID} ... ${CLAUDE_EFFORT}` strings; doc:skills] | None substituted; Pi turns `$ARGUMENTS[0]` into all arguments plus a literal `[0]` [pi] | Which forms to translate at install; record the rest as divergences | HIGH |
+| FG-04 | skills | **GAP: skill arguments are not substituted.** | Same substitution as commands, with `ARGUMENTS:` appended when no placeholder [doc:skills] | Pi appends the raw text after the `<skill>` block and substitutes nothing [pi 1.4.0 `agent-session.js` "Expand skill commands"] | Transform `/skill:` input in the existing `input` handler (`edge/skill-aliases.ts`), or record a Pi gap? | HIGH |
+| FG-05 | skills, commands | **GAP: dynamic context injection `` !`cmd` `` and ` ```! ` blocks never run.** Common in real plugins, for example `!`git status``. | Runs the shell command before the content reaches the model; a failure aborts the invocation; `shell:` selects bash or powershell [doc:skills "Dynamic context injection"; bin: `e.includes("!`")`] | Literal text reaches the model; no code handles it [repo: no match outside `bridges/mcp/adapter-escape.ts`] | Implement (input transform plus a spawn chokepoint), or record a Pi gap? Needs a security review either way | HIGH |
+| FG-06 | skills, commands | **CONTRA: description fallback.** D-86-06 (SKILL-02) followed the older "first paragraph" docs. | First non-empty line; a `#` heading yields its text without the hashes; cut at 100 chars (97 + `...`) [bin: `A2e(content,"Plugin skill"/"Plugin command")`; doc:skills "first non-empty line"] | Skills: first prose paragraph, headings skipped, no length cut [repo: `bridges/skills/frontmatter-degrade.ts::firstBodyParagraph`]. Commands: Pi's own fallback, first non-empty line cut at 60 chars, `#` kept [pi] | Re-align skills to `A2e`? Synthesize a command `description` at install so the 60-char Pi rule never applies? | HIGH |
+| FG-07 | skills | **GAP: frontmatter `name` is ignored for the generated name.** | In a plugin, frontmatter `name` replaces the directory name: `skills/review/SKILL.md` with `name: fancy` gives `/my-plugin:fancy` [doc:skills "Namespacing"] | The name comes from the directory basename, and SK-3 rewrites `name` [repo: `bridges/skills/discover.ts:119`] | Derive from frontmatter `name` when present? (Verify first with `claude plugin details`) | MEDIUM |
+| FG-08 | skills | **CONTRA: skill/command clash on one qualified name.** SK-6 gives the command or prompt template priority. | A skill wins over a command of the same name [doc:skills "Namespacing and precedence"; stated for `.claude/`, not verified for one plugin] | `edge/skill-aliases.ts:91-94`: a non-skill command with the name wins | Probe upstream with one plugin that has `skills/x` and `commands/x.md`, then decide | MEDIUM |
+| FG-09 | skills | **EDGE: the `/plugin:skill` alias works only in interactive input.** RPC and print `/plugin:skill` falls through to Pi. | `/plugin:skill` is the only name [doc:skills] | `event.source !== "interactive"` returns `continue` [repo: `edge/skill-aliases.ts:82`] | Accept (and test through the TUI) or extend to RPC? | HIGH |
+| FG-10 | skills, commands | **GAP: frontmatter fields dropped silently.** v1.15 recorded only `allowed-tools`, `disallowed-tools`, `model`, `context: fork` as out of scope, without a decision ID. Also unrecorded: `effort`, `agent`, `background`, skill-scoped `hooks`, `paths`, `shell`, `arguments`. Agents warn about dropped fields; skills and commands say nothing. | All are honored [bin: skill schema `PEo`/`MEo` describe strings; doc:skills table] | Passed through byte-identical; Pi reads only `name`, `description`, `argument-hint`, `disable-model-invocation` [pi 1.4.0] | One divergence ID licensed by the Pi gap; should install warn per field as agents do? | HIGH |
+| FG-11 | commands | **GAP: commands are model-invocable upstream.** | Commands were merged into skills; the model may run them through the Skill tool unless `disable-model-invocation` [doc:skills "Commands have been merged into skills"; bin: plugin commands load through the same skill loader `XK`] | Pi prompt templates are user-only | Record a Pi gap, or also stage commands as skills? | HIGH |
+| FG-12 | commands | **GAP: `user-invocable: false` on commands.** The 2026-10-31 decision covers skills only. | Hidden from `/` and refused on `/name` [doc:skills invocation table] | Listed and runnable | Extend the skills divergence ID to commands | HIGH |
+| FG-13 | commands | **GAP: the object-map `commands` form makes the plugin unavailable.** | `commands` may be `{name: {source|content, description, argumentHint, model, allowedTools}}` [doc:plugins-reference "commands"] | Non-string element -> `component path ... is not a string` note [repo: `domain/component-paths.ts:62-73`] | Support the map (`content` needs a synthesized file), or record an unsupported form? | HIGH (code), HIGH (doc) |
+| FG-14 | commands, agents, workflows | **CONTRA/EDGE: replace vs union.** Upstream replaces the default dir for `commands`, `agents`, `workflows` and adds for `skills`. D-07 unions all of them. PROJECT.md "Out of Scope" says "explicit declaration replaces the default", which contradicts D-07. | [doc:plugins-reference "How each key combines with its default location"] | Union [repo: `docs/workflows-compatibility.md`; D-07 / COMP-01] | Confirm D-07 still stands, fix the PROJECT.md bullet, pin the union in a scenario | HIGH |
+| FG-15 | agents | **GAP: nested agent files are ignored.** | `agents/review/security.md` registers as `my-plugin:review:security` [doc:sub-agents "Plugin naming"; doc:plugins-reference "Subfolders are part of the agent name"] | Flat, non-recursive [repo: `bridges/agents/discover.ts:3`] | Recurse and colon-join, as CM-4 does for commands? | MEDIUM-HIGH |
+| FG-16 | agents | **EDGE: preloading a `disable-model-invocation` skill.** | Not preloaded: "skills can't be preloaded" [doc:sub-agents "Skills preloading"] | No check in `bridges/agents/` | Skip and warn? | MEDIUM |
+| FG-17 | agents | **GAP: fields with a pi-subagents near-analog are dropped.** `background` (pi-subagents `async`), `memory` (pi-subagents `memory`), `maxTurns`, `isolation`, `color`, `omitClaudeMd`, `autoCompactWindow`, `initialPrompt` (upstream ignores it for plugins). | [bin: agent schema list `...maxTurns,autoCompactWindow,skills,initialPrompt,memory,background,omitClaudeMd,isolation`; doc:sub-agents] | Recorded in `droppedFields` with a warning [repo: `bridges/agents/convert.ts` `SUPPORTED_SOURCE_FIELDS`]; pi-subagents 0.84 reads `async`, `memory`, `maxSubagentDepth`, `toolBudget` | Map `background`->`async`, `memory`->`memory`? Record the rest | MEDIUM |
+| FG-18 | agents | **EDGE: the `--map-model` table is stale.** No `fable` alias; full model IDs are not passed through; targets `claude-opus-4-7`/`claude-sonnet-4-6`. | Aliases `sonnet`, `opus`, `haiku`, `fable`, full IDs, `inherit` [doc:sub-agents "Model field"] | `MODEL_MAP` [repo: `bridges/agents/convert.ts:43-47`] | Refresh the table and pass full `claude-*` IDs through? | MEDIUM |
+| FG-19 | hooks | **BUG: exec-form `${CLAUDE_PLUGIN_ROOT}` is not substituted.** A hook `{"command":"node","args":["${CLAUDE_PLUGIN_ROOT}/x.js"]}` receives the literal string. | "Path placeholders like ${CLAUDE_PLUGIN_ROOT} are substituted per-element" [bin: hook `args` describe string]; "Anywhere in `command` and `args`" [doc:plugins-reference "Where each variable resolves"] | `planSpawn` copies `args` and `command` verbatim; no `substituteClaudeVars` in `bridges/hooks/` [repo: `bridges/hooks/spawn-helpers.ts:33-42`] | None needed: fix in the hooks phase under the bug policy | HIGH |
+| FG-20 | hooks | **GAP: the SessionEnd `reason` mapping beyond `new`->`clear`.** | Closed set `clear`, `resume`, `logout`, `prompt_input_exit`, `other` [bin: `_xi=[...]`] | D-60-04 passes Pi `quit`/`reload`/`new`/`resume`/`fork` through; matcher closed set empty [repo: `domain/components/hook-events.ts:262-265`] | Map `quit`->`prompt_input_exit`? `reload`/`fork`->`other`? Admit which matchers? | HIGH |
+| FG-21 | hooks | **GAP: SessionStart on Pi `reload`.** | No `reload` value; enum `startup`/`resume`/`clear`/`compact`/`fork` [bin: `source:U([...])`] | Sends `source: "reload"` [repo: `bridges/hooks/payloads/session-start.ts:34`] | Send `startup`, suppress, or keep `reload` as a Pi-gap divergence? | HIGH (facts), upstream behavior for a reload unknown |
+| FG-22 | hooks | **GAP: new handler fields.** `once: true` (run once, then remove) and `onFailure: "continue"|"block"` (`block` turns a crash, timeout, or other exit code into exit 2). | [bin: command-hook schema `once`, `onFailure` describe strings] | `once` is tolerated in the schema and not implemented; `onFailure` is not modeled [repo: `domain/components/hooks/schema.ts:44-45`] | Implement both (small), or record them? | HIGH |
+| FG-23 | hooks | **EDGE: new events and a doc contradiction.** `DirectoryAdded`, `PreModelSwitch`, `PostModelSwitch` exist (HKMS-01 covers the model-switch pair). PROJECT.md says the inapplicable events are "silently dropped ... debug-logged only", but the partition drops every non-admitted event as `{unsupported hooks}`. | [bin: hook event tuple] | `domain/components/hooks/partition.ts` (`kind: "event"`) | Record `DirectoryAdded`; correct PROJECT.md or the code | MEDIUM |
+| FG-24 | hooks | **GAP: the manifest `hooks` field is never installed.** A path, an array, or an inline object is read only to detect a hooks module; only `hooks/hooks.json` installs. The rest is dropped silently. | Merges with `hooks/hooks.json`; also inline objects and the marketplace-entry form [doc:plugins-reference "hooks"] | [repo: `domain/hooks-resolution.ts:65-75,140-152`] | Implement the merge, or classify it unsupported so it is not silent? | HIGH |
+| FG-25 | hooks | **EDGE: doc drift.** `docs/hooks-compatibility.md` and the `hook-events.ts` header say Pi compact events "carry no trigger field" and that only match-all is supported. The code admits `manual`/`auto` (PDEF-08). Pi 1.3/1.4 carry `reason: manual|threshold|overflow`. | -- | `NON_TOOL_EVENT_CLOSED_SETS.PreCompact` | None: fix the docs; pin it with a scenario | HIGH |
+| FG-26 | hooks | **EDGE: `systemMessage` is dropped as "no Pi surface".** Pi has `ctx.ui.notify`. | Shown to the user [doc:hooks] | Silent drop [repo: `docs/hooks-compatibility.md`] | Surface it through the notify chokepoint? | MEDIUM |
+| FG-27 | mcp | **CONTRA: `mcpServers` sources merge upstream; MC-1 picks the first.** | `.mcp.json` loads first, then each declared shape; a server name declared later replaces an earlier one; arrays and `.mcpb` bundles are accepted [doc:plugins-reference "mcpServers"] | MC-1: entry > manifest > `.mcp.json`, first match wins, no merge [repo: `docs/prd` MC-1] | Re-decide MC-1 for parity, or record it with an ID | HIGH |
+| FG-28 | mcp | **EDGE: one malformed server.** Upstream skips that server only; the extension makes the whole plugin `(unavailable) {malformed mcp}`. | [doc:mcp; `docs/mcp-compatibility.md` "Invalid server configs"] | Documented, but no decision ID found | Confirm the license ID, or align | MEDIUM |
+| FG-29 | mcp | **PIGAP to note for the harness: project-scope servers in headless sessions.** pi-mcp-adapter skips an unapproved project server unless user-global `settings.projectServers: "allow"`; upstream never asks for plugin servers. | [`docs/mcp-compatibility.md` "Project-scope servers"] | Adapter-owned trust | The harness must configure the adapter, or project-scope MCP scenarios cannot connect | HIGH |
+| FG-30 | mcp | **EDGE: adapter 7.x.** Every MCP doc row was measured on 5.0/5.2 (`toolPrefix`, `directTools`, `auth: "oauth"`, `mcp-adapter.json`, `pi-mcp-adapter/status/v1`). The milestone raises the floor to 7.x. | -- | -- | Re-measure in the harness phase; a break is fixed there | MEDIUM |
+| FG-31 | workflows | **PIGAP to record: no run approval.** Upstream asks before running a plugin workflow by name (manual mode) or relies on permission rules (`-p`); the engine runs at once. | [doc:workflows "Approve the plan before it runs"] | Engine-owned | Record it as a Pi gap with an ID | HIGH |
+| FG-32 | workflows | **EDGE: typed arguments.** Upstream: the model passes `args` as structured data; there is no stated rule for text typed after `/plugin:name`. The engine gives `{_, _raw, key=value}`. | [doc:workflows "Pass input to a saved workflow"] | `docs/workflows-compatibility.md` "Script semantics" | Accept the engine's shape (no upstream position) and pin it | MEDIUM |
+| FG-33 | all | **EDGE: the user-invocable decision has no ID yet.** Spike 028 took the decision on 2026-10-31, but it has no ID in PROJECT.md. | -- | -- | Assign IDs to the four 2026-10-31 decisions (user-invocable, compact, fork, new->clear) | HIGH |
+
+Existing scenario impact: `features/plugin/session-start-hooks.feature` expects `source new`. The recorded `new`->`clear` change makes both scenarios fail. The hooks phase must update them as the scenario that fails without the change.
+
+---
 
 ## Feature Landscape
 
-### Table Stakes (each must have a scenario)
+### Table Stakes (each component phase must cover these)
 
-Missing any of these means a regression in core marketplace behavior can ship without a red scenario.
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Listing and naming per kind, model-free | A Claude user knows `/plugin:name`, `plugin:agent`, `mcp__plugin_p_s__tool` | LOW | `get_commands`, the probe extension, companion surfaces (spike 028) |
+| Frontmatter and field variants per kind | These are the upstream contract fields a plugin author relies on | MEDIUM | Pin each MATCH and each DIV; a GAP waits for its decision |
+| Invocation through the faux model | Shows that what reaches the model matches upstream | MEDIUM | Faux records the system prompt, the user message, and tool calls |
+| Companion-missing degradation (agents, MCP, workflows) | Core Value: degradation never blocks the install | LOW | `{requires pi-subagents}` / `{requires pi-mcp-adapter}` / `{requires pi-dynamic-workflows}`; recovery = load the companion, then `/reload`, with no reinstall |
+| Removal and replacement through uninstall, disable, enable, update | Lifecycle parity | MEDIUM | Observe through the host after `new_session` (spike: it reloads resources) |
+| Hook parity fixes (`new`->`clear`, `compact`, `fork`) | Recorded milestone target | MEDIUM | Each needs a scenario that fails without the change |
+| FG-19 exec-form placeholder fix | Bug policy | LOW | One hooks scenario |
 
-#### `marketplace add`
+### Differentiators (where this suite goes beyond earlier milestones)
 
-| ID | Behavior | Observable result | Sources | Governing IDs | Complexity |
-|----|----------|-------------------|---------|---------------|------------|
-| MF-ADD-01 | Adding a marketplace records it in the chosen scope under the name its manifest declares | `cascade`; block `{name:<manifest name>, scope, status:"added", plugins:[]}`; sev `info`; reload `false`; no tally (single-target) | any | MA-1, MA-3, MA-5, MA-11, MURL-01, SNM-33 | LOW for dir/file; MEDIUM for url/gh (stand-in) |
-| MF-ADD-02 | `--scope` omitted adds to the user scope | block `scope:"user"` | dir (one kind suffices) | MA-2, SC-5 | LOW |
-| MF-ADD-03 | An added marketplace appears in `marketplace list` and survives a new session (config write-back plus load-time reconcile stay a no-op) | `marketplace list` after `new_session` shows the row | dir, url | MA-1, WB-01, NFR-2 | LOW |
-| MF-ADD-04 | Adding a name the scope already holds fails as a duplicate, on the manifest-derived name | block `{name:<derived>, status:"failed", reasons:["duplicate name"]}`; sev `error`; `summary:"A marketplace operation has failed."` | dir, url | MA-8, ATTR-07 | LOW |
-| MF-ADD-05 | The same marketplace can be added to both scopes independently | two adds succeed; list shows two rows, project first | dir | CMP-1..8, D-29, SC-6 | LOW |
-| MF-ADD-06 | A path that does not exist fails as source missing, with the typed source as the subject | `{name:<raw source>, status:"failed", reasons:["source missing"]}`; sev `error` | dir | ATTR-07, NFR-5 | LOW (needs a path placeholder, see Dependencies) |
-| MF-ADD-07 | A malformed or schema-invalid manifest fails as invalid manifest, with the typed source as the subject | `reasons:["invalid manifest"]`, name = raw source | dir, url | ATTR-07, D-48-B, MA-9 | LOW for dir; MEDIUM for url |
-| MF-ADD-08 | Refused source forms fail at parse level as unsupported source, and the git host receives no request | `{name:<raw>, status:"failed", reasons:["unsupported source"]}`; stand-in records zero requests | parse level, Scenario Outline: `http://…`, `ssh://…`, `git@host:o/r.git`, `https://github.com/o/r/tree/main`, `https://github.com/o` (no repo), `foo` (bare word), `a/b/c`, `~other/mp` | MA-10 (as amended by D-76-01..04), SP-1, SP-3, SP-4, SP-5, MM-4 | LOW |
-| MF-ADD-09 | A url clone the host answers 404 fails as source missing | `reasons:["source missing"]`, name = raw URL | url | D-76-09, MURL-09 | MEDIUM (armable stand-in) |
-| MF-ADD-10 | A url clone the host answers 5xx, or drops the connection on, fails as network unreachable | `reasons:["network unreachable"]` | url | D-76-09, GAUTH-02 | MEDIUM; the drop must happen before any response bytes, see Pitfalls |
-| MF-ADD-11 | A url clone the host answers 401, with no stored credential, fails as authentication required | header `reasons:["authentication required"]`, `plugins:[]` (code; the catalog shows a synthetic child, see conflicts) | url only (never gh, see Anti-Features) | D-76-08, GAUTH-03, GAUTH-04, PROV-02 | HIGH (credential-helper isolation) |
-| MF-ADD-12 | A GitHub source clones from `GITHUB_BASE_URL` at `<base>/<owner>/<repo>.git`, and the record keeps the GitHub identity | add succeeds; a later `marketplace info` shows `source:{sourceKind:"github", owner, repo}`; the stand-in records a request under `/<owner>/<repo>.git` | gh (`owner/repo`, `https://github.com/o/r`) | MA-1, D-76-02, MURL-09, new `GITHUB_BASE_URL` requirement | MEDIUM (new production env var) |
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Tool-use hooks driven by scripted faux tool calls | Proves PreToolUse/PostToolUse exit codes and JSON decisions end-to-end without a key | MEDIUM | Spike: RPC `bash` does not fire PreToolUse; only a model tool call does |
+| Agent runs with the child prompt recorded | Proves body conversion, `${CLAUDE_*}` substitution, preloads, tools | MEDIUM | `async: false` only (spike gotcha) until the 0.84 floor is proven |
+| MCP calls through the adapter, logged by the stub | Proves naming, variable expansion, env, arguments end-to-end | MEDIUM | Spike: go through the `mcp` proxy; direct tools are not active by default (`directTools: "search"`) |
+| Workflow runs read from `.events.jsonl` | Proves `meta.name`, args parsing, result | LOW | Results are not delivered over RPC (spike gotcha) |
+| Cross-kind: hook on a plugin MCP tool, agent granted a plugin MCP tool | The kinds work together as upstream promises | MEDIUM | Needs both fixtures from the harness phase |
 
-#### `marketplace remove` / `rm`
+### Anti-Features
 
-| ID | Behavior | Observable result | Sources | Governing IDs | Complexity |
-|----|----------|-------------------|---------|---------------|------------|
-| MF-RM-01 | Removing a marketplace with no installed plugins drops it | `{status:"removed", plugins:[]}`; sev `info`; reload `false` | dir, url | MR-1, MR-2, MR-8, MURL-04 | LOW |
-| MF-RM-02 | Removing a marketplace uninstalls every plugin installed from it (cascade) | block `status:"removed"`; one row per plugin `{status:"uninstalled", name, id:"<p>@<mp>", reasons:[]}`, no `version`; reload `true` | dir (path fixture already supports install) | MR-2, MR-3, MR-8, D-22-02 | LOW |
-| MF-RM-03 | After the cascade, a new session no longer offers the plugin's skills, and `plugin list` no longer lists the plugin | `the session offers no skills`; `plugin list` shows `marketplaces: []` | dir | MR-2, MR-5, NFR-2 | LOW (reuses session steps) |
-| MF-RM-04 | A removed marketplace stays removed in a new session (config entry deleted, so reconcile does not re-add it) | `marketplace list` after `new_session` shows none | dir | WB-01, MR-2 | LOW |
-| MF-RM-05 | Removing a name the requested scope does not hold fails as not added, with the scope bracket | `kind:"marketplace-not-added"`, `{name, scope, reasons:["marketplace not added"]}` (or `marketplace not added to <scope> scope` when the other scope holds it); sev `error` | parse-free | ATTR-06, SCOPE-01, CMP-4 | LOW |
-| MF-RM-06 | Removing a name neither scope holds, with no `--scope`, fails as not added with no scope | `marketplace-not-added`, `scope` absent, `reasons:["marketplace not added"]` | — | ATTR-06, SC-4 | LOW |
-| MF-RM-07 | `rm` is an alias of `remove` | identical result to MF-RM-01 | dir | AP-3 (router aliases) | LOW (one scenario, or an Outline row) |
-| MF-RM-08 | A removed git marketplace can be added again from the same source (its clone was deleted, so there is no stale clone) | second add `status:"added"` | url, gh | MR-5, MURL-04, MA-6 | MEDIUM |
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Asserting on files the bridge wrote | Easy to check | Milestone rule: observe through Pi or a companion only. It also duplicates the unit tests | Probe extension, `get_commands`, companion surfaces |
+| Testing model auto-selection of skills or agents | Upstream headline behavior | Needs a real model (RM) | Assert the description reaches the model's system prompt (FX) |
+| Workflows whose scripts call `agent()` | Real workflows do | Needs the faux model reachable from the engine's agents; not tried (spike) | Defer to a real-provider milestone |
+| Background (`async: true`) agent runs | Upstream default for some agents | pi-subagents 0.74 failed on host packages; unproven at 0.84 | Use `async: false`; add one async scenario only if the harness phase proves it |
+| Pinning a GAP behavior before the user decides | Keeps phases moving | Locks in an unlicensed divergence | The discuss step of each phase settles the FG items first |
 
-#### `marketplace list` / `ls`
+## Per-Kind Contracts
 
-| ID | Behavior | Observable result | Sources | Governing IDs | Complexity |
-|----|----------|-------------------|---------|---------------|------------|
-| MF-LS-01 | With nothing added, the list is empty | `cascade`, `marketplaces:[]`; sev `info` (tally shape to be read off a real run) | — | ML-4 (as amended), CMC-10, D-16-17 | LOW |
-| MF-LS-02 | The list shows every marketplace of both scopes, project scope first, each with its autoupdate state | one block per record, `{name, scope, plugins:[], details:{autoupdate, lastUpdatedAt}}`; tally `label:"Marketplace list"` | dir plus url | ML-1..3, SC-6, MSG-GR-3 | MEDIUM (`lastUpdatedAt` is a run-time timestamp, see Dependencies) |
-| MF-LS-03 | `--scope` narrows the list to one scope | only that scope's rows | dir | SC-6, AP-2 | LOW |
-| MF-LS-04 | `ls` is an alias of `list` | same as MF-LS-02 | dir | AP-3 | LOW |
-| MF-LS-05 | Listing never touches the network | stand-in records zero requests after `marketplace list` over git-sourced records | url, gh | NFR-5, ML-3 | LOW once the stand-in records requests |
+### 1. Skills
 
-#### `marketplace info`
+| # | Upstream behavior | Evidence / conf | Extension | Disposition | Tier |
+|---|-------------------|-----------------|-----------|-------------|------|
+| S1 | Plugin skills are invoked as `/plugin:skill` | doc:skills, HIGH | `/skill:<plugin>-<skill>` (SK-1/SK-2); `/plugin:skill` alias in interactive input only (SK-6) | DIV(SK-2, Pi name validator `a-z0-9-`) + **FG-09** | MF (`get_commands`), TUI (alias) |
+| S2 | `<plugin>-` prefix | upstream: no elision | Elided (SK-2) | DIV(SK-2/RN-1) | MF |
+| S3 | Name from frontmatter `name` | doc:skills, MEDIUM | Directory basename | **FG-07** | MF |
+| S4 | `description` fallback | bin `A2e`, HIGH | First paragraph | **FG-06** | MF |
+| S5 | `when_to_use` appended; 1,536-char cut | doc:skills, HIGH | WTU-01/02 | MATCH | MF (description in `get_commands`) |
+| S6 | Unparseable frontmatter | upstream: skill loads, debug-only message | SKILL-01: placeholder, `disable-model-invocation: true`, install warning (WARN-01) | DIV(SKILL-01/WARN-01) | MF |
+| S7 | `disable-model-invocation: true` hides the skill from the model; `/name` still works | doc:skills, HIGH | Pi-native, passed through | MATCH | FX (absent from the system prompt), MF (listed) |
+| S8 | `user-invocable: false` hides it from `/` and refuses `/name` | bin + doc, HIGH | Listed and runnable | DIV(2026-10-31 Pi-gap decision; **FG-33** ID) | MF |
+| S9 | `$ARGUMENTS`, `$N`, `ARGUMENTS:` append | bin `T2e`, HIGH | Raw append by Pi | **FG-04** | FX |
+| S10 | `` !`cmd` `` injection | doc:skills, HIGH | Literal | **FG-05** | FX |
+| S11 | `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, `${CLAUDE_SKILL_DIR}`, `${CLAUDE_PROJECT_DIR}` | doc:skills, plugins-reference, HIGH | Install-time substitution; PROJECT_DIR at project scope only (SK-4, SUB-01/02) | MATCH / DIV(SUB-02 at user scope) | FX |
+| S12 | `${CLAUDE_SESSION_ID}`, `${CLAUDE_EFFORT}` | bin, HIGH | Literal | **FG-03** | FX |
+| S13 | `allowed-tools`, `disallowed-tools`, `model`, `effort`, `context: fork`, `agent`, `background`, `hooks`, `paths`, `shell`, `arguments` | bin schema, HIGH | Ignored silently | Partly recorded (v1.15 Out of Scope, no ID) + **FG-10** | n/a (pin "still invocable") |
+| S14 | `skills` manifest key adds to `skills/` | doc:plugins-reference, HIGH | Union (D-07) | MATCH | MF |
+| S15 | Same-plugin references | -- | Rewritten to Pi invocations (SK-7, D-142) | Pi-name necessity | FX (body as the model sees it) |
+| S16 | Skill vs command clash | doc, MEDIUM | Command wins | **FG-08** | TUI |
+| S17 | Enable/disable/uninstall take effect | upstream: `/reload-plugins` | After `/reload` (NFR-2) | DIV(NFR-2) | MF |
 
-| ID | Behavior | Observable result | Sources | Governing IDs | Complexity |
-|----|----------|-------------------|---------|---------------|------------|
-| MF-INFO-01 | Info on a directory marketplace shows its absolute path, autoupdate state and description | `kind:"marketplace-info"`, `{name, scope, details:{autoupdate:false, lastUpdatedAt}, source:{sourceKind:"path", absPath}, description?}` | dir, file | INFO-01, INFO-07, MA-3 | MEDIUM (absPath and timestamp placeholders) |
-| MF-INFO-02 | Info on a url marketplace shows the identity URL (`.git` and trailing slash stripped) and the ref | `source:{sourceKind:"url", url, ref?}` | url (with and without `#ref`) | MURL-05, D-76-09, D-76-10, D-2-05 | MEDIUM |
-| MF-INFO-03 | Info on a GitHub marketplace shows owner, repo and ref | `source:{sourceKind:"github", owner, repo, ref?}` | gh (`owner/repo#ref`, `owner/repo@ref`) | INFO-01, D-76-04 | MEDIUM |
-| MF-INFO-04 | A name held by both scopes, with no `--scope`, fans out into one block per scope, project first | `kind:"marketplace-info-cascade"`, `blocks:[project, user]` | dir | INFO-03, MSG-GR-3 | MEDIUM (new driver kind) |
-| MF-INFO-05 | A name neither scope holds fails as not added, with no scope | `marketplace-not-added`, no `scope`, `reasons:["marketplace not added"]`, sev `error` | — | INFO-04, ATTR-06 | LOW |
-| MF-INFO-06 | `--scope` naming the scope that misses, while the other scope holds the name, says which scope missed | `marketplace-not-added`, `scope:"user"`, `reasons:["marketplace not added to user scope"]` (code; the catalog shows plain `marketplace not added`) | dir | SCOPE-01, CMP-4 | LOW |
-| MF-INFO-07 | Info never touches the network | stand-in records zero requests | url, gh | NFR-5 | LOW |
+### 2. Commands
 
-#### `marketplace update`
+| # | Upstream behavior | Evidence / conf | Extension | Disposition | Tier |
+|---|-------------------|-----------------|-----------|-------------|------|
+| C1 | `/plugin:cmd`; nested dirs colon-joined | bin (path join in `XK` caller), doc, HIGH | CM-1/CM-4 | MATCH | MF |
+| C2 | No prefix elision | bin, HIGH | `<plugin>-` elided | DIV(CM-2, D-141-01/02) | MF |
+| C3 | Dotfile entries registered | measured 2.1.228 | Skipped | DIV(CM-4) | MF |
+| C4 | Description fallback | bin `A2e`, HIGH | Pi rule (60 chars, `#` kept) | **FG-06** | MF |
+| C5 | `argument-hint` | doc, HIGH | Pi-native | MATCH | TUI or probe (`get_commands` omits it) |
+| C6 | `$ARGUMENTS` | bin, HIGH | Pi-native | MATCH | FX |
+| C7 | `$N` 0-based; missing index stays literal | bin, HIGH | 1-based; missing becomes empty | **FG-01** | FX |
+| C8 | `ARGUMENTS:` append with no placeholder | bin, HIGH | Dropped | **FG-02** | FX |
+| C9 | `$ARGUMENTS[N]`, `$name`, `\$` | bin, HIGH | Not supported | **FG-03** | FX |
+| C10 | Shell-quoted arguments (`"a b"` = one) | bin `Ck` shell-quote, doc, HIGH | Pi `parseCommandArgs` quotes | MATCH (verify escapes) | FX |
+| C11 | Model-invocable through the Skill tool | doc, HIGH | User-only | **FG-11** | RM to prove upstream; pin a negative FX |
+| C12 | `disable-model-invocation`, `user-invocable`, `allowed-tools`, `model`, `effort`, `context`, `agent` | doc, HIGH | Ignored | **FG-10/FG-12** | MF |
+| C13 | Malformed frontmatter | upstream loads | CMD-01 neutralizes plus warning | MATCH + DIV(WARN-01) | MF |
+| C14 | `${CLAUDE_*}` in the body | doc, HIGH | CM-3, SUB-02 | MATCH | FX |
+| C15 | `commands` object map | doc, HIGH | Plugin unavailable | **FG-13** | MF |
+| C16 | `commands` key replaces `commands/` | doc, HIGH | Union | DIV(D-07) + **FG-14** | MF |
+| C17 | `!`cmd`` | doc, HIGH | Literal | **FG-05** | FX |
 
-| ID | Behavior | Observable result | Sources | Governing IDs | Complexity |
-|----|----------|-------------------|---------|---------------|------------|
-| MF-UPD-01 | Updating a marketplace whose manifest did not change skips it as up to date | `{status:"skipped", reasons:["up-to-date"], plugins:[]}`; sev `info`; reload `false` | dir, url, gh | UXG-05, MU-1, MURL-03 | LOW for dir; MEDIUM for git |
-| MF-UPD-02 | Updating a marketplace whose manifest changed reports it updated, with no plugin rows when autoupdate is off | `{status:"updated", plugins:[]}`; reload `false` | dir, url (new commit served), gh | UXG-05, MU-4, MU-6, MURL-03 | MEDIUM (publish a new commit to the stand-in repo) |
-| MF-UPD-03 | With autoupdate off, installed plugins keep their version after a manifest update | `plugin list` still shows the old version | dir | MU-6 | LOW |
-| MF-UPD-04 | With autoupdate on, a marketplace update updates the installed plugins whose offered version moved | block `status:"updated"`; rows `{status:"updated", from, to, scope}`; reload `true`; a new session offers the new skill version | dir (one git kind optional) | MU-4, MU-6, MU-7, MU-9 | MEDIUM |
-| MF-UPD-05 | With autoupdate on and nothing changed, the marketplace collapses to up to date | `{status:"skipped", reasons:["up-to-date"], plugins:[]}` | dir | UXG-05 | LOW |
-| MF-UPD-06 | A refreshed manifest that offers a new plugin does not install it | `plugin list` shows the new plugin `available`, not installed | dir | MU-8 | LOW |
-| MF-UPD-07 | A bare `update` refreshes every marketplace of both scopes and emits one result per marketplace, each with the plural tally | N `cascade` payloads, project first, each tally `label:"Marketplace update"` | dir | MU-1, SC-6 | MEDIUM (driver must accept N payloads) |
-| MF-UPD-08 | A bare `update` with nothing added reports no marketplaces | one `cascade`, `marketplaces:[]` | — | MU-1, CMC-10 | LOW |
-| MF-UPD-09 | Updating a name the scope does not hold fails as not added (explicit-scope and bare forms) | `marketplace-not-added` with and without `scope` | — | ATTR-06, SC#1, SC-4 | LOW |
-| MF-UPD-10 | A path marketplace whose manifest became invalid fails with an invalid-manifest child row | block `status:"failed"`; one row `{name:<mp>, status:"failed", reasons:["invalid manifest"], cause}`; sev `error` | dir | ATTR-10, D-48-B, NFR-5 | LOW |
-| MF-UPD-11 | A git marketplace whose host fails (5xx, dropped connection, or 404) fails as network unreachable | block `failed`; child row `reasons:["network unreachable"]`, `cause.causeChain[0]:"Failed to update marketplace \"<mp>\"."` | url | MU-5, MURL-03 | MEDIUM |
-| MF-UPD-12 | A url marketplace whose host now answers 401 fails as authentication required, with the cause line that names `git credential approve` for that host | child row `reasons:["authentication required"]`; cause chain ends with `no credential was obtained for 127.0.0.1:<port>; store one with: …` | url only | GAUTH-04, D-1-02 | HIGH (port placeholder plus credential isolation) |
+### 3. Agents (pi-subagents)
 
-#### `marketplace autoupdate` / `noautoupdate`
+| # | Upstream behavior | Evidence / conf | Extension | Disposition | Tier |
+|---|-------------------|-----------------|-----------|-------------|------|
+| A1 | Named `plugin:agent` | doc:sub-agents, plugins-reference, HIGH | Frontmatter name `plugin:agent` (AG-1a), file `pi-claude-marketplace-<plugin>-<agent>.md` (AG-1/AG-5), flat alias | MATCH | FX (`subagent {action:"list"}`), MF (`/subagents-doctor` count) |
+| A2 | Nested `agents/x/y.md` -> `plugin:x:y` | doc, MEDIUM-HIGH | Not discovered | **FG-15** | FX |
+| A3 | `description` required | doc, HIGH | Fallback text plus warning (AG-7) | DIV(AG-7) | FX + MF warning |
+| A4 | `tools` omitted inherits all | doc, HIGH | No allowlist -> pi-subagents defaults (#179) | MATCH | FX (child tool list) |
+| A5 | Tool names | -- | `Read/Bash/Edit/Write/Grep/LS` 1:1, `Glob`->`find`; others silently dropped (AG-7) | DIV(AG-7) | FX |
+| A6 | Zero resolvable tools: refuse the launch | doc, HIGH | Install throws (AG-11) | DIV(AG-11: install-time instead of launch-time) | MF |
+| A7 | `disallowedTools` | doc, HIGH | Filtered, or emitted as `excludeTools` when `tools` is omitted | MATCH | FX |
+| A8 | MCP tools in `tools` | doc, HIGH | `mcp:plugin_<p>_<s>_[/<tool>]` (ANAME-02) | MATCH | FX (needs the MCP stub) |
+| A9 | `model` (aliases, `inherit`, full ID) | doc, HIGH | Omitted by default; `--map-model` maps 3 aliases | DIV(AG-7) + **FG-18** | FX (child model), MF (info) |
+| A10 | `skills` preload: full content injected | doc, HIGH | Resolved to `<plugin>-<skill>`; unknown dropped with a warning | MATCH + **FG-16** | FX (child prompt holds the skill) |
+| A11 | `hooks`, `mcpServers`, `permissionMode` ignored for plugin agents | doc, HIGH | Dropped with guidance (#179) | MATCH | MF (install warning) |
+| A12 | `effort` | doc, HIGH | Mapped to `thinking` through an allowlist | MATCH (approx.) | FX |
+| A13 | `maxTurns`, `memory`, `background`, `isolation`, `color`, `omitClaudeMd`, `autoCompactWindow` | bin, HIGH | `droppedFields` warning | **FG-17** | MF |
+| A14 | Body = system prompt; `${CLAUDE_*}` substituted | doc, HIGH | PI-10 | MATCH | FX |
+| A15 | Lower priority than user/project agents | doc, HIGH | Cross-plugin ownership refusal (AG-9); pi-subagents order | EDGE (user agent with the same name: not modeled) | FX |
+| A16 | `SubagentStart`/`SubagentStop` hooks | doc, HIGH | Not supported | DIV(recorded deferral, hooks-compatibility) | -- |
+| A17 | pi-subagents absent | -- | `{requires pi-subagents}`; info `(missing)`; recovery by `/reload` | DIV(soft-degrade decision) | MF |
 
-| ID | Behavior | Observable result | Sources | Governing IDs | Complexity |
-|----|----------|-------------------|---------|---------------|------------|
-| MF-AU-01 | Turning autoupdate on for a marketplace records it | `{status:"autoupdate enabled", plugins:[]}`; sev `info`; reload `false`; no tally | dir | MAU-1, UXG-04, SNM-33 | LOW |
-| MF-AU-02 | Turning autoupdate on twice reports it already on | `{status:"skipped", reasons:["already autoupdate"]}`; sev `info` | dir | MAU-3, UXG-02 | LOW |
-| MF-AU-03 | A freshly added marketplace already has autoupdate off, so `noautoupdate` reports it already off | `{status:"skipped", reasons:["already no autoupdate"]}` | dir (also url and gh: add never enables it) | MAU-1, MAU-4, catalog "github-source" note | LOW |
-| MF-AU-04 | `noautoupdate` after `autoupdate` turns it off | `status:"autoupdate disabled"` | dir | MAU-1 | LOW |
-| MF-AU-05 | The setting shows in `marketplace list` and `marketplace info`, and survives a new session | list `details.autoupdate:true`; info `details.autoupdate:true` after `new_session` | dir | MAU-4 (as amended by SPLIT-01: config, not state) | LOW |
-| MF-AU-06 | With no name, the flip applies to every marketplace of both scopes, with the plural tally | one block per record; tally `label:"Marketplace autoupdate"` | dir | MAU-2, SC-6 | LOW |
-| MF-AU-07 | With no name and nothing added, the result is empty | `marketplaces:[]` | — | MAU-2, CMC-10 | LOW |
-| MF-AU-08 | A name neither scope holds fails as not added; the bare form reports the project scope | `marketplace-not-added`, `scope:"project"`, `reasons:["marketplace not added"]` | — | ATTR-05 | LOW |
+### 4. Hooks
 
-#### Help and usage errors (parse level, network-free)
+| # | Upstream behavior | Evidence / conf | Extension | Disposition | Tier |
+|---|-------------------|-----------------|-----------|-------------|------|
+| H1 | SessionStart `source` | bin, HIGH | Milestone decision: `new`->`clear`, `session_compact`->`compact`, admit the `clear`/`compact`/`fork` matchers | Target; **FG-21** (reload) | MF (startup, new, resume, fork); FX (compact) |
+| H2 | SessionEnd `reason` | bin, HIGH | Pass-through; empty matcher set | **FG-20** | MF |
+| H3 | UserPromptSubmit fires; exit 2 blocks the prompt; no matcher | doc, HIGH | Matched; matcher refused | MATCH | MF (fires), FX (block keeps the prompt from the model) |
+| H4 | PreToolUse/PostToolUse/PostToolUseFailure tool matchers, pipe-OR | doc, HIGH | Tool map; regex -> partial | MATCH / DIV(Out of Scope: regex) | FX |
+| H5 | Exit 2 blocks with stderr to the model; other codes non-blocking | doc, HIGH | Matched | MATCH | FX |
+| H6 | JSON `permissionDecision`, `updatedInput`, `updatedToolOutput`, `continue:false`, `suppressOutput` | doc, HIGH | Matched (`defer` missing) | MATCH | FX |
+| H7 | `additionalContext` on every event | doc, HIGH | SessionStart and Stop only | DIV(hooks-compat, no ID) **EDGE** | FX |
+| H8 | `systemMessage` | doc, HIGH | Dropped | **FG-26** | MF |
+| H9 | `if` field | doc, HIGH | Compiler with fall-open | MATCH | FX |
+| H10 | Stop/StopFailure, block re-entry, `stop_hook_active`, 8-block cap | doc, HIGH | v1.16 | MATCH (extra turn boundary, not observable by the hook) | FX |
+| H11 | PreCompact/PostCompact `trigger` and matchers | bin, HIGH | `manual`/`auto` admitted (PDEF-08) | MATCH + **FG-25** docs | FX (`/compact` summarization uses the model) |
+| H12 | Exec-form `${CLAUDE_PLUGIN_ROOT}` | bin, HIGH | Literal | **FG-19 BUG** | MF (SessionStart exec-form hook) |
+| H13 | Env: `CLAUDE_PLUGIN_ROOT`, `CLAUDE_PLUGIN_DATA`, `CLAUDE_PROJECT_DIR`, `CLAUDECODE`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_ENV_FILE` (read back) | doc, HIGH | All set; `CLAUDE_ENV_FILE` not sourced back | MATCH / DIV(env-vars.md) | MF |
+| H14 | `timeout` seconds, defaults | doc, HIGH | Matched, SessionEnd per-hook budget (HKTO-01 backlog) | MATCH / recorded backlog | MF |
+| H15 | `async`, `asyncRewake` | doc, HIGH | Matched (not on Stop) | MATCH | MF |
+| H16 | `once`, `onFailure` | bin, HIGH | Not implemented | **FG-22** | MF |
+| H17 | Handler types `http`, `prompt`, `agent`, `mcp_tool` | doc, HIGH | Partial drop `{unsupported hooks}` | DIV(hooks-compat) | MF (install output) |
+| H18 | Unsupported events | bin, HIGH | Partial drop | DIV + **FG-23** | MF |
+| H19 | Manifest `hooks` field merge | doc, HIGH | Ignored | **FG-24** | MF |
+| H20 | Hooks on plugin MCP tools by Claude name; the proxy `mcp({tool})` reaches hooks as `mcp` | doc, HIGH | ANAME-02; proxy = Pi gap | MATCH / PIGAP | FX |
+| H21 | `${user_config.*}` / `CLAUDE_PLUGIN_OPTION_*` | doc, HIGH | Not supported | DIV(USRCFG-01 backlog) | -- |
+| H22 | Duplicate `session_start` on RPC `new_session` | -- | Deduplicated (#294, SSDEDUP-01) | MATCH | MF |
 
-| ID | Behavior | Observable result | Governing IDs | Complexity |
-|----|----------|-------------------|---------------|------------|
-| MF-USE-01 | `marketplace help` and `help marketplace` print the marketplace usage | `kind:"usage-info"`, `usage:` = `MARKETPLACE_USAGE`; sev `info` | AP-3, RAWS-01 | LOW (driver must accept `usage-info`, which the milestone list omits) |
-| MF-USE-02 | `marketplace` with no subcommand, and an unknown subcommand, print the usage with a reason | `usage-error`, `message:"marketplace requires a subcommand."` / `Unknown marketplace subcommand: "<x>".`, `usage:` = `MARKETPLACE_USAGE`; sev `error` | AP-3 | LOW |
-| MF-USE-03 | A missing required argument names itself (`add`, `remove`, `info`) | `message:"Missing required argument."`, `usage:` = that verb's usage line | MSG-NC-2, AP-5 | LOW |
-| MF-USE-04 | Surplus positionals are rejected | `message:"Too many arguments."` | AP-5 | LOW |
-| MF-USE-05 | Unknown flags are rejected, including `--local` on verbs that do not write config (`list`, `info`, `update`) | `message:"Unknown flag: \"--x\"."` | AP-5 | LOW |
-| MF-USE-06 | A bad or missing `--scope` value is rejected, in any position | `Invalid --scope value: "global". Must be "user" or "project".` / `--scope requires a value: "user" or "project".` | AP-2, AP-4 | LOW |
-| MF-USE-07 | An explicitly empty optional argument is rejected, not treated as omitted (`update ""`, `autoupdate ""`) | `message:"Argument must not be empty."` | AP-6 | LOW |
-| MF-USE-08 | `marketplace help` with an argument is rejected | `message:"marketplace help takes no arguments."`, `usage:"Usage: /claude:plugin marketplace help"` | router | LOW |
+### 5. MCP servers (pi-mcp-adapter)
 
-Usage scenarios suit a few `Scenario Outline`s, one per message family, with columns `command | message | usage`.
+| # | Upstream behavior | Evidence / conf | Extension | Disposition | Tier |
+|---|-------------------|-----------------|-----------|-------------|------|
+| M1 | Tool names `mcp__plugin_<p>_<s>__<tool>` | bin/doc, HIGH | Key `plugin_<p>_<s>_` + `toolPrefix: "mcp"` (ANAME-01) | MATCH | MF (`getAllTools()` after an activating search -- FX -- or with `alwaysLoad`) |
+| M2 | Tools deferred behind tool search; `alwaysLoad` keeps them in the prompt | doc, HIGH | `directTools: "search"` / `true` (ANAME-04); per-tool `_meta` ignored | MATCH / DIV(doc) | FX (faux records the request's tool list) |
+| M3 | Connects at session start, stays connected | doc, HIGH | Adapter `lazy` lifecycle (ANAME-05) | DIV(ANAME-05) | MF (stub log: initialize, tools/list) |
+| M4 | stdio `command`/`args`/`env`; `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, `${CLAUDE_PROJECT_DIR}` | doc, HIGH | AVAR-01..05 | MATCH | MF (stub argv/env log) |
+| M5 | `${VAR:-default}`; plain `${VAR}` | doc, HIGH | Default resolved at install; plain left for the adapter | MATCH (install-time snapshot) | MF |
+| M6 | Credential deny-list | doc, HIGH | Withheld plus warning | MATCH | MF |
+| M7 | `http`/`sse` with `url`, `headers` | doc, HIGH | `httpTransport: "sse"` for sse | MATCH | MF (loopback HTTP stub) |
+| M8 | OAuth unless an `Authorization` header | doc, HIGH | `auth: "oauth"` rule (D-08-04) | MATCH | MF (entry effect visible only on connect; a full OAuth flow is out of scope) |
+| M9 | `timeout`, `request_timeout_ms` | doc, HIGH | `requestTimeoutMs` | DIV(doc: progress resets) | MF |
+| M10 | `ws`, `headersHelper`, `oauth.xaa`, leading `~` | bin, HIGH | `(partially-available) {unsupported mcp}` | DIV(doc) | MF |
+| M11 | One malformed server is skipped | doc, HIGH | Whole plugin unavailable | **FG-28** | MF |
+| M12 | Sources merge | doc, HIGH | First match | **FG-27** | MF |
+| M13 | Collisions (same key, `-`/`_` fold) | -- | Refused, rolled back (ANAME-03) | DIV(ANAME-03) | MF |
+| M14 | Plugin servers need no approval | doc, HIGH | Adapter project trust | PIGAP **FG-29** | MF |
+| M15 | Tool permission fields | bin, HIGH | Not enforced plus warning (ANAME-07) | DIV(ANAME-07) | MF |
+| M16 | User overrides survive | -- | D-08-01/02, AFILE-06 | Pi-only feature | MF (adapter `/mcp` view or probe) |
+| M17 | Adapter absent | -- | `{requires pi-mcp-adapter}`, info `(missing)` (MC-8, D-01-01) | DIV(soft-degrade) | MF |
+| M18 | `info` status | -- | `pi-mcp-adapter/status/v1` events (MC-11) | Pi-only | MF |
 
-### Differentiators (valuable, not required for the milestone)
+### 6. Workflows (pi-dynamic-workflows)
 
-| ID | Behavior | Value | Complexity | Notes |
-|----|----------|-------|------------|-------|
-| MF-HOST-01 | A url source is cloned at exactly the URL typed, `.git` is not appended, and one request is made per operation | Pins MURL-08/09 end to end: the stand-in serves only the verbatim path and returns 404 for `…/repo.git` | MEDIUM | Needs the request log on the stand-in; asserts paths, not counts of pack exchanges |
-| MF-HOST-02 | GitHub spellings fold to one source: `https://GitHub.com/o/r`, `https://www.github.com/o/r`, `https://github.com/o/r.git`, `https://github.com/o/r/` | Guards D-76-02 | LOW once MF-ADD-12 exists | Scenario Outline |
-| MF-HOST-03 | `owner/repo@ref` and `owner/repo#ref` clone that ref | Guards D-76-04; the PRD (MA-10, SP-2) still says to refuse `@ref` | MEDIUM | Stand-in repo needs a tag or branch |
-| MF-ADD-13 | `add --local` writes the declaration to `claude-plugins.local.json`, and `remove --local` clears it | WB-01 per-machine layer | MEDIUM | Observable only through a user-owned file in the scope root, which steps may name |
-| MF-ADD-14 | `add ~/…` keeps the `~` form and resolves against HOME | MA-4, SP-7 | LOW | HOME is the sandbox, so it is hermetic |
-| MF-RM-09 | A name held by both scopes, removed with no `--scope`, removes only the project record | SC-4 / MR-1 precedence | LOW | Contrast with MF-INFO-04 (fan-out) and MF-AU-06 (flips both) |
-| MF-AU-09 | `autoupdate <name>` with no `--scope`, for a name in both scopes, flips both records in one single-cardinality result | Documents an asymmetry with `update` and `remove` (project only) | LOW | Pin it, or ask whether it is intended |
-| MF-UPD-13 | Autoupdate-on update of a plugin the refreshed manifest dropped: row `skipped {not in manifest}`, sev `warning`, summary `A plugin operation needs attention.` | LIFE-06 | MEDIUM | |
-| MF-UPD-14 | Update of a path marketplace whose directory vanished fails as source missing (not network unreachable) | ATTR-10 / NFR-5 truthfulness | LOW | |
-| MF-INFO-08 | Info on a marketplace whose manifest became invalid reports a `plugin-info` failure row `{status:"failed", reasons:["invalid manifest"]}` (`unparseable` for malformed JSON) | D-48-B / IN-02 | MEDIUM | Driver must accept the `plugin-info` kind; with both scopes the success and the failure come as two payloads |
-| MF-INFO-09 | Info shows `allowedMarketplaces` from `allowCrossMarketplaceDependenciesOn` | D-11-06 | LOW | Needs a manifest-field knob on the fixture |
-| MF-UPD-15 | Update of a `file`-kind marketplace whose manifest sits outside `.claude-plugin/` | Likely exposes a bug, see conflict C-10 | LOW | Write it after the operator rules on C-10 |
+| # | Upstream behavior | Evidence / conf | Extension | Disposition | Tier |
+|---|-------------------|-----------------|-----------|-------------|------|
+| W1 | `/plugin:<meta.name>` | doc:workflows, bin 2.1.267, HIGH | WNAM-01/06 | MATCH | MF (`get_commands` source extension) |
+| W2 | No prefix elision | doc, HIGH | Elided | DIV(WNAM-06/RN-1) | MF |
+| W3 | Non-literal `meta.name`, no `meta` -> skipped | doc, HIGH | Skipped with a warning | MATCH | MF |
+| W4 | `meta` not first, non-`const`, no description | doc, HIGH | Installed with a caveat; the engine refuses at run | DIV(admit-vs-run, documented) | MF (run fails in the events file) |
+| W5 | Determinism blocklist | doc, HIGH | Per-file refusal | MATCH | MF |
+| W6 | Syntax error | doc: reported at run | Refused at install | DIV(documented) | MF |
+| W7 | Size cap 524,288 | bin 2.1.267 | Per-file skip | MATCH | MF |
+| W8 | Dotfiles, symlinks | upstream admits | Refused (D-14) | DIV(D-14) | MF |
+| W9 | `workflows` key replaces `workflows/` | doc, HIGH | Union (D-07) | DIV + **FG-14** | MF |
+| W10 | Run approval | doc, HIGH | None | **FG-31** | -- |
+| W11 | `args` | doc, MEDIUM | `{_, _raw, k=v}` | **FG-32** | MF (events file) |
+| W12 | Engine absent | -- | Envelope written; `{requires pi-dynamic-workflows}`; warning severity on standalone install, manual update, standalone enable (WDEP-02) | DIV(WDEP-02) | MF |
+| W13 | Uninstalled command lingers until `/reload` | -- | Notice (WLIF-06) | PIGAP(no `unregisterCommand`) | MF |
+| W14 | `agent()` inside scripts | doc | Engine | RM / out of scope | RM |
 
-### Anti-Features (do not test)
-
-| Anti-feature | Why tempting | Why not | Alternative |
-|--------------|--------------|---------|-------------|
-| Any scenario that reaches live `github.com` or another public host | "Real GitHub" feels realistic | The cucumber rules forbid the network as a BLOCKER, and the run becomes flaky | `GITHUB_BASE_URL` plus the loopback stand-in |
-| A 401 scenario on a GitHub (`gh`) source | Symmetry with MF-ADD-11 | `hostFromCloneUrl` returns the literal `github.com` for the GitHub kind, so a 401 runs `git credential fill` for `github.com` (it can read the operator's real keychain and send that token to the stand-in), then runs the GitHub Device Flow against real `github.com` (`domain/github-auth.ts` `fetch`), because RPC mode is not `print` | Cover 401 on `url` only. Unit tests cover the Device Flow. |
-| Asserting the clone directory, `sources/<name>/`, the ownership marker or `state.json` contents | Directly "proves" MR-5 or MA-5 | Implementation detail; the cucumber rules say steps name only user-visible things | Prove cleanup through a re-add (MF-RM-08) and a new-session list |
-| Stale-clone and leftover-recognition scenarios (MA-6, MA-12..14) | Real user-visible error tokens | You can reach them only by planting a tree inside the extension's private storage, which is an implementation detail. Unit tests in `tests/orchestrators/marketplace/add.test.ts` already cover them. | Keep them in unit tests |
-| Lock-held (`{lock held}`) and permission-denied (`EACCES`) cascades | Real failure tokens | They need a concurrent process or chmod games, which flake on CI (memory: CI race-test flake cluster) | Unit and integration tests |
-| Device-flow prompt (`device-flow-prompt` kind) | It is a marketplace-add surface | It needs GitHub Device Flow endpoints, which means the network | Unit tests with `deviceFlowHttp` |
-| `bootstrap` (adds `anthropics/claude-plugins-official`) | It is a marketplace add | Plugin command, out of milestone scope. It could run through `GITHUB_BASE_URL` later. | A later milestone |
-| Text-renderer byte forms (`● alpha [project] <autoupdate>`) | `docs/output-catalog.md` is detailed | The suite reads JSON, and the catalog tests already lock the text | Compare JSON payloads |
-| Pinning `lastUpdatedAt` values, absolute temp paths or loopback ports literally | Whole-result tables want every field | They change every run | Placeholder substitution in steps (see Dependencies) |
-| Plugin install, uninstall or update flows beyond the cascade | Fixtures exist | Out of milestone scope | `features/plugin/*` |
-
-## Doc and code conflicts (trust code; each needs a scenario decision)
-
-| # | Where | Docs say | Code does | Recommendation |
-|---|-------|----------|-----------|----------------|
-| C-1 | catalog `add-authentication-required` | Synthetic child failed row carrying `{authentication required}` and the HTTP cause; summary `Some operations have failed.` | `handleAddFailure` puts `reasons:["authentication required"]` on the marketplace header with `plugins:[]` and no cause; the summary is the marketplace form | Pin the code; fix the catalog |
-| C-2 | catalog `scope-mismatch-not-added` (info) and the explicit-scope not-added states of remove, update and autoupdate | `{marketplace not added}` with `[user]` | `crossScopeFlag` / `resolveScopeOrNotifyNotAdded` add `presentInOtherScope`, so the reason becomes `marketplace not added to user scope` when the other scope holds the name | Pin the code; scenario MF-INFO-06 |
-| C-3 | catalog `failure-unreachable` (add) | Bare `(failed)` header, no reason | Never emitted in standalone mode: an unclassified error is re-thrown, and the command run turns it into `kind:"internal-error"`, `summary:"Command failed unexpectedly."` | Stale catalog state. An unclassified TLS error (for example a missing `NODE_EXTRA_CA_CERTS`) surfaces as `internal-error`. |
-| C-4 | catalog "unsupported source" note | Lists `url` as unimplemented | `url` is admitted (MURL-01); only `git-subdir`, `npm` and `unknown` are refused | Doc fix |
-| C-5 | PRD MA-10, SP-2, SP-3 | Refuse `owner/repo@<ref>` and every other `://` host | `owner/repo@ref` → github plus ref (D-76-04); any `https://` host → `url` (MURL-01); `http://`, `ssh://` and `git@` are still refused (D-76-01) | Scenarios follow the code; the PRD needs an amendment |
-| C-6 | PRD MA-7 | Fail with "git not found on PATH" | Git operations use isomorphic-git, so no git binary is needed for clone. The `git` binary is used only by `git credential fill`. | Obsolete requirement; do not test |
-| C-7 | PRD MR-4, MR-8, ML-1..4, MU-1, MAU-3, MA-11 | Text messages, `warning` for a partial remove, `verb: drop` reload | JSON wire: partial remove is `error`; reload is `needsReload`; empty is `marketplaces:[]` | Test the wire; PRD wording is v1-era |
-| C-8 | PRD MAU-4 | Flag round-trips through `state.json` | Flag lives in `claude-plugins.json` (SPLIT-01); a flip never writes state | Test through `list`/`info` and a new session only |
-| C-9 | PRD MU-2 | `git pull --ff-only` | fetch, then `forceUpdateRef` and checkout (D-14); upstream is followed blindly | Not observable; do not test |
-| C-10 | MA-3 (file path) vs `update` | Direct `marketplace.json` path accepted | `addPathInGuard` sets `marketplaceRoot = dirname(dirname(file))`; `update` reads `<marketplaceRoot>/.claude-plugin/marketplace.json`. A manifest outside `.claude-plugin/` therefore updates as `source missing`, and info shows the grandparent as `absPath`. | LIKELY BUG (MEDIUM confidence). Table-stakes scenarios use `<root>/.claude-plugin/marketplace.json`. Raise the other layout with the operator before writing MF-UPD-15. |
-| C-11 | router `MARKETPLACE_USAGE` | `add <source> [--scope user|project]` (no `--local`) | `add`, `remove`, `autoupdate` and `noautoupdate` accept `--local`, and their own usage lines say so | Doc inconsistency inside the code; MF-USE-01 pins it, so decide first whether to fix |
-| C-12 | GAUTH-04 for `add` | "fails with a cause line naming `git credential approve`" | Only the `update` path attaches `NO_STORED_CREDENTIAL_CAUSE`; the add header carries no cause, so `add` shows no cause line | Ask: gap or accepted? MF-ADD-11 pins today's form |
-| C-13 | `update` vs `add` 404 classification | — | `add` maps HTTP 404 → `source missing` (`classifyGitSourceAccessFailure`); `update` uses `classifyGitTransportFailure`, which has no 404 arm, so it falls back to `network unreachable` | Inconsistent truthfulness; pin or fix (MF-UPD-11) |
-
-## Upstream Claude Code parity points
-
-Checked against code.claude.com docs (`discover-plugins`, `plugin-marketplaces`), fetched 2026-10-15. Confidence is HIGH for what the docs state. The binary was not grepped.
-
-| Point | Upstream | Here | Scenario? |
-|-------|----------|------|-----------|
-| Remove uninstalls the marketplace's plugins and clears their settings entries | Yes ("uninstalls every plugin you installed from it and removes their `enabledPlugins` entries") | Yes (cascade plus config write-back) | Yes: MF-RM-02..04 |
-| Bare `name/name` read as GitHub; local paths need `./` or `../` | Yes | Yes (`parseShorthandSourceForm`) | Yes: an MF-ADD-08 row (`a/b/c`) and MF-ADD-12 |
-| `owner/repo#ref` pins a ref | Yes | Yes, plus `@ref` | Differentiator MF-HOST-03 |
-| Third-party marketplaces have auto-update off by default | Yes | Yes, for every kind | Yes: MF-AU-03 |
-| `git@host:path` SSH accepted | Yes | Refused (recorded D-76-01) | Pin the refusal (MF-ADD-08); recorded divergence |
-| Hosted `https://…/marketplace.json` URL | Accepted | Parsed as a `url` git source, so the clone fails | Unrecorded divergence: ask the operator, do not write a scenario yet |
-| Reserved official names (`claude-plugins-official` and others) refused unless from the official source | Yes (`The name '<name>' is reserved…`) | Not enforced | Unrecorded parity gap: ask, do not pin |
-| `/plugin market` short alias | Yes | `Unknown subcommand: "market".` | Gap: ask, do not pin |
-| Bare `marketplace update` leaves plugins at current versions (shell CLI); the panel's "Update marketplace" updates plugins | Mixed | Updates plugins only when autoupdate is on (MU-6) | Pin the current behavior (MF-UPD-03/04); flag the parity question |
-| Private HTTPS uses the git credential helpers and never prompts | Yes | Yes (stored-credential bundle, `GIT_TERMINAL_PROMPT=0`) | MF-ADD-11 / MF-UPD-12 on `url` |
+---
 
 ## Feature Dependencies
 
 ```
-Driver: accept every marketplace payload kind (cascade, marketplace-info,
-        marketplace-info-cascade, marketplace-not-added, usage-error,
-        usage-info, plugin-info) + N payloads per command
-    └──required by──> MF-INFO-*, MF-USE-*, MF-UPD-07, MF-*-not-added rows
+Harness phase (faux provider, companion Pi, MCP stub, hook recorder, probe extension, fixture builders, shared steps, version raise)
+    └──required by──> every kind phase below
 
-Placeholder substitution in result tables (sandbox paths, stand-in
-URL/port, run timestamps)
-    └──required by──> MF-ADD-06/07/09/10/11, MF-INFO-01/02, MF-LS-02, MF-UPD-12
+Decision gate per kind (FG items) ──blocks──> scenarios that pin the gap behavior
 
-Loopback HTTPS git stand-in (BeforeAll, before Pi starts; per-scenario
-reset of repos, arming, request log)
-    ├──required by──> every url/gh row, MF-LS-05, MF-INFO-07, MF-ADD-08 "no request"
-    └──requires──> NODE_EXTRA_CA_CERTS + GITHUB_BASE_URL in the Pi child env
-                   (tests/e2e/_rpc.ts childEnvironment is fixed today)
-
-GITHUB_BASE_URL production env var
-    └──required by──> MF-ADD-12, MF-HOST-02/03, every gh row
-        (must cover canonicalCloneUrl + networkCloneUrl + update.ts:399;
-         leftover recognition compares canonicalCloneUrl identities)
-
-Credential isolation (no system/global git credential helper reachable:
-GIT_CONFIG_NOSYSTEM=1, sandbox HOME/XDG_CONFIG_HOME)
-    └──required by──> MF-ADD-11, MF-UPD-12
-
-Existing path-marketplace fixture + plugin install Given
-    └──required by──> MF-RM-02/03, MF-UPD-03..06
-Fixture knobs: description, invalid manifest, manifest-at-file-path,
-new commit on a served repo, tag/branch
-    └──required by──> MF-INFO-01, MF-ADD-07, MF-UPD-02/10, MF-HOST-03
+Skills fixture builder ──enhances──> Agents (A10 skills preload)
+MCP stub ──required by──> Agents (A8 MCP grants), Hooks (H20 MCP tool matcher)
+Faux tool-call scripting ──required by──> Hooks tool-use, MCP tool calls, Agent runs
+pi-subagents 0.84 floor ──required by──> any async agent scenario (anti-feature until proven)
+pi-mcp-adapter 7.x re-measure (FG-30) ──required by──> MCP phase
+Workflow engine >= 3.15 (honors PI_CODING_AGENT_DIR) ──required by──> Workflows phase
 ```
 
 ### Dependency Notes
 
-- **The driver comes first.** `features/lib/pi-commands.ts::runCommand` validates only `CASCADE_PAYLOAD_SCHEMA` and asserts exactly one payload. `marketplace help` emits `usage-info`, info with a broken manifest emits `plugin-info`, and a bare `update` emits one payload per marketplace, so the milestone's list of four kinds is short by at least two. `PluginWorld.result` is typed `CascadePayload` and needs to widen too.
-- **Stand-in before Pi.** Pi lives for the whole run (`features/support/pi-process.ts`), and its environment is fixed at spawn by `tests/e2e/_rpc.ts::childEnvironment` (`HOME`, `PI_CODING_AGENT_DIR`, `PI_OFFLINE`, `PATH` only). The CA certificate path and `GITHUB_BASE_URL` must therefore exist before `PiProcess.start`, and the stand-in's port is fixed for the run. The per-scenario `Before()` must also reset the stand-in's repos, arming and request log, and assert that they are empty.
-- **Dynamic values.** Every path add stamps `lastUpdatedAt` (`addPathInGuard`), so `marketplace list` and `info` always carry `details.lastUpdatedAt`. `info` carries `absPath` (a temp path). Failure subjects for `dir`, `file` and `url` carry the typed source, which is a temp path or `https://127.0.0.1:<port>/…`. The house rule is "a table lists every field", and steps must not name temp paths, so tables need named placeholders (for example `<marketplaces>/demo`, `<git host>/team/mp.git`, `<a timestamp>`). Running relative `./…` paths from the project cwd is an alternative for subjects only. `stat` resolves relative paths against the process cwd, which equals `ctx.cwd` in this harness.
+- **The harness phase owns every shared file** (`features/support/**`, `features/lib/**`, the shared step modules) under `.agents/skills/cucumber/rules/layout.md` "Parallel work". Kind phases add only their own feature files and verb step modules.
+- **Cross-kind scenarios (H20, A8, A10)** use the stub and fixtures that the harness provides. Each one lives in the consuming kind's phase, so no stream edits another stream's file.
+- **`features/plugin/session-start-hooks.feature`** belongs to the `plugin` function. The hooks stream needs to change its expected `new` to `clear`. Either the harness phase moves the file to `features/hook/` first, or the hooks phase edits it with explicit ownership.
+
+## Scenario Plan (feature files that can be written independently)
+
+Paths follow `features/<function>/<capability>.feature`, titled `Feature: <Function> <capability>`. Functions use the singular, as `plugin` and `marketplace` do. Within a kind, each file is independent of the others, so a phase can give one file to each executor in a wave. `[G]` marks a scenario whose expected outcome waits for the FG decision named.
+
+### features/skill/ (skills phase)
+
+- **listing.feature** (MF): listed as `/skill:<plugin>-<skill>` with its description; `<plugin>-` elided, and a name equal to the plugin gives `/skill:<plugin>`; `when_to_use` folded and cut at 1,536; missing description [G FG-06]; frontmatter `name` differs from the directory [G FG-07]; unparseable frontmatter still listed with an install warning; two directories eliding to one name keep the first with a warning; a declared `skills` path loads beside `skills/`; `user-invocable: false` still listed (DIV); skills of both scopes.
+- **invocation.feature** (FX): `/skill:x` sends the body in a `<skill>` block; `${CLAUDE_PLUGIN_ROOT}`/`DATA`/`SKILL_DIR` replaced; `${CLAUDE_PROJECT_DIR}` replaced at project scope and literal at user scope; same-plugin reference rewritten to `/skill:`; arguments after the command [G FG-04]; `` !`cmd` `` [G FG-05]; a model-invocable skill appears in the system-prompt skill list; a `disable-model-invocation` skill does not appear and still runs on `/skill:`.
+- **qualified-name.feature** (TUI): `/plugin:skill` runs the skill interactively; autocomplete offers it; a command with the same qualified name [G FG-08]; RPC behavior [G FG-09].
+- **lifecycle.feature** (MF): uninstall, disable, enable, update (renamed or removed skill), reinstall -- each observed on a new session.
+
+### features/command/ (commands phase)
+
+- **listing.feature** (MF): `/<plugin>:<cmd>` with source `prompt`; nested `build/web.md` -> `plugin:build:web`; `acme-lint` -> `acme:lint`; dotfile skipped; malformed frontmatter neutralized with a warning; description fallback [G FG-06]; `user-invocable: false` [G FG-12]; object-map `commands` [G FG-13]; declared path plus `commands/` union (D-07) [G FG-14].
+- **arguments.feature** (FX): `$ARGUMENTS`; quoted argument stays one; `$1` [G FG-01]; no placeholder [G FG-02]; `$ARGUMENTS[0]`, `$name`, `\$1` [G FG-03]; `${1:-x}` Pi-only form [G FG-03]; `argument-hint` via the probe or TUI.
+- **content.feature** (FX): plugin path variables substituted; same-plugin reference rewriting; `` !`cmd` `` [G FG-05].
+- **lifecycle.feature** (MF): as for skills.
+
+### features/agent/ (agents phase)
+
+- **listing.feature** (FX list call + MF doctor): `plugin:agent` listed with description and alias; missing description fallback with a warning; duplicate source names keep the first; agent owned by another plugin refused at install (MF); nested agent [G FG-15].
+- **conversion.feature** (FX child run + MF warnings): `Read, Grep` -> `read,grep`; `Glob` -> `find`; unmapped tool dropped; omitted `tools` -> default tools; `disallowedTools` -> `excludeTools`; empty mapped `tools` refused at install; `hooks`/`mcpServers`/`permissionMode` dropped with guidance; `model: sonnet` omitted without `--map-model` (child on the session model); with `--map-model` mapped [G FG-18]; `effort` -> `thinking`; other fields [G FG-17].
+- **invocation.feature** (FX, `async: false`): child system prompt holds the converted body with path variables substituted; skill preload content present [G FG-16 for a `disable-model-invocation` skill]; plugin MCP tool grant reaches the child (MCP stub).
+- **companion.feature** (MF): pi-subagents absent -> `{requires pi-subagents}` row and info `(missing)`; companion loaded later plus `/reload` lists the agent with no reinstall.
+- **lifecycle.feature** (FX list): uninstall, disable, update remove or replace the agent.
+
+### features/hook/ (hooks phase)
+
+- **session-start.feature** (MF; compact FX): startup; `/new` sends `clear` (changed); resume; fork; compaction fires `compact`; matchers `startup`/`resume`/`clear`/`compact`/`fork` each run only on their source; reload [G FG-21]; one run per RPC `new_session`; `additionalContext` reaches the model (FX). Migrates the two existing scenarios.
+- **session-end.feature** (MF): `/new` sends `clear`; quit/reload/fork reasons [G FG-20]; non-empty matcher [G FG-20]; 1.5 s default budget.
+- **user-prompt-submit.feature** (MF + FX): fires with a Claude-shaped stdin; exit 2 keeps the prompt from the model; matcher refused at install.
+- **tool-use.feature** (FX): PreToolUse on a faux `bash` call with `tool_name: "Bash"`; `Edit|Write` matcher; an unmapped alternative dropped while the rest fire; exit 2 blocks with stderr reaching the model; `permissionDecision: deny`; `updatedInput`; PostToolUse `tool_response`; PostToolUseFailure; `if: "Bash(git *)"` filters; MCP tool matcher on a direct call fires, through the `mcp` proxy it does not (PIGAP).
+- **stop.feature** (FX): Stop fires once per settle; `decision: block` re-enters with the reason; `stop_hook_active`; 8-block cap; StopFailure on an error ending (if the faux provider can end in error).
+- **compact.feature** (FX): PreCompact/PostCompact with `trigger: manual`; `manual` and `auto` matchers.
+- **process.feature** (MF): env variables; shell form; exec-form `${CLAUDE_PLUGIN_ROOT}` (BUG FG-19); timeout kills; `async` does not block; `once`/`onFailure` [G FG-22].
+- **configuration.feature** (MF install/info): unsupported event, regex matcher, `http` handler -> partial with `--partial`; malformed `hooks.json` -> unavailable; manifest `hooks` field [G FG-24]; `DirectoryAdded` [G FG-23].
+- **lifecycle.feature** (MF): uninstall and disable stop the hook; update replaces it.
+
+### features/mcp-server/ (MCP phase)
+
+- **connection.feature** (MF): stub spawned with `${CLAUDE_PLUGIN_ROOT}`-expanded args and the default-expanded env; `CLAUDE_PLUGIN_ROOT`/`DATA` in its env; tools named `mcp__plugin_<p>_<s>__<tool>`; `/mcp` lists the server; `info` shows a status.
+- **tool-calls.feature** (FX): `mcp` search then call returns the stub reply; `alwaysLoad: true` sends the tool directly in the first request; default deferral.
+- **remote.feature** (MF, loopback HTTP stub): `http` connects with expanded `url` and `headers`; `sse`; `ws` partial.
+- **configuration.feature** (MF): wrapped and unwrapped `.mcp.json`; source precedence [G FG-27]; one malformed server [G FG-28]; key collision refused and rolled back; withheld credential warning; unset variable warning; tool permission rules warning; user override kept across update and disable.
+- **companion.feature** (MF): adapter absent -> `{requires pi-mcp-adapter}` and `(missing)`; adapter loaded plus `/reload` connects with no reinstall.
+- **project-scope.feature** (MF): a project-scope server in a headless session under the harness's adapter setting (FG-29).
+- **lifecycle.feature** (MF): uninstall removes the tools after reload; disable keeps the user choice in `serverChoices`; update replaces the entry.
+
+### features/workflow/ (workflows phase)
+
+- **listing.feature** (MF): `/<plugin>:<meta.name>` registered; the filename plays no part; prefix elided (DIV); missing `meta` skipped; non-literal name skipped; determinism refusal; syntax refusal; size cap; dotfile and symlink skipped; declared path union [G FG-14].
+- **runs.feature** (MF, events file): `/kit:demo hello who=Ada` completes with `{"_":"hello","who":"Ada",...}` [G FG-32]; a script installed with a caveat fails at the engine with its refusal.
+- **companion.feature** (MF): engine absent -> `{requires pi-dynamic-workflows}` at warning severity on install, info severity on `list`; engine loaded plus `/reload` registers the command with no reinstall.
+- **lifecycle.feature** (MF): uninstall reports the lingering command (WLIF-06) and it is gone after `/reload`; disable and enable; update runs the new script.
 
 ## MVP Definition
 
-### Launch with (this milestone)
+### Launch With (this milestone)
 
-- [ ] Driver widening: all marketplace kinds, N payloads, placeholders. Every other row depends on it.
-- [ ] `add` over dir and file: MF-ADD-01..07, MF-ADD-08 (parse-level Outline).
-- [ ] `remove`, `list`, `info` and `autoupdate` over dir: MF-RM-01..07, MF-LS-01..04, MF-INFO-01, 04..06, MF-AU-01..08.
-- [ ] `update` over dir, including the cascade: MF-UPD-01..10.
-- [ ] Usage and help: MF-USE-01..08.
-- [ ] HTTPS stand-in plus `url` kind: MF-ADD-01/04/07/09/10, MF-RM-08, MF-LS-05, MF-INFO-02/07, MF-UPD-01/02/11.
-- [ ] `GITHUB_BASE_URL` plus `gh` kind: MF-ADD-12, MF-INFO-03, MF-UPD-01/02 over gh.
+- [ ] Harness phase: the faux model, companions at the raised floors, the stub, the recorder, the probe -- prerequisite for everything
+- [ ] Per kind: listing, invocation (FX), companion degradation, lifecycle files -- the milestone goal
+- [ ] Hook parity fixes (`clear`, `compact`, `fork`) and the FG-19 bug fix -- recorded target and the bug policy
+- [ ] Decisions on FG-01..FG-05 (arguments and `` !`cmd` ``), the largest real-plugin impact
+- [ ] Every FG item either decided or explicitly deferred, with an ID
 
-### Add after validation (same milestone if time allows)
+### Add After Validation
 
-- [ ] 401 rows (MF-ADD-11, MF-UPD-12), once credential isolation is proven not to reach the operator's keychain.
-- [ ] MF-HOST-01..03 (verbatim URL, GitHub spelling fold, refs).
-- [ ] MF-RM-09, MF-AU-09, MF-UPD-13/14, MF-INFO-08/09, MF-ADD-13/14.
+- [ ] Async agent runs -- once pi-subagents 0.84 is proven in the harness
+- [ ] Remote MCP OAuth flow end-to-end -- needs an OAuth stand-in
+- [ ] StopFailure scenarios -- if the faux provider cannot end a turn in error, add a provider stub
 
-### Future consideration
+### Future Consideration
 
-- [ ] MF-UPD-15 / C-10 (manifest outside `.claude-plugin/`): after an operator ruling.
-- [ ] Upstream gaps (reserved names, hosted `marketplace.json`, `/plugin market`): after an operator ruling under the Upstream parity constraint.
+- [ ] Real-provider milestone: model auto-selection of skills and agents, commands through the Skill tool (FG-11), workflows calling `agent()`
 
 ## Feature Prioritization Matrix
 
-| Feature group | User value | Implementation cost | Priority |
-|---------------|------------|---------------------|----------|
-| Driver kinds plus placeholders | HIGH (enables everything) | MEDIUM | P1 |
-| add/remove/list/info/autoupdate over dir and file | HIGH | LOW | P1 |
-| update plus autoupdate cascade over dir | HIGH | LOW to MEDIUM | P1 |
-| Usage errors and help | MEDIUM | LOW | P1 |
-| url kind via the HTTPS stand-in, including 404/5xx/drop | HIGH | MEDIUM | P1 |
-| gh kind via `GITHUB_BASE_URL` | HIGH | MEDIUM (production change) | P1 |
-| 401 on url (add/update) | MEDIUM | HIGH (credential isolation) | P2 |
-| Request-path assertions (MURL-08/09, `.git` append) | MEDIUM | LOW once the log exists | P2 |
-| Scope asymmetries, LIFE-06, plugin-info failure | MEDIUM | LOW to MEDIUM | P2 |
-| Parity gaps, C-10 | depends on ruling | — | P3 |
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|---------------------|----------|
+| Command argument parity (FG-01/02) | HIGH | LOW (install-time rewrite) | P1 |
+| `` !`cmd` `` injection (FG-05) | HIGH | HIGH (runtime spawn, security) | P1 decision, implementation P2 |
+| Exec-form hook placeholders (FG-19) | HIGH | LOW | P1 |
+| Hook `clear`/`compact`/`fork` | MEDIUM | LOW | P1 (recorded) |
+| Manifest `hooks` merge (FG-24) | MEDIUM | MEDIUM | P2 |
+| MCP source merge (FG-27) | MEDIUM | MEDIUM | P2 |
+| Nested agents (FG-15) | MEDIUM | LOW | P2 |
+| Object-map `commands` (FG-13) | LOW-MEDIUM | MEDIUM | P2 |
+| Description fallback (FG-06) | LOW | LOW | P2 |
+| Agent field near-analogs (FG-17), `--map-model` refresh (FG-18) | LOW | LOW | P3 |
 
 ## Competitor Feature Analysis
 
-| Feature | Claude Code `/plugin marketplace` | nklisch/pi-plugins (memory: skills/hooks/MCP only, has TUI) | This suite's approach |
-|---------|-----------------------------------|-----------------------------------------------------|------------------------|
-| Source forms | GitHub shorthand, any git URL, SSH, local dir or file, hosted JSON | not researched | Every accepted form plus parse-level refusals |
-| Remove cascades to plugins | Yes | not researched | MF-RM-02..04 |
-| Auto-update default off for third-party marketplaces | Yes | not researched | MF-AU-03 |
-| Private repos through credential helpers | Yes, never prompts | not researched | MF-ADD-11 / MF-UPD-12 on url |
+| Feature | Claude Code 2.1.316 | Pi native | Our approach |
+|---------|---------------------|-----------|--------------|
+| Plugin skill name | `/plugin:skill` | `/skill:name` | `/skill:<plugin>-<skill>` plus an interactive alias |
+| Command arguments | `$ARGUMENTS`, 0-based `$N`, `ARGUMENTS:` append | `$ARGUMENTS`, 1-based `$N`, `${N:-d}` | Today pass-through (FG-01..03) |
+| Agents | Native subagents | pi-subagents | Converted files plus an index |
+| MCP | Native client | pi-mcp-adapter | Translated `mcp-adapter.json` entries |
+| Workflows | Native runtime | pi-dynamic-workflows | Saved envelopes |
 
 ## Sources
 
-- Code (HIGH): `extensions/pi-claude-marketplace/edge/router.ts`, `edge/args.ts`, `edge/args-schema.ts`, `edge/handlers/shared.ts`, `edge/handlers/marketplace/*.ts`, `edge/handlers/plugin/help.ts`, `orchestrators/marketplace/{add,remove,list,info,update,autoupdate,shared}.ts` and `*.messaging.ts`, `orchestrators/auth-host.ts`, `domain/source.ts`, `domain/clone-key.ts`, `shared/git-failure-classifiers.ts`, `shared/notification-wire.ts`, `shared/notification-resolve.ts`, `shared/notification-command-error.ts`.
-- Harness (HIGH): `features/lib/{pi-commands,pi-process,path-marketplace}.ts`, `features/support/{world,pi-process}.ts`, `features/step_definitions/*.ts`, `tests/e2e/_rpc.ts`, `features/plugin/*.feature`, `.agents/skills/cucumber/**`.
-- Docs (MEDIUM where they conflict with code): `docs/output-catalog.md` (marketplace sections), `docs/json-output.md`, `docs/prd/pi-claude-marketplace-prd.md` (MA, MR, ML, MU, MAU, SP, SC, AP), `.planning/milestones/url-source-REQUIREMENTS.md` (MURL, PROV), `.planning/milestones/ws-git-hosts-2026-10-01/milestones/any-git-host-REQUIREMENTS.md` (GAUTH-03..06, MURL-08/09, MA-12..14).
-- Upstream (HIGH for stated behavior): https://code.claude.com/docs/en/discover-plugins and https://code.claude.com/docs/en/plugin-marketplaces, fetched 2026-10-15.
+- Claude Code 2.1.316 binary `/opt/claude-code/bin/claude`, grepped 2026-10-31: skill frontmatter schema (`PEo`/`MEo`), argument substitution `T2e`, description fallback `A2e`, agent field list, hook event tuple, `source`/SessionEnd reason enums, hook `args`/`once`/`onFailure` describe strings, MCP server schemas. HIGH.
+- https://code.claude.com/docs/en/skills (retrieved 2026-10-31) -- frontmatter, substitutions, invocation control, namespacing, `` !`cmd` ``, `context: fork`. HIGH.
+- https://code.claude.com/docs/en/sub-agents (2026-10-31) -- fields, plugin restrictions, naming, model, tools, preload. HIGH.
+- https://code.claude.com/docs/en/plugins-reference (2026-10-31) -- replace/add/merge per key, `commands` map, `hooks`/`mcpServers` merge, variables per component. HIGH.
+- https://code.claude.com/docs/en/workflows (2026-10-31) -- naming, approval, `args`, `meta` rules. HIGH.
+- Pi 1.3.0 `node_modules/@earendil-works/pi-coding-agent` (`docs/prompt-templates.md`, `docs/skills.md`, `docs/rpc-commands.md`, `substituteArgs`) and Pi 1.4.0 (`dist/core/extensions/types.d.ts`, `agent-session.js`); pi-subagents 0.84.0 `src/agents/agents.js`. HIGH.
+- Repo: `docs/hooks-compatibility.md`, `docs/mcp-compatibility.md`, `docs/workflows-compatibility.md`, `docs/prd/pi-claude-marketplace-prd.md` (SK/CM/AG/MC), `.planning/milestones/v1.15-REQUIREMENTS.md`, `.planning/milestones/ws-workflows-2026-09-27/milestones/workflows-REQUIREMENTS.md`, `.planning/spikes/028-model-free-harness/README.md`, and the bridge sources cited per row.
 
 ---
-*Feature research for: marketplace behavioral test suite (`marketplace-features`)*
-*Researched: 2026-10-15*
+*Feature research for: component-features (component behavioral tests)*
+*Researched: 2026-10-31*
