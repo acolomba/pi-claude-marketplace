@@ -307,7 +307,9 @@ async function createHermeticScopes(t: TestContext, label: string): Promise<Herm
       // fails against the reconcile logic instead of naming the environment.
       // Refuse up front.
       if (!(await chmodDeniesThisProcess())) {
-        throw new Error("denyWrites cannot deny this process; run this suite as a non-root user");
+        throw new Error(
+          "denyWrites cannot deny this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
+        );
       }
 
       denied.push(directory);
@@ -2404,7 +2406,9 @@ describe("applyReconcile", () => {
     });
     const commandFile = path.join(marketplaceRoot, "plugins", "bar", "commands", "deploy.md");
     if (!(await chmodDeniesThisProcess())) {
-      t.skip("cannot deny reads for this process; run this suite as a non-root user");
+      t.skip(
+        "cannot deny reads for this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
+      );
       return;
     }
 
@@ -8782,7 +8786,7 @@ const REFUSED_WIDGET_COPY_NOTIFICATION = {
 async function unreadableSkill(marketplaceRoot: string, plugin: string): Promise<void> {
   if (!(await chmodDeniesThisProcess())) {
     throw new Error(
-      "an unreadable file cannot stop this process; run this suite as a non-root user",
+      "an unreadable file cannot stop this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
     );
   }
 
@@ -9746,7 +9750,7 @@ describe("applyReconcile catalog convergence", () => {
     // nobody may list, so the deferred cleanup fails.
     if (!(await chmodDeniesThisProcess())) {
       throw new Error(
-        "a directory mode cannot stop this process; run this suite as a non-root user",
+        "a directory mode cannot stop this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
       );
     }
 
@@ -10319,7 +10323,7 @@ describe("applyReconcile catalog convergence", () => {
     const unreadable = path.join(marketplaceRoot, "plugins", "alpha", "commands", "deploy.md");
     if (!(await chmodDeniesThisProcess())) {
       throw new Error(
-        "an unreadable file cannot deny this process; run this suite as a non-root user",
+        "an unreadable file cannot deny this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
       );
     }
 
@@ -10594,7 +10598,7 @@ describe("applyReconcile catalog convergence", () => {
     );
     if (!(await chmodDeniesThisProcess())) {
       throw new Error(
-        "an unreadable file cannot deny this process; run this suite as a non-root user",
+        "an unreadable file cannot deny this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
       );
     }
 

@@ -66,5 +66,5 @@ npx fallow agent install --harness claude --harness codex --without hooks --with
 # normalize AGENTS.md
 pre-commit run --files AGENTS.md || true
 
-# marks a completed run
+# init-session.sh and cloud-env.sh read this marker
 touch node_modules/.init-done

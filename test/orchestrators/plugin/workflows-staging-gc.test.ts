@@ -86,7 +86,7 @@ async function backdate(target: string): Promise<void> {
 async function requireChmodDenial(): Promise<void> {
   if (!(await chmodDeniesThisProcess())) {
     throw new Error(
-      "chmod-based denial is inert for this process; run this suite as a non-root user",
+      "chmod-based denial is inert for this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
     );
   }
 }

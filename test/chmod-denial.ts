@@ -1,19 +1,18 @@
-// Whether a `chmod` mode denies this process. The chmod-based cases of several
-// suites provoke EACCES with a 0o000 file or a 0o555 directory,
-// and such a mode denies nothing to the usual uid 0, which holds
-// CAP_DAC_OVERRIDE and CAP_DAC_READ_SEARCH. It denies every other user, and a
-// uid 0 whose bounding set dropped both capabilities, which is how the Claude
-// Code cloud VM runs Node (scripts/cloud-env.sh). So the suites probe the
-// condition itself instead of the uid.
+// Whether a `chmod` mode denies this process. Several suites provoke EACCES
+// with a 0o000 file or a 0o555 directory. Such a mode denies nothing to the
+// usual uid 0, which holds CAP_DAC_OVERRIDE and CAP_DAC_READ_SEARCH. It denies
+// every other user. It also denies a uid 0 whose bounding set dropped both
+// capabilities, which is how the Claude Code cloud VM runs Node
+// (scripts/cloud-env.sh). So the suites probe the condition, not the uid.
 
 import { access, chmod, constants, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 /**
- * Reports whether a `chmod` mode denies this process. The probe reads a
- * 0o000 file and writes into a 0o555 directory, both in a temporary directory
- * of its own, and reports true only when both are denied.
+ * Reports whether a `chmod` mode denies this process. The probe checks read
+ * access to a 0o000 file and writes into a 0o555 directory, both in a
+ * temporary directory of its own. It reports true only when both are denied.
  */
 export async function chmodDeniesThisProcess(): Promise<boolean> {
   const dir = await mkdtemp(path.join(tmpdir(), "chmod-denial-"));

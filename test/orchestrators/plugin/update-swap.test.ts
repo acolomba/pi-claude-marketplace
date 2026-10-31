@@ -1691,7 +1691,9 @@ test("AMIG-02: a swap removes the plugin's marked mcp.json entries after the MCP
 test("AMIG-02: a legacy removal that fails records an mcp phase failure and keeps both entries", async (t) => {
   // A 0o555 directory stays writable for the usual uid 0, so the removal would succeed.
   if (!(await chmodDeniesThisProcess())) {
-    throw new Error("this case cannot deny this process; run this suite as a non-root user");
+    throw new Error(
+      "this case cannot deny this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
+    );
   }
 
   await withHermeticHome(async () => {

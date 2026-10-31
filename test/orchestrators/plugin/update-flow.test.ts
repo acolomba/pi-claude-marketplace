@@ -14481,7 +14481,7 @@ test("D-13: a source file convergePlugin cannot read fails the move as permissio
       });
       if (!(await chmodDeniesThisProcess())) {
         throw new Error(
-          "an unreadable file cannot deny this process; run this suite as a non-root user",
+          "an unreadable file cannot deny this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
         );
       }
 

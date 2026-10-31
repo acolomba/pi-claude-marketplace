@@ -40,7 +40,7 @@ Set the setup script of the cloud environment to:
 /home/user/pi-claude-marketplace/scripts/init.sh
 ```
 
-On the VM, `scripts/init.sh` reads `CLAUDE_CODE_REMOTE` and sources `scripts/cloud-env.sh`, which lists what differs there. The SessionStart hook does the rest for each session. A cloud session exports `SKIP=trufflehog`. When you run pre-commit by hand, keep it: `SKIP=npm-check${SKIP:+,$SKIP} pre-commit run --files <changed files>`.
+On the VM, `scripts/init.sh` and the SessionStart hook read `CLAUDE_CODE_REMOTE` and source `scripts/cloud-env.sh`, which lists what differs there. The hook exports those settings, among them `SKIP=trufflehog`, into the session and refreshes `node_modules`. When you run pre-commit by hand, keep that value: `SKIP=npm-check${SKIP:+,$SKIP} pre-commit run --files <changed files>`.
 
 ## Running Pi against the checkout
 

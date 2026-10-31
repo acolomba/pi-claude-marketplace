@@ -1330,7 +1330,7 @@ async function deniedManifestDirectoryCopy(
   // A 0o000 directory stays readable for the usual uid 0, so the EACCES never happens.
   if (!(await chmodDeniesThisProcess())) {
     throw new Error(
-      "a denied directory cannot deny this process; run this suite as a non-root user",
+      "a denied directory cannot deny this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
     );
   }
 

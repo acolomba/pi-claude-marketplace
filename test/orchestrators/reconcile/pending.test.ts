@@ -1918,7 +1918,9 @@ test("I5 / T-53-02-02: an unreadable config's cause names its basename and no ab
   // arrange
   // A mode does not bind the usual uid 0, so the EACCES never happens under root.
   if (!(await chmodDeniesThisProcess())) {
-    throw new Error("a mode does not deny this process; run this suite as a non-root user");
+    throw new Error(
+      "a mode does not deny this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
+    );
   }
 
   const { cwd, project } = await createHermeticScopes(t, "compose-unreadable");

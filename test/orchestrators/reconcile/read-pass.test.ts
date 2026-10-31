@@ -83,7 +83,9 @@ async function createProjectScope(t: TestContext, label: string): Promise<Projec
     setMode: async (entry, mode) => {
       // A mode does not bind the usual uid 0, so the EACCES never happens under root.
       if (!(await chmodDeniesThisProcess())) {
-        throw new Error("a mode does not deny this process; run this suite as a non-root user");
+        throw new Error(
+          "a mode does not deny this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
+        );
       }
 
       changed.push(entry);

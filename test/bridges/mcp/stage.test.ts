@@ -67,7 +67,9 @@ async function lockedLink(
   // A 0o555 directory stays writable for the usual uid 0, so the write this helper
   // exists to refuse would succeed. Refuse up front and name the environment.
   if (!(await chmodDeniesThisProcess())) {
-    throw new Error("lockedLink cannot deny this process; run this suite as a non-root user");
+    throw new Error(
+      "lockedLink cannot deny this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
+    );
   }
 
   const lockedDirectory = path.join(cwd, "locked");

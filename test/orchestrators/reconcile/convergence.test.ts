@@ -1645,7 +1645,9 @@ test("D-PL2-12 / D-PL2-25: the installed-copy reader fails closed on a copy unde
 test("D-PL2-25: the installed-copy reader fails closed on a pinned copy whose path cannot be inspected", async (t) => {
   // arrange
   if (!(await chmodDeniesThisProcess())) {
-    t.skip("a mode does not deny this process; run this suite as a non-root user");
+    t.skip(
+      "a mode does not deny this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
+    );
     return;
   }
 

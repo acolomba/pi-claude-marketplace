@@ -12,20 +12,28 @@ top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
 if [[ ${CLAUDE_CODE_REMOTE-} == true ]]; then
     cd -- "$top"
     source scripts/cloud-env.sh
-    if [[ -n ${CLAUDE_ENV_FILE-} ]]; then
+    # Claude Code sources this file before each Bash command of the session.
+    # The hook's own exports end with the hook.
+    if [[ -z ${CLAUDE_ENV_FILE-} ]]; then
+        echo "scripts/init-session.sh: CLAUDE_ENV_FILE is unset. Run 'source scripts/cloud-env.sh' before Node commands."
+    elif ! grep -qsF "$wrapper_dir" "$CLAUDE_ENV_FILE"; then
         cloud_session_exports >>"$CLAUDE_ENV_FILE"
     fi
 
-    git lfs install --local --skip-smudge >/dev/null
+    # shellcheck disable=SC2086 -- the flags are words
+    git lfs install --local $lfs_install_flags >/dev/null
     if [[ -e node_modules/.init-done ]]; then
         npm install --no-audit --no-fund >/dev/null
         exit 0
     fi
 
+    # stdout reaches the session; stderr of a hook that exits 0 does not
     mkdir -p node_modules
-    scripts/init.sh >node_modules/.init.log 2>&1 ||
-        echo "scripts/init.sh failed; see $top/node_modules/.init.log" >&2
-    echo "scripts/init-session.sh ran scripts/init.sh. Subagents and MCP servers load at the next session."
+    if scripts/init.sh >node_modules/.init.log 2>&1; then
+        echo "scripts/init-session.sh ran scripts/init.sh. Subagents and MCP servers load at the next session."
+    else
+        echo "scripts/init.sh failed; see $top/node_modules/.init.log"
+    fi
     exit 0
 fi
 
@@ -37,4 +45,4 @@ fi
 
 mkdir -p "$top/node_modules"
 "$top/scripts/init.sh" >"$top/node_modules/.init.log" 2>&1 ||
-    echo "scripts/init.sh failed; see $top/node_modules/.init.log" >&2
+    echo "scripts/init.sh failed; see $top/node_modules/.init.log"

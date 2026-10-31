@@ -369,7 +369,7 @@ async function lockLegacyMcpJson(
   // exists to refuse would succeed. Refuse up front and name the environment.
   if (!(await chmodDeniesThisProcess())) {
     throw new Error(
-      "lockLegacyMcpJson cannot deny this process; run this suite as a non-root user",
+      "lockLegacyMcpJson cannot deny this process; run this suite as a non-root user or through the node wrapper of scripts/cloud-env.sh",
     );
   }
 

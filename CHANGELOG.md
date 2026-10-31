@@ -2,9 +2,9 @@
 
 ## [Unreleased]
 
-- Internal: a Claude Code cloud session can now set up the repository and run GSD. `scripts/init.sh` prepares the cloud VM when `CLAUDE_CODE_REMOTE` is true, and it installs pre-commit with uv when pipx is absent.
+- Internal: a Claude Code cloud session now sets up the repository and runs GSD.
 
-  - The tests that deny access with `chmod` now probe whether the mode denies the process, instead of refusing uid 0.
+  - The tests that deny access with `chmod` now probe whether the mode denies the process.
 
 ## [0.21.0] - 2026-10-31
 

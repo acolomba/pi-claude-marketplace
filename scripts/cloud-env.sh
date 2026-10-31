@@ -33,25 +33,35 @@ cloud_session_exports() {
     echo "export PATH=\"$wrapper_dir:\$PATH\""
     echo "export npm_config_prefix=$npm_config_prefix"
     echo "export NODE_OPTIONS=$NODE_OPTIONS"
-    echo "export SKIP=trufflehog"
+    echo "export SKIP=$SKIP"
 }
 
 if [[ ! -x $node_real ]]; then
     npm install --global --prefix "$node_prefix" --no-audit --no-fund node@24
 fi
 
+if ! command -v setpriv >/dev/null 2>&1; then
+    echo "scripts/cloud-env.sh: setpriv is required" >&2
+    exit 1
+fi
+
+# written whole, then moved, so a `node` call in between never sees a part
 mkdir -p "$wrapper_dir"
-cat >"$wrapper_dir/node" <<WRAPPER
+cat >"$wrapper_dir/node.tmp" <<WRAPPER
 #!/bin/sh
 # written by scripts/cloud-env.sh: root obeys file modes in Node processes
 exec setpriv --bounding-set=-dac_override,-dac_read_search -- "$node_real" "\$@"
 WRAPPER
-chmod +x "$wrapper_dir/node"
+chmod +x "$wrapper_dir/node.tmp"
+mv -f "$wrapper_dir/node.tmp" "$wrapper_dir/node"
 hash -r
 
 # A first install builds the pre-commit hook environments in the background,
-# so the setup script stays under its five-minute cache budget.
-if [[ ! -e node_modules/.init-done ]]; then
+# so the setup script stays under its five-minute cache budget. The marker
+# path is relative: both callers are in the repository root. The guard keeps
+# the hook, which sources this file and then runs init.sh, to one warmup.
+if [[ ! -e node_modules/.init-done && -z ${PI_CM_CLOUD_WARMUP-} ]]; then
+    export PI_CM_CLOUD_WARMUP=1
     if ! command -v pre-commit >/dev/null 2>&1 && command -v uv >/dev/null 2>&1; then
         uv tool install pre-commit
     fi
