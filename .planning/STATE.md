@@ -1,20 +1,20 @@
 ---
 gsd_state_version: "1.0"
 milestone: plugin-lifecycle
-status: Awaiting next milestone
-stopped_at: Milestone plugin-lifecycle archived; PR #290 open
-last_updated: "2026-10-30T21:47:45.831Z"
+status: plugin-lifecycle milestone complete
+stopped_at: Milestone plugin-lifecycle shipped; PR
+last_updated: "2026-10-31T08:13:42.210Z"
 last_activity: 2026-10-30
-last_activity_desc: Completed quick task 261030-ogp: bootstrap runs only marketplace add
-state_head: 841e3dc291afe6ad9e6923585167f046e2a0b569
+last_activity_desc: "Completed quick task 261030-ogp: bootstrap runs only marketplace add"
+state_head: 9847e01b61249175f6ed565fdb02b2e0c5215253
+milestone_name: Marketplace and Plugin Lifecycle Backlog
+current_phase: 11
 progress:
   total_phases: 11
   completed_phases: 11
   total_plans: 80
   completed_plans: 80
   percent: 100
-milestone_name: Marketplace and Plugin Lifecycle Backlog
-current_phase: 11
 ---
 
 # Project State
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 
 Phase: Milestone plugin-lifecycle complete
 Plan: —
-Status: Awaiting next milestone
+Status: plugin-lifecycle milestone complete
 Last activity: 2026-10-30 - Completed quick task 261030-ogp: bootstrap runs only marketplace add
 
 ### mcp-4 closeout
@@ -187,6 +187,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-glv | GV-01: an update with no tag drops the tag commit from the record; plugin directory plugins pick no release tag and their listed copy answers the range | 2026-10-26 | 33c9ac69 | complete | [261026-glv-match-claude-code-on-untagged-updates-an](./quick/261026-glv-match-claude-code-on-untagged-updates-an/) |
 | 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
 | 261030-ogp | bootstrap runs only marketplace add | 2026-10-30 | 841e3dc2 | complete | [261030-ogp-bootstrap-runs-only-marketplace-add](./quick/261030-ogp-bootstrap-runs-only-marketplace-add/) |
+| 12 | Fix STATE.md health warnings: archived 03.x phase tokens, milestone-complete status, PR #290 merged | 2026-10-31 | 9847e01b | — | — |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
@@ -328,25 +329,25 @@ archived milestone artifacts.
 | Phase 03 P01 | 7 min | 2 tasks | 5 files |
 | Phase 03 P02 | 5 min | 2 tasks | 3 files |
 | Phase 03 P03 | 7 min | 2 tasks | 3 files |
-| Phase 03.1 P01 | 21min | 3 tasks | 12 files |
-| Phase 03.1 P02 | 20min | 3 tasks | 13 files |
-| Phase 03.1 P03 | 16min | 2 tasks | 7 files |
-| Phase 03.1 P04 | 16min | 3 tasks | 11 files |
-| Phase 03.1 P05 | 11min | 3 tasks | 7 files |
-| Phase 03.2 P03 | 15min | 3 tasks | 24 files |
-| Phase 03.2 P04 | 38min | 3 tasks | 11 files |
-| Phase 03.2 P05 | 25min | 3 tasks | 9 files |
-| Phase 03.3 P01 | 16min | 1 tasks | 16 files |
-| Phase 03.3 P02 | 9min | 1 tasks | 12 files |
-| Phase 03.3 P03 | 31min | 2 tasks | 9 files |
-| Phase 03.3 P04 | 36min | 2 tasks | 18 files |
-| Phase 03.3 P05 | 28min | 2 tasks | 19 files |
-| Phase 03.3 P06 | 37min | 3 tasks | 13 files |
-| Phase 03.3 P10 | 16min | 2 tasks | 9 files |
-| Phase 03.4 P06 | 19min | 2 tasks | 10 files |
-| Phase 03.4 P07 | 15min | 2 tasks | 15 files |
-| Phase 03.4 P08 | 36min | 3 tasks | 56 files |
-| Phase 03.4 P10 | 40min | 2 tasks | 20 files |
+| `03.1/` P01 | 21min | 3 tasks | 12 files |
+| `03.1/` P02 | 20min | 3 tasks | 13 files |
+| `03.1/` P03 | 16min | 2 tasks | 7 files |
+| `03.1/` P04 | 16min | 3 tasks | 11 files |
+| `03.1/` P05 | 11min | 3 tasks | 7 files |
+| `03.2/` P03 | 15min | 3 tasks | 24 files |
+| `03.2/` P04 | 38min | 3 tasks | 11 files |
+| `03.2/` P05 | 25min | 3 tasks | 9 files |
+| `03.3/` P01 | 16min | 1 tasks | 16 files |
+| `03.3/` P02 | 9min | 1 tasks | 12 files |
+| `03.3/` P03 | 31min | 2 tasks | 9 files |
+| `03.3/` P04 | 36min | 2 tasks | 18 files |
+| `03.3/` P05 | 28min | 2 tasks | 19 files |
+| `03.3/` P06 | 37min | 3 tasks | 13 files |
+| `03.3/` P10 | 16min | 2 tasks | 9 files |
+| `03.4/` P06 | 19min | 2 tasks | 10 files |
+| `03.4/` P07 | 15min | 2 tasks | 15 files |
+| `03.4/` P08 | 36min | 3 tasks | 56 files |
+| `03.4/` P10 | 40min | 2 tasks | 20 files |
 | Phase 06 P02 | 50 min | 3 tasks | 6 files |
 | Phase 07 P01 | 10 min | 2 tasks | 8 files |
 | Phase 07 P02 | 11 min | 2 tasks | 6 files |
@@ -493,39 +494,39 @@ archived milestone artifacts.
 - [Phase 03]: [marketplace-features] publishMarketplace delegates to publishMarketplaceIn (directory = name), so the kind switch stays single; the second-publish step records nothing on the world (D-01)
 - [Phase 03]: [marketplace-features] remove --local is shown by a second local entry that stays (Option 1), so no remove.steps.ts and no zero-declaration step exist
 - [Phase 03]: [marketplace-features] Review WARNING recorded: the published-marketplace lookup is duplicated in add.steps.ts and publishing.steps.ts; move it to features/lib when publishing.steps.ts next changes
-- [Phase 03.1]: The first-run migration leaves out what claude-plugins.local.json declares and declines with local-invalid on an unreadable local file (FIX-02, D-01, D-02)
-- [Phase 03.1]: A reload after a local install writes no base file, because the install adopts the marketplace into the local file (CR-02); D-04's plugin-key rule is proven by unit and convergence cases
-- [Phase 03.1]: FIX-03: the refusal token is the closed-set reason 'marketplace declared locally' in the shared FailureReason group; the --local remedy rides the cause line (D-07)
-- [Phase 03.1]: FIX-03: localOnlyMarketplaceRefusal (plugin/shared.ts) is the single rule; install refuses inside the lock right after the write-target selection, before the D-04-07 promotion and the cascade, standalone only (D-06)
-- [Phase 03.1]: Standalone enable and disable refuse a shared write under a local-only marketplace right after the not-installed check; orchestrated calls never refuse (FIX-03, D-06)
-- [Phase 03.1]: Update and reinstall keep the flag as the write-back target; without the flag they write nothing for a local key or under a local-only marketplace and report an unreadable local file (D-08, D-MF-03)
-- [Phase 03.1]: A named flagless update is refused between the preflight and the swap, and a named flagless reinstall inside the lock before resolution; both read writeBackRefusal over selectLayerWriteBack; nameless forms, autoupdate, and the backfill are never refused (FIX-03, D-08)
-- [Phase 03.1]: ReinstallFailedOutcome.cause is set only for MarketplaceDeclaredLocallyError, so no other failed reinstall row gains a cause line (FIX-03, D-07)
-- [Phase 03.1]: One catalog state in the install section documents the FIX-03 refusal row for install, enable, disable, named update, and named reinstall (A-12)
-- [Phase 03.2]: D-04: the mirror refusal reason is 'marketplace declared in shared config'; MarketplaceDeclaredLocallyError lives in shared/errors.ts so marketplace verbs can raise it
-- [Phase 03.2]: An unreadable other layer keeps every plugin installed on a layer remove (A-07 applied to plugin keys)
-- [Phase 03.2]: Plugin-clone GC still runs whenever no plugin failed; the marketplace data dir and clone go only when the state record was deleted
-- [Phase 03.2]: The full marketplace remove unstages only explicit records; every dependency record under it goes through the retention order (D-04-dep)
-- [Phase 03.2]: Remove retention reads dependency candidates from the marketplace record; the scope index answers only who holds what
-- [Phase 03.2]: An unreadable declaration index refuses a remove with {unreadable} before any change, in both modes (D-09 Q4)
-- [Phase 03.2]: [marketplace-features] A standalone project install declares every marketplace its transaction added (dependencies included) in the root's target config file, under the UAT-05 gate; no dependency plugin key (D-04-02); reload/import write nothing (WR-09)
-- [Phase 03.3]: pluginLayerVerdict (plugin/shared.ts) is the one layer verdict for named plugin verbs; a standalone uninstall reads both layers, refuses an invalid other layer with the CFG-03 row, and refuses other-only declarations after the record checks (LAYER-04)
-- [Phase 03.3]: Install, enable, and disable pick their layer by the --local flag alone (selectDeclaringConfigWriteTarget reads both layers, either invalid layer stops the command); standalone enable/disable refuse a plugin only the other layer declares, idempotent calls included (LAYER-04)
-- [Phase 03.3]: A command that writes a plugin declaration also declares the plugin's marketplace in that layer; dependency marketplaces keep the both-layer gate; CR-06 overwrites enabled:false in every layer with the plain writer (LAYER-06)
-- [Phase 03.3]: The install no-op fires only for a standalone call, an explicit record, no version pin, and verdict other-only; it returns the existing installed outcome shape with resourcesChanged false (LAYER-05)
-- [Phase 03.3]: A standalone uninstall deletes the plugin key from its target layer only; when both layers declare the plugin it drops only that declaration and reports a warning skipped row with the --local hint (LAYER-05)
-- [Phase 03.3]: Uninstall of an undeclared dependency: refused with {dependents remain} while a target-layer plugin needs it, skipped at warning while only other-layer plugins do (LAYER-08, D-07, D-14)
-- [Phase 03.3]: A flagless enable or disable that the local layer's opposite enabled overrides is refused with {disabled|enabled in local layer} (LAYER-04, D-13); closed reason set 76
-- [Phase 03.3]: Named update and reinstall refuse a plugin only the other layer declares through namedPluginLayerRefusal; update checks before the preflight (NFR-5), reinstall inside the lock before resolve and replace
-- [Phase 03.3]: An unreadable layer on a named update or reinstall is InvalidMarketplaceManifestError with the basename-only message, mapped to {invalid manifest}
-- [Phase 03.3]: Nameless update and reinstall with --local keep only the targets their scope's local layer declares (keepLocalLayerTargets: own keys, one read per scope)
-- [Phase 03.3]: [marketplace-features] Plugin layer docs: the READMEs define the two files as the scope's shared and local layers, and the CHANGELOG states the D-11 load error remedy (marketplace add <source> --local) with no automatic repair
-- [Phase 03.4]: IN-02 / D-02: the flag-only layer loader is loadTargetLayers (TargetLayers, arm loaded); seams loadTargetLayers and UninstallTransaction.loadLayerConfig; the other layer's parse is other
-- [Phase 03.4]: D-02: the migration helper that builds the base config's plugin entries is basePluginEntries; production comments say base config/local config and base layer/local layer (D-03)
-- [Phase 03.4]: D-02: test layer helpers, snapshot keys, and layer values say base and local; test data named shared keeps its name
-- [Phase 03.4]: User rule: a layer's file is a config -- LayerConfigUnreadableError, features/lib/layer-config.ts, prose says layer config; plan 10 gates add the layer-file pattern
-- [Phase 03.4]: D-03: prose says layer for a level and config for a file; configuration stays only for a scope's effective configuration
-- [Phase 03.4]: D-03: the writing step is now 'a config in scope <scope> and layer <layer>, with these plugins:'
+- [marketplace-features `03.1/`]: The first-run migration leaves out what claude-plugins.local.json declares and declines with local-invalid on an unreadable local file (FIX-02, D-01, D-02)
+- [marketplace-features `03.1/`]: A reload after a local install writes no base file, because the install adopts the marketplace into the local file (CR-02); D-04's plugin-key rule is proven by unit and convergence cases
+- [marketplace-features `03.1/`]: FIX-03: the refusal token is the closed-set reason 'marketplace declared locally' in the shared FailureReason group; the --local remedy rides the cause line (D-07)
+- [marketplace-features `03.1/`]: FIX-03: localOnlyMarketplaceRefusal (plugin/shared.ts) is the single rule; install refuses inside the lock right after the write-target selection, before the D-04-07 promotion and the cascade, standalone only (D-06)
+- [marketplace-features `03.1/`]: Standalone enable and disable refuse a shared write under a local-only marketplace right after the not-installed check; orchestrated calls never refuse (FIX-03, D-06)
+- [marketplace-features `03.1/`]: Update and reinstall keep the flag as the write-back target; without the flag they write nothing for a local key or under a local-only marketplace and report an unreadable local file (D-08, D-MF-03)
+- [marketplace-features `03.1/`]: A named flagless update is refused between the preflight and the swap, and a named flagless reinstall inside the lock before resolution; both read writeBackRefusal over selectLayerWriteBack; nameless forms, autoupdate, and the backfill are never refused (FIX-03, D-08)
+- [marketplace-features `03.1/`]: ReinstallFailedOutcome.cause is set only for MarketplaceDeclaredLocallyError, so no other failed reinstall row gains a cause line (FIX-03, D-07)
+- [marketplace-features `03.1/`]: One catalog state in the install section documents the FIX-03 refusal row for install, enable, disable, named update, and named reinstall (A-12)
+- [marketplace-features `03.2/`]: D-04: the mirror refusal reason is 'marketplace declared in shared config'; MarketplaceDeclaredLocallyError lives in shared/errors.ts so marketplace verbs can raise it
+- [marketplace-features `03.2/`]: An unreadable other layer keeps every plugin installed on a layer remove (A-07 applied to plugin keys)
+- [marketplace-features `03.2/`]: Plugin-clone GC still runs whenever no plugin failed; the marketplace data dir and clone go only when the state record was deleted
+- [marketplace-features `03.2/`]: The full marketplace remove unstages only explicit records; every dependency record under it goes through the retention order (D-04-dep)
+- [marketplace-features `03.2/`]: Remove retention reads dependency candidates from the marketplace record; the scope index answers only who holds what
+- [marketplace-features `03.2/`]: An unreadable declaration index refuses a remove with {unreadable} before any change, in both modes (D-09 Q4)
+- [marketplace-features `03.2/`]: [marketplace-features] A standalone project install declares every marketplace its transaction added (dependencies included) in the root's target config file, under the UAT-05 gate; no dependency plugin key (D-04-02); reload/import write nothing (WR-09)
+- [marketplace-features `03.3/`]: pluginLayerVerdict (plugin/shared.ts) is the one layer verdict for named plugin verbs; a standalone uninstall reads both layers, refuses an invalid other layer with the CFG-03 row, and refuses other-only declarations after the record checks (LAYER-04)
+- [marketplace-features `03.3/`]: Install, enable, and disable pick their layer by the --local flag alone (selectDeclaringConfigWriteTarget reads both layers, either invalid layer stops the command); standalone enable/disable refuse a plugin only the other layer declares, idempotent calls included (LAYER-04)
+- [marketplace-features `03.3/`]: A command that writes a plugin declaration also declares the plugin's marketplace in that layer; dependency marketplaces keep the both-layer gate; CR-06 overwrites enabled:false in every layer with the plain writer (LAYER-06)
+- [marketplace-features `03.3/`]: The install no-op fires only for a standalone call, an explicit record, no version pin, and verdict other-only; it returns the existing installed outcome shape with resourcesChanged false (LAYER-05)
+- [marketplace-features `03.3/`]: A standalone uninstall deletes the plugin key from its target layer only; when both layers declare the plugin it drops only that declaration and reports a warning skipped row with the --local hint (LAYER-05)
+- [marketplace-features `03.3/`]: Uninstall of an undeclared dependency: refused with {dependents remain} while a target-layer plugin needs it, skipped at warning while only other-layer plugins do (LAYER-08, D-07, D-14)
+- [marketplace-features `03.3/`]: A flagless enable or disable that the local layer's opposite enabled overrides is refused with {disabled|enabled in local layer} (LAYER-04, D-13); closed reason set 76
+- [marketplace-features `03.3/`]: Named update and reinstall refuse a plugin only the other layer declares through namedPluginLayerRefusal; update checks before the preflight (NFR-5), reinstall inside the lock before resolve and replace
+- [marketplace-features `03.3/`]: An unreadable layer on a named update or reinstall is InvalidMarketplaceManifestError with the basename-only message, mapped to {invalid manifest}
+- [marketplace-features `03.3/`]: Nameless update and reinstall with --local keep only the targets their scope's local layer declares (keepLocalLayerTargets: own keys, one read per scope)
+- [marketplace-features `03.3/`]: [marketplace-features] Plugin layer docs: the READMEs define the two files as the scope's shared and local layers, and the CHANGELOG states the D-11 load error remedy (marketplace add <source> --local) with no automatic repair
+- [marketplace-features `03.4/`]: IN-02 / D-02: the flag-only layer loader is loadTargetLayers (TargetLayers, arm loaded); seams loadTargetLayers and UninstallTransaction.loadLayerConfig; the other layer's parse is other
+- [marketplace-features `03.4/`]: D-02: the migration helper that builds the base config's plugin entries is basePluginEntries; production comments say base config/local config and base layer/local layer (D-03)
+- [marketplace-features `03.4/`]: D-02: test layer helpers, snapshot keys, and layer values say base and local; test data named shared keeps its name
+- [marketplace-features `03.4/`]: User rule: a layer's file is a config -- LayerConfigUnreadableError, features/lib/layer-config.ts, prose says layer config; plan 10 gates add the layer-file pattern
+- [marketplace-features `03.4/`]: D-03: prose says layer for a level and config for a file; configuration stays only for a scope's effective configuration
+- [marketplace-features `03.4/`]: D-03: the writing step is now 'a config in scope <scope> and layer <layer>, with these plugins:'
 - [Phase 06]: Use bare marketplace update for one-record behavioral checks because only the plural result includes the required tally. — The named form omits tally fields.
 - [Phase 06]: Derive destructive fixture targets from PublishedMarketplace and reject filesystem-root or out-of-root targets. — Missing-source scenarios must not accept arbitrary deletion paths.
 - [Phase 06]: Assert the prior failed refresh inside Given for repair scenarios. — The action under test remains after all setup and runs in the same Pi process.
@@ -796,9 +797,9 @@ in the phase deferred items. The milestone remains open for audit and archival.
   modules
 - Phase 8 added: Address tech debt: ledger dispositions and advisory
 - Phase 9 added: Address tech debt: redact LLM tool error text
-- Phase 3.1 inserted after Phase 3: Local Declaration Leak Fix: a --local marketplace leaks into claude-plugins.json on the first-run migration (FIX-02), found in Phase 3 discussion
-- Phase 3.2 inserted after Phase 3.1: Marketplace Layer Partition (LAYER-01..03, D-MF-03)
-- Phase 3.3 inserted after Phase 3.2: Plugin Layer Partition (LAYER-04..06, D-MF-03)
+- `03.1/` inserted after `03/`: Local Declaration Leak Fix: a --local marketplace leaks into claude-plugins.json on the first-run migration (FIX-02), found in Phase 3 discussion
+- `03.2/` inserted after `03.1/`: Marketplace Layer Partition (LAYER-01..03, D-MF-03)
+- `03.3/` inserted after `03.2/`: Plugin Layer Partition (LAYER-04..06, D-MF-03)
 
 ### Recent Decisions
 
