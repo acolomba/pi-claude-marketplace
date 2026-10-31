@@ -21,6 +21,53 @@ Use these terms in code, messages, docs, and planning (user decisions 2026-10-17
 - **Declaration:** an entry in a layer. **Installation:** the plugin's artifacts and record in a scope.
 - **Effective configuration:** a scope's two layers merged field by field, local winning on conflicts. The same intent may be declared in both layers.
 
+## Current Milestone: component-features -- Component Behavioral Tests (branch: claude/quirky-planck-hhm592, started 2026-10-31)
+
+**Goal:** The cucumber suite checks every bridged component kind -- skills,
+commands, agents, hooks, MCP servers, workflows -- as Pi and its companion
+extensions see it after a real `/claude:plugin` install, with Claude Code's
+component behavior as the reference and no authenticated LLM.
+
+**Target features:**
+
+- A harness phase first: Pi's faux model provider in the cucumber Pi, a
+  companion Pi that loads pi-subagents, pi-mcp-adapter and
+  pi-dynamic-workflows, a stub MCP server, a hook recorder, a probe extension
+  for tools and commands, per-kind fixture builders, and the shared steps.
+- The companions and Pi at their latest releases, with the declared floors
+  raised to match: Pi 1.4.0, pi-mcp-adapter 7.x, pi-subagents 0.84,
+  pi-dynamic-workflows 3.15 as a new optional peer. Whatever the new
+  versions break is fixed in the same phase.
+- One independent phase per component kind -- skills, commands, agents,
+  hooks, MCP servers, workflows -- each covering listing and naming,
+  frontmatter and field variants, invocation through the faux model,
+  companion-missing degradation, and removal and replacement through
+  uninstall, disable, and update.
+- Hook parity fixes found by spike 028: Pi `new` is sent as `clear` in
+  SessionStart and SessionEnd, `compact` fires SessionStart on Pi's
+  `session_compact`, and `clear`, `compact`, and `fork` matchers are
+  admitted.
+- The `user-invocable: false` skill behavior is recorded as a divergence
+  licensed by a Pi capability gap and reported to Pi.
+
+**Key context:** Spike 028 (`.planning/spikes/028-model-free-harness/`)
+proved every component kind is checkable this way. Phase 1 (the harness and
+the version raise) is the only prerequisite; every component phase after it
+runs in its own session and worktree in parallel, and splits its feature
+files across executor waves. Every scenario checks what Pi or a companion
+reports, never the files the bridge wrote. Plan every behavior from Claude
+Code's documented and observed behavior, and record each divergence with an
+ID and its license (a project decision or a Pi capability gap); a gap,
+contradiction, or edge case with no license goes to the user. Behavior that
+needs a real model (a model choosing a skill on its own, workflows whose
+scripts call agents) is out of scope and waits for a later milestone with a
+real provider.
+
+**Bug policy:** as in lifecycle-coverage. A scenario that exposes a product
+bug fixes it in the same phase, with Claude Code as the reference. A phase
+stops for the user only when upstream behavior contradicts a recorded
+project principle and no precedent settles it.
+
 ## Previous Milestone: plugin-lifecycle -- Marketplace and Plugin Lifecycle Backlog (branch: features/plugin-lifecycle-p11, started 2026-10-26, completed 2026-10-29, PR #290, not yet merged, no npm release)
 
 **Goal:** Every open `BACKLOG.md` entry about the marketplace and plugin
@@ -804,7 +851,8 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ### Active
 
-No milestone is active; start the next one with `$gsd-new-milestone`. The 64
+Milestone `component-features` is active; its requirements are in
+[REQUIREMENTS.md](REQUIREMENTS.md). The 64
 plugin-lifecycle requirements are validated and archived in
 [milestones/plugin-lifecycle-REQUIREMENTS.md](milestones/plugin-lifecycle-REQUIREMENTS.md);
 the 104 lifecycle-coverage requirements are validated and archived in

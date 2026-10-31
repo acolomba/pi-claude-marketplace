@@ -1,20 +1,16 @@
 ---
 gsd_state_version: "1.0"
-milestone: plugin-lifecycle
-status: plugin-lifecycle milestone complete
-stopped_at: "Milestone plugin-lifecycle shipped; PR #290 merged, released as 0.21.0"
-last_updated: "2026-10-31T08:13:42.210Z"
-last_activity: 2026-10-30
-last_activity_desc: "Completed quick task 261030-ogp: bootstrap runs only marketplace add"
-state_head: 9847e01b61249175f6ed565fdb02b2e0c5215253
-milestone_name: Marketplace and Plugin Lifecycle Backlog
-current_phase: 11
+milestone: component-features
+milestone_name: Component Behavioral Tests
+status: planning
+last_updated: "2026-10-31T22:26:02.785Z"
+last_activity: 2026-10-31
 progress:
-  total_phases: 11
-  completed_phases: 11
-  total_plans: 80
-  completed_plans: 80
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -30,10 +26,11 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: Milestone plugin-lifecycle complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: plugin-lifecycle milestone complete
-Last activity: 2026-10-30 - Completed quick task 261030-ogp: bootstrap runs only marketplace add
+Status: Defining requirements
+Last activity: 2026-10-31 — Milestone component-features started
+
 
 ### mcp-4 closeout
 
