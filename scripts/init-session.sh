@@ -19,10 +19,15 @@ top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
 # after launch, and Claude Code reads subagent definitions and starts MCP
 # servers only at launch, so GSD's subagents and the codegraph and fallow MCP
 # servers wait for the next session.
-if [[ ${CLAUDE_CODE_REMOTE-} == true && -n ${CLAUDE_ENV_FILE-} ]]; then
+if [[ ${CLAUDE_CODE_REMOTE-} == true ]]; then
     cd -- "$top"
     source scripts/cloud-env.sh
-    cloud_session_exports >>"$CLAUDE_ENV_FILE"
+    # Claude Code sets CLAUDE_ENV_FILE for a SessionStart hook; a run by hand
+    # has none
+    if [[ -n ${CLAUDE_ENV_FILE-} ]]; then
+        cloud_session_exports >>"$CLAUDE_ENV_FILE"
+    fi
+
     git lfs install --local --skip-smudge >/dev/null
     if [[ -e node_modules/.init-done ]]; then
         npm install --no-audit --no-fund >/dev/null
