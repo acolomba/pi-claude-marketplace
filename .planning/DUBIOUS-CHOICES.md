@@ -184,3 +184,34 @@ this project.
 - **Why dubious:** Phase 1 grows by about two plans and delays the fan-out,
   in exchange for one implementation instead of two that could drift.
 - **Recorded in:** `01-CONTEXT.md` `<specifics>`.
+
+### DC-11: UI design-contract step skipped on a false frontend match
+
+- **Phase / source:** Phase 1, autonomous step 3a.5; parent session.
+- **Severity:** Low. **Status:** open.
+- **Choice:** `gsd-tools check ui-plan-gate 1` answered `frontend: true`
+  only because the goal contains the word "component" (plugin components);
+  it found no frontend evidence, and `workflow.ui_phase` is false. The only
+  `plan:pre` step hook with a skill is `ai-integration-phase`, not a UI hook.
+  The run skipped the step, as the workflow does for `ui_phase=false`.
+- **Alternatives:** Run `gsd-ai-integration-phase 1`, which the literal rule
+  would have dispatched.
+- **Why dubious:** It departs from the literal workflow text. A GSD tooling
+  issue: the gate's keyword match and the "any step hook means ui_phase is on"
+  assumption both misfire here.
+- **Recorded in:** this file only.
+
+### DC-12: Planning without reversibility checkpoints
+
+- **Phase / source:** all planning; parent session.
+- **Severity:** Medium. **Status:** open.
+- **Choice:** Plans are made as with `--no-reversibility-gates`: a one-way-door
+  decision is still rated and recorded on its task, but it does not become a
+  human `checkpoint:decision` that stops execution. Workflow prompts that
+  offer a recommended option (for example "research first?") take it.
+- **Alternatives:** Keep the default gates, which would stop the run for the
+  user at each one-way-door decision.
+- **Why dubious:** It removes a safety stop the workflow has by default. The
+  user asked not to be interrupted, and the flag exists for unattended runs.
+- **Recorded in:** this file; the planner prompt says
+  `REVERSIBILITY_GATES: false`.
