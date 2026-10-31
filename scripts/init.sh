@@ -18,7 +18,7 @@ export GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never
 git lfs install --local $lfs_install_flags
 
 # pre-commit: pipx on a developer machine; the Claude Code cloud VM ships uv
-# and pip but no pipx
+# but no pipx
 if ! command -v pre-commit >/dev/null 2>&1; then
     if command -v pipx >/dev/null 2>&1; then
         pipx install pre-commit
@@ -27,7 +27,8 @@ if ! command -v pre-commit >/dev/null 2>&1; then
         uv tool install pre-commit
         PATH="$PATH:$(uv tool dir --bin)"
     else
-        python3 -m pip install --user pre-commit
+        echo "scripts/init.sh: install pipx or uv first; neither is on PATH" >&2
+        exit 1
     fi
 fi
 
