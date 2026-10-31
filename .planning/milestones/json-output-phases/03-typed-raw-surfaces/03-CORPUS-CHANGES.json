@@ -1,0 +1,67 @@
+[
+  {
+    "line": 2967,
+    "file": "tests/shared/notification-dispatch.test.ts",
+    "before": {
+      "message": "failed",
+      "severity": "error",
+      "argc": 2
+    },
+    "after": null,
+    "multiplicity": 1,
+    "test": "raw dispatch preserves absent and explicit severity once each",
+    "preserves": "The deleted raw-callback case pinned one- and two-argument forwarding of a caller-composed string. No surface composes its own notify string any more; the text strategy owns the argument count (D-15), pinned by the formatEnvelopeArguments rows and the formatRawSurface D-15 table in tests/shared/notification-grammar.test.ts."
+  },
+  {
+    "line": 2968,
+    "file": "tests/shared/notification-dispatch.test.ts",
+    "before": {
+      "message": "plain",
+      "severity": null,
+      "argc": 1
+    },
+    "after": null,
+    "multiplicity": 1,
+    "test": "raw dispatch preserves absent and explicit severity once each",
+    "preserves": "The deleted raw-callback case pinned one- and two-argument forwarding of a caller-composed string. No surface composes its own notify string any more; the text strategy owns the argument count (D-15), pinned by the formatEnvelopeArguments rows and the formatRawSurface D-15 table in tests/shared/notification-grammar.test.ts."
+  },
+  {
+    "line": null,
+    "file": "tests/shared/notification-dispatch.test.ts",
+    "before": null,
+    "after": {
+      "message": "reconcile aborted: boom",
+      "severity": "error",
+      "argc": 2
+    },
+    "multiplicity": 1,
+    "test": "notifyReconcileAborted emits the serialized cause at error severity",
+    "preserves": "Direct pair coverage of the named helper: exact bytes, severity, and two arguments for its kind (RAWS-04). tests/index.test.ts, tests/orchestrators/auth-host.test.ts, and the other production-path suites keep locking the same bytes unchanged."
+  },
+  {
+    "line": null,
+    "file": "tests/shared/notification-dispatch.test.ts",
+    "before": null,
+    "after": {
+      "message": "plugin PATH not refreshed for project scope (install state unreadable): schema unsupported",
+      "severity": "warning",
+      "argc": 2
+    },
+    "multiplicity": 1,
+    "test": "notifyPluginPathSkipped emits the skipped scope and reason at warning severity",
+    "preserves": "Direct pair coverage of the named helper: exact bytes, severity, and two arguments for its kind (RAWS-04). tests/index.test.ts, tests/orchestrators/auth-host.test.ts, and the other production-path suites keep locking the same bytes unchanged."
+  },
+  {
+    "line": null,
+    "file": "tests/shared/notification-dispatch.test.ts",
+    "before": null,
+    "after": {
+      "message": "Open https://github.com/login/device and enter: ABCD-1234",
+      "severity": "info",
+      "argc": 2
+    },
+    "multiplicity": 1,
+    "test": "notifyDeviceFlowPrompt emits the verification URI and user code at info severity",
+    "preserves": "Direct pair coverage of the named helper: exact bytes, severity, and two arguments for its kind (RAWS-03). tests/index.test.ts, tests/orchestrators/auth-host.test.ts, and the other production-path suites keep locking the same bytes unchanged."
+  }
+]

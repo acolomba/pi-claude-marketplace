@@ -56,8 +56,8 @@
 //
 // D-03-04 is accepted here rather than guarded. An already-installed member's
 // RECORDED version goes through `recordedVersionSatisfies`' normalization
-// ladder with no special case for this project's `hash-<12hex>` and
-// `sha-<12hex>` forms, which have no upstream equivalent. The consequence is
+// ladder with no special case for this project's `hash-<12hex>` form, which
+// has no upstream equivalent, or the git commit form (GV-01). The consequence is
 // plain: coercion can extract a misleading digit run from one of those strings
 // and produce a version that unpredictably satisfies or fails a range, and a
 // form that normalizes to nothing satisfies no range at all. The risk is taken
@@ -93,19 +93,28 @@ import { resolveDependencyClosure } from "../../domain/dependency-closure.ts";
 import {
   intersectDependencyRanges,
   isUnconstrainedRange,
+  MAX_DIRECTORY_PIN_FIELD_CHARS,
   recordedVersionSatisfies,
-  renderConstraintRange,
+  renderDeclaredRanges,
+  truncateForRefusal,
 } from "../../domain/dependency-range.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
-import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
+import { isPluginDirectoryMarketplace } from "../../domain/version.ts";
+import {
+  isRecordedButDisabled,
+  rangeVersionOf,
+  toDisabledRecord,
+} from "../../persistence/state-io.ts";
+import { DependencyCascadeError } from "../../shared/errors.ts";
+import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { runPhases } from "../../transaction/phase-ledger.ts";
 import { DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
-import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
+import { cascadeUnstagePlugin, foldUnstageNotices } from "../marketplace/shared.ts";
 
 import { probeDependencyTags } from "./dependency-tag-probe.ts";
-import { runInstallLedger } from "./install-outcome.ts";
+import { ledgerDegradationSignals, runInstallLedger } from "./install-outcome.ts";
 import { probeMarketplaceTags } from "./marketplace-tag-probe.ts";
 import { applyPartialCascadeFold } from "./shared.ts";
 
@@ -114,6 +123,7 @@ import type {
   DependencyTagProbeOptions,
 } from "./dependency-tag-probe.ts";
 import type {
+  DirectoryPinRange,
   InstallFailureCapture,
   InstallLedgerOptions,
   InstallLedgerResult,
@@ -121,6 +131,7 @@ import type {
   InstallLedgerTransaction,
 } from "./install-outcome.ts";
 import type { MarketplaceTagProbeOptions } from "./marketplace-tag-probe.ts";
+import type { LedgerDegradationSignals } from "./shared.ts";
 import type {
   ClosureLookup,
   ClosureMember,
@@ -132,6 +143,8 @@ import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { RemoteTag } from "../../platform/git.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type { DiscoveryWarning } from "../../shared/staging-warnings.ts";
 import type { Phase, RollbackPartial, RunPhasesResult } from "../../transaction/phase-ledger.ts";
 
 /** Materialization operations the cascade drives, injectable for fault tests. */
@@ -172,14 +185,14 @@ export type CascadeTagProbe = typeof probeDependencyTags;
 export type CascadeMarketplaceTagProbe = typeof probeMarketplaceTags;
 
 /** The per-URL tag listing memo one cascade run threads through every query. */
-type CascadeTagMemo = NonNullable<DependencyTagProbeOptions["tagMemo"]>;
+export type CascadeTagMemo = NonNullable<DependencyTagProbeOptions["tagMemo"]>;
 
 /**
  * The per-marketplace-root tag listing memo one cascade run threads through
  * every path-source member's local probe, so several members constrained
  * against the SAME marketplace clone list it once (WR-02).
  */
-type CascadeMarketplaceTagMemo = NonNullable<MarketplaceTagProbeOptions["tagMemo"]>;
+export type CascadeMarketplaceTagMemo = NonNullable<MarketplaceTagProbeOptions["tagMemo"]>;
 
 /**
  * Resolves the marketplace record a member's source is read from.
@@ -199,7 +212,7 @@ export type CascadeMarketplaceLookup = (
  * Why a member's accumulated version constraint produced no install.
  *
  * `range` is the constraint as rendered for a user-visible row, already bounded
- * by `renderConstraintRange`. Every arm carries the member key and that range
+ * by `renderDeclaredRanges`. Every arm carries the member key and that range
  * and nothing else identifying: no arm carries a filesystem path, and the
  * intersection's own `detail` is assembled from measurements and field
  * positions rather than from any declared range's text.
@@ -222,6 +235,19 @@ export type CascadeConstraintFailure =
       readonly key: string;
       readonly range: string;
       readonly recordedVersion: string;
+      /**
+       * UPD-DEP-D1: why `update`'s path cannot move the copy into the range,
+       * when the caller judged a move. Absent when no move was judged.
+       */
+      readonly moveRefusal?: string;
+      /**
+       * D-PL3-11: the keys of the plugins that declare the dependency, set
+       * beside `moveRefusal` by the plan that judged the move, so the refusal
+       * can tell whether the plugin the user named declares it.
+       */
+      readonly declaredBy?: readonly string[];
+      /** Set when `update` would meet the same refusal, so no hint names it. */
+      readonly updateBlocked?: true;
     }
   | {
       readonly kind: "range-too-complex";
@@ -261,7 +287,7 @@ export interface ResolvedCascadeMember extends ClosureMember {
      * The semver the selected tag carries, recorded as the member's version.
      *
      * RESV-05 reads a recorded version back against the constraint on the next
-     * install. A git-materialized install otherwise records `sha-<12hex>`, which
+     * install. A git-materialized install otherwise records its commit, which
      * `recordedVersionSatisfies`' normalization ladder either rejects outright or
      * coerces into an arbitrary digit run (D-03-04) -- so the run that pinned the
      * tag would fail its own constraint the second time it ran. The tag's own
@@ -283,6 +309,18 @@ export interface ResolvedCascadeMember extends ClosureMember {
    * installed fine.
    */
   readonly fellBackToCurrentCopy?: true;
+  /**
+   * GV-01: a member of Claude Code's plugin directory picks no release tag.
+   * It installs the copy its catalog entry lists, which must satisfy this
+   * range.
+   */
+  readonly directoryPin?: DirectoryPinRange;
+  /**
+   * D-PL4-01: the commit the dependency plan's install preview resolved for
+   * this member. The install pins it when no release tag pins the member, so
+   * it installs what the plan previewed and resolves the source once.
+   */
+  readonly previewedCommit?: string;
 }
 
 /**
@@ -300,9 +338,30 @@ type CascadePhaseMember =
       readonly record: PluginInstallRecord;
     };
 
+/**
+ * UPD-DEP-D1: one closure member a dependency plan decided, as the cascade
+ * that carries the plan out materializes it.
+ */
+export type PlannedCascadeMember =
+  | { readonly kind: "install"; readonly member: ResolvedCascadeMember }
+  | { readonly kind: "re-enable"; readonly member: ClosureMember };
+
+/**
+ * UPD-DEP-D1: what a cascade carrying out a dependency plan materializes, in
+ * order, and the recorded members its rows report as left alone.
+ */
+export interface PlannedClosure {
+  readonly members: readonly PlannedCascadeMember[];
+  readonly alreadyInstalled: readonly ClosureMember[];
+}
+
 /** Every member decided, in the walk's post order, or the first failure one produced. */
 type MemberConstraintResolution =
-  | { readonly ok: true; readonly members: readonly CascadePhaseMember[] }
+  | {
+      readonly ok: true;
+      readonly members: readonly CascadePhaseMember[];
+      readonly outOfRange: boolean;
+    }
   | { readonly ok: false; readonly failure: CascadeConstraintFailure };
 
 /** Inputs of one cascade run's constraint resolution. */
@@ -318,10 +377,25 @@ interface MemberConstraintOptions {
    */
   readonly rootRanges?: readonly string[];
   /**
+   * GV-01 / MISS-01: the keys of the plugins whose ranges `rootRanges` holds,
+   * which a plugin directory root's refusal names.
+   */
+  readonly rootRequiredBy?: readonly string[];
+  /** UPD-DEP-D1: report a recorded member outside its range instead of failing. */
+  readonly moveOutOfRange?: true;
+  /**
    * Every member the walk returned, in post order. A member the snapshot
-   * records DISABLED re-enables through that record; the rest install fresh.
+   * records DISABLED re-enables through that record; one in `readThrough`
+   * is a recorded member a plan moves; the rest install fresh.
    */
   readonly closure: readonly ClosureMember[];
+  /** What each plugin the walk found declares, as `recordingLookup` recorded it. */
+  readonly declared: ReadonlyMap<
+    string,
+    readonly { readonly key: string; readonly range?: string }[]
+  >;
+  /** UPD-DEP-D1: the recorded ENABLED keys a dependency plan moves. */
+  readonly readThrough: ReadonlySet<string>;
   /**
    * The members RESV-05 skipped -- recorded and ENABLED -- which are CHECKED
    * and never installed.
@@ -357,12 +431,17 @@ interface MemberConstraintOptions {
 }
 
 /** One member the cascade itself materialized, in install order. */
-export interface CascadeMemberOutcome {
+export interface CascadeMemberOutcome extends Pick<
+  LedgerDegradationSignals,
+  "orphanRewake" | "degradedKinds"
+> {
   readonly key: string;
   readonly name: string;
   readonly marketplace: string;
   readonly requiredBy: string | undefined;
   readonly version: string;
+  /** Unsupported kinds omitted by this member's partial installation. */
+  readonly unsupported?: readonly string[];
   /**
    * What the member staged, as the three soft-dependency kinds the renderer
    * probes for. Carried as booleans rather than as the staged name lists so a
@@ -387,6 +466,8 @@ export interface CascadeMemberOutcome {
    */
   readonly pluginRoot: string;
   readonly hooksConfigPath: string | undefined;
+  /** D-PL10-16: the member's own discovery notes, omitted when it raised none. */
+  readonly discoveryWarnings?: readonly DiscoveryWarning[];
   /**
    * TAGS-02: whether this member installed the marketplace's current copy
    * because no tag satisfied its constraint, rather than a pin.
@@ -442,6 +523,8 @@ export interface InstallCascadeOptions {
    * because the user typed the root.
    */
   readonly rootRanges?: readonly string[];
+  /** GV-01 / MISS-01: the keys of the plugins whose ranges `rootRanges` holds. */
+  readonly rootRequiredBy?: readonly string[];
   readonly lookup: ClosureLookup;
   /**
    * Per-member ledger options; the caller owns scope, cwd and the auth bundle.
@@ -461,6 +544,23 @@ export interface InstallCascadeOptions {
    * keep EDEP-03's read-through.
    */
   readonly treatDisabledAsWall?: true;
+  /**
+   * UPD-DEP-D1: recorded ENABLED keys a dependency plan moves. The walk reads
+   * through each one, from the declarations of the version its move lands
+   * (the caller's `lookup` answers them), and none becomes a phase.
+   */
+  readonly readThrough?: ReadonlySet<string>;
+  /**
+   * UPD-DEP-D1: the members a dependency plan decided. The cascade
+   * materializes exactly these, in this order, and walks nothing.
+   */
+  readonly planned?: PlannedClosure;
+  /**
+   * D-10-18: one operation's tag listing memos, so the plan and the cascade
+   * that executes it list a source once. Absent, each run allocates its own.
+   */
+  readonly tagMemo?: CascadeTagMemo;
+  readonly marketplaceTagMemo?: CascadeMarketplaceTagMemo;
   readonly knownMarketplaces: ReadonlySet<string>;
   /**
    * The caller's failure capture, threaded to every member's ledger so a
@@ -485,6 +585,20 @@ export interface InstallCascadeOptions {
   readonly marketplaceRecordFor?: CascadeMarketplaceLookup;
 }
 
+/**
+ * CAS-01 / D-PL3-01: the closure members this run would have materialized and
+ * did not, in the order the walk first looked them up. The root, the failing
+ * member, and the members a plan moves are never listed: each already has a
+ * row of its own.
+ *
+ * REQUIRED on every failure the cascade produces, on the D-07 rationale of
+ * `CascadeMemberOutcome.fellBackToCurrentCopy`: a producer that omits it is a
+ * compile error rather than a silently missing row.
+ */
+export interface Unmaterialized {
+  readonly unmaterialized: readonly string[];
+}
+
 /** The cascade's outcome. */
 export type InstallCascadeResult =
   | {
@@ -499,19 +613,138 @@ export type InstallCascadeResult =
        * to make.
        */
       readonly alreadyInstalled: readonly CascadeSkippedMember[];
+      /** AFILE-04: every member's MCP config file notices, in member order. */
+      readonly mcpConfigNotices: readonly McpConfigNotice[];
+    }
+  | {
+      /** UPD-DEP-D1: `installed` for a recorded root, which does not materialize; no root summary. */
+      readonly kind: "dependencies-installed";
+      readonly members: readonly CascadeMemberOutcome[];
+      readonly alreadyInstalled: readonly CascadeSkippedMember[];
+      readonly mcpConfigNotices: readonly McpConfigNotice[];
+    }
+  | {
+      /**
+       * UPD-DEP-D1: nothing materialized, because a recorded member falls
+       * outside its range. The caller plans the whole operation before it
+       * writes anything (`dependency-plan.ts`).
+       */
+      readonly kind: "planned";
     }
   | { readonly kind: "marketplace-absent" }
   | {
       readonly kind: "closure-failed";
-      readonly failure: Extract<DependencyClosureResult, { readonly ok: false }>;
+      readonly failure: Extract<DependencyClosureResult, { readonly ok: false }> & Unmaterialized;
     }
-  | { readonly kind: "constraint-failed"; readonly failure: CascadeConstraintFailure }
+  | {
+      readonly kind: "constraint-failed";
+      readonly failure: CascadeConstraintFailure & Unmaterialized;
+    }
   | {
       readonly kind: "member-failed";
       readonly key: string;
       readonly error: Error;
       readonly rollbackPartials: readonly RollbackPartial[];
+      /**
+       * CAS-01 / D-PL3-03: the members this run rolled back or never reached,
+       * in phase order, the root and the failing member excluded. REQUIRED on
+       * the D-07 rationale `Unmaterialized` states.
+       */
+      readonly unmaterialized: readonly string[];
+      /**
+       * AFILE-04: the notices of the members that committed before the
+       * failure, then those of their undo. The undo unstages from the
+       * rewritten file rather than restoring its bytes, so removed comments
+       * stay removed.
+       */
+      readonly mcpConfigNotices: readonly McpConfigNotice[];
     };
+
+/** UPD-DEP-D1: one plugin that declares a graph node, and the ranges it declares for it. */
+export interface GraphRequester {
+  readonly key: string;
+  readonly ranges: readonly string[];
+}
+
+/**
+ * UPD-DEP-D1: a plugin of a dependency graph that is not installed yet. It
+ * installs with the pin its combined range chose.
+ */
+export interface FreshGraphNode {
+  readonly kind: "fresh";
+  readonly member: ResolvedCascadeMember;
+  /** Every plugin of the graph that declares this one, in walk order. */
+  readonly requesters: readonly GraphRequester[];
+  /** The keys this node's declarations name. */
+  readonly dependsOn: readonly string[];
+}
+
+/**
+ * UPD-DEP-D1: a plugin of a dependency graph the scope records. The walk read
+ * through it when it is disabled or moving (`walked`), and stopped at it
+ * otherwise.
+ */
+export interface RecordedGraphNode {
+  readonly kind: "recorded";
+  readonly member: ClosureMember;
+  readonly requesters: readonly GraphRequester[];
+  /** The keys this node's declarations name; empty when the walk stopped at it. */
+  readonly dependsOn: readonly string[];
+  readonly version: string | undefined;
+  /**
+   * GV-01: the version ranges read when it is not the recorded one: the
+   * release tag's semver the record keeps, or the declared version of a
+   * pinned `anthropic-plugin-directory` plugin.
+   */
+  readonly resolvedVersion?: string;
+  readonly disabled: boolean;
+  readonly walked: boolean;
+}
+
+/** UPD-DEP-D1: one plugin of a dependency graph below its root. */
+export type DependencyGraphNode = FreshGraphNode | RecordedGraphNode;
+
+/**
+ * UPD-DEP-D1: one write-free walk of a whole dependency graph. `nodes` lists
+ * the recorded plugins the walk stopped at first, then the rest in post
+ * order, dependencies first. `root` is the root as it would install; a
+ * recorded root (an update) has none.
+ */
+export interface DependencyGraph {
+  readonly kind: "graph";
+  readonly root: ResolvedCascadeMember | undefined;
+  readonly rootDependsOn: readonly string[];
+  readonly nodes: readonly DependencyGraphNode[];
+}
+
+/** The arms a cascade reaches when its closure or a constraint fails, before any write. */
+export type CascadeResolutionFailure = Extract<
+  InstallCascadeResult,
+  { readonly kind: "closure-failed" | "constraint-failed" }
+>;
+
+/**
+ * UPD-DEP-D1 / WR-1: a graph walk that failed, with every plugin whose
+ * declarations the failure involves: the members of a cycle, the plugin that
+ * named a dependency it could not reach, or the plugins that declare the
+ * dependency whose ranges failed. A transport failure involves none.
+ */
+export type GraphWalkFailure = CascadeResolutionFailure & { readonly declarers: readonly string[] };
+
+/** UPD-DEP-D1: the arm a cascade reaches when recorded dependencies must move first. */
+export type CascadePlan = Extract<InstallCascadeResult, { readonly kind: "planned" }>;
+
+/** What a cascade that installs the root answers. */
+export type RootCascadeResult = Exclude<
+  InstallCascadeResult,
+  { readonly kind: "dependencies-installed" | "planned" }
+>;
+
+/** UPD-DEP-D1: what a cascade rooted at a recorded plugin answers. */
+export type DependencyCascadeResult = Exclude<
+  InstallCascadeResult,
+  { readonly kind: "installed" | "planned" }
+>;
 
 /** Mutable ledger context: what the phases record as they run. */
 interface CascadeRun {
@@ -521,6 +754,8 @@ interface CascadeRun {
   readonly members: CascadeMemberOutcome[];
   /** Keys THIS run materialized, and the only keys an `undo` may touch. */
   readonly materialized: Set<string>;
+  /** AFILE-04: each materialized member's MCP config file notices. */
+  readonly mcpConfigNotices: McpConfigNotice[];
 }
 
 /**
@@ -538,7 +773,7 @@ function toIntersectionFailure(
   ranges: readonly string[],
   failed: Extract<DependencyRangeIntersection, { readonly ok: false }>,
 ): CascadeConstraintFailure {
-  const range = renderConstraintRange(ranges.join(" "));
+  const range = renderDeclaredRanges(ranges);
   if (failed.reason === "disjoint") {
     return {
       kind: "range-conflict",
@@ -580,7 +815,7 @@ async function resolveMemberTagSource(
 ): Promise<MemberTagSource> {
   const lookup =
     options.marketplaceRecordFor ??
-    ((marketplace: string) => Promise.resolve(options.state.marketplaces[marketplace]));
+    ((marketplace: string) => Promise.resolve(ownValue(options.state.marketplaces, marketplace)));
   const record = await lookup(member.marketplace);
   if (record === undefined) {
     return { kind: "absent" };
@@ -627,10 +862,10 @@ type MemberConstraintOutcome =
  */
 function toMemberConstraintOutcome(
   member: ClosureMember,
-  range: string,
+  declared: string,
   probed:
     | { readonly kind: "pinned"; readonly oid: string; readonly version: string }
-    | { readonly kind: "no-matching-tag"; readonly range: string }
+    | { readonly kind: "no-matching-tag" }
     | {
         readonly kind: "tag-listing-failed";
         readonly classification: DependencyTagListingFailureReason;
@@ -646,7 +881,11 @@ function toMemberConstraintOutcome(
   if (probed.kind === "no-matching-tag") {
     return {
       kind: "failed",
-      failure: { kind: "no-matching-tag", key: member.key, range: probed.range },
+      failure: {
+        kind: "no-matching-tag",
+        key: member.key,
+        range: declared,
+      },
     };
   }
 
@@ -655,7 +894,7 @@ function toMemberConstraintOutcome(
     failure: {
       kind: "tag-listing-failed",
       key: member.key,
-      range: renderConstraintRange(range),
+      range: declared,
       classification: probed.classification,
     },
   };
@@ -665,12 +904,13 @@ async function probeMemberPin(
   options: MemberConstraintOptions,
   member: ClosureMember,
   range: string,
+  declared: string,
 ): Promise<MemberConstraintOutcome> {
   const tagSource = await resolveMemberTagSource(options, member);
   if (tagSource.kind === "absent") {
     return {
       kind: "failed",
-      failure: { kind: "no-matching-tag", key: member.key, range: renderConstraintRange(range) },
+      failure: { kind: "no-matching-tag", key: member.key, range: declared },
     };
   }
 
@@ -696,7 +936,7 @@ async function probeMemberPin(
       return { kind: "resolved", member: { ...member, fellBackToCurrentCopy: true } };
     }
 
-    return toMemberConstraintOutcome(member, range, probed);
+    return toMemberConstraintOutcome(member, declared, probed);
   }
 
   const ledger = options.ledgerOptionsFor(member);
@@ -707,12 +947,13 @@ async function probeMemberPin(
     tagMemo: options.tagMemo,
     auth: {
       ctx: ledger.ctx,
+      run: ledger.run,
       credentialOps: ledger.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
       ...(ledger.deviceFlowHttp !== undefined && { deviceFlowHttp: ledger.deviceFlowHttp }),
       ...(ledger.authMemo !== undefined && { authMemo: ledger.authMemo }),
     },
   });
-  return toMemberConstraintOutcome(member, range, probed);
+  return toMemberConstraintOutcome(member, declared, probed);
 }
 
 /**
@@ -734,6 +975,35 @@ function effectiveRanges(
 }
 
 /**
+ * GV-01: the plugins a member's ranges came from, as Claude Code names them
+ * when a plugin directory copy falls outside them. The root gets the caller's
+ * requirers (MISS-01). Any other member gets every cascade member that
+ * declared a range on it, in reverse install order: the closure's post order
+ * reversed, which is the order Claude Code names them in (D-PL3-08). This is
+ * not the order of distance from the requested plugin. An installed plugin
+ * outside the closure is not named, because D-03-10 keeps its range out of the
+ * walk and out of the check (D-PL3-13).
+ */
+function rangeRequirers(
+  options: MemberConstraintOptions,
+  member: ClosureMember,
+): readonly string[] {
+  if (member.key === options.rootKey) {
+    return options.rootRequiredBy ?? [];
+  }
+
+  const declarers = new Set(
+    requestersOf(options.declared, member.key)
+      .filter((requester) => requester.ranges.length > 0)
+      .map((requester) => requester.key),
+  );
+  return [...options.closure]
+    .reverse()
+    .filter((declarer) => declarers.has(declarer.key))
+    .map((declarer) => declarer.key);
+}
+
+/**
  * Resolve one member this run would install.
  *
  * The wildcard arm returns the member untouched and makes NO query: an empty
@@ -750,20 +1020,44 @@ async function resolveOneMember(
     return { kind: "failed", failure: toIntersectionFailure(member.key, ranges, intersected) };
   }
 
-  return isUnconstrainedRange(intersected.range)
-    ? { kind: "resolved", member }
-    : probeMemberPin(options, member, intersected.range);
+  if (isUnconstrainedRange(intersected.range)) {
+    return { kind: "resolved", member };
+  }
+
+  // GV-01: Claude Code never picks a release tag for a plugin of its plugin
+  // directory; the copy its catalog lists must satisfy the range instead.
+  if (isPluginDirectoryMarketplace(member.marketplace)) {
+    return {
+      kind: "resolved",
+      member: {
+        ...member,
+        directoryPin: {
+          range: intersected.range,
+          declared: truncateForRefusal(ranges.join(", "), MAX_DIRECTORY_PIN_FIELD_CHARS),
+          requiredBy: rangeRequirers(options, member),
+        },
+      },
+    };
+  }
+
+  return probeMemberPin(options, member, intersected.range, renderDeclaredRanges(ranges));
 }
 
 /**
  * The version the locked snapshot records for a member, if it records one.
  *
- * Read in one place so the RESV-05 constraint check and the RESV-06 skipped-row
- * projection cannot answer the same question differently -- a row reporting a
- * version the check never saw would be the worst of both.
+ * Read from the one record the RESV-05 constraint check reads, so the RESV-06
+ * skipped-row projection and that check cannot answer about different
+ * records. The check reads the record's range version (GV-01); the row shows
+ * the version it records.
  */
 function recordedVersionOf(state: ExtensionState, member: ClosureMember): string | undefined {
-  return state.marketplaces[member.marketplace]?.plugins[member.name]?.version;
+  return recordOf(state, member)?.version;
+}
+
+/** The record the locked snapshot holds for a member, if any. */
+function recordOf(state: ExtensionState, member: ClosureMember): PluginInstallRecord | undefined {
+  return ownValue(ownValue(state.marketplaces, member.marketplace)?.plugins, member.name);
 }
 
 /**
@@ -786,7 +1080,7 @@ function disabledRecordOf(
     return undefined;
   }
 
-  const record = state.marketplaces[member.marketplace]?.plugins[member.name];
+  const record = ownValue(ownValue(state.marketplaces, member.marketplace)?.plugins, member.name);
   return record !== undefined && isRecordedButDisabled(record) ? record : undefined;
 }
 
@@ -834,6 +1128,9 @@ function liveInstalledKeys(
  * A member the snapshot records no version for is left alone. It is not
  * installed in this state after all, so there is nothing for a constraint to
  * conflict with.
+ *
+ * INR-04: a conflict reports the DECLARED ranges, as the contradictory
+ * declarations arm does and as Claude Code does, not their intersection.
  */
 function checkInstalledMember(
   state: ExtensionState,
@@ -844,40 +1141,58 @@ function checkInstalledMember(
     return toIntersectionFailure(member.key, member.ranges, intersected);
   }
 
-  const recorded = recordedVersionOf(state, member);
+  const recorded = recordOf(state, member);
   if (isUnconstrainedRange(intersected.range) || recorded === undefined) {
     return undefined;
   }
 
-  return recordedVersionSatisfies(recorded, intersected.range)
+  // GV-01: a record at a release tag is read by the tag's semver.
+  return recordedVersionSatisfies(rangeVersionOf(recorded), intersected.range)
     ? undefined
     : {
         kind: "range-conflict",
         why: "installed-unsatisfied",
         key: member.key,
-        range: renderConstraintRange(intersected.range),
-        recordedVersion: recorded,
+        range: renderDeclaredRanges(member.ranges),
+        recordedVersion: recorded.version,
       };
 }
 
 /**
- * RESV-05 over every recorded member -- the enabled ones the walk skipped and
- * the disabled ones it walked -- none of which needs a query.
+ * RESV-05 over every recorded member -- the enabled ones the walk skipped,
+ * the disabled ones it walked, and the ones a plan moves -- none of which
+ * needs a query. UPD-DEP-D1: with `moveOutOfRange`, a member whose recorded
+ * version the range rejects is noted for a move instead of failing the
+ * cascade; every other failure still fails it.
  */
-function checkRecordedMembers(
-  options: MemberConstraintOptions,
-): CascadeConstraintFailure | undefined {
-  const disabled = options.closure.filter(
-    (member) => disabledRecordOf(options.state, options.rootKey, member) !== undefined,
+function checkRecordedMembers(options: MemberConstraintOptions): {
+  readonly failure?: CascadeConstraintFailure;
+  readonly outOfRange: boolean;
+} {
+  const walked = options.closure.filter(
+    (member) =>
+      disabledRecordOf(options.state, options.rootKey, member) !== undefined ||
+      options.readThrough.has(member.key),
   );
-  for (const member of [...options.alreadyInstalled, ...disabled]) {
+  let outOfRange = false;
+  for (const member of [...options.alreadyInstalled, ...walked]) {
     const failure = checkInstalledMember(options.state, member);
-    if (failure !== undefined) {
-      return failure;
+    if (failure === undefined) {
+      continue;
     }
+
+    if (
+      options.moveOutOfRange !== true ||
+      failure.kind !== "range-conflict" ||
+      failure.why !== "installed-unsatisfied"
+    ) {
+      return { failure, outOfRange };
+    }
+
+    outOfRange = true;
   }
 
-  return undefined;
+  return { outOfRange };
 }
 
 /**
@@ -893,9 +1208,9 @@ function checkRecordedMembers(
 async function resolveMemberConstraints(
   options: MemberConstraintOptions,
 ): Promise<MemberConstraintResolution> {
-  const recordedFailure = checkRecordedMembers(options);
-  if (recordedFailure !== undefined) {
-    return { ok: false, failure: recordedFailure };
+  const recorded = checkRecordedMembers(options);
+  if (recorded.failure !== undefined) {
+    return { ok: false, failure: recorded.failure };
   }
 
   const members: CascadePhaseMember[] = [];
@@ -903,6 +1218,12 @@ async function resolveMemberConstraints(
     const record = disabledRecordOf(options.state, options.rootKey, member);
     if (record !== undefined) {
       members.push({ kind: "re-enable", member, record });
+      continue;
+    }
+
+    // UPD-DEP-D1: a recorded member a plan moves is neither a phase nor a
+    // fresh install; the plan decides its version.
+    if (options.readThrough.has(member.key)) {
       continue;
     }
 
@@ -915,7 +1236,44 @@ async function resolveMemberConstraints(
     members.push({ kind: "install", member: outcome.member });
   }
 
-  return { ok: true, members };
+  // UPD-DEP-D1: every other member resolved, so the moves are all that stand
+  // between the closure and its install; nothing is materialized yet.
+  return { ok: true, members, outOfRange: recorded.outOfRange };
+}
+
+/**
+ * Records a member whose ledger just materialized it: the key an `undo` may
+ * touch, its MCP config notices (AFILE-04), and its outcome as its own ledger
+ * summary reports it. `origin` holds the two facts the summary cannot know.
+ */
+function recordMaterializedMember(
+  run: CascadeRun,
+  member: ClosureMember,
+  summary: InstallLedgerSummary,
+  origin: Pick<CascadeMemberOutcome, "fellBackToCurrentCopy" | "reEnabledFromRecord">,
+): void {
+  run.materialized.add(member.key);
+  run.mcpConfigNotices.push(...summary.mcpConfigNotices);
+  run.members.push({
+    key: member.key,
+    name: member.name,
+    marketplace: member.marketplace,
+    requiredBy: member.requiredBy,
+    version: summary.version,
+    ...(summary.resolved.state === "partially-available" && {
+      unsupported: [...summary.resolved.unsupported],
+    }),
+    ...ledgerDegradationSignals(summary),
+    declaresAgents: summary.stagedAgentNames.length > 0,
+    declaresMcp: summary.stagedMcpServerNames.length > 0,
+    declaresWorkflows: summary.stagedWorkflowNames.length > 0,
+    pluginRoot: summary.resolved.pluginRoot,
+    hooksConfigPath: summary.resolved.hooksConfigPath,
+    ...(summary.discoveryWarnings.length > 0 && {
+      discoveryWarnings: summary.discoveryWarnings,
+    }),
+    ...origin,
+  });
 }
 
 /**
@@ -957,18 +1315,7 @@ function buildMemberPhase(
         throw new Error(`Marketplace "${member.marketplace}" is not added.`);
       }
 
-      run.materialized.add(member.key);
-      run.members.push({
-        key: member.key,
-        name: member.name,
-        marketplace: member.marketplace,
-        requiredBy: member.requiredBy,
-        version: result.summary.version,
-        declaresAgents: result.summary.stagedAgentNames.length > 0,
-        declaresMcp: result.summary.stagedMcpServerNames.length > 0,
-        declaresWorkflows: result.summary.stagedWorkflowNames.length > 0,
-        pluginRoot: result.summary.resolved.pluginRoot,
-        hooksConfigPath: result.summary.resolved.hooksConfigPath,
+      recordMaterializedMember(run, member, result.summary, {
         fellBackToCurrentCopy: member.fellBackToCurrentCopy ?? false,
         reEnabledFromRecord: false,
       });
@@ -977,38 +1324,74 @@ function buildMemberPhase(
       }
     },
     undo: async (run) => {
-      if (!run.materialized.has(member.key)) {
+      const unstaged = await unstageMaterializedMember(options, seam, run, member);
+      if (unstaged === undefined) {
         return;
-      }
-
-      const marketplaceRecord = options.state.marketplaces[member.marketplace];
-      const installed = marketplaceRecord?.plugins[member.name];
-      if (marketplaceRecord === undefined || installed === undefined) {
-        return;
-      }
-
-      const outcome = await seam.cascadeUnstagePlugin(
-        member.name,
-        member.marketplace,
-        options.locations,
-        installed,
-      );
-      if (!outcome.ok) {
-        // The primitive REPORTS rather than throws -- its whole body is a
-        // try/catch returning `{ok: false, dropped, cause}` -- and the ledger's
-        // only partial-rollback channel is a throw. Discarding this outcome
-        // reports a cascade that unwound cleanly while the member's artifacts
-        // are still on disk, so convert it. Subtracting what DID drop first
-        // keeps the record honest about what remains (NFR-3), and the record is
-        // deliberately NOT deleted: it is what still owns those artifacts.
-        applyPartialCascadeFold(installed, outcome.dropped);
-        throw outcome.cause ?? new Error(`Rollback of "${member.key}" did not complete.`);
       }
 
       // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- `plugins` is a Record<string, ...> keyed by the member's own token-checked plugin name.
-      delete marketplaceRecord.plugins[member.name];
+      delete unstaged.marketplaceRecord.plugins[member.name];
     },
   };
+}
+
+/**
+ * The unstage both member undos share. Returns the member's marketplace slot
+ * and record once its artifacts are off disk, or `undefined` when this run
+ * did not materialize the member or the snapshot no longer records it.
+ *
+ * AFILE-04: the unstage rewrites the MCP config files again, and its notices
+ * join the run's even when a later slot then fails. AVAR-04: the variable
+ * notices of the servers it removed leave the run's list.
+ *
+ * The primitive REPORTS rather than throws -- its whole body is a try/catch
+ * returning `{ok: false, dropped, cause}` -- and the ledger's only
+ * partial-rollback channel is a throw. Discarding a failed outcome reports a
+ * cascade that unwound cleanly while the member's artifacts are still on
+ * disk, so convert it. Subtracting what DID drop first keeps the record honest
+ * about what remains (NFR-3), and the record is deliberately NOT deleted or
+ * disabled: it is what still owns those artifacts.
+ */
+async function unstageMaterializedMember(
+  options: InstallCascadeOptions,
+  seam: InstallCascadeLedgerSeam,
+  run: CascadeRun,
+  member: Pick<ClosureMember, "key" | "name" | "marketplace">,
+): Promise<
+  | {
+      readonly marketplaceRecord: ExtensionState["marketplaces"][string];
+      readonly installed: PluginInstallRecord;
+    }
+  | undefined
+> {
+  if (!run.materialized.has(member.key)) {
+    return undefined;
+  }
+
+  const marketplaceRecord = ownValue(options.state.marketplaces, member.marketplace);
+  const installed = ownValue(marketplaceRecord?.plugins, member.name);
+  if (marketplaceRecord === undefined || installed === undefined) {
+    return undefined;
+  }
+
+  const outcome = await seam.cascadeUnstagePlugin(
+    member.name,
+    member.marketplace,
+    options.locations,
+    installed,
+  );
+  foldUnstageNotices(run.mcpConfigNotices, {
+    scope: options.locations.scope,
+    plugin: member.name,
+    droppedServers: outcome.dropped.mcpServers,
+    notices: outcome.mcpConfigNotices ?? [],
+  });
+  if (!outcome.ok) {
+    applyPartialCascadeFold(installed, outcome.dropped);
+    throw outcome.cause ?? new Error(`Rollback of "${member.key}" did not complete.`);
+  }
+
+  return { marketplaceRecord, installed };
 }
 
 type InstalledLedgerResult = Extract<InstallLedgerResult, { readonly kind: "installed" }>;
@@ -1075,6 +1458,7 @@ function buildReEnableMemberPhase(
         {
           ...options.ledgerOptionsFor(member),
           pinVersionOverride: record.version,
+          ...(record.resolvedVersion !== undefined && { resolvedVersion: record.resolvedVersion }),
           allowExistingRecord: true,
           partial: !record.compatibility.installable,
         },
@@ -1083,116 +1467,185 @@ function buildReEnableMemberPhase(
       );
       assertReEnableLedgerInstalled(result);
 
-      run.materialized.add(member.key);
-      run.members.push({
-        key: member.key,
-        name: member.name,
-        marketplace: member.marketplace,
-        requiredBy: member.requiredBy,
-        version: result.summary.version,
-        declaresAgents: result.summary.stagedAgentNames.length > 0,
-        declaresMcp: result.summary.stagedMcpServerNames.length > 0,
-        declaresWorkflows: result.summary.stagedWorkflowNames.length > 0,
-        pluginRoot: result.summary.resolved.pluginRoot,
-        hooksConfigPath: result.summary.resolved.hooksConfigPath,
+      recordMaterializedMember(run, member, result.summary, {
         fellBackToCurrentCopy: false,
         reEnabledFromRecord: true,
       });
     },
     undo: async (run) => {
-      if (!run.materialized.has(member.key)) {
+      const unstaged = await unstageMaterializedMember(options, seam, run, member);
+      if (unstaged === undefined) {
         return;
       }
 
-      const marketplaceRecord = options.state.marketplaces[member.marketplace];
-      const installed = marketplaceRecord?.plugins[member.name];
-      if (marketplaceRecord === undefined || installed === undefined) {
-        return;
-      }
-
-      const outcome = await seam.cascadeUnstagePlugin(
+      setOwn(
+        unstaged.marketplaceRecord.plugins,
         member.name,
-        member.marketplace,
-        options.locations,
-        installed,
-      );
-      if (!outcome.ok) {
-        applyPartialCascadeFold(installed, outcome.dropped);
-        throw outcome.cause ?? new Error(`Rollback of "${member.key}" did not complete.`);
-      }
-
-      marketplaceRecord.plugins[member.name] = toDisabledRecord(
-        installed,
-        new Date().toISOString(),
+        toDisabledRecord(unstaged.installed, new Date().toISOString()),
       );
     },
   };
 }
 
-/** Project the ledger result and the run's records onto the caller-facing arm. */
-function toCascadeResult(
+/** A ledger run's result and the run's records, before the caller's arm is chosen. */
+interface MaterializedCascade {
+  readonly result: RunPhasesResult;
+  readonly run: CascadeRun;
+  readonly alreadyInstalled: readonly CascadeSkippedMember[];
+  /** The key of every member the run built a phase for, in phase order. */
+  readonly phaseKeys: readonly string[];
+}
+
+/** The failure arms a ledger run can reach. */
+function failedCascade(
   options: InstallCascadeOptions,
-  result: RunPhasesResult,
-  run: CascadeRun,
-  alreadyInstalled: readonly CascadeSkippedMember[],
-): InstallCascadeResult {
-  if (result.ok) {
-    const root = run.root;
-    if (root === undefined) {
-      // The closure always ends at the root, so a clean ledger run always
-      // recorded it. Reaching here means the injected scheduler reported
-      // success without running the phases.
-      throw new Error("Install cascade reported success without materializing the root plugin.");
-    }
-
-    return { kind: "installed", root, members: run.members, alreadyInstalled };
-  }
-
+  { result, run, phaseKeys }: MaterializedCascade,
+): Extract<InstallCascadeResult, { readonly kind: "marketplace-absent" | "member-failed" }> {
   if (run.marketplaceAbsent) {
     return { kind: "marketplace-absent" };
   }
 
+  const key = run.attempting ?? options.rootKey;
   return {
     kind: "member-failed",
-    key: run.attempting ?? options.rootKey,
+    key,
     error: result.error ?? new Error("Install cascade failed."),
     rollbackPartials: result.rollbackPartials,
+    mcpConfigNotices: run.mcpConfigNotices,
+    unmaterialized: phaseKeys.filter(
+      (phaseKey) => phaseKey !== options.rootKey && phaseKey !== key,
+    ),
+  };
+}
+
+/** Projects a ledger run that installed the root onto the caller-facing arm. */
+function rootCascadeResult(
+  options: InstallCascadeOptions,
+  materialized: MaterializedCascade,
+): RootCascadeResult {
+  const { result, run, alreadyInstalled } = materialized;
+  if (!result.ok) {
+    return failedCascade(options, materialized);
+  }
+
+  const root = run.root;
+  if (root === undefined) {
+    // The closure always ends at the root, so a clean ledger run always
+    // recorded it. Reaching here means the injected scheduler reported
+    // success without running the phases.
+    throw new Error("Install cascade reported success without materializing the root plugin.");
+  }
+
+  return {
+    kind: "installed",
+    root,
+    members: run.members,
+    alreadyInstalled,
+    mcpConfigNotices: run.mcpConfigNotices,
+  };
+}
+
+/** UPD-DEP-D1: projects a ledger run rooted at a recorded plugin onto its arm. */
+function dependencyCascadeResult(
+  options: InstallCascadeOptions,
+  materialized: MaterializedCascade,
+): DependencyCascadeResult {
+  const { result, run, alreadyInstalled } = materialized;
+  return result.ok
+    ? {
+        kind: "dependencies-installed",
+        members: run.members,
+        alreadyInstalled,
+        mcpConfigNotices: run.mcpConfigNotices,
+      }
+    : failedCascade(options, materialized);
+}
+
+/** The closure walked and every member's constraint decided, nothing materialized. */
+interface ResolvedCascade {
+  readonly kind: "resolved";
+  /** The walk's post order, the members a plan moves included. */
+  readonly closure: readonly ClosureMember[];
+  readonly alreadyInstalled: readonly ClosureMember[];
+  readonly members: readonly CascadePhaseMember[];
+  /** UPD-DEP-D1: whether a recorded member falls outside its range. */
+  readonly outOfRange: boolean;
+}
+
+/**
+ * UPD-DEP-D1: the closure a dependency plan decided, taken as it stands. A
+ * member the plan re-enables must still be recorded disabled; a scope another
+ * process changed since the plan refuses the run.
+ */
+function plannedCascade(options: InstallCascadeOptions, planned: PlannedClosure): ResolvedCascade {
+  const members = planned.members.map((entry): CascadePhaseMember => {
+    if (entry.kind === "install") {
+      return entry;
+    }
+
+    const record = disabledRecordOf(options.state, options.rootKey, entry.member);
+    if (record === undefined) {
+      throw new DependencyCascadeError(
+        `Dependency "${entry.member.key}" changed since the dependency plan read it; run the command again.`,
+        entry.member.key,
+      );
+    }
+
+    return { kind: "re-enable", member: entry.member, record };
+  });
+  return {
+    kind: "resolved",
+    closure: planned.members.map((entry) => entry.member),
+    alreadyInstalled: planned.alreadyInstalled,
+    members,
+    outOfRange: false,
   };
 }
 
 /**
- * Resolve the requested plugin's dependency closure and materialize every
- * member of it, all-or-nothing.
- *
- * Nothing is materialized when the closure itself fails, and `runPhases` never
- * throws on its own -- its `{ok: false}` result is translated here, so the
- * caller sees one discriminated value for every outcome.
+ * Walks the requested plugin's dependency closure and decides every member's
+ * constraint, with no write. With `moveOutOfRange` (UPD-DEP-D1 / RESV-05), a
+ * recorded member whose version the range rejects is noted for a move
+ * instead of failing the cascade. A cascade carrying out a plan walks nothing.
  */
-export async function runInstallCascade(
+async function resolveCascade(
   options: InstallCascadeOptions,
-): Promise<InstallCascadeResult> {
+  moveOutOfRange: boolean,
+  declared: DeclaredEdges,
+): Promise<ResolvedCascade | CascadeResolutionFailure> {
+  if (options.planned !== undefined) {
+    return plannedCascade(options, options.planned);
+  }
+
+  const readThrough = options.readThrough ?? new Set<string>();
   // EDEP-03: a disabled record is not a wall by default. The walk reads
   // through it, so its own dependencies -- disabled or never installed -- are
   // members of this closure with their ranges merged across every declaring
   // branch, and a declaration it cannot resolve fails this install naming it
   // as the dependent. D-09-04's `treatDisabledAsWall` is the one input that
   // reverses this: the walk stops at a disabled key exactly as it stops at a
-  // live one.
+  // live one. UPD-DEP-D1: a recorded key a plan moves is read through too.
+  const live = liveInstalledKeys(options.state, options.installedKeys);
+  const walls = options.treatDisabledAsWall === true ? options.installedKeys : live;
   const closure = await resolveDependencyClosure({
     rootKey: options.rootKey,
-    lookup: options.lookup,
-    installedKeys:
-      options.treatDisabledAsWall === true
-        ? options.installedKeys
-        : liveInstalledKeys(options.state, options.installedKeys),
+    lookup: recordingLookup(options.lookup, declared),
+    installedKeys: new Set([...walls].filter((key) => !readThrough.has(key))),
     knownMarketplaces: options.knownMarketplaces,
+    // XMKT-02: only an enabled record is exempt from the root's allowlist, as
+    // in Claude Code, so a disabled foreign dependency this install would
+    // enable again needs the root marketplace's permission.
     installPolicy: {
       allowedMarketplaces: options.rootAllowedMarketplaces,
-      recordedKeys: options.installedKeys,
+      recordedKeys: live,
     },
   });
   if (!closure.ok) {
-    return { kind: "closure-failed", failure: closure };
+    const failing = closure.reason === "cycle" ? closure.chain.slice(-1) : [closure.key];
+    return {
+      kind: "closure-failed",
+      failure: { ...closure, ...unmaterialized(options.rootKey, failing, declared, readThrough) },
+    };
   }
 
   // RESV-03 / RESV-05: decided here, between the walk and the phase array, so
@@ -1203,12 +1656,17 @@ export async function runInstallCascade(
     state: options.state,
     rootKey: options.rootKey,
     closure: closure.closure,
+    declared,
+    readThrough,
     alreadyInstalled: closure.alreadyInstalled,
     ledgerOptionsFor: options.ledgerOptionsFor,
     tagProbe: options.tagProbe ?? probeDependencyTags,
-    tagMemo: new Map<string, readonly RemoteTag[]>(),
-    marketplaceTagMemo: new Map<string, readonly ReleaseTagCandidate[]>(),
+    tagMemo: options.tagMemo ?? new Map<string, readonly RemoteTag[]>(),
+    marketplaceTagMemo:
+      options.marketplaceTagMemo ?? new Map<string, readonly ReleaseTagCandidate[]>(),
     ...(options.rootRanges !== undefined && { rootRanges: options.rootRanges }),
+    ...(options.rootRequiredBy !== undefined && { rootRequiredBy: options.rootRequiredBy }),
+    ...(moveOutOfRange && { moveOutOfRange: true }),
     ...(options.marketplaceTagProbe !== undefined && {
       marketplaceTagProbe: options.marketplaceTagProbe,
     }),
@@ -1217,9 +1675,39 @@ export async function runInstallCascade(
     }),
   });
   if (!constraints.ok) {
-    return { kind: "constraint-failed", failure: constraints.failure };
+    const failing = [constraints.failure.key];
+    return {
+      kind: "constraint-failed",
+      failure: {
+        ...constraints.failure,
+        ...unmaterialized(options.rootKey, failing, declared, readThrough),
+      },
+    };
   }
 
+  return {
+    kind: "resolved",
+    closure: closure.closure,
+    alreadyInstalled: closure.alreadyInstalled,
+    members: constraints.members,
+    outOfRange: constraints.outOfRange,
+  };
+}
+
+/**
+ * Materializes every member of a resolved closure, all-or-nothing. A recorded
+ * root (UPD-DEP-D1) is the plugin an update moves; its own swap replaces it,
+ * so only its closure becomes phases.
+ *
+ * `runPhases` never throws on its own -- its `{ok: false}` result is
+ * translated by the caller's projection, so the caller sees one
+ * discriminated value for every outcome.
+ */
+async function materializeCascade(
+  options: InstallCascadeOptions,
+  resolved: ResolvedCascade,
+  rootRecorded: boolean,
+): Promise<MaterializedCascade> {
   const seam = options.seam ?? REAL_INSTALL_CASCADE_SEAM;
   const transaction = options.transaction ?? DEFAULT_INSTALL_CASCADE_TRANSACTION;
   const run: CascadeRun = {
@@ -1228,10 +1716,14 @@ export async function runInstallCascade(
     attempting: undefined,
     members: [],
     materialized: new Set<string>(),
+    mcpConfigNotices: [],
   };
   // One phase per closure member, in the walk's post order: a dependency is
   // live -- installed or re-enabled -- before the member that needs it runs.
-  const phases: readonly Phase<CascadeRun>[] = constraints.members.map((entry) =>
+  const members = rootRecorded
+    ? resolved.members.filter((entry) => entry.member.key !== options.rootKey)
+    : resolved.members;
+  const phases: readonly Phase<CascadeRun>[] = members.map((entry) =>
     entry.kind === "re-enable"
       ? buildReEnableMemberPhase(options, seam, transaction, entry.member, entry.record)
       : buildMemberPhase(options, seam, transaction, entry.member),
@@ -1240,12 +1732,238 @@ export async function runInstallCascade(
   // the ledger -- these members never reach a phase, so the run has nothing to
   // record about them. They are carried out of the cascade so the block can
   // report them as left alone rather than omitting them entirely.
-  const alreadyInstalled: readonly CascadeSkippedMember[] = closure.alreadyInstalled.map(
+  const alreadyInstalled: readonly CascadeSkippedMember[] = resolved.alreadyInstalled.map(
     (member) => ({
       key: member.key,
       version: recordedVersionOf(options.state, member),
     }),
   );
 
-  return toCascadeResult(options, await transaction.runPhases(phases, run), run, alreadyInstalled);
+  return {
+    result: await transaction.runPhases(phases, run),
+    run,
+    alreadyInstalled,
+    phaseKeys: members.map((entry) => entry.member.key),
+  };
+}
+
+/**
+ * Resolve the requested plugin's dependency closure and materialize every
+ * member of it, all-or-nothing. Nothing is materialized when the closure
+ * itself fails. A recorded member outside its range fails the cascade.
+ */
+export async function runInstallCascade(
+  options: InstallCascadeOptions,
+): Promise<RootCascadeResult> {
+  const resolved = await resolveCascade(options, false, new Map());
+  return resolved.kind === "resolved"
+    ? rootCascadeResult(options, await materializeCascade(options, resolved, false))
+    : resolved;
+}
+
+/**
+ * UPD-DEP-D1 / RESV-05: `runInstallCascade`, except that a recorded member
+ * outside its range answers `planned` and nothing materializes.
+ */
+export async function runInstallCascadeOrPlanMoves(
+  options: InstallCascadeOptions,
+): Promise<RootCascadeResult | CascadePlan> {
+  const resolved = await resolveCascade(options, true, new Map());
+  if (resolved.kind !== "resolved") {
+    return resolved;
+  }
+
+  return resolved.outOfRange
+    ? { kind: "planned" }
+    : rootCascadeResult(options, await materializeCascade(options, resolved, false));
+}
+
+/**
+ * UPD-DEP-D1: the cascade of a recorded root, the plugin an update moves:
+ * its closure materializes and the root itself does not. A recorded member
+ * outside its range fails the cascade.
+ */
+export async function runDependencyCascade(
+  options: InstallCascadeOptions,
+): Promise<DependencyCascadeResult> {
+  const resolved = await resolveCascade(options, false, new Map());
+  return resolved.kind === "resolved"
+    ? dependencyCascadeResult(options, await materializeCascade(options, resolved, true))
+    : resolved;
+}
+
+/**
+ * UPD-DEP-D1: `runDependencyCascade`, except that a recorded member outside
+ * its range answers `planned` and nothing materializes.
+ */
+export async function runDependencyCascadeOrPlanMoves(
+  options: InstallCascadeOptions,
+): Promise<DependencyCascadeResult | CascadePlan> {
+  const resolved = await resolveCascade(options, true, new Map());
+  if (resolved.kind !== "resolved") {
+    return resolved;
+  }
+
+  return resolved.outOfRange
+    ? { kind: "planned" }
+    : dependencyCascadeResult(options, await materializeCascade(options, resolved, true));
+}
+
+/** UPD-DEP-D1: what each plugin the walk read declares, by key. */
+type DeclaredEdges = Map<string, readonly { readonly key: string; readonly range?: string }[]>;
+
+/** Wraps `lookup` so every plugin it finds lands in `declared` with its declarations. */
+function recordingLookup(lookup: ClosureLookup, declared: DeclaredEdges): ClosureLookup {
+  return async (subject) => {
+    const looked = await lookup(subject);
+    if (looked.kind === "found") {
+      declared.set(
+        subject.key,
+        looked.dependencies.map((dependency) => ({
+          key: `${dependency.name}@${dependency.marketplace ?? subject.marketplace}`,
+          ...(dependency.version !== undefined && { range: dependency.version }),
+        })),
+      );
+    }
+
+    return looked;
+  };
+}
+
+/**
+ * CAS-01 / D-PL3-01: every plugin the walk found before it failed, minus the
+ * root, the failing member, and the members a plan moves (`Unmaterialized`).
+ */
+function unmaterialized(
+  rootKey: string,
+  failing: readonly string[],
+  declared: DeclaredEdges,
+  readThrough: ReadonlySet<string>,
+): Unmaterialized {
+  return {
+    unmaterialized: [...declared.keys()].filter(
+      (key) => key !== rootKey && !failing.includes(key) && !readThrough.has(key),
+    ),
+  };
+}
+
+/** Every plugin the walk read that declares `key`, with the ranges it declares, in walk order. */
+function requestersOf(
+  declared: ReadonlyMap<string, readonly { readonly key: string; readonly range?: string }[]>,
+  key: string,
+): GraphRequester[] {
+  const requesters: GraphRequester[] = [];
+  for (const [declarer, edges] of declared) {
+    const toKey = edges.filter((edge) => edge.key === key);
+    if (toKey.length > 0) {
+      requesters.push({
+        key: declarer,
+        ranges: toKey.flatMap((edge) => (edge.range === undefined ? [] : [edge.range])),
+      });
+    }
+  }
+
+  return requesters;
+}
+
+/** WR-1: the plugins whose declarations a failed walk involves (`GraphWalkFailure`). */
+function failureDeclarers(failure: CascadeResolutionFailure, declared: DeclaredEdges): string[] {
+  const declarersOf = (key: string): string[] =>
+    requestersOf(declared, key).map((requester) => requester.key);
+  if (failure.kind === "constraint-failed") {
+    return failure.failure.kind === "tag-listing-failed" ? [] : declarersOf(failure.failure.key);
+  }
+
+  const closure = failure.failure;
+  if (closure.reason === "cycle") {
+    return [...closure.chain];
+  }
+
+  if (closure.reason === "invalid-root-id") {
+    return [];
+  }
+
+  return closure.reason === "unusable-declaration"
+    ? [closure.key, ...declarersOf(closure.key)]
+    : [closure.requiredBy];
+}
+
+/** One graph node: fresh, or what the snapshot records. */
+function graphNode(
+  options: InstallCascadeOptions,
+  member: ClosureMember,
+  walked: boolean,
+  fresh: ReadonlyMap<string, ResolvedCascadeMember>,
+  facts: Pick<DependencyGraphNode, "dependsOn" | "requesters">,
+): DependencyGraphNode {
+  const resolved = fresh.get(member.key);
+  if (resolved !== undefined) {
+    return { kind: "fresh", member: resolved, ...facts };
+  }
+
+  const record = recordOf(options.state, member);
+  const rangeVersion = nodeRangeVersion(record);
+  return {
+    kind: "recorded",
+    member,
+    ...facts,
+    version: record?.version,
+    ...(rangeVersion !== undefined && { resolvedVersion: rangeVersion }),
+    disabled: disabledRecordOf(options.state, options.rootKey, member) !== undefined,
+    walked,
+  };
+}
+
+/** GV-01: the version a recorded node's ranges read, when the record keeps one apart. */
+function nodeRangeVersion(record: PluginInstallRecord | undefined): string | undefined {
+  if (record === undefined || record.resolvedVersion !== undefined) {
+    return record?.resolvedVersion;
+  }
+
+  const rangeVersion = rangeVersionOf(record);
+  return rangeVersion === record.version ? undefined : rangeVersion;
+}
+
+/**
+ * UPD-DEP-D1: walks the whole dependency graph of `options.rootKey` with no
+ * write, reading through every key in `options.readThrough`, and answers each
+ * plugin it reached with the plugins that declare it and the ranges they
+ * declare. A fresh member's pin is chosen over every range the graph declares
+ * for it. A recorded member's version is not checked: the plan decides
+ * whether it moves.
+ */
+export async function walkDependencyGraph(
+  options: InstallCascadeOptions,
+): Promise<DependencyGraph | GraphWalkFailure> {
+  const declared: DeclaredEdges = new Map();
+  const resolved = await resolveCascade(options, true, declared);
+  if (resolved.kind !== "resolved") {
+    return { ...resolved, declarers: failureDeclarers(resolved, declared) };
+  }
+
+  const dependsOn = (key: string): readonly string[] => [
+    ...new Set((declared.get(key) ?? []).map((edge) => edge.key)),
+  ];
+  const fresh = new Map(
+    resolved.members.flatMap((entry) =>
+      entry.kind === "install" ? [[entry.member.key, entry.member] as const] : [],
+    ),
+  );
+  const node = (member: ClosureMember, walked: boolean): DependencyGraphNode =>
+    graphNode(options, member, walked, fresh, {
+      requesters: requestersOf(declared, member.key),
+      dependsOn: dependsOn(member.key),
+    });
+  const nodes = [
+    ...resolved.alreadyInstalled.map((member) => node(member, false)),
+    ...resolved.closure
+      .filter((member) => member.key !== options.rootKey)
+      .map((member) => node(member, true)),
+  ];
+  return {
+    kind: "graph",
+    root: options.installedKeys.has(options.rootKey) ? undefined : fresh.get(options.rootKey),
+    rootDependsOn: dependsOn(options.rootKey),
+    nodes,
+  };
 }

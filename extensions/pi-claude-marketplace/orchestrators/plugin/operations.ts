@@ -5,21 +5,20 @@
 // this owner binds those contracts to the concrete Node implementations, so a
 // command boundary asks for an operation rather than assembling one.
 //
-// Reinstall is the exception, and the user-facing verb takes the other path.
-// `reinstall-flow.ts` binds `REAL_REINSTALL_TRANSACTION` a second time in its
-// module-private `createNodeReinstallPlugin`, which feeds the exported bulk
-// `createNodeReinstallPlugins` that `edge/register.ts` calls for
-// `/claude:plugin reinstall`. `createReinstallOperation` below binds the same
-// transaction for the single-plugin form `reconcile/backfill.ts` takes. The two
-// bodies are identical and nothing holds them in step, so a change made to one
-// binding reaches only that binding's callers.
+// Reinstall is bound once, by `createReinstallOperation` below.
+// `edge/register.ts` hands that single-plugin operation to `reinstall-flow.ts`'s
+// bulk `createNodeReinstallPlugins` for `/claude:plugin reinstall`.
+//
+// `apply`'s catalog move is bound by `createConvergeOperation` below, from the
+// same update operations factory the extension entry point binds for `update`
+// (D-26).
 //
 // The two read commands are bound as values rather than behind a factory: they
 // take no routing or completion-cache owner from their caller, so there is
 // nothing left for a caller to supply once the filesystem and status
 // capabilities are bound here.
 
-import { readdir, readFile, stat } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 
 import { runPhases } from "../../transaction/phase-ledger.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
@@ -27,15 +26,20 @@ import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
 import { createSetPluginEnabled } from "./enable-disable.ts";
 import { createFetchPlugins } from "./fetch.ts";
-import { makePresenceProbe, probeManifestEntry } from "./git-source-probe.ts";
+import { makePresenceProbe } from "./git-source-probe.ts";
 import { createGetPluginInfo } from "./info.ts";
-import { createInstallMissingDependency, createInstallPlugin } from "./install-flow.ts";
+import {
+  createInstallMissingDependency,
+  createInstallPlugin,
+  createUpdateDependencyResolver,
+} from "./install-flow.ts";
 import { runInstallLedger } from "./install-outcome.ts";
+import { resolveListCandidate } from "./list-candidate-version.ts";
 import { createPrunePlugin } from "./prune.ts";
 import { createReinstallPlugin } from "./reinstall-flow.ts";
-import { REAL_REINSTALL_TRANSACTION } from "./reinstall-replace.ts";
-import { selectDeclaringConfigWriteTarget, writeAdoptingConfigEntries } from "./shared.ts";
+import { loadTargetLayers, writeAdoptingConfigEntries } from "./shared.ts";
 import { createUninstallPlugin, REAL_UNINSTALL_TRANSACTION } from "./uninstall.ts";
+import { createPluginUpdateOperations } from "./update-flow.ts";
 
 import type {
   EnableDisableHooksRouting,
@@ -50,10 +54,14 @@ import type {
   InstallMissingDependencyOutcome,
   InstallTransaction,
 } from "./install-flow.ts";
+import type { PruneRestoreOps } from "./prune-rollback.ts";
 import type { PrunePluginOptions } from "./prune.ts";
 import type { ReinstallHooksRouting, ReinstallPluginFn } from "./reinstall-flow.ts";
 import type { UninstallHooksRouting, UninstallPluginOperation } from "./uninstall.ts";
+import type { UpdateHooksRouting } from "./update-cascade.ts";
+import type { PluginUpdateOperations } from "./update-flow.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { PluginConvergeFn } from "../types.ts";
 
 // The one concrete binding of install's semantic transaction contract. It is
 // module-private so no caller can pass a half-real transaction: the only way to
@@ -75,7 +83,7 @@ const INSTALL_TRANSACTION: InstallTransaction = {
 const ENABLE_DISABLE_TRANSACTION: EnableDisableTransaction = {
   cascadeUnstagePlugin,
   runInstallLedger,
-  selectConfigWriteTarget: selectDeclaringConfigWriteTarget,
+  loadTargetLayers,
   withLockedStateTransaction,
   writeConfigEntries: writeAdoptingConfigEntries,
 };
@@ -133,41 +141,53 @@ export function createUninstallOperation(
   return createUninstallPlugin(REAL_UNINSTALL_TRANSACTION, hooksRouting, completionCache);
 }
 
-/** Composes the standalone orphan sweep with uninstall's transaction owner. */
+// The one concrete binding of the prune backup operations. `mkdtemp` appends
+// six random characters to the prefix `preparePruneRollback` passes, so every
+// sweep gets its own backup directory under the scope's extension root. `rm`
+// removes it.
+const NODE_PRUNE_RESTORE_OPS: PruneRestoreOps = { createBackupRoot: mkdtemp, removeBackup: rm };
+
+/**
+ * Composes the standalone orphan sweep with uninstall's transaction owner and
+ * the Node-backed backup operations.
+ */
 export function createPruneOperation(
   hooksRouting: UninstallHooksRouting,
   completionCache: CompletionCache,
 ): (options: PrunePluginOptions) => Promise<void> {
-  return createPrunePlugin(REAL_UNINSTALL_TRANSACTION, hooksRouting, completionCache);
+  return createPrunePlugin(
+    REAL_UNINSTALL_TRANSACTION,
+    hooksRouting,
+    completionCache,
+    NODE_PRUNE_RESTORE_OPS,
+  );
 }
 
 /**
- * Composes the single-plugin reinstall operation from its production
- * transaction owner and the caller's routing and completion-cache owners.
- * Constructing the operation runs no work of its own -- only invoking the
- * returned operation does.
+ * Composes the single-plugin reinstall operation from the caller's routing and
+ * completion-cache owners. Constructing the operation runs no work of its own
+ * -- only invoking the returned operation does.
  *
- * Reinstall's binding is imported rather than built here for the same reason as
- * uninstall's: five of `REAL_REINSTALL_TRANSACTION`'s six members are steps of
- * reinstall's own prepare/replace/compensate schedule, private to
- * `reinstall-replace.ts`, so this module imports the bound object and never its
- * parts (D-03). The binding names no network capability, which is what keeps
- * this module inside the network-free gate while composing an operation that
- * materializes artifacts (NFR-5: reinstall reads the cached manifest only).
+ * The operation materializes through the shared runner that `update` uses, so
+ * it may clone a git source on a cache miss and list a constrained
+ * dependency's tags (NFR-5 as amended by D-03-03; D-18-04, D-18-07). This
+ * module names no git surface itself: the runner reaches git through its own
+ * seams, which keeps this module inside the network-free gate.
  */
 export function createReinstallOperation(
   hooksRouting: ReinstallHooksRouting,
   completionCache: CompletionCache,
 ): ReinstallPluginFn {
-  return createReinstallPlugin(REAL_REINSTALL_TRANSACTION, hooksRouting, completionCache);
+  return createReinstallPlugin(hooksRouting, completionCache);
 }
 
-// The one concrete binding of fetch's status capability. Both members are the
-// fs-only probes `git-source-probe.ts` owns, which is what keeps this
-// composition inside the network-free gate: fetch reaches git only through the
-// clone-cache seam it defaults internally, never through anything named here
-// (NFR-5).
-const NODE_FETCH_STATUS: FetchStatus = { makePresenceProbe, probeManifestEntry };
+// The one concrete binding of fetch's status capability. Both members are
+// fs-only reads -- the presence probe `git-source-probe.ts` owns and the
+// offline version rule `list` uses (`list-candidate-version.ts`) -- which is
+// what keeps this composition inside the network-free gate: fetch reaches git
+// only through the clone-cache seam it defaults internally, never through
+// anything named here (NFR-5).
+const NODE_FETCH_STATUS: FetchStatus = { makePresenceProbe, resolveListCandidate };
 
 /**
  * Fetches plugins through the Node-backed status capability. Reaching the value
@@ -189,3 +209,41 @@ const NODE_PLUGIN_INFO_READER: PluginInfoReader = {
  * the value runs no work of its own -- only invoking it does.
  */
 export const getPluginInfo = createGetPluginInfo(NODE_PLUGIN_INFO_READER);
+
+/**
+ * Composes the update operations the extension entry point binds for
+ * `update` and the autoupdate cascade. UPD-DEP-D1: each settles the closure of
+ * the version it moves a plugin to through install's cascade, bound to the
+ * SAME production transaction owner `createInstallOperation` binds.
+ * Constructing the operations runs no work of their own.
+ */
+export function createUpdateOperations(
+  hooksRouting: UpdateHooksRouting,
+  completionCache: CompletionCache,
+): PluginUpdateOperations {
+  return createPluginUpdateOperations(
+    hooksRouting,
+    completionCache,
+    undefined,
+    process.env,
+    createUpdateDependencyResolver(INSTALL_TRANSACTION, hooksRouting, completionCache),
+  );
+}
+
+/**
+ * D-26: composes `apply`'s catalog-move operation from the caller's routing
+ * and completion-cache owners. A move runs the shared runner `update` uses,
+ * under the converge policy, and not reinstall: reinstall deletes the plugin
+ * data directory and overwrites the agent files a user edited, which a move
+ * the user did not name must never do. Constructing the operation runs no work
+ * of its own -- only invoking the returned operation does.
+ *
+ * Like reinstall, the runner may clone a git source on a cache miss (NFR-5,
+ * D-11); this module names no git surface itself.
+ */
+export function createConvergeOperation(
+  hooksRouting: UpdateHooksRouting,
+  completionCache: CompletionCache,
+): PluginConvergeFn {
+  return createPluginUpdateOperations(hooksRouting, completionCache).convergePlugin;
+}

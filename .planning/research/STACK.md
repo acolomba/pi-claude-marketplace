@@ -1,339 +1,198 @@
-# Stack Research — v1.19 Unit Test Refactor
+# Stack Research
 
-**Project:** pi-claude-marketplace
-**Domain:** Brownfield TypeScript unit-test migration
-**Researched:** 2026-08-28
-**Confidence:** HIGH
+**Domain:** Cucumber behavioral suite for `/claude:plugin marketplace`, with a loopback HTTPS git stand-in and a `GITHUB_BASE_URL` clone-base override (milestone `marketplace-features`)
+**Researched:** 2026-10-15
+**Confidence:** HIGH for the codebase facts, CI tool availability, and the cert-trust mechanics (all checked against code or run locally). MEDIUM for the `git http-backend` CGI details that its docs leave unstated.
 
-## Recommendation
+## Bottom line
 
-Keep the current production stack. Do not add a test framework or coverage
-package. Use Node 24, `node:test`, `node:assert/strict`, and Node's built-in V8
-coverage. Use `strong-mock` only for typed behavior-heavy ports.
+You do not need any new npm package. The milestone needs four things that already exist: the `git` CLI (it runs `git http-backend` and builds fixture repos), the `openssl` CLI (it makes a certificate at run time), `node:https`, and the `isomorphic-git` the extension already pins. All four are on `ubuntu-latest` and on dev machines.
 
-Each executable plan and commit must own one production source file and its one
-mirrored test file. Retained source or test commits are only the brownfield
-baseline. They are never completion evidence for v1.19.
+The production change (D-MF-01) is one environment read, used in one function: `networkCloneUrl` in `domain/clone-key.ts`. The work is mostly about where **not** to apply it: the clone-key identity, the auth host, and the displayed source.
 
-## Brownfield Baseline
-
-The production root contains 204 TypeScript modules. The live pair audit at
-`/tmp/pi-cm-pair-audit.CJWiph/results.tsv` reports:
-
-| Pair result     |   Count | Meaning for v1.19                                         |
-| --------------- | ------: | --------------------------------------------------------- |
-| `PASS`          |      59 | Candidate baseline only. Reprove the pair in its plan.    |
-| `COVERAGE_FAIL` |      83 | The mirrored test does not give complete direct coverage. |
-| `MISSING`       |      60 | The mirrored test file is absent.                         |
-| `TEST_FAIL`     |       2 | The mirrored test fails when it runs as the direct pair.  |
-| **Total**       | **204** | All modules remain open until v1.19 records new proof.    |
-
-The audit ran locally with Node 26.7.0. CI uses Node 24. Coverage closure must
-run on Node 24 because V8 coverage data can change between Node releases.
+One finding goes back to the user as a question, because it was not known when D-MF-01 was decided. The name `GITHUB_BASE_URL` is already used by the Terraform GitHub provider, where it holds the **API** URL (`https://api.github.com/`). See "Open question" below.
 
 ## Recommended Stack
 
-### Core Runtime and Language
+### Core Technologies
 
-| Technology         | Version         | Purpose                                            | Why                                                                                                                     |
-| ------------------ | --------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Node.js            | CI 24.x         | Execute source and TypeScript tests                | This is the repository's current CI runtime. Node 24 includes stable `node:test` and native TypeScript type stripping.  |
-| TypeScript         | 6.0.3 locked    | Strict static checks and structural script parsing | The repository already uses strict `NodeNext`, `noEmit`, and explicit `.ts` imports. No compiler migration is required. |
-| ECMAScript modules | Native Node ESM | Production and test module system                  | `package.json` uses `type: module`. Source and tests already use explicit `.ts` relative imports.                       |
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| `git` CLI (`git http-backend`) | system; 2.55.0 on `ubuntu-latest` (runner image 20261004) and on the Fedora dev box | Smart-HTTP server behind the `node:https` CGI wrapper; also builds the fixture repos | Upstream's own server, so the wire protocol is the real one. It is already on every runner and dev machine. Ubuntu/Debian ship it in the `git` package at `/usr/lib/git-core/git-http-backend`, Fedora in `git-core` at `/usr/libexec/git-core/` (checked). Spawn it as `git http-backend` so you never look up `--exec-path`. Spike of 2026-10-15 and the any-git-host UATs of 2026-09-28 proved isomorphic-git clone and fetch through it. |
+| `openssl` CLI | system; 3.0.13 on `ubuntu-latest`; OpenSSL 4.0.3 on the dev box | Makes a self-signed certificate per worker at run time | Preinstalled everywhere the suite runs, no dependency, about 20 ms per cert (measured). Node's `crypto` can parse X.509 but cannot create it, so a pure-Node option needs a library. |
+| `node:https` + `node:child_process` | Node 24 (CI) / `^22.22.2 \|\| ^24.15.0 \|\| >=26.0.0` | The roughly 25-line CGI wrapper; it records requests and can be armed to answer 401/404/5xx or to drop the connection | It is in the stdlib. The rule-pack bans on `node:https` (`no-network-modules`) cover `extensions/pi-claude-marketplace/**` only. `features/` is outside that scope. |
+| `NODE_EXTRA_CA_CERTS` | Node built-in | Makes the Pi child trust the stand-in's certificate | Checked locally on Node 26.11.1. A Node child with no variable fails with `DEPTH_ZERO_SELF_SIGNED_CERT`. The same child with `NODE_EXTRA_CA_CERTS=<cert.pem>` connects. The `openssl req -x509` default adds `basicConstraints=critical,CA:TRUE`, so the leaf also works as its own trust anchor. Node reads the variable **once at process start**. |
+| `@cucumber/cucumber` | 13.3.0 (already installed; latest on npm) | Runner | No change. |
+| `isomorphic-git` | 1.42.3 installed (`^1.42.3`); 1.44.2 is latest | Client under test | Do **not** bump it in this milestone. A bump would change the code under test while the suite that should catch the change is still being built. |
 
-The product contract still states Node `>=20.19.0`. That floor does not define
-the test migration runtime. Use Node 24 for reproducible v1.19 proof.
-
-### Test and Mock Tools
-
-| Technology                | Version                     | Purpose                                          | When to Use                                                                                                                      |
-| ------------------------- | --------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| `node:test`               | Bundled with Node 24        | Test runner, per-test context, spies, and timers | Use for every mirrored unit test. Prefer `t.mock` and `t.mock.timers` for case-owned state.                                      |
-| `node:assert/strict`      | Bundled with Node 24        | Assertions                                       | Assert public results, effects, protocol payloads, and error identity.                                                           |
-| `strong-mock`             | 9.2.2 locked                | Typed mocks for behavior-heavy ports             | Use when exact calls, arguments, or call order are part of the public contract. Use `mock`, `when`, `verify`, and `exactParams`. |
-| Real temporary filesystem | Node `fs`, `os`, and `path` | Filesystem behavior                              | Use fresh case-owned directories and real path semantics. Do not add an in-memory filesystem.                                    |
-
-Use literal fakes for simple collaborators. Keep a fake in its concern-local
-test module when several nearby tests share the same protocol. Do not create a
-generic helper inventory that hides subjects, inputs, or expected values.
-
-### Verification and Quality Tools
-
-| Tool                    | Declared or locked version | Purpose                                   | v1.19 role                                                                           |
-| ----------------------- | -------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------ |
-| Node V8 coverage        | Bundled with Node 24       | Line, function, and branch coverage       | Enforce 100% for the paired production source during the paired test run.            |
-| TypeScript compiler API | 6.0.3 locked               | Parse imports and exports                 | Power small fail-closed structural checks without another parser package.            |
-| ESLint                  | 10.8.1 locked              | Typed lint and architecture boundaries    | Keep the current strict configuration. Test relaxations remain narrow.               |
-| Fallow                  | 3.17.0 locked              | Dead-code, health, and duplication checks | Enable production dead-code analysis without using tests as production reachability. |
-| Prettier                | 3.9.6 locked               | Formatting                                | Keep the existing format gate.                                                       |
-| SonarQube input         | Existing LCOV flow         | Aggregate repository reporting            | Keep for project reporting. Do not use aggregate coverage as pair proof.             |
-
-There is no database or service infrastructure for this milestone. Tests must
-stay local and deterministic. Unit tests must not use the network, user state,
-or project state outside their temporary directory.
-
-## Installation
-
-No new package is required.
+### The certificate command (verified on OpenSSL 4.0.3; every flag also exists in 3.0.x)
 
 ```bash
-npm ci
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+  -keyout key.pem -out cert.pem -days 1 \
+  -subj /CN=127.0.0.1 -addext subjectAltName=IP:127.0.0.1
 ```
 
-Do not add Jest, Vitest, Sinon, c8, nyc, or a filesystem emulator. Each would
-duplicate a capability that the current stack already provides.
+- `-nodes`, not `-noenc`. `-noenc` is missing from OpenSSL 1.1 and LibreSSL (macOS). `-nodes` still works on 4.0 (checked).
+- Use an **IP SAN for `127.0.0.1`**, and put `127.0.0.1` in every URL. Do not use `localhost`. Node resolves `localhost` in OS order and can try `::1` first, while the server listens on `127.0.0.1`.
+- EC P-256 is faster than RSA, and every client here accepts it.
+- `-days 1` is enough, because each run makes a new cert.
 
-## Compiler Configuration
+### Supporting Libraries
 
-Keep these existing choices:
+None. Each candidate below fails the dependency policy, or makes CI less likely to work:
 
-- `strict: true`
-- `module: "NodeNext"`
-- `moduleResolution: "NodeNext"`
-- `noEmit: true`
-- `allowImportingTsExtensions: true`
-- `exactOptionalPropertyTypes: true`
-- `noUncheckedIndexedAccess: true`
+| Considered | Version | Verdict |
+|------------|---------|---------|
+| `selfsigned` | 5.5.0 | **Do not add.** It now depends on `@peculiar/x509` plus `pkijs`, which is about 20 transitive packages (`@peculiar/asn1-*` x8, `tsyringe`, `asn1js`, `pvtsutils`, `bytestreamjs`, `@noble/hashes`, ...). It only replaces one `openssl` call that every target machine can already run. |
 
-Add these checks during v1.19:
+### Development Tools
 
-```json
-{
-  "erasableSyntaxOnly": true,
-  "verbatimModuleSyntax": true
-}
+| Tool | Purpose | Notes |
+|------|---------|-------|
+| `npm run test:cucumber` | Runs the suite | Already in `npm run check` and in the CI `behavioral` job (`ubuntu-latest`, Node 24, 10-minute timeout, `npm ci --ignore-scripts`). That job needs no new setup step, because `git` and `openssl` are on the image. It is **not** in `check:commit`, so commits that touch `features/` rely on `npm run check` at the GSD gates and on the CI job. |
+| `tsc` / ESLint / fallow | Gate `features/**` | `tsconfig.json` includes `features/**/*.ts`. `npm run lint` covers `features`. fallow's `allowUnmatched` lists `features/**`, and `fallow dupes` (threshold 3) still reads it. If the git wrapper's spawn-and-collect code looks like `tests/e2e/_rpc.ts`, fallow can flag it as a clone. |
+
+## Integration Points
+
+### 1. The Pi child environment (`tests/e2e/_rpc.ts:166-173`)
+
+`childEnvironment()` builds an allowlist from scratch: `HOME`, `PI_CODING_AGENT_DIR`, `PI_OFFLINE`, `PATH`. Widen it with an **explicit, typed extra-env option** on `startRpcPi`/`RpcSandbox`. Do not spread `process.env`. The cucumber run passes:
+
+| Variable | Value | Why |
+|----------|-------|-----|
+| `NODE_EXTRA_CA_CERTS` | **absolute** path to the worker's `cert.pem` | A relative path resolves against the child's cwd. A missing file only prints a warning, and every later clone fails as `DEPTH_ZERO_SELF_SIGNED_CERT`. `shared/git-failure-classifiers.ts` does not map that error to a reason. |
+| `GITHUB_BASE_URL` | `https://127.0.0.1:<port>[/<prefix>]` | D-MF-01. |
+| `GIT_CONFIG_NOSYSTEM` | `1` | On a 401, the extension spawns `git credential fill` with the child env (`platform/git-credential.ts:152`). `HOME` already isolates the global config. `/etc/gitconfig` can still name a credential helper (libsecret, GCM) on a dev box, and the suite must not query the real keychain. |
+
+`PI_OFFLINE`/`--offline` does not affect the extension's isomorphic-git traffic. Pi reads it in `model-runtime`, `package-manager`, `version-check`, and `tools-manager` only.
+
+**Ordering constraint.** Pi reads both variables only when it starts. The worker's Pi is started once in `BeforeAll` (`features/support/pi-process.ts`), and `Before()` restarts it with the same sandbox when a scenario leaves it busy. So the git stand-in must already be listening, and its cert must exist, **before** `PiProcess.start`. It must also outlive every Pi restart. Do not rely on cucumber's `BeforeAll` order across two support files. Make the stand-in part of the run's one module-level state (a field of `PiRun`, started in the same `BeforeAll`, reset in `Before()`, stopped in `AfterAll` after Pi). This also keeps to the cucumber rule that the slow process is the run's **only** module-level state.
+
+### 2. The `git http-backend` CGI environment (worker side)
+
+Build the CGI child env as an allowlist as well. Never use `...process.env`:
+
+| Variable | Source |
+|----------|--------|
+| `GIT_PROJECT_ROOT` | worker's repo root (emptied per scenario) |
+| `GIT_HTTP_EXPORT_ALL` | `1` (no `git-daemon-export-ok` files) |
+| `PATH_INFO`, `REQUEST_METHOD`, `QUERY_STRING`, `CONTENT_TYPE` | from the request |
+| `CONTENT_LENGTH` | **always set it**: buffer the request body and set its byte length. isomorphic-git's node client usually sends a Buffer with `content-length` (via `simple-get`). Its fallback path streams chunked. The http-backend docs do not say how an unset `CONTENT_LENGTH` behaves, so do not depend on it (MEDIUM). |
+| `HTTP_CONTENT_ENCODING` | pass it through if present. isomorphic-git does not gzip request bodies, but real `git` does. |
+| `GIT_PROTOCOL` | copy the `Git-Protocol` request header. http-backend copies `HTTP_GIT_PROTOCOL` itself (git-scm docs), and an explicit `GIT_PROTOCOL` wins. Marketplace add/update use clone + fetch (protocol v1: `GET info/refs` + `POST git-upload-pack`, per the 02-UAT wire log). `resolveRemoteRef`/`listRemoteTags` send `Git-Protocol: version=2` (`platform/git.ts:459,541`) only on plugin paths, which this milestone excludes. Passing the header through costs one line and keeps v2 working if a scenario reaches it. |
+| `HOME` (temp), `GIT_CONFIG_NOSYSTEM=1`, `PATH` | keeps the developer's `~/.gitconfig` (for example `commit.gpgsign`, hooks, `init.defaultBranch`) out of both the server and the fixture builds |
+
+Parse the CGI response yourself: a header block, then `Status:` (default 200), then the body.
+
+**Why an allowlist and not inherit-and-override:** a run started from inside a git hook inherits `GIT_DIR`/`GIT_INDEX_FILE`/`GIT_WORK_TREE`. Then the fixture `git commit` calls would write to **this repository**.
+
+### 3. Fixture repos (git CLI, same isolated env)
+
+- Make each fixture with `git -c init.defaultBranch=main init`. Set author and committer through `GIT_AUTHOR_NAME/EMAIL` and `GIT_COMMITTER_NAME/EMAIL` in the env, so the run never touches config.
+- To "publish an update", commit into the working repo that http-backend serves. Two ways: give the working tree a `--separate-git-dir` under `GIT_PROJECT_ROOT`, or point `PATH_INFO` at `<repo>/.git`.
+- Layout: serve GitHub-shaped repos under a prefix (`/github/<owner>/<repo>.git`) and plain https-URL repos at the path the user types (`/<name>` or `/<name>.git`). This lets one server and one port cover both source kinds. `networkCloneUrl` appends `.git` on the github arm only and keeps the user's `.git` choice on the url arm (D-2-01/D-2-03), so the server has to answer exactly the path each form produces.
+
+### 4. `GITHUB_BASE_URL` in production (D-MF-01)
+
+**Where it plugs in: one place.** In `domain/clone-key.ts::networkCloneUrl`, the `github` arm:
+
+```ts
+case "github":
+  return ensureGitSuffix(`${githubCloneBase()}/${source.owner}/${source.repo}`);
 ```
 
-Node's TypeScript runtime removes erasable types and ignores `tsconfig.json`.
-These options make `tsc` reject syntax and import forms that native execution
-cannot handle safely. A validation run with both flags already passes at HEAD.
+`githubCloneBase()` returns the trimmed override, or `https://github.com` when the variable is unset or empty. Both wire consumers already go through `networkCloneUrl`: `orchestrators/marketplace/add.ts:866` (clone) and `orchestrators/plugin/dependency-tag-probe.ts:159` (tag listing). `marketplace update` fetches `origin` from the clone's own config (`refreshGitHubClone`, `orchestrators/marketplace/shared.ts:259`), so it reaches the stand-in without any further change.
 
-Do not add `rewriteRelativeImportExtensions`. This project uses `noEmit`, and
-both source and test files already use explicit `.ts` extensions.
+**Where it must NOT plug in:**
 
-## Direct Pair Mechanics
+| Site | Keep as is | Why |
+|------|------------|-----|
+| `canonicalCloneUrl` (`clone-key.ts:81-85`) | `https://github.com/<o>/<r>` | It is the cache-key and dedup identity that `pluginCloneKey`/`pluginMirrorKey` hash, and the identity recorded in state. If it read the environment, `plugin-clones/` keys and record identity would depend on an env var. Its own doc comment already keeps it separate from the wire form. |
+| `formatSourceForDisplay` (`domain/source.ts:762`) | `https://github.com/...` | Output must stay the same whether the variable is set or not. So scenarios assert the github.com form the user sees, and the override stays invisible. |
+| `GITHUB_HOST` / `hostFromCloneUrl` (`orchestrators/auth-host.ts:81-99`), `update.ts:397-400`, `add.ts:974` | `github.com` | See the auth consequence below. |
+| `auth-registry.ts` Device Flow URLs | `https://github.com/login/...` | Device Flow is out of scope. Its endpoints must never be redirected by a clone-base variable. |
 
-The existing scripts are useful retained foundations. They are not v1.19
-completion proof until the milestone revalidates their rules and negative
-controls.
+**Auth consequence (check it in the plan; it is intended):** with the override set, a github source's auth bundle stays bound to `github.com`, while the request goes to `127.0.0.1:<port>`. `buildAuthCallbacks.onAuth` (`platform/git-auth-callbacks.ts:178`) sees the host mismatch and returns `{ cancel: true }` **before** it consults the credential helper or Device Flow. So a 401 on a GitHub-shaped stand-in can never reach github.com, a keychain, or a Device Flow prompt. That is the safety property you want. The cost: such a scenario sees "authentication required" through the mismatch guard, not the production path (helper, then Device Flow). **Do not write auth scenarios for github sources.** Cover 401 on the https-URL source, whose host matches the bundle, so the real `git credential fill` path runs.
 
-### Correspondence and Direct Import
+**Leftover-clone consequence:** `originMatchesSource` (`clone-key.ts:117-128`, called from `add.ts:807`) compares the clone's `origin` with `canonicalCloneUrl(source)`. With the override set, a GitHub clone's origin is `https://127.0.0.1:<port>/.../<r>.git`, which parses as `url` kind and never matches `https://github.com/<o>/<r>`. So a "leftover clone is reused" scenario on a github source would fail as `{stale clone}`. Write leftover-clone scenarios on the https-URL source, or make `originMatchesSource` aware of the override (a larger production change, not part of D-MF-01).
 
-`scripts/check-corresponding-tests.mjs` derives this mapping:
+**Lint and gate constraints on reading the environment:**
 
-```text
-extensions/pi-claude-marketplace/<path>/<name>.ts
-                       ↓
-tests/<path>/<name>.test.ts
-```
+- No ESLint rule and no rule-pack rule bans `process.env`. BLOCK F (`eslint.config.js:361-391`) bans `platform/git` imports and the `gitOps`/`DEFAULT_GIT_OPS`/`refreshGitHubClone` names in non-seam `orchestrators/` and `domain/` modules. The rule pack bans stdio, console, notify, Pi peer, isomorphic-git, proper-lockfile, write-file-atomic, network modules, and `fetch`. Precedents for reading the environment: `platform/workflow-home.ts:36`, `shared/debug-log.ts:23`.
+- **Naming trap:** BLOCK F's `no-restricted-imports` pattern is the **unanchored regex `platform/git`**. A helper named `platform/github-*.ts` or `platform/git-*.ts`, imported from `domain/clone-key.ts` (not a `NETWORK_SEAM`), fails lint. Put the reader in `shared/` (domain may import `shared` and `platform` under fallow's zones), or give a `platform/` file a name that does not start with `git`.
+- Read the variable **per call**, not at module load, as `workflow-home.ts` does. Then a unit test can set it and restore it with `t.after()`. Accept only an `https:` URL: `onAuth` rejects anything else anyway, and `http://` is a refused form. Strip trailing slashes, and allow a path prefix.
+- A new source file needs a paired test with 100% direct coverage (`test:corresponding` and `test:coverage:direct:all`). If you put the reader in an existing paired module, there is no new pair to keep.
 
-It uses the TypeScript compiler API to read static imports and exports. It then
-requires the mirrored test to import its production source directly.
+### 5. isomorphic-git behaviors the stand-in must accommodate
 
-Keep the source-to-test rule. Refine the reverse rule before using the script
-as a closure gate. The current rule labels every unmatched unit-test file as
-unexpected. This conflicts with valid concern-local fake and contract modules.
-Support tests may exist, but they must not replace the mirrored test or own its
-direct coverage proof.
-
-Static import validation proves module ownership. It does not prove that the
-test calls every public export. The direct coverage gate and pair review must
-provide that evidence. Type-only modules and intentional barrels need explicit,
-small rules instead of a general exemption register.
-
-### Direct Coverage
-
-`scripts/test-coverage-direct.mjs` runs only the mirrored test in a child Node
-process. It reads LCOV for exactly the paired source record and requires:
-
-```text
-BRH = BRF
-FNH = FNF
-LH  = LF
-```
-
-The gate fails when the pair, source record, or full branch, function, or line
-coverage is missing. A type-only source may omit an LCOV record only when its
-transpiled runtime output is the empty `export {}` module.
-
-During migration, always pass the production source explicitly. The no-argument
-mode selects all changed files from the merge base. That scope crosses pair
-boundaries and is not valid proof for a one-pair plan.
-
-```bash
-npm run test:coverage:direct -- \
-  extensions/pi-claude-marketplace/<path>/<name>.ts
-```
-
-Node also offers native line, branch, and function thresholds. Keep the LCOV
-record check because a pair test can import dependencies. The milestone must
-prove exactly one paired source record, including missing-record failures.
-
-### Negative Controls
-
-The retained negative scripts currently pass, but their coverage is incomplete.
-Keep planted failures for correspondence and direct coverage. Add a focused
-negative control for each fail-closed class:
-
-- missing mirrored test
-- wrong direct import
-- invalid or outside-root path
-- missing non-type source record
-- duplicate paired-source record
-- incomplete line, function, and branch coverage
-- valid type-only source without runtime statements
-
-Do not use baseline counts. A newly introduced violation must fail even when
-the total count does not change.
-
-## Fallow Configuration
-
-The current `.fallowrc.json` sets `production` to `false`. Replace that setting
-during v1.19 with:
-
-```json
-{
-  "production": {
-    "deadCode": true,
-    "health": false,
-    "dupes": false
-  }
-}
-```
-
-This catches exports that exist only for tests without treating every test call
-as production reachability. Do not add a broad `ignoreExports` list. Use a
-narrow documented suppression only for a real runtime API that static analysis
-cannot discover.
-
-## Command Contract
-
-### Every Pair Plan
-
-Use the mirrored test path and source path explicitly:
-
-```bash
-node --test tests/<path>/<name>.test.ts
-npm run test:coverage:direct -- \
-  extensions/pi-claude-marketplace/<path>/<name>.ts
-npm run check
-```
-
-The executable plan and commit contain one production source and its mirrored
-test. A necessary configuration or gate correction may travel with that pair.
-Do not batch several pairs into one plan or commit.
-
-### Milestone Closure
-
-After every pair passes, run the global gates on Node 24:
-
-```bash
-npm run test:corresponding
-npm run test:coverage:direct:all
-npm run check
-```
-
-The current `npm run check` does not call the correspondence or direct-coverage
-gates. Add both global gates to `check` only when all pairs pass, so the required
-quality command stays green throughout the migration. Make this change with the
-final pair, not in a separate tooling-only executable plan.
-
-Direct-all starts one coverage process per source pair. Measure its Node 24 CI
-duration before closure. If it exceeds the 15-minute CI timeout, use bounded
-child-process concurrency. Keep one isolated LCOV directory per pair and one
-in-memory result list. Do not restore coverage shards or reconciliation files.
-
-## Test Implementation Guidance
-
-For each pair:
-
-1. Trace production callers and public effects before changing code.
-2. Import the production source directly from the mirrored test.
-3. Create the subject and mutable collaborators inside each test case.
-4. Use Arrange, Act, Assert sections in that order.
-5. Cover meaningful success, failure, and boundary behavior.
-6. Verify exact port calls when interaction is part of the contract.
-7. Use a fresh temporary directory for every filesystem case.
-8. Assert public behavior, not private constants, regular expressions, or file layout.
-9. Run the focused test, explicit direct coverage, and normal quality gate.
-10. Record new v1.19 evidence before marking the pair complete.
-
-Do not use process-wide `mock` state from `node:test`. Do not use global
-`verifyAll`, `resetAll`, or shared mutable mock instances. Do not add a
-test-only production export. If code is hard to test, improve its real runtime
-seam through the pair plan.
+| Behavior | Where | What it means for the stand-in |
+|----------|-------|--------------------------------|
+| A custom redirect follower; credentials stay on the original origin | `platform/git.ts:201-360` (cap 10; POST 301/302 becomes GET; 303/307/308 keep the method; cross-origin hops drop auth headers) | Not in the listed arming modes. A redirect mode would be an easy add later; the any-git-host UAT already covered it by hand. |
+| Clone and fetch use protocol v1 | isomorphic-git | http-backend's default; nothing to set. |
+| `listServerRefs` uses protocol v2 | `platform/git.ts:459,541` | Plugin paths only; pass `Git-Protocol` through (see §2). |
+| Status mapping | `shared/git-failure-classifiers.ts` | 404 maps to `{source missing}`; 5xx and `ECONNRESET`/`ECONNREFUSED` map to `{network unreachable}`; 401/403 and `UserCanceledError` map to auth required. "Drop the connection" = `socket.destroy()` gives `ECONNRESET`. A TLS trust failure maps to no reason, so it looks like a wiring bug. Assert that the run's first scenario reaches the stand-in. |
+| Credential lookup on a 401 | `git credential fill` with `GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`, host-keyed with no `path=` line | With the sandbox HOME and `GIT_CONFIG_NOSYSTEM=1`, the lookup misses quickly and the clone cancels cleanly. A "private marketplace authenticates" scenario can write `credential.helper=store` and `~/.git-credentials` into the sandbox HOME (user-owned files). Then the stand-in checks Basic auth. |
 
 ## Alternatives Considered
 
-| Category             | Recommended                                    | Alternative                     | Why Not                                                                                                                                     |
-| -------------------- | ---------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Test runner          | `node:test`                                    | Jest or Vitest                  | The built-in runner already executes this native ESM TypeScript repository. Another runner adds configuration and competing mock semantics. |
-| Coverage             | Node V8 coverage plus exact LCOV record checks | c8 or nyc                       | Node already produces the needed line, function, and branch data. Pair ownership still needs repository-specific record validation.         |
-| Simple doubles       | Literal fakes and `t.mock`                     | Sinon                           | Existing tools cover simple stubs, spies, and timers without a dependency.                                                                  |
-| Behavior-heavy ports | `strong-mock`                                  | Untyped hand-written mocks      | The installed library preserves interface types and provides explicit interaction verification.                                             |
-| Filesystem tests     | Real case-owned temporary directories          | memfs                           | Real paths, permissions, renames, and cleanup behavior are part of this product's contracts.                                                |
-| Direct import checks | TypeScript compiler API                        | Regex or runtime module loaders | The compiler API reads ESM syntax reliably. Runtime module replacement would weaken direct ownership.                                       |
+| Recommended | Alternative | When to Use Alternative |
+|-------------|-------------|-------------------------|
+| `openssl` CLI at run time | `selfsigned@5.5.0` | Only if a supported dev platform lacks `openssl`. Today none does (Linux runners, Fedora, macOS LibreSSL, where the command above works with `-nodes`). |
+| `openssl` CLI at run time | A cert and key checked in as a fixture | Never. The key expires, so the suite breaks on a date. A committed private key also invites scanner noise. The TruffleHog hook runs `filesystem --results=verified`, so an unverifiable key would not fail it today, but GitHub secret scanning or a later hook change could flag it. Run-time generation costs about 20 ms. |
+| Override in `networkCloneUrl` only | Override in `canonicalCloneUrl` | Never. It would make the cache keys and the recorded identity depend on the environment. |
+| Auth host stays `github.com` | Derive the auth host from `GITHUB_BASE_URL` | Only if github-source auth scenarios become a requirement. The bundle would then bind to the stand-in host with no provider, which makes the github path behave like the url path and **still** never exercises Device Flow. More production surface for no extra coverage. |
+| `git http-backend` behind our `node:https` CGI wrapper | git-http-mock-server / mockttp / node-git-server / msw / nock / dugite | Decided: not re-litigated. |
 
-## Explicit Non-Choices
+## What NOT to Use
 
-Do not restore or create:
+| Avoid | Why | Use Instead |
+|-------|-----|-------------|
+| `selfsigned`, `node-forge`, `@peculiar/x509` | About 20 transitive packages for one cert; a new supply-chain surface in a repo whose dependency list is deliberately short | `openssl req -x509 ...` via `execFile` |
+| `localhost` in stand-in URLs or certs | IPv6-first resolution can give `ECONNREFUSED`, and the SAN must match | `127.0.0.1` everywhere, IP SAN |
+| `-noenc` in the openssl command | Missing from LibreSSL and OpenSSL 1.1 | `-nodes` |
+| `...process.env` in the http-backend or fixture-git child env | Leaks `GIT_DIR`/`GIT_INDEX_FILE` from hooks and the user's gitconfig (gpgsign, hooks) | An explicit allowlist with a temp `HOME` and `GIT_CONFIG_NOSYSTEM=1` |
+| `...process.env` in the Pi child env | Leaks provider credentials (the reason `_rpc.ts` is an allowlist) | Add the three named variables only |
+| An `isomorphic-git` upgrade in this milestone | Changes the code under test while the suite is still being built | Keep `^1.42.3`; bump later, under the new suite |
+| A per-scenario stand-in server | Pi reads `GITHUB_BASE_URL`/`NODE_EXTRA_CA_CERTS` only at start, and the port would change under a running Pi | One server per worker run, emptied and disarmed in `Before()` |
+| `http://` stand-in | `http://` is a refused source form, and `onAuth` requires `https:` | HTTPS only |
 
-- historical coverage shards, matrices, reconciliation files, or baselines
-- mirrored-test exemption registers or ownership registries
-- adapter participation scanners or preservation checkers
-- generic helper directories that conceal the tested subject or expected values
-- module-mocking loaders or process-wide mock state
-- test-only production exports
-- migration-history comments or historical module partitions
-- the abandoned handoff patch or any patch-application mechanism
+## Stack Patterns by Variant
 
-Aggregate test success and Sonar coverage remain useful repository signals.
-They cannot prove that one mirrored test directly owns one production source.
+**If the scenario uses an https git URL source:**
+- Serve it at the exact path the user types (with or without `.git`).
+- 401 scenarios go here, because the auth host matches the bundle host and the real helper path runs.
 
-## Risks and Mitigations
+**If the scenario uses a GitHub source (`owner/repo` or `https://github.com/o/r`):**
+- Serve it at `<GITHUB_BASE_URL path>/<owner>/<repo>.git`.
+- Assert the github.com display form. No auth scenarios, and no leftover-clone scenarios (see §4).
 
-| Risk                                                        | Evidence at HEAD                                                                                                 | Mitigation                                                                                                          |
-| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Coverage differs by Node and V8 version.                    | Local audit used Node 26.7.0, while CI uses Node 24.                                                             | Treat Node 24 output as the closure result.                                                                         |
-| The advertised Node floor conflicts with current tools.     | Fallow 3.17 requires Node 22 or newer. `write-file-atomic` 8 requires newer Node 22, Node 24, or Node 26 ranges. | Track runtime-floor alignment outside the pair migration. Do not silently expand v1.19 into a dependency migration. |
-| Coverage APIs remain experimental.                          | Node 24 documents test coverage as experimental.                                                                 | Pin CI to Node 24 for the milestone and retain planted negative controls.                                           |
-| The global correspondence gate rejects valid support tests. | The live run reports 43 unmatched test files in addition to pair defects.                                        | Make enforcement source-driven and define a narrow support-test rule.                                               |
-| Direct-all can exceed CI time.                              | It launches up to 204 isolated child processes.                                                                  | Measure first. Add bounded concurrency only when the Node 24 timing requires it.                                    |
-| Existing pair tests can pass in the suite but fail alone.   | The live audit reports two `TEST_FAIL` pairs.                                                                    | Require focused isolated execution for every pair.                                                                  |
-| Old structure can distort the refactor.                     | The handoff explicitly retires old partitions and patch mechanisms.                                              | Design each pair from current callers and behavior. Write comments only for current invariants.                     |
+**If the scenario uses a local directory or a direct `marketplace.json` path:**
+- No stand-in. Reuse `features/lib/path-marketplace.ts`. These are path sources, which never touch the network (NFR-5).
 
-## Roadmap Implications
+## Version Compatibility
 
-- Start future work at Phase 108.
-- Use Phase 108 to revalidate the small gates and complete its first source-test pair.
-- Use one source-test pair per later executable plan and commit.
-- Order pairs by present dependencies and risk, not by retired phase boundaries.
-- Enable the two global gates in `npm run check` with the final pair.
-- End with Node 24 correspondence, direct-all, and normal quality-gate evidence.
+| Package A | Compatible With | Notes |
+|-----------|-----------------|-------|
+| `isomorphic-git@1.42.3` | `git http-backend` 2.55.0 | Spike of 2026-10-15 plus the 2026-09-28 UATs (clone, fetch, verbatim path, Basic auth, redirects). |
+| OpenSSL 3.0.13 (runner) / 4.0.3 (dev) | Node 24 / 26 bundled OpenSSL | The cert command works on both; Node trusts it via `NODE_EXTRA_CA_CERTS` (checked on Node 26.11.1). |
+| `ubuntu-latest` | Moves to Ubuntu 26.04 in November 2026 | Newer git/OpenSSL; the flags above are stable across 3.x and 4.x. Nothing pins Ubuntu 24.04 in particular. |
+
+## Open question (for the user, not decided here)
+
+**The name `GITHUB_BASE_URL` collides with an established meaning.** The Terraform GitHub provider (`integrations/terraform-provider-github`, `provider.go`: `EnvDefaultFunc("GITHUB_BASE_URL", DotComAPIURL)`) reads it as the **API** base URL, for example `https://api.github.com/` or a GHES `/api/v3/` URL. Other tools, such as Elixir `git_store`, do the same. A Pi user who exports it for Terraform would have every GitHub marketplace clone go to `https://api.github.com/<o>/<r>.git` and fail. Claude Code 2.1.296 hardcodes `https://github.com/<repo>.git` and reads no such variable (binary grep), so there is no upstream name to match. A namespaced name in the house style of `PI_CLAUDE_MARKETPLACE_DEBUG` (for example `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`) would avoid the collision. D-MF-01 records the name, so this goes to the user as a question. It does not change the decision here.
 
 ## Sources
 
-### Repository Evidence
+- Codebase (HIGH): `domain/clone-key.ts:61-128`, `orchestrators/auth-host.ts:81-99`, `orchestrators/marketplace/{add.ts:807,866,974; update.ts:388-400; shared.ts:252-264}`, `platform/git.ts:201-360,459,541`, `platform/git-auth-callbacks.ts:170-250`, `platform/git-credential.ts:145-160`, `shared/git-failure-classifiers.ts`, `eslint.config.js:44-106,361-391`, `rule-packs/architecture.json`, `.fallowrc.json`, `tests/e2e/_rpc.ts:166-173`, `features/support/pi-process.ts`, `.github/workflows/ci.yml` (`behavioral` job), `.pre-commit-config.yaml` (TruffleHog `--results=verified`), `node_modules/isomorphic-git/http/node/index.js:187-203`, `node_modules/simple-get/index.js:39`
+- Local experiments (HIGH): the openssl command on OpenSSL 4.0.3 (22 ms; SAN and basicConstraints checked); a Node 26.11.1 child fails without `NODE_EXTRA_CA_CERTS` (`DEPTH_ZERO_SELF_SIGNED_CERT`) and succeeds with it; `git-http-backend` present in Fedora `git-core-2.55.0`
+- [git-http-backend docs](https://git-scm.com/docs/git-http-backend) (MEDIUM): `HTTP_GIT_PROTOCOL` is copied to `GIT_PROTOCOL`, an explicit `GIT_PROTOCOL` takes precedence, `GIT_HTTP_EXPORT_ALL`, `GIT_PROJECT_ROOT`; silent on `CONTENT_LENGTH` and gzip
+- [actions/runner-images Ubuntu 24.04 readme](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md) (MEDIUM): image 20261004, Git 2.55.0, OpenSSL 3.0.13, `ubuntu-latest` moves to 26.04 in November 2026
+- `npm view` (HIGH): `selfsigned@5.5.0` deps `@peculiar/x509`, `pkijs` (and their trees); `isomorphic-git@1.44.2` latest; `@cucumber/cucumber@13.3.0` latest
+- [Terraform GitHub provider](https://github.com/integrations/terraform-provider-github) via `gh search code` (HIGH): `GITHUB_BASE_URL` is the API base URL
+- Claude Code 2.1.296 binary grep (HIGH): GitHub clone URL hardcoded as `https://github.com/${repo}.git`; no base-URL env read for clones
+- `.planning/milestones/ws-git-hosts-2026-10-01/.../01-UAT.md`, `02-UAT.md` (HIGH): prior runs of isomorphic-git against `git http-backend` behind Node HTTPS with `NODE_EXTRA_CA_CERTS`; marketplace add/update wire = `GET info/refs` + `POST git-upload-pack`
 
-- `package.json`, `package-lock.json`, `tsconfig.json`, and `.fallowrc.json` at HEAD
-- `.github/workflows/ci.yml` and `.github/workflows/sonarqube.yml` at HEAD
-- `scripts/check-corresponding-tests.mjs` and its negative control at HEAD
-- `scripts/test-coverage-direct.mjs` and its negative control at HEAD
-- `docs/guidelines/typescript-unit-testing-guidelines.md`
-- `.claude/rules/typescript-unit-testing.md`
-- `.planning/inputs/unit-test-refactor-handoff/START-HERE.md` and linked handoff decisions
-- `/tmp/pi-cm-pair-audit.CJWiph/results.tsv`
-
-### Official Documentation
-
-- [Node.js test runner](https://nodejs.org/docs/latest-v24.x/api/test.html)
-- [Node.js TypeScript support](https://nodejs.org/docs/latest-v24.x/api/typescript.html)
-- [Node.js command-line coverage options](https://nodejs.org/docs/latest-v24.x/api/cli.html)
-- [TypeScript `allowImportingTsExtensions`](https://www.typescriptlang.org/tsconfig/allowImportingTsExtensions.html)
-- [TypeScript module resolution](https://www.typescriptlang.org/tsconfig/moduleResolution.html)
-- [Fallow configuration](https://fallow.tools/docs/configuration/overview/)
-- [`strong-mock` documentation](https://github.com/NiGhTTraX/strong-mock)
-
-Repository findings have HIGH confidence because they come from HEAD and live
-commands. External behavior has MEDIUM confidence under the research provider
-classification, even though the cited pages are primary documentation.
+---
+*Stack research for: marketplace behavioral tests (cucumber + loopback HTTPS git stand-in)*
+*Researched: 2026-10-15*

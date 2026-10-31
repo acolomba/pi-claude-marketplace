@@ -28,10 +28,19 @@ const MARKETPLACE_LEDGERS = [
 ];
 
 /**
+ * D-PL9-10 / PKD-03: the only module that may import platform/package-manager.ts.
+ * It is the network seam of a plugin's own package install. NETWORK_SEAMS names
+ * the git surface and does not list it.
+ */
+const PACKAGE_INSTALL_SEAM =
+  "./extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts";
+
+/**
  * NFR-5 / PI-2 / PL-3 / PRL-07: the orchestrators/ and domain/ modules that
- * BLOCK F skips, because each one must name the git surface itself. BLOCK F
- * is default-deny, so a new module in either directory is gated from its
- * first commit. A module stays off this list when it reaches git through
+ * BLOCK F skips, because each one must name the git surface, or the hosted
+ * catalog download (D-PL5-07), itself. BLOCK F is default-deny, so a new
+ * module in either directory is gated from its first commit. A module stays
+ * off this list when it reaches git through
  * orchestrators/plugin/clone-cache.ts by entrypoint name, or through an
  * injected field whose name the gate does not match. Add a file here only
  * when neither works, with a one-line reason.
@@ -52,6 +61,8 @@ const NETWORK_SEAMS = [
   "extensions/pi-claude-marketplace/orchestrators/import/execute.ts",
   // NFR-5: adding a git-source marketplace clones it.
   "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts",
+  // D-PL5-07: owns the hosted catalog port and its default download.
+  "extensions/pi-claude-marketplace/orchestrators/marketplace/hosted-catalog.ts",
   // D-12 / D-13: owns GitOps, DEFAULT_GIT_OPS, and refreshGitHubClone.
   "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts",
   // NFR-5: updating a git-source marketplace refreshes its clone.
@@ -78,30 +89,201 @@ const NETWORK_SEAMS = [
   "extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts",
 ];
 
+// NFR-5 / D-PL5-07: the names of the git seam and of the hosted catalog
+// download. A network-free module reaches neither through a name the gate
+// does not match.
+const NETWORK_SEAM_NAMES =
+  "gitOps|DEFAULT_GIT_OPS|refreshGitHubClone|hostedManifestFetch|HostedManifestFetch|DEFAULT_HOSTED_MANIFEST_FETCH|downloadHostedCatalog|refreshHostedCatalog|fetchHostedManifest";
+
 const NETWORK_FREE_SYNTAX_SELECTORS = [
   {
-    selector: "ImportExpression[source.value=/platform\\/git/]",
-    message: "NFR-5: network-free modules must not dynamically import a platform/git module.",
+    selector: "ImportExpression[source.value=/platform\\/(?:git|hosted-manifest)/]",
+    message:
+      "NFR-5 / D-PL5-07: network-free modules must not dynamically import a platform/git or platform/hosted-manifest-fetch module.",
   },
   {
-    selector: "TSImportType Literal[value=/platform\\/git/]",
-    message: "NFR-5: network-free modules must not name a platform/git type through import().",
+    selector: "TSImportType Literal[value=/platform\\/(?:git|hosted-manifest)/]",
+    message:
+      "NFR-5 / D-PL5-07: network-free modules must not name a platform/git or platform/hosted-manifest-fetch type through import().",
+  },
+  {
+    selector: `:matches(Identifier, PrivateIdentifier)[name=/^(?:${NETWORK_SEAM_NAMES})$/]`,
+    message:
+      "NFR-5 / D-PL5-07: network-free modules must not name the git seam (gitOps, DEFAULT_GIT_OPS, refreshGitHubClone) or the hosted catalog download (hostedManifestFetch, HostedManifestFetch, DEFAULT_HOSTED_MANIFEST_FETCH, downloadHostedCatalog, refreshHostedCatalog, fetchHostedManifest). Only the NETWORK_SEAMS files in eslint.config.js may name them.",
+  },
+  {
+    selector: `Literal[value=/\\b(?:${NETWORK_SEAM_NAMES})\\b/]`,
+    message:
+      "NFR-5 / D-PL5-07: network-free modules must not spell a git seam or hosted catalog download name in a string.",
+  },
+  {
+    selector: `TemplateElement[value.raw=/\\b(?:${NETWORK_SEAM_NAMES})\\b/]`,
+    message:
+      "NFR-5 / D-PL5-07: network-free modules must not spell a git seam or hosted catalog download name in a string.",
+  },
+];
+
+const GITHUB_LITERAL = /github\.com/i;
+
+/**
+ * GHB-02 / D-MF-01: a github.com URL belongs in shared/github-base-url.ts.
+ * That module is the one place the clone-base override reads, so a github.com
+ * literal anywhere else in the extension would send bytes or credentials
+ * around the override. The rule reports string literals, template text after
+ * escapes are resolved, and regular expression literals with their `\.`
+ * escapes read as dots. Comments are not AST nodes, so a comment never
+ * matches.
+ */
+const LOCAL_PLUGIN = {
+  rules: {
+    "no-github-literal": {
+      meta: {
+        type: "problem",
+        schema: [],
+        messages: {
+          found:
+            "GHB-02: a github.com literal belongs in shared/github-base-url.ts. Disable this line with a reason only at a parser host comparison, user-facing reason text, the github.com display string, or a Device Flow endpoint.",
+        },
+      },
+      create(context) {
+        return {
+          Literal(node) {
+            const text = typeof node.value === "string" ? node.value : node.regex?.pattern;
+            if (text !== undefined && GITHUB_LITERAL.test(text.replaceAll("\\.", "."))) {
+              context.report({ node, messageId: "found" });
+            }
+          },
+          TemplateElement(node) {
+            if (GITHUB_LITERAL.test(node.value.cooked ?? node.value.raw)) {
+              context.report({ node, messageId: "found" });
+            }
+          },
+        };
+      },
+    },
+  },
+};
+
+const APPEND_ENTRY_SYNTAX_SELECTORS = [
+  {
+    selector:
+      "CallExpression[callee.type='MemberExpression'][callee.computed=false][callee.property.name='appendEntry']",
+    message: "JOUT-01: only shared/notification-dispatch.ts may call appendEntry.",
   },
   {
     selector:
-      ":matches(Identifier, PrivateIdentifier)[name=/^(?:gitOps|DEFAULT_GIT_OPS|refreshGitHubClone)$/]",
-    message:
-      "NFR-5: network-free modules must not name gitOps, DEFAULT_GIT_OPS, or refreshGitHubClone. Only the NETWORK_SEAMS files in eslint.config.js may name the git seam.",
+      "CallExpression[callee.type='MemberExpression'][callee.computed=true][callee.property.value='appendEntry']",
+    message: "JOUT-01: only shared/notification-dispatch.ts may call appendEntry.",
+  },
+];
+
+/** BLOCK C: layer directions and ledger isolation apply even to network seams. */
+const IMPORT_DIRECTION_ZONES = [
+  // D-21-02 Phase 21: edge/ may now import domain/ directly; the
+  // prior cross-zone re-export hack via the retired rendering
+  // layer is gone.
+  {
+    target: "./extensions/pi-claude-marketplace/edge",
+    from: [
+      "./extensions/pi-claude-marketplace/bridges",
+      "./extensions/pi-claude-marketplace/transaction",
+      "./extensions/pi-claude-marketplace/persistence",
+    ],
+    message: "edge/ may only import from orchestrators/, domain/, shared/, platform/.",
   },
   {
-    selector: "Literal[value=/\\b(?:gitOps|DEFAULT_GIT_OPS|refreshGitHubClone)\\b/]",
-    message:
-      "NFR-5: network-free modules must not spell gitOps, DEFAULT_GIT_OPS, or refreshGitHubClone in a string.",
+    target: "./extensions/pi-claude-marketplace/orchestrators",
+    from: ["./extensions/pi-claude-marketplace/edge"],
+    message: "orchestrators/ MUST NOT import from edge/.",
   },
   {
-    selector: "TemplateElement[value.raw=/\\b(?:gitOps|DEFAULT_GIT_OPS|refreshGitHubClone)\\b/]",
+    target: "./extensions/pi-claude-marketplace/bridges",
+    from: [
+      "./extensions/pi-claude-marketplace/edge",
+      "./extensions/pi-claude-marketplace/orchestrators",
+      "./extensions/pi-claude-marketplace/transaction",
+    ],
     message:
-      "NFR-5: network-free modules must not spell gitOps, DEFAULT_GIT_OPS, or refreshGitHubClone in a string.",
+      "bridges/ may only import from domain/, persistence/, shared/, platform/. Cross-bridge imports are also forbidden.",
+  },
+  {
+    target: "./extensions/pi-claude-marketplace/domain",
+    from: [
+      "./extensions/pi-claude-marketplace/edge",
+      "./extensions/pi-claude-marketplace/orchestrators",
+      "./extensions/pi-claude-marketplace/bridges",
+      "./extensions/pi-claude-marketplace/transaction",
+      "./extensions/pi-claude-marketplace/persistence",
+    ],
+    message:
+      "domain/ MUST NOT import upward -- pure logic only. shared/ and platform/ are the only sibling imports allowed.",
+  },
+  {
+    target: "./extensions/pi-claude-marketplace/transaction",
+    from: [
+      "./extensions/pi-claude-marketplace/edge",
+      "./extensions/pi-claude-marketplace/orchestrators",
+      "./extensions/pi-claude-marketplace/bridges",
+      "./extensions/pi-claude-marketplace/domain",
+    ],
+    message: "transaction/ may only import from persistence/, shared/, platform/.",
+  },
+  {
+    target: "./extensions/pi-claude-marketplace/persistence",
+    from: [
+      "./extensions/pi-claude-marketplace/edge",
+      "./extensions/pi-claude-marketplace/orchestrators",
+      "./extensions/pi-claude-marketplace/bridges",
+      "./extensions/pi-claude-marketplace/transaction",
+    ],
+    message: "persistence/ may only import from domain/, shared/, platform/.",
+  },
+  {
+    target: "./extensions/pi-claude-marketplace/platform",
+    from: [
+      "./extensions/pi-claude-marketplace/edge",
+      "./extensions/pi-claude-marketplace/orchestrators",
+      "./extensions/pi-claude-marketplace/bridges",
+      "./extensions/pi-claude-marketplace/domain",
+      "./extensions/pi-claude-marketplace/transaction",
+      "./extensions/pi-claude-marketplace/persistence",
+    ],
+    message:
+      "platform/ may only import from shared/. It's the external-system boundary (git, Pi API surface).",
+  },
+  {
+    target: "./extensions/pi-claude-marketplace/shared",
+    from: [
+      "./extensions/pi-claude-marketplace/edge",
+      "./extensions/pi-claude-marketplace/orchestrators",
+      "./extensions/pi-claude-marketplace/bridges",
+      "./extensions/pi-claude-marketplace/domain",
+      "./extensions/pi-claude-marketplace/transaction",
+      "./extensions/pi-claude-marketplace/persistence",
+    ],
+    message: "shared/ may only import from platform/ for Pi API types.",
+  },
+  {
+    target: "./extensions/pi-claude-marketplace/orchestrators/marketplace",
+    from: PLUGIN_LEDGERS,
+    message:
+      "D-v1.0-01-11: orchestrators/marketplace/ must not import a plugin ledger module. Import the leaf row composer (plugin/update-row.ts), a shared type from orchestrators/types.ts, or the injected pluginUpdate seam instead.",
+  },
+  {
+    target: PLUGIN_LEDGERS,
+    from: MARKETPLACE_LEDGERS,
+    message:
+      "D-v1.0-01-11: a plugin ledger must not import a marketplace ledger module. Only orchestrators/marketplace/shared.ts is reachable from a plugin ledger.",
+  },
+  {
+    target: PLUGIN_LEDGERS,
+    from: PLUGIN_LEDGERS,
+    message: "D-v1.0-01-11: plugin ledger modules must not import each other.",
+  },
+  {
+    target: MARKETPLACE_LEDGERS,
+    from: MARKETPLACE_LEDGERS,
+    message: "D-v1.0-01-11: marketplace ledger modules must not import each other.",
   },
 ];
 
@@ -117,7 +299,7 @@ export default tseslint.config(
       "dist/",
       "node_modules/",
       "tmp/",
-      "tests/live-uat/",
+      "test/live-uat/",
     ],
   },
   js.configs.recommended,
@@ -185,12 +367,142 @@ export default tseslint.config(
         { blankLine: "always", prev: "block-like", next: "*" },
       ],
       "prefer-object-has-own": "error",
+      // The style rules the typescript-style skill relies on the toolchain for.
+      eqeqeq: ["error", "smart"],
+      "prefer-arrow-callback": "error",
+      // Function declarations are hoisted, so a helper may follow its caller.
+      "@typescript-eslint/no-use-before-define": [
+        "error",
+        { functions: false, classes: false, enums: false },
+      ],
       "sonarjs/cognitive-complexity": ["error", 15],
       "sonarjs/no-identical-functions": "error",
       "sonarjs/no-inverted-boolean-check": "error",
       "sonarjs/no-nested-conditional": "error",
       "sonarjs/no-nested-template-literals": "error",
       curly: ["error", "all"],
+    },
+  },
+  {
+    // The cucumber skill's steps.md: a step module exports nothing, and its step text is a
+    // Cucumber expression written as a string literal, never a regular expression. A literal
+    // is required so a pattern held in a variable cannot hide a regex. The text checks match
+    // the callee by name, so a step module registers through `Given`, `When`, and `Then`
+    // imported under their own names: no `defineStep`, no renamed import, and no namespace
+    // import whose member calls the checks would miss. A local alias still escapes them, so
+    // scripts/check-features.mjs also rejects every registered pattern that is not a Cucumber
+    // expression. Hooks, parameter types, and the world belong to support modules (layout.md).
+    files: ["features/step_definitions/**/*.steps.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@cucumber/cucumber",
+              importNames: ["defineStep"],
+              message: "A step module registers steps through Given, When, and Then.",
+            },
+            {
+              name: "@cucumber/cucumber",
+              importNames: [
+                "Before",
+                "After",
+                "BeforeAll",
+                "AfterAll",
+                "BeforeStep",
+                "AfterStep",
+                "defineParameterType",
+                "setWorldConstructor",
+                "setDefaultTimeout",
+                "setDefinitionFunctionWrapper",
+                "setParallelCanAssign",
+              ],
+              message: "A step module registers steps only; support modules register the rest.",
+            },
+          ],
+        },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "ExportNamedDeclaration, ExportDefaultDeclaration, ExportAllDeclaration, TSExportAssignment",
+          message: "A step module exports nothing.",
+        },
+        {
+          selector:
+            "CallExpression[callee.name=/^(Given|When|Then)$/][arguments.0.type!='Literal']",
+          message: "Step text is a string literal Cucumber expression.",
+        },
+        {
+          selector: "CallExpression[callee.name=/^(Given|When|Then)$/] > Literal.arguments[regex]",
+          message: "Step text uses Cucumber expressions, never regular expressions.",
+        },
+        {
+          selector:
+            "ImportSpecifier[imported.name='Given'][local.name!='Given'], ImportSpecifier[imported.name='When'][local.name!='When'], ImportSpecifier[imported.name='Then'][local.name!='Then']",
+          message: "Import Given, When, and Then under their own names.",
+        },
+        {
+          selector:
+            "ImportDeclaration[source.value='@cucumber/cucumber'] > :matches(ImportNamespaceSpecifier, ImportDefaultSpecifier)",
+          message: "Import the Cucumber functions by name.",
+        },
+      ],
+    },
+  },
+  {
+    // The cucumber skill's layout.md: only step modules call Given, When, or Then.
+    files: ["features/support/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@cucumber/cucumber",
+              importNames: ["Given", "When", "Then", "defineStep"],
+              message: "Only step modules register steps.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // The cucumber skill's layout.md: a library module registers nothing. Only step modules
+    // register steps and only support modules register hooks, parameter types, or the world.
+    files: ["features/lib/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@cucumber/cucumber",
+              importNames: [
+                "Given",
+                "When",
+                "Then",
+                "Before",
+                "After",
+                "BeforeAll",
+                "AfterAll",
+                "BeforeStep",
+                "AfterStep",
+                "defineStep",
+                "defineParameterType",
+                "setWorldConstructor",
+                "setDefaultTimeout",
+                "setDefinitionFunctionWrapper",
+                "setParallelCanAssign",
+              ],
+              message: "A library module registers nothing.",
+            },
+          ],
+        },
+      ],
     },
   },
   {
@@ -203,126 +515,32 @@ export default tseslint.config(
     rules: { "no-console": "off" },
   },
   {
-    // BLOCK C (D-v1.0-01-11): Import-direction enforcement. The first eight zones map
-    // each layer folder to the sibling folders that MUST NOT import from it
-    // (i.e. they enforce the upward/inward direction of the dep graph). The
-    // last four keep the ledger modules apart, type-only and dynamic imports
-    // included: no orchestrators/marketplace/ file imports a plugin ledger, no
-    // plugin ledger imports a marketplace ledger, and no ledger imports another
-    // ledger of its own kind. Cycle detection reports a cycle only once the
-    // graph is already circular, so these zones stop the first edge.
+    // BLOCK C: every module, including the package seam, keeps the layer
+    // direction and ledger restrictions.
     files: ["extensions/pi-claude-marketplace/**/*.ts"],
+    rules: {
+      "import-x/no-restricted-paths": [
+        "error",
+        { basePath: import.meta.dirname, zones: IMPORT_DIRECTION_ZONES },
+      ],
+    },
+  },
+  {
+    // Only this exact importer may reach the package runner. Keep all other
+    // direction restrictions when adding the package-runner zone.
+    files: ["extensions/pi-claude-marketplace/**/*.ts"],
+    ignores: [PACKAGE_INSTALL_SEAM.slice(2)],
     rules: {
       "import-x/no-restricted-paths": [
         "error",
         {
           basePath: import.meta.dirname,
           zones: [
-            // D-21-02 Phase 21: edge/ may now import domain/ directly; the
-            // prior cross-zone re-export hack via the retired rendering
-            // layer is gone.
+            ...IMPORT_DIRECTION_ZONES,
             {
-              target: "./extensions/pi-claude-marketplace/edge",
-              from: [
-                "./extensions/pi-claude-marketplace/bridges",
-                "./extensions/pi-claude-marketplace/transaction",
-                "./extensions/pi-claude-marketplace/persistence",
-              ],
-              message: "edge/ may only import from orchestrators/, domain/, shared/, platform/.",
-            },
-            {
-              target: "./extensions/pi-claude-marketplace/orchestrators",
-              from: ["./extensions/pi-claude-marketplace/edge"],
-              message: "orchestrators/ MUST NOT import from edge/.",
-            },
-            {
-              target: "./extensions/pi-claude-marketplace/bridges",
-              from: [
-                "./extensions/pi-claude-marketplace/edge",
-                "./extensions/pi-claude-marketplace/orchestrators",
-                "./extensions/pi-claude-marketplace/transaction",
-              ],
-              message:
-                "bridges/ may only import from domain/, persistence/, shared/, platform/. Cross-bridge imports are also forbidden.",
-            },
-            {
-              target: "./extensions/pi-claude-marketplace/domain",
-              from: [
-                "./extensions/pi-claude-marketplace/edge",
-                "./extensions/pi-claude-marketplace/orchestrators",
-                "./extensions/pi-claude-marketplace/bridges",
-                "./extensions/pi-claude-marketplace/transaction",
-                "./extensions/pi-claude-marketplace/persistence",
-              ],
-              message:
-                "domain/ MUST NOT import upward -- pure logic only. shared/ and platform/ are the only sibling imports allowed.",
-            },
-            {
-              target: "./extensions/pi-claude-marketplace/transaction",
-              from: [
-                "./extensions/pi-claude-marketplace/edge",
-                "./extensions/pi-claude-marketplace/orchestrators",
-                "./extensions/pi-claude-marketplace/bridges",
-                "./extensions/pi-claude-marketplace/domain",
-              ],
-              message: "transaction/ may only import from persistence/, shared/, platform/.",
-            },
-            {
-              target: "./extensions/pi-claude-marketplace/persistence",
-              from: [
-                "./extensions/pi-claude-marketplace/edge",
-                "./extensions/pi-claude-marketplace/orchestrators",
-                "./extensions/pi-claude-marketplace/bridges",
-                "./extensions/pi-claude-marketplace/transaction",
-              ],
-              message: "persistence/ may only import from domain/, shared/, platform/.",
-            },
-            {
-              target: "./extensions/pi-claude-marketplace/platform",
-              from: [
-                "./extensions/pi-claude-marketplace/edge",
-                "./extensions/pi-claude-marketplace/orchestrators",
-                "./extensions/pi-claude-marketplace/bridges",
-                "./extensions/pi-claude-marketplace/domain",
-                "./extensions/pi-claude-marketplace/transaction",
-                "./extensions/pi-claude-marketplace/persistence",
-              ],
-              message:
-                "platform/ may only import from shared/. It's the external-system boundary (git, Pi API surface).",
-            },
-            {
-              target: "./extensions/pi-claude-marketplace/shared",
-              from: [
-                "./extensions/pi-claude-marketplace/edge",
-                "./extensions/pi-claude-marketplace/orchestrators",
-                "./extensions/pi-claude-marketplace/bridges",
-                "./extensions/pi-claude-marketplace/domain",
-                "./extensions/pi-claude-marketplace/transaction",
-                "./extensions/pi-claude-marketplace/persistence",
-              ],
-              message: "shared/ may only import from platform/ for Pi API types.",
-            },
-            {
-              target: "./extensions/pi-claude-marketplace/orchestrators/marketplace",
-              from: PLUGIN_LEDGERS,
-              message:
-                "D-v1.0-01-11: orchestrators/marketplace/ must not import a plugin ledger module. Import the leaf row composer (plugin/update-row.ts), a shared type from orchestrators/types.ts, or the injected pluginUpdate seam instead.",
-            },
-            {
-              target: PLUGIN_LEDGERS,
-              from: MARKETPLACE_LEDGERS,
-              message:
-                "D-v1.0-01-11: a plugin ledger must not import a marketplace ledger module. Only orchestrators/marketplace/shared.ts is reachable from a plugin ledger.",
-            },
-            {
-              target: PLUGIN_LEDGERS,
-              from: PLUGIN_LEDGERS,
-              message: "D-v1.0-01-11: plugin ledger modules must not import each other.",
-            },
-            {
-              target: MARKETPLACE_LEDGERS,
-              from: MARKETPLACE_LEDGERS,
-              message: "D-v1.0-01-11: marketplace ledger modules must not import each other.",
+              target: "./extensions/pi-claude-marketplace",
+              from: ["./extensions/pi-claude-marketplace/platform/package-manager.ts"],
+              message: `D-PL9-10: only ${PACKAGE_INSTALL_SEAM} imports platform/package-manager.ts, the spawn runner of a plugin's own package install.`,
             },
           ],
         },
@@ -330,13 +548,22 @@ export default tseslint.config(
     },
   },
   {
+    // Optional calls share the same CallExpression/MemberExpression shape.
+    files: ["extensions/pi-claude-marketplace/**/*.ts"],
+    ignores: ["extensions/pi-claude-marketplace/shared/notification-dispatch.ts"],
+    rules: {
+      "no-restricted-syntax": ["error", ...APPEND_ENTRY_SYNTAX_SELECTORS],
+    },
+  },
+  {
     // BLOCK F (NFR-5 / PI-2 / PL-3 / PRL-07): default-deny. Every orchestrators/
     // and domain/ module outside NETWORK_SEAMS names no git surface: no
-    // platform/git import of any kind (type-only and dynamic included) and no
-    // gitOps / DEFAULT_GIT_OPS / refreshGitHubClone identifier, key, or string.
-    // edge/ and index.ts are outside the rule. No other block sets either rule
-    // for extension files. A block that did would replace these options for
-    // every file that both blocks match.
+    // platform/git or platform/hosted-manifest-fetch import of any kind
+    // (type-only and dynamic included, D-PL5-07) and no NETWORK_SEAM_NAMES
+    // identifier, key, or string: the git seam and the hosted catalog
+    // download.
+    // edge/ and index.ts are outside the network rule. Compose the append
+    // restriction again: this block replaces the earlier syntax rule options.
     files: [
       "extensions/pi-claude-marketplace/orchestrators/**/*.ts",
       "extensions/pi-claude-marketplace/domain/**/*.ts",
@@ -352,10 +579,41 @@ export default tseslint.config(
               message:
                 "NFR-5: network-free modules must not import a platform/git module, type-only imports included. Reach git through orchestrators/plugin/clone-cache.ts by entrypoint name.",
             },
+            {
+              regex: "platform/hosted-manifest",
+              message:
+                "NFR-5 / D-PL5-07: network-free modules must not import platform/hosted-manifest-fetch.ts, type-only imports included. Download a hosted catalog through the port in orchestrators/marketplace/hosted-catalog.ts.",
+            },
           ],
         },
       ],
-      "no-restricted-syntax": ["error", ...NETWORK_FREE_SYNTAX_SELECTORS],
+      "no-restricted-syntax": [
+        "error",
+        ...APPEND_ENTRY_SYNTAX_SELECTORS,
+        ...NETWORK_FREE_SYNTAX_SELECTORS,
+      ],
+    },
+  },
+  {
+    // GHB-02: a github.com literal outside the seam fails lint at its line.
+    // A disable covers one line, so a new literal fails even in a file that
+    // already carries disables. The rule has its own name because a
+    // no-restricted-syntax disable would also mute the NFR-5 and JOUT-01
+    // selectors on that line. A run over the real tree is the proof; no
+    // planted violation is committed.
+    files: ["extensions/pi-claude-marketplace/**/*.ts"],
+    plugins: { local: LOCAL_PLUGIN },
+    rules: {
+      "local/no-github-literal": "error",
+    },
+  },
+  {
+    // GHB-02: the seam holds the github.com origin. The rule is turned off
+    // here rather than ignored above, so the plugin stays registered for this
+    // file and a directive that names the rule still resolves.
+    files: ["extensions/pi-claude-marketplace/shared/github-base-url.ts"],
+    rules: {
+      "local/no-github-literal": "off",
     },
   },
   {
@@ -367,7 +625,7 @@ export default tseslint.config(
     // the push rather than after it.
     //
     // Scoped to mirror `sonar.sources` in sonar-project.properties.
-    // `sonar.test.exclusions` drops tests/**, so SonarCloud never reads the
+    // `sonar.test.exclusions` drops test/**, so SonarCloud never reads the
     // test tree. Tests opt into the three assertion rules below. The full
     // preset conflicts with compiler proofs, strict mocks, and fixture data;
     // SWTEST-01 records the measured per-cluster policy.
@@ -398,7 +656,7 @@ export default tseslint.config(
     // construction rather than by coincidence.
     //
     // Scoped to mirror `sonar.sources`, like the block above. SonarCloud
-    // drops tests/** via `sonar.test.exclusions`, so enforcing there would
+    // drops test/** via `sonar.test.exclusions`, so enforcing there would
     // gate code Sonar never grades.
     files: ["extensions/pi-claude-marketplace/**/*.ts"],
     rules: {
@@ -412,7 +670,7 @@ export default tseslint.config(
     // above does not carry it.
     //
     // Scoped to mirror `sonar.sources`, like the blocks above. SonarCloud
-    // drops tests/** via `sonar.test.exclusions`.
+    // drops test/** via `sonar.test.exclusions`.
     files: ["extensions/pi-claude-marketplace/**/*.ts"],
     rules: {
       "no-await-in-loop": "error",
@@ -422,7 +680,7 @@ export default tseslint.config(
     // Tests deliberately do defensive checking after operations that "should"
     // have populated state, and `node:test`'s `test(...)` returns an unawaited
     // promise by design. Relax the rules that fight that style.
-    files: ["tests/**/*.ts"],
+    files: ["test/**/*.ts"],
     rules: {
       "@typescript-eslint/no-floating-promises": "off",
       "@typescript-eslint/no-non-null-assertion": "off",
@@ -458,16 +716,16 @@ export default tseslint.config(
     // contract is compile-time, and the shared `assertNever` owner carries the
     // runtime cases for that concern.
     files: [
-      "tests/bridges/agents/types.test.ts",
-      "tests/bridges/commands/types.test.ts",
-      "tests/bridges/hooks/exec-result.test.ts",
-      "tests/bridges/mcp/types.test.ts",
-      "tests/bridges/skills/types.test.ts",
-      "tests/bridges/workflows/types.test.ts",
-      "tests/domain/resolver-types.test.ts",
-      "tests/edge/types.test.ts",
-      "tests/orchestrators/import/types.test.ts",
-      "tests/orchestrators/types.test.ts",
+      "test/bridges/agents/types.test.ts",
+      "test/bridges/commands/types.test.ts",
+      "test/bridges/hooks/exec-result.test.ts",
+      "test/bridges/mcp/types.test.ts",
+      "test/bridges/skills/types.test.ts",
+      "test/bridges/workflows/types.test.ts",
+      "test/domain/resolver-types.test.ts",
+      "test/edge/types.test.ts",
+      "test/orchestrators/import/types.test.ts",
+      "test/orchestrators/types.test.ts",
     ],
     rules: { "sonarjs/no-empty-test-file": "off" },
   },

@@ -2,7 +2,7 @@
 //
 // MU-1, MU-4, MU-5, MU-6, MU-7, MU-8, MU-9 + RH-1/RH-2/RH-5 + SC-6 + NFR-5.
 //
-// Each orchestration emits exactly one `notify(ctx, pi,...)` call with a
+// Each orchestration emits exactly one `notify(ctx, run,...)` call with a
 // discriminated `NotificationMessage` payload. Severity, reload-hint,
 // soft-dep marker, and per-row glyph dispatch are owned by the renderer in
 // `shared/notification-grammar.ts`.
@@ -22,11 +22,18 @@
 //  "updated", plugins: outcomes.map(outcomeToCascadePluginMessage) }] }`.
 //  The per-plugin cause chain rides on `PluginFailedMessage.cause`;
 //  `unchanged` renders as `⊘... (skipped) {up-to-date}`. Catalog UAT
-//  fixture `mixed-outcomes`.
+//  fixture `mixed-outcomes`. Each updated plugin's package note follows the
+//  rows as its own warning diagnostic, before the MCP config notices
+//  (D-PL9-21).
 //  - mp-level failure (clone/manifest unreachable): the failed marketplace
 //  header plus a synthetic `PluginFailedMessage` child carrying
 //  `cause: err` so the underlying MarketplaceUpdateError reaches the user
 //  (`err.retryHint` remains on the error for programmatic inspection).
+//  - invalid GitHub base override: an `InvalidGitHubBaseUrlError` from the
+//  refresh or from a cascade plugin update fails the whole command; no row is
+//  rendered (GHB-03). A throw out of the missing-dependency step after the
+//  updates reaches the command only after the marketplace's update rows and
+//  notices are reported (D-PL2-21).
 //  - empty targets (no marketplaces configured): `{ marketplaces: [] }`
 //  renders the `(no marketplaces)` sentinel.
 //  - post-success cache cleanup: a `rm` runs to drop the stale completion
@@ -34,8 +41,8 @@
 //
 // Per-row soft-dep markers are driven by the per-plugin
 // `dependencies: Dependency[]` field on `PluginUpdatedMessage` /
-// `PluginInstalledMessage` / `PluginReinstalledMessage`, threaded through the
-// notify-time `softDepStatus(pi)` probe.
+// `PluginInstalledMessage` / `PluginReinstalledMessage`. D-05: the markers come
+// from the command run's soft-dependency snapshot, composed in the resolve step.
 //
 // MU-2 and MU-3 do not apply under the "follow upstream blindly" contract --
 // the local marketplace clone is read-only, so the pull --ff-only
@@ -62,15 +69,15 @@
 //  // at false so the "Retry the command." hint is suppressed.
 //  // Any later step throw (forceUpdateRef/checkout) or
 //  // manifest re-read throw still produces the retry hint.
-//  manifest = read+validate <marketplaceRoot>/.claude-plugin/marketplace.json
+//  manifest = read+validate recordedManifestPath(record)
 //  record.lastUpdatedAt = now
 //  } catch (err) {
 //  throw new MarketplaceUpdateError(..., { cause, retryHint: cloneAdvanced ? "Retry the command." : "" })
 //  }
 //  else if path:
-//  refreshPathManifest(record) // NO gitOps; NFR-5
+//  manifest = read+validate recordedManifestPath(record) // NO gitOps; NFR-5
 //  // capture snapshot for cascade-outside-guard:
-//  snapshot = { autoupdate: record.autoupdate ?? false, plugins: Object.keys(record.plugins) }
+//  snapshot = { autoupdate: effectiveMarketplaceAutoupdate(name, <config value>), plugins: Object.keys(record.plugins) }
 //  return snapshot
 //  })
 //
@@ -81,7 +88,7 @@
 //  partition[outcome.partition].push(outcome)
 //  // MU-7: per-plugin outcomes feed outcomeToCascadePluginMessage construction
 //
-//  3. Compose user-visible output via a single notify(ctx, pi,...)
+//  3. Compose user-visible output via a single notify(ctx, run,...)
 //  call per orchestration (see header comment above for
 //  the catalog UAT fixtures bound to each shape). Empty targets,
 //  mp-level failure, autoupdate-OFF success, and autoupdate-ON
@@ -92,22 +99,39 @@
 //  D-14 sequence: fetch + (symbolic HEAD) forceUpdateRef + checkout, OR
 //  (detached HEAD) checkout directly. NO `pull`.
 
-import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 
-import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
+import { networkCloneUrl } from "../../domain/clone-key.ts";
+import { loadMarketplaceManifestDocument } from "../../domain/manifest.ts";
+import {
+  assertRecordedMarketplaceName,
+  catalogMarketplaceNameRefusal,
+  reservedMarketplaceNameRefusal,
+} from "../../domain/name.ts";
+import { effectiveMarketplaceAutoupdate } from "../../domain/official-marketplaces.ts";
+import { hasInvalidConfigLayer, loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
-  CrossOriginChallengeError,
+  HostedManifestFetchError,
   InvalidMarketplaceManifestError,
+  MarketplaceBaselineUnreadableError,
   MarketplaceUpdateError,
-  PluginShapeError,
+  ReservedMarketplaceNameError,
+  StateLockHeldError,
   composeErrorWithCauseChain,
   errorMessage,
+  isErrnoException,
+  rethrowInvalidGitHubBaseUrl,
+  withoutCleanupLeaks,
 } from "../../shared/errors.ts";
-import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { createRemovalOps, type RemovalOps } from "../../shared/fs-utils.ts";
+import {
+  classifyGitFailure,
+  hostedFetchFailureReason,
+} from "../../shared/git-failure-classifiers.ts";
+import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import {
@@ -116,6 +140,8 @@ import {
   type Plural,
   type Single,
 } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
+import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import {
   withLockedStateTransaction,
   type LockedStateTransactionDeps,
@@ -123,36 +149,52 @@ import {
 import {
   DEFAULT_CREDENTIAL_OPS,
   NO_STORED_CREDENTIAL_CAUSE,
-  buildAuthForHost,
-  hostFromCloneUrl,
+  buildGitHubAuth,
 } from "../auth-host.ts";
+import { surfaceCascadeStagingDiagnostics } from "../plugin/staging-diagnostics.ts";
+
+import {
+  DEFAULT_HOSTED_MANIFEST_FETCH,
+  refreshHostedCatalog,
+  type HostedManifestFetch,
+} from "./hosted-catalog.ts";
+import {
+  DEFAULT_GIT_OPS,
+  lacksStoredCredential,
+  recordedManifestPath,
+  refreshGitHubClone,
+  refreshUrlClone,
+  resolveScopeOrNotifyNotAdded,
+  type GitAuthBundle,
+  type GitOps,
+} from "./shared.ts";
 // WR-12 / WR-03: the `(updated)` row composer, imported from the LEAF module
 // that holds it rather than from the plugin-update ledger. The ledger stays
 // behind the injected `pluginUpdate` seam -- and now stays out of this module's
 // import graph too, so no future edge can close an
 // `orchestrators/marketplace` <-> `orchestrators/plugin` cycle here.
-
-import {
-  DEFAULT_GIT_OPS,
-  refreshGitHubClone,
-  resolveScopeOrNotifyNotAdded,
-  type GitOps,
-} from "./shared.ts";
 import {
   UPDATE_CONTEXT,
   outcomeToCascadePluginMessage,
+  surfaceCascadeStagingWarnings,
   type UpdateRowMsg,
 } from "./update.messaging.ts";
 
 import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
-import type { ParsedSource, UrlSource } from "../../domain/source.ts";
+import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
+import type {
+  PluginUpdateFn,
+  PluginUpdateOutcome,
+  ScopeDependencyInstallFn,
+  ScopeDependencyInstallResult,
+} from "../types.ts";
 
 export interface UpdateMarketplaceOptions {
   readonly completionCache: CompletionCache;
@@ -168,16 +210,22 @@ export interface UpdateMarketplaceOptions {
    */
   readonly pluginUpdate?: PluginUpdateFn;
   /**
-   * Soft-dep probe target. `pi.getAllTools` is the source of truth for
-   * whether `pi-subagents` / `pi-mcp-adapter` are loaded. Required (not
-   * optional) so every `notify(ctx, pi, ...)` call has a non-null reference;
-   * the renderer threads `softDepStatus(pi)` internally at notify-time.
+   * D-PL2-10: `apply`'s missing-dependency step over the marketplace's scope.
+   * The autoupdate cascade runs it after its plugin updates, for missing
+   * dependencies of this marketplace's plugins, as Claude Code does after a
+   * background autoupdate. When omitted, the cascade runs no such step.
    */
-  readonly pi: ToolInventory;
+  readonly installMissingDependencies?: ScopeDependencyInstallFn;
+  /**
+   * D-05: the command's run. Every emission renders from its soft-dependency
+   * snapshot, and the `{requires ...}` markers are composed from it in the
+   * resolve step.
+   */
+  readonly run: NotificationRun;
   /**
    * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
    * wraps `git credential fill/approve/reject` via subprocess. Tests
-   * inject createCredentialOpsFake() from tests/platform/credential-ops-fake.ts
+   * inject createCredentialOpsFake() from test/platform/credential-ops-fake.ts
    * so the developer's OS keychain is never touched.
    */
   readonly credentialOps?: CredentialOps;
@@ -196,6 +244,13 @@ export interface UpdateMarketplaceOptions {
    * forwarded unchanged.
    */
   readonly stateTransaction?: LockedStateTransactionDeps;
+  /**
+   * D-PL5-09 injection seam that downloads a hosted catalog again. Defaults to
+   * DEFAULT_HOSTED_MANIFEST_FETCH, which wraps platform/hosted-manifest-fetch.ts.
+   */
+  readonly hostedManifestFetch?: HostedManifestFetch;
+  /** Injection seam for the removal of a hosted refresh's staging directory (MA-9). */
+  readonly removalOps?: RemovalOps;
 }
 
 export interface UpdateAllMarketplacesOptions {
@@ -205,12 +260,14 @@ export interface UpdateAllMarketplacesOptions {
   readonly cwd: string;
   readonly gitOps?: GitOps;
   readonly pluginUpdate?: PluginUpdateFn;
-  /** See `UpdateMarketplaceOptions.pi`. */
-  readonly pi: ToolInventory;
+  /** See `UpdateMarketplaceOptions.installMissingDependencies`. */
+  readonly installMissingDependencies?: ScopeDependencyInstallFn;
+  /** See `UpdateMarketplaceOptions.run`. */
+  readonly run: NotificationRun;
   /**
    * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
    * wraps `git credential fill/approve/reject` via subprocess. Tests
-   * inject createCredentialOpsFake() from tests/platform/credential-ops-fake.ts
+   * inject createCredentialOpsFake() from test/platform/credential-ops-fake.ts
    * so the developer's OS keychain is never touched.
    */
   readonly credentialOps?: CredentialOps;
@@ -220,6 +277,8 @@ export interface UpdateAllMarketplacesOptions {
    * inside the orchestrator's onAuthRequired closure.
    */
   readonly deviceFlowHttp?: DeviceFlowHttp;
+  /** See `UpdateMarketplaceOptions.hostedManifestFetch`. */
+  readonly hostedManifestFetch?: HostedManifestFetch;
 }
 
 /** MU-1 single-name form. */
@@ -240,16 +299,23 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
   await refreshOneMarketplace({
     completionCache: opts.completionCache,
     ctx: opts.ctx,
-    pi: opts.pi,
+    run: opts.run,
     cardinality: "single",
     name: opts.name,
     scope: resolved.scope,
+    cwd: opts.cwd,
     locations: resolved.locations,
     gitOps,
     credentialOps,
+    hostedManifestFetch: opts.hostedManifestFetch ?? DEFAULT_HOSTED_MANIFEST_FETCH,
+    reportedDependencies: new Set(),
     ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     ...(opts.pluginUpdate !== undefined && { pluginUpdate: opts.pluginUpdate }),
+    ...(opts.installMissingDependencies !== undefined && {
+      installMissingDependencies: opts.installMissingDependencies,
+    }),
     ...(opts.stateTransaction !== undefined && { stateTransaction: opts.stateTransaction }),
+    removalOps: opts.removalOps ?? createRemovalOps(),
   });
 }
 
@@ -260,6 +326,8 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
 export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions): Promise<void> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
   const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
+  const hostedManifestFetch = opts.hostedManifestFetch ?? DEFAULT_HOSTED_MANIFEST_FETCH;
+  const removalOps = createRemovalOps();
   // Iteration order is project-first per MSG-GR-3 so same-name cross-scope
   // stable-sort ties render project-before-user.
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
@@ -282,25 +350,35 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
     // OUT-07 / D-12: empty inventory -> Plural (zero rows). Renders the
     // `(no marketplaces)` sentinel via the central seam the spine reuses.
     const emptyRows: Plural<MarketplaceRows<UpdateRowMsg>> = [];
-    notifyWithContext(opts.ctx, opts.pi, UPDATE_CONTEXT, emptyRows, undefined, "plural");
+    notifyWithContext(opts.ctx, opts.run, UPDATE_CONTEXT, emptyRows, undefined, "plural");
     return;
   }
 
+  // WR-04: one set for the whole command, so a dependency that two
+  // autoupdated marketplaces of one scope declare is tried and reported once.
+  const reportedDependencies = new Set<string>();
   // Process sequentially.
   for (const t of targets) {
     // eslint-disable-next-line no-await-in-loop -- each refresh locks the scope and notifies in order
     await refreshOneMarketplace({
       completionCache: opts.completionCache,
       ctx: opts.ctx,
-      pi: opts.pi,
+      run: opts.run,
       cardinality: "plural",
       name: t.name,
       scope: t.scope,
+      cwd: opts.cwd,
       locations: t.locations,
       gitOps,
       credentialOps,
+      hostedManifestFetch,
+      removalOps,
+      reportedDependencies,
       ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
       ...(opts.pluginUpdate !== undefined && { pluginUpdate: opts.pluginUpdate }),
+      ...(opts.installMissingDependencies !== undefined && {
+        installMissingDependencies: opts.installMissingDependencies,
+      }),
     });
   }
 }
@@ -311,57 +389,48 @@ interface RefreshOneArgs {
   readonly cardinality: "single" | "plural";
   readonly name: string;
   readonly scope: Scope;
+  /** The command's working directory, which roots the project scope of the missing-dependency step. */
+  readonly cwd: string;
   readonly locations: ScopedLocations;
   readonly gitOps: GitOps;
   readonly pluginUpdate?: PluginUpdateFn;
-  readonly pi: ToolInventory;
+  readonly installMissingDependencies?: ScopeDependencyInstallFn;
+  /**
+   * D-PL2-01 / WR-04: the dependency rows this command already reported, as
+   * `dependencyRowKey` keys. The missing-dependency step adds its own.
+   */
+  readonly reportedDependencies: Set<string>;
+  readonly run: NotificationRun;
   readonly credentialOps: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly stateTransaction?: LockedStateTransactionDeps;
+  readonly hostedManifestFetch: HostedManifestFetch;
+  readonly removalOps: RemovalOps;
+}
+
+/** A dependency row's key in `reportedDependencies`: the same key in two scopes is two installs. */
+function dependencyRowKey(scope: Scope, name: string): string {
+  return `${scope}:${name}`;
 }
 
 /**
- * UXG-05 change-detection seam. Reads the persisted, schema-validated
- * `MarketplaceManifest` and returns a comparison key (the `JSON.stringify` of
- * the validated parsed content). Used to compare the manifest content PRE vs
- * POST refresh so the no-op vs changed decision (autoupdate-OFF and
- * autoupdate-ON alike) can distinguish a genuine change (`updated`) from a
- * no-op (`skipped {up-to-date}`).
- *
- * WR-01: `loadMarketplaceManifest` returns the RAW `JSON.parse` value -- it
- * runs `MARKETPLACE_VALIDATOR.Check()` but NEVER `.Parse()`/`.Clean()`. So the
- * comparison key is `JSON.stringify` of the schema-validated-but-raw parsed
- * manifest: its key order mirrors the source file and it retains any
- * unknown/extra fields. Any content delta -- including reordered keys or
- * changed extra fields -- reads as "changed", the conservative direction. Do
- * NOT "optimize" `loadMarketplaceManifest` into `.Parse()`: that would rewrite
- * the key order and could silently flip the no-op classification.
- *
- * Compares ONLY post-validation parsed content (T-27-05 mitigation): a tampered
- * manifest that fails the schema throws inside `loadMarketplaceManifest` and
- * routes to the `(failed)` path, never to the no-op `(skipped)` decision.
- *
- * WR-02: returns `undefined` ONLY for a genuine "no manifest yet" (ENOENT) PRE
- * read; a `undefined` PRE key compared against a defined POST key reads as
- * "changed", the safe default. Any OTHER PRE-read failure (EACCES, malformed
- * JSON, schema-invalid) is re-thrown so it propagates to `refreshRecord`'s
- * try/catch and routes to the existing `(failed)` path -- the same routing
- * `validateManifestAtRoot` already uses for POST-read failures. This removes
- * the silent always-`(updated)` failure mode for a corrupt/unreadable
- * pre-existing manifest.
+ * Reads the pre-fetch comparison for a git record without a saved baseline.
+ * A manifest that is missing or invalid gives no comparison, so the refresh
+ * counts as changed once the fetched manifest validates. D-07: a later update
+ * can succeed once the source is fixed. Any other read failure (EACCES, EIO,
+ * EISDIR) fails the refresh.
  */
 async function manifestContentKey(
   record: ExtensionState["marketplaces"][string],
 ): Promise<string | undefined> {
   try {
-    const parsed = await loadMarketplaceManifest(record.manifestPath);
-    return JSON.stringify(parsed);
+    return (await loadMarketplaceManifestDocument(recordedManifestPath(record))).comparisonJson;
   } catch (err) {
-    // WR-02: only ENOENT (no manifest yet) maps to the changed-safe default.
-    // Mirrors the errno-narrowing idiom `reasonsFromCascadeError` already uses
-    // (gates on `(err as NodeJS.ErrnoException).code`). All other failures
-    // propagate to `(failed)`.
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+    // The fetched manifest is still validated, so an invalid one fails there.
+    if (
+      err instanceof InvalidMarketplaceManifestError ||
+      (isErrnoException(err) && err.code === "ENOENT")
+    ) {
       return undefined;
     }
 
@@ -370,52 +439,67 @@ async function manifestContentKey(
 }
 
 /**
- * MURL-03 url-source refresh via the on-disk `origin` remote (same D-14
- * sequence as github; refreshGitHubClone fetches by remote name, so the
- * original clone URL is irrelevant). GAUTH-03: the host extracted from
- * source.url carries its own auth bundle, so the user's git credential helper
- * is consulted on every host; a registry host adds that provider's Device Flow
- * on a helper miss (PROV-03).
- *
- * D-1-02 / GAUTH-04: an auth failure on a host whose only auth path is a
- * stored credential carries exactly one extra cause line telling the user WHY
- * authentication cannot proceed. Attached as the chain TAIL, which keeps the
- * code-bearing transport error at cause-depth 1 where `transportReason`'s
- * one-level unwrap classifies it as `authentication required`. GAUTH-05: a
- * `device-flow` bundle is excluded -- there the story is a declined or expired
- * Device Flow, and the bare closed-set token is the whole truth. A challenge
- * after a cross-origin redirect keeps its own cause text, because a credential
- * stored for `host` cannot answer it (Q-02).
+ * Parses the comparison text, or returns undefined when there is none. A saved
+ * baseline that does not parse refuses the refresh as unreadable before any
+ * source read or fetch.
  */
-async function refreshUrlClone(
-  cloneDir: string,
-  source: UrlSource,
-  args: RefreshOneArgs,
-  onFetchSucceeded: () => void,
-): Promise<void> {
-  const { ctx, credentialOps, deviceFlowHttp, gitOps } = args;
-  const host = hostFromCloneUrl(source.url, "url");
-  const auth = buildAuthForHost({
-    host,
-    credentialOps,
-    ctx,
-    ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
-  });
+function parseBaseline(name: string, text: string | undefined): unknown {
+  if (text === undefined) {
+    return undefined;
+  }
 
   try {
-    await refreshGitHubClone(cloneDir, source.ref, gitOps, onFetchSucceeded, auth);
+    return JSON.parse(text);
+  } catch (cause) {
+    throw new MarketplaceBaselineUnreadableError(name, { cause });
+  }
+}
+
+/**
+ * UPD-12 / GAUTH-04 / GHB-01: refresh a github clone. Under
+ * `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` the bundle is a stored credential
+ * bound to the override's host, so a failed credential lookup gains the line
+ * that names how to store one. The line goes before the fetched-URL link, which
+ * stays the last link, and the code-bearing error stays at depth 0. With the
+ * override unset the bundle is the github.com Device Flow and nothing changes
+ * (GHB-04).
+ */
+async function refreshGitHubSource(
+  cloneDir: string,
+  ref: string | undefined,
+  gitOps: GitOps,
+  onFetchSucceeded: () => void,
+  auth: GitAuthBundle,
+): Promise<void> {
+  try {
+    await refreshGitHubClone(cloneDir, ref, gitOps, onFetchSucceeded, auth);
   } catch (err) {
-    if (
-      err instanceof Error &&
-      err.cause === undefined &&
-      classifyGitTransportFailure(err) === "authentication required" &&
-      auth.kind === "stored-credential" &&
-      !(err instanceof CrossOriginChallengeError)
-    ) {
-      err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(host));
+    if (lacksStoredCredential(err, auth)) {
+      err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(auth.host), { cause: err.cause });
     }
 
     throw err;
+  }
+}
+
+/**
+ * MKT-01 / D-PL5-27 / D-PL5-28: refuses a refreshed manifest that now declares
+ * a look-alike or one of Claude Code's own names, grandfathered against the
+ * record's name `recordName`, or a name Claude Code reserves for the anthropics
+ * GitHub organization. It runs before the record is stamped, so a refused
+ * refresh keeps its baseline. A hosted catalog was already refused before its
+ * rename.
+ */
+function refuseReservedRefreshName(
+  declaredName: string,
+  recordName: string,
+  source: ParsedSource,
+): void {
+  const refusal =
+    catalogMarketplaceNameRefusal(declaredName, recordName) ??
+    reservedMarketplaceNameRefusal(declaredName, source);
+  if (refusal !== undefined) {
+    throw new ReservedMarketplaceNameError(refusal);
   }
 }
 
@@ -425,41 +509,38 @@ async function refreshRecord(
 ): Promise<boolean> {
   const { name, locations, gitOps } = args;
   const source = record.source as ParsedSource;
+  const remoteUrl = refreshRemoteUrl(source);
   let cloneAdvanced = false;
   try {
-    // UXG-05: capture the PRE-refresh validated-manifest content key BEFORE the
-    // refresh re-validates and re-persists. Read off the currently persisted
-    // `record.manifestPath` (the manifest as the user last saw it). NOT keyed on
-    // `record.lastUpdatedAt` -- it is stamped to `now` every refresh
-    // regardless of content.
-    // WR-01: this read lives INSIDE the try so a non-ENOENT PRE-read failure
-    // (manifestContentKey re-throws per WR-02) is wrapped as MarketplaceUpdateError
-    // exactly like a POST-read failure -- same `(failed)` routing, same cause
-    // chain. Do NOT hoist it back outside the try (that bypasses the wrapper and
-    // surfaces a bare, mislabeled reason).
-    const preKey = await manifestContentKey(record);
+    // D-PL5-28: Claude Code checks the recorded name before it refreshes, so a
+    // refused record makes no request.
+    assertRecordedMarketplaceName(name, source);
+    // A local legacy record has no historical content to compare. Its first
+    // successful refresh establishes the baseline and reports a change.
+    const preKey =
+      record.lastSuccessfulManifest ??
+      (source.kind === "path" ? undefined : await manifestContentKey(record));
+    const baseline = parseBaseline(name, preKey);
     if (source.kind === "github") {
       const cloneDir = await locations.sourceCloneDir(name);
-      // AUTH-02 / D-79-05: buildAuthForHost binds the GitHub provider's
-      // Device Flow as the onAuthRequired closure for this fetch.
+      // AUTH-02 / D-79-05: buildGitHubAuth binds github.com with the GitHub
+      // provider's Device Flow as the onAuthRequired closure for this fetch,
+      // or the override host with a stored credential and no Device Flow when
+      // PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL is set (GHB-02).
       // platform/git.ts::buildAuthCallbacks first consults
       // credentialOps.fill(host); on a hit (the post-add common case) the
       // stored token is returned and Device Flow does NOT trigger -- this is
-      // the AUTH-02 silent-reuse contract. AUTH-09: the closure interpolates
-      // ONLY user_code + verification_uri inside the flow's notifyFn.
+      // the AUTH-02 silent-reuse contract. AUTH-09: only the user code and
+      // the verification URI cross the flow's onDeviceCode callback.
       const { ctx, credentialOps, deviceFlowHttp } = args;
-      const host = hostFromCloneUrl(
-        `https://github.com/${source.owner}/${source.repo}.git`,
-        "github",
-      );
-      const auth = buildAuthForHost({
-        host,
+      const auth = buildGitHubAuth({
         credentialOps,
         ctx,
+        run: args.run,
         ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
       });
 
-      await refreshGitHubClone(
+      await refreshGitHubSource(
         cloneDir,
         source.ref,
         gitOps,
@@ -468,52 +549,120 @@ async function refreshRecord(
         },
         auth,
       );
-      await validateManifestAtRoot(record, cloneDir);
     } else if (source.kind === "url") {
       const cloneDir = await locations.sourceCloneDir(name);
-      await refreshUrlClone(cloneDir, source, args, () => {
-        cloneAdvanced = true;
+      const { ctx, credentialOps, deviceFlowHttp } = args;
+      await refreshUrlClone({
+        cloneDir,
+        source,
+        gitOps,
+        ctx,
+        run: args.run,
+        credentialOps,
+        ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
+        onFetchSucceeded: () => {
+          cloneAdvanced = true;
+        },
       });
-      await validateManifestAtRoot(record, cloneDir);
-    } else if (source.kind === "path") {
-      await validateManifestAtRoot(record, record.marketplaceRoot);
-    } else {
+    } else if (source.kind === "hosted") {
+      // D-PL5-09: download the catalog again; it replaces the stored one only
+      // once it validates. Nothing is cloned, so no retry hint applies.
+      await refreshHostedCatalog({
+        name,
+        source,
+        manifestPath: recordedManifestPath(record),
+        locations,
+        fetchCatalog: args.hostedManifestFetch,
+        removalOps: args.removalOps,
+      });
+    } else if (source.kind !== "path") {
       throw new Error(
         `Cannot update marketplace "${name}": unsupported source kind "${source.kind}"`,
       );
     }
 
-    // UXG-05: capture the POST-refresh validated-manifest content key AFTER the
-    // refresh re-validates (and `validateManifestAtRoot` repoints
-    // `record.manifestPath` if the root moved). Whole-manifest equality of the
-    // parsed/validated content -- source-kind-uniform (a path source whose local
-    // marketplace.json is unchanged compares equal; a github source whose clone
-    // advanced but yielded byte-identical manifest content also compares equal).
-    const postKey = await manifestContentKey(record);
-    const changed = preKey !== postKey;
+    const document = await loadMarketplaceManifestDocument(recordedManifestPath(record));
+    refuseReservedRefreshName(document.manifest.name, name, source);
 
+    const changed =
+      preKey === undefined || !isDeepStrictEqual(baseline, JSON.parse(document.comparisonJson));
+
+    record.lastSuccessfulManifest = document.comparisonJson;
     // lastUpdatedAt is stamped on EVERY refresh (used elsewhere); it is
     // deliberately NOT the change signal.
     record.lastUpdatedAt = new Date().toISOString();
     return changed;
   } catch (err) {
-    throw new MarketplaceUpdateError(
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside refreshGitHubClone.
-      cloneAdvanced
-        ? `Marketplace "${name}" clone advanced but manifest could not be persisted.`
-        : `Failed to update marketplace "${name}".`,
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside refreshGitHubClone.
-      { cause: err, retryHint: cloneAdvanced ? "Retry the command." : "" },
-    );
+    // An invalid manifest is read from the advanced checkout, so the clone
+    // moved, but retrying the same revision cannot repair its content. Keep
+    // the clone-advanced retry hint only for failures that can succeed once
+    // the post-fetch persistence problem clears.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside refreshGitHubClone.
+    const retryable = cloneAdvanced && !(err instanceof InvalidMarketplaceManifestError);
+    throw new MarketplaceUpdateError(refreshFailureMessage(name, err, remoteUrl, retryable), {
+      cause: err,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- see above: cloneAdvanced is set by callback.
+      retryHint: retryable ? "Retry the command." : "",
+    });
   }
+}
+
+/**
+ * UPD-11: the URL a refresh of `source` requests, for the `{status} on {url}`
+ * frame: the clone URL of a github or url source, or the catalog URL of a
+ * hosted source (D-PL5-21). Any other source requests nothing.
+ */
+function refreshRemoteUrl(source: ParsedSource): string | undefined {
+  switch (source.kind) {
+    case "github":
+    case "url":
+      return networkCloneUrl(source);
+    case "hosted":
+      return source.url;
+    case "path":
+    case "git-subdir":
+    case "npm":
+    case "unknown":
+      return undefined;
+  }
+}
+
+/**
+ * UPD-11: the 404 rule of a marketplace refresh (D-PL7-02). A refresh reads a
+ * repository the record already points at, so a 404 or 410 from the host is
+ * `network error`, not `source missing`.
+ */
+const MARKETPLACE_REFRESH_RULE: Parameters<typeof classifyGitFailure>[1] = {
+  notFound: "network error",
+};
+
+/**
+ * UPD-11: the first frame of a refresh failure's cause line. When the git host
+ * answered with an HTTP status, `classifyGitFailure` frames it as the status on
+ * the URL the fetch sent. Without a remote URL there is no frame.
+ */
+function refreshFailureMessage(
+  name: string,
+  err: unknown,
+  remoteUrl: string | undefined,
+  cloneAdvanced: boolean,
+): string {
+  const frame = classifyGitFailure(err, MARKETPLACE_REFRESH_RULE, remoteUrl)?.frame;
+  if (frame !== undefined) {
+    return frame;
+  }
+
+  return cloneAdvanced
+    ? `Marketplace "${name}" clone advanced but manifest could not be persisted.`
+    : `Failed to update marketplace "${name}".`;
 }
 
 interface RefreshSnapshot {
   readonly autoupdate: boolean;
   readonly plugins: readonly string[];
   /**
-   * UXG-05: true when the refresh changed the validated marketplace.json
-   * content; false when the manifest content was byte-identical pre/post
+   * UXG-05: true when the refresh changed the complete parsed manifest
+   * content; false when it equals the last successful baseline
    * (the no-op case). Drives the autoupdate-OFF `updated` vs `skipped
    * {up-to-date}` emission. Source-kind-uniform (path + github).
    */
@@ -525,12 +674,17 @@ async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapsh
   // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config), not
   // state. Read it OUTSIDE the lock (read-only seam; mergeScopeConfigs is a
   // pure reducer over loadConfig, which never throws).
-  const { merged } = await loadMergedScopeConfig(locations);
-  const autoupdate = merged.marketplaces[name]?.entry.autoupdate ?? false;
+  const outcome = await loadMergedScopeConfig(locations);
+  const autoupdate =
+    !hasInvalidConfigLayer(outcome) &&
+    effectiveMarketplaceAutoupdate(
+      name,
+      ownValue(outcome.merged.marketplaces, name)?.entry.autoupdate,
+    );
   return withLockedStateTransaction(
     locations,
     async (tx) => {
-      const record = tx.state.marketplaces[name];
+      const record = ownValue(tx.state.marketplaces, name);
       if (record === undefined) {
         // TOCTOU race: the marketplace was removed between
         // `resolveScopeOrNotifyNotAdded`'s pre-guard `loadState` and this guard's
@@ -539,9 +693,9 @@ async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapsh
         // standalone `{marketplace not added}` variant); reaching here means a concurrent
         // removal in that window. Return undefined so the caller skips the
         // cascade and emits NOTHING further -- no raw MarketplaceNotFoundError
-        // escapes (which `refreshOneMarketplace`'s catch would misattribute as the
-        // lying `{network unreachable}` default, the exact ATTR-10/NFR-5 class this
-        // change closes). Mirrors runRemoveLockBody's silent-return in remove.ts
+        // escapes to `refreshOneMarketplace`'s catch, which would render a
+        // second, failed row for a marketplace that is already gone (ATTR-10).
+        // Mirrors runRemoveLockBody's silent-return in remove.ts
         // at the same withLockedStateTransaction boundary; that path also
         // saves the unmodified state (a harmless re-write of the same content).
         await tx.save();
@@ -560,14 +714,36 @@ async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapsh
   );
 }
 
+/** What the autoupdate cascade did: its plugin updates, then its missing-dependency installs. */
+interface AutoupdateCascade {
+  readonly outcomes: readonly PluginUpdateOutcome[];
+  readonly installs: ScopeDependencyInstallResult;
+}
+
+const NO_DEPENDENCY_INSTALLS: ScopeDependencyInstallResult = {
+  rows: [],
+  stagingDiagnostics: [],
+  mcpConfigNotices: [],
+};
+
+const NO_AUTOUPDATE_CASCADE: AutoupdateCascade = { outcomes: [], installs: NO_DEPENDENCY_INSTALLS };
+
+/**
+ * The autoupdate cascade: each installed plugin's update, then (D-PL2-10) the
+ * missing-dependency step, so the step sees the versions the updates landed
+ * (E4 order). `report` gets the cascade before a throw out of the step leaves
+ * it, so the updates that committed are reported first (D-PL2-21). A throw
+ * out of a plugin update leaves without a report.
+ */
 async function cascadeAutoupdates(
   snapshot: RefreshSnapshot,
-  name: string,
-  scope: Scope,
-  pluginUpdate: PluginUpdateFn | undefined,
-): Promise<readonly PluginUpdateOutcome[]> {
+  args: RefreshOneArgs,
+  report: (cascade: AutoupdateCascade) => void,
+): Promise<void> {
+  const { name, scope, pluginUpdate } = args;
   if (!snapshot.autoupdate || pluginUpdate === undefined) {
-    return [];
+    report(NO_AUTOUPDATE_CASCADE);
+    return;
   }
 
   const outcomes: PluginUpdateOutcome[] = [];
@@ -576,6 +752,7 @@ async function cascadeAutoupdates(
       // eslint-disable-next-line no-await-in-loop -- each update locks the scope (retries: 0)
       outcomes.push(await pluginUpdate(plugin, name, scope));
     } catch (err) {
+      rethrowInvalidGitHubBaseUrl(err);
       // `notes` is consumed by callers OUTSIDE the notify path (e.g.
       // JSON-mode outcome aggregation in tests) and by the
       // narrowFailReason notes-substring fallback below, so the cause-chain
@@ -584,17 +761,15 @@ async function cascadeAutoupdates(
       // renderer owns; the `outcome.cause` stamp below carries the raw `err`
       // for that path.
       //
-      // Pre-narrow the closed-set Reason via `reasonsFromCascadeError(err)`
-      // so the cascade row renders the precise cause class (`permission
-      // denied` / `source missing` / `no longer installable` / ...) instead
-      // of degrading to the permissive `not in manifest` fallback via the
-      // consumer's `narrowFailReasons` substring parse.
-      const typedReasons = reasonsFromCascadeError(err);
+      // PUP-9: the production `pluginUpdate` runs each plugin through
+      // `runCascadeTarget` (`orchestrators/plugin/update-flow.ts`), which
+      // returns every failure as a `failed` outcome with its reason and
+      // rethrows only GHB-03. This catch therefore sets no reason; the cascade
+      // mapper's notes fallback names the row's reason.
       outcomes.push({
         partition: "failed",
         name: plugin,
         notes: [composeErrorWithCauseChain(err)],
-        ...(typedReasons !== undefined && { reasons: typedReasons }),
         // CMC-13: required `boolean` on the outcome contract. `(failed)`
         // cascade rows do not render the soft-dep marker (MSG-SD-3), so the
         // value is deliberately `false`; explicit emission keeps every
@@ -613,96 +788,73 @@ async function cascadeAutoupdates(
     }
   }
 
-  return outcomes;
+  let installs = NO_DEPENDENCY_INSTALLS;
+  try {
+    installs = await installAutoupdateDependencies(args, outcomes);
+  } finally {
+    report({ outcomes, installs });
+  }
 }
 
 /**
- * Typed-dispatch helper for the `cascadeAutoupdates` catch. Maps a thrown
- * error to a closed-set Reason[] using the same priority order as the cascade
- * narrowers in `orchestrators/plugin/{update,reinstall}.ts::reasonsFromTypedError`:
- * PluginShapeError variants first, then errno-bearing FS errors, then
- * `undefined` to defer to the consumer's substring fallback.
+ * D-PL2-10: the missing-dependency step after an autoupdate, in the
+ * marketplace's scope, for missing dependencies that a plugin of this
+ * marketplace declares, as Claude Code limits it to declarers whose
+ * marketplace has autoupdate on (E1). A dependency this command already
+ * reported a row for, in an update of any cascade or in an earlier step, is
+ * not tried again, so one command reports one row per dependency (D-PL2-01,
+ * D-PL2-19, WR-04).
  */
-function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undefined {
-  if (err instanceof PluginShapeError) {
-    // Switch on `err.shape.kind` for compile-time exhaustiveness.
-    switch (err.shape.kind) {
-      case "no-longer-installable":
-      case "not-installable":
-        return ["no longer installable"] as const;
-      case "not-in-manifest":
-        return ["not in manifest"] as const;
-      case "already-installed":
-        // Cascade-path "already installed" is unexpected (we only
-        // cascade-update plugins already in the record); map to the
-        // permissive `not in manifest` fallback.
-        return ["not in manifest"] as const;
-    }
+async function installAutoupdateDependencies(
+  args: RefreshOneArgs,
+  outcomes: readonly PluginUpdateOutcome[],
+): Promise<ScopeDependencyInstallResult> {
+  const { installMissingDependencies, name, reportedDependencies, scope } = args;
+  for (const row of outcomes.flatMap((o) => o.dependencyRows ?? [])) {
+    reportedDependencies.add(dependencyRowKey(scope, row.name));
   }
 
-  // ATTR-10 / D-48-B: a typed marketplace-manifest parse/validation failure
-  // (malformed JSON or schema-invalid marketplace.json) maps to the closed-set
-  // `invalid manifest` reason for BOTH path and github sources. A path-source
-  // manifest failure is network-free (NFR-5), so it MUST NOT fall through to the
-  // `?? ["network unreachable"]` default at the refreshOneMarketplace catch; a
-  // github clone that advanced and then hit a malformed manifest is genuinely
-  // `invalid manifest` too (only typed manifest errors map here, not generic
-  // github network failures). The refreshOneMarketplace catch sees
-  // the InvalidMarketplaceManifestError WRAPPED inside a MarketplaceUpdateError
-  // (refreshRecord rethrows with `{ cause }`), so unwrap ONE level of cause as
-  // well (mirrors add.ts::unwrapAddError). The cascadeAutoupdates catch passes
-  // the raw error, which the direct `instanceof` covers. Placed before the errno
-  // checks so the typed class takes precedence over any incidental errno on the
-  // cause chain.
-  if (
-    err instanceof InvalidMarketplaceManifestError ||
-    (err instanceof Error && err.cause instanceof InvalidMarketplaceManifestError)
-  ) {
-    return ["invalid manifest"] as const;
+  if (installMissingDependencies === undefined) {
+    return NO_DEPENDENCY_INSTALLS;
   }
 
-  // Mirror the one-level cause unwrap above for code-bearing transport
-  // errors (errno + HttpError); the narrowing lives in `transportReason`.
-  if (err instanceof Error) {
-    const reason = transportReason(err);
-    if (reason !== undefined) {
-      return [reason] as const;
-    }
+  const installs = await installMissingDependencies({
+    ctx: args.ctx,
+    run: args.run,
+    scope,
+    cwd: args.cwd,
+    select: (install) =>
+      !reportedDependencies.has(
+        dependencyRowKey(scope, `${install.plugin}@${install.marketplace}`),
+      ) && install.declarers.some((declarer) => declarer.endsWith(`@${name}`)),
+  });
+  for (const row of installs.rows) {
+    reportedDependencies.add(dependencyRowKey(scope, row.name));
   }
 
-  return undefined;
+  return installs;
 }
 
 /**
  * Narrow a code-bearing transport failure to its closed-set Reason. The
- * refreshOneMarketplace catch receives the transport error WRAPPED inside a
+ * refresh classification receives the transport error WRAPPED inside a
  * MarketplaceUpdateError (refreshRecord rethrows with `{ cause }`), so the
- * wrapper itself carries no `code` -- hence the one-level cause unwrap.
- * Without it, a path-source refresh that hits ENOENT/ENOTDIR/EACCES/EPERM --
- * a network-free failure (NFR-5) -- would fall through to the lying
- * `?? ["network unreachable"]` default instead of the correct closed-set
- * `source missing` / `permission denied` reasons.
+ * wrapper itself carries no `code` -- hence the one-level cause unwrap. A
+ * path-source refresh that hits ENOENT/ENOTDIR/EACCES/EPERM is a network-free
+ * failure (NFR-5) and maps to `source missing` / `permission denied`.
  *
  * EACCES/EPERM/ENOENT/ENOTDIR classify first since the shared classifier
- * has no opinion on them (path-source failures never reach git). The
- * remaining ladder -- isomorphic-git `HttpError` 401/403, `UserCanceledError`
- * (a declined or failed Device Flow), and network errno -- delegates to
- * `classifyGitTransportFailure` (`shared/git-failure-classifiers.ts`)
- * instead of a hand-rolled copy, so `update` cannot drift out of sync with
- * `install-outcome.ts`/`fetch.ts` (plugin), which already delegate to it.
+ * has no opinion on them (path-source failures never reach git). The rest of
+ * the ladder (authentication, network errno, and the host's HTTP status)
+ * goes to the shared `classifyGitFailure` with the refresh rule, so `update`
+ * cannot drift from the other git surfaces.
  */
-function transportReason(err: Error): ContentReason | undefined {
-  let bearer: NodeJS.ErrnoException | undefined;
-  if ((err as NodeJS.ErrnoException).code !== undefined) {
-    bearer = err;
-  } else if (err.cause instanceof Error) {
-    bearer = err.cause;
-  }
-
-  if (bearer === undefined) {
+function transportReason(err: MarketplaceUpdateError): ContentReason | undefined {
+  if (!(err.cause instanceof Error)) {
     return undefined;
   }
 
+  const bearer: NodeJS.ErrnoException = err.cause;
   if (bearer.code === "EACCES" || bearer.code === "EPERM") {
     return "permission denied";
   }
@@ -711,16 +863,63 @@ function transportReason(err: Error): ContentReason | undefined {
     return "source missing";
   }
 
-  return classifyGitTransportFailure(bearer);
+  return classifyGitFailure(bearer, MARKETPLACE_REFRESH_RULE)?.reason;
+}
+
+/**
+ * ATTR-10 / UPD-11: the reasons of a failed marketplace refresh row. Only a
+ * failure of the refresh itself, which `refreshRecord` wraps in a
+ * `MarketplaceUpdateError`, is classified. A held state lock is `lock held`,
+ * as in autoupdate. Any other error failed outside the refresh (the state
+ * load, the state save, or the lock release), so no errno code on it is
+ * mapped. The git host's HTTP answer is `network error` (UPD-11). A refresh
+ * failure that no rule names gets no reason; its cause chain still prints.
+ */
+function refreshFailureReasons(err: unknown): readonly ContentReason[] {
+  if (err instanceof StateLockHeldError) {
+    return ["lock held"];
+  }
+
+  if (!(err instanceof MarketplaceUpdateError)) {
+    return [];
+  }
+
+  // ATTR-10 / D-48-B / MPA-02: a typed marketplace-manifest parse or
+  // validation failure maps to the token `list` and `info` use (D-11):
+  // malformed JSON reads `unparseable`, a schema-invalid manifest
+  // `invalid manifest`, for both path and github sources. refreshRecord wraps
+  // it with `{ cause }`, so it is read one level down (as add.ts::unwrapAddError
+  // does), before the errno rules, so the typed class takes precedence over any
+  // incidental errno on the cause chain.
+  // MA-9: a cleanup leak the refresh appended to its error does not hide the
+  // cause behind it, so every typed cause is read through `withoutCleanupLeaks`.
+  const cause = withoutCleanupLeaks(err.cause);
+  if (cause instanceof InvalidMarketplaceManifestError) {
+    return [narrowProbeError(cause)];
+  }
+
+  if (cause instanceof MarketplaceBaselineUnreadableError) {
+    return ["unreadable"];
+  }
+
+  // D-PL5-10 / D-PL5-21: a hosted download that got no usable answer. A hosted
+  // HTTP status takes the git host ladder in `transportReason`.
+  if (cause instanceof HostedManifestFetchError) {
+    return [hostedFetchFailureReason(cause.failure)];
+  }
+
+  const reason = transportReason(err);
+  return reason === undefined ? [] : [reason];
 }
 
 async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
-  const { ctx, cardinality, name, scope, locations, pluginUpdate, pi } = args;
+  const { ctx, cardinality, name, scope, locations, run } = args;
 
   let snapshot: RefreshSnapshot | undefined;
   try {
     snapshot = await snapshotAfterRefresh(args);
   } catch (err) {
+    rethrowInvalidGitHubBaseUrl(err);
     // A marketplace refresh failure renders as the header
     // `⊘ <name> [<scope>] (failed)`. The MarketplaceNotificationMessage
     // shape carries no `cause` (SNM-10 confines `cause` to plugin-level
@@ -729,12 +928,13 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     // failed-plugin child whose `cause` drives the depth-5 cause-chain
     // trailer the renderer appends. Mirrors the reinstall synthetic-failed
     // recipe (orchestrators/plugin/reinstall-flow.ts).
-    const typedReasons = reasonsFromCascadeError(err);
     const failedRow: PluginFailedMessage = {
       status: "failed",
       name,
-      reasons: typedReasons ?? (["network unreachable"] as const),
+      reasons: refreshFailureReasons(err),
       cause: err as Error,
+      // D-PL5-12: the row stands for the marketplace; its JSON id is the name.
+      marketplaceSubject: true,
       // D-03/D-06: a marketplace-refresh failure -> error, no reload.
       severity: "error",
       needsReload: false,
@@ -746,7 +946,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       // D-03: a failed marketplace update -> error.
       { name, scope, status: "failed", severity: "error", plugins: [failedRow] },
     ];
-    notifyWithContext(ctx, pi, UPDATE_CONTEXT, failedRows, undefined, cardinality);
+    notifyWithContext(ctx, run, UPDATE_CONTEXT, failedRows, undefined, cardinality);
     return;
   }
 
@@ -754,9 +954,8 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     // TOCTOU concurrent-removal no-op: the marketplace was removed between the
     // pre-guard existence read and snapshotAfterRefresh's fresh guard load. The
     // pre-guard already emitted the standalone `{marketplace not added}` notification, so
-    // return silently -- NO second contradictory notification, and crucially NO
-    // lying `{network unreachable}` (the raw MarketplaceNotFoundError does not
-    // escape; mirrors remove.ts).
+    // return silently -- NO second contradictory notification (the raw
+    // MarketplaceNotFoundError does not escape; mirrors remove.ts).
     return;
   }
 
@@ -783,7 +982,19 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
 
   // CASCADE OUTSIDE the outer guard. Honors MU-4 literal
   // "persisted before any plugin cascade runs".
-  const outcomes = await cascadeAutoupdates(snapshot, name, scope, pluginUpdate);
+  await cascadeAutoupdates(snapshot, args, (cascade) => {
+    notifyRefreshed(args, snapshot, cascade);
+  });
+}
+
+/** The refreshed marketplace's notification and the MCP config notices of its cascade. */
+function notifyRefreshed(
+  args: RefreshOneArgs,
+  snapshot: RefreshSnapshot,
+  cascade: AutoupdateCascade,
+): void {
+  const { ctx, cardinality, name, scope, pluginUpdate, run } = args;
+  const { outcomes, installs } = cascade;
 
   // CMC-32 / UXG-05 binding: BOTH the autoupdate-OFF (manifest-only refresh)
   // and the autoupdate-ON (cascade) paths now DISTINGUISH a no-op from a
@@ -812,7 +1023,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       const skippedRows: Single<MarketplaceRows<UpdateRowMsg>> = [
         { name, scope, status: "skipped", reasons: ["up-to-date"], plugins: [] },
       ];
-      notifyWithContext(ctx, pi, UPDATE_CONTEXT, skippedRows, undefined, cardinality);
+      notifyWithContext(ctx, run, UPDATE_CONTEXT, skippedRows, undefined, cardinality);
       return;
     }
 
@@ -820,7 +1031,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     const updatedRows: Single<MarketplaceRows<UpdateRowMsg>> = [
       { name, scope, status: "updated", plugins: [] },
     ];
-    notifyWithContext(ctx, pi, UPDATE_CONTEXT, updatedRows, undefined, cardinality);
+    notifyWithContext(ctx, run, UPDATE_CONTEXT, updatedRows, undefined, cardinality);
     return;
   }
 
@@ -841,14 +1052,16 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   // stopped making. Catalog state `update-autoupdate-disabled-repin`.
   // When both hold, emit the SAME `(skipped) {up-to-date}` payload as the OFF
   // no-op (plugins:[] -> shouldEmitReloadHint stays false, warning severity).
-  const cascadeIsNoOp = outcomes.every((o) => o.partition === "unchanged");
+  // D-PL2-10: a missing-dependency install is a change too.
+  const cascadeIsNoOp =
+    outcomes.every((o) => o.partition === "unchanged") && installs.rows.length === 0;
   if (!snapshot.changed && cascadeIsNoOp) {
     // OUT-07 / D-12: autoupdate-ON no-op collapses to the OFF no-op shape
     // (plugins:[]) -> Single, one marketplace block.
     const noopRows: Single<MarketplaceRows<UpdateRowMsg>> = [
       { name, scope, status: "skipped", reasons: ["up-to-date"], plugins: [] },
     ];
-    notifyWithContext(ctx, pi, UPDATE_CONTEXT, noopRows, undefined, cardinality);
+    notifyWithContext(ctx, run, UPDATE_CONTEXT, noopRows, undefined, cardinality);
     return;
   }
 
@@ -858,7 +1071,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   // -> warning; otherwise info), reload-hint (fires only when a plugin row
   // carries a status in {installed, updated, reinstalled, uninstalled} -- the
   // marketplace status never triggers it), and the per-row soft-dep marker
-  // (single probe per notify call, threaded into every renderPluginRow).
+  // (single probe per notify call, applied to every row by its row policy).
   // Caller-supplied plugin order is honored verbatim.
   // OUT-07 / D-12: one marketplace block carrying the per-plugin cascade child
   // rows -> Single. The `(updated)` header renders via the central seam; the
@@ -871,36 +1084,28 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       // WR-01: `outcomeToCascadePluginMessage` returns `UpdateRowMsg` by
       // construction, so the mapped rows are the narrowed Msg the
       // UPDATE_CONTEXT requires with no cast.
-      plugins: outcomes.map((o) => outcomeToCascadePluginMessage(o, scope)),
+      // UPD-DEP-D1: the dependencies an update changed render beside its row.
+      // D-PL2-10: the missing-dependency step's rows follow the update rows.
+      plugins: [
+        ...outcomes.flatMap((o) => [
+          outcomeToCascadePluginMessage(o, scope),
+          ...(o.dependencyRows ?? []),
+        ]),
+        ...installs.rows,
+      ],
     },
   ];
-  notifyWithContext(ctx, pi, UPDATE_CONTEXT, cascadeRows, undefined, cardinality);
-}
-
-/**
- * MU-4 / MU-5: re-read and re-validate the marketplace.json at the
- * given root. Throws on read or validation failure -- the caller wraps
- * as `MarketplaceUpdateError`.
- *
- * WR-03: for path sources the caller already passes
- * `record.marketplaceRoot`, and for github sources
- * `cloneDir === record.marketplaceRoot` after `add`, so the
- * `record.manifestPath` / `record.marketplaceRoot` writes are gated on a
- * real change. This keeps the function's purpose (validate) clear and lets
- * a "did anything change?" optimization rely on identity.
- */
-async function validateManifestAtRoot(
-  record: ExtensionState["marketplaces"][string],
-  marketplaceRoot: string,
-): Promise<void> {
-  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
-  await loadMarketplaceManifest(manifestPath);
-
-  if (record.manifestPath !== manifestPath) {
-    record.manifestPath = manifestPath;
-  }
-
-  if (record.marketplaceRoot !== marketplaceRoot) {
-    record.marketplaceRoot = marketplaceRoot;
-  }
+  notifyWithContext(ctx, run, UPDATE_CONTEXT, cascadeRows, undefined, cardinality);
+  surfaceCascadeStagingWarnings(ctx, run, outcomes, scope);
+  surfaceCascadeStagingDiagnostics(ctx, run, installs.stagingDiagnostics ?? []);
+  // AFILE-04: the notices of the cascade's updates, shown after the rows they
+  // explain. A failed update can carry them too: its MCP commit succeeded
+  // before a later bridge or the finalize failed. The no-op paths above have
+  // only `unchanged` outcomes, which carry none.
+  notifyMcpConfigNotices(ctx, run, [
+    ...outcomes.flatMap((o) =>
+      o.partition === "updated" || o.partition === "failed" ? (o.mcpConfigNotices ?? []) : [],
+    ),
+    ...installs.mcpConfigNotices,
+  ]);
 }

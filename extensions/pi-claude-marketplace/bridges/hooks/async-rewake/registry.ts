@@ -6,13 +6,13 @@
 // (`rewakeMessage` + body) into Pi's model context via pi.sendMessage with
 // `display: false` matching Claude Code's <system-reminder> semantic.
 //
-// This is the THIRD of exactly THREE sanctioned `node:child_process` import
+// This is one of exactly FOUR sanctioned `node:child_process` import
 // sites in the extension tree (closed-set whitelist at
-// tests/architecture/no-shell-out.test.ts). Adding a FOURTH site requires
+// test/architecture/no-shell-out.test.ts). Adding a FIFTH site requires
 // amending the whitelist set AND the sibling assertion in the SAME commit
-// (D-58-01 atomic-supersession). The first two sites are
-// platform/git-credential.ts (AUTH-08) and bridges/hooks/dispatch-exec.ts
-// (EXEC-01..04 sync path). This site (HOOK-06 / EXEC-05 / D-62-01) diverges
+// (D-58-01 atomic-supersession). The other sites are
+// platform/git-credential.ts (AUTH-08), bridges/hooks/dispatch-exec.ts
+// (EXEC-01..04 sync path), and platform/package-manager.ts (D-PL9-11). This site (HOOK-06 / EXEC-05 / D-62-01) diverges
 // from the sync site: `detached: false` + the parent does NOT await child
 // exit; a per-child handler watches for code 2 and triggers the HOOK-06
 // injection contract via `pi.sendMessage({ customType: "claude-hook-rewake",
@@ -44,6 +44,7 @@ import { readFile } from "node:fs/promises";
 import { hookDebugLog } from "../../../shared/debug-log.ts";
 import { errorMessage } from "../../../shared/errors.ts";
 import { notifyAsyncRewakeSummary } from "../../../shared/notification-dispatch.ts";
+import { openNotificationRun, requireNotificationMode } from "../../../shared/notification-run.ts";
 import { installTimerLadder } from "../exec-timer.ts";
 import { prepareHookEnv } from "../hook-env.ts";
 import { translatePostCompact } from "../payloads/post-compact.ts";
@@ -356,6 +357,7 @@ export async function spawnAndRegister(
     child.once("error", (err) => {
       ladder.cancel();
       hookDebugLog(`async-rewake: child error dispatchId=${dispatchId}: ${errorMessage(err)}`);
+      // fallow-ignore-next-line code-duplication -- reviewed: the async-rewake and synchronous dispatch paths each own their child's stdin wiring; the shared part is a short EPIPE guard
       finalizeOnce(undefined);
     });
 
@@ -424,6 +426,13 @@ function finalizeChild(
     return;
   }
 
+  try {
+    requireNotificationMode(ctx.mode);
+  } catch (err: unknown) {
+    hookDebugLog(`async-rewake: mode unavailable (${entry.pluginId}): ${errorMessage(err)}`);
+    return;
+  }
+
   // IL-2 EXEMPTION (T-62-09): `rewakeSummary` is the single sanctioned
   // runtime notify call originating from `bridges/hooks/async-rewake/`,
   // routed through the canonical `shared/notification-dispatch.ts` seam. Fires
@@ -431,7 +440,8 @@ function finalizeChild(
   // status surface, not a success-only signal.
   if (entry.rewakeSummary !== undefined) {
     try {
-      notifyAsyncRewakeSummary(ctx, entry.rewakeSummary);
+      const run = openNotificationRun(pi, { kind: "hook" });
+      notifyAsyncRewakeSummary(ctx, run, entry.rewakeSummary);
     } catch (err) {
       hookDebugLog(`async-rewake: notify failed (${entry.pluginId}): ${errorMessage(err)}`);
     }
@@ -455,9 +465,8 @@ function finalizeChild(
 
   const truncated = stderrText.length > 0 ? stderrTrunc : stdoutTrunc;
   const content = buildInjectionContent(entry.rewakeMessage, body, truncated);
-  const lane: "nextTurn" | "followUp" = ctx.isIdle() ? "nextTurn" : "followUp";
-
   try {
+    const lane: "nextTurn" | "followUp" = ctx.isIdle() ? "nextTurn" : "followUp";
     pi.sendMessage(
       {
         customType: REWAKE_CUSTOM_TYPE,

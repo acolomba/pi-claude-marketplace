@@ -22,6 +22,8 @@ Candidate directions for later brainstorming:
 
 Workaround today: run `/claude:plugin pending` before reloading, or `list` after.
 
+Lifecycle-coverage (2026-10-25): since APL-03 a load prints the pending block when the configuration and the records differ, so that block is now also lost on `/reload`. The lifecycle-coverage milestone audit lists a manual check of it in a live Pi as owed.
+
 ## ~~REASON-01: unify malformed-input failures under a "malformed X" reason family~~ -- CLOSED
 
 Closed 2026-09-11 by the `refine-unit-tests` milestone. Disposition:
@@ -155,7 +157,7 @@ Filed 2026-08-15 alongside the fallow adoption (quick task 260815-h7g).
 `boundaries.coverage.requireAllFiles: true`, so zone coverage is complete by
 construction rather than by accident of the current tree. Both questions the
 item asked are settled: the failure names the unzoned path
-(`extensions/.../probe.ts:1 no matching boundary zone`), and `tests/**` plus
+(`extensions/.../probe.ts:1 no matching boundary zone`), and `test/**` plus
 `eslint.config.js` are explicitly out of scope through `allowUnmatched`, which
 records them as unmatched by design rather than by oversight.
 
@@ -184,7 +186,7 @@ it should turn an unzoned file into a loud failure that says "add a zone,"
 instead of silence that reads as "no violations."
 
 Two things to settle when picking this up. First, the failure has to name the
-unzoned path, or it just moves the confusion. Second, decide whether `tests/`
+unzoned path, or it just moves the confusion. Second, decide whether `test/`
 and repo-root config files are in or out of the policy's scope -- they match no
 zone either, by design, and a naive policy would flag every one of them.
 
@@ -276,7 +278,7 @@ it buys editor-time feedback and a second opinion on the graph, at the cost of
 a type-aware rule running over the full extension tree. Weigh the lint-time
 cost against that.
 
-`tests/architecture/import-boundaries.test.ts` pins both the current glob and
+`test/architecture/import-boundaries.test.ts` pins both the current glob and
 the `import-x/extensions` setting the rule depends on (without `.ts` in that
 setting the rule walks a one-node graph and greens on any cycle). Widening the
 glob means updating that test in the same change, and the test is the thing
@@ -520,7 +522,7 @@ derived one is the point of recording it.
 `.planning/milestones/refine-unit-tests-phases/07-gate-integrity/07-16-SUMMARY.md` carries the satisfaction
 row: plan `07-07` resolved both boundary gates through
 `ESLint#calculateConfigForFile` and deleted the two gates it replaced, verified
-by `node --test tests/architecture/eslint-effective-config.test.ts` and by
+by `node --test test/architecture/eslint-effective-config.test.ts` and by
 `npm run lint` inside `npm run check`.
 `.planning/milestones/refine-unit-tests-phases/07-gate-integrity/07-VERIFICATION.md` reads `status: passed`,
 7/7, with the `GGAT-03` row `SATISFIED`.
@@ -715,7 +717,7 @@ The clause fragments that make the match, quoted from `.planning/REQUIREMENTS.md
 - `GGAT-04`: "Terminal closed-set and delegated-contract gates cover their real
   production consumers and any public seams created by approved splits, with
   visitation, offender, and benign controls."
-  `tests/architecture/no-test-only-production-surface.test.ts` is the standing
+  `test/architecture/no-test-only-production-surface.test.ts` is the standing
   gate that stops the count returning above zero.
 
 **This route is derived from clause text, not from a record that names
@@ -795,13 +797,13 @@ sitting in the wrong module, and moving it gave it a public interface for free:
 - `errorWithManualRecovery` and `findManualRecoveryError` were declared in
   `reinstall.ts` but are the `ManualRecoveryError` PROTOCOL: three bridges throw
   the class and the notify renderer reads it. Both moved to `shared/errors.ts`
-  beside the class, and their ten tests moved to `tests/shared/errors.test.ts`
+  beside the class, and their ten tests moved to `test/shared/errors.test.ts`
   against the public interface.
 - `clonePluginRecord` moved to `persistence/state-io.ts`, beside the
   `PLUGIN_INSTALL_RECORD_SCHEMA` it copies field by field. Its own comment warns
   that a forgotten key vanishes silently; the point of the move is that the
   schema and the enumeration are now adjacent, so whoever adds a field sees the
-  clone that must copy it. Its two tests moved to `tests/persistence/`.
+  clone that must copy it. Its two tests moved to `test/persistence/`.
 
 The move surfaced something the seam had been hiding. THREE separate depth-5
 `Error.cause` walkers existed -- `causeChainTrailer` in `errors.ts`,
@@ -858,7 +860,7 @@ The remaining work is dependency injection proper: pass the executor,
 the probe bundle and the spawn function in, after which the seams
 disappear rather than moving. Note `__test_availableRowMessage` is
 different in kind -- it feeds a real cross-surface drift guard in
-`tests/orchestrators/edge-deps.test.ts`, so it wants a public contract,
+`test/orchestrators/edge-deps.test.ts`, so it wants a public contract,
 not deletion.
 
 **Update 2026-08-18: the "fallow is quiet about them" claim above is only
@@ -1061,37 +1063,30 @@ today; it is a discoverability ceiling, not a data loss.
 
 Code seams: `.github/workflows/lint.yml` (`fallow-audit`).
 
-## MRO-01: mode-aware structured output via `ctx.mode` and `pi.appendEntry`
+## MRO-01: mode-aware structured output via `ctx.mode` and `pi.appendEntry` — CLOSED
 
-Surfaced during the 2026-08-10 competitive analysis of `@nklisch/pi-plugins`
-(`docs/competitive-analysis/pi-plugins.md`, recommendation #11). Verified
-2026-08-13 directly against our own pinned `@earendil-works/pi-coding-agent`:
-every `ExtensionContext` carries a real `mode: "tui" | "rpc" | "json" |
-"print"` field, set by how the user invoked Pi (`pi` interactive, `pi -p`,
-`pi --mode json`, or the RPC stdin/stdout protocol). We never read it. Our
-sole output primitive, `ctx.ui.notify(message: string, type?)`, takes a plain
-formatted string and a severity -- no structured-payload slot.
+Closed 2026-10-10. Surfaced during the 2026-08-10 competitive analysis of
+`@nklisch/pi-plugins` (`docs/competitive-analysis/pi-plugins.md`,
+recommendation #11).
 
-A user driving `/claude:plugin` through `pi --mode json` or RPC gets the same
-human-formatted string wrapped in a JSON envelope today, not real
-machine-readable data. `@nklisch/pi-plugins` solved this on the low-level
-`pi.appendEntry<T>(customType, data)` primitive -- confirmed present in our
-own pinned Pi version too, under "Append a custom entry to the session for
-state persistence (not sent to LLM)". Their `pi-control-channel.ts` keys
-output by mode: rpc/json modes emit `appendEntry` frames, print mode writes
-stdout lines, tui is a no-op. A versioned grammar, closed exit-code
-vocabulary, and pagination sit on top of that channel, none of which are
-scoped here.
+The extension reads `ctx.mode` and selects exactly one transport. In
+`tui`/`print`, it uses `ctx.ui.notify`. Pi keeps print notifications silent,
+so scripts use `--mode json`. In `json`/`rpc`, the JSON strategy uses
+`pi.appendEntry` to emit versioned custom `claude-plugin` entries. Pi owns
+the event framing. The extension never writes directly to stdout/stderr.
 
-Direction for later: design a structured shape for the existing
-`NotificationMessage` / `PluginInfoRow` discriminated types in
-`shared/notify.ts` (most of the shape work already exists), and emit it via
-`pi.appendEntry` when `ctx.mode` is `"json"` or `"rpc"`, alongside (not
-instead of) the existing human `notify()` line.
+The earlier claim that JSON and RPC receive the same human notification
+string was incorrect. These modes receive structured payloads. The earlier
+proposal to emit structured output alongside `notify`, or to use print
+stdout, was also incorrect. Transport selection is exclusive. RPC
+front-ends render the entries, including device-flow instructions.
 
-Code seams: `shared/notify.ts` (message shapes), `platform/pi-api.ts`
-(re-exports `ExtensionContext`), `edge/router.ts` (the `/claude:plugin`
-command entry point every handler's `ctx` flows through).
+The [JSON output guide](../docs/json-output.md) documents every payload kind,
+field, compatibility rule, command verdict, and delivery limitation.
+[Real-runtime tests](../test/e2e/pi-json-output.test.ts) passed on Pi
+0.87.1 and exact 0.86.1, including startup stream absence, RPC `get_entries`,
+and slash-only persistence timing. The executed commands and results are in
+[the runtime summary](phases/07-mode-refusals-real-pi-verification-and-docs/07-03-SUMMARY.md#verification-evidence).
 
 <!--
 Pruned 2026-09-09: shipped under workflows-detection and workflows-replay, one
@@ -1145,7 +1140,10 @@ Code seams: `domain/source.ts` (`ParsedSource` union, `parsePluginSource`),
 `domain/resolver.ts` (source-kind dispatch), `orchestrators/plugin/clone-cache.ts`
 (the only existing acquisition seam, currently git-only).
 
-## PKGDEP-01: no auto-install of a plugin's own Node.js/Bun dependencies
+## ~~PKGDEP-01: no auto-install of a plugin's own Node.js/Bun dependencies~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 9 (PR #289, PKD-01 to PKD-03). Disposition: fixed. Install and update run the plugin's npm or bun install from its lockfile, with Claude Code's lockfile check (D-PL9-01 to D-PL9-22). Leftovers: PKGDEP-02, PKGDEP-03, PKGDEP-04.
+
 
 Surfaced 2026-08-13 auditing Claude Code's plugins-reference docs
 (`code.claude.com/docs/en/plugins-reference`, "Node.js package
@@ -1235,7 +1233,10 @@ Code seams: `domain/components/plugin.ts` (schema field), `domain/resolver.ts`
 `persistence/state-io.ts` (the `enabled` flag this would set the initial
 value of).
 
-## AUTOUP-01: autoupdate is a manual-trigger flag, not a background update
+## ~~AUTOUP-01: autoupdate is a manual-trigger flag, not a background update~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 8 (PR #288, AUP-01 to AUP-03). Disposition: fixed. After the first message in a `tui` runtime, a background pass updates each autoupdate marketplace, with Claude Code's opt-outs and notice (D-PL8-01 to D-PL8-26). Leftovers: AUTOUP-02.
+
 
 Surfaced 2026-08-13 comparing our `marketplace autoupdate`/`noautoupdate`
 against Claude Code's own autoupdate model (`code.claude.com/docs/en/
@@ -1334,7 +1335,9 @@ Code seams: `persistence/migrate.ts` (delete), `persistence/migrate-config.ts`
 `STATE_SCHEMA.schemaVersion` union simplification), `orchestrators/reconcile/apply.ts`
 (`migrateFirstRunConfig` call site, new loud-failure guard).
 
-## PDEP-01: `claude:plugin info` silently drops version-pinned plugin dependencies
+## ~~PDEP-01: `claude:plugin info` silently drops version-pinned plugin dependencies~~ -- CLOSED
+
+**CLOSED 2026-10-26** at the plugin-lifecycle milestone start: already fixed. `info` parses dependencies with `parseDeclaredDependencies` and renders object entries with range and sha (`orchestrators/plugin/info.ts`), and dependencies are resolved and installed since #198 (8b6ac3bc). Original report follows.
 
 Surfaced 2026-08-13 spiking whether Claude Code plugins support declaring
 dependencies on other plugins and how this repo handles the field. Full
@@ -1449,7 +1452,9 @@ extend), `persistence/state-io.ts` (storage location for non-sensitive
 values), `orchestrators/plugin/install.ts` / `enable-disable.ts`
 (prompt-at-install/enable touchpoints).
 
-## UDISP-01: uninstall deletes plugin data unconditionally, no `--keep-data` escape hatch
+## ~~UDISP-01: uninstall deletes plugin data unconditionally, no `--keep-data` escape hatch~~ -- CLOSED
+
+**CLOSED 2026-10-26** at the plugin-lifecycle milestone start: already fixed. `uninstall --keep-data` shipped with #198 (8b6ac3bc, DATA-01); scenario in `features/plugin/uninstall.feature`. Original report follows.
 
 Surfaced 2026-08-13 from a competitive-analysis gap review
 (`docs/competitive-analysis/pi-plugins.md` recommendation #1: "Uninstall
@@ -1527,7 +1532,11 @@ the per-scope partition), `orchestrators/reconcile/apply.ts`
 `edge/handlers/plugin/uninstall.ts` (new `--keep-data` flag parsing),
 `edge/args.ts` / `edge/flag-catalog.ts` (flag registration, drift-gated).
 
-## MCPSRC-01: MCP collision slot list has drifted behind pi-mcp-adapter
+## ~~MCPSRC-01: MCP collision slot list has drifted behind pi-mcp-adapter~~ -- CLOSED
+
+Closed 2026-10-03 by AFILE-05: a nine-source, later-wins walk of
+pi-mcp-adapter 5's config sources, where only full definitions declare
+and the refusal names the winning source.
 
 Surfaced 2026-08-13 from the upstream release review covering
 2026-08-05..2026-08-12 (pi 0.84.0-0.84.1, pi-subagents 0.41.0-0.47.1,
@@ -1644,7 +1653,12 @@ first-declarer-wins walk), `bridges/mcp/stage.ts`
 that locks the slot order, and the RN-5 user-contract wording wherever it
 enumerates the slots.
 
-## ENVDOC-01: `docs/env-vars.md` has drifted behind two upstreams
+## ~~ENVDOC-01: `docs/env-vars.md` has drifted behind two upstreams~~ -- CLOSED
+
+Closed 2026-10-09 by ADOC-01 in the `mcp-4` milestone. `docs/env-vars.md`
+now re-anchors the "MCP runtime env inheritance" section to pi-mcp-adapter
+5.2.0, around `resolveCommandSecret` and its `!` and `!!` rules, and gives
+`AI_AGENT` a pi-only row with no spawn-order caveat.
 
 Surfaced 2026-08-13 from the same upstream release review that produced
 [MCPSRC-01]. Two independent staleness points, both in `docs/env-vars.md`,
@@ -1696,7 +1710,21 @@ footnote list at 33-35; per-surface tables; the "MCP runtime env
 inheritance" subsection at 151). Documentation only -- no extension source
 changes, since we neither set nor consume `AI_AGENT`.
 
-## ENVLIT-01: `literalEnv` opt-out is unevaluated for MCP env fidelity
+Source for the rewrite (2026-10-07): the "Variables" section of
+`docs/mcp-compatibility.md` states the current MCP variable rules.
+
+## ~~ENVLIT-01: `literalEnv` opt-out is unevaluated for MCP env fidelity~~ -- CLOSED
+
+Closed 2026-10-07 by AVAR-03 in the `mcp-4` milestone. The missing fact is now
+known: Claude Code 2.1.291 expands `${VAR}` and `${VAR:-default}` in stdio
+`env` values (all keys except `CLAUDE_PLUGIN_ROOT` and `CLAUDE_PLUGIN_DATA`).
+Verdict: `literalEnv` is not used. `literalEnv: true` turns off the adapter's
+runtime `${VAR}` expansion of `env`, and Claude's rule needs that expansion,
+because this extension never writes a resolved environment value. The
+install-time rewrite keeps `${VAR}` for the adapter and escapes the
+adapter-only syntax instead. `docs/mcp-compatibility.md` section "Variables"
+records the verdict.
+
 
 Surfaced 2026-08-13 from the upstream release review. The doc-accuracy
 half of this is [ENVDOC-01]; this item is the behavioral question, which
@@ -1896,7 +1924,7 @@ invariant for the lazy-hydrate path: boot with a user-scope-only
 `SessionStart` plugin, assert the OTHER scope's root stays empty.
 
 Code seams: `bridges/hooks/event-router.ts` (the factory hydrate loop and
-`ensureSharedDataDir`), `tests/integration/hooks-dispatch-end-to-end.test.ts`.
+`ensureSharedDataDir`), `test/integration/hooks-dispatch-end-to-end.test.ts`.
 
 ## HKDR-01: the blocking lane settles on `close`, so a surviving grandchild can pin a turn
 
@@ -2019,7 +2047,7 @@ Two documents still describe it as live: `bridges/agents/discover.ts:93-95`
 collisions within a single plugin MUST throw with both source names listed").
 PRD RN-6 points the reader at AG-12 for exactly this, so the two rows now
 disagree about whether an agents collision throws. The two tests of the gate
-(`tests/bridges/agents/convert.test.ts:220`, `:238`) hand-build the colliding
+(`test/bridges/agents/convert.test.ts:220`, `:238`) hand-build the colliding
 array and call the function directly, which is why the suite says nothing.
 
 **Out of scope now.** PR #141's brief locked the skills gate as its subject
@@ -2039,7 +2067,10 @@ componentPaths.agents entry", which is false for a within-dir collision --
 fix it the way the skills and commands bridges were fixed, by naming the
 winner.
 
-## ENWARN-01: `enable` re-materializes a plugin and discards every warning
+## ~~ENWARN-01: `enable` re-materializes a plugin and discards every warning~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 1 (PR #281). Disposition: fixed. A standalone `enable` shows its root's discovery warnings, and the orchestrated outcome carries them for `apply` (D-PL1-12, D-PL1-07).
+
 
 Surfaced by review while landing PR #141 (2026-08-23).
 
@@ -2069,7 +2100,10 @@ enable branch surface the discovery half through
 `"enabled"` verb after its own row, and carry both halves on the orchestrated
 outcome. The verb union is closed, so the compiler names every header site.
 
-## UPCASC-01: update's cascade warning channel is a carrier with no consumer
+## ~~UPCASC-01: update's cascade warning channel is a carrier with no consumer~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 1 (PR #281). Disposition: fixed. Every verb's header names the scope, and `marketplace update`, autoupdate and `apply` render each plugin's warnings, both halves, in one diagnostic per plugin (D-PL1-05, D-PL1-07, D-PL1-09, D-PL1-20, D-PL1-25; D-PL1-08 superseded).
+
 
 Surfaced by review while landing PR #141 (2026-08-23), in the change that
 built the channel.
@@ -2116,7 +2150,10 @@ reinstall and backfill cascades together. The install cascade's existing
 `postCommitWarnings` rendering is the precedent to match rather than to
 reinvent.
 
-## WCHAN-01: the two warning channels are the same type, so a swap compiles
+## ~~WCHAN-01: the two warning channels are the same type, so a swap compiles~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 1 (PR #281). Disposition: fixed. Each bridge tags its warnings as discovery or hygiene, one classifier serves install, the update swap and reinstall, and the renderer takes `readonly DiscoveryWarning[]` (D-PL1-01 to D-PL1-04).
+
 
 Surfaced by review while landing PR #141 (2026-08-23).
 
@@ -2265,7 +2302,7 @@ scan into a standalone gate that rejects without granting `--local`, or decide
 That choice is the whole cost of the item; the scan itself is mechanical.
 
 **Why the drift guard did not catch it.**
-`tests/architecture/flag-catalog-drift.test.ts` pins each verb's parse set
+`test/architecture/flag-catalog-drift.test.ts` pins each verb's parse set
 against `flag-catalog.ts`, but `CatalogVerb` enumerates only the twelve
 plugin-family verbs. No `marketplace <subcommand>` has a catalog entry or a
 drift assertion, so the three holes are outside what the guard can see. Closing
@@ -2280,7 +2317,7 @@ Code seams: `edge/args-schema.ts` (`parseCommandArgs`, the arity gap),
 `edge/args.ts` (`parseArgs`, the everything-is-a-positional tokenizer),
 `edge/handlers/shared.ts` (`extractLocalFlag`, the existing gate),
 `edge/handlers/marketplace/{info,list,update}.ts` (the three holes),
-`edge/flag-catalog.ts` + `tests/architecture/flag-catalog-drift.test.ts`
+`edge/flag-catalog.ts` + `test/architecture/flag-catalog-drift.test.ts`
 (the guard that needs to grow a marketplace half).
 
 ## ~~SEV-01: "absent target" renders at two severities depending on the verb~~ -- CLOSED
@@ -2474,7 +2511,17 @@ Code seams: `bridges/agents/frontmatter.ts` (`parseFrontmatter`),
 `bridges/skills/stage.ts` (the gate-1 parse call), `platform/pi-api.ts:38`
 (the re-exported parser).
 
-## MENVX-01: a staged MCP `env` value beginning with `!` executes as a shell command
+## ~~MENVX-01: a staged MCP `env` value beginning with `!` executes as a shell command~~ -- CLOSED
+
+Closed 2026-10-07 by AVAR-03 in the `mcp-4` milestone. Disposition: escape.
+A written `env` or `headers` value that starts with `!` is written with one
+more `!`, so `!x` becomes `!!x`. pi-mcp-adapter drops one `!` from a `!!`
+value and interpolates the rest, so it outputs the literal value that Claude
+Code passes and runs no shell command. The adapter conformance test
+(`test/integration/adapter-expansion-conformance.test.ts`) proves this
+against pi-mcp-adapter 5.1.0 in CI. `docs/mcp-compatibility.md` section
+"Variables" records the rule.
+
 
 Surfaced by the upstream release review covering 2026-08-24..2026-08-31,
 verified first-hand against the published `pi-mcp-adapter@2.31.0` tarball on
@@ -2832,7 +2879,7 @@ install valid on THIS volume succeeds? Candidate directions:
 - probe the target volume's behavior and fold only when it actually folds
 - do nothing and document the exposure
 
-`tests/domain/workflow-script.test.ts` currently pins the NFC/NFD pair as
+`test/domain/workflow-script.test.ts` currently pins the NFC/NFD pair as
 explicitly NOT colliding, so whichever direction wins has a test to retitle.
 `.planning/WINDOWS.md` is the other document this touches.
 
@@ -2864,7 +2911,7 @@ Two facts separate this from the case and normalization variants:
 
 **Closed for the workflows gate.** `domain/name.ts::generatedWorkflowName` now
 refuses a generated name matching `/\p{Cs}/u`, with the pair of lone-surrogate
-rows and a well-formed-astral acceptance row pinned in `tests/domain/name.test.ts`.
+rows and a well-formed-astral acceptance row pinned in `test/domain/name.test.ts`.
 The screen is documented at its site as the one place this gate deliberately
 exceeds the engine.
 
@@ -2884,7 +2931,7 @@ recursion, no wrapper stripping. Both command arms now guard on
 `event.toolName` so `Bash(...)` rules no longer fire on powershell events.
 -->
 
-## ~~SWTEST-01: the Sonar way ruleset stops at `extensions/`; `tests/` is unmeasured by it~~ -- CLOSED
+## ~~SWTEST-01: the Sonar way ruleset stops at `extensions/`; `test/` is unmeasured by it~~ -- CLOSED
 
 **Closed 2026-09-14 — test-backlog Phase 2.** The three assertion rules now
 run as errors on tests. Seven exact type-only owner files retain their compile-time
@@ -2905,16 +2952,16 @@ than guessed, so the decision is a scoping call and not a discovery exercise.
 `eslint.config.js` runs `sonarjs.configs.recommended.rules` over
 `extensions/pi-claude-marketplace/**/*.ts` only. That scope mirrors
 `sonar.sources`. The test tree is outside it for two independent reasons:
-`sonar.test.exclusions=tests/**` means SonarCloud never reads it, so there is
+`sonar.test.exclusions=test/**` means SonarCloud never reads it, so there is
 no upstream parity pressure; and the same ruleset reports 1021 problems there
 today.
 
-**There is no blanket exemption to lean on.** The `tests/**/*.ts` block turns
+**There is no blanket exemption to lean on.** The `test/**/*.ts` block turns
 off five sonarjs rules and a handful of typescript-eslint ones, nothing more.
 Every other active rule already runs on the test tree and passes. So this is
 an opt-in decision about 1021 specific findings, not a wall.
 
-**The measured breakdown**, from the full ruleset against `tests/`:
+**The measured breakdown**, from the full ruleset against `test/`:
 
 | Count | Rule | Reading |
 |---|---|---|
@@ -2945,13 +2992,13 @@ coexists with ~231 surviving-mutation BLOCKERs; per-pair coverage is not
 evidence of assertion strength". These three rules are a cheap, automated
 probe for that class, and nothing in the repo currently runs them.
 
-Direction for later: do NOT enable the ruleset wholesale on `tests/`. Enable
+Direction for later: do NOT enable the ruleset wholesale on `test/`. Enable
 the three assertion-strength rules first and read their 21 findings, since
 they carry the value and are separable from the noise. Then decide the rest
 per cluster: `void-use` should almost certainly stay off for the test tree
 (the idiom is deliberate and documented), the fixture clusters
 (`publicly-writable-directories`, `no-hardcoded-passwords`) want a
-`tests/fixtures/**` carve-out rather than a rule-level disable, and
+`test/fixtures/**` carve-out rather than a rule-level disable, and
 `no-unused-vars` should be left to the typescript-eslint rule already
 configured for it rather than run twice under two ignore patterns.
 
@@ -2960,11 +3007,13 @@ large test-quality corpus with 9 operator decisions pending, and its
 `test:coverage:direct` work would collide with a broad test-tree lint change.
 
 Code seams: `eslint.config.js` (the Sonar way block, currently scoped to
-`extensions/`; and the `tests/**/*.ts` block that disables five sonarjs
+`extensions/`; and the `test/**/*.ts` block that disables five sonarjs
 rules), `.planning/codebase/CONVENTIONS.md` (the "Sonar way on `extensions/`
 only" bullet, which states the scope this item would change).
 
-## PMAN-01: a bare `<pluginRoot>/plugin.json` is never read
+## ~~PMAN-01: a bare `<pluginRoot>/plugin.json` is never read~~ -- CLOSED
+
+**CLOSED 2026-10-26** at the plugin-lifecycle milestone start: already fixed. `domain/manifest-path.ts` `MANIFEST_CANDIDATES` reads the wrapped then the bare `plugin.json` at every reader, and `domain/component-paths.ts` normalizes paths before the dedup check (#198, 8b6ac3bc). Original report follows.
 
 Surfaced 2026-09-09 while correcting [UDISP-01]. Verified by source read,
 against the installed Claude Code CLI v2.1.236, and against the four
@@ -3092,14 +3141,14 @@ assertion), `package.json` (`test:coverage:direct:negative`), `.github/workflows
 
 **Revalidated 2026-09-14 (test-backlog HIST-01):** the current tests already
 assert the folded marketplace grammar. `env -u PI_CODING_AGENT_DIR node
-tests/e2e/import-command.test.ts` passes all three cases (3 pass, 0 fail) on
+test/e2e/import-command.test.ts` passes all three cases (3 pass, 0 fail) on
 Node v26.8.2. No test rewrite is needed. The original report below describes
 a condition that no longer exists.
 
 Carried out of the `refine-unit-tests` milestone close (2026-09-13) as an open
 audit item. Originally recorded in Phase 25, which archived with milestone v1.4.1.
 
-Three cases in `tests/e2e/import-command.test.ts` fail: `import imports enabled
+Three cases in `test/e2e/import-command.test.ts` fail: `import imports enabled
 Claude settings across both scopes`, `import --scope project narrows writes to
 project scope`, and `import reports source mismatches and skips dependent
 plugins`. All three match on a `Claude plugin import summary` header. The command
@@ -3112,7 +3161,7 @@ command's output surface. The source-load runtime smoke in the same suite passes
 including the test that matters for extension loading (`real Pi runtime package
 bin loads the extension under isolated HOME and cwd`).
 
-Why it has stayed open: `tests/e2e/**` is excluded from `npm run check`, so these
+Why it has stayed open: `test/e2e/**` is excluded from `npm run check`, so these
 never gate a commit. CI does run `pinned e2e tests` as its own job, which is where
 they would surface.
 
@@ -3124,7 +3173,7 @@ Candidate directions:
   (`shared/notification-grammar.ts`) instead of rendered stdout, which is what the
   unit suites do
 
-Code seams: `tests/e2e/import-command.test.ts` (the three cases and the header
+Code seams: `test/e2e/import-command.test.ts` (the three cases and the header
 regex), `extensions/pi-claude-marketplace/orchestrators/import/execute.messaging.ts`
 (the message builder that replaced the old header), `package.json`
 (`test:e2e`, and the `check` chain that excludes it).
@@ -3133,13 +3182,16 @@ regex), `extensions/pi-claude-marketplace/orchestrators/import/execute.messaging
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
 - "Install error misattribution when marketplace is missing" -> closed by ATTR-01..10
   (every op converges on the marketplace-subject `{not added}` model; see
-  tests/orchestrators/plugin/install.test.ts "ATTR-01").
+  test/orchestrators/plugin/install.test.ts "ATTR-01").
 - "Structural `{not added}` variant for `PluginInfoMessage`" -> closed by TYPE-01..04
   (dedicated `marketplace-not-added` kind in shared/notify.ts; placeholder/sole-reason
   renderer carve-out removed).
 -->
 
-## CASCADEAX-01: the cascade `dropped` fold reads its axes structurally, so a new kind is silently ignored
+## ~~CASCADEAX-01: the cascade `dropped` fold reads its axes structurally, so a new kind is silently ignored~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 5 (PR #285). Disposition: fixed (D-PL5-15).
+
 
 Surfaced by the Phase 112 research (2026-09-05), while measuring the blast radius
 of widening `UnstageOutcome.dropped` with a `workflows` axis.
@@ -3168,7 +3220,10 @@ exhaustive so the compiler leads on the next kind — an exhaustive destructure,
 three converts a future silent omission into a build error. Doing this while
 touching `remove.ts` for an unrelated reason is the cheapest moment.
 
-## WARN-01: a failed install discards every bridge's prepare warnings
+## ~~WARN-01: a failed install discards every bridge's prepare warnings~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 1 (PR #281). Disposition: fixed. Failed installs, updates and reinstalls show the staging warnings of the phases that ran (D-PL1-13, D-PL1-14, D-PL1-24).
+
 
 Surfaced by the Phase 112 code review, iteration 2 (WR-04). Not workflows-specific
 and not repairable inside a workflows phase, which is why it is filed here rather
@@ -3253,7 +3308,7 @@ arms were removed under the unreachable-code rule, because `addMarketplace`,
 `installPlugin` and `setPluginEnabled` each answer with a typed outcome for every
 throw they can meet. That claim rests on an internal contract, and no test can
 check it: all three orchestrators are STATIC imports, and `ApplyReconcileOptions`
-exposes no injection seam, so `tests/orchestrators/reconcile/apply.test.ts`
+exposes no injection seam, so `test/orchestrators/reconcile/apply.test.ts`
 physically cannot plant a throwing collaborator. Contrast the two loops that kept
 their catch, which ARE covered, because `raceStateFromRead` gives the test a way
 to force the throw.
@@ -3335,7 +3390,7 @@ in the guide.
 
 **To settle it:** measure the `needsReload` plumbing across every producer that
 stamps it, then restate the guide at the grade that holds. A doc pin
-(`tests/architecture/messaging-guide-doc-pins.test.ts`) should bind the restated
+(`test/architecture/messaging-guide-doc-pins.test.ts`) should bind the restated
 sentence to the source the way the variant names are bound.
 
 Note 2026-10-05: `ce38da6a` deleted that test with the other documentation
@@ -3362,7 +3417,7 @@ Carried from the workflows-replay close (WINDOWS #72; OPEN-QUESTIONS Q7).
 
 The storage assertions in the archived phase-105 verification were never driven
 against a live engine, and their driver
-(`tests/live-uat/workflow-storage-canary.mjs`) was never re-landed on this
+(`test/live-uat/workflow-storage-canary.mjs`) was never re-landed on this
 branch. The storage half of the host-engine contract rests on a source read;
 the `agent()` failure half was measured at 3.10.1 and refuted the source read.
 
@@ -3370,10 +3425,10 @@ the `agent()` failure half was measured at 3.10.1 and refuted the source read.
 canary was run -- a disposable `npm install --prefix` scratch engine plus
 `PI_WORKFLOW_ENGINE_ROOT`, with the negative control.
 
-Closed 2026-09-21 on the workflows branch: `tests/live-uat/workflow-storage-canary.mjs`
+Closed 2026-09-21 on the workflows branch: `test/live-uat/workflow-storage-canary.mjs`
 landed and was driven against engine 3.13.0 in both scopes (W0-W5 all PASS),
 with `--invert`, a missing engine and an out-of-sandbox agent directory each
-exiting 1. The transcript is in `tests/live-uat/README.md`; the compatibility
+exiting 1. The transcript is in `test/live-uat/README.md`; the compatibility
 doc's storage claims carry the `runtime-measured at 3.13.0` grade.
 
 ## WPIN-01: machine-check the engine internals the compatibility doc cites
@@ -3431,7 +3486,7 @@ Walking the "Scope when picked up" list against what actually closed it:
   "A dependency's own enablement" section states the current behavior for
   both call sites, and `docs/dependency-resolution.md`'s already-installed
   section states the same for install's side, gated by
-  `tests/architecture/dependency-doc-agreement.test.ts` driving the real
+  `test/architecture/dependency-doc-agreement.test.ts` driving the real
   composer against both.
 - **"a decision record superseding the Phase 3 policy"** -- D-08-02 (the
   `{dependency enabled}` token) and this phase's `<threat_model>` entries
@@ -3443,7 +3498,10 @@ review, about a plugin's OWN status reflecting a partially-supported
 dependency -- not about enablement, and not upstream parity. Nothing in
 this closure pulls it in.
 
-## DEPS-STATUS-01: dependency status propagates to the dependent
+## ~~DEPS-STATUS-01: dependency status propagates to the dependent~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 3 (PR #283). Disposition: closed as decided. No propagation, as Claude Code (D-PL3-06).
+
 
 Surfaced in the same review. Operator statement: a fully supported plugin
 that depends on a partially supported plugin is itself partially supported
@@ -3465,7 +3523,10 @@ D-12-03 drops the proposed `{orphaned}` marker on `list` and `info`. The preview
 command supplies the orphan inventory, and Claude Code shows no marker on those
 surfaces. The marker is not a separate backlog item.
 
-## PRUNE-GUARD-MR-01: `marketplace remove` bypasses the dependents guard
+## ~~PRUNE-GUARD-MR-01: `marketplace remove` bypasses the dependents guard~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 5 (PR #285). Disposition: closed as decided, no code change (D-PL5-14).
+
 
 Surfaced while planning the v1.20 prune work (2026-09-16). `marketplace
 remove` unstages every plugin under the marketplace through
@@ -3495,7 +3556,9 @@ LOAD-03 already settled for the reconcile-driven uninstall, which deliberately
 carries no dependents brace for exactly this reason. Refusing the removal is
 NOT on the table: it would re-introduce the deadlock this phase removed.
 
-## PENDING-VERDICT-01: `pending` previews an enable the next reload will undo
+## ~~PENDING-VERDICT-01: `pending` previews an enable the next reload will undo~~ -- CLOSED
+
+**CLOSED 2026-10-26** at the plugin-lifecycle milestone start: already fixed. `orchestrators/reconcile/pending.ts` computes `buildScopeSatisfactionVerdict` and passes it to `planReconcile` (D-21, #274, eab57d73). Original report follows.
 
 Surfaced by the Phase 6 load-time dependency check (2026-09-18), recorded by
 all three of its implementation plans and by none of their file scopes.
@@ -3514,36 +3577,29 @@ preview also needs a row for the disable it would then foresee, which is a
 closed-set question, not just a wiring one. Doing nothing is defensible if the
 preview is read as "what the config says", but it is not what the row claims.
 
-## STALE-DECLARER-01: one unreadable declarer aborts the whole scope's dependency check
+## ~~STALE-DECLARER-01: one unreadable declarer aborts the whole scope's dependency check~~ -- CLOSED
 
-Surfaced by the Phase 6 code review (`06-REVIEW.md` WR-03, 2026-09-19) and
-re-declined on the same reasoning across both fix iterations. In
-`orchestrators/plugin/dependency-index.ts::readRecordDeclarations`, a record
-whose plugin `lookupDeclaredPlugin` can no longer resolve in its marketplace
-manifest -- for example, a plugin dropped from `marketplace.json` after it was
-installed -- is treated as `kind: "absent"`, an unreadable declarer.
-`buildScopeDeclarationDetail` returns on the FIRST record that hits this, so
-one stale record turns off the LOAD-01 load-time check for every other plugin
-in the scope and renders `⊘ <plugin> (failed) {unreadable}` at error severity
-on every reload, for a condition that has nothing to do with that plugin.
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 2 (PR #282). Disposition: closed as decided. The whole scope fails closed, as Claude Code does (D-PL2-05).
 
-Left unfixed because the remedy is not scoped to LOAD-01:
-`readRecordDeclarations` is the same function `buildScopeDeclarationIndex`
-calls for `uninstall`'s dependents guard (Phase 5, D-05-07's fail-closed
-posture). Loosening the abort-on-first-unreadable behavior here would silently
-change what counts as a "declarer" for that guard too, letting an uninstall
-proceed past a dependent it should have blocked. Two existing tests pin the
-current behavior as intentional for that reason.
 
-Scope when picked up: decide whether the fail-closed unit should stay the
-whole scope, or narrow to per-record (skip the one unreadable declarer and
-keep checking the rest, only surfacing `{unreadable}` for that plugin's own
-row). Any change must be evaluated against both call sites --
-`buildScopeDeclarationDetail` (LOAD-01) and `buildScopeDeclarationIndex`
-(uninstall's dependents guard) -- and the two tests that currently encode
-D-05-07 as intentional will need to move with it, not just be deleted.
+Surfaced by the Phase 6 code review (`06-REVIEW.md` WR-03, 2026-09-19). Rewritten 2026-10-26 after lifecycle-coverage phases 17 and 28 changed the row and narrowed the cause.
 
-## MISS-MPADD-01: marketplace add and post-install activation do not resolve missing dependencies
+The dependency walk still stops at the first record whose declarations it cannot read. `buildScopeDeclarationDetail` and `buildScopeDeclarationIndex` in `orchestrators/plugin/dependency-index.ts` both return on the first failed `readRecordDeclarations`. So one broken record turns off the load-time dependency check (LOAD-01) for every other plugin in the scope, and it makes `update`, `reinstall`, and the other walk callers refuse with `{unreadable}` (D-17).
+
+What changed since the first text:
+
+- Delisted plugins no longer trip the walk. DLS-01 (phase 28, DLS-D1) reads a plugin that its marketplace no longer lists from its installed copy. Only a record whose installed copy is also gone fails closed (`features/plugin/reconcile.feature:157`).
+- The row is no longer `⊘ <plugin> (failed) {unreadable}` at error. Since REC-05 (phase 17, D-10, D-11) every new session prints a `(failed)` row at warning severity with the narrowed token and a cause, for example `{unparseable}` and "cannot read the dependencies of demo@fixtures: its marketplace manifest is invalid" (`features/plugin/reconcile.feature:126-155`). The plugin keeps working.
+- What still fails closed for the whole scope: a marketplace manifest that does not load (missing, unreadable, invalid JSON), and a delisted record with no installed copy. `28-CONTEXT.md` keeps both out of scope on purpose.
+
+Decision: keep the whole-scope fail-closed unit, or narrow it to one record (skip the unreadable declarer, keep checking the rest, and report `{unreadable}` only on that plugin's row).
+
+Recommendation (lifecycle-coverage triage, 2026-10-26): keep fail-closed. The same reader feeds `uninstall`'s dependents guard (D-05-07) and the other callers in `orchestrators/plugin/{uninstall,prune,enable-disable,constraint-fold,update-constraint-gate}.ts`, `orchestrators/marketplace/remove.ts`, and `orchestrators/reconcile/{dependency-verdict,convergence,read-pass}.ts`. A per-record walk would let an uninstall go past a dependent it cannot see. The project rule is to refuse on corrupt data, not to skip it. If the user picks the per-record walk instead, judge it against every caller above, and move the tests that pin D-05-07 with it.
+
+## ~~MISS-MPADD-01: marketplace add and post-install activation do not resolve missing dependencies~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 2 (PR #282). Disposition: fixed. `marketplace add`, `bootstrap` and the autoupdate cascade run the missing-dependency step (D-PL2-09, D-PL2-10, D-PL2-11, D-PL2-19 to D-PL2-21).
+
 
 Surfaced by Phase 9's upstream check (D-09-15, 2026-09-22). Upstream runs its
 missing-dependency resolver on `marketplace add` and again after an install
@@ -3556,7 +3612,10 @@ Scope when picked up: run the load-time verdict and the dependency-install
 step for one scope from each of those call sites, the same step `/reload`
 already drives.
 
-## RECON-REPLAN-01: the toggles are re-planned only after a dependency install
+## ~~RECON-REPLAN-01: the toggles are re-planned only after a dependency install~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 2 (PR #282). Disposition: closed as fixed by APPLY1-D1, proven by the scenario "Apply disables a plugin whose dependency a config drops in the same run, as pending lists it" (D-PL2-04).
+
 
 Surfaced by Phase 9's D-09-07 design (2026-09-22). The reload's toggle buckets
 are re-planned from a fresh read pass only when the dependency-install step
@@ -3568,12 +3627,14 @@ Scope when picked up: re-plan the toggle buckets after any mutating bucket,
 not only the dependency-install step, and measure the added read-pass cost on
 a steady-state reload before shipping it.
 
-## TEST-TMPLEAK-01: clone-cache tests leak their mkdtemp fixtures into /tmp
+## ~~TEST-TMPLEAK-01: clone-cache tests leak their mkdtemp fixtures into /tmp~~ -- CLOSED
+
+**CLOSED 2026-10-26** at the plugin-lifecycle milestone start: already fixed. every `mkdtemp` in `test/orchestrators/plugin/clone-cache.test.ts` has a `t.after` removal (#274, eab57d73). Original report follows.
 
 Surfaced during Phase 9's code review (2026-09-22): the host `/tmp` tmpfs hit
 100% inodes with ~29.8k `clone-cache*`, `clone-cache-marketplace-*` and
 `clone-cache-nongit-*` directories dated across several days of `npm test`
-runs. `tests/orchestrators/plugin/clone-cache.test.ts` creates them with
+runs. `test/orchestrators/plugin/clone-cache.test.ts` creates them with
 `mkdtemp(path.join(tmpdir(), ...))` and never removes them; every run of the
 suite on this machine leaves hundreds behind. The orchestrator removed the
 ones older than two hours to unblock the run.
@@ -3597,8 +3658,8 @@ update. `update-flow.test.ts`'s PDEF-01 case was fixed in `afa96ed2` by
 seeding a real `other-mp/marketplace.json`.
 
 Two more carry the same shape and pass today only because their verbs never
-reach that walk: `tests/orchestrators/plugin/reinstall-flow.test.ts:882` and
-`tests/orchestrators/plugin/install-flow.test.ts:785` (the
+reach that walk: `test/orchestrators/plugin/reinstall-flow.test.ts:882` and
+`test/orchestrators/plugin/install-flow.test.ts:785` (the
 `conflictingMarketplaceRecord` helper, used by PI-6, PDEF-01 and RESV-06).
 They are latent, not broken — the next phase that puts a scope-wide
 declaration read in front of install or reinstall will turn both red for a
@@ -3724,7 +3785,7 @@ Closed 2026-09-30 by quick task 260930-j4y. Disposition per finding:
 - WR-04: wrong at HEAD. `locations.sourceCloneDir` runs `assertPathInside`
   before recognition, and its segment walk lstats `sources/<name>` and throws
   `SymlinkRefusedError` for a symlink (`shared/path-containment.ts`). Guarded
-  by `tests/persistence/locations.test.ts` "source clones refuse a symlinked
+  by `test/persistence/locations.test.ts` "source clones refuse a symlinked
   marketplace component". `add.ts` now records this in a comment.
 - IN-05: fixed in `727939fc`. `domain/clone-key.ts::originMatchesSource`
   parses the origin through the source parser and compares normalized
@@ -3759,3 +3820,714 @@ Carried from `any-git-host` (`03-REVIEW-DISPOSITION.md`; milestone audit, 2026-0
   root. The `listRemotes` arm no longer uses `chmod`.
 - Code hygiene: WR-01/WR-06/WR-07 (stale JSDoc and flow header), WR-08
   (five positional parameters), WR-09, IN-02, IN-03, IN-06, IN-07, IN-08.
+
+## WOUT-01: workflow output quality is unobserved because engine subagents declined every tool call
+
+Carried from the json-output close (WINDOWS #84).
+
+The bridge-to-engine path is proven end to end; workflow output quality is not.
+Measured 2026-09-22 with engine 3.13.0 and pi 0.85.1 in the `tmp/pi-uat`
+sandbox: `code-modernization:modernize-harden-scan` reached status `completed`
+in 16.5 s with all five Find-phase agents done. The staged envelope loaded from
+the user saved store, the script parsed unmodified, its log, dedup, and
+refutation stages ran, and its return value came back as JSON with zero
+findings.
+
+Every subagent declined to call any tool. Each one emitted "structured_output
+recovered from prose extraction" and then claimed that no filesystem was
+available. That claim is false: `agent.ts:818` defaults to
+`createCodingTools(cwd)` when the invocation passes no tools.
+
+A one-agent negative control that asked for one file name failed the same way,
+with `SCHEMA_NONCOMPLIANCE` at 217 output tokens. So the cause is not
+code-modernization, the six envelopes, or this bridge.
+
+The sandbox had only `openai-codex` authed. gpt-5.5 and gpt-5.6-terra failed
+the same way, and gpt-5.3-codex-spark hung past 200 s without a run record, so
+the provider path could not be separated from the engine subagent layer. The
+Verify phase and the adversarial second pass are unobserved.
+
+**To settle it:** put an Anthropic key in `tmp/pi-uat/agent` and re-run
+`code-modernization:modernize-harden-scan` once in that sandbox. Subagents that
+call tools and return findings settle the question; the same refusal under a
+second provider points at the engine subagent layer.
+
+## DEPADV-01: Pi's shrinkwrap pins a vulnerable nested brace-expansion
+
+Carried from the json-output close (DEP-07-03-01 in the 07/ deferred items).
+
+GHSA-q2hr-2g5m-vwhr, GHSA-qhr7-859c-m2p7, and GHSA-6j4f-fj2g-mc7p cover
+`brace-expansion` 4.0.0 - 5.0.11 and are fixed in >=5.0.12. Lock commit
+`a12dfa16` pinned the root `node_modules/brace-expansion` at 5.0.12.
+
+`npm audit --package-lock-only` still reports
+`node_modules/@earendil-works/pi-coding-agent/node_modules/brace-expansion` at
+5.0.9. Pi 0.87.1 publishes an `npm-shrinkwrap.json` that pins
+`brace-expansion` 5.0.9 and `minimatch` 10.2.6, and npm honors a dependency's
+shrinkwrap: `overrides`, `npm dedupe`, and a fresh lock all left it at 5.0.9
+(measured 2026-10-10). Deleting the nested lock entries clears the audit on
+paper only, because `npm ci` re-extracts the shrinkwrapped tree.
+
+The copy is a dev-only dependency that no attacker-controlled glob reaches. The
+peer-floor fixture lock under `test/e2e/pi-peer-floor/` keeps Pi 0.86.1's
+shrinkwrapped 5.0.9 by design, as `07-PEER-FLOOR-AUDIT.md` decided; the
+json-output close kept that fixture byte-identical.
+
+Measured 2026-10-10 with
+`npm view @earendil-works/pi-coding-agent@<V> _hasShrinkwrap`: 0.87.1 true,
+0.99.2 true, 1.0.0 true, 1.0.1 false, 1.1.0 false. 1.0.1 is the first release
+that ships no shrinkwrap. `origin/main` at `94160614` (#250, the Pi 1.0 floor)
+locks `@earendil-works/pi-coding-agent` at 1.0.0, which still ships the
+shrinkwrap (nested `brace-expansion` 5.0.9), and its root
+`node_modules/brace-expansion` at 5.0.9.
+
+**To settle it:** the clearing action is the Pi devDependency bump to 1.x (its
+own work, not the json-output close). It clears this copy only once the lock
+resolves Pi at 1.0.1 or later, the first release with no shrinkwrap; for
+example, when this branch merges main's Pi 1.0 floor and refreshes the lock
+past 1.0.0. Keep the root `node_modules/brace-expansion` at >=5.0.12 in that
+merged lock. Then `npm audit --package-lock-only` reports no `brace-expansion`
+path. This residual has no WINDOWS.md entry.
+
+## ~~MCPOVR-01: MCP server overrides do not survive plugin disable then enable~~ -- CLOSED
+
+Closed 2026-10-10 by the `mcp-4` milestone debt work. Disposition:
+`implemented` by D-08-01 and D-08-02. `openUi` and `trace` join the carried
+fields (D-08-01). A user's per-server choices now survive plugin disable then
+enable, uninstall then reinstall, and an update that drops the server: they
+move into the top-level `_piClaudeMarketplace.serverChoices` member of
+`mcp-adapter.json`, recorded with the plugin and marketplace names (review fix 28a1bf0c), in the same atomic write
+that removes or writes the entry (D-08-02, NFR-1). Commits: `fb345e31` and
+`00e310e7` (code and lifecycle tests), `57182472` (pi-mcp-adapter 5.2.0
+loads a user file that holds a stored choice), `73200878` (docs). The
+original entry follows.
+
+Surfaced by the `mcp-4` adapter-file delivery work (2026-10-03), source
+D-02-15. AFILE-06 carries a user's own fields (`disabled`, `approveTools`,
+`lifecycle` and the rest of the closed set) from the previous marked entry
+into the new one on `update` and `reinstall`. `disable` unstages the plugin's
+marked entries instead, so a `/mcp-adapter disable` choice, or any other
+carried field, is gone when the plugin is disabled and enabled again: the
+enable re-stages from the plugin's own entry with nothing to carry from.
+
+Scope when picked up: keeping the choices needs persisted state, because the
+MC-5 marker is a byte-stable contract and cannot hold them. Decide where the
+carried fields live while the plugin is disabled (the install record is the
+natural candidate) and how enable reads them back.
+
+Changed by D-02-21 (2026-10-04): a marker-less override that a plugin's entry
+absorbed at install now survives disable then enable. Disable writes it back
+from `_piClaudeMarketplace.keptOverride`, and enable keeps it again. A choice
+the user writes into the plugin's own entry while the plugin owns the name
+(for example `/mcp-adapter disable` after install) still does not survive.
+The `keptOverride` member shows that the marker can carry an additive member,
+so "the marker cannot hold them" no longer holds as written. Whether those
+choices belong in the marker or in persisted state is still open.
+
+## ~~MCPROW-01: review the `enable` and `import` row grammar when MCP notices follow~~ -- CLOSED
+
+Closed 2026-10-10 by the `mcp-4` milestone debt work. Disposition:
+`no renderer change`, by D-08-03. `(installed)` is the catalog's normal
+enable row, and the MCP variable notices print as their own warning lines,
+as for `install`. The warning severity the pinned test recorded came from
+SEV-01: pi-mcp-adapter was not loaded, which raises the row exactly as it
+does for install, and SEV-01 is kept for that consistency. Commits:
+`f1a31171` and `6a85e010` pin the enable and import rows with the adapter
+loaded; `73200878` adds the catalog sentence. The original entry follows.
+
+Surfaced by the `mcp-4` variable expansion verification (2026-10-07). The
+staging-verb tests record two behaviors as found rather than designed:
+
+- `enable` of a plugin whose servers carry unset variables or withheld
+  credentials renders the plugin row as `(installed)` at warning severity, not
+  as an enabled row.
+- An `import` row that carries the two MCP notices is info severity and has no
+  "needs attention" summary line, unlike a standalone install row.
+
+The operator accepted both for the variable expansion phase. Scope when picked
+up: decide whether each matches the tri-state severity model (info = desired
+state reached, warning = carried out but short) and the import grammar, check
+Claude Code's `/plugin` behavior first, then update the renderer, the catalog
+and the pinned tests together.
+
+## ~~ROOTKEY-01: a root plugin name outside the token alphabet gets a dependency cause~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 3 (PR #283). Disposition: fixed. The root is looked up before the id check and gets Claude Code's invalid-id refusal (D-PL3-04, D-PL3-05, D-PL3-14).
+
+
+Surfaced by the `mcp-4` reserved record-key work (2026-10-10, broken-windows
+ledger entry 90). `install` checks the root `<plugin>@<marketplace>` key
+against the dependency token rule before the resolver runs:
+`resolveDependencyClosure` in `domain/dependency-closure.ts` calls `splitKey`,
+and `TOKEN_PATTERN` in `domain/dependencies.ts` needs a leading letter or
+digit. So `install __proto__@<mp>`, and any root name outside that alphabet
+(for example `_x@mp`), is refused as `(failed) {invalid manifest}` with the
+cause `Plugin "__proto__@hostile" declares an unusable dependency (root:
+expected <plugin>@<marketplace>).` The plugin declares no dependency, so the
+cause is misleading. `list` and `info` show the resolver's verdict for the
+same name, `(unavailable) {unsupported source}`. The refusal itself is
+correct: no record is dropped and no file changes. The case
+`test/integration/reserved-record-keys.test.ts` pins the current text.
+
+Scope when picked up: decide which verdict an invalid root name should get,
+check what Claude Code's `/plugin install` prints for such a name first, then
+either run the resolver before the closure root check or give the root check
+its own cause, and update the catalog and the pinned case together.
+
+## ~~MKTPAR-01: three Claude Code marketplace behaviors are missing~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 5 (PR #285). Disposition: fixed. b1 reserved names (D-PL5-01, D-PL5-02, then D-PL5-27, D-PL5-28), b2 hosted `marketplace.json` (D-PL5-04 to D-PL5-10, D-PL5-29 to D-PL5-36), b3 `market` alias (D-PL5-11, D-PL5-24). Leftovers: MKTNAME-01, HOSTED-PUP-01, HOSTED-DNS-01, HOSTED-REL-02.
+
+
+Found by the marketplace-features research (2026-10-15,
+`.planning/research/FEATURES.md`). Claude Code's `/plugin marketplace`:
+
+- refuses reserved official marketplace names; this extension accepts them;
+- adds a marketplace from a plain https URL to a hosted `marketplace.json`;
+  here that URL parses as a git `url` source and the clone fails;
+- accepts `market` as an alias of `marketplace`; here it is
+  `Unknown subcommand`.
+
+The marketplace-features milestone keeps them out of scope. Scope when picked
+up: confirm each against the upstream docs and binary first, then implement it
+with a behavioral scenario under `features/marketplace/`.
+
+## ~~GITERR-01: a git host's HTTP answer is classified per caller, not in one place~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 7 (PR #287, GLK-01). Disposition: fixed. `classifyGitFailure` with a per-operation rule (D-PL7-01 to D-PL7-03, D-PL7-14).
+
+
+Found during marketplace-features (2026-10-20), after quick task 261019-fvd
+(`d430aca1`) made `marketplace add` report a host's HTTP answer as
+`{network error}`. That fix moved the status helpers into
+`shared/git-failure-classifiers.ts` (`hostHttpStatus`, `hostHttpFailureFrame`)
+and added `classifyGitSourceAccessFailure`: errno -> `network unreachable`,
+401/403 -> `authentication required`, 404/410 -> `source missing`, any other
+status -> `network error`. Each operation still composes these pieces itself:
+
+| Remote git access | Classifier | Host 5xx reports |
+|---|---|---|
+| `marketplace add` | `classifyGitSourceAccessFailure` | `{network error}` + status/URL cause frame |
+| `marketplace update` (and the autoupdate cascade) | `classifyGitTransportFailure` + `hostHttpStatus` in `update.ts` | `{network error}` + frame (404 is `network error` here by design, UPD-11) |
+| git-source plugin `install` (`install.messaging.ts`) | only extracts `authentication required` | the generic cause chain |
+| plugin `update` (`update-flow.ts`, `update-preflight.ts`), `fetch`, `info`, the dependency tag probe, `marketplace/shared.ts` | `classifyGitTransportFailure` only | not `{network error}` |
+
+Scope when picked up: research Claude Code's behavior for plugin git-source
+failures first (claude-code-compat-research), then route every remote git
+access through one classification entry point with an explicit per-operation
+404/410 rule, so plugin install/update/fetch/info report a host's HTTP answer
+the way marketplace add and update do. Paired unit tests at 100% direct
+coverage, the output-catalog entries, and a CHANGELOG line. Related:
+`GAUTH-01` (the auth-hint cause line has the same one-call-site-at-a-time
+shape).
+
+## ~~ROWID-01: marketplace-level failure rows carry a plugin-shaped JSON id~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 5 (PR #285). Disposition: fixed (D-PL5-12, D-PL5-26). Import's own `<mp>@<mp>` row moved to Phase 10 (XPH-01).
+
+
+Found during marketplace-features (2026-10-21), when D-19 fixed the id of a
+failed git `marketplace add` child row. `marketplaceFailureRows` in
+`orchestrators/marketplace/shared.ts` names its synthetic failed child row
+after the marketplace, so the wire id reads `<mp>@<mp>` (`tools@tools`) on the
+failure rows of `marketplace remove`, `update`, `autoupdate`, and `info`, as if
+a plugin of that name existed. Scenarios in `remove.feature`, `update.feature`,
+`autoupdate.feature`, `info.feature`, and `file-source-update.feature` pin it.
+
+What exists: a failed `marketplace add` child row sets `marketplaceSubject` on
+its `PluginFailedMessage`, and `rowId` in `shared/notification-json.ts` then
+uses the row name alone, so its id is the bare source (marketplace-features,
+D-19). The user kept the other rows out of D-19's scope.
+
+Scope when picked up: set the same marker in `marketplaceFailureRows`, change
+the pinned cells and any unit case that pins `<mp>@<mp>`, update
+`docs/json-output.md`, and add a CHANGELOG line, because it changes the
+published payload. WINDOWS entry 98 was waived to this entry.
+
+## ~~SHORTREF-01: the `owner/repo@ref` shorthand splits at the last `@`, upstream at the first~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 5 (PR #285). Disposition: fixed. The shorthand splits at the first `@` or `#`; D-76-04 is retired, D-MF-07 stays (D-PL5-13).
+
+
+Found during marketplace-features (2026-10-21), in the review of the `#ref`
+shorthand fix (D-12, review finding IN-04). Pi's `parseShorthandSourceForm`
+in `domain/source.ts` splits `owner/repo@ref` at the LAST `@` (D-76-04).
+Claude Code 2.1.296 parses the shorthand with `/^([^#@]+)(?:[#@](.+))?$/`,
+which splits at the FIRST `@` or `#`. So `acme/tools@a@b` is repo `tools`,
+ref `a@b` upstream, but repo `tools@a`, ref `b` in Pi. Only sources with two
+or more `@` differ. The user chose to record it as a follow-up rather than
+reverse D-76-04 inside the suite close.
+
+Scope when picked up: decide parity (switch to the first-`@` split and retire
+D-76-04) or record D-76-04 as a divergence with an ID. A switch is test-first
+in `test/domain/source.test.ts`, keeps the `#` arm's rule (D-12, D-MF-07),
+and adds a CHANGELOG line, because it changes which sources parse.
+
+## APPLY1-01: a dependent shipped with the newer dependency it needs takes two `apply` runs
+
+**Resolved 2026-10-25** (decision APPLY1-D1, user option C; reworked after two
+review rounds, APPLY1-REVIEW and APPLY1-REVIEW-2): the catalog moves run as one
+cascade, dependencies first. `settleMoveCascade`
+(`orchestrators/reconcile/convergence.ts`) releases a dependent held for a
+dependency's version when the planned moves satisfy it, so `pending` and
+`apply` agree. `apply` enables released and held-down records in cascade
+order, after their moves, and then `judgeFinalScope`
+(`dependency-verdict.ts`) checks every enabled record of the final state,
+strictly and to a fixed point, and disables each unmet one. Scenarios in
+`features/plugin/apply.feature` and `features/plugin/pending.feature`.
+
+Found in the lifecycle-coverage phase 29 code review (2026-10-25, CR-01,
+deferred; D-12b). A marketplace update ships `widget` 1.1.0, which declares
+`zcore@^2.0.0`, together with `zcore` 2.0.0, both recorded at 1.0.0. The
+first `apply` disables `widget` (its catalog range is unmet by the recorded
+`zcore`) and moves `zcore`; `pending` then lists `widget (will enable)` and
+`widget (will update)`, and the second `apply` makes them. No run leaves a
+dependent enabled with its range unmet. The user accepted the two runs at
+the phase close (ROADMAP phase 29 criterion 1, CONTEXT D-08).
+
+A release loop inside the planner (121c6168, reverted in 288f5c6b) reached
+one run but could move a released dependent to a version whose range stays
+unmet, and released it on every pass when the planned move never landed.
+
+Scope when picked up: re-check the ranges inside `convergeScope`
+(`orchestrators/reconcile/apply.ts`) after the moves run, over the moves that
+actually landed, and enable and move the dependents those moves satisfy in
+the same `apply`. `pending` must preview the same result. Test-first with the
+reviewer's probe shapes (co-shipped bump, a marker-held dependent, a move that
+keeps failing). Then drop the exception from `docs/dependency-resolution.md`.
+
+## ~~VERSTR-01: a hold row's cause interpolates the raw catalog `version` string~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 3 (PR #283). Disposition: fixed. A version is cut at render to 64 code units; a parse-time bound was declined (D-PL3-12, D-PL3-16).
+
+
+Lifecycle-coverage phase 29 security audit, T-29-24 (medium, open below the
+blocking threshold). `describeConstraint` in `orchestrators/plugin/constraint-fold.ts`
+puts the catalog `version` string, unbounded manifest text, into the
+`{dependents constrain}` hold cause. It predates the phase. Close it one of
+two ways: bound the manifest `version` string at parse time (a
+`VERSION_PATTERN`-style allowlist), or accept it under T-29-21, since the
+same strings already render in the `will update` / `updated` version slots.
+
+## ~~APPLYTHROW-01: an apply pass that throws drops the rows it already collected~~ -- CLOSED
+
+**CLOSED 2026-10-25** by `20ee9b25` (quick task 261025-j40), confirmed against the code on 2026-10-26 (`orchestrators/reconcile/apply.ts:1776-1780`). Disposition: fixed. `applyReconcileWithReader` now reports the collected scope passes, the post-commit warnings, and the MCP config notices before it rethrows. Scenarios: "Apply that an invalid GitHub base address stops reports the install it made before stopping" (`features/plugin/apply.feature`) and "An autoapply session that an invalid GitHub base address stops reports the install it made before stopping" (`features/plugin/autoapply.feature`); the MCP move is covered by a unit test.
+
+Found by the phase 30 code review (round 2, WR-01), accepted open. When the
+apply step throws mid-pass (GHB-03: an invalid
+`PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`), `applyReconcileWithReader` discards
+the outcomes it collected, so installs and enables that committed before the
+throw get no row and no `/reload` trailer. Under autoapply, a one-time MCP
+migration notice that committed before the throw is also lost, because the
+read-only rerun finds nothing left to move. `/claude:plugin apply` behaves the
+same today. Fix: report the collected scope passes (`notifyScopePasses`)
+before rethrowing, and test an install plus an MCP move that commit before the
+throw.
+
+## DBLEMIT-01: every load row prints twice in a new session
+
+Found in lifecycle-coverage phase 17 (notes line 151), still open at 0d04bfa6. Pi's RPC `new_session` binds the extension twice, so `resources_discover` runs twice and every row a load reports appears two times. The cucumber scenarios pin the doubled rows, for example the two identical `reconcile-applied-cascade` results in `features/plugin/reconcile.feature:132-140`. Since APL-03 a load prints the whole pending block whenever the configuration and the records differ, and the stale-declarer warning (STALE-DECLARER-01) prints in every session, so the user sees the duplicates often.
+
+Decision: report it to Pi, add a dedupe in the extension, or accept it. Claude Code is not involved: the cause is in the Pi host.
+
+Recommendation (triage, 2026-10-26): report the double load to Pi with a minimal reproduction (one extension that counts its `resources_discover` calls in a new RPC session). Do not add an extension-side dedupe first. A dedupe hides a host bug and needs state that lives across two bindings. When Pi fixes it, change the doubled rows in the scenarios.
+
+## ~~IMPNAME-01: `import` fails `{duplicate name}` for a marketplace recorded under another name~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 6 (PR #286). Disposition: fixed. Import reuses the recorded source silently and each `p@<settings name>` fails as not added, as Claude Code does (D-PL6-17, D-PL6-18; D-PL6-02 and D-PL6-10 superseded).
+
+
+Found in lifecycle-coverage phase 19 (notes line 169, deferred there). `planMarketplaceSourcesForRefs` in `orchestrators/import/marketplaces.ts:98-129` plans each marketplace by its settings name only. If the scope already records the same source under a different name, the add fails with `{duplicate name}`. No scenario covers it.
+
+Decision: adopt the recorded name for the settings key, keep an alias from the settings name to the recorded name, or refuse with a clear remedy. Claude Code keys `extraKnownMarketplaces` by name, but its behavior for this case is not verified.
+
+Scope when picked up: research upstream first with `.agents/skills/claude-code-compat-research` (what Claude Code does when a settings marketplace names a source it already knows under another name). Then decide, and add a scenario under `features/plugin/import.feature`.
+
+## ~~IMPEXTRA-01: `import` adds an `extraKnownMarketplaces` entry only when an enabled plugin uses it~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 6 (PR #286). Disposition: fixed (D-PL6-01, D-PL6-08).
+
+
+Found in lifecycle-coverage phase 13 (notes line 296). `planMarketplaceSourcesForRefs` (`orchestrators/import/marketplaces.ts:98-129`) walks the enabled plugin references only. An `extraKnownMarketplaces` entry that no enabled plugin references is never added.
+
+Decision: add every listed marketplace, or only the referenced ones. Claude Code is believed to register every listed extra marketplace (it offers them when the user trusts the folder), but this is not verified.
+
+Scope when picked up: research upstream first with `.agents/skills/claude-code-compat-research`. If upstream adds every entry, match it (the parity rule in AGENTS.md) and add an import scenario for an unreferenced entry. If it does not, record the finding here and close.
+
+## ~~CLOSUREROW-01: a failed install closure gives no row to the members that resolved~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 3 (PR #283). Disposition: fixed for the walk, constraint and member-ledger routes (D-PL3-01 to D-PL3-03). The root-ledger, plan-step and mid-walk routes (D-PL3-15) moved to Phase 10 (CAS-08).
+
+
+Found in lifecycle-coverage phase 3 review (IN-02, notes line 287). `03-REVIEW-FIX.md:25` left it to the orchestrator, and no decision recorded it. When one member of a dependency closure fails, the result lists the root and the failing member, but no row for the members that resolved. In `features/plugin/install-dependencies.feature:84-87` the rows are `app` and `base`, and `lib` has none. `:139-142` has no row for `mid`.
+
+Decision: give each resolved member a row (for example `(failed) {dependency failed}`, or a skipped row), or record the omission as a decision. Claude Code's output for this case is not checked.
+
+Recommendation (triage, 2026-10-26): give resolved closure members a row. INS-01 says the install reports each member, and today the user cannot tell from the result that `lib` was part of the plan. Check the upstream wording with `.agents/skills/claude-code-compat-research` before choosing the token, and add the rows to the two scenarios.
+
+## ~~ENDEPS-01: the enable closure reads dependencies from the catalog, not from the installed plugin~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 2 (PR #282). Disposition: fixed (`60773ccf`). The enable closure reads an installed git plugin's copy (D-PL2-06, D-PL2-22, D-PL2-23).
+
+
+Found in lifecycle-coverage phase 2 (notes line 293). The enable cascade gets each member's declarations through `readRecordDeclarations` (`orchestrators/plugin/dependency-index.ts:249-262`, called from `enable-disable.ts`). It reads the marketplace's current manifest and uses the installed copy only for a plugin the marketplace no longer lists (DLS-01). Claude Code reads the installed `plugin.json`. No scenario covers a catalog whose declarations differ from the installed copy. No divergence ID covers it.
+
+Decision: match upstream, or record a divergence ID.
+
+Recommendation (triage, 2026-10-26): match upstream. Read the declarations of an installed record from its installed copy, as DLS-D1 already does for a delisted plugin. Add an enable scenario where the marketplace changed a plugin's dependencies after the install. Check the effect on the other `readRecordDeclarations` callers (see STALE-DECLARER-01) before changing the shared reader.
+
+## ~~CLONEGC-01: clone cleanup runs after the state lock is released~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 7 (PR #287, GLK-03). Disposition: fixed (D-PL7-05, D-PL7-13).
+
+
+Lifecycle-coverage phase 26 review WR-03 (deferred, pre-existing, `26-REVIEW-FIX.md:34`, notes line 499). `uninstall`, the update swap, `marketplace remove`, and `apply` call `garbageCollectPluginClones` after the guard releases the lock (`orchestrators/plugin/uninstall.ts:1155`, `orchestrators/marketplace/remove.ts:1238`, `orchestrators/reconcile/apply.ts:1479`). The cleanup can delete a mirror that a locked `fetch`, `info --fetch`, or `install` is using, or a fresh copy between update's preflight and its swap.
+
+Fix: run the clone cleanup under the lock. Add a unit test with a second operation that holds the lock while the cleanup runs.
+
+## ~~TAGCOPY-01: a marketplace-tag-pinned update copies the marketplace git data without the lock~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 7 (PR #287, GLK-04). Disposition: fixed (D-PL7-06).
+
+
+Lifecycle-coverage phase 26 review WR-05 (deferred, `26-REVIEW-FIX.md:39`, notes line 500). When `update` materializes a path plugin pinned to a marketplace tag, it copies the marketplace `.git` with no state lock held. A concurrent `marketplace update` can change that directory during the copy.
+
+Fix: take the lock for the copy, or copy from a snapshot that no other command writes.
+
+## ~~FETCHROW-01: `fetch` and `info --fetch` read their result row after the lock is released~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 7 (PR #287, GLK-05). Disposition: fixed (D-PL7-07).
+
+
+Lifecycle-coverage phase 26 review WR-06 (deferred, `26-REVIEW-FIX.md:41`, notes line 501). `fetchOne` (`orchestrators/plugin/fetch.ts`) refreshes the mirror under `withExistingScopeLock`, then reads the mirror tree for its row after it releases the lock. Another command can change the mirror in between, so the row can show a revision other than the one fetched. Display only: nothing is written from that read.
+
+Fix: read the row data inside the lock.
+
+## ~~INTENTMS-01: two update intent marks in the same millisecond write the same stamp~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 7 (PR #287, GLK-06). Disposition: fixed (D-PL7-08).
+
+
+Lifecycle-coverage phase 18 review WR-04 residual risk (`18-REVIEW-FIX.md:66`, notes line 492). The ST-9 concurrency check in `orchestrators/plugin/update-swap.ts` compares the record's `updatedAt` with the stamp the run read. Two processes that mark the same plugin inside one millisecond write the same `updatedAt`, so the check can miss the other run.
+
+Fix: make the intent mark unique (for example a random token beside the timestamp) and compare that. Low probability.
+
+## ~~AGIDX-01: a forced agents commit removes an index row the user named by hand~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 1 (PR #281). Disposition: fixed. A forced agents commit replaces only the rows its own staging produced (D-PL1-15).
+
+
+Lifecycle-coverage phase 18 known gap (`18-01-SUMMARY.md:46`, MILESTONE-AUDIT tech debt, notes line 492). `commitPreparedAgents` with `force` (reinstall, RINST-01) replaces this plugin's preserved agent files and drops their rows from `agents-index.json`. A row that the user added by hand for a file inside the agents directory is removed with them.
+
+Fix: drop only the rows the plugin's own staging produced, and add a unit case in `test/bridges/agents/stage.test.ts` with a hand-named row.
+
+## ~~CASCREASON-01: the autoupdate cascade falls back to `{not in manifest}` for an unclassified error~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 7 (PR #287, GLK-02). Disposition: fixed (D-PL7-04, D-PL7-12).
+
+
+Lifecycle-coverage milestone audit, tech debt (cross-phase integration check). `reasonsFromTypedError` in `orchestrators/plugin/update-flow.ts:777-810` maps the typed errors and errno codes, then returns `["not in manifest"]` for every other error. It also skips the git-host classification. The direct update path falls back to `{unreadable manifest}` instead. So in the autoupdate cascade the token can mean a real catalog drop or an unclassified crash, the same fault IMP-09 fixed for import (`orchestrators/import/execute.ts:219-224`). The audit found no concrete flow that reaches the fallback with a classifiable cause.
+
+Fix: classify git-host failures the way the direct path does, and use the direct path's fallback (or a bare `(failed)` with the cause, as IMP-09 does). Unit-test the fallback arm.
+
+## ~~ENTRYVER-01: `fetch`, completion, and `browse` show the marketplace entry version~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 7 (PR #287, GLK-07). Disposition: fixed for completion and `fetch`; `browse` already used `list`'s builders (D-PL7-09, D-PL7-15 to D-PL7-17).
+
+
+Lifecycle-coverage milestone audit, tech debt. VER-01 and VER-02 give `install`, `list`, and `info` one version rule (the declared version, `plugin.json` before the marketplace entry, then `sha-<12hex>`). Three surfaces still print the entry's `version` field:
+
+- `orchestrators/plugin/fetch.ts:440` and `:565` (the `fetch` rows);
+- `orchestrators/edge-deps.ts:172` (tab completion data);
+- `edge/browser/plugin-browser.ts:376` (the `browse` description).
+
+So `fetch` and `browse` can show a version that `list` and `info` do not. Fix: route the three through the same version helper as `list`, and add a `fetch` scenario for a plugin whose `plugin.json` and entry disagree.
+
+## LCHARN-01: cucumber harness hardening left by lifecycle-coverage
+
+Small fixes to the step library and the harness under `features/`. None changes product behavior.
+
+- Network guard (phase 1 WR-06, notes lines 41 and 369): nothing fails a scenario when Pi connects to a host other than 127.0.0.1. Only `PI_OFFLINE=1` (`test/e2e/_rpc.ts:190`), `--offline`, the GitHub base-URL override, and the NFR-5 lint rule limit it. A real guard needs a socket-wrapping preload through `NODE_OPTIONS` in `test/e2e/_rpc.ts` (shared with e2e), a report channel per scenario, and a plan for `git credential` child processes, which the preload does not cover. `01-VERIFICATION.md:205,211`.
+- Phase 1 review IN-03..IN-06 (notes line 375): `features/lib/git-clones.ts:84-100` ("holds no git clones") ignores `sources-staging/` and `sources/` folders without `.git`; `features/step_definitions/plugin/installation.steps.ts:213-235` lists data directories with `isFile` only, so empty folders and symlinks are not seen; `features/lib/run-tokens.ts:58-69` passes an unknown run token through unexpanded instead of throwing; `.agents/skills/cucumber/rules/world-and-stand-ins.md:14` says the "serves … again" Given can follow a When, which `rules/features.md:41` forbids.
+- The installation-record step projects no `{<repo> revision N}` tokens, so a git version cannot be stated through it, and `holds these git clones:` prints an empty revision for an unpinned mirror (`features/step_definitions/plugin/installation.steps.ts:202-210`, `:244`; notes line 401).
+- The install-retry seed in `features/plugin/install-rollback.feature:37-54` uses two `When` steps (notes line 405).
+- `features/plugin/list.feature:74-626` copies one 42-line fixture into 10 scenarios. Move them to `list-filters.feature` with a `Background:` (phase 9 WR-03, notes line 394).
+- Flake: `test/edge/handlers/plugin/browse.test.ts:449` and `:511` wait a fixed 50 ms. One run failed under heavy load (notes line 425). Wait on the event instead.
+
+## LCTEST-01: behavioral and unit test gaps left by lifecycle-coverage
+
+Each item is behavior that works today but that no scenario (or no unit case) proves. A regression in one of them passes every gate.
+
+Cucumber scenarios:
+
+- No scenario has a `, `-joined range on an `update` cause line. Only unit tests cover it (milestone audit, phase 25; notes lines 53 and 508). Add one to `features/plugin/update-dependencies.feature`.
+- No post-swap update failure is exercised. The path is not rolled back by design (update-swap D-03, `rollback partial` plus the reinstall hint), and only `update-flow.test.ts` and `update-swap.test.ts` reach it (notes line 386).
+- Already-enabled root plus a missing dependency (skipped, not refused, phase 2 D-09) has no scenario in `features/plugin/enable.feature` (notes line 389).
+- No `list` scenario shows a `partially-upgradable` row (`orchestrators/plugin/list.messaging.ts:37`, notes line 396).
+- The prune keep-dependency scenario (`features/plugin/prune.feature:84-101`) does not check that `claude-plugins.json` still declares the kept plugin (notes line 384).
+- `apply` failed-install scenario (`features/plugin/apply.feature:134`) could also carry an uninstall and a disable in the same edit (REC-04, notes line 397).
+- Bare `fetch` that continues after one failure has no scenario. Only the `@<marketplace>` form does (`features/plugin/fetch.feature:124`, notes line 399).
+- `features/marketplace/usage-errors.feature` has no rows for the `rm` and `ls` aliases (notes line 407).
+- The url-source invalid-JSON failed add (`features/marketplace/failed-add.feature:79-97`) has no record check and no retry (phase 15 WR-03, notes line 418).
+- Autoapply at load uses stored credentials only, with no Device Flow (D-13). Unit tests only (notes line 546).
+- The migration before a base-file set is unit-tested only, because the harness cannot record an installed plugin without `install` writing the base configuration (notes line 547).
+- The dependency closure of a tag update that lands (CR-04) is unit-tested only, because the step library cannot give a tagged revision dependencies (notes line 554).
+- Phase 29 review IN-03: the "nothing to change" `apply` scenario does not prove that `apply` writes nothing (`29-REVIEW-DISPOSITION.md`, notes line 537).
+
+Unit tests:
+
+- The import re-enable arm with `{rollback partial}` (`orchestrators/import/execute.ts:1197`) has no case. Only the root-install case exists (`test/orchestrators/import/execute.test.ts:1555`; phase 27 WR-02, notes line 56).
+- Phase 21 WR-06 (notes line 69): the MPA-01 standalone skip test (`test/orchestrators/marketplace/add.test.ts:1274`) does not check the completion cache, and the project-scope tokens and the update raw-error cascade arm have no case.
+
+## ~~LCCODE-01: dead, duplicated, and loosely typed code left by lifecycle-coverage~~ -- CLOSED
+
+**CLOSED 2026-10-28** by the plugin-lifecycle milestone, Phases 4-6 and 11. Disposition: fixed. D-PL4-05, D-PL4-06, D-PL5-19, and D-PL6-06 close b2, b3, b6, and b7. `11-01-SUMMARY.md` closes the dead seams and optional outcome fields. `11-02-SUMMARY.md` shares the message builder and declarer filter. `11-03-SUMMARY.md` and `11-11-SUMMARY.md` consolidate ordinary held-lock fixtures. `11-04-SUMMARY.md`, `11-07-SUMMARY.md`, `11-08-SUMMARY.md`, and `11-10-SUMMARY.md` close the misplaced helper, prototype-read pin, stale comment, long literals, and test-only deferred-pin option.
+
+Cleanups with no user-visible effect.
+
+- Dead code: `createDelegatingRemovalOps` (`test/platform/removal-ops-fake.ts:179`, no importer) and `CheckoutOptions.force` (`platform/git.ts:109`, set only by `test/platform/git.test.ts:380`). Phase 26, notes line 503.
+- Unread field: the `no-matching-tag` outcome's `range` (`orchestrators/plugin/install-cascade.ts:803-810` returns the declared range, and the probe's own `range` at `dependency-tag-probe.ts:66` and `release-tag.ts:112` is never read). Phase 27 IN-01.
+- Undeclared field: the failed arm of `InstallMissingDependencyOutcome` (`orchestrators/plugin/install-flow.ts:2943-2952`) has no `rollbackPartials`, but the object is spread from `handleCaughtInstallFailure`, which sets it. Phase 27 IN-03.
+- Optional fields that can drop a value without an error: `InstallPluginOutcome.version` is optional (`orchestrators/types.ts:722`, phase 13 WR-03), and `buildReconcilePendingNotification` defaults `recordedVersions` to an empty map (`orchestrators/reconcile/notify.ts:698`), so a new caller that omits it loses the `will uninstall` versions (milestone audit).
+- Duplicates: the `marketplace-not-added` row builder (`orchestrators/plugin/list-flow.ts:803`, `plugin/info.ts:3150`, `marketplace/info.ts:141`); the two "enabled declarers" filters (`orchestrators/plugin/enable-disable.ts:1567-1574` inline, `withoutDisabledHolders` in `dependency-index.ts:387`, phase 23 IN-02); the lock-holding test helpers (`whileLockHeld` and `lockHeldCause` in `test/orchestrators/marketplace/{add,remove}.test.ts`, `holdStateLock` in `mcp-migration.test.ts`, inline `lockfile.lock` in 7 test files, phase 15 IN-01).
+- `marketplace add`'s no-op returns `status: "added"` internally (`orchestrators/marketplace/add.ts:1091`, phase 21 IN-02). The standalone path discards it.
+- The import enable outcome carries the companion facts twice, as `declaresAgents/Mcp/Workflows` and as `enableSignals` (`orchestrators/import/execute.ts:1185-1192`, phase 24 IN-03).
+- `rejectUnknownFlag` lives in `edge/handlers/shared.ts:170`, but only plugin handlers call it (phase 14 IN-05).
+- `test/orchestrators/marketplace/add.test.ts:3063` pins the `instanceof` prototype read count (`prototypeReads, 6`). A count-free double needs a design (phase 15 IN-04).
+- The IMP-09 comment sits above the REC-06 test (`test/orchestrators/import/execute.test.ts:1552-1555`, phase 27 IN-04).
+- Two template literals in `orchestrators/plugin/update-preflight.ts:795` and `:887` pass 100 columns (phase 25).
+
+## ~~LCORCH-01: small orchestrator gaps left by lifecycle-coverage~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phases 1, 2, 5, 6 and 7. Disposition: every bullet fixed. b1 `marketplace add` classification (D-PL5-16 to D-PL5-18); b2 rollback-partial detail (D-PL6-03 to D-PL6-05, D-PL6-11 to D-PL6-13, D-PL6-20); b3 `update` MCP notices for dependencies (D-PL1-16); b4 reinstall regressions (D-PL1-17, D-PL1-18); b5 tag-ref reinstall offline (D-PL7-10); b6 installed-copy containment (D-PL2-12, D-PL2-17, D-PL2-23, D-PL2-24).
+
+
+Each item changes what a user sees or what a command does in an edge case. None was judged worth its own entry.
+
+- `marketplace add` outcome classification (phase 21): `unparseable` is both the malformed-manifest token (`narrowProbeError`, `orchestrators/marketplace/add.ts:316-321`) and the orchestrated catch-all (`add.ts:946-956`), so `apply` and `import` cannot tell a broken manifest from a crash (WR-05). `already added` checks state and configuration only, not that the clone still exists (`redeclareRecordedSource`, `add.ts:479-516`), so a deleted clone reads as added and is not repaired. `errorAddReason` (`add.ts:334-347`) maps ENOENT and ENOTDIR only, so EISDIR on a standalone add is a raw exception, while `list` and `info` say `unreadable` (`marketplace/shared.ts:866-869`).
+- Rollback-partial detail (phase 27, deferred D-06, WR-01, WR-04): `import` shows `{rollback partial}` without install's per-phase child rows, and passes only a boolean `rolledBackPartial` (`orchestrators/import/execute.ts:1074`, `:1197`). In an import cascade a dependency's partial rollback stays `{dependency failed}` on the root, so the user is not told files may remain. Reconcile's failed-install row shows no rollback-partial token.
+- `update` shows no MCP notices for the dependencies it installs (update-dependencies quick tasks, notes line 555).
+- Reinstall regressions from the update/reinstall merge (phase 18): the reinstall outcome arms in `orchestrators/types.ts` lost `resourcesChanged`, and the completion cache is dropped twice per reinstall (`update-swap.ts:1632`, `reinstall-flow.ts:454`). User effect not verified.
+- Reinstall of a tag ref refreshes over the network even with a warm mirror, because `resolveFetchedRefOffline` (`orchestrators/plugin/clone-cache.ts:519-535`) resolves only `refs/remotes/origin/<ref>` (phase 18 CR-02). NFR-5 allows it, since the plugin is not sha-pinned. It needs an offline tag-resolve helper.
+- Installed-copy containment for a delisted plugin accepts the marketplace clone or `plugin-clones/` whatever the source kind, and follows symlinks (`orchestrators/plugin/dependency-declaration-read.ts:346-358`, phase 28 IN-03). An NFR-10 hardening.
+
+## ~~LCDOC-01: docs and CHANGELOG gaps left by lifecycle-coverage~~ -- CLOSED
+
+**CLOSED 2026-10-28** by the plugin-lifecycle milestone, Phase 11. Disposition: fixed and reconciled against the passing Phase 10 tree. `11-05-SUMMARY.md` records the Phase 1-9 reader docs, NFR-5 policy, architecture chokepoints, and D-PL11-01 through D-PL11-03. `11-12-SUMMARY.md` closes the six feature descriptions. Phase 10's CAS-08, MIM-05, and source-replacement corrections are recorded in CHANGELOG, the PRD, the output catalog, D-PL3-03, D-PL6-03, and D-PL6-19. `features/plugin/apply.feature` and `10-VERIFICATION.md` provide the tracked behavioral and final-gate evidence.
+
+- `CHANGELOG.md` `[Unreleased]` (combined in `f6e1f13f`) does not tell users about these behavior changes (notes lines 320, 330, 338, 420):
+  - install, enable, disable, update, reinstall, `marketplace add`, and `marketplace remove` now fail as `lock held` with the lock's cause (phase 15);
+  - a surplus argument now reads `Too many arguments.` and an unknown flag `Unknown flag: "<flag>".` across `list`, `ls`, `pending`, `import`, `bootstrap`, `browse`, and `help`, and a failed `bootstrap` renders the `marketplace add` failed row (phase 14);
+  - `list <marketplace>` fails as not added for an unknown marketplace, and `--scope` shows a block per scope (phase 9). Also check the phase 5, 10, and 13 product fixes.
+- `list` docs lag the phase 9 behavior: `docs/prd/pi-claude-marketplace-prd.md:355` (PL-3) is unchanged, and `docs/output-catalog.md` has no `list <unknown marketplace>` state. `features/plugin/list.feature:627-652` pins the behavior.
+- Stale comments and docs from before APL-D1 (phase 29 review IN-02): `orchestrators/reconcile/dependency-verdict.ts:37` says the walk "disables it on the next reload", and `docs/output-catalog.md:2557` describes a "Load-time install failed" state, but a load changes nothing now. The other deferred phase 29 info items (IN-01, IN-04, IN-05, IN-07, IN-08, IN-09 in `29-REVIEW-DISPOSITION.md`) were not re-checked. IN-07 and IN-09 may be superseded by APPLY1-D1.
+- Phase 18 behaviors with no Key Decision row in `.planning/PROJECT.md`: `update --partial` records the plugin as not installable (consented partial), an occupied agent name fails before the intent mark, and the recovery hint `Run /claude:plugin reinstall <p>@<m> to repair it.` The hint and the order are documented in `docs/output-catalog.md:1932-1937`. Record IDs if the user wants them.
+- Six feature files have a four-line description, where `.agents/skills/cucumber/rules/features.md:27` allows two or three: `features/plugin/{cross-scope-install,autoapply,git-source-update,reconcile,update-dependencies,update-rollback}.feature`.
+
+## ~~PENDMOVE-01: `pending` lists a disable that `apply` does not make~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 2 (PR #282). Disposition: fixed. `pending` lists the moves and the install and no disable, and `apply` makes them in that order (D-PL2-01, D-PL2-02, D-PL2-03).
+
+
+Found by quick task 261026-c06. A plugin's move waits on a moved dependency
+whose new version needs a plugin MISS-01 installs. `pending` lists the plugin
+as `(will disable)`, but `apply` moves it. The bug predates that quick task.
+`pending` should show the move that `apply` makes.
+
+## ~~MISSORDER-01: MISS-01 runs before the catalog moves in `apply`~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phase 2 (PR #282). Disposition: fixed. `apply` runs MISS-01 after the catalog moves (D-PL2-01, D-PL2-03).
+
+
+Found by quick task 261026-c06. `apply` installs missing dependencies (MISS-01)
+before it runs the catalog moves. A missing dependency that needs a version the
+same `apply` moves to fails to install. Example: the new dependency needs
+`ycore@^2`, but ycore is still at 1.0 when MISS-01 runs. The dependent is then
+disabled with "Install …" until the next `apply`.
+
+Needs a decision: run the moves before MISS-01, or repeat MISS-01 after the
+moves. Related: APPLY1-01 (two `apply` runs for a co-released dependency).
+
+## ~~UPDDEP-01: leftovers from the UPD-DEP-D1 dependency resolver reviews~~ -- CLOSED
+
+**CLOSED 2026-10-28** by the plugin-lifecycle milestone, Phases 2-4 and 11. Disposition: b1-b3 and b6 fixed; b4-b5 closed by recorded upstream decisions; b7 fixed by the install-flow split. Evidence: D-PL4-01, D-PL3-11, D-PL2-06, D-PL4-02, D-PL4-03, D-PL4-04, D-PL4-08, and `11-13-SUMMARY.md`. The six owner suites are `test/orchestrators/plugin/install-flow.test.ts`, `test/orchestrators/plugin/install-flow-planning.test.ts`, `test/orchestrators/plugin/install-flow-ledger.test.ts`, `test/orchestrators/plugin/install-flow-cascade-context.test.ts`, `test/orchestrators/plugin/install-flow-results.test.ts`, and `test/orchestrators/plugin/install-flow-dependency-ledger.test.ts`.
+
+The four reviews of the update-dependency work (1daa12d0..fdb584a6) left these
+open. None changes a result a user relies on.
+
+- An unpinned git dependency installed fresh is resolved twice over the
+  network, once by the plan's preview and once by the install. The second fetch
+  can land a revision the plan never previewed. Fix: hand the previewed commit
+  to the install run. NFR-5 allows the extra fetch.
+- The offline refusal of an install that would move a git dependency gives no
+  next step. A hint to run `update` on the dependency needs the source kind at
+  the judge.
+- The update preflight reads other installed plugins' ranges from the catalog
+  version, not from the version installed. This predates UPD-DEP-D1 and is
+  shared with `pending`.
+- The plan previews dependencies that `apply` installs in its own later step,
+  so one bad dependency refuses the root plugin before its moves land. Whether
+  it should is a product choice.
+- The resolver is a greedy search with permanent exclusions, not a complete
+  solver: a conflict two moved dependencies cause together excludes a version
+  from the first that still has one left. A solvable graph can be refused.
+- Agent-target refusals still run in the update swap, after earlier moves have
+  landed (documented in UPD-DEP-D1). The check needs the swap's staged files.
+- `orchestrators/plugin/install-flow.ts` is about 3,700 lines. The planning
+  ports use too many of its private helpers to move out cheaply.
+
+## ~~PARITYGV-01: four small Claude Code differences left by the version parity work~~ -- CLOSED
+
+**CLOSED 2026-10-27** by the plugin-lifecycle milestone, Phases 2 and 3 (PRs #282, #283). Disposition: b1 closed as decided (D-PL3-07); b2 fixed for cascade members (D-PL3-08, D-PL3-13); b3 fixed (D-PL3-09, D-PL3-10 reversed by quick 261027-8h9); b4 closed as decided (D-PL2-11).
+
+
+Quick task 261026-dpt (ece42b45) kept these on purpose. Claude Code 2.1.310
+evidence is in that task's SUMMARY.
+
+- `list` marks git-source plugins upgradable (PL-5). Claude Code computes an
+  available version only for relative-path and `claudeai` entries, so it shows
+  no upgrade state for git sources.
+- A refusal for a non-root cascade member names only the first declarer that
+  reached it. Claude Code names every member that declared a range
+  (`required by "a", "b"`). Fixing it changes the closure-member shape that
+  many tests compare exactly.
+- Claude Code truncates names and ranges at 120 characters in these refusal
+  messages. This extension bounds ranges its own way.
+- `apply` shows a failed row when MISS-01 refuses a missing dependency. Claude
+  Code's `resolveMissingDependencies` only logs it. The row matches how `apply`
+  reports every other change; changing it is a product decision.
+
+## DECLREC-01: a path-source record keeps no dependency declarations of its own
+
+Proposed by plugin-lifecycle Phase 2 (02-02, D-PL2-07). Record each install's
+dependency declarations in `state.json`, so that path-source records keep
+theirs. Then the load verdict and the uninstall guard can move to installed
+declarations for full Claude Code parity (E2).
+
+## GITROOTDEPS-01: a cold-cache git install ignores its own `plugin.json` dependencies
+
+Proposed by plugin-lifecycle Phase 2 (02-02). The install cascade reads the
+root from the warm clone cache only, before the root is cloned, so a git-source
+plugin installed on a cold cache installs without the dependencies its own
+`plugin.json` declares. Claude Code reads the installed manifest. Details:
+`.planning/phases/02-apply-ordering-and-installed-declarations/deferred-items.md`.
+
+**CLOSED 2026-10-29** by the plugin-lifecycle milestone. Disposition: fixed.
+The install previews the requested plugin before the dependency walk and pins
+the ledger to the previewed commit. The owner test and Cucumber scenario cover
+a cold pinned git root whose marketplace entry declares no dependencies.
+
+## PROTOSRC-01: `list` and `info` show `{unsupported source}` for a `__proto__` plugin
+
+Deferred by plugin-lifecycle Phase 3 (03-02, CONTEXT Deferred Ideas).
+
+## MOVEREFUSE-01: refusals that still come after a dependency move landed
+
+Proposed by plugin-lifecycle Phase 4 (04-06). D-PL4-04 moved the agent-target
+refusal before any move, but these still come after earlier moves land:
+
+- A workflow target refuses (`Cannot replace workflow target with non-previous content`) in a move's swap.
+- A disabled dependency that the plan re-enables runs the install ledger again, and its agents commit can refuse an occupied target.
+- The plan previews fresh nodes only.
+
+## AGTARGET-01: the agent-target rule has two copies
+
+Proposed by plugin-lifecycle Phase 4 (review WR-03). `bridges/agents/target-check.ts`
+repeats the agents commit's target rule from `stage.ts`
+(`assertAgentCommitTargets`), and no test runs one fixture through both. Share
+the predicate or add a parity test.
+
+## MKTNAME-01: reserved-name rules not yet ported
+
+Proposed by plugin-lifecycle Phase 5. D-PL5-27 and D-PL5-28 (quick tasks
+261027-92u, 261027-a3p) ported every MKTNAME-01 rule but these:
+
+- The plugin-id rule `K$` and the remaining schema rules: the `Claude Code cannot install plugins from a marketplace with this name` sentence (2.1.295+), the no-spaces message, the control and bidirectional-character message, and the path-separator and `..` rules.
+- `marketplace list` quoting of look-alike and non-ASCII names.
+- The commands D-PL5-28 divergence (g) leaves ungated: `pending`, `apply` planning, `plugin update` with its PUP-2 sync, `reinstall`, `fetch`, and completions.
+
+## HOSTED-PUP-01: `plugin update` does not refresh a hosted catalog
+
+Proposed by plugin-lifecycle Phase 5 (D-PL5-22). The PUP-2 marketplace sync in
+`orchestrators/plugin/update-flow.ts` reads a hosted marketplace's stored copy.
+Widening it changes the NFR-5 wording too.
+
+## HOSTED-DNS-01: the hosted redirect check reads host text only
+
+Proposed by plugin-lifecycle Phase 5 (D-PL5-31). A DNS name that resolves to a
+loopback, link-local, or metadata address passes the cross-origin redirect
+check, as in Claude Code. Closing it needs a pinned-address lookup, which the
+`no-network-modules` rule (IL-4 / NFR-5) bans today.
+
+## HOSTED-REL-02: hosted relative entries outside the resolver's wired surfaces
+
+Proposed by plugin-lifecycle Phase 5 (quick 261027-ckr, D-PL5-32 divergences c and d):
+
+- A load-time warning for an installed plugin whose hosted entry later names a relative path. Claude Code fails to load it.
+- The surfaces left ungated: tab completion, the pending force-install preview, the installed row's upgradable hint in `plugin list`, and `plugin fetch`.
+
+## FORCEREMOVE-01: `forceRemoveDeletedPlugins` is not honored
+
+Proposed by plugin-lifecycle Phase 6 (06-06, quick 261027-9jj). Claude Code's
+marketplace setting that removes plugins a marketplace delists is not ported
+anywhere: `import` (D-PL6-19), reconcile, and `marketplace update` ignore it.
+
+## GLKRES-01: git and lock residue left by plugin-lifecycle Phase 7
+
+Proposed by plugin-lifecycle Phase 7 (07-10).
+
+- Candidate-clone window: update, reinstall, and converge create the candidate clone in preflight and record it only at finalize, so a locked GC from another process can delete it. Record the key in the intent mark, or hold one lock from copy to finalize.
+- Unlocked install preview: `previewInstall` reaches the tag copy and the mirror refresh with no lock.
+- Unlocked `sources/<name>` deletes and seeding: `marketplace/remove.ts` and `carried-marketplace-adds.ts` delete with no lock, and `seedSameRepoPluginMirrors` copies after the lock.
+- A mirror first cloned for another plugin's branch ref holds no `refs/tags/<ref>`, so D-PL7-10's offline resolve misses there. `tags: true` would fix it.
+- `apply`'s catalog-move row drops `outcome.cause` (`reconcile/notify.ts`), while the autoupdate row shows it.
+- The `shared/notification-types.ts` comment that limits `network error` to marketplace refresh and add needs widening to plugin clone accesses.
+- `bridges/skills/stage.ts` passes the raw `cp` error up, whose Node 26 message names a random `skills-staging/<uuid>` path. A `BridgeStagingError` wrapper would make the cause actionable.
+
+## AUTOUP-02: background autoupdate leftovers
+
+Proposed by plugin-lifecycle Phase 8 (08-04). Retry a marketplace that another
+process held within one runtime, and show a waiting line while a command waits
+on the gate. The tui scenarios for the pass are Phase 10's (XPH-01).
+
+## MISSSTEP-01: the missing-dependency step drops some rows
+
+Observed by quick task 261027-9oq, not changed:
+
+- An invalid layer config gives no row from the add-time or autoupdate step (`read.invalidOutcomes` is dropped), while `apply` reports it.
+- A GHB-03 from a plugin update inside the autoupdate cascade drops the rows of the updates before it, unlike D-PL2-21's step throw.
+- The rows of the dependencies the step installed before it threw are lost (the WR-02 limit).
+
+## STALESHA-01: enabling a legacy path record with a stale `resolvedSha`
+
+Observed by quick task 261027-cyg. Enabling such a record materializes it again
+at its stale pin (GIT-01 `recordedSourcePin`), which fails for a marketplace
+that is not a git checkout. An update repairs the record first (WR-01). A fix
+would teach the enable ledger to drop a pin whose `resolvedSource` lies outside
+`plugin-clones/`, the test D-PL2-23 uses.
+
+## PKGDEP-02: no load-time package diagnostic, and `update` does not retry the package install
+
+Proposed by plugin-lifecycle Phase 9. Claude Code 2.1.310 prints a load-time
+"packages not installed" or "packages refused" diagnostic and retries the
+package install of an up-to-date plugin on `update` (texts in 09-CONTEXT.md).
+Seams: `orchestrators/reconcile/load.ts` and the up-to-date path of
+`update-flow.ts`.
+
+## PKGDEP-03: npm output is not redacted for secrets
+
+Proposed by plugin-lifecycle Phase 9 (T-09-10), narrowed 2026-10-27. Claude
+Code redacts secrets in npm output. The lockfile check it also named landed as
+D-PL9-08 (reversed).
+
+## PKGDEP-04: no closed-set row reason for a package install that did not happen
+
+Proposed by plugin-lifecycle Phase 9 (D-PL9-14). The install, update, enable,
+reconcile, and reinstall rows carry the note only (09-RESEARCH.md section 7).
+
+## ~~PKGDEP-05: uninstall leaves the package step's node_modules in a kept clone~~ -- CLOSED
+
+**CLOSED 2026-10-27** by quick task 261027-b8d (`b3320aa2`), plugin-lifecycle Phase 9. Disposition: fixed. Uninstall, `prune`, and apply's uninstall remove a marked node_modules the package step wrote (D-PL9-22).
+
+Found by the Phase 9 review (WR-03): a kept clone's old node_modules made the
+next install skip the package step.

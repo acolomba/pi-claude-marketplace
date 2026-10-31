@@ -1,5 +1,281 @@
 # Milestones: pi-claude-marketplace
 
+## plugin-lifecycle Marketplace and Plugin Lifecycle Backlog (Shipped: 2026-10-29)
+
+**Pull request:** #290 (open; merge date and squash SHA pending)
+
+**Phases completed:** 11 phases, 80 plans, 121 tasks
+
+**Delivered:** Closed the 64-requirement marketplace and plugin lifecycle backlog across warning transport, reconciliation, dependency cascades, resolver pinning, marketplace and import parity, git failure and lock discipline, background autoupdate, package dependencies, lifecycle coverage, and final cleanup. The exact executable tree passes 1,151 Cucumber scenarios, 11,854 steps, 16 hooks, and 309 direct-coverage records.
+
+**Closeout:** Audit `tech_debt`, no blockers: 64/64 requirements, 11/11 phases, 12/12 integration groups, and 10/10 flows. HOSTED-DNS-01 remains accepted under D-PL5-31. [Roadmap](milestones/plugin-lifecycle-ROADMAP.md), [requirements](milestones/plugin-lifecycle-REQUIREMENTS.md), [audit](milestones/plugin-lifecycle-MILESTONE-AUDIT.md), and [phase records](milestones/plugin-lifecycle-phases/).
+
+<details>
+<summary>Generated phase accomplishments</summary>
+
+**Key accomplishments:**
+
+- `pending` now counts every planned install as present when it judges catalog moves, and lists moves, then missing-dependency installs, then the enables that wait on them, which is the order the reordered `apply` makes them in.
+- `enable` and `update` now read a git-source plugin's dependencies from the `plugin.json` of the commit it installed (its per-commit clone), as Claude Code reads the installed manifest, with the catalog read as the fallback for a copy that is gone or has no manifest.
+- `apply` now runs the missing-dependency install (MISS-01) after the catalog moves and the enables that wait on it after that install, so one `apply` makes the rows `pending` lists, in the same order, for both MISSORDER-01 and PENDMOVE-01.
+- The installed-copy dependency read now opens a record's copy only under the one clone root that owns the record (`plugin-clones/` when it has `resolvedSha`, the marketplace clone otherwise), and it refuses a manifest reached through a symlink inside the copy.
+- `marketplace add` now runs `apply`'s missing-dependency step over its own scope once the marketplace is recorded, installs the missing dependencies the added marketplace offers, and lists each one (or the refusal, as `apply` reports it) under the `(added)` header.
+- `bootstrap` now installs, through its add, the missing dependencies that the official marketplace offers, and a `marketplace update` with autoupdate on installs the missing dependencies of that marketplace's plugins after its plugin updates. The phase gate `npm run check` exits 0.
+- A catalog version quoted in a `{dependents constrain}` hold cause or a dependency move refusal is now cut to 64 UTF-16 code units plus `…`, through one `truncateForRefusal` helper that mirrors Claude Code's cut.
+- An install of a root whose `<plugin>@<marketplace>` id breaks the token rule now gets Claude Code's verdict in Claude Code's order: looked up first, `{not in manifest}` when unlisted, and `{invalid manifest}` with the verbatim invalid-id cause when listed.
+- A failed install now prints a cause-less `(failed) {dependency failed}` row for every dependency it would have installed and did not: on a walk failure, a version-constraint failure, and a dependency's own install failure. A dependency already reported by a moved row is not listed twice.
+- The Anthropic Directory pin refusal now names every plugin of the install that declared a range on the dependency, in Claude Code's order (`required by "app", "mid"`), and cuts the plugin name, the listed version, the joined ranges, and each requirer to 120 code units with `…`.
+- When an installed dependency cannot move into the range the named plugin declares, the refusal now ends with Claude Code's next step, `To look for a version in range, run /claude:plugin update <dependency>.`, for every source kind, including the offline git case.
+- D-PL3-06 (no propagation of a dependency's partial availability) and D-PL3-07 (git-source `list` rows keep their upgrade state) are recorded by ID, `docs/dependency-resolution.md` now describes everything the phase shipped, and `npm run check` exits 0 on the combined tree.
+- A partially failed `marketplace remove` now drops the deleted hooks from the kept plugin row: remove.ts calls the shared `applyPartialCascadeFold`, which maps all six unstage axes through one `satisfies`-typed table, so a new axis fails the typecheck until it is mapped.
+- `classifyGitFailure(error, rule, remoteUrl?)` now classifies every git host failure with a per-operation 404 rule. The three old named classifiers are one-call fixed-rule wrappers over it. `marketplace update` and `lacksStoredCredential` call it directly, and every rendered row and frame stays the same.
+- `update` now classifies a failure the same way on the direct path and in the autoupdate and converge cascades. A cascade row carries the cause on its git, errno, and fallback arms. A plugin update's github or url marketplace refresh reports a host HTTP status as `{network error}` with the `<status> on <url>` frame, the same as `marketplace update`.
+- `fetch` now reports a git host's HTTP answer the way `marketplace update` does: a 404/410 is `{source missing}`, any other non-auth status is `{network error}` (the 5xx-as-source-missing bug is fixed), and the cause leads with `<status> on <url>`. An unpinned fetch reads its row inside the same scope-lock body as the mirror refresh. Every fetch row that shows a version shows `list`'s version.
+- `info --fetch` now reads a git host's HTTP answer the way `fetch` does: a 404/410 names the plugin `{source missing}` and any other non-auth status `{network error}`, where both used to fall through to `{unreadable}`. On an unpinned source, the mirror refresh and the row read, component files included, run in one body under the scope's state lock.
+- The first message of a tui or rpc runtime now arms one delayed, unref'd pass that runs `marketplace update`'s refresh and cascade for each autoupdate marketplace, silently and one gate step at a time, while every `/claude:plugin` command waits for at most one background step.
+- The suite's RPC Pi harness now carries an optional `PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS` that only the run can set, the hermetic cases prove the four Claude Code opt-out variables and the delay never leak in from the shell, and `docs/env-vars.md` records the background update's opt-outs, delay knob, and per-marketplace default mapping.
+- A background update that moved plugins now raises one notice, `Plugin updated: demo · Run /reload to apply` (two names joined with "and", three or more counted), or in json/rpc one load-origin `background-update` entry with `needsReload: true` and one row per updated install; a pass that moved nothing, or whose runtime stopped, stays silent.
+- A cucumber Scenario Outline starts its own Pi with no background update delay, sends a plain message, and reads exactly one `background-update` result naming `demo` 1.0.0 -> 1.10.0 for dir, file, url, and github marketplaces; with the `input` listener removed, every row fails at the message step.
+- A contained plugin with package.json and a bun.lock, npm-shrinkwrap.json, or package-lock.json now gets Claude Code's frozen, script-free `npm ci` / `bun install` in a sources-staging work dir, as an eighth install-ledger phase between workflows and state. Failures and Claude Code's refusals become discoveryWarnings notes and never block the plugin.
+- A loopback npm registry stand-in with deterministic ustar/gzip tarballs drives the real Pi, extension, and npm 11 through three scenarios: a lockfile package lands in the plugin's `node_modules`, a 404 leaves the plugin installed with Claude Code's `Plugin dependency install failed (npm): no output` note, and a session start hook of the installed plugin loads the package.
+- A plugin that runs from the user's own folder now gets a note naming the exact `npm ci ...` or `bun install ...` command to run there, and the folder is never written. Every verb that lands an `updated` outcome through `materializeLatestVersion` now installs the new version's packages. A revision move replaces and, on failure, restores an existing node_modules. A same-revision reinstall keeps node_modules and stays offline. A failure adds a note and never fails the update.
+- Four new scenarios, one of them a three-row Outline, cover the rest of the package behavior through the real `/claude:plugin` command. A plugin of a dir marketplace installs with the D-PL9-03 note naming `npm ci ...` for its folder `pkp`, and npm gets no request. yarn.lock, pnpm-lock.yaml, and bun.lockb each install with Claude Code's refusal line, word for word. An update to 2.0.0 fetches only `/pkd-dep/-/pkd-dep-2.0.0.tgz` and leaves pkd-dep 2.0.0 alone in node_modules. A reinstall with an empty npm cache makes no request and keeps pkd-dep 1.0.0.
+- `npm run check`, run unpiped on the combined tree at `fb0feda0`, exited 0 on its first run: 910 cucumber scenarios passed, and direct coverage merged 293 records. No fix was needed. This SUMMARY holds everything the parent applies at merge: the CHANGELOG line, the D-PL9-01..17 rows with the NFR-5 amendment, the backlog dispositions, 32 uncertain choices, and the residue.
+- Lifecycle tests now fail closed on hidden filesystem state, synchronize browse loading by event, and seed every recorded marketplace with loadable manifests.
+- A real pseudoterminal now drives Pi's production TUI under the Cucumber sandbox, while complete TUI notices and registered-provider completion sets fail closed when no step compares them.
+- Root-ledger, dependency-plan, and mid-walk failures now list every resolved cascade member that did not install, while preserving typed errors and redacting row causes.
+- Apply now exposes missing-dependency rollback phases, converges changed marketplace sources through the locked add path, and import repairs the exact local layer that owns a stale source.
+- Lifecycle operations now retain typed warnings and index facts, redact failure paths before rendering, classify network failures consistently, and keep package-manager notes with the cascade member that produced them.
+- The remaining reachable lifecycle gaps now have complete command-surface assertions, no-op apply is proven byte-stable, and every retained unit-only behavior has an evidence-backed harness limit.
+- All 56 lifecycle test and cross-phase source items now map to exact automated evidence, with a clean full-project gate over the final combined Phase 10 tree.
+- Unused Git and removal-test seams are gone, while installed versions and pending recorded-version maps are now compile-time requirements.
+- Marketplace absence notifications and enabled reverse-dependent checks now use their existing shared rules without changing output bytes or order.
+- Lifecycle owner tests now acquire the real state lock through one fixture that preserves lock options, row text, and each caller's release lifetime.
+- Unknown-flag rejection now belongs to the plugin handler module, with every exact consumer and focused test migrated without changing diagnostics or parse order.
+- Lifecycle docs now match the shipped Phase 1-9 behavior, and the project records every allowed network, fetch, and child-process boundary with its decision ID.
+- A 3,879-line install owner is now a 71-line public root backed by typed planning and ledger leaves, with the integrated repository gate green.
+- Marketplace add now exposes an explicit unchanged result, and reconcile and import consume that no-op without manufacturing rows.
+- The last stale IMP-09 note now labels its owning regression, and both long update-preflight messages meet source style without changing their output.
+- The final docs now match the verified Phase 10 behavior, and every settled cleanup section closes with dated evidence while future work stays open.
+- Deferred-pin failure injection now belongs to reconcile composition, while production apply requests carry only runtime data and retain the real state restore.
+- Plugin update, fetch, info, and reinstall tests now share one release-safe lock fixture for ordinary held-lock setup while retaining explicit specialized lock semantics.
+- Six lifecycle feature headers now explain their behavior in two lines while every scenario, tag, step, and example remains byte-identical.
+- The 146-KiB install ledger is now four cohesive, directly covered owners while the public planning port and lifecycle transaction behavior remain unchanged.
+
+</details>
+
+---
+
+## lifecycle-coverage -- Plugin Lifecycle Behavioral Tests (Completed: 2026-10-25 on `claude/plugin-lifecycle-coverage-b1d431`; not yet pushed, merged or released)
+
+**Phases completed:** 30 phases (1-30), 76 plans; 104/104 requirements
+
+**Delivered:** a cucumber suite drives every `/claude:plugin` plugin lifecycle
+command (`install`, `uninstall`, `enable`, `disable`, `update`, `reinstall`,
+`list`, `info`, `pending`, `fetch`, `prune`, `import`, `bootstrap`, `browse`,
+`help`, `apply`, `autoapply`) through a real headless Pi. The scenarios it
+added found and fixed the parity gaps in reasons, rows and versions. A load
+is now read-only and `/claude:plugin apply` makes the changes. 825 scenarios
+pass.
+
+**Key accomplishments:**
+
+- Plugin lifecycle coverage: shared steps for installation records, data
+  files, a second Pi in another project, and plugins in git repositories on
+  the loopback git host as `github`, `url`, or `git-subdir` sources, pinned or
+  not.
+- One version rule and one runner: `list`, `info`, `install`, `update`,
+  `reinstall` and `apply` derive versions the same way, and `update`,
+  `reinstall` and `apply` move plugins through one runner with per-commit
+  copies under the state lock.
+- Parity of reasons and rows: install, import, reconcile, update and
+  reinstall name the same failure reasons for the same causes (`{source
+  missing}`, `{network error}`, `{not installed}`, ranges joined with `, `),
+  and same-version commit moves show both commits.
+- A read-only load (APL-D1): a session start or `/reload` prints `pending`'s
+  block and changes nothing. `/claude:plugin apply` makes every change,
+  including catalog moves, and the startup backfill and `EXTENSION_VERSION`
+  are gone (NFR-2 amended, APL-D2).
+- `autoapply` (AAP-D1, AAP-D2): a config setting makes a load run `apply`,
+  and `/claude:plugin autoapply [on|off]` shows the effective value per file
+  or sets it.
+- A delisted plugin no longer blocks its scope (DLS-D1): its dependencies are
+  read from its installed copy.
+
+**Closeout:** `override_closeout`. Every phase's VERIFICATION.md says
+`passed`, but 22 of the 30 archived reports read `stale` under
+`verification.status` (measured 2026-10-25). Two causes, both outside the
+close-out's doc edits:
+
+- Later phases of this milestone changed source, feature and test files that
+  earlier reports cover, as planned. Phases 16, 18 and 25 cover files a later
+  phase deleted (`reinstall-clone-probe.ts`, `reconcile/backfill.ts`), and the
+  backfill criteria of 18 and 25 are superseded by APL-D1. Only phase 30's
+  drift was docs-only (the combined CHANGELOG entry and the `already added`
+  reason) until the APPLYTHROW-01 fix changed `reconcile/apply.ts`.
+- `milestone.complete` moved the phase folders to
+  `milestones/lifecycle-coverage-phases/` without updating `covered_files`, so
+  every report that lists a plan or summary under `.planning/phases/` fails
+  its digest closed.
+
+The tooling's route for a stale report is a verifier re-run; none was run. The
+combined `npm run check` at `1cfe3bb4` exited 0 (825 scenarios, 286
+direct-coverage records). Known verification overrides: 22 newly acknowledged
+(stale only, causes above), 0 carried forward. Phase 29 passed with one override, the accepted two-apply
+case (D-12b, BACKLOG APPLY1-01).
+
+**Tech debt carried:** see `milestones/lifecycle-coverage-MILESTONE-AUDIT.md`
+(APPLY1-01, APPLYTHROW-01, phase 29 IN-01..09, T-29-24, UAT-02 manual).
+
+---
+
+## marketplace-features -- Marketplace Behavioral Tests (Completed: 2026-10-21 on `features/cucumber-behavioral-tests`; PR #271, merged 2026-10-22, not yet released)
+
+**Phases completed:** 14 phases (1-10, with 3.1-3.4 inserted), 82 plans, 183 tasks; 97/97 requirements
+
+**Delivered:** a cucumber suite drives every `/claude:plugin marketplace`
+lifecycle command (`add`, `remove`/`rm`, `list`/`ls`, `info`, `update`,
+`autoupdate`/`noautoupdate`, `help`, and every usage error) through a real
+headless Pi, against local stand-ins for all four source kinds: a directory,
+a `marketplace.json` path, an https git URL, and GitHub. 433 scenarios run
+with no tag excluded, on Node 24 and Node 26.
+
+**Key accomplishments:**
+
+- A payload driver that returns and schema-validates every `claude-plugin`
+  entry, run tokens (`{home}`, `{scenario time}`, `{git host}`), kind-neutral
+  publishing steps, and a `check:features` gate against unused, undefined, or
+  ambiguous steps.
+- `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` (D-MF-01): one seam rewrites the
+  github.com clone base for clone, origin matching, update, and the auth host;
+  unset changes nothing, an invalid value is a typed error.
+- A loopback HTTPS git stand-in (`node:https` around `git http-backend`) that
+  records requests and can answer 401, 404, 5xx, or drop the connection; Pi
+  and fixture git run hermetic, and a hostile git config changes no result.
+- Config layers: a scope's base (`claude-plugins.json`) and local
+  (`claude-plugins.local.json`) layers are partitioned for every marketplace
+  and plugin mutation, merge field by field, and a `--local` declaration no
+  longer leaks into the base layer on the first-run migration (FIX-02, D-MF-03).
+- A project install that needs a user-scope marketplace adds it to the
+  project scope with its own record and clone (D-MF-04); marketplace remove
+  and info act per scope, project first (D-MF-05, D-MF-06).
+- Product fixes found by scenarios: `update` re-reads a manifest added from
+  outside `.claude-plugin/` (C-10), `owner/repo#ref` parses the ref
+  (D-MF-07), a 401 on update names `git credential approve` for the host, and
+  a rejected stored credential reads `<host> rejected the stored credential`.
+
+**Closeout:** override close. The audit reads `tech_debt` with no blockers:
+97/97 requirements, 14/14 phases verified (phases 1-7 and 9 re-verified at
+HEAD after later phases made them stale), integration 9/9, flows 5/6 (no
+file-kind `list` row). One pending todo acknowledged as deferred
+(cucumber-rules trial on another repository). Known verification overrides:
+0 newly acknowledged phases; 1 todo newly acknowledged, 17 items carried
+forward.
+
+**Carried:** WINDOWS #93, #94, #100-#109; BACKLOG ROWID-01 and SHORTREF-01;
+16 open review info items in phases 01 and 06; CI proof of the git host and
+the behavioral job's duration are read at PR time (D-08).
+
+**Archive:** [roadmap](milestones/marketplace-features-ROADMAP.md),
+[requirements](milestones/marketplace-features-REQUIREMENTS.md),
+[audit](milestones/marketplace-features-MILESTONE-AUDIT.md), phase records
+under [marketplace-features-phases](milestones/marketplace-features-phases/).
+
+## json-output -- Mode-Keyed Presentation Strategies (Completed: 2026-10-11; merged to main 2026-10-11 as PR #251, squash `0e45ffd9`, not yet in an npm release)
+
+**Phases completed:** 9 phases (1-9), 50 plans, 72 tasks; 36/36 requirements
+
+**Delivered:** `/claude:plugin` output now comes from one of two presentation
+strategies chosen by Pi's `ctx.mode`. Text serves `tui` and `print` with its
+byte form unchanged. JSON serves `json` and `rpc` as versioned, schema-valid
+`claude-plugin` session entries delivered through `pi.appendEntry`.
+
+**Key accomplishments:**
+
+- Every presentation decision (severity, summary line, reload hint, tally,
+  `{requires ...}` markers, failure detail) is computed once, upstream of the
+  renderers. Each command opens one notification run, which is its only
+  soft-dependency probe. Per-verb render callbacks became a row-policy map of data.
+- Every raw output surface (load warnings, usage errors and help,
+  diagnostics, the hook warnings, the Device Flow prompt) is a typed model
+  kind, so text is a pure formatter of the model.
+- A versioned typebox wire schema covers all 19 payload kinds. It is
+  generated, packaged, drift-tested, and validated against all 260 catalog
+  examples. Credentials are redacted at every serialization site, including
+  names and LLM tool text (PMOD-04).
+- JSON and RPC consumers receive every command, load-time, and hook output
+  as session entries. Each entry carries its origin, a canonical command
+  identity, an invocation ID, and an explicit outcome, and this holds even
+  when a command throws.
+- Browse and new device-flow logins refuse clearly outside `tui`. A real
+  headless Pi run at 0.87.1 and at the 0.86.1 peer floor proves the contract.
+  A JSON reference documents every payload kind with working `jq` recipes.
+- The text corpus (3,149 records) and `docs/output-catalog.md` stayed
+  byte-identical through the whole milestone, apart from the user-approved
+  ledgered exceptions and PMOD-04 redaction.
+
+**Closeout:** override close. The re-audit after Phase 9 reads `tech_debt`
+with no blockers: 36/36 requirements, 15/15 seams, and 8/8 flows. The
+WINDOWS.md ledger reads 0 open. Phase 9 closed the last undecided audit
+item, the LLM tool error text that bypassed redaction. Phases 1-7 keep
+`passed` reports whose digests read `stale`, because later phases edited the
+files those reports cover (decision 08 D-12). Phase 1 stays Nyquist-partial
+by decision (08 D-11).
+Known verification overrides: 2 newly acknowledged (DEP-07-03-01, carried as
+BACKLOG DEPADV-01; DEF-08-04-01, upstream tooling), 17 carried forward from
+prior closes (see STATE.md Deferred Items).
+
+**Open user choice:** Pi 0.87.1 ignores the `isError: true` that the LLM
+tools return on failure (Phase 9 D-03). Throwing a redacted Error instead
+would set Pi's error flag.
+
+**Archive:** `.planning/milestones/json-output-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`,
+`json-output-phases/`, and `json-output-quick/`.
+
+---
+
+## mcp-4 -- MCP 4 (Completed: 2026-10-10; merged 2026-10-10 as PR #250, squash `94160614`; released as 0.20.0)
+
+**Phases completed:** 8 phases (1-8), 73 plans, 176 tasks; 41/41 requirements.
+
+**Driver:** Pi 1.0 shipped, and pi-mcp-adapter 5 reads plugin servers from its
+own `mcp-adapter.json`. The goal was to make Pi 1.0 the baseline and deliver
+plugin MCP servers through that file at Claude Code parity: Claude Code tool
+names, tool search, variable expansion and live status, without adopting Pi's
+built-in MCP. Phase numbering restarted at 1.
+
+**Key accomplishments:**
+
+- Pi 1.0, pi-subagents 0.74.0 and pi-mcp-adapter 5.2.0 (which fixes advisory GHSA-6qxp-vccf-f47h) are the floors. Only pi-mcp-adapter itself satisfies the MCP soft dependency, never Pi's built-in MCP, and the live canaries pass on Pi 1.0.
+- Plugin MCP servers are written to the adapter's own `<scopeRoot>/mcp-adapter.json`. The file is read as JSONC the way the adapter reads it, refused rather than replaced when it does not parse, and checked for collisions across the adapter's nine config sources. A user's own per-server choices, such as `/mcp-adapter disable`, survive update, reinstall, disable and uninstall.
+- The model sees plugin tools under Claude Code's exact names, `mcp__plugin_<plugin>_<server>__<tool>`, and loads them on demand through tool search. Claude Code's transport, timeout and OAuth fields are translated by a closed table, and a server that needs a feature the adapter cannot honor makes the plugin partially available.
+- Variables expand by Claude Code's rules. Path variables and `${VAR:-default}` resolve at install time, plain `${VAR}` is left for the adapter at runtime with its second expansion escaped, and Claude's credential deny-list holds for `url` and `headers`. No environment value is written to disk; unset variables and withheld credentials show as warnings and in `info`.
+- One `/reload` moves each installed plugin's old `mcp.json` entries into `mcp-adapter.json`, adding before removing. One notice lists the renames, what they cost the user, and any entry it had to leave in place with its remedy.
+- `/claude:plugin info` shows each plugin MCP server's live state as the adapter reports it, or `status unknown`. `docs/mcp-compatibility.md` documents the names, the upgrade costs and 26 divergences, and an operator-run canary proves the whole path on a real Pi 1.0 with adapter 5.2.0.
+
+**Closeout:** verified close. The first audit (2026-10-09) read `tech_debt`
+with no blockers: open review findings in every phase, a fallow audit verdict
+of `warn`, MCPOVR-01 and MCPROW-01 open in `BACKLOG.md`, and records that no
+longer matched the code. Phase 8 cleared it in 21 plans. Every review ledger
+now reads `open: 0`, the fallow audit reads `pass` with 0 introduced groups,
+and every command reads state records by own key, so plugin and marketplace
+names such as `constructor` and `__proto__` behave like any other name. Phases
+1-7 were re-verified in scope against the final tree. The re-audit passed:
+41/41 requirements, 8/8 phases, 12/12 integration seams, 6/6 flows; Nyquist
+compliant on all 8 phases; `threats_open: 0`. One minor item, ROOTKEY-01 (a
+misleading cause line for a root plugin name outside the dependency token
+alphabet), is carried in `BACKLOG.md`.
+
+**Release state:** PR #250 squash-merged to main on 2026-10-10 (`94160614`)
+and shipped as npm 0.20.0 (tag `v0.20.0`, D-07-11). Phases 2 to 5 went out in
+one release.
+
+**Archive:** `.planning/milestones/mcp-4-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`;
+phase and quick-task records are under `.planning/milestones/mcp-4-phases/` and
+`.planning/milestones/mcp-4-quick/`.
+
+---
+
 ## any-git-host -- Any Git Host (Completed: 2026-09-30; merged to main 2026-09-30 via PR #221, not yet in an npm release)
 
 **Phases completed:** 3 phases (1-3), 11 plans, 29 tasks

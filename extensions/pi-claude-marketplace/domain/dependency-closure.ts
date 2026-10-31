@@ -45,6 +45,12 @@
 // them here would pre-empt that with a dependency-shaped verdict on a plugin
 // that is nobody's dependency: an absent root would report `not-found` with no
 // `requiredBy`, which is not a statement the arm can carry.
+//
+// An install walk looks up a root whose id breaks the token rule before
+// refusing it, because Claude Code checks the id only after the lookup
+// (CAS-02, D-PL3-04): a root the marketplace does not list resolves to itself
+// alone, so the caller reports the miss, and a listed one is refused as
+// `invalid-root-id`.
 
 import {
   isRenderableDependencyToken,
@@ -78,7 +84,9 @@ export type DeclarationLookupResult = Exclude<ClosureLookupResult, { readonly ki
  *
  * The two halves arrive already split and already allowlist-checked. A lookup
  * therefore never re-parses the key, and no reader has to carry a guard for a
- * shape the walk cannot produce.
+ * shape the walk cannot produce. The one exception is an install walk's single
+ * lookup of a root whose id breaks the token rule, whose halves arrive as typed
+ * (CAS-02).
  */
 export interface ClosureSubject {
   readonly key: string;
@@ -123,6 +131,7 @@ export interface ClosureMember {
 /** Root marketplace permission and target-scope records for an install walk. */
 export interface DependencyInstallPolicy {
   readonly allowedMarketplaces: ReadonlySet<string>;
+  /** Keys exempt from `allowedMarketplaces`: the enabled records of the target scope. */
   readonly recordedKeys: ReadonlySet<string>;
 }
 
@@ -134,7 +143,11 @@ export interface ResolveDependencyClosureOptions {
   readonly installedKeys: ReadonlySet<string>;
   /** Marketplace names already added to the target scope (D-03-08). */
   readonly knownMarketplaces: ReadonlySet<string>;
-  /** Omitted only for a traversal that cannot install new plugins. */
+  /**
+   * Omitted only for a traversal that cannot install new plugins. Its presence
+   * also looks up a root whose id breaks the token rule before refusing it
+   * (D-PL3-14).
+   */
   readonly installPolicy?: DependencyInstallPolicy;
 }
 
@@ -180,6 +193,13 @@ export type DependencyClosureResult =
       readonly reason: "unusable-declaration";
       readonly key: string;
       readonly detail: string;
+    }
+  | {
+      readonly ok: false;
+      readonly reason: "invalid-root-id";
+      readonly key: string;
+      /** D-PL3-04 / D-PL3-14: which half of the root id breaks the token rule. */
+      readonly invalidPart: "plugin" | "marketplace" | "both";
     };
 
 type ClosureFailure = Extract<DependencyClosureResult, { readonly ok: false }>;
@@ -476,6 +496,55 @@ async function walkEdge(
   return undefined;
 }
 
+/** Which half of an id with an `@` fails the token rule; at least one does. */
+function invalidIdPart(name: string, marketplace: string): "plugin" | "marketplace" | "both" {
+  const pluginInvalid = !isRenderableDependencyToken(name);
+  const marketplaceInvalid = !isRenderableDependencyToken(marketplace);
+  if (pluginInvalid && marketplaceInvalid) {
+    return "both";
+  }
+
+  return pluginInvalid ? "plugin" : "marketplace";
+}
+
+/**
+ * The verdict on a root `splitKey` rejected. An install walk looks the root up
+ * first, as Claude Code does (D-PL3-04, D-PL3-14); any other walk, and a key
+ * with no `@`, refuses it without a lookup.
+ */
+async function refuseUnsplittableRoot(
+  options: ResolveDependencyClosureOptions,
+): Promise<DependencyClosureResult> {
+  const key = options.rootKey;
+  const at = key.indexOf("@");
+  if (at === -1 || options.installPolicy === undefined) {
+    return {
+      ok: false,
+      reason: "unusable-declaration",
+      key,
+      detail: "root: expected <plugin>@<marketplace>",
+    };
+  }
+
+  const name = key.slice(0, at);
+  const marketplace = key.slice(at + 1);
+  const looked = await options.lookup({ key, name, marketplace });
+  if (looked.kind === "absent") {
+    return {
+      ok: true,
+      closure: [{ key, name, marketplace, requiredBy: undefined, ranges: [] }],
+      alreadyInstalled: [],
+    };
+  }
+
+  return {
+    ok: false,
+    reason: "invalid-root-id",
+    key,
+    invalidPart: invalidIdPart(name, marketplace),
+  };
+}
+
 /**
  * Resolves the closure of `rootKey`, or reports the first reason it cannot be
  * resolved.
@@ -488,12 +557,7 @@ export async function resolveDependencyClosure(
 ): Promise<DependencyClosureResult> {
   const rootParts = splitKey(options.rootKey);
   if (rootParts === undefined) {
-    return {
-      ok: false,
-      reason: "unusable-declaration",
-      key: options.rootKey,
-      detail: "root: expected <plugin>@<marketplace>",
-    };
+    return refuseUnsplittableRoot(options);
   }
 
   const ctx: WalkContext = {

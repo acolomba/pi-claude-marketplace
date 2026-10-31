@@ -29,25 +29,24 @@
 //  PluginUpdatePhase3Error with RECOVERY_PLUGIN_REINSTALL_PREFIX hint.
 //  Else: success outcome carries WR-04 stagedAgentNames/stagedMcpServerNames.
 //
-// D-141-03 / D-141-05: the four bridges' staging warnings are READ (they were
-// not, so every one of them was dark on this path) and split by install's
-// rule through `./shared.ts::splitStagingWarnings`. The skills and commands
-// DISCOVERY half always rides the `updated` outcome's `notes`; the agents and
-// mcp HYGIENE half joins it in cascade mode only. The direct path renders the
-// discovery half through `surfaceDiscoveryWarnings` AFTER the cascade, since
-// the runner that produces a warning finishes long before the row it
-// qualifies exists.
+// D-141-03 / D-PL1-10: the five bridges' tagged staging warnings ride the
+// `updated` outcome's `stagingWarnings`, both halves, in bridge order, in
+// direct and cascade mode alike. Readers split the halves through
+// `partitionStagingWarnings`, the classifier install uses (D-PL1-03). The
+// direct path and reinstall render the discovery half AFTER the cascade,
+// since the runner that produces a warning finishes long before the row it
+// qualifies exists. The cascades render both halves (D-PL1-25).
 //
 // PUP-9 routing:
 //  updateSinglePlugin -- cascade path -- catches into partition='failed'
 //  updatePlugins -- direct path -- surfaces phase-2-or-earlier throws via
-//  a single notify(ctx, pi, NotificationMessage) per
+//  a single notify(ctx, run, NotificationMessage) per
 //  orchestration arm (cause threaded structurally on a
 //  PluginFailedMessage; renderer composes the 4-space
 //  cause-chain trailer).
 //
 // Success and failure notifications are a single
-//  notify(opts.ctx, opts.pi, { marketplaces: [{..., plugins: [...] }] })
+//  notify(opts.ctx, opts.run, { marketplaces: [{..., plugins: [...] }] })
 // call per orchestration arm. notify() owns severity, the reload-hint
 // trailer, and the cause-chain. The post-success completion-cache-refresh
 // warning inside dropPluginCompletionCache is NOT surfaced: the underlying
@@ -65,6 +64,8 @@ import path from "node:path";
 
 import {
   abortPreparedAgents,
+  assertAgentCommitTargets,
+  assertAgentTargetsFree,
   commitPreparedAgents,
   prepareStagePluginAgents,
 } from "../../bridges/agents/index.ts";
@@ -79,6 +80,7 @@ import {
   abortPreparedMcp,
   commitPreparedMcp,
   prepareStageMcpServers,
+  removeLegacyMcpEntries,
 } from "../../bridges/mcp/index.ts";
 import {
   abortPreparedSkills,
@@ -107,7 +109,7 @@ import {
 import { createRemovalOps, type RemovalOps } from "../../shared/fs-utils.ts";
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
-import { notifyWithContext } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import {
   withStateGuard,
   type LockedStateTransactionDeps,
@@ -116,34 +118,86 @@ import {
 import { discoverGeneratedNames } from "./discover-names.ts";
 import {
   assertNoCrossPluginConflicts,
-  maybeWritePluginConfigBack,
   removePluginRecord,
   retiresWorkflowCommand,
-  splitStagingWarnings,
 } from "./shared.ts";
-import { UPDATE_CONTEXT } from "./update.messaging.ts";
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
 import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PreparedWorkflowsStaging } from "../../bridges/workflows/index.ts";
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { UpdateHooksRouting } from "./update-cascade.ts";
 import type {
+  MaterializationPolicy,
   PreparedPluginUpdate,
   PreparePluginUpdateOptions,
   UpdateCloneCacheSeam,
 } from "./update-preflight.ts";
-import type { PluginUpdateFailedOutcome, PluginUpdateOutcome } from "../types.ts";
+import type {
+  PluginUpdateFailedOutcome,
+  PluginUpdateOutcome,
+  RevisionMove,
+  DependencyStagingDiagnostic,
+  UpdateDependencyRow,
+} from "../types.ts";
+
+/**
+ * UPD-DEP-D1: what settling the dependency closure of an update's new version
+ * produced. `settled` carries a row for each dependency it installed, enabled
+ * or moved; `refused` carries the row of the dependency that cannot be met,
+ * after the rows of any change the settle made before a step failed.
+ *
+ * D-PL1-16: both arms carry the MCP config notices of the dependencies the
+ * settle installed, omitted when there are none (NREG-01).
+ */
+export type UpdateDependencySettlement =
+  | {
+      readonly kind: "settled";
+      readonly rows: readonly UpdateDependencyRow[];
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
+      readonly stagingDiagnostics?: readonly DependencyStagingDiagnostic[];
+    }
+  | {
+      readonly kind: "refused";
+      readonly rows: readonly UpdateDependencyRow[];
+      readonly cause: Error;
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
+      readonly stagingDiagnostics?: readonly DependencyStagingDiagnostic[];
+    };
+
+/**
+ * UPD-DEP-D1: settles the closure of `prepared`, the version `args` moves its
+ * plugin to, so the closure read is the candidate's and not the catalog head's.
+ */
+export type UpdateDependencySettler = (
+  args: ThreePhaseArgs,
+  prepared: PreparedPluginUpdate,
+) => Promise<UpdateDependencySettlement>;
+
+/**
+ * UPD-DEP-D1: the settler an update operation is bound to, before the
+ * notification context of the command that runs it is known. Install's flow
+ * owns the cascade it runs (`createUpdateDependencyResolver`).
+ */
+export type UpdateDependencyResolver = (
+  args: ThreePhaseArgs,
+  prepared: PreparedPluginUpdate,
+  notification: { readonly ctx: NotificationContext; readonly run: NotificationRun },
+) => Promise<UpdateDependencySettlement>;
 
 /** Common collaborators and identity for one prepared plugin replacement. */
 export interface ThreePhaseArgsBase {
@@ -154,10 +208,13 @@ export interface ThreePhaseArgsBase {
   readonly locations: ScopedLocations;
   readonly hooksRouting: UpdateHooksRouting;
   readonly completionCache: CompletionCache;
+  /** D-08-06: the environment the update stages MCP servers with. */
+  readonly env: ClaudeEnv;
   readonly mapModel?: boolean;
   readonly local?: boolean;
   readonly partial?: boolean;
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
+  readonly cloneCandidates?: Set<string>;
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
@@ -176,6 +233,41 @@ export interface ThreePhaseArgsBase {
   >;
   readonly cleanupClones: (locations: ScopedLocations) => Promise<unknown>;
   /**
+   * UPR-03: receives the revisions of the derived candidate, reported once
+   * before the swap starts and never for a verdict the preflight returns, so
+   * a caller can name the move on a failure the swap throws without wrapping
+   * the error. Production callers that render failures set it.
+   */
+  readonly onCandidate?: (move: RevisionMove) => void;
+  /** UPR-03: the installed version, reported before any candidate; see `onCandidate`. */
+  readonly onRecord?: NonNullable<PreparePluginUpdateOptions["onRecord"]>;
+  /**
+   * D-PL1-14: receives the tagged staging warnings of the handles prepared so
+   * far, when there are any, so a caller can report them on a failure the
+   * swap throws. The swap reports from a failed prepare, or once after a full
+   * prepare and before the intent mark.
+   */
+  readonly onStagingWarnings?: (warnings: readonly StagingWarning[]) => void;
+  /**
+   * UPD-DEP-D1: the command's context for a cascade-mode run's credential
+   * prompts. A dependency move runs in cascade mode, so its rows return to the
+   * command; on an interactive command it still authenticates as the command
+   * does (Device Flow included).
+   */
+  readonly preflightNotification?: PreparePluginUpdateOptions["notification"];
+  /** UPD-DEP-D1: the plugins a dependency move is made for (`PreparePluginUpdateOptions`). */
+  readonly requesters?: NonNullable<PreparePluginUpdateOptions["requesters"]>;
+  /** UPD-DEP-D1: the version the dependency plan chose (`PreparePluginUpdateOptions`). */
+  readonly expectVersion?: string;
+  /** WR-1: the versions the dependency plan ruled out (`PreparePluginUpdateOptions`). */
+  readonly excludedVersions?: PreparePluginUpdateOptions["excludedVersions"];
+  /**
+   * UPD-DEP-D1: settles the dependency closure of the version the update
+   * moves to before the swap, under a policy that resolves it. Absent, the
+   * update moves the plugin alone.
+   */
+  readonly settleDependencies?: UpdateDependencySettler;
+  /**
    * State I/O for the intent-mark and finalize guards (and the disabled-pin
    * refresh in preflight). Production callers omit it and get the real state
    * I/O; tests observe or reshape a save deterministically through it.
@@ -187,7 +279,7 @@ export interface ThreePhaseArgsBase {
 export interface DirectThreePhaseArgs extends ThreePhaseArgsBase {
   readonly cascade: false;
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly run: NotificationRun;
   readonly cardinality: "single" | "plural";
   readonly notifyPhaseFailure: (error: Error, failures: readonly UpdatePhase3Failure[]) => void;
 }
@@ -196,7 +288,7 @@ export interface DirectThreePhaseArgs extends ThreePhaseArgsBase {
 export interface CascadeThreePhaseArgs extends ThreePhaseArgsBase {
   readonly cascade: true;
   readonly ctx?: never;
-  readonly pi?: never;
+  readonly run?: never;
 }
 
 /** Complete mode-specific replacement contract. */
@@ -222,19 +314,21 @@ export type NonFailedUpdateOutcome = Exclude<PluginUpdateOutcome, PluginUpdateFa
 
 /**
  * A failed update outcome the caller can render directly -- one that carries its
- * own reasons and none of the phase-3 rollback payload.
+ * own reasons and none of the phase-3 rollback payload. It may name the
+ * installed version and the error behind it (the preflight's candidate
+ * failures, SRC-01 / UPR-03), never a move.
  *
  * Stated as an intersection rather than as an interface extending an `Omit` of
- * the same five keys. Both admit exactly the same values, because every one of
- * those five slots is optional on the source; the intersection additionally
- * keeps each absence marker beside the slot it closes, so what the marker
- * narrows is readable from the declaration itself.
+ * the same keys. Both admit exactly the same values, because every one of
+ * those slots is optional on the source; the intersection additionally keeps
+ * each absence marker beside the slot it closes, so what the marker narrows is
+ * readable from the declaration itself.
  */
 export type DirectRenderableFailedOutcome = PluginUpdateFailedOutcome & {
   readonly reasons: readonly ContentReason[];
-  readonly cause?: never;
-  readonly fromVersion?: never;
+  readonly fromCommit?: never;
   readonly phaseFailures?: never;
+  readonly toCommit?: never;
   readonly toVersion?: never;
 };
 
@@ -259,10 +353,10 @@ type PluginPreflight = PreparedPluginUpdate;
  * order; any throw aborts the handles already prepared and appends their
  * cleanup-leak descriptors.
  *
- * D-141-03 / D-141-05: each returned handle carries a `result.warnings`
- * array. Those are read once the swap succeeds, by `collectUpdateWarnings`
- * below -- not here, because a prepare that later fails has no row to hang a
- * warning off.
+ * D-141-03 / D-PL1-02: each returned handle carries a tagged
+ * `result.warnings` array. A throw here reports the warnings of the handles
+ * prepared so far through `reportStagingWarnings` before it rethrows
+ * (D-PL1-14); on success the caller reports the full set (D-PL1-24).
  */
 async function prepareUpdateHandles(
   ops: RemovalOps,
@@ -313,6 +407,8 @@ async function prepareUpdateHandles(
       // cascade entrypoint never sets `args.mapModel`, so cascade re-
       // installs always resolve to false (omit `model:`).
       mapModel: args.mapModel ?? false,
+      // ANAME-02: the servers this update writes, mapped in agent tool lists.
+      mcpServerNames: Object.keys(installable.mcpServers),
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd,
     });
@@ -325,6 +421,8 @@ async function prepareUpdateHandles(
       pluginRoot: installable.pluginRoot,
       pluginData: pluginDataDir,
       sourcePath: `${installable.pluginRoot}#mcpServers`,
+      description: installable.description,
+      env: args.env,
     });
     handles.workflows = await prepareStageWorkflows({
       locations,
@@ -339,6 +437,7 @@ async function prepareUpdateHandles(
       previousWorkflowNames: record.resources.workflows,
     });
   } catch (err) {
+    reportStagingWarnings(args, handles);
     throw errorWithCleanupFailures(err, await abortPartialHandles(ops, handles, "prepare"));
   }
 
@@ -346,34 +445,37 @@ async function prepareUpdateHandles(
 }
 
 /**
- * D-141-03 / D-141-05: fold the four bridges' staging warnings onto the
- * `updated` outcome, split by install's rule -- the skills and commands
- * DISCOVERY half reaches both modes, the agents and mcp HYGIENE half is
- * orchestrated-only. `args.cascade` is the mode seam; no plumbing flag was
- * added for this.
+ * D-PL1-14 / D-PL1-24: hand the prepared handles' warnings to the caller's
+ * holder; a holder hears nothing when there are none (NREG-01).
+ */
+function reportStagingWarnings(args: ThreePhaseArgsBase, handles: Partial<PrepHandles>): void {
+  const warnings = collectUpdateWarnings(handles);
+  if (warnings.length > 0) {
+    args.onStagingWarnings?.(warnings);
+  }
+}
+
+/**
+ * D-PL1-10: the five bridges' tagged staging warnings for the `updated`
+ * outcome, both halves, in bridge order (skills, commands, agents, mcp,
+ * workflows). No mode seam: each reader takes the half it renders.
+ *
+ * D-PL1-14: it also reads a partial set, the handles a failed prepare had
+ * already prepared.
  *
  * Its own function rather than a few lines inside the finalize window:
  * `prepareUpdateHandles` and that window already sit near the fallow
  * `maxCognitive: 15` ceiling.
  */
-function collectUpdateWarnings(handles: PrepHandles, cascade: boolean): readonly string[] {
-  const { discovery, bridge } = splitStagingWarnings({
-    skills: handles.skills.result.warnings,
-    commands: handles.commands.result.warnings,
-    agents: handles.agents.result.warnings,
-    mcp: handles.mcp.result.warnings,
-  });
-  // WLIF-02: the workflow prepare's warnings join the DISCOVERY half, and they
-  // join it HERE rather than through `splitStagingWarnings`. They describe the
-  // plugin's declared scripts -- a fact a standalone user needs -- not a
-  // hygiene note only the cascade forwards. The shared classifier is left at
-  // four members on purpose: a fifth would drag every other consumer of it
-  // into this change.
-  return Object.freeze([
-    ...discovery,
-    ...handles.workflows.result.warnings,
-    ...(cascade ? bridge : []),
-  ]);
+function collectUpdateWarnings(handles: Partial<PrepHandles>): readonly StagingWarning[] {
+  const ordered = [
+    handles.skills,
+    handles.commands,
+    handles.agents,
+    handles.mcp,
+    handles.workflows,
+  ];
+  return Object.freeze(ordered.flatMap((handle) => handle?.result.warnings ?? []));
 }
 
 async function abortPartialHandles(
@@ -531,6 +633,16 @@ const PHASE3_FAILURE_PHASES = [
 ] as const;
 type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
 
+// D-PL7-08: the stamp is strictly later than the one it replaces, even within
+// one millisecond, so a rival run that read the replaced stamp fails ST-9. A
+// stamp that does not parse, or that is the largest time a Date holds, is
+// replaced by the current time, which still differs from it.
+function nextUpdateStamp(previous: string): string {
+  const now = Date.now();
+  const later = new Date(Math.max(now, Date.parse(previous) + 1));
+  return (Number.isNaN(later.getTime()) ? new Date(now) : later).toISOString();
+}
+
 /**
  * TR-04: pre-commit intent-mark.
  *
@@ -554,10 +666,11 @@ type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
  * truthful current view during the intent-mark window; `finalizeUpdateRecord`
  * rewrites them on the all-success branch.
  *
- * No mutation to `sRecord.version`, `sRecord.resolvedSource`, or
- * `sRecord.updatedAt` -- those are the finalize step's responsibility.
- * `sRecord.resources.workflows` is the ONE exception, and CR-02 below says
- * why.
+ * No mutation to `sRecord.version` or `sRecord.resolvedSource` -- those are
+ * the finalize step's responsibility. `sRecord.updatedAt` is restamped here,
+ * strictly later than the stamp it replaces, so the ST-9 check sees an
+ * overlapping run even when the version and the sha stay the same, and
+ * `sRecord.resources.workflows` is widened, as CR-02 below says.
  */
 async function markUpdateInProgress(
   args: ThreePhaseArgs,
@@ -569,23 +682,33 @@ async function markUpdateInProgress(
   await withStateGuard(
     locations,
     (s) => {
-      const sMp = s.marketplaces[marketplace];
+      const sMp = ownValue(s.marketplaces, marketplace);
       if (sMp === undefined) {
         throw new PluginUpdateConcurrencyError("marketplace-removed", plugin, marketplace);
       }
 
-      const sRecord = sMp.plugins[plugin];
+      const sRecord = ownValue(sMp.plugins, plugin);
       if (sRecord === undefined) {
         throw new PluginUpdateConcurrencyError("plugin-uninstalled", plugin, marketplace);
       }
 
-      // ST-9: stale-version check.
-      if (sRecord.version !== fromVersion) {
+      // ST-9: stale-version check. Two git revisions can share a declared
+      // version (D-16-09), so the recorded commit must not have moved either.
+      // A same-revision run (every reinstall, D-18-04) moves neither, so the
+      // write stamp must not have moved too: the stamp below is what a second
+      // process that read the record before this mark then fails on.
+      if (
+        sRecord.version !== fromVersion ||
+        sRecord.resolvedSha !== preflight.record.resolvedSha ||
+        sRecord.updatedAt !== preflight.record.updatedAt
+      ) {
         throw new PluginUpdateConcurrencyError("plugin-updated", plugin, marketplace, {
           expectedVersion: fromVersion,
           actualVersion: sRecord.version,
         });
       }
+
+      sRecord.updatedAt = nextUpdateStamp(sRecord.updatedAt);
 
       sRecord.compatibility = {
         installable: false,
@@ -730,16 +853,21 @@ function applyPerBridgeResources(
 }
 
 /**
- * SC#2 all-or-nothing: the version bump, `installable: true` and
+ * SC#2 all-or-nothing: the version bump, the `compatibility` block and
  * `resolvedSource` happen ONLY when every bridge succeeded. On failure the
  * intent-mark `compatibility` set by `markUpdateInProgress` carries forward,
  * which is the truthful "we did not complete the swap" view.
+ *
+ * `installable` is the same derived flag install writes: a
+ * `partially-available` candidate records `false` beside its dropped kinds,
+ * because enable, install and backfill read that flag as the partial-consent
+ * marker (D-18-06).
  */
 function applyAllSuccessRecordFields(sRecord: PluginStateRecord, preflight: PluginPreflight): void {
   const { installable, toVersion, resolvedSha } = preflight;
   sRecord.version = toVersion;
   sRecord.compatibility = {
-    installable: true,
+    installable: installable.state === "installable",
     notes: [...installable.notes],
     supported: [...installable.supported],
     unsupported: [...installable.unsupported],
@@ -749,12 +877,20 @@ function applyAllSuccessRecordFields(sRecord: PluginStateRecord, preflight: Plug
   // post-commit GC and the next update read the swapped sha. Undefined for
   // an unpinned source (no clone to protect). WR-01: also clear a STALE
   // `resolvedSha` a prior update or install left on the record -- otherwise
-  // a `path` source whose re-resolution no longer pins a tag would keep
-  // naming a commit `resolvedSource` no longer sits at.
+  // a `path` source whose re-resolution does not pin a tag would keep
+  // naming a commit `resolvedSource` does not sit at.
   if (resolvedSha === undefined) {
     delete sRecord.resolvedSha;
   } else {
     sRecord.resolvedSha = resolvedSha;
+  }
+
+  // GV-01: the tag's semver when the dependents' range selected a tag, else
+  // none, as Claude Code writes `resolvedVersion` on an update.
+  if (preflight.resolvedVersion === undefined) {
+    delete sRecord.resolvedVersion;
+  } else {
+    sRecord.resolvedVersion = preflight.resolvedVersion;
   }
 }
 
@@ -834,8 +970,12 @@ async function refreshHooksCacheAfterUpdate(
  *    `version` stays at `fromVersion`, and `resolvedSource` stays at
  *    the pre-update install path.
  *
- * `sRecord.updatedAt` is set on BOTH branches: even a failed finalize
- * is a truthful "we touched this record" stamp.
+ * `sRecord.updatedAt` is set on BOTH branches, strictly later than the
+ * intent mark's stamp: even a failed finalize is a truthful "we touched this
+ * record" stamp.
+ *
+ * LAYER-04 / D-MF-03: finalize changes the installation record only. An update
+ * never writes a layer config, so a dependency it updates stays undeclared.
  */
 async function finalizeUpdateRecord(
   args: ThreePhaseArgs,
@@ -844,23 +984,22 @@ async function finalizeUpdateRecord(
   phase3aFailures: readonly Phase3Failure[],
   hookEntries: readonly HookSummaryEntry[] | undefined,
   workflows: WorkflowsCommitReport,
-): Promise<{ readonly invalidConfigWriteBack: boolean }> {
+): Promise<void> {
   const { plugin, marketplace, locations } = args;
   const { installable } = preflight;
   const allSucceeded = phase3aFailures.length === 0;
-  let invalidConfigWriteBack = false;
 
   await withStateGuard(
     locations,
-    async (s) => {
-      const sMp = s.marketplaces[marketplace];
+    (s) => {
+      const sMp = ownValue(s.marketplaces, marketplace);
       if (sMp === undefined) {
         throw new PluginUpdateConcurrencyError("marketplace-removed", plugin, marketplace, {
           lifecycle: "finalize",
         });
       }
 
-      const sRecord = sMp.plugins[plugin];
+      const sRecord = ownValue(sMp.plugins, plugin);
       if (sRecord === undefined) {
         throw new PluginUpdateConcurrencyError("plugin-uninstalled", plugin, marketplace, {
           lifecycle: "finalize",
@@ -888,38 +1027,18 @@ async function finalizeUpdateRecord(
         applyAllSuccessRecordFields(sRecord, preflight);
       }
 
-      sRecord.updatedAt = new Date().toISOString();
-
-      // WB-01 / A7: deep-equal short-circuited config write-back on the
-      // all-success arm. SKIPPED in cascade mode (the marketplace autoupdate
-      // cascade owns its own writes; mirrors WR-09 orchestrated-mode
-      // semantics). The deep-equal gate compares the prospective
-      // `{...existing, ...patch}` shape against the existing entry; the
-      // current plugin entry shape carries no version field, so the patch is
-      // `{}` and a CHANGED update with a byte-stable existing entry produces a
-      // no-op, preserving RECON-05 mtime stability.
-      if (!args.cascade && allSucceeded) {
-        const writeResult = await maybeWritePluginConfigBack({
-          locations,
-          marketplace,
-          plugin,
-          local: args.local === true,
-        });
-        if (writeResult.invalidConfig) {
-          invalidConfigWriteBack = true;
-        }
-      }
+      // D-PL7-08: a run that read the record during this run's window checks
+      // ST-9 against this stamp, so it must differ from the mark's stamp.
+      sRecord.updatedAt = nextUpdateStamp(sRecord.updatedAt);
     },
     args.stateTransaction,
   );
 
   // Route visibility follows the state guard's durable auto-save. A failed
-  // state/config write therefore leaves the lifecycle runtime untouched.
+  // state write therefore leaves the lifecycle runtime untouched.
   if (allSucceeded) {
     await refreshHooksCacheAfterUpdate(args, installable);
   }
-
-  return { invalidConfigWriteBack };
 }
 
 /**
@@ -933,8 +1052,7 @@ async function finalizeUpdateRecord(
  * preserves the OLD `resources.hooks` inventory in state.json, keeping the
  * truthful "swap incomplete" view. The /reload routing table points at the
  * partially-deleted file until the user runs reinstall
- * (RECOVERY_PLUGIN_REINSTALL_PREFIX hint). Same recovery contract as
- * `reinstall.ts::commitHooks` (WR-05).
+ * (RECOVERY_PLUGIN_REINSTALL_PREFIX hint).
  *
  * Returns the supported hook entries version B materialized (D-100-01 /
  * ENBL-10), or undefined when version B declares no hooks -- which is the
@@ -1059,18 +1177,34 @@ async function commitUpdateWorkflows(prepared: PreparedWorkflowsStaging): Promis
  * workflows order, matching install's PI-9 ledger order. Each commit is
  * independently atomic at the OS level (rename for skills/commands/agents/
  * workflows, atomicWriteJson for mcp, write-or-remove for hooks).
+ *
+ * AMIG-02: right after the MCP commit writes `mcp-adapter.json`, the plugin's
+ * marked entries leave the scope's `mcp.json`. Update has no rollback, so a
+ * removal that throws is an `mcp` failure that keeps the new entry and the
+ * legacy one; the next reload or a reinstall finishes the move.
+ *
+ * D-18-15: `overwrite` reaches the agents commit only, as RINST-01 shipped.
+ * Skills and commands already replace a stray target; the workflows commit
+ * keeps its WR-06 refusal and MCP its ANAME-03 collision refusal.
  */
 async function commitUpdatePhase3a(
   ops: RemovalOps,
   args: ThreePhaseArgs,
   preflight: PluginPreflight,
   handles: PrepHandles,
+  overwrite: boolean,
 ): Promise<{
   readonly failures: UpdatePhase3Failure[];
   readonly hookEntries: readonly HookSummaryEntry[] | undefined;
   /** CR-03 / WR-01: what the workflows commit reported. The record write is
    * the only consumer. */
   readonly workflows: WorkflowsCommitReport;
+  /**
+   * AFILE-04 / AMIG-02: the MCP commit's file notices, then the legacy
+   * removal's; empty when the commit threw, the commit's alone when the
+   * removal threw.
+   */
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
 }> {
   const failures: UpdatePhase3Failure[] = [];
 
@@ -1113,7 +1247,7 @@ async function commitUpdatePhase3a(
   }
 
   try {
-    const leak = await commitPreparedAgents(ops, handles.agents);
+    const leak = await commitPreparedAgents(ops, handles.agents, { force: overwrite });
     if (leak !== undefined) {
       const cleanupFailure = commitCleanupFailure(
         "agents",
@@ -1138,8 +1272,18 @@ async function commitUpdatePhase3a(
     failures.push({ phase: "hooks", msg: errorMessage(err), cause: err as Error });
   }
 
+  // AFILE-04: the notices describe a write, so they are taken only once the
+  // commit that performs it has returned.
+  let mcpConfigNotices: readonly McpConfigNotice[] = [];
   try {
     await commitPreparedMcp(handles.mcp);
+    mcpConfigNotices = handles.mcp.result.notices;
+    const legacy = await removeLegacyMcpEntries({
+      locations: args.locations,
+      pluginName: args.plugin,
+      marketplaceName: args.marketplace,
+    });
+    mcpConfigNotices = [...mcpConfigNotices, ...legacy.notices];
   } catch (err) {
     failures.push({ phase: "mcp", msg: errorMessage(err), cause: err as Error });
   }
@@ -1153,6 +1297,7 @@ async function commitUpdatePhase3a(
     failures,
     hookEntries,
     workflows: { committed: workflows.committed, placedNames: workflows.placedNames },
+    mcpConfigNotices,
   };
 }
 
@@ -1188,15 +1333,24 @@ function hasUpdatePhase3Failures(
  * 4-space cause-chain trailer beneath the failed plugin row. The cascade is
  * NOT re-rendered here -- aborting before the cascade walk means there is
  * exactly one row to surface.
+ *
+ * AFILE-04: `mcpConfigNotices` are the MCP commit's notices. A bridge after
+ * it, or the finalize, can fail once the file is already rewritten, so the
+ * failed outcome carries them for the caller to show after this row.
  */
 function composePhase3FailureOutcome(
   args: ThreePhaseArgs,
   failures: NonEmptyUpdatePhase3Failures,
-  versions: { readonly fromVersion: string; readonly toVersion: string },
+  move: RevisionMove,
+  mcpConfigNotices: readonly McpConfigNotice[],
+  stagingWarnings: readonly StagingWarning[],
 ): UpdatePhase3FailedOutcome {
-  const { plugin } = args;
-  const recoveryHint = `${RECOVERY_PLUGIN_REINSTALL_PREFIX} "${plugin}".`;
-  const aggregateMsg = `Plugin "${plugin}" update failed during physical replace. ${recoveryHint}`;
+  const { plugin, marketplace } = args;
+  // D-18-10: running `reinstall` again repairs a partial replace for either
+  // verb, so `update` and `reinstall` share this hint, and the failure text
+  // names no verb.
+  const recoveryHint = `${RECOVERY_PLUGIN_REINSTALL_PREFIX} ${plugin}@${marketplace} to repair it.`;
+  const aggregateMsg = `Plugin "${plugin}" failed during physical replace. ${recoveryHint}`;
   // CR-01: phase-3 failure text is NOT path-redacted, in `msg` or along the
   // `cause` chain. These strings ARE the manual-recovery instructions: the
   // workflows commit deliberately leaves the only copy of a displaced envelope
@@ -1220,8 +1374,8 @@ function composePhase3FailureOutcome(
   return {
     partition: "failed",
     name: plugin,
-    fromVersion: versions.fromVersion,
-    toVersion: versions.toVersion,
+    // UPR-03: the versions, and the commits when a side has one.
+    ...move,
     notes: [aggregateMsg, ...failures.map((f) => `${f.phase}: ${f.msg}`)],
     // Pre-narrowed: phase-3 aggregate failures always render as `(failed)
     // {rollback partial}` per docs/output-catalog.md. The direct entrypoint
@@ -1238,58 +1392,63 @@ function composePhase3FailureOutcome(
     declaresAgents: false,
     declaresMcp: false,
     declaresWorkflows: false,
+    // NREG-01: absent when the MCP commit threw or reported nothing.
+    ...(mcpConfigNotices.length > 0 && { mcpConfigNotices }),
+    // D-PL1-14: every prepared handle's warnings; NREG-01, absent when none.
+    ...(stagingWarnings.length > 0 && { stagingWarnings }),
   };
 }
 
 /**
- * S5: an invalid config file silently skipped the write-back while the
- * success notify proceeded. Direct-path callers surface the abort as a
- * separate warning AFTER the success row, so the user knows the on-disk
- * artifacts were updated but the config entry was not written. The cascade
- * path never calls the write-back (gated by `!args.cascade`), so it is
- * structurally unaffected.
+ * PI-6: discovers the candidate's generated names and refuses one another
+ * plugin of the scope already owns, checked against `preflight.state` without
+ * the plugin's own record, so an update never conflicts with itself (a plugin
+ * moving its skill names from {a,b} to {a,c} would otherwise conflict on
+ * "a"). Writes nothing. The swap runs it over the scope the moves left;
+ * `assertUpdateNamesFree` runs it, with the agent-target check, before any
+ * dependency moves.
  */
-function notifyInvalidConfigWriteBack(args: DirectThreePhaseArgs): void {
-  const targetBasename = path.basename(
-    args.local === true ? args.locations.configLocalJsonPath : args.locations.configJsonPath,
+async function assertNamesFree(
+  args: Pick<ThreePhaseArgsBase, "marketplace" | "plugin" | "scope">,
+  preflight: Pick<PreparedPluginUpdate, "installable" | "state">,
+): Promise<Awaited<ReturnType<typeof discoverGeneratedNames>>> {
+  const generatedNames = await discoverGeneratedNames(args.plugin, preflight.installable);
+  assertNoCrossPluginConflicts(
+    args.scope,
+    generatedNames,
+    removePluginRecord(preflight.state, args.marketplace, args.plugin),
   );
-  notifyWithContext(
-    args.ctx,
-    args.pi,
-    UPDATE_CONTEXT,
-    [
-      {
-        name: args.marketplace,
-        scope: args.scope,
-        plugins: [
-          {
-            status: "failed",
-            name: args.plugin,
-            reasons: ["invalid manifest"] as const,
-            cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
-            // D-03/D-06: invalid-config abort -> error, no reload.
-            severity: "error" as const,
-            needsReload: false,
-          },
-        ],
-      },
-    ],
-    undefined,
-    args.cardinality,
-  );
+  return generatedNames;
+}
+
+/**
+ * PI-6, then D-PL4-04: the name check, then a refusal of a new agent target
+ * that holds a file the agents commit would not replace. It writes nothing.
+ * The move judge and the update's WR-C check run it, so an occupied target
+ * refuses before anything lands. It returns nothing, because only the swap
+ * reads the names, through `assertNamesFree`.
+ */
+export async function assertUpdateNamesFree(
+  args: Pick<ThreePhaseArgsBase, "marketplace" | "plugin" | "scope" | "locations">,
+  preflight: Pick<PreparedPluginUpdate, "installable" | "state">,
+): Promise<void> {
+  const names = await assertNamesFree(args, preflight);
+  await assertAgentTargetsFree(args.locations, args, names.agents);
 }
 
 // The three-phase update body sequences preflight, the D-UPD disabled-record
 // fast path, prepare-handles, the intent-mark window, phase-3a per-bridge
-// commits, finalize, the phase-3b aggregate error path, and the S5
-// invalid-config write-back warning. The per-phase save-vs-throw discipline
-// stays visible here; the phase bodies themselves are extracted above.
+// commits, finalize, and the phase-3b aggregate error path. The per-phase
+// save-vs-throw discipline stays visible here; the phase bodies themselves are
+// extracted above. `policy` is the calling verb's; its `overwrite` reaches the
+// agents commit.
 export async function swapPluginUpdate(
   args: ThreePhaseArgs,
   preflight: PreparedPluginUpdate,
+  policy: MaterializationPolicy,
 ): Promise<UpdateRunOutcome> {
-  const { plugin, marketplace, scope } = args;
-  const { installable, fromVersion, toVersion } = preflight;
+  const { plugin, marketplace } = args;
+  const { installable } = preflight;
 
   // ─── : prepare into tmp ────────────────────────────────────────────
   //
@@ -1299,14 +1458,12 @@ export async function swapPluginUpdate(
   // materializes the merged doc; commit writes mcp.json atomically).
   //
   // PI-6 cross-plugin guard: re-check generated names against the SAME-SCOPE
-  // state EXCLUDING this plugin's currently-recorded resources -- updating
-  // your own plugin against your own state must not count as cross-plugin
-  // conflict (a plugin updating its skill names from {a,b} -> {a,c} would
-  // otherwise self-conflict on "a").
+  // state EXCLUDING this plugin's currently-recorded resources.
 
-  const generatedNames = await discoverGeneratedNames(plugin, installable);
-  const stateForGuard = removePluginRecord(preflight.state, marketplace, plugin);
-  assertNoCrossPluginConflicts(scope, generatedNames, stateForGuard);
+  // The swap checks names only, so a forced reinstall (RINST-01, D-18-15) can
+  // overwrite a user-edited agent of its own. `assertAgentCommitTargets` below
+  // still refuses a file that appeared since the plan.
+  const generatedNames = await assertNamesFree(args, preflight);
   // D-08-12: this verb owns the swap lifecycle, so it constructs the removal
   // operations once and every prepare, commit, and abort step below performs its
   // cleanup through that one collaborator.
@@ -1318,6 +1475,8 @@ export async function swapPluginUpdate(
     generatedNames.agentsDirs,
     generatedNames,
   );
+  // D-PL1-24: reported before the intent-mark window, so its throws carry them.
+  reportStagingWarnings(args, handles);
 
   // ─── Phase 2a: pre-commit intent-mark (TR-04) ─────────────────────────────
   //
@@ -1333,10 +1492,14 @@ export async function swapPluginUpdate(
   // are the post-phase-3a `finalizeUpdateRecord` step's responsibility.
 
   try {
+    // NFR-3 / PI-6: the agents commit's target refusals run here first, so an
+    // occupied target refuses before the intent mark and changes nothing. The
+    // commit repeats them for a file that appears in between.
+    await assertAgentCommitTargets(handles.agents, { force: policy.overwrite });
     await markUpdateInProgress(args, preflight, handles);
   } catch (err) {
-    // Intent-mark failure (typically ST-9 stale-version): abort all prep
-    // handles + rethrow.
+    // A target refusal or an intent-mark failure (typically ST-9
+    // stale-version): abort all prep handles + rethrow.
     throw errorWithCleanupFailures(err, await abortHandles(removalOps, handles));
   }
 
@@ -1346,14 +1509,15 @@ export async function swapPluginUpdate(
     failures: phase3aFailures,
     hookEntries,
     workflows: workflowsCommit,
-  } = await commitUpdatePhase3a(removalOps, args, preflight, handles);
+    mcpConfigNotices,
+  } = await commitUpdatePhase3a(removalOps, args, preflight, handles, policy.overwrite);
 
   // ─── Phase 2b: finalize state (TR-04) ─────────────────────────────────────
   //
   // The finalize window writes per-bridge resource updates for every
   // bridge whose commit succeeded (independent of other bridges' outcomes),
-  // and bumps `version` + `installable=true` + `resolvedSource` ONLY when
-  // all four bridges succeeded.
+  // and bumps `version` + the `compatibility` block + `resolvedSource` ONLY
+  // when all four bridges succeeded.
   //
   // Order discipline: finalize MUST run BEFORE the phase-3b recovery-hint
   // emission. If finalize ran AFTER the recovery-hint emission on a success
@@ -1368,9 +1532,8 @@ export async function swapPluginUpdate(
   // `msg` field carries the explicit `state finalize failed:` text so
   // operator diagnostics see the truthful cause. A dedicated
   // `phase: "finalize"` Phase3Failure member is deferred.
-  let invalidConfigWriteBack = false;
   try {
-    const finalizeResult = await finalizeUpdateRecord(
+    await finalizeUpdateRecord(
       args,
       preflight,
       handles,
@@ -1378,7 +1541,6 @@ export async function swapPluginUpdate(
       hookEntries,
       workflowsCommit,
     );
-    invalidConfigWriteBack = finalizeResult.invalidConfigWriteBack;
   } catch (finalizeErr) {
     phase3aFailures.push({
       phase: "mcp",
@@ -1390,7 +1552,13 @@ export async function swapPluginUpdate(
   // ─── Phase 3b: aggregate error path with recovery hint, OR success ────────
 
   if (hasUpdatePhase3Failures(phase3aFailures)) {
-    return composePhase3FailureOutcome(args, phase3aFailures, { fromVersion, toVersion });
+    return composePhase3FailureOutcome(
+      args,
+      phase3aFailures,
+      preflightMove(preflight),
+      mcpConfigNotices,
+      collectUpdateWarnings(handles),
+    );
   }
 
   // PURL-06 / D-78-01: GC-after-swap. The finalize withStateGuard has committed
@@ -1412,11 +1580,11 @@ export async function swapPluginUpdate(
   }
 
   // Success: WR-04 fields populated for cascade-side RH-5 composition.
-  // CMC-13: declaresAgents / declaresMcp predicate inputs
-  // mirror reinstall's effective-state contract (declares iff actually
-  // staged this update). The renderer probes companion-loaded state via
-  // SoftDepProbe and emits `{requires pi-subagents}` / `{requires pi-mcp}`
-  // iff (declares AND unloaded).
+  // CMC-13: declaresAgents / declaresMcp / declaresWorkflows reflect what
+  // was actually staged, matching reinstall's effective-state contract.
+  // resolveRows composes `{requires pi-subagents}`, `{requires pi-mcp-adapter}`,
+  // and `{requires pi-dynamic-workflows}` from the command run's snapshot under
+  // the context's marker policy (D-05, D-12), iff (declares AND unloaded).
   const stagedAgentNames = handles.agents.result.recorded.map((r) => r.generatedName);
   const stagedMcpServerNames = handles.mcp.result.recorded.map((r) => r.generatedName);
   // WARN-01 / WR-12 / D-99-03: the same per-kind degrade collection install and
@@ -1439,17 +1607,13 @@ export async function swapPluginUpdate(
     preflight.record.resources.workflows,
     handles.workflows.result.stagedNames,
   );
-  const updateWarnings = collectUpdateWarnings(handles, args.cascade);
+  const stagingWarnings = collectUpdateWarnings(handles);
   await dropPluginCompletionCache(args);
-  if (isDirectUpdate(args) && invalidConfigWriteBack) {
-    notifyInvalidConfigWriteBack(args);
-  }
 
   return {
     partition: "updated",
     name: plugin,
-    fromVersion,
-    toVersion,
+    ...preflightMove(preflight),
     stagedAgentNames,
     stagedMcpServerNames,
     declaresAgents: stagedAgentNames.length > 0,
@@ -1460,6 +1624,13 @@ export async function swapPluginUpdate(
     // justified consumer of `PreparedPluginUpdate.constraint`.
     constraint: preflight.constraint,
     declaresWorkflows: handles.workflows.result.stagedNames.length > 0,
+    resourcesChanged: stagedResourcesChanged(preflight.record.resources, [
+      handles.skills.result.stagedNames,
+      handles.commands.result.stagedNames,
+      stagedAgentNames,
+      stagedMcpServerNames,
+      handles.workflows.result.stagedNames,
+    ]),
     // Spread only when non-empty: a clean update's outcome keeps the key ABSENT
     // rather than present-and-empty, so its shape is unchanged (NREG-01).
     ...(degradedKinds.length > 0 && { degradedKinds }),
@@ -1491,9 +1662,30 @@ export async function swapPluginUpdate(
         newlyDegraded: preflight.record.compatibility.unsupported.length === 0,
       },
     }),
-    // D-141-03 / D-141-05: same NREG-01 spread rule as `degradedKinds` -- a
-    // clean update's outcome keeps the key absent.
-    ...(updateWarnings.length > 0 && { notes: updateWarnings }),
+    // D-PL1-10: same NREG-01 spread rule as `degradedKinds` -- a clean
+    // update's outcome keeps the key absent.
+    ...(stagingWarnings.length > 0 && { stagingWarnings }),
+    // AFILE-04: same NREG-01 spread rule; the caller that renders the row
+    // routes these through `notifyMcpConfigNotices`.
+    ...(mcpConfigNotices.length > 0 && { mcpConfigNotices }),
+  };
+}
+
+/**
+ * UPR-02 / UPR-03: the revisions a prepared update moves between -- the
+ * versions, and the record's and the candidate's commits, each commit key
+ * present exactly when its side has a sha (NREG-01). The one place both shas
+ * are read: the success outcome, the phase-3 failure outcome, and the
+ * runner's candidate report all take it from here.
+ */
+export function preflightMove(preflight: PreparedPluginUpdate): RevisionMove {
+  const fromCommit = preflight.record.resolvedSha;
+  const toCommit = preflight.resolvedSha;
+  return {
+    fromVersion: preflight.fromVersion,
+    toVersion: preflight.toVersion,
+    ...(fromCommit !== undefined && { fromCommit }),
+    ...(toCommit !== undefined && { toCommit }),
   };
 }
 
@@ -1510,6 +1702,32 @@ function collectDegradedKinds(handles: PrepHandles): readonly DegradeKind[] {
       ...(handles.commands.result.degraded.length > 0 ? ["command" as const] : []),
     ]),
   );
+}
+
+/**
+ * D-PL1-18: whether the update touched a resource a reload must pick up -- a
+ * skill, prompt, agent, MCP server or workflow, in the record's inventory
+ * before the swap or among the names it staged. Hooks are re-routed in
+ * process, so the record's hooks inventory is not read.
+ */
+function stagedResourcesChanged(
+  before: {
+    readonly skills: readonly string[];
+    readonly prompts: readonly string[];
+    readonly agents: readonly string[];
+    readonly mcpServers: readonly string[];
+    readonly workflows: readonly string[];
+  },
+  staged: readonly (readonly string[])[],
+): boolean {
+  return [
+    before.skills,
+    before.prompts,
+    before.agents,
+    before.mcpServers,
+    before.workflows,
+    ...staged,
+  ].some((names) => names.length > 0);
 }
 
 async function dropPluginCompletionCache(args: ThreePhaseArgs): Promise<void> {

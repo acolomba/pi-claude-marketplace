@@ -26,18 +26,19 @@
 //
 // AUTH-09: a credential bundle is composed here and threaded into the listing
 // call, and no credential value is read, stored, or placed on a returned arm.
-// The failure arm carries the classified transport cause and the rendered
-// range only.
+// The failure arm carries the classified transport cause only.
 
 import { canonicalCloneUrl, networkCloneUrl } from "../../domain/clone-key.ts";
 import { RELEASE_TAG_SEPARATOR, selectHighestSatisfyingTag } from "../../domain/release-tag.ts";
 import { listRemoteTags } from "../../platform/git.ts";
-import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
+import { classifyGitFailure } from "../../shared/git-failure-classifiers.ts";
 import { buildCloneAuth } from "../auth-host.ts";
 
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { RemoteTag } from "../../platform/git.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 
 /** The tag-listing operation this probe reaches the network through. */
@@ -45,14 +46,15 @@ export interface DependencyTagListingSeam {
   readonly listRemoteTags: typeof listRemoteTags;
 }
 
-/** The transport reason a failed listing classified to, where it classified. */
-export type DependencyTagListingFailureReason = ReturnType<typeof classifyGitTransportFailure>;
+/** The host reason a failed listing classified to, where it classified. */
+export type DependencyTagListingFailureReason =
+  NonNullable<ReturnType<typeof classifyGitFailure>>["reason"] | undefined;
 
 /**
  * What a constrained dependency's tag query came to.
  *
- * `no-matching-tag` carries the range as rendered for a user-visible reason,
- * and is the ONLY no-match answer -- see D-03-09 in the module header.
+ * `no-matching-tag` is the ONLY no-match answer -- see D-03-09 in the module
+ * header. The caller renders the member's declared ranges (D-PL4-05).
  */
 export type DependencyTagProbeResult =
   | {
@@ -61,7 +63,7 @@ export type DependencyTagProbeResult =
       readonly oid: string;
       readonly version: string;
     }
-  | { readonly kind: "no-matching-tag"; readonly range: string }
+  | { readonly kind: "no-matching-tag" }
   | {
       readonly kind: "tag-listing-failed";
       readonly cause: Error;
@@ -83,6 +85,7 @@ export interface DependencyTagProbeOptions {
   readonly tagMemo?: Map<string, readonly RemoteTag[]>;
   readonly auth: {
     readonly ctx: NotificationContext;
+    readonly run: NotificationRun;
     readonly credentialOps: CredentialOps;
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;
@@ -127,10 +130,13 @@ async function listCandidateTags(request: TagListingRequest): Promise<TagListing
     request.memo?.set(request.url, tags);
     return { kind: "listed", tags };
   } catch (err) {
+    rethrowInvalidGitHubBaseUrl(err);
     return {
       kind: "tag-listing-failed",
       cause: err instanceof Error ? err : new Error(String(err)),
-      classification: classifyGitTransportFailure(err),
+      // D-PL7-02: the listing reads the dependency's own source repository,
+      // so the plugin-clone rule applies and a 404 or 410 is `source missing`.
+      classification: classifyGitFailure(err, { notFound: "source missing" })?.reason,
     };
   }
 }

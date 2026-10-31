@@ -1,0 +1,243 @@
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
+
+import { createEventBus } from "@earendil-works/pi-coding-agent";
+
+import claudeMarketplaceExtension from "../../extensions/pi-claude-marketplace/index.ts";
+import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { resolvePiRuntime } from "../pi-runtime.ts";
+import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
+
+import { PINNED_SHA } from "./_pinned-sha.ts";
+import { E2E_MARKETPLACE_NAME, targetByPlugin } from "./_targets.ts";
+
+import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+
+const execFileAsync = promisify(execFile);
+
+const UPSTREAM_URL = "https://github.com/anthropics/claude-plugins-official.git";
+const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
+
+export interface NotifyRecord {
+  readonly message: string;
+  readonly severity?: string;
+}
+
+export interface E2EEnvironment {
+  readonly home: string;
+  readonly cwd: string;
+  readonly upstreamRoot: string;
+  marketplaceAdded: boolean;
+}
+
+export interface RegisteredCommand {
+  readonly handler: (args: string, ctx: ExtensionContext) => Promise<void>;
+}
+
+export interface ResourceDiscoverResult {
+  readonly skillPaths: readonly string[];
+  readonly promptPaths: readonly string[];
+}
+
+export interface MockPiHarness {
+  readonly pi: ExtensionAPI;
+  readonly commands: Map<string, RegisteredCommand>;
+  readonly events: Map<
+    string,
+    ((event: unknown, ctx: ExtensionContext) => Promise<ResourceDiscoverResult>)[]
+  >;
+}
+
+/**
+ * Builds a mock Pi whose soft-dependency probes read `tools` and
+ * `slashCommands`. `getCommands` is always defined: an absent method would
+ * throw inside the pi-mcp-adapter command arm, which reads a throw as "not
+ * loaded" (ADET-02). `events` is Pi's own event bus, because the factory
+ * subscribes to pi-mcp-adapter's status channel through it (ASTAT-01).
+ */
+export function makeMockPi(
+  tools: readonly unknown[],
+  slashCommands: readonly unknown[] = [],
+): MockPiHarness {
+  const commands = new Map<string, RegisteredCommand>();
+  const events = new Map<
+    string,
+    ((event: unknown, ctx: ExtensionContext) => Promise<ResourceDiscoverResult>)[]
+  >();
+
+  const pi = {
+    registerCommand: (name: string, command: RegisteredCommand): void => {
+      commands.set(name, command);
+    },
+    registerTool: (): void => {
+      // Not exercised by the e2e assertions.
+    },
+    on: (
+      event: string,
+      handler: (event: unknown, ctx: ExtensionContext) => Promise<ResourceDiscoverResult>,
+    ): void => {
+      const list = events.get(event) ?? [];
+      list.push(handler);
+      events.set(event, list);
+    },
+    getAllTools: (): readonly unknown[] => tools,
+    getCommands: (): readonly unknown[] => slashCommands,
+    events: createEventBus(),
+  } as unknown as ExtensionAPI;
+
+  return { pi, commands, events };
+}
+
+export function makeCtx(cwd: string): { ctx: ExtensionContext; notifications: NotifyRecord[] } {
+  const notifications: NotifyRecord[] = [];
+  const ctx = {
+    mode: "tui",
+    cwd,
+    ui: {
+      notify: (message: string, severity?: string): void => {
+        notifications.push(severity === undefined ? { message } : { message, severity });
+      },
+      addAutocompleteProvider: (): void => {
+        // session_start is not exercised in e2e tests.
+      },
+    },
+  } as unknown as ExtensionContext;
+
+  return { ctx, notifications };
+}
+
+async function prepareUpstreamCheckout(root: string): Promise<string> {
+  const dir = path.join(root, "claude-plugins-official");
+  await execFileAsync("git", ["init", dir]);
+  await execFileAsync("git", ["-C", dir, "remote", "add", "origin", UPSTREAM_URL]);
+  const ref = process.env.PI_CM_E2E_REF === "main" ? "main" : PINNED_SHA;
+  await execFileAsync("git", ["-C", dir, "fetch", "--depth", "1", "origin", ref], {
+    env: process.env.GITHUB_TOKEN
+      ? { ...process.env, GITHUB_TOKEN: process.env.GITHUB_TOKEN }
+      : process.env,
+    timeout: 120_000,
+  });
+  await execFileAsync("git", ["-C", dir, "checkout", "FETCH_HEAD"]);
+  await renameUpstreamMarketplace(dir);
+  return dir;
+}
+
+/**
+ * D-PL5-23: rewrites the `name` the checkout's manifest declares to
+ * `E2E_MARKETPLACE_NAME`, keeping the pinned commit and every other field.
+ * The checkout is added as a path source, which may not declare the reserved
+ * `claude-plugins-official`.
+ */
+async function renameUpstreamMarketplace(dir: string): Promise<void> {
+  const manifestPath = path.join(dir, ".claude-plugin", "marketplace.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify({ ...manifest, name: E2E_MARKETPLACE_NAME }, null, 2)}\n`,
+  );
+}
+
+export async function withE2EEnvironment<T>(fn: (env: E2EEnvironment) => Promise<T>): Promise<T> {
+  return withHermeticEnvironment("pi-cm-e2e-", async ({ root, home, cwd }) => {
+    const originalCwd = process.cwd();
+    try {
+      const upstreamRoot = await prepareUpstreamCheckout(root);
+      process.chdir(cwd);
+      return await fn({ home, cwd, upstreamRoot, marketplaceAdded: false });
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+}
+
+export async function installTargetWithMockPi(
+  env: E2EEnvironment,
+  plugin: string,
+  tools: readonly unknown[],
+  slashCommands: readonly unknown[] = [],
+): Promise<{
+  readonly mock: MockPiHarness;
+  readonly ctx: ExtensionContext;
+  readonly notifications: readonly NotifyRecord[];
+  readonly state: ExtensionState;
+}> {
+  const target = targetByPlugin(plugin);
+  const mock = makeMockPi(tools, slashCommands);
+  const { ctx, notifications } = makeCtx(env.cwd);
+  await claudeMarketplaceExtension(mock.pi);
+  const command = mock.commands.get("claude:plugin");
+  if (command === undefined) {
+    throw new Error("claude:plugin command was not registered");
+  }
+
+  if (!env.marketplaceAdded) {
+    await command.handler(`marketplace add ${env.upstreamRoot} --scope project`, ctx);
+    env.marketplaceAdded = true;
+  }
+
+  await command.handler(`install ${target.plugin}@${target.marketplace} --scope project`, ctx);
+  const state = await loadState(locationsFor("project", env.cwd).extensionRoot);
+  return { mock, ctx, notifications, state };
+}
+
+export type NightlyClassification = "pass" | "upstream-change" | "regression";
+
+export function classifyNightlyFailure(args: {
+  readonly failed: boolean;
+  readonly snapshotDiff: string;
+}): NightlyClassification {
+  if (!args.failed) {
+    return "pass";
+  }
+
+  return args.snapshotDiff.trim().length > 0 ? "upstream-change" : "regression";
+}
+
+export async function runPiRuntimeSmoke(): Promise<{
+  readonly ok: boolean;
+  readonly output: string;
+}> {
+  const root = await mkdtemp(path.join(tmpdir(), "pi-cm-runtime-smoke-"));
+  const home = path.join(root, "home");
+  const cwd = path.join(root, "project");
+  const agentDir = path.join(home, ".pi", "agent");
+  const sessionDir = path.join(agentDir, "sessions");
+  const extension = path.join(REPO_ROOT, "extensions", "pi-claude-marketplace", "index.ts");
+
+  try {
+    await mkdir(home, { recursive: true });
+    await mkdir(cwd, { recursive: true });
+    const runtime = resolvePiRuntime(REPO_ROOT);
+    const { stdout, stderr } = await execFileAsync(
+      process.execPath,
+      [runtime.cliPath, "--offline", "--no-extensions", "--extension", extension, "--help"],
+      {
+        cwd,
+        env: {
+          ...process.env,
+          HOME: home,
+          PI_CODING_AGENT_DIR: agentDir,
+          PI_CODING_AGENT_SESSION_DIR: sessionDir,
+          PI_OFFLINE: "1",
+        },
+        timeout: 30_000,
+      },
+    );
+    const output = `${stdout}\n${stderr}`;
+    return { ok: !/failed to load|error loading/i.test(output), output };
+  } catch (err) {
+    const error = err as { stdout?: string; stderr?: string; message?: string };
+    const output = `${error.stdout ?? ""}\n${error.stderr ?? ""}\n${error.message ?? ""}`;
+    return { ok: false, output };
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}

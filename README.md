@@ -26,21 +26,23 @@ This extension installs plugins from Claude plugin marketplaces that contain the
 - Skills.
 - Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents).
 - Hooks. Partial support. For more information, see [Hook compatibility](docs/hooks-compatibility.md).
-- MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter).
+- MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). For more information, see [MCP compatibility](docs/mcp-compatibility.md).
 - Workflows. Requires [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). For more information, see [Workflow compatibility](docs/workflows-compatibility.md).
 
 Plugins that contain unsupported components can be partially installed. A partially installed plugin may fail to work as intended.
 
-The `/claude:plugin` command manages Claude marketplaces and plugins, like Claude Code's `/plugin`. A desired-state configuration in `[~/].pi/agent/claude-plugins[.local].json` files makes plugin installations automatic and repeatable. You can share these files across machines or team members.
+The `/claude:plugin` command manages Claude marketplaces and plugins, like Claude Code's `/plugin`. Desired-state configs in `[~/].pi/agent/claude-plugins[.local].json` make plugin installations automatic and repeatable. You can share these configs across machines or team members.
 
 ## Prerequisites
 
-- [Pi Coding Agent](https://pi.dev) 0.86.1 or newer
-- [pi-subagents](https://pi.dev/packages/pi-subagents) (optional but recommended, `pi install npm:pi-subagents`)
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) (optional but recommended, `pi install npm:pi-mcp-adapter`)
+- [Pi Coding Agent](https://pi.dev) 1.0.0 or newer
+- [pi-subagents](https://pi.dev/packages/pi-subagents) 0.74.0 or newer (optional but recommended, `pi install npm:pi-subagents`)
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 5.2.0 or a later 5.x release (optional but recommended, `pi install npm:pi-mcp-adapter`). Pi's built-in MCP support does not satisfy this requirement.
 - [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) (optional but recommended, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
 ## Usage
+
+For scripts, see [JSON output](docs/json-output.md).
 
 Install the Pi extension:
 
@@ -118,38 +120,13 @@ Skills use Pi's `/skill:` form and also have an alias in interactive sessions:
 
 Skill aliases use a colon on every platform. If an alias conflicts with a command, the command takes precedence. Use `/skill:foo-bar` to invoke the skill.
 
-MCP server names do not change. If another MCP configuration already uses that name, the plugin install or update fails.
+Plugin MCP servers get the names that Claude Code gives them. The model sees each tool as `mcp__plugin_<plugin>_<server>__<tool>`. pi-mcp-adapter stores each server under a key that ends with `_`. `/claude:plugin info` shows each server as `plugin:<plugin>:<server>`.
 
-| Plugin name | `mcpServers` key | Pi MCP server name                 |
-| ----------- | ---------------- | ---------------------------------- |
-| `foo`       | `api`            | `api`                              |
-| `foo`       | `foo-api`        | `foo-api`                          |
-| `bar`       | `api`            | _conflict if `api` already exists_ |
-
-### Customizing generated agents
-
-This extension converts each plugin agent into a pi-subagents agent file named `pi-claude-marketplace-<plugin>-<agent>`. Do not edit these files: install, update, and reinstall regenerate them.
-
-Two conversion rules to know:
-
-- If the source agent does not declare `tools:`, the generated agent has no tool allowlist. pi-subagents then grants its default builtin tools, like Claude Code grants every tool available to subagents. Background children also receive ambient extension tools, such as MCP tools from pi-mcp-adapter. If the source agent sets `disallowedTools`, those names become `excludeTools`, which needs pi-subagents 0.62.0 or newer. Older versions ignore the field.
-- Agent-level `allowed-tools`, `mcpServers`, `permissionMode`, and `hooks` fields are dropped, with a warning that explains why. Claude Code ignores all four on plugin agents (`allowed-tools` is a slash-command field). The plugin's own MCP servers and its hooks.json still install.
-
-To change a generated agent's settings so the change survives plugin updates, use pi-subagents agent overrides in your Pi settings file (`~/.pi/agent/settings.json` for the user scope, `<project>/.pi/settings.json` for the project scope):
-
-```json
-{
-  "subagents": {
-    "agentOverrides": {
-      "pi-claude-marketplace-foo-reviewer": {
-        "tools": "read,bash,mcp:github"
-      }
-    }
-  }
-}
-```
-
-An override replaces the same field in the generated frontmatter. `mcp:<server>` entries grant direct MCP tools when pi-mcp-adapter is installed. pi-subagents loads MCP tools only for background (`async: true`) children.
+| Plugin name | `mcpServers` key | Adapter server key  | Tool names                      | Name shown by `info` |
+| ----------- | ---------------- | ------------------- | ------------------------------- | -------------------- |
+| `foo`       | `api`            | `plugin_foo_api_`   | `mcp__plugin_foo_api__<tool>`   | `plugin:foo:api`     |
+| `foo`       | `my.db`          | `plugin_foo_my_db_` | `mcp__plugin_foo_my_db__<tool>` | `plugin:foo:my.db`   |
+| `bar`       | `api`            | `plugin_bar_api_`   | `mcp__plugin_bar_api__<tool>`   | `plugin:bar:api`     |
 
 ### Scoping
 
@@ -161,7 +138,7 @@ You can also install the same plugin in both the user and project scopes. Then t
 
 ### Partially available plugins
 
-Some plugins contain unsupported components: an unmappable hook, an LSP server, or a theme. To install or update these plugins partially, pass the `--partial` option. This extension installs the supported components and ignores the unsupported ones.
+Some plugins contain unsupported components: an unmappable hook, an LSP server, a theme, or an MCP server that uses a feature pi-mcp-adapter cannot run. To install or update these plugins partially, pass the `--partial` option. This extension installs the supported components and ignores the unsupported ones.
 
 List partially available plugins.
 
@@ -177,48 +154,80 @@ Install a partially available plugin. Put `--partial` first to enable argument c
 
 ## Configuration files
 
-Each scope stores its declarative configuration for marketplaces and plugins in `claude-plugins.json`, under the scope root.
+Each scope declares its marketplaces and plugins in two layers: the base layer and the local layer. The file of a layer is its config. The base config, `claude-plugins.json`, is under the scope root.
 
 | Scope     | File path                         |
 | --------- | --------------------------------- |
 | `user`    | `~/.pi/agent/claude-plugins.json` |
 | `project` | `<cwd>/.pi/claude-plugins.json`   |
 
-These files are the authoritative record of the installed marketplaces and plugins. Pi applies their contents at extension load (`/reload`).
+The configs of a scope are the desired state of its marketplaces and plugins. The catalog of a marketplace is the list of plugins and versions that it offers. A new session or `/reload` does not change your installed plugins, unless you turn on [autoapply](#autoapply). It only lists the changes that your configs and the marketplace catalogs need.
+
+To see those changes, run `/claude:plugin pending`. To make them, run `/claude:plugin apply`. Then run `/reload` so that Pi loads the result.
+
+```text
+/claude:plugin pending
+/claude:plugin apply
+/reload
+```
 
 Whether Pi applies a declared plugin's components depends on the entry's optional `enabled` key and on the install-time default the plugin author declares. For more information, see [Plugin enablement](docs/plugin-enablement.md).
 
-### Local configuration files
+### Autoapply
 
-Each scope can also have a `claude-plugins.local.json` file alongside the base file.
+To make each new session and `/reload` apply your configs, turn on `autoapply`:
+
+```text
+/claude:plugin autoapply on
+```
+
+This sets the top-level `autoapply` key of a config to `true`. Like `enable`, it writes the user base config unless you add `--scope project` or `--local`. `/claude:plugin autoapply off` sets the key to `false`. Run `/claude:plugin autoapply` with no value to see the value in effect, the config that sets it, and each config's own value. With `--scope` or `--local`, it lists only those configs. A set does not run `apply`: the next load reads the new value. You can also edit the key by hand:
+
+```json
+{
+  "autoapply": true,
+  "plugins": { "context7-plugin@context7-marketplace": {} }
+}
+```
+
+The default is `false`. When `autoapply` is on, the load runs `/claude:plugin apply` for both scopes before Pi looks for skills and prompts. So the plugins that it installs are ready in the same session. The load can clone repositories from the network, as `apply` does. A failed change shows as a failed row and stays in `pending`. The next load tries it again.
+
+Any config can set `autoapply`. The most specific config that sets it wins, in this order: the project local config, the project base config, the user local config, and the user base config. If a config is not valid, for example because `autoapply` is not `true` or `false`, the load does not apply anything and reports the config.
+
+A user config cannot turn off a project's `autoapply`, because the project configs are more specific. To stop it on your machine, set `"autoapply": false` in the project local config. A load never asks you to sign in. If a clone needs a credential that you have not stored, its row fails, and `/claude:plugin apply` can then ask you to sign in.
+
+> [!WARNING]
+> A project's base config is usually in version control. If it sets `autoapply` to `true`, starting `pi` in that project installs its plugins, hooks and MCP servers included, with no prompt. Read `.pi/claude-plugins.json` before you start `pi` in a project that you cloned. Claude Code has no such setting: it does not install a plugin that only a project's settings enable, and you install it with a command.
+
+### The local config
+
+The local config, `claude-plugins.local.json`, is next to the base config.
 
 | Scope     | File path                               |
 | --------- | --------------------------------------- |
 | `user`    | `~/.pi/agent/claude-plugins.local.json` |
 | `project` | `<cwd>/.pi/claude-plugins.local.json`   |
 
-The local file overrides individual entries from the base file. An entry in `claude-plugins.local.json` replaces the same-keyed entry in `claude-plugins.json` completely.
-
-For commands that write configuration, `--local` selects `claude-plugins.local.json`. Reads always combine both configuration files. Marketplace `update` still refreshes cached sources and installed-plugin state.
+The local config overrides entries from the base config. To write to the local config, add `--local`:
 
 ```text
+/claude:plugin marketplace add upstash/context7 --local
 /claude:plugin install context7-plugin@context7-marketplace --local
-/claude:plugin marketplace autoupdate context7-marketplace --local
 ```
 
 ### Gitignore convention
 
-In the project scope, commit `claude-plugins.json`. Then your collaborators install the same marketplaces and plugins. Keep `claude-plugins.local.json` out of version control. Add this line to your project's `.gitignore`:
+In the project scope, commit the base config, `claude-plugins.json`. Then your collaborators install the same marketplaces and plugins. Keep the local config, `claude-plugins.local.json`, out of version control. Add this line to your project's `.gitignore`:
 
 ```text
 .pi/claude-plugins.local.json
 ```
 
-User-scope files live in your home directory. They are personal and never shared.
+User-scope configs live in your home directory. They are personal and never shared.
 
 ## Command reference
 
-This extension mirrors Claude Code's `/plugin` command. Use `/claude:plugin` in Pi for marketplace and plugin operations. After you install, uninstall, update, or reinstall plugins, run `/reload`. Then Pi discovers the changed resources.
+This extension mirrors Claude Code's `/plugin` command. Use `/claude:plugin` in Pi for marketplace and plugin operations. After you install, uninstall, update, or reinstall plugins, run `/reload`. Then Pi discovers the changed resources. If you edit a config by hand, run `/claude:plugin apply` before `/reload`.
 
 ### Marketplace
 
@@ -286,19 +295,28 @@ Update one marketplace. If you omit the name, the command updates all marketplac
 /claude:plugin marketplace update
 ```
 
-Remove a marketplace and all plugins installed from it.
+Remove a marketplace and uninstall its plugins. A dependency that another plugin still needs stays installed.
 
 ```text
 /claude:plugin marketplace remove context7-marketplace
 /claude:plugin marketplace rm context7-marketplace
 ```
 
-Toggle marketplace plugin auto-updates. When you update the marketplace manually, this extension also updates the installed plugins.
+### Autoupdate
+
+Autoupdate is a setting for each marketplace. It controls what happens when the marketplace updates:
+
+- If autoupdate is on, the extension updates the marketplace and its installed plugins in the background. The update starts after the first message of a `tui` session, with a random delay of up to ten minutes. A manual `marketplace update` also updates the installed plugins of the marketplace.
+- If autoupdate is off, `marketplace update` refreshes only the list of plugins in the marketplace.
+
+Turn autoupdate on or off for one marketplace.
 
 ```text
 /claude:plugin marketplace autoupdate context7-marketplace
 /claude:plugin marketplace noautoupdate context7-marketplace
 ```
+
+If a marketplace has no autoupdate setting, autoupdate is off. Official Claude marketplaces are the exception, as in Claude Code. An official marketplace is one with a name that Claude Code reserves for Anthropic, such as `claude-plugins-official`. Autoupdate is on by default for these marketplaces, except for `knowledge-work-plugins` and `first-party-plugins`.
 
 ### Plugin
 
@@ -390,7 +408,7 @@ Also remove the dependencies that no remaining plugin needs with `--prune`.
 /claude:plugin uninstall context7-plugin@context7-marketplace --prune
 ```
 
-You can uninstall a plugin that another installed plugin needs. Its row names the dependents as `{dependents unsatisfied}`. At the next reload, Pi disables those dependents. For more information, see [Dependency resolution](docs/dependency-resolution.md).
+You can uninstall a plugin that another installed plugin needs. Its row names the enabled dependents as `{dependents unsatisfied}`. The next `/claude:plugin apply` installs the plugin again as a dependency, because the dependents still declare it. If that install fails, `apply` disables those dependents. For more information, see [Dependency resolution](docs/dependency-resolution.md).
 
 To remove orphaned dependency installs without naming a plugin to uninstall, run `prune`. It selects the user scope by default. Use `--scope project` to select the project scope.
 
@@ -408,7 +426,7 @@ Preview the same scope with `--dry-run`. The preview reads the current state and
 
 Only dependency-installed plugins that no installed plugin in the same scope declares qualify. Even disabled plugins still hold their dependencies. Plugins you installed by name stay installed. The sweep repeats until no more plugins qualify. Actual rows read `(uninstalled) {dependency pruned}`; preview rows read `(will uninstall) {dependency pruned}`. If none qualify, both commands report `Nothing to prune in user scope: no orphaned dependency installs were found.` for the default scope.
 
-Reload Pi after changes. A reload never prunes orphaned dependencies. Run `prune` or `uninstall <plugin> --prune` to remove them.
+Reload Pi after changes. Neither `/reload` nor `/claude:plugin apply` prunes orphaned dependencies. Run `prune` or `uninstall <plugin> --prune` to remove them.
 
 ```text
 /reload
@@ -446,17 +464,10 @@ The `/claude:plugin install` command automatically fetches a remote plugin.
 
 ### Bootstrap
 
-Bootstrap is a one-step setup. It adds the official Anthropic marketplace in the user scope and enables autoupdate.
+Bootstrap is a one-step setup. It adds the official Anthropic marketplace, `claude-plugins-official`, in the user scope. Autoupdate is on by default for this marketplace. If the marketplace is already added, bootstrap does not change its [autoupdate](#autoupdate) setting.
 
 ```text
 /claude:plugin bootstrap
-```
-
-It runs these commands:
-
-```text
-/claude:plugin marketplace add anthropics/claude-plugins-official
-/claude:plugin marketplace autoupdate claude-plugins-official
 ```
 
 ### Import

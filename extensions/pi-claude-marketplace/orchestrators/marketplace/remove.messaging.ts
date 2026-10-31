@@ -1,47 +1,30 @@
-// orchestrators/marketplace/remove.messaging.ts
-//
-// The `marketplace remove` command's co-located notification vocabulary: its
-// `CommandContext` (carrying `Messaging.label` and a render map over the
-// plugin-child-row statuses it emits) for its marketplace notifications.
-//
-// D-01 / MOD-01: `marketplace remove` emits a marketplace block whose header is
-// `(removed)` (clean) or `(failed)` (partial), with child plugin rows: one
-// `(uninstalled)` (○) per successfully unstaged plugin and, on the partial arm,
-// one `(failed)` (⊘) per plugin whose cascade failed. The header line renders
-// via the central `renderMpHeader` seam the spine reuses; the per-plugin child
-// rows render through this command's render map below, whose arms call the same
-// shared row helpers the central `renderPluginRow` `uninstalled` / `failed` arms
-// call, so dispatch is byte-identical.
-
-import {
-  pluginRow,
-  renderUninstalledRow,
-  ICON_UNINSTALLABLE,
-} from "../../shared/notification-grammar.ts";
+import { renderDependentKeys } from "../../domain/dependencies.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import { type PluginUninstalledMessage } from "../../shared/notification-types.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";
 
-/**
- * The plugin-child-row statuses `marketplace remove` emits inside its cascade:
- * `uninstalled` (one per unstaged plugin) and `failed` (one per cascade
- * failure, partial arm). This is the Status set the render map below is total
- * over (D-10: a missing arm is a TS2741 compile error).
- */
 type RemoveRowStatus = "uninstalled" | "failed";
 export type RemoveRowMsg = PluginUninstalledMessage | PluginFailedMessage;
 
-/**
- * D-04 / D-05 / D-10 / MOD-01 / MOD-03: the `marketplace remove` command
- * context. The render map is total over the command's plugin-child-row statuses;
- * each arm reproduces the EXACT bytes of the central `renderPluginRow` arm it
- * lifts, so cascade dispatch through `notifyWithContext` is byte-identical.
- */
+/** The command label and complete per-status reason policy. */
 export const REMOVE_CONTEXT = {
   Messaging: { label: "Marketplace remove" },
-  render: {
-    uninstalled: (p, probe, mpScope) => renderUninstalledRow(p, probe, mpScope),
-    failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
+  rowPolicies: {
+    uninstalled: { markers: false, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
   },
-} as const satisfies CommandContext<RemoveRowStatus, RemoveRowMsg>;
+} as const satisfies CommandContext<RemoveRowStatus>;
+
+/**
+ * LAYER-03: the cause line of a remove refused because plugins that stay still
+ * declare a plugin the remove would uninstall. It names those plugins and the
+ * order that unblocks the remove. T-08-06: `renderDependentKeys` falls back to
+ * a count when a key could forge the sentence.
+ */
+export function composeHeldRemovalCause(
+  marketplace: string,
+  dependents: readonly string[],
+): string {
+  return `Uninstall ${renderDependentKeys(dependents)} first, then remove the marketplace ${marketplace} again.`;
+}

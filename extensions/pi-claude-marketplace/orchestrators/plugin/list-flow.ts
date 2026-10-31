@@ -24,8 +24,8 @@
 // CMC-13 / MSG-SD-1..3 per-row soft-dep markers: each installed-variant
 // `PluginInstalledMessage` carries `dependencies: readonly Dependency[]`
 // derived from the plugin's installed resources (state-recorded).
-// `notify` owns the single softDepStatus(pi) probe per call
-// and emits the `{requires pi-subagents}` / `{requires pi-mcp}` markers
+// The command run carries the one soft-dependency snapshot (D-05), and resolve
+// composes the `{requires pi-subagents}` / `{requires pi-mcp-adapter}` markers from it
 // when (declares AND companion unloaded). RLD-04: the list orchestrator
 // stamps the steady-state inventory row `installed` with `needsReload: false`,
 // so the OR-reduce reload-hint (RLD-02) does NOT fire the `/reload to pick up
@@ -37,8 +37,14 @@
 //     one flag is set, show UNION of selected buckets.
 //   - PL-3 marketplace narrowing: optional opts.marketplace filters which
 //     marketplace records are walked.
-//   - PL-5 upgradable: STRING comparison (manifest.version !== installed
-//     record version). NOT semver.
+//   - PL-5 upgradable: STRING comparison of the record's version against
+//     the candidate version the one version rule derives offline
+//     (plugin.json, then the entry, then the tree's commit version for an
+//     undeclared git plugin), falling back to the entry version when no
+//     candidate resolves (VER-01, VER-02). NOT semver. Claude Code's `list`
+//     shows no upgrade state for any source, so this state is a recorded
+//     divergence, kept for git sources too because `fetch` exists to feed it
+//     (D-PL3-07).
 //   - PL-6 manifest soft-fail: per-marketplace manifest load failure
 //     surfaces as a `(failed)` MarketplaceNotificationMessage with
 //     `status: "failed"` and `plugins: []`. No marketplace-level cause
@@ -54,11 +60,18 @@
 
 import { lookupDeclaredPlugin, type ManifestLookup } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
-import { loadMergedScopeConfig, type MergedConfig } from "../../persistence/config-merge.ts";
+import { assertRecordedMarketplaceName } from "../../domain/name.ts";
+import { effectiveMarketplaceAutoupdate } from "../../domain/official-marketplaces.ts";
+import {
+  hasInvalidConfigLayer,
+  loadMergedScopeConfig,
+  type MergedConfig,
+} from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { notify } from "../../shared/notification-dispatch.ts";
 import {
   type MarketplaceDetails,
   type PluginFailedMessage,
@@ -68,7 +81,10 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { narrowProbeError as sharedNarrowProbeError } from "../../shared/probe-classifiers.ts";
+import { crossScopeFlag, marketplaceNotAddedMessage } from "../marketplace/shared.ts";
+import { collectMarketplaceRecordsByScope } from "../scope-fanout.ts";
 
 import { availableRowMessage, type FilterBucket } from "./list-candidate-row.ts";
 import { composeInstalledListRow } from "./list-installed-row.ts";
@@ -80,7 +96,9 @@ import {
 } from "./list-orphan-fold.ts";
 import { LIST_CONTEXT, type ListMsg } from "./list.messaging.ts";
 
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { ParsedSource } from "../../domain/source.ts";
+import type { ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /** Rows actually returned by the loader; listPlugins constructs failure notifications separately. */
@@ -130,22 +148,16 @@ type PluginRenderStatus =
  * and the filter keys on their render status instead.
  */
 /**
- * Options bag for {@link listPlugins}. The edge layer constructs this
- * from `/claude:plugin list` argv parsing.
- *
- * `pi` is REQUIRED -- the `notify(ctx, pi, message)` call consumes it
- * for the single softDepStatus(pi) probe per invocation. The
- * renderer derives per-row soft-dep markers from each
- * `PluginInstalledMessage.dependencies` field plus the probe result.
+ * Options bag for {@link loadPluginListPayload}. It carries no run, because
+ * building the payload emits nothing: the LLM list tool and the browser's
+ * plugin loader build payloads without a notification run.
  */
-export interface ListPluginsOptions {
+export interface PluginListPayloadOptions {
   readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
   readonly cwd: string;
-  /** SC-6 enumeration narrowing: when undefined the cross-scope walk + fold
-   *  rule applies. When set, the orchestrator STILL reads both scopes (the
-   *  fold rule needs visibility into both) but constrains which blocks are
-   *  emitted at the end. */
+  /** SC-6 / LST-05 enumeration narrowing: when undefined the cross-scope walk
+   *  + fold rule applies. When set, only that scope's marketplace records are
+   *  emitted, each enumerated from that scope alone, with no fold. */
   readonly scope?: Scope;
   /** PL-3 marketplace narrowing: when undefined, every marketplace is walked. */
   readonly marketplace?: string;
@@ -168,10 +180,22 @@ export interface ListPluginsOptions {
 }
 
 /**
+ * Options bag for {@link listPlugins}. The edge layer constructs this
+ * from `/claude:plugin list` argv parsing.
+ */
+export interface ListPluginsOptions extends PluginListPayloadOptions {
+  /**
+   * D-05: the command run. Resolve composes each row's soft-dependency
+   * markers from `PluginInstalledMessage.dependencies` and the run's snapshot.
+   */
+  readonly run: NotificationRun;
+}
+
+/**
  * PL-1 / LIST-01: when ALL filter flags are absent or false, show every bucket.
  * When any one is true, show UNION of the selected buckets.
  */
-function filtersPassive(opts: ListPluginsOptions): boolean {
+function filtersPassive(opts: PluginListPayloadOptions): boolean {
   return (
     opts.installed !== true &&
     opts.available !== true &&
@@ -189,7 +213,7 @@ function filtersPassive(opts: ListPluginsOptions): boolean {
  * pass `installed-inventory` and are matched on `status`.
  */
 function shouldShow(
-  opts: ListPluginsOptions,
+  opts: PluginListPayloadOptions,
   status: PluginRenderStatus,
   bucket: FilterBucket,
 ): boolean {
@@ -300,7 +324,7 @@ type ListReason =
  * the orchestrator applies the final MSG-GR-3 sort at the block boundary.
  */
 async function enumerateMarketplacePlugins(args: {
-  opts: ListPluginsOptions;
+  opts: PluginListPayloadOptions;
   mpName: string;
   mpRecord: ExtensionState["marketplaces"][string];
   pluginScope: Scope;
@@ -335,6 +359,7 @@ async function enumerateMarketplacePlugins(args: {
       pluginScope,
       marketplaceScope,
       marketplaceRoot: mpRecord.marketplaceRoot,
+      marketplaceSource: mpRecord.source,
       marketplaceName: mpName,
       record,
       lookup: manifestLookupFor(scopedManifest, pluginName),
@@ -370,14 +395,19 @@ async function enumerateMarketplacePlugins(args: {
     // presence probe reads the WARM clone/mirror cache fs-only (no network).
     //
     // DFEN-04 / D-01: the config key is the flat `<plugin>@<marketplace>` form,
-    // and the merged view resolves base-vs-local by the same identity rule
-    // `install` applies (a local entry replaces the base entry wholesale).
+    // and the merged view reads `enabled` field by field, as the install's
+    // precedence read does (LAYER-09 / DFEN-05): a local entry's explicit
+    // `enabled` wins, and a local entry without one keeps the base value.
     // eslint-disable-next-line no-await-in-loop -- bounded by the manifest's uninstalled entries, one row each
     const { message: row, bucket } = await availableRowMessage(
       manifestEntry,
-      { marketplaceRoot: mpRecord.marketplaceRoot, marketplaceName: mpName },
+      {
+        marketplaceRoot: mpRecord.marketplaceRoot,
+        marketplaceName: mpName,
+        marketplaceSource: mpRecord.source,
+      },
       locationsFor(pluginScope, opts.cwd),
-      pluginScopeConfig.plugins[`${manifestEntry.name}@${mpName}`]?.entry.enabled,
+      ownValue(pluginScopeConfig.plugins, `${manifestEntry.name}@${mpName}`)?.entry.enabled,
     );
     if (shouldShow(opts, row.status, bucket)) {
       rows.push(row);
@@ -441,6 +471,8 @@ async function loadMarketplaceManifestSoftly(
 ): Promise<ScopedManifest> {
   try {
     const manifest = await loadManifestSoftly(mpRecord.manifestPath);
+    // D-PL5-28: a marketplace Claude Code refuses reads as a failed one.
+    assertRecordedMarketplaceName(mpRecord.name, mpRecord.source as ParsedSource, manifest.name);
     return { ok: true, manifest };
   } catch (err) {
     // BOUND-03 / D-95-05: the failure stays off every rendered row (the
@@ -506,11 +538,11 @@ const EMPTY_ORPHAN_FOLD: OrphanFold = { folded: [], foldedNames: new Set() };
  * duplicate `(available)`. FSTAT-02 / FSTAT-04 / D-66-01 / D-66-02: the derived
  * `partially-installed` / `partially-upgradable` rows are recorded-installed
  * inventory and join for the same reason. Regressions:
- * tests/integration/fold-adoption.test.ts and the "CR-01 / G-21-01
- * fold-carryover" case in tests/orchestrators/plugin/list-flow.test.ts.
+ * test/integration/fold-adoption.test.ts and the "CR-01 / G-21-01
+ * fold-carryover" case in test/orchestrators/plugin/list-flow.test.ts.
  */
 async function computeOrphanFold(
-  opts: ListPluginsOptions,
+  opts: PluginListPayloadOptions,
   mpName: string,
   projectMp: ExtensionState["marketplaces"][string],
   /**
@@ -534,7 +566,7 @@ async function computeOrphanFold(
 }
 
 async function buildMarketplaceMessage(args: {
-  opts: ListPluginsOptions;
+  opts: PluginListPayloadOptions;
   mpName: string;
   mpScope: Scope;
   mpRecord: ExtensionState["marketplaces"][string];
@@ -619,25 +651,39 @@ async function buildMarketplaceMessage(args: {
 }
 
 /**
+ * D-13-17 / LST-05: the orphan fold serves the both-scopes view only. Under
+ * `--scope`, a project clone of a user marketplace is that scope's own block.
+ */
+function foldsInBothScopeView(
+  opts: PluginListPayloadOptions,
+  projectMp: ExtensionState["marketplaces"][string] | undefined,
+  userMp: ExtensionState["marketplaces"][string] | undefined,
+): projectMp is ExtensionState["marketplaces"][string] {
+  return opts.scope === undefined && isOrphanMarketplaceClone(projectMp, userMp);
+}
+
+/**
  * D-02: pure payload builder for the cross-scope
  * plugin list. Reads BOTH scopes' state regardless of `opts.scope` -- the
  * fold rule needs visibility into both; final scope-filtering applies AFTER
  * the blocks are constructed.
  */
 export async function loadPluginListPayload(
-  opts: ListPluginsOptions,
+  opts: PluginListPayloadOptions,
 ): Promise<readonly MarketplaceRows<Exclude<ListMsg, { status: "failed" }>>[]> {
   // D-13-19: read both scopes' state.
   const userLocations = locationsFor("user", opts.cwd);
   const projectLocations = locationsFor("project", opts.cwd);
-  const [userState, projectState, userMerged, projectMerged] = await Promise.all([
+  const [userState, projectState, userOutcome, projectOutcome] = await Promise.all([
     loadState(userLocations.extensionRoot),
     loadState(projectLocations.extensionRoot),
     // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config).
     // Pre-compute the merged view per scope ONCE before the fold loops below.
-    loadMergedScopeConfig(userLocations).then((r) => r.merged),
-    loadMergedScopeConfig(projectLocations).then((r) => r.merged),
+    loadMergedScopeConfig(userLocations),
+    loadMergedScopeConfig(projectLocations),
   ]);
+  const userMerged = userOutcome.merged;
+  const projectMerged = projectOutcome.merged;
 
   const blocks: BuiltMarketplace[] = [];
 
@@ -647,12 +693,12 @@ export async function loadPluginListPayload(
       continue;
     }
 
-    const userMp = userState.marketplaces[mpName];
+    const userMp = ownValue(userState.marketplaces, mpName);
     // Orphan-fold rule: if the project-scope record is a CLONE of the
     // user-scope record (same marketplaceRoot), DO NOT emit a separate
     // project-scope block. The project-scope plugins fold under the
-    // user-scope header below.
-    if (isOrphanMarketplaceClone(mpRecord, userMp)) {
+    // user-scope header below. The fold serves the both-scopes view only.
+    if (foldsInBothScopeView(opts, mpRecord, userMp)) {
       continue;
     }
 
@@ -662,7 +708,12 @@ export async function loadPluginListPayload(
       mpName,
       mpScope: "project",
       mpRecord,
-      autoupdate: projectMerged.marketplaces[mpName]?.entry.autoupdate ?? false,
+      autoupdate:
+        !hasInvalidConfigLayer(projectOutcome) &&
+        effectiveMarketplaceAutoupdate(
+          mpName,
+          ownValue(projectMerged.marketplaces, mpName)?.entry.autoupdate,
+        ),
       scopeConfig: projectMerged,
       extraPlugins: [],
     });
@@ -676,9 +727,9 @@ export async function loadPluginListPayload(
     }
 
     // Fold orphan project plugins iff the matching project-scope record
-    // is a clone (per D-13-17 semantics) and exists.
-    const projectMp = projectState.marketplaces[mpName];
-    const { folded, foldedNames } = isOrphanMarketplaceClone(projectMp, mpRecord)
+    // is a clone (per D-13-17 semantics) and exists, in the both-scopes view.
+    const projectMp = ownValue(projectState.marketplaces, mpName);
+    const { folded, foldedNames } = foldsInBothScopeView(opts, projectMp, mpRecord)
       ? // eslint-disable-next-line no-await-in-loop -- bounded by the user marketplaces, one orphan fold each
         await computeOrphanFold(opts, mpName, projectMp, projectMerged)
       : EMPTY_ORPHAN_FOLD;
@@ -689,7 +740,12 @@ export async function loadPluginListPayload(
       mpName,
       mpScope: "user",
       mpRecord,
-      autoupdate: userMerged.marketplaces[mpName]?.entry.autoupdate ?? false,
+      autoupdate:
+        !hasInvalidConfigLayer(userOutcome) &&
+        effectiveMarketplaceAutoupdate(
+          mpName,
+          ownValue(userMerged.marketplaces, mpName)?.entry.autoupdate,
+        ),
       scopeConfig: userMerged,
       extraPlugins: folded,
       excludeFromAvailable: foldedNames,
@@ -697,10 +753,10 @@ export async function loadPluginListPayload(
     blocks.push(built);
   }
 
-  // SC-6 scope narrowing: if the caller restricted the scope, only emit
-  // blocks whose ORIGINATING scope matches. The fold rule still applied
-  // above so the cross-scope visibility is preserved -- but the resulting
-  // surface is filtered to the requested scope.
+  // SC-6 / LST-05 scope narrowing: with the fold off, each block lists one
+  // scope's own records and candidates, so `--scope` keeps that scope's
+  // installations by keeping that scope's blocks. A project record cloned
+  // from a user marketplace (D-MF-04) shows under its own project header.
   const filtered =
     opts.scope === undefined ? blocks : blocks.filter((b) => b.emitScope === opts.scope);
 
@@ -734,16 +790,60 @@ function narrowListFailReason(err: unknown): ListReason {
 }
 
 /**
+ * WR-03: synthetic identities used by the list-orchestration catch path.
+ * Held as module-level constants so tests can assert against them and
+ * future changes are gated behind a single edit point. Both render under
+ * the cascade grammar as parens-wrapped tokens -- the renderer does
+ * not special-case parens, so the visual marker reads as "synthetic
+ * placeholder" to an operator scanning output.
+ */
+const SYNTHETIC_LIST_FAILURE_MARKETPLACE_NAME = "(list)";
+const SYNTHETIC_LIST_FAILURE_PLUGIN_NAME = "(list)";
+
+/**
+ * PL-3: a named marketplace must be recorded in a consulted scope, the same
+ * presence test `plugin info` and `marketplace info` apply before they fail
+ * with `{marketplace not added}`.
+ */
+async function marketplaceAdded(opts: ListPluginsOptions, marketplace: string): Promise<boolean> {
+  const found = await collectMarketplaceRecordsByScope({
+    cwd: opts.cwd,
+    scope: opts.scope,
+    marketplace,
+  });
+  return found.length > 0;
+}
+
+/**
  * D-06 orchestrator entrypoint. Read-only listing of plugins. Constructs
  * the `NotificationMessage` payload inline and forwards it to a single
- * `notify(ctx, pi, message)` call per orchestration arm (success or
- * failure). `notify()` owns the single softDepStatus(pi) probe per
- * invocation and emits per-row `{requires pi-subagents}` /
- * `{requires pi-mcp}` markers when (declares AND companion unloaded).
+ * `notifyWithContext(ctx, run, ...)` call per orchestration arm (success or
+ * failure). A named marketplace that no consulted scope records instead
+ * emits one `marketplace-not-added` result through `notify()` (PL-3). The
+ * command run carries the soft-dependency snapshot (D-05), and
+ * resolve composes the per-row `{requires pi-subagents}` /
+ * `{requires pi-mcp-adapter}` markers from it when (declares AND companion unloaded).
  */
 export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
-  const { ctx, pi } = opts;
+  const { ctx, run } = opts;
   try {
+    if (opts.marketplace !== undefined && !(await marketplaceAdded(opts, opts.marketplace))) {
+      notify(
+        ctx,
+        run,
+        marketplaceNotAddedMessage({
+          name: opts.marketplace,
+          scope: opts.scope,
+          ...(await crossScopeFlag({
+            cwd: opts.cwd,
+            marketplace: opts.marketplace,
+            scope: opts.scope,
+          })),
+        }),
+      );
+      return;
+    }
+
     // OUT-07 / D-12: the list surface is a bulk op, so its row slot is typed
     // `Plural<Row>` (a readonly array). Additive typing only.
     // WR-01: loadPluginListPayload is typed to `MarketplaceRows<ListMsg>`, so the
@@ -758,7 +858,7 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
     // seam (the trailer fires when at least one
     // installed/updated/reinstalled/uninstalled plugin row is present;
     // pure available/unavailable/upgradable lists emit no trailer).
-    notifyWithContext(ctx, pi, LIST_CONTEXT, marketplaces, undefined, "plural");
+    notifyWithContext(ctx, run, LIST_CONTEXT, marketplaces, undefined, "plural");
   } catch (err) {
     // Aggregate list-failure path. The list surface has no dedicated
     // catalog state for orchestrator-level failure (D-19-03 Option B):
@@ -803,17 +903,6 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
     // of rows produced by this failure arm. It remains a plural operation even
     // though the synthetic failure occupies one marketplace block.
     const failureRows: Plural<MarketplaceRows<ListMsg>> = [mp];
-    notifyWithContext(ctx, pi, LIST_CONTEXT, failureRows, undefined, "plural");
+    notifyWithContext(ctx, run, LIST_CONTEXT, failureRows, undefined, "plural");
   }
 }
-
-/**
- * WR-03: synthetic identities used by the list-orchestration catch path.
- * Held as module-level constants so tests can assert against them and
- * future changes are gated behind a single edit point. Both render under
- * the cascade grammar as parens-wrapped tokens -- the renderer does
- * not special-case parens, so the visual marker reads as "synthetic
- * placeholder" to an operator scanning output.
- */
-const SYNTHETIC_LIST_FAILURE_MARKETPLACE_NAME = "(list)";
-const SYNTHETIC_LIST_FAILURE_PLUGIN_NAME = "(list)";

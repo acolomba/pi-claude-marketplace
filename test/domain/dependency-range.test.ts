@@ -1,0 +1,430 @@
+import assert from "node:assert/strict";
+import { describe, test } from "node:test";
+
+import {
+  excludingRange,
+  intersectDependencyRanges,
+  isUnconstrainedRange,
+  recordedVersionSatisfies,
+  renderDeclaredRanges,
+  truncateForRefusal,
+  type DependencyRangeIntersection,
+} from "../../extensions/pi-claude-marketplace/domain/dependency-range.ts";
+
+void ({ ok: true, range: "*" } satisfies DependencyRangeIntersection);
+void ({
+  ok: false,
+  reason: "disjoint",
+  detail: "no version satisfies all 2 declared ranges",
+} satisfies DependencyRangeIntersection);
+// @ts-expect-error The failure vocabulary is closed at three reasons.
+void ({ ok: false, reason: "no-matching-tag", detail: "" } satisfies DependencyRangeIntersection);
+// @ts-expect-error A successful intersection carries a range and no reason.
+void ({ ok: true, reason: "invalid" } satisfies DependencyRangeIntersection);
+
+describe("intersectDependencyRanges", () => {
+  test("D-03-02.1 an empty accumulator of declared ranges is no constraint", () => {
+    // arrange
+    const declared: readonly string[] = [];
+
+    // act
+    const intersected = intersectDependencyRanges(declared);
+
+    // assert
+    assert.deepStrictEqual(intersected, { ok: true, range: "*" });
+  });
+
+  test("D-03-02.1 a single declared range intersects to its canonical form", () => {
+    // arrange
+    const declared = ["^1.0.0"];
+
+    // act
+    const intersected = intersectDependencyRanges(declared);
+
+    // assert
+    assert.deepStrictEqual(intersected, { ok: true, range: ">=1.0.0 <2.0.0-0" });
+  });
+
+  test("RESV-03 two overlapping ranges intersect to the versions both admit", () => {
+    // arrange
+    const declared = ["^1.0.0", ">=1.5.0"];
+
+    // act
+    const intersected = intersectDependencyRanges(declared);
+
+    // assert
+    assert.deepStrictEqual(intersected, { ok: true, range: ">=1.0.0 <2.0.0-0 >=1.5.0" });
+    assert.equal(recordedVersionSatisfies("1.5.0", ">=1.0.0 <2.0.0-0 >=1.5.0"), true);
+    assert.equal(recordedVersionSatisfies("1.4.9", ">=1.0.0 <2.0.0-0 >=1.5.0"), false);
+    assert.equal(recordedVersionSatisfies("2.0.0", ">=1.0.0 <2.0.0-0 >=1.5.0"), false);
+  });
+
+  test("D-03-02.1 a union-bearing input multiplies the branch count and drops the disjoint cells", () => {
+    // arrange
+    const declared = ["1.x || 2.x", "1.5.x || 2.5.x"];
+
+    // act
+    const intersected = intersectDependencyRanges(declared);
+
+    // assert
+    assert.deepStrictEqual(intersected, {
+      ok: true,
+      range: ">=1.0.0 <2.0.0-0 >=1.5.0 <1.6.0-0||>=2.0.0 <3.0.0-0 >=2.5.0 <2.6.0-0",
+    });
+  });
+
+  test("D-03-02.1 two declared wildcards intersect to a doubled wildcard", () => {
+    // arrange
+    const declared = ["*", "x"];
+
+    // act
+    const intersected = intersectDependencyRanges(declared);
+
+    // assert
+    assert.deepStrictEqual(intersected, { ok: true, range: "* *" });
+  });
+
+  test("RESV-03 a disjoint pair fails as a conflict rather than as a range matching nothing", () => {
+    // arrange
+    const declared = [">=2.0.0", "<1.0.0"];
+
+    // act
+    const intersected = intersectDependencyRanges(declared);
+
+    // assert
+    assert.deepStrictEqual(intersected, {
+      ok: false,
+      reason: "disjoint",
+      detail: "no version satisfies all 2 declared ranges",
+    });
+  });
+
+  test("RESV-03 an unparseable declared range names its position and no sibling's text", () => {
+    // arrange
+    const declared = ["^1.0.0", "not-a-range"];
+
+    // act
+    const intersected = intersectDependencyRanges(declared);
+
+    // assert
+    assert.deepStrictEqual(intersected, {
+      ok: false,
+      reason: "invalid",
+      detail: "input 2 of 2 is not a valid version range",
+    });
+  });
+
+  test("T-03-07 total input characters are measured before any range is parsed", () => {
+    // arrange: the second element is not a range at all, so a reason of
+    // "invalid" would prove the parser ran before the size guard.
+    const declared = ["^1.0.0", "x".repeat(4096)];
+
+    // act
+    const intersected = intersectDependencyRanges(declared);
+
+    // assert
+    assert.deepStrictEqual(intersected, {
+      ok: false,
+      reason: "too-complex",
+      detail: "total input 4102 characters exceeds the 4096 character cap",
+    });
+  });
+
+  test("T-03-07 a cross-product over the conjunct cap fails before the product is allocated", () => {
+    // arrange: twelve four-branch inputs project to 16,777,216 conjuncts. The
+    // walk refuses at the sixth input, so nothing is allocated; a cap tested
+    // after the product would have to build the explosion it exists to refuse.
+    const declared = Array.from({ length: 12 }, () => "1.x || 2.x || 3.x || 4.x");
+
+    // act
+    const intersected = intersectDependencyRanges(declared);
+
+    // assert
+    assert.deepStrictEqual(intersected, {
+      ok: false,
+      reason: "too-complex",
+      detail: "4096 conjuncts after 6 of 12 inputs exceeds the 1024 conjunct cap",
+    });
+  });
+
+  test("D-03-02.1 a cross-product under the cap keeps every satisfiable cell and drops the rest", () => {
+    // arrange: seven two-branch inputs project to 128 conjuncts, of which only
+    // the two whose seven picks share a major admit any version.
+    const declared = Array.from({ length: 7 }, () => "1.x || 2.x");
+    const sameMajorThroughout = (major: number): string =>
+      Array.from({ length: 7 }, () => `>=${major}.0.0 <${major + 1}.0.0-0`).join(" ");
+
+    // act
+    const intersected = intersectDependencyRanges(declared);
+
+    // assert
+    assert.deepStrictEqual(intersected, {
+      ok: true,
+      range: `${sameMajorThroughout(1)}||${sameMajorThroughout(2)}`,
+    });
+  });
+});
+
+describe("recordedVersionSatisfies", () => {
+  for (const { label, recorded, range, expected } of [
+    {
+      label: "a plain version inside the range",
+      recorded: "1.2.3",
+      range: "^1.0.0",
+      expected: true,
+    },
+    {
+      label: "a plain version outside the range",
+      recorded: "2.0.0",
+      range: "^1.0.0",
+      expected: false,
+    },
+    {
+      label: "a prerelease against a range that admits no prerelease",
+      recorded: "1.2.3-beta.1",
+      range: ">=1.0.0",
+      expected: false,
+    },
+    {
+      label: "a prerelease against a range whose bound is itself a prerelease",
+      recorded: "1.2.3-beta.1",
+      range: ">=1.2.3-alpha <2.0.0",
+      expected: true,
+    },
+    {
+      label: "a non-semver string the coercion ladder rescues",
+      recorded: "v2",
+      range: "^2.0.0",
+      expected: true,
+    },
+    {
+      label: "a string that normalizes to nothing",
+      recorded: "nope",
+      range: "*",
+      expected: false,
+    },
+  ]) {
+    test(`D-03-02.3 the recorded-version ladder resolves ${label}`, () => {
+      // arrange
+      const candidate = recorded;
+
+      // act
+      const satisfied = recordedVersionSatisfies(candidate, range);
+
+      // assert
+      assert.equal(satisfied, expected);
+    });
+  }
+
+  for (const { form, recorded } of [
+    { form: "content-hash", recorded: "hash-abc123def456" },
+    { form: "git-sha", recorded: "sha-abc123def456" },
+  ]) {
+    test(`D-03-04 a ${form} recorded version runs the unguarded coercion ladder`, () => {
+      // arrange: the ladder extracts the digit run "123" from the hexadecimal
+      // body and coerces it to 123.0.0. The accepted risk is exactly this -- the
+      // answer is a real verdict against a misleading version, not a rejection.
+      const range = "^123.0.0";
+
+      // act
+      const admitted = recordedVersionSatisfies(recorded, range);
+      const refused = recordedVersionSatisfies(recorded, "^1.0.0");
+
+      // assert
+      assert.equal(admitted, true);
+      assert.equal(refused, false);
+    });
+  }
+});
+
+describe("isUnconstrainedRange", () => {
+  for (const { label, range, expected } of [
+    { label: "the bare wildcard", range: "*", expected: true },
+    { label: "an x-range", range: "x", expected: true },
+    { label: "a floor every version clears", range: ">=0.0.0", expected: true },
+    {
+      label: "the doubled wildcard two declared wildcards intersect to",
+      range: "* *",
+      expected: true,
+    },
+    { label: "a caret range", range: "^1.0.0", expected: false },
+    { label: "a wildcard narrowed by a real range", range: "* >=1.0.0 <2.0.0-0", expected: false },
+  ]) {
+    test(`RESV-03 ${label} is ${expected ? "" : "not "}an unconstrained range`, () => {
+      // arrange
+      const candidate = range;
+
+      // act
+      const unconstrained = isUnconstrainedRange(candidate);
+
+      // assert
+      assert.equal(unconstrained, expected);
+    });
+  }
+});
+
+describe("excludingRange", () => {
+  test("WR-1 a semver version is excluded by a range that admits every other version", () => {
+    // act
+    const range = excludingRange("2.0.0");
+
+    // assert
+    assert.deepStrictEqual(
+      [
+        range,
+        ["1.9.0", "2.0.0", "2.0.1"].map((version) =>
+          recordedVersionSatisfies(version, range ?? ""),
+        ),
+      ],
+      ["<2.0.0 || >2.0.0", [true, false, true]],
+    );
+  });
+
+  test("WR-1 a version with no semver form has no range", () => {
+    // act
+    const range = excludingRange("sha-0123456789ab");
+
+    // assert
+    assert.strictEqual(range, undefined);
+  });
+});
+
+describe("renderDeclaredRanges", () => {
+  test("T-03-08 a range at the rendering bound is carried whole", () => {
+    // arrange
+    const range = ">=1.0.0 ".repeat(25);
+
+    // act
+    const rendered = renderDeclaredRanges([range]);
+
+    // assert
+    assert.deepStrictEqual({ length: range.length, rendered }, { length: 200, rendered: range });
+  });
+
+  test("D-PL3-10 a text that is not a valid range is quoted and cut to 64 code units", () => {
+    // arrange
+    const range = "x".repeat(250);
+
+    // act
+    const rendered = renderDeclaredRanges([range]);
+
+    // assert
+    assert.equal(rendered, `\u201c${"x".repeat(64)}…\u201d`);
+  });
+
+  test("INR-05 one declared range renders as written", () => {
+    // arrange
+    const ranges = ["^1.0.0"];
+
+    // act
+    const rendered = renderDeclaredRanges(ranges);
+
+    // assert
+    assert.equal(rendered, "^1.0.0");
+  });
+
+  test("INR-05 declared ranges are joined with a comma in their declared order", () => {
+    // arrange
+    const ranges = ["^1.0.0", ">=1.2.0"];
+
+    // act
+    const rendered = renderDeclaredRanges(ranges);
+
+    // assert
+    assert.equal(rendered, "^1.0.0, >=1.2.0");
+  });
+
+  test("INR-05 a union range keeps its operator", () => {
+    // arrange
+    const ranges = ["1.x || 2.x", "<2.5.0"];
+
+    // act
+    const rendered = renderDeclaredRanges(ranges);
+
+    // assert
+    assert.equal(rendered, "1.x || 2.x, <2.5.0");
+  });
+
+  test("D-PL3-10 a join past the rendering bound is truncated once and names what it dropped", () => {
+    // arrange: four 62-character ranges join to 254 characters.
+    const ranges = Array.from(
+      { length: 4 },
+      (_, index) => `^${String(index + 1)}.0.0-${"x".repeat(55)}`,
+    );
+
+    // act
+    const rendered = renderDeclaredRanges(ranges);
+
+    // assert
+    assert.equal(rendered, `${ranges.join(", ").slice(0, 200)}… (+54 chars)`);
+  });
+
+  test("D-PL3-10 a join is cut before a quoted range the bound would split", () => {
+    // arrange: the fourth quoted range opens inside the first 200 characters.
+    const ranges = Array.from({ length: 4 }, (_, index) => `${String(index)}${"x".repeat(61)}`);
+    const quoted = ranges.map((range) => `\u201c${range}\u201d`).join(", ");
+
+    // act
+    const rendered = renderDeclaredRanges(ranges);
+
+    // assert
+    assert.equal(rendered, `${quoted.slice(0, 198)}… (+64 chars)`);
+  });
+});
+
+describe("truncateForRefusal", () => {
+  test("D-PL3-12 a zero limit keeps no code units", () => {
+    // arrange
+    const version = "abc";
+
+    // act
+    const cut = truncateForRefusal(version, 0);
+
+    // assert
+    assert.equal(cut, "\u2026");
+  });
+
+  test("D-PL3-12 a version at the limit is kept whole", () => {
+    // arrange
+    const version = "abc";
+
+    // act
+    const cut = truncateForRefusal(version, 3);
+
+    // assert
+    assert.equal(cut, "abc");
+  });
+
+  test("D-PL3-12 a version past the limit keeps its first code units and ends in an ellipsis", () => {
+    // arrange
+    const version = `2.0.0-${"z".repeat(70)}`;
+
+    // act
+    const cut = truncateForRefusal(version, 64);
+
+    // assert
+    assert.equal(cut, `2.0.0-${"z".repeat(58)}\u2026`);
+  });
+
+  test("D-PL3-12 a cut that would end on a high surrogate drops it", () => {
+    // arrange: the 64th code unit is the high half of U+1F600.
+    const version = `${"a".repeat(63)}\u{1F600}b`;
+
+    // act
+    const cut = truncateForRefusal(version, 64);
+
+    // assert
+    assert.equal(cut, `${"a".repeat(63)}\u2026`);
+  });
+
+  test("D-PL3-12 a cut that ends after a whole surrogate pair keeps the pair", () => {
+    // arrange: the 64th code unit is the low half of U+1F600.
+    const version = `${"a".repeat(62)}\u{1F600}b`;
+
+    // act
+    const cut = truncateForRefusal(version, 64);
+
+    // assert
+    assert.equal(cut, `${"a".repeat(62)}\u{1F600}\u2026`);
+  });
+});

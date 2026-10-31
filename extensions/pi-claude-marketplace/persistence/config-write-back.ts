@@ -15,7 +15,7 @@
 // on a merged view -- serializing a merged view back to disk would copy
 // `claude-plugins.local.json` entries into `claude-plugins.json` and
 // silently clobber the per-machine override. The architecture test at
-// `tests/architecture/config-state-consistency.test.ts` is the round-trip
+// `test/architecture/config-state-consistency.test.ts` is the round-trip
 // integrity gate.
 //
 // Cascade-delete contract: `deleteMarketplaceConfigEntryWithCascade`
@@ -29,6 +29,8 @@
 // schemaVersion is pinned to `1` on every write (D-v1.12-51-11): the literal floor
 // for the schemaVersion-1 config family. Future schema versions land in a
 // successor file, not by bumping this literal.
+
+import { ownValue } from "../shared/own-key.ts";
 
 import {
   saveConfig,
@@ -54,7 +56,7 @@ export async function writeMarketplaceConfigEntry(
   marketplace: string,
   patch: Partial<MarketplaceConfigEntry>,
 ): Promise<void> {
-  const existing = current.marketplaces?.[marketplace] ?? {};
+  const existing = ownValue(current.marketplaces, marketplace) ?? {};
   // S10 (PR #51): the cast is needed because `existing` may be `{}` (no prior
   // entry) and `patch` is a `Partial`, so the spread's inferred type does NOT
   // guarantee the required `source` field. The runtime backstop is
@@ -122,7 +124,7 @@ export async function writePluginConfigEntry(
   patch: Partial<PluginConfigEntry>,
 ): Promise<void> {
   const key = `${plugin}@${marketplace}`;
-  const existing = current.plugins?.[key] ?? {};
+  const existing = ownValue(current.plugins, key) ?? {};
   const merged: PluginConfigEntry = { ...existing, ...patch };
   const patched: ScopeConfig = {
     ...current,
@@ -130,6 +132,19 @@ export async function writePluginConfigEntry(
     plugins: { ...current.plugins, [key]: merged },
   };
   await saveConfig(targetConfigPath, patched, scopeRoot);
+}
+
+/**
+ * AAP-04: write the top-level `autoapply` value. Every other member, and any
+ * unknown forward-compat key, is preserved (D-09).
+ */
+export async function writeAutoapplyConfig(
+  current: ScopeConfig,
+  targetConfigPath: string,
+  scopeRoot: string,
+  autoapply: boolean,
+): Promise<void> {
+  await saveConfig(targetConfigPath, { ...current, schemaVersion: 1, autoapply }, scopeRoot);
 }
 
 /**
@@ -173,7 +188,7 @@ export interface BatchedConfigPatch {
  *
  * Structural single-write guarantee: this function contains exactly ONE
  * `await saveConfig(...)` call. Test coverage at
- * `tests/persistence/config-write-back.test.ts` exercises both the unknown
+ * `test/persistence/config-write-back.test.ts` exercises both the unknown
  * forward-compat key preservation property AND the all-N-patches-applied
  * post-condition.
  */

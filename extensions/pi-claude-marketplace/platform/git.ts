@@ -1,10 +1,16 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
 import * as git from "isomorphic-git";
 import nodeHttpClient from "isomorphic-git/http/node";
 
-import { CrossOriginChallengeError, TooManyRedirectsError } from "../shared/errors.ts";
+import {
+  CrossOriginChallengeError,
+  FetchedUrlCause,
+  TooManyRedirectsError,
+} from "../shared/errors.ts";
+import { gitHubWireUrl } from "../shared/github-base-url.ts";
 
 import { buildAuthCallbacks } from "./git-auth-callbacks.ts";
 
@@ -34,6 +40,11 @@ import type { GitHttpRequest, GitHttpResponse, HttpClient } from "isomorphic-git
  *
  * The wrapper is the canonical platform-git surface; the optional-auth
  * callbacks are consumed by isomorphic-git's onAuth / onAuthFailure hooks.
+ *
+ * D-PL8-24: `runWithGitAbortSignal` runs a call inside an abort scope. When
+ * its signal aborts, `http` stops the hop in flight and the response body
+ * being read, so the network call fails like a network drop mid-request.
+ * Local operations do not read the scope.
  */
 
 export interface CloneOptions {
@@ -50,6 +61,9 @@ export interface CloneOptions {
    * stored identity form is `.git`-stripped; the wire form is not. Callers
    * pass a host-keyed `opts.auth` bundle (GAUTH-03); a public clone never
    * challenges, so the bundle is not consulted.
+   *
+   * The URL actually sent is `shared/github-base-url.ts::gitHubWireUrl` of
+   * this value; the clone's recorded origin stays this value.
    */
   url: string;
   /** Optional ref (branch/tag/SHA) to check out. If omitted, the default branch. */
@@ -79,6 +93,8 @@ export interface FetchOptions {
   remote?: string;
   /** Optional ref to fetch. */
   ref?: string;
+  /** INR-06: also fetch tags (isomorphic-git fetches only branches by default). */
+  tags?: boolean;
 }
 
 export interface CheckoutOptions {
@@ -87,16 +103,6 @@ export interface CheckoutOptions {
   ref: string;
   /** Default false. Set true to keep working-tree files at HEAD. */
   noCheckout?: boolean;
-  /**
-   * Default false. isomorphic-git's checkout skips writing a file whose
-   * index entry already matches the target commit, even when the file is
-   * absent from the actual working tree (it diffs index vs. commit, not
-   * disk vs. commit). Set true when `dir`'s work tree may be empty or
-   * incomplete relative to its own index -- for example a `.git`-only copy
-   * checked out into a fresh, empty directory -- so every file the target
-   * tree names gets written regardless of what the index already claims.
-   */
-  force?: boolean;
 }
 
 export interface ResolveRefOptions {
@@ -280,11 +286,103 @@ function nextHop(
   return { ...rest, url: target.href, headers: kept, ...(body !== undefined && { body }) };
 }
 
-async function sendHop(hop: GitHttpRequest, chain: RedirectChain): Promise<GitHttpResponse> {
-  const response = await nodeHttpClient.request({
-    ...hop,
-    fetchOptions: { followRedirects: false },
+/** Sends one hop; the abort scope may wrap it. */
+type HopSender = (hop: GitHttpRequest) => Promise<GitHttpResponse>;
+
+/** D-PL8-24: the abort signal of the call that runs in the current async context. */
+const gitAbortScope = new AsyncLocalStorage<AbortSignal>();
+
+/** D-PL8-24: signals whose abort cut off a request or a body read that had not settled. */
+const interruptedSignals = new WeakSet<AbortSignal>();
+
+/**
+ * D-PL8-24: runs `run` in an abort scope. Each HTTP request that `run` makes
+ * through this module rejects with `signal.reason` once `signal` aborts.
+ */
+export function runWithGitAbortSignal<T>(signal: AbortSignal, run: () => Promise<T>): Promise<T> {
+  return gitAbortScope.run(signal, run);
+}
+
+function sendPlainHop(hop: GitHttpRequest): Promise<GitHttpResponse> {
+  return nodeHttpClient.request({ ...hop, fetchOptions: { followRedirects: false } });
+}
+
+/**
+ * Settles as `pending` does, or rejects with the abort reason when `signal`
+ * aborts first, after `onAbort` has released what `pending` holds. The abort
+ * listener is removed once `pending` settles. An abort that lands after
+ * `pending` settled interrupts nothing and is ignored.
+ */
+function raceAbort<T>(signal: AbortSignal, pending: Promise<T>, onAbort: () => void): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const abort = (): void => {
+      interruptedSignals.add(signal);
+      onAbort();
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the scope rejects with the reason its owner passed to abort(), as fetch does.
+      reject(signal.reason);
+    };
+
+    const removeAbortListener = (): void => {
+      signal.removeEventListener("abort", abort);
+    };
+
+    pending.then(removeAbortListener, removeAbortListener);
+    pending.then(resolve, reject);
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+
+    signal.addEventListener("abort", abort, { once: true });
   });
+}
+
+/** Ends a body that nobody reads any more; a failure to end it is of no use to anyone. */
+function endBody(body: AsyncIterableIterator<Uint8Array> | undefined): void {
+  Promise.resolve(body?.return?.()).catch(() => undefined);
+}
+
+/** A hop that the abort beat; a response that still arrives has its body ended. */
+function releaseLateHop(pending: Promise<GitHttpResponse>): void {
+  pending.then(
+    (late) => {
+      endBody(late.body);
+    },
+    () => undefined,
+  );
+}
+
+function abortableHopSender(signal: AbortSignal): HopSender {
+  return (hop) => {
+    signal.throwIfAborted();
+    const pending = sendPlainHop(hop);
+    return raceAbort(signal, pending, () => {
+      releaseLateHop(pending);
+    });
+  };
+}
+
+/** Reads `body` until `signal` aborts; the abort ends the body and rejects the read. */
+function abortableBody(
+  body: AsyncIterableIterator<Uint8Array>,
+  signal: AbortSignal,
+): AsyncIterableIterator<Uint8Array> {
+  const iterator: AsyncIterableIterator<Uint8Array> = {
+    next: () =>
+      raceAbort(signal, body.next(), () => {
+        endBody(body);
+      }),
+    [Symbol.asyncIterator]: () => iterator,
+  };
+  return iterator;
+}
+
+async function sendHop(
+  hop: GitHttpRequest,
+  chain: RedirectChain,
+  send: HopSender,
+): Promise<GitHttpResponse> {
+  const response = await send(hop);
   const target = redirectTarget(response, hop.url);
   if (target === undefined) {
     if (chain.leftOrigin && CHALLENGE_STATUSES.has(response.statusCode)) {
@@ -300,19 +398,31 @@ async function sendHop(hop: GitHttpRequest, chain: RedirectChain): Promise<GitHt
     throw new TooManyRedirectsError();
   }
 
-  return sendHop(nextHop(hop, response.statusCode, target, chain.origin), {
-    origin: chain.origin,
-    redirects: chain.redirects + 1,
-    leftOrigin: chain.leftOrigin || target.origin !== chain.origin,
-  });
+  return sendHop(
+    nextHop(hop, response.statusCode, target, chain.origin),
+    {
+      origin: chain.origin,
+      redirects: chain.redirects + 1,
+      leftOrigin: chain.leftOrigin || target.origin !== chain.origin,
+    },
+    send,
+  );
 }
 
 async function requestWithinOrigin(original: GitHttpRequest): Promise<GitHttpResponse> {
-  return sendHop(original, {
+  const chain: RedirectChain = {
     origin: new URL(original.url).origin,
     redirects: 0,
     leftOrigin: false,
-  });
+  };
+  const signal = gitAbortScope.getStore();
+  if (signal === undefined) {
+    return sendHop(original, chain, sendPlainHop);
+  }
+
+  const response = await sendHop(original, chain, abortableHopSender(signal));
+  const { body } = response;
+  return body === undefined ? response : { ...response, body: abortableBody(body, signal) };
 }
 
 /**
@@ -356,8 +466,102 @@ async function requestWithinOrigin(original: GitHttpRequest): Promise<GitHttpRes
  * makes a 303 a GET. It also keeps its body, where `simple-get` re-sends an
  * empty one. isomorphic-git's request bodies are arrays, so the same reference
  * sends the same bytes again.
+ *
+ * Abort scope (D-PL8-24). Inside `runWithGitAbortSignal`, a hop does not start
+ * once the signal has aborted, a hop in flight rejects with the abort reason,
+ * and a response that arrives after that has its body ended. Each read of the
+ * final response body also races the signal; the abort ends the body, which
+ * destroys its stream. A hop aborted before its response arrives keeps its
+ * socket until the host answers or closes it.
  */
 const http: HttpClient = { request: requestWithinOrigin };
+
+/**
+ * GHB-01: runs one network call. When the call sends `wireUrl` in place of the
+ * caller's `url` and fails with an error that has no cause, the error gains a
+ * `FetchedUrlCause` naming `wireUrl`, so a wrong base shows in the failure
+ * output. The code-bearing error stays at depth 0 for the failure classifiers.
+ * An unrewritten call runs with no `try` and its failure is unchanged (GHB-04).
+ */
+async function withFetchedUrlCause<T>(
+  wireUrl: string,
+  url: string,
+  call: () => Promise<T>,
+): Promise<T> {
+  if (wireUrl === url) {
+    return call();
+  }
+
+  try {
+    return await call();
+  } catch (error: unknown) {
+    // A rejection that is not a writable Error passes through unchanged.
+    if (error instanceof Error && error.cause === undefined && Object.isExtensible(error)) {
+      error.cause = new FetchedUrlCause(wireUrl);
+    }
+
+    throw error;
+  }
+}
+
+/**
+ * D-PL8-24: runs one network call and fails it with the abort reason when the
+ * scope's signal cut the call off. isomorphic-git reads a failed
+ * ref-advertisement body as the end of the list, so without this check an
+ * interrupted listing could return a cut-short ref list as a success. A call
+ * that settled before the abort reached it is returned or thrown as it settled.
+ */
+async function networkCall<T>(wireUrl: string, url: string, call: () => Promise<T>): Promise<T> {
+  const signal = gitAbortScope.getStore();
+  let result: T;
+  try {
+    result = await withFetchedUrlCause(wireUrl, url, call);
+  } catch (error: unknown) {
+    if (signal !== undefined && interruptedSignals.has(signal)) {
+      signal.throwIfAborted();
+    }
+
+    throw error;
+  }
+
+  if (signal !== undefined && interruptedSignals.has(signal)) {
+    signal.throwIfAborted();
+  }
+
+  return result;
+}
+
+/**
+ * The protocol version 2 ref advertisement that `resolveRemoteRef` and
+ * `listRemoteTags` both read, with annotated tags peeled. `extra` carries the
+ * one option each caller adds. Returns the URL sent (GHB-01), which the caller
+ * names in its own refusals.
+ *
+ * Same conditional-spread + AuthFailureCallback cast idiom as `clone()`: the
+ * callbacks are built only when `opts.auth` is defined, so the public-only
+ * listing stays byte-identical.
+ */
+async function listServerRefsAt(
+  opts: { readonly url: string; readonly auth?: BuildAuthCallbacksOpts | undefined },
+  extra: { readonly symrefs?: true; readonly prefix?: string },
+): Promise<{ readonly wireUrl: string; readonly refs: git.ServerRef[] }> {
+  const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
+  const wireUrl = gitHubWireUrl(opts.url);
+  const refs = await networkCall(wireUrl, opts.url, () =>
+    git.listServerRefs({
+      http,
+      url: wireUrl,
+      protocolVersion: 2,
+      peelTags: true,
+      ...extra,
+      ...(authCbs !== undefined && {
+        onAuth: authCbs.onAuth,
+        onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
+      }),
+    }),
+  );
+  return { wireUrl, refs };
+}
 
 export async function clone(opts: CloneOptions): Promise<void> {
   // When opts.auth is provided, build the isomorphic-git callbacks
@@ -374,34 +578,64 @@ export async function clone(opts: CloneOptions): Promise<void> {
   // it only takes the `url: string` parameter -- no contravariant
   // GitAuth-typed slot.
   const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
-  await git.clone({
-    fs,
-    http,
-    dir: opts.dir,
-    url: opts.url,
-    ...(opts.ref !== undefined && { ref: opts.ref }),
-    ...(opts.singleBranch !== undefined && { singleBranch: opts.singleBranch }),
-    ...(authCbs !== undefined && {
-      onAuth: authCbs.onAuth,
-      onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
+  const wireUrl = gitHubWireUrl(opts.url);
+  await networkCall(wireUrl, opts.url, () =>
+    git.clone({
+      fs,
+      http,
+      dir: opts.dir,
+      url: wireUrl,
+      ...(opts.ref !== undefined && { ref: opts.ref }),
+      ...(opts.singleBranch !== undefined && { singleBranch: opts.singleBranch }),
+      ...(authCbs !== undefined && {
+        onAuth: authCbs.onAuth,
+        onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
+      }),
+      // No depth (full history is kept). No corsProxy (Node only).
     }),
-    // No depth (full history is kept). No corsProxy (Node only).
-  });
+  );
+  if (wireUrl !== opts.url) {
+    // GHB-01: isomorphic-git records the URL it fetched as origin. The clone
+    // keeps its canonical identity; only the bytes came from the base.
+    await git.setConfig({ fs, dir: opts.dir, path: "remote.origin.url", value: opts.url });
+  }
 }
 
+/**
+ * Fetches `opts.remote` (default "origin") into its remote-tracking refs.
+ *
+ * GHB-01: the remote's recorded url is read and sent as
+ * `shared/github-base-url.ts::gitHubWireUrl` of it, never as recorded. A
+ * rewritten url goes to isomorphic-git as an explicit `url` beside the remote
+ * name, so the tracking refs update and `.git/config` keeps the canonical url.
+ */
 export async function fetch(opts: FetchOptions): Promise<void> {
   const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
-  await git.fetch({
+  const remote = opts.remote ?? "origin";
+  const recordedUrl: unknown = await git.getConfig({
     fs,
-    http,
     dir: opts.dir,
-    ...(opts.remote !== undefined && { remote: opts.remote }),
-    ...(opts.ref !== undefined && { ref: opts.ref }),
-    ...(authCbs !== undefined && {
-      onAuth: authCbs.onAuth,
-      onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
-    }),
+    path: `remote.${remote}.url`,
   });
+  // A remote with no recorded url sends nothing new, so isomorphic-git raises
+  // its own MissingParameterError.
+  const url = typeof recordedUrl === "string" ? recordedUrl : "";
+  const wireUrl = gitHubWireUrl(url);
+  await networkCall(wireUrl, url, () =>
+    git.fetch({
+      fs,
+      http,
+      dir: opts.dir,
+      ...(opts.remote !== undefined && { remote: opts.remote }),
+      ...(wireUrl !== url && { remote, url: wireUrl }),
+      ...(opts.ref !== undefined && { ref: opts.ref }),
+      ...(opts.tags !== undefined && { tags: opts.tags }),
+      ...(authCbs !== undefined && {
+        onAuth: authCbs.onAuth,
+        onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
+      }),
+    }),
+  );
 }
 
 export async function checkout(opts: CheckoutOptions): Promise<void> {
@@ -410,7 +644,6 @@ export async function checkout(opts: CheckoutOptions): Promise<void> {
     dir: opts.dir,
     ref: opts.ref,
     ...(opts.noCheckout !== undefined && { noCheckout: opts.noCheckout }),
-    ...(opts.force !== undefined && { force: opts.force }),
   });
 }
 
@@ -444,31 +677,20 @@ export async function resolveRef(opts: ResolveRefOptions): Promise<string> {
  * public-only path. No sparse/partial fetch is exposed (documented
  * divergence; see the NOT-exposed list above).
  *
+ * GHB-01: the URL sent, and named in the two refusals below, is
+ * `shared/github-base-url.ts::gitHubWireUrl` of `opts.url`.
+ *
  * Source: node_modules/isomorphic-git/index.d.ts -- listServerRefs({ http,
  * url, onAuth, onAuthFailure, protocolVersion, symrefs, peelTags }) =>
  * Promise<ServerRef[]>, where each ServerRef is { ref, oid, target?, peeled? }.
  */
 export async function resolveRemoteRef(opts: ResolveRemoteRefOptions): Promise<string> {
-  // Same conditional-spread + AuthFailureCallback cast idiom as clone() at the
-  // top of this file: build the callbacks only when opts.auth is defined so the
-  // public-only resolution stays byte-identical.
-  const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
-  const refs = await git.listServerRefs({
-    http,
-    url: opts.url,
-    protocolVersion: 2,
-    symrefs: true,
-    peelTags: true,
-    ...(authCbs !== undefined && {
-      onAuth: authCbs.onAuth,
-      onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
-    }),
-  });
+  const { wireUrl, refs } = await listServerRefsAt(opts, { symrefs: true });
 
   if (opts.ref === undefined) {
     const head = refs.find((r) => r.ref === "HEAD");
     if (head === undefined) {
-      throw new Error(`remote ${opts.url} advertised no HEAD ref`);
+      throw new Error(`remote ${wireUrl} advertised no HEAD ref`);
     }
 
     return head.oid;
@@ -479,7 +701,7 @@ export async function resolveRemoteRef(opts: ResolveRemoteRefOptions): Promise<s
       r.ref === `refs/heads/${opts.ref}` || r.ref === `refs/tags/${opts.ref}` || r.ref === opts.ref,
   );
   if (match === undefined) {
-    throw new Error(`remote ${opts.url} has no ref "${opts.ref}"`);
+    throw new Error(`remote ${wireUrl} has no ref "${opts.ref}"`);
   }
 
   // For an annotated tag the `peeled` field carries the commit the tag points
@@ -526,26 +748,15 @@ const PEELED_REF_SUFFIX = "^{}";
  * `resolveRemoteRef` takes, so a private source repository needs no second
  * credential path; omitted = the public-only path.
  *
+ * GHB-01: the URL sent is `shared/github-base-url.ts::gitHubWireUrl` of
+ * `opts.url`.
+ *
  * Source: node_modules/isomorphic-git/index.d.ts -- listServerRefs({ http,
  * url, onAuth, onAuthFailure, protocolVersion, prefix, peelTags }) =>
  * Promise<ServerRef[]>, where each ServerRef is { ref, oid, target?, peeled? }.
  */
 export async function listRemoteTags(opts: ListRemoteTagsOptions): Promise<RemoteTag[]> {
-  // Same conditional-spread + AuthFailureCallback cast idiom as clone() at the
-  // top of this file: build the callbacks only when opts.auth is defined so the
-  // public-only listing stays byte-identical.
-  const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
-  const refs = await git.listServerRefs({
-    http,
-    url: opts.url,
-    protocolVersion: 2,
-    prefix: TAG_REF_PREFIX,
-    peelTags: true,
-    ...(authCbs !== undefined && {
-      onAuth: authCbs.onAuth,
-      onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
-    }),
-  });
+  const { refs } = await listServerRefsAt(opts, { prefix: TAG_REF_PREFIX });
 
   const tags: RemoteTag[] = [];
   for (const advertised of refs) {

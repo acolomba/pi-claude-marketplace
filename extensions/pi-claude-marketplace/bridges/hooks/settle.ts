@@ -17,14 +17,15 @@
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { notifyStopHookOverrideCap } from "../../shared/notification-dispatch.ts";
+import { openNotificationRun, requireNotificationMode } from "../../shared/notification-run.ts";
 
 import { collectBucketOutcomes, matcherFiresOnClosedSetValue } from "./dispatch.ts";
 import { classifyStopFailure } from "./payloads/stop-failure.ts";
+import { STOP_OVERRIDE_CAP, type HooksRuntime } from "./runtime.ts";
 
 import type { HookExecutor } from "./dispatch.ts";
 import type { StopFailureEvent } from "./payloads/stop-failure.ts";
 import type { StopEvent } from "./payloads/stop.ts";
-import type { HooksRuntime } from "./runtime.ts";
 import type { StopFailureErrorType } from "../../domain/components/hook-events.ts";
 import type {
   AgentEndEvent,
@@ -34,6 +35,7 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 
 /**
  * Custom-message type for the Stop block re-entry. Distinct from the
@@ -133,6 +135,13 @@ export function settleHandlerFor(
       return;
     }
 
+    try {
+      requireNotificationMode(ctx.mode);
+    } catch (error: unknown) {
+      hookDebugLog(`settle: context unavailable: ${errorMessage(error)}`);
+      return;
+    }
+
     // One-shot consumption: clear the cache so a spurious second `agent_settled`
     // without an intervening `agent_end` no-ops instead of reprocessing the same
     // (stale) message. Each legitimate re-entry produces a fresh `agent_end`
@@ -143,9 +152,12 @@ export function settleHandlerFor(
     }
 
     switch (last.stopReason) {
-      case "stop":
-        await runStopBucket(runtime, last, capturedGeneration, ctx, pi, executor);
+      case "stop": {
+        const run = openNotificationRun(pi, { kind: "hook" });
+        await runStopBucket(runtime, last, capturedGeneration, ctx, pi, run, executor);
         return;
+      }
+
       case "error":
       case "length": {
         const stopErrorMessage = last.errorMessage ?? "";
@@ -228,6 +240,7 @@ async function runStopBucket(
   capturedGeneration: number,
   ctx: ExtensionContext,
   pi: ExtensionAPI,
+  run: NotificationRun,
   executor?: HookExecutor,
 ): Promise<void> {
   const bucket = runtime.getRoutingBucket("Stop");
@@ -275,7 +288,7 @@ async function runStopBucket(
   // bounded lane so it counts toward the STOP-07 cap (D-88-08).
   const block = outcomes.find((o) => o.result.kind === "block");
   if (block?.result.kind === "block") {
-    reenterBounded(runtime, pi, ctx, block.result.reason ?? "", block.entry.pluginId);
+    reenterBounded(runtime, pi, ctx, run, block.result.reason ?? "", block.entry.pluginId);
     return;
   }
 
@@ -286,7 +299,7 @@ async function runStopBucket(
     (o) => o.result.kind === "mutate" && typeof o.result.additionalContext === "string",
   );
   if (mutate?.result.kind === "mutate" && mutate.result.additionalContext !== undefined) {
-    reenterBounded(runtime, pi, ctx, mutate.result.additionalContext, mutate.entry.pluginId);
+    reenterBounded(runtime, pi, ctx, run, mutate.result.additionalContext, mutate.entry.pluginId);
     return;
   }
 
@@ -370,12 +383,17 @@ function reenterBounded(
   runtime: HooksRuntime,
   pi: ExtensionAPI,
   ctx: ExtensionContext,
+  run: NotificationRun,
   content: string,
   pluginId: string,
 ): void {
   const transition = runtime.recordStopReentry();
   if (transition.notifyCap) {
-    notifyStopHookOverrideCap(ctx, pluginId);
+    try {
+      notifyStopHookOverrideCap(ctx, run, pluginId, STOP_OVERRIDE_CAP);
+    } catch (err: unknown) {
+      hookDebugLog(`settle: cap notification failed (${pluginId}): ${errorMessage(err)}`);
+    }
   }
 
   if (!transition.reenter) {

@@ -3,14 +3,16 @@
 // Read-only info surface for `marketplace info <name>`. MUST NOT touch
 // the network (NFR-5) -- no `platform/git`, no `DEFAULT_GIT_OPS`, no
 // `refreshGitHubClone`. The grep-gate test in
-// `tests/orchestrators/marketplace/info.test.ts` enforces this
+// `test/orchestrators/marketplace/info.test.ts` enforces this
 // structurally. IL-2: exactly one `notify()` call per invocation on the
-// all-success / all-not-added paths. The partial-failure path
-// intentionally emits one notify per failed scope (in addition to the
-// success cascade) so a corrupt manifest in one scope cannot silently
-// hide behind a healthy other-scope render.
+// all-success / all-not-added paths. The partial-failure path intentionally
+// emits one notify per scope in project-first order, so a corrupt manifest
+// in one scope cannot silently hide behind a healthy other-scope render.
+
+import path from "node:path";
 
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { assertRecordedMarketplaceName } from "../../domain/name.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
@@ -20,16 +22,19 @@ import {
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import { collectMarketplaceRecordsByScope } from "../scope-fanout.ts";
 
-import { crossScopeFlag } from "./shared.ts";
+import { crossScopeFlag, marketplaceNotAddedMessage, recordedManifestPath } from "./shared.ts";
 
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 
+/** Inputs to `getMarketplaceInfo`: the notification context and the marketplace to describe. */
 export interface GetMarketplaceInfoOptions {
   readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  /** D-05: the command's notification run; every block renders from its snapshot. */
+  readonly run: NotificationRun;
   readonly name: string;
   /** When omitted, fan-out across BOTH scopes (project-first per INFO-03). */
   readonly scope?: Scope;
@@ -48,15 +53,25 @@ type MarketplaceRecord = ExtensionState["marketplaces"][string];
  * level but is constrained to a `ParsedSource` at the write paths.
  * Casting to that discriminated union lets the discriminator narrow
  * `kind === "github"` / `kind === "url"` without re-checking `typeof` on
- * each field. `github` and `url` (D-76-09) get dedicated projections;
- * every OTHER kind coerces to the `path` arm with `record.marketplaceRoot`
- * -- surfacing a bare row beats refusing to render (NFR-12).
+ * each field. `github`, `url` (D-76-09), and recorded path sources get
+ * dedicated projections, and a hosted source shows as `url` with its catalog
+ * URL (D-PL5-05). Every OTHER kind coerces to the `path` arm with
+ * `record.marketplaceRoot` -- surfacing a bare row beats refusing to render
+ * (NFR-12).
+ *
+ * D-01: a path source shows a path the record holds. When the typed source's
+ * basename equals the recorded manifest's basename, the user named the
+ * manifest file, so the row shows the recorded manifest; otherwise it shows
+ * the recorded root of the directory source. The typed source is provenance
+ * and is read only for that basename, so the row and `marketplace update` name
+ * the same file.
  */
 async function buildBlock(
   record: MarketplaceRecord,
   autoupdate: boolean,
 ): Promise<MarketplaceInfoMessage> {
   const src = record.source as ParsedSource;
+  const manifestPath = recordedManifestPath(record);
   let source: MarketplaceInfoMessage["source"];
   if (src.kind === "github") {
     source = {
@@ -74,6 +89,18 @@ async function buildBlock(
       url: src.url,
       ...(src.ref !== undefined && { ref: src.ref }),
     };
+  } else if (src.kind === "hosted") {
+    // D-PL5-05: a hosted catalog shows its URL and last update time as a url
+    // source does, so the info message and its schema keep three kinds.
+    source = { sourceKind: "url", url: src.url };
+  } else if (src.kind === "path") {
+    source = {
+      sourceKind: "path",
+      absPath:
+        path.basename(src.logical) === path.basename(manifestPath)
+          ? manifestPath
+          : record.marketplaceRoot,
+    };
   } else {
     source = { sourceKind: "path", absPath: record.marketplaceRoot };
   }
@@ -86,7 +113,9 @@ async function buildBlock(
     ...(record.lastUpdatedAt !== undefined && { lastUpdatedAt: record.lastUpdatedAt }),
   };
 
-  const parsed = await loadMarketplaceManifest(record.manifestPath);
+  const parsed = await loadMarketplaceManifest(manifestPath);
+  // D-PL5-28: a marketplace Claude Code refuses fails as an invalid manifest.
+  assertRecordedMarketplaceName(record.name, src, parsed.name);
   const rawDescription = (parsed as Record<string, unknown>).description;
   const description = typeof rawDescription === "string" ? rawDescription : undefined;
 
@@ -116,15 +145,11 @@ async function buildNotAddedMessage(
   name: string,
   scope: Scope | undefined,
 ): Promise<NotificationMessage> {
-  return {
-    kind: "marketplace-not-added",
+  return marketplaceNotAddedMessage({
     name,
-    // `scope` is set when a single `--scope` was requested (renders the
-    // `[scope]` bracket); OMITTED when `--scope` was undefined and BOTH scopes
-    // missed (D-03: "absent from both scopes" body has no `[scope]` bracket).
-    ...(scope !== undefined && { scope }),
+    scope,
     ...(await crossScopeFlag({ cwd, marketplace: name, scope })),
-  };
+  });
 }
 
 /**
@@ -152,6 +177,7 @@ function buildManifestFailureMessage(
       scope: record.scope,
       reasons: [reason],
       componentsResolved: false,
+      marketplaceSubject: true,
     },
   };
 }
@@ -169,21 +195,35 @@ export async function getMarketplaceInfo(opts: GetMarketplaceInfoOptions): Promi
   });
 
   if (found.length === 0) {
-    notify(opts.ctx, opts.pi, await buildNotAddedMessage(opts.cwd, opts.name, opts.scope));
+    notify(opts.ctx, opts.run, await buildNotAddedMessage(opts.cwd, opts.name, opts.scope));
     return;
   }
 
   // Try each candidate independently so a manifest failure on one scope
   // does not poison the fan-out -- the other scope still renders.
-  const blocks: MarketplaceInfoMessage[] = [];
-  const failures: NotificationMessage[] = [];
+  const outcomes: NotificationMessage[] = [];
   for (const f of found) {
     try {
       // eslint-disable-next-line no-await-in-loop -- at most two scopes, one manifest block each
-      blocks.push(await buildBlock(f.record, f.autoupdate));
+      outcomes.push(await buildBlock(f.record, f.autoupdate));
     } catch (err) {
-      failures.push(buildManifestFailureMessage(f.record, narrowProbeError(err), f.autoupdate));
+      outcomes.push(buildManifestFailureMessage(f.record, narrowProbeError(err), f.autoupdate));
     }
+  }
+
+  // A partial or complete failure emits one result per candidate in the same
+  // project-first order as collection. Keeping success and failure in one
+  // outcome list prevents either kind from jumping ahead of the other.
+  if (
+    !outcomes.every(
+      (outcome): outcome is MarketplaceInfoMessage => outcome.kind === "marketplace-info",
+    )
+  ) {
+    for (const outcome of outcomes) {
+      notify(opts.ctx, opts.run, outcome);
+    }
+
+    return;
   }
 
   // Single success -> emit the bare block (matches the prior single-
@@ -191,18 +231,10 @@ export async function getMarketplaceInfo(opts: GetMarketplaceInfoOptions): Promi
   // fan-out cascade (project-first per the iteration order above).
   // The destructure proves the non-empty tuple shape that the cascade
   // type requires.
-  const [first, ...remaining] = blocks;
+  const [first, ...remaining] = outcomes;
   if (first !== undefined && remaining.length === 0) {
-    notify(opts.ctx, opts.pi, first);
+    notify(opts.ctx, opts.run, first);
   } else if (first !== undefined) {
-    notify(opts.ctx, opts.pi, { kind: "marketplace-info-cascade", blocks: [first, ...remaining] });
-  }
-
-  // Surface each failed scope as its own notify call. This intentionally
-  // breaks IL-2's single-notify rule on the partial-failure path so a
-  // corrupt manifest in one scope cannot silently hide behind a healthy
-  // other-scope render. Callers wanting strict IL-2 must pass `--scope`.
-  for (const failure of failures) {
-    notify(opts.ctx, opts.pi, failure);
+    notify(opts.ctx, opts.run, { kind: "marketplace-info-cascade", blocks: [first, ...remaining] });
   }
 }

@@ -1,7 +1,10 @@
+import { redactAbsolutePaths } from "./redact-absolute-paths.ts";
+
 import type {
   CascadeNotificationMessage,
   MarketplaceNotificationMessage,
   NotificationMessage,
+  RetainedWorkflowStaging,
   Severity,
 } from "./notification-types.ts";
 
@@ -17,10 +20,11 @@ import type {
  *
  * The guard name is kept as `isInfoKind` per the TYPE-03 wording even though
  * the set now includes a failure kind; "standalone-dispatched" is the precise
- * meaning -- these kinds are routed through `dispatchInfoMessage`. The
- * committed prune warning requests reload because its state save succeeded.
+ * meaning -- these kinds take their own arm in the presentation step and in its
+ * text formatter. The committed prune warning requests reload because its
+ * state save succeeded.
  */
-export type StandaloneKind =
+type StandaloneKind =
   | "marketplace-info"
   | "plugin-info"
   | "marketplace-info-cascade"
@@ -38,7 +42,7 @@ export type StandaloneKind =
  * route through this one guard; each then narrows the residual to
  * `CascadeNotificationMessage` and switches over every kind with no default.
  */
-export function isInfoKind(
+function isInfoKind(
   m: NotificationMessage,
 ): m is Extract<NotificationMessage, { kind: StandaloneKind }> {
   return (
@@ -55,69 +59,21 @@ export function isInfoKind(
 }
 
 // ---------------------------------------------------------------------------
-// Public notify() entry point + file-private helpers.
-//
-// Grammar mini-spec (documented in docs/output-catalog.md per SNM-19 /
-// SNM-20). The wire format `notify` emits is:
-//
-//   <mp-header-1>
-//     <plugin-row-1>
-//       [cause-chain at 4-space indent if (failed | manual recovery) with cause]
-//       [rollback child row at 4-space indent for each rollbackPartial phase]
-//       [phase cause-chain at 6-space indent if phase.cause set]
-//     <plugin-row-2>
-//     ...
-//
-//   <mp-header-2>
-//   ...
-//
-//   /reload to pick up changes  <-- iff any row stamps needsReload:true
-//
-// Joins / separators:
-//   - Plugin row prefix:                "  " (2 spaces)
-//   - Cause-chain trailer prefix:       "    " (4 spaces)
-//   - rollbackPartial child row prefix: "    " (4 spaces)
-//   - rollbackPartial phase cause:      "      " (6 spaces)
-//   - Between marketplace blocks:       "\n\n" (one blank line)
-//   - Between body and reload-hint:     "\n\n" (one blank line)
+// Envelope facts over the stamped rows. notification-resolve.ts turns these
+// into the resolved envelope; notification-grammar.ts owns the wire format.
 //
 // Severity (SEV-02): the numeric MAX over the caller-stamped `row.severity`
 // (info=0 < warning=1 < error=2) across the marketplace rows AND their plugin
 // rows; rank 0 -> undefined (info, no 2nd arg). No status/reasons inference.
 //
-// Reload-hint (RLD-02): the OR-reduce of the caller-stamped `row.needsReload`
-// over the same flattened rows. Realized transitions (install/update/reinstall/
-// uninstall + the fresh-disable) stamp needsReload:true; inventory rows stamp
-// false. No marketplace-status / cascade-kind inference: the hint is a per-row
-// stamped fact. Info-surface kinds
-// short-circuit to no-trailer (including reconcile-applied-cascade, which
-// suppresses the trailer at the kind level even though its rows stamp true).
-//
-// Empty-marketplaces sentinel: "(no marketplaces)".
-//
-// Soft-dep probe discipline: single softDepStatus(pi) call at notify entry;
-// the resulting SoftDepStatus is threaded into every renderPluginRow(p,
-// probe) invocation. No per-row re-probing.
-//
-// D-v1.0-01-11 layering: notify lives entirely in `shared/`; the reload-hint trailer
-// literal sits alongside the renderMpHeader / renderPluginRow grammar
-// literals.
+// Reload decision (RLD-02): the OR-reduce of the caller-stamped
+// `row.needsReload` over the same flattened rows. Realized transitions
+// (install/update/reinstall/uninstall + the fresh-disable) stamp
+// needsReload:true; inventory rows stamp false. No marketplace-status /
+// cascade-kind inference: the decision is a per-row stamped fact. Info-surface
+// kinds short-circuit to false; reconcile-applied-cascade reads its rows like a
+// cascade does.
 // ---------------------------------------------------------------------------
-
-/** Reload-hint trailer literal. */
-export const RELOAD_HINT_TRAILER = "/reload to pick up changes";
-
-/**
- * UGRM-01 / UGRM-02 never-silent no-op headline for a bulk `update` that
- * realized ZERO transitions (all targets up-to-date, OR the only surviving rows
- * are benign info skips such as a `(partially-upgradable)` decline). Hard-coded so
- * the byte form cannot drift from `docs/output-catalog.md`'s `all-up-to-date-noop`
- * / `skip-partially-upgradable-bulk` states -- mirrors the `reconcile-pending-empty`
- * byte-lock precedent. Emitted in PLACE of the `composeTally` success line
- * (which collapses a `tally {count: 0}` override to `""`), so the summary line
- * never vanishes.
- */
-export const UPDATE_NO_OP_HEADLINE = "Plugin update: nothing to update";
 
 /**
  * SEV-03: the desired-state tri-state contract every producer stamps on a row:
@@ -171,7 +127,11 @@ function cascadeSeverity(message: {
   return rank === 1 ? "warning" : "error";
 }
 
-function computeSeverity(message: NotificationMessage): ComputedSeverity {
+/**
+ * SEV-02: the severity of `message`, as the second `ctx.ui.notify` argument
+ * wants it. `undefined` means info.
+ */
+export function computeSeverity(message: NotificationMessage): "warning" | "error" | undefined {
   // SEV-02: the cascade severity is the MAX over the rows' caller-stamped
   // `severity` (see `cascadeSeverity`), NOT content inference.
   //
@@ -219,9 +179,10 @@ function computeSeverity(message: NotificationMessage): ComputedSeverity {
 }
 
 /**
- * The plugin/marketplace operation counts that drive the summary line.
+ * The plugin/marketplace operation counts that drive the summary line and the
+ * resolved tally.
  */
-interface SummaryCounts {
+export interface SummaryCounts {
   readonly plugins: number;
   readonly marketplaces: number;
 }
@@ -276,7 +237,7 @@ function countSkippedRows(marketplaces: readonly MarketplaceNotificationMessage[
  * already classifies an absent or explicit `info` severity, so widening the
  * union needs no further change.
  */
-function countRowsBySeverity(
+export function countRowsBySeverity(
   marketplaces: readonly MarketplaceNotificationMessage[],
   target: Severity,
 ): SummaryCounts {
@@ -357,8 +318,9 @@ function buildSummaryLineForCascade(
 
 /**
  * UXG-07 / GRAM-01 / GRAM-02 (D-29-02/03/04): build the human-readable summary
- * line that `emitWithSummary` prepends before the body for `error` and
- * `warning` severity. It gives the host `Error:` / `Warning:` prefix a
+ * line for `error` and `warning` severity. `resolveEnvelope`
+ * (notification-resolve.ts) carries it, and the text strategy prepends it
+ * before the body. It gives the host `Error:` / `Warning:` prefix a
  * meaningful, contextual sentence to introduce ("focus on the operation, not
  * what happened to each plugin -- the body already shows that").
  *
@@ -376,7 +338,10 @@ function buildSummaryLineForCascade(
  * when a matching row exists) the function degrades gracefully to the
  * plugin-only plural form rather than crashing.
  */
-function buildSummaryLine(message: NotificationMessage, severity: "error" | "warning"): string {
+export function buildSummaryLine(
+  message: NotificationMessage,
+  severity: "error" | "warning",
+): string {
   // GRAM-02: the standalone-dispatched kinds derive their summary from the
   // FAILED ROW's subject, not the invoking command. The two error-severity
   // standalone kinds carry a hard-count-1 summary (one absent marketplace /
@@ -394,8 +359,8 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
       case "reconcile-applied-cascade":
         // RECON-04: at error/warning severity reuse the cascade-arm counting
         // helpers over the same per-status `marketplaces` shape; at info
-        // severity buildSummaryLine isn't called (emitWithSummary short-
-        // circuits) so the empty arm below is unreachable in practice.
+        // severity `resolveEnvelope` does not call buildSummaryLine, so the
+        // empty arm below is unreachable in practice.
         return buildSummaryLineForCascade(message.marketplaces, severity);
       case "prune-committed-warning":
         return "Prune committed; finalization needs attention.";
@@ -430,7 +395,7 @@ function buildSummaryLine(message: NotificationMessage, severity: "error" | "war
  * `count === 1 ? singular : plural` idiom: `failure`/`failures`,
  * `warning`/`warnings`, `success`/`successes`.
  */
-function tallyCategory(count: number, singular: string, plural: string): string {
+export function tallyCategory(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
@@ -453,7 +418,7 @@ function tallyCategory(count: number, singular: string, plural: string): string 
  * a count nobody read is not a fact the line may state.
  */
 export function composeRetainedWorkflowsAdvisories(
-  retained: readonly { readonly name: string; readonly envelopeCount?: number }[],
+  retained: readonly RetainedWorkflowStaging[],
 ): readonly string[] {
   return retained.map((tree) => {
     const count = tree.envelopeCount;
@@ -463,98 +428,9 @@ export function composeRetainedWorkflowsAdvisories(
   });
 }
 
-/**
- * OUT-03 / OUT-04 / D-04: build the trailing per-operation tally for a
- * structurally PLURAL (bulk) cascade. Plural cardinality makes the tally
- * eligible. Returns `<Operation>: <n> failure(s), <n> warning(s), <n>
- * success(es)` where `<Operation>` is the threaded `Messaging.label`, the
- * counts come from `countRowsBySeverity` over the marketplace + nested plugin
- * rows (D-03 mixed-subject: all rows counted uniformly under the operation
- * name), zero-count categories are OMITTED, and there is NO terminal period.
- *
- * Returns `""` when the tally must not render: the operation is single-target
- * (cardinality !== "plural" -- D-04, never a row-count heuristic),
- * the label is absent (legacy `notify()` emissions), the default result is
- * empty, or every category is zero. Per OUT-03 the tally renders on eligible
- * plural ops regardless of severity, so a successful bulk import shows
- * `Plugin import: 3 success(es)`.
- */
-export function composeTally(message: {
-  readonly label?: string;
-  readonly cardinality?: "single" | "plural";
-  readonly marketplaces: readonly MarketplaceNotificationMessage[];
-  readonly tally?: { readonly verb: string; readonly count: number };
-}): string {
-  if (message.cardinality !== "plural" || message.label === undefined) {
-    return "";
-  }
-
-  const errorCount = countRowsBySeverity(message.marketplaces, "error");
-  const warningCount = countRowsBySeverity(message.marketplaces, "warning");
-
-  const failures = errorCount.plugins + errorCount.marketplaces;
-  const warnings = warningCount.plugins + warningCount.marketplaces;
-
-  const parts: string[] = [];
-
-  if (failures > 0) {
-    parts.push(tallyCategory(failures, "failure", "failures"));
-  }
-
-  if (warnings > 0) {
-    parts.push(tallyCategory(warnings, "warning", "warnings"));
-  }
-
-  if (message.tally === undefined) {
-    // OUT-03 / OUT-06 / D-03: the default tally counts OPERATION rows uniformly
-    // across the plugin and marketplace subjects. A BARE marketplace header --
-    // one carrying neither a `status` (a realized mp outcome: `added` /
-    // `updated` / `removed` / `failed` / `skipped`) NOR a stamped `severity` --
-    // is a pure grouping label (bookkeeping, not an operation), so it must not
-    // inflate the success count. A marketplace row WITH a `status` IS a real
-    // mp-level operation and counts (an import `added` block, a `marketplace
-    // remove` `removed` block). The `info` count from `countRowsBySeverity`
-    // includes bare headers via its `?? "info"` default, so subtract them;
-    // plugin rows always represent an operation and always count.
-    const successCount = countRowsBySeverity(message.marketplaces, "info");
-    const bareHeaders = message.marketplaces.filter(
-      (mp) => mp.severity === undefined && mp.status === undefined,
-    ).length;
-    const successes = successCount.plugins + successCount.marketplaces - bareHeaders;
-
-    // Structural plural cardinality makes the default success tally eligible.
-    // An empty result suppresses this line, while a populated result with no
-    // other tally category reports zero successes. An explicit owner tally with
-    // count 0 retains its omission semantics.
-    if (successes > 0 || (message.marketplaces.length > 0 && parts.length === 0)) {
-      parts.push(tallyCategory(successes, "success", "successes"));
-    }
-  } else if (message.tally.count > 0) {
-    // UGRM-02: the update-scoped override OWNS the success category -- the count
-    // is realized transitions only (the orchestrator's `updated`-partition
-    // tally), rendered with a verb that has no plural-s (`1 updated`, `2
-    // updated`). The info-row `successes` math above is SKIPPED entirely so an
-    // at-desired-state `(skipped) {up-to-date}` row never inflates the headline.
-    // A `count` of 0 contributes nothing (the never-silent no-op headline is the
-    // orchestrator's job), so a failure-only cascade stays e.g. `1 failure`.
-    parts.push(tallyCategory(message.tally.count, message.tally.verb, message.tally.verb));
-  }
-
-  if (parts.length === 0) {
-    return "";
-  }
-
-  return `${message.label}: ${parts.join(", ")}`;
-}
-
-/**
- * OUT-03: fold the optional trailing tally into the body BETWEEN the cascade
- * body and the reload-hint trailer, yielding `{body}\n\n{tally}\n\n{hint}` when
- * both are present (each segment omitted when empty). The tally placement is the
- * binding catalog byte contract.
- */
-export function foldTallyAndHint(body: string, tally: string, hint: string): string {
-  return [body, tally, hint].filter((segment) => segment !== "").join("\n\n");
+/** Formats a leftover-clone cleanup leak with redacted paths and advisory indentation. */
+export function composeLeftoverRemovalAdvisories(leak: string): readonly string[] {
+  return [`    ${redactAbsolutePaths(leak)}`];
 }
 
 /**
@@ -597,12 +473,6 @@ export function shouldEmitReloadHint(message: NotificationMessage): boolean {
     // DIFF-01 SC #2: `reconcile-pending-empty` rows are pre-transition; the
     // trailer would be grammatically false (`/reload` cannot pick up zero
     // changes).
-    // RECON-04: `reconcile-applied-cascade` already ran ON /reload (the
-    // resources_discover handler IS the trailer's nominal trigger), so
-    // emitting `Run /reload to pick up changes` after applying changes
-    // would be a lie. Structurally false closes the trailer-leak gap --
-    // this kind-level exclusion stands EVEN THOUGH its rows stamp
-    // needsReload:true (they are realized transitions).
     switch (message.kind) {
       case "marketplace-info":
       case "plugin-info":
@@ -611,19 +481,29 @@ export function shouldEmitReloadHint(message: NotificationMessage): boolean {
       case "marketplace-not-added":
       case "reconcile-pending-empty":
       case "prune-empty":
-      case "reconcile-applied-cascade":
         return false;
       case "prune-committed-warning":
         return true;
+      case "reconcile-applied-cascade":
+        // D-08: this report comes from `/claude:plugin apply`, which changed
+        // state the running session has not loaded, so its rows decide. A
+        // load's per-session warning rows stamp needsReload:false, so those
+        // warnings never carry the trailer.
+        return rowsNeedReload(message.marketplaces);
     }
   }
 
-  // RLD-02: the trailer fires iff the OR-reduce of the stamped `needsReload`
-  // over the flattened marketplace + plugin rows is true. Realized install/
-  // update/reinstall/uninstall and the realized fresh-disable transition stamp
-  // needsReload:true, while list/info inventory `disabled`/`installed` rows
-  // stamp needsReload:false.
-  for (const mp of message.marketplaces) {
+  return rowsNeedReload(message.marketplaces);
+}
+
+/**
+ * RLD-02: the OR-reduce of the stamped `needsReload` over the flattened
+ * marketplace + plugin rows. Realized install/update/reinstall/uninstall and
+ * the realized fresh-disable transition stamp needsReload:true, while
+ * list/info inventory `disabled`/`installed` rows stamp needsReload:false.
+ */
+function rowsNeedReload(marketplaces: readonly MarketplaceNotificationMessage[]): boolean {
+  for (const mp of marketplaces) {
     if (mp.needsReload === true) {
       return true;
     }
@@ -636,30 +516,4 @@ export function shouldEmitReloadHint(message: NotificationMessage): boolean {
   }
 
   return false;
-}
-
-/**
- * GRAM-04: the single summary-composition seam shared by the standalone arm
- * and the cascade arm of the dispatcher. Computing the
- * severity and prepending the summary in ONE place is the structural
- * anti-divergence guarantee -- no caller can re-introduce a summary-less
- * error/warning emission like the v1.10 standalone-arm defect.
- *
- * GRAM-01: at error/warning severity the summary is prepended as its own
- * block, separated from the body by `\n\n` (never a single `\n`, which would
- * re-glue the host `Error:` / `Warning:` label onto the detail row). At info
- * severity the body is returned unchanged (no summary -- the operation-count
- * semantics do not apply to read-only results). The dispatch owner consumes
- * this exact tuple and performs the single Pi notification call.
- */
-export function composeWithSummary(
-  message: NotificationMessage,
-  body: string,
-): readonly [message: string] | readonly [message: string, severity: "warning" | "error"] {
-  const severity = computeSeverity(message);
-  if (severity === undefined) {
-    return [body];
-  }
-
-  return [`${buildSummaryLine(message, severity)}\n\n${body}`, severity];
 }

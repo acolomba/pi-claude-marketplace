@@ -2,7 +2,7 @@
 //
 // DIFF-01 pure bidirectional 8-bucket diff between MergedConfig and
 // ExtensionState. NEVER touches the disk or network. The architecture
-// purity gate at `tests/architecture/reconcile-planner-purity.test.ts`
+// purity gate at `test/architecture/reconcile-planner-purity.test.ts`
 // structurally enforces zero effectful imports (no node:fs, no platform
 // git, no save*/withState*/withLockedStateTransaction, no notify).
 //
@@ -48,6 +48,7 @@
 import { parsePluginSource, samePlannedSource, sourceLogical } from "../../domain/source.ts";
 import { isDeclaredEnabled } from "../../persistence/config-io.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
+import { ownValue } from "../../shared/own-key.ts";
 
 import { emptyReconcilePlan } from "./types.ts";
 
@@ -112,20 +113,20 @@ interface PendingMarketplaceClaim {
   readonly candidateMarketplace: string;
 }
 
-interface MarketplaceClaimConflict extends PlannedSourceDetail {
+interface DeclaredClaimConflict extends PlannedSourceDetail {
   readonly declaredMarketplace: string;
 }
 
 interface MarketplaceClaims {
   readonly recordedByDeclared: ReadonlyMap<string, string>;
-  readonly conflicts: readonly MarketplaceClaimConflict[];
+  readonly conflicts: readonly DeclaredClaimConflict[];
   readonly conflictedDeclared: ReadonlySet<string>;
   readonly conflictedRecorded: ReadonlySet<string>;
 }
 
 interface MarketplaceClaimAccumulator {
   readonly recordedByDeclared: Map<string, string>;
-  readonly conflicts: MarketplaceClaimConflict[];
+  readonly conflicts: DeclaredClaimConflict[];
   readonly pending: PendingMarketplaceClaim[];
   readonly conflictedRecorded: Set<string>;
 }
@@ -137,7 +138,7 @@ function recordedSourceCandidates(
 ): string[] {
   const candidates: string[] = [];
   for (const [name, record] of Object.entries(recorded)) {
-    if (declared[name] !== undefined) {
+    if (ownValue(declared, name) !== undefined) {
       continue;
     }
 
@@ -156,7 +157,7 @@ function collectMarketplaceClaim(
   declared: MergedConfig["marketplaces"],
   recorded: ExtensionState["marketplaces"],
 ): void {
-  if (recorded[declaredMarketplace] !== undefined) {
+  if (ownValue(recorded, declaredMarketplace) !== undefined) {
     acc.recordedByDeclared.set(declaredMarketplace, declaredMarketplace);
     return;
   }
@@ -247,6 +248,20 @@ function buildMarketplaceClaims(
 }
 
 /**
+ * D-PL6-17 / CR-01: the recorded marketplace each config declaration claims,
+ * by its own name or by a one-to-one source match, read from the planner's own
+ * claim rule. A declaration in a conflicted claim, or with no recorded match,
+ * maps to nothing. Import reads it to keep the name the config uses for a
+ * recorded marketplace when the settings name that marketplace directly.
+ */
+export function marketplaceSourceClaims(
+  declared: MergedConfig["marketplaces"],
+  recorded: ExtensionState["marketplaces"],
+): ReadonlyMap<string, string> {
+  return buildMarketplaceClaims(declared, recorded).recordedByDeclared;
+}
+
+/**
  * D-04-05: whether any record under a marketplace arrived as another plugin's
  * dependency. The exemption that keeps such a record out of the uninstall
  * bucket must reach the marketplace-removal path too: a dependency resolved
@@ -295,7 +310,7 @@ function diffMarketplaces(
       continue;
     }
 
-    const recordedRecord = recorded[mpName];
+    const recordedRecord = ownValue(recorded, mpName);
     if (recordedRecord === undefined) {
       // A unique source match means the declaration is already fulfilled by
       // the recorded canonical identity. Planning an add here would clone it
@@ -466,7 +481,7 @@ function classifyDeclaredPlugin(
   // is in `marketplacesToRemove`): installing into / disabling under a
   // marketplace being torn down is contradictory, so the entry surfaces as
   // a diagnostic instead of an install/disable action.
-  if (declaredMarketplaces[declaredMarketplace] === undefined) {
+  if (ownValue(declaredMarketplaces, declaredMarketplace) === undefined) {
     acc.dangling.push({
       scope,
       cause: "dangling-reference",
@@ -507,7 +522,7 @@ function classifyDeclaredPlugin(
     // is NOT already disabled (artifacts still materialised) needs the action --
     // symmetric with the enable branch's "recorded + enabled" steady state
     // below.
-    const record = state.marketplaces[marketplace]?.plugins[plugin];
+    const record = ownValue(ownValue(state.marketplaces, marketplace)?.plugins, plugin);
     if (recorded && record !== undefined && !isRecordedButDisabled(record)) {
       // Declared-disabled but still materialised: drop artifacts without
       // removing the version pin (D-04 / ENBL-02).
@@ -531,7 +546,7 @@ function classifyDeclaredPlugin(
   // consequence-disable is structurally indistinguishable from an ordinary
   // declared-enabled / recorded-disabled divergence, so without it every
   // reload would re-enable a record the same reload then disables again.
-  const record = state.marketplaces[marketplace]?.plugins[plugin];
+  const record = ownValue(ownValue(state.marketplaces, marketplace)?.plugins, plugin);
   if (
     record !== undefined &&
     isRecordedButDisabled(record) &&
@@ -688,7 +703,7 @@ function buildDependencyDisableBucket(
     const record =
       parsed === undefined
         ? undefined
-        : state.marketplaces[parsed.marketplace]?.plugins[parsed.plugin];
+        : ownValue(ownValue(state.marketplaces, parsed.marketplace)?.plugins, parsed.plugin);
     if (parsed === undefined || record === undefined || isAlreadyDependencyDisabled(record)) {
       continue;
     }
@@ -740,7 +755,7 @@ function isEligibleDependencyInstallDependent(
   const record =
     parsed === undefined
       ? undefined
-      : state.marketplaces[parsed.marketplace]?.plugins[parsed.plugin];
+      : ownValue(ownValue(state.marketplaces, parsed.marketplace)?.plugins, parsed.plugin);
   if (record === undefined) {
     return false;
   }
@@ -763,6 +778,7 @@ interface DependencyInstallGroup {
   ranges: string[];
   requiredBy: string;
   declarers: string[];
+  requirers: string[];
 }
 
 /** Fold one eligible verdict row while keeping its first diagnostic declarer. */
@@ -776,6 +792,7 @@ function addMissingDependencyGroup(
       ranges: [...(entry.ranges ?? [])],
       requiredBy: entry.dependent,
       declarers: [entry.dependent],
+      requirers: entry.ranges === undefined ? [] : [entry.dependent],
     });
     return;
   }
@@ -783,6 +800,10 @@ function addMissingDependencyGroup(
   group.ranges.push(...(entry.ranges ?? []));
   if (!group.declarers.includes(entry.dependent)) {
     group.declarers.push(entry.dependent);
+  }
+
+  if (entry.ranges !== undefined && !group.requirers.includes(entry.dependent)) {
+    group.requirers.push(entry.dependent);
   }
 }
 
@@ -841,6 +862,7 @@ function buildDependencyInstallBucket(
       ranges: group.ranges,
       requiredBy: group.requiredBy,
       declarers: group.declarers,
+      ...(group.requirers.length > 0 && { requirers: group.requirers }),
     });
   }
 

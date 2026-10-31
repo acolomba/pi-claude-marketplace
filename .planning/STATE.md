@@ -1,18 +1,19 @@
 ---
 gsd_state_version: "1.0"
-milestone: any-git-host
-status: Awaiting next milestone
-stopped_at: milestone any-git-host archived (2026-09-30); awaiting next milestone
-last_updated: "2026-10-06T13:53:27.309Z"
-last_activity: 2026-10-06
-last_activity_desc: Completed quick task 261006-kr1 (adopt workflow engine 3.14.0)
-state_head: 6af2e9e97ca8bea6273a2ae13d7cba38174660d8
-milestone_name: Any Git Host
+milestone: plugin-lifecycle
+status: plugin-lifecycle milestone complete
+stopped_at: "Milestone plugin-lifecycle shipped; PR #290 merged, released as 0.21.0"
+last_updated: "2026-10-31T08:13:42.210Z"
+last_activity: 2026-10-30
+last_activity_desc: "Completed quick task 261030-ogp: bootstrap runs only marketplace add"
+state_head: 9847e01b61249175f6ed565fdb02b2e0c5215253
+milestone_name: Marketplace and Plugin Lifecycle Backlog
+current_phase: 11
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 11
-  completed_plans: 11
+  total_phases: 11
+  completed_phases: 11
+  total_plans: 80
+  completed_plans: 80
   percent: 100
 ---
 
@@ -20,608 +21,125 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-09-24 after v1.20 closeout)
+See: `.planning/PROJECT.md` (updated 2026-10-29 after plugin-lifecycle completion)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Planning the next milestone. any-git-host closed on
-2026-09-30 with 3/3 phases and 10/10 requirements, after v1.20 closed with
-12/12 phases and 45/45 requirements. The private-repository credential
-challenge deferred in v1.20 Phase 3 UAT passed on 2026-09-30, after the merge
-of #221.
+**Current focus:** Planning the next milestone
 
 ## Current Position
 
-Phase: Milestone any-git-host complete
+Phase: Milestone plugin-lifecycle complete
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-10-06 - Completed quick task 261006-kr1: Adopt workflow engine 3.14.0: mirror PI_CODING_AGENT_DIR storage root and bump pins
+Status: plugin-lifecycle milestone complete
+Last activity: 2026-10-30 - Completed quick task 261030-ogp: bootstrap runs only marketplace add
 
-### workflows-replay closeout (merged from main)
+### mcp-4 closeout
 
-`workflows` and `workflows-replay` ran in the `workflows` workstream, which was
-archived to `milestones/ws-workflows-2026-09-27/` on 2026-09-27.
-`.planning/workstreams/` no longer exists and no workstream is active.
-workflows-replay completed 2026-09-21 with no accepted debt: 46/46
-requirements, 9/9 phases verified, `threats_open: 0`, Nyquist-validated. All
-twelve `[workflows-replay]` broken-window entries are fixed or waived with named
+Completed 2026-10-10 on `features/mcp-4` and merged to main the same day as
+PR #250; released as npm 0.20.0 (tag `v0.20.0`, D-07-11). 8/8 phases (`01/`
+to `08/`), 73 plans, 41/41 requirements. The first audit read `tech_debt`;
+`08/` cleared it, and the re-audit passed (12/12 integration seams, 6/6 flows,
+Nyquist compliant on all eight phases, `threats_open: 0`). It was a verified
+close, so no verification override was acknowledged. The archive is
+`.planning/milestones/mcp-4-*`, with phase and quick-task records under
+`milestones/mcp-4-phases/` and `milestones/mcp-4-quick/`. Its decisions are
+kept under `### mcp-4 decisions` below.
+
+Carried items:
+
+- `ROOTKEY-01` in `BACKLOG.md` (WINDOWS #90, waived): `install __proto__@<mp>`,
+  and any root plugin name outside the dependency token alphabet, is refused
+  with a misleading dependency cause.
+- From the mcp-4 `05/` session notes, not re-checked since: the user-scope
+  plugin record was moved aside to
+  `~/.pi/agent/pi-claude-marketplace/state.json.broken-20261008`; run `/reload`
+  or reinstall `plugin-dev@claude-plugins-official` in Pi to recreate it.
+
+### workflows-replay closeout
+
+Completed 2026-09-21 with no accepted debt: 46/46 requirements, 9/9 phases
+verified, `threats_open: 0`, Nyquist-validated. All twelve
+`[workflows-replay]` broken-window entries are fixed or waived with named
 `BACKLOG.md` carriers (VSTALE-01, WLREC-01, RLHINT-01, PCERR-01, WSTOR-01,
-WPIN-01). The bridge reached `main` in PR #205 (`5c652697`) on 2026-09-24; the
-`0.19.x` tags deliberately exclude it, and the next release cut from `main`
-carries it.
+WPIN-01).
 
-### any-git-host closeout (merged from main)
+The bridge reached `main` in PR #205 (`5c652697`) on 2026-09-24. The `0.19.x`
+tags deliberately exclude it: they were cut from `releases/v0.19.2`, which PR
+#216 then merged back into `main`. No release action is outstanding — whatever
+is cut from `main` next carries workflows by construction.
 
-`any-git-host` ran in the `git-hosts` workstream, which was archived to
-`milestones/ws-git-hosts-2026-10-01/` on 2026-10-01; `.planning/workstreams/`
-again does not exist and no workstream is active. It completed 2026-09-30:
-10/10 requirements, 3/3 phases re-verified `passed` against the final tree,
-`threats_open: 0` on each. The audit reads `passed` after quick task 260930-j4y
-closed the review debt (`BACKLOG.md` GHRED-01, GHADD-01) in PR #231. The code
-reached `main` in PR #221 (`a0d3aef1`) on 2026-09-30, with review fixes in
-PR #231; no tag contains it (`v0.19.2` was cut on 2026-09-24). The workstream's
-three quick tasks (260928-tt9, 260930-j4y, 260930-tlb) are recorded in the
-archived `STATE.md`. PR #153, the contributor PR any-git-host reimplemented, is
-still open with a comment explaining what landed.
+### test-backlog closeout: `override_closeout`
 
-## Performance Metrics
+Shipped 2026-09-18, no npm release. All eight phases read `status: passed`
+(5/5, 4/4, 18/18, 7/7, 10/10, 2/2, 8/8, 7/7); the audit is `tech_debt` with no
+blockers (requirements 18/18, phases 8/8, integration 9/9, flows 2/2). Two
+override reasons, neither an outcome failure:
 
-**Velocity:**
+1. **`init.manager` reports every phase `stale`** because each `covered_files`
+   list names `STATE.md`, `ROADMAP.md` and `REQUIREMENTS.md`, which every later
+   close rewrites. Third milestone with this artifact.
+2. **Two artifacts acknowledged at close** (the `05/` and `06/` deferred-item
+   records). Known verification overrides: **2 newly acknowledged, 16 carried
+   forward**.
 
-- Total plans completed: 206
-- Average recorded duration: 11.9 min
-- Total recorded execution time: 30 hr 1 min
+The refine-unit-tests close (2026-09-13) carried the same shape: 4 newly
+acknowledged, 17 carried forward, and the phase-25 table conversion.
 
-**By Phase:**
+### Known snags for the next close
 
-| Phase                           | Plans | Total           | Avg/Plan          |
-| ------------------------------- | ----: | --------------- | ----------------- |
-| 108. Domain and Platform        |    23 | 10h 58m         | 28.6 min          |
-| 109. Shared Contracts           |    19 | 3h 19m          | 10.5 min          |
-| 110                             |    12 | -               | -                 |
-| 111. Non-Hook Component Bridges |    31 | -               | -                 |
-| 112. Hook Runtime               |    31 | 7h 58m          | 15.4 min          |
-| 113. Orchestrator Support       |    35 | 7h 46m recorded | 16.6 min recorded |
-| 1 | 4 | - | - |
-| 02 | 2 | - | - |
-| 3 | 7 | - | - |
-| 04 | 6 | - | - |
-| 5 | 3 | - | - |
-| 06 | 4 | - | - |
-| 07 | 3 | - | - |
-| 8 | 3 | - | - |
-| 09 | 4 | - | - |
-| 10 | 4 | - | - |
-| 11 | 7 | - | - |
-| 12 | 8 | - | - |
+- `phase.complete` drops `current_phase_name`, resets Current Position to
+  `Plan: Not started`, and rewrites the historical `Stopped at:` line under an
+  older heading. Restore by hand and check with `git diff`.
+- `milestone complete` leaves every original-path deletion **unstaged**
+  (`git add -u .planning/phases .planning/quick`) and writes 40 verbose
+  accomplishment bullets that need a hand rewrite. `.planning/workstreams/` no
+  longer exists, so the verb runs; the earlier `--ws` refusal is gone.
+- The `audit-open` line parser stops at a frontmatter list item that begins
+  with a backtick, so a complete quick task reads `unknown`, and the
+  acknowledge writer then **replaces the whole frontmatter** with its marker.
+  Quote the scalar instead of acknowledging; restore the file from git if the
+  writer already ran.
+- A table-shaped deferred item still cannot be acknowledged; convert it to
+  bullets with every cell preserved.
+- `state.advance-plan` resets `Status:` and rewrites a historical `Stopped at:`
+  line; re-read STATE.md after every state verb.
+- **Name an archived phase by its directory token (`05/`, `09/`), never
+  `Phase 5`.** `/gsd-health`'s W002 archived-phase exemption matches
+  `^v\d+.*-phases$` only, so `test-backlog-phases`,
+  `refine-unit-tests-phases`, `url-source-phases` and every `ws-*` workstream
+  archive are invisible to it: a `Phase N` token from one of those reads as an
+  undeclared phase as soon as N leaves ROADMAP.md. The directory form says the
+  same thing, more precisely, and the check stays quiet. Do not re-add a phase
+  checklist to ROADMAP.md to silence it — that trades each W002 for a W006.
+- **Do not zero the `progress:` block between milestones.** The 9/9 phases and
+  39/39 plans are workflows-replay's, not root scope's, but 0 routes worse:
+  `smart-entry` tests `total_phases <= 0` first and recommends
+  `/gsd-discuss-phase` for a phase that does not exist. Measured both ways.
 
-**Recent Trend:** 35 Phase 113 plans completed with all direct owner, review, validation, verification, security, and clean-repository gates green.
-**Per-Plan Metrics:**
+## Known Risk Worth Revisiting
 
-| Plan          | Duration | Tasks   | Files   |
-| ------------- | -------- | ------- | ------- |
-| Phase 116 P19 | 45 min   | 1 tasks | 1 files |
-| Phase 116 P15 | 40 min   | 1 tasks | 1 files |
-| Phase 116 P14 | 45 min   | 1 tasks | 1 files |
-| Phase 108 P01 | 10 min   | 2 tasks | 1 files |
-| Phase 108 P06 | 18 min   | 3 tasks | 7 files |
-| Phase 108 P08 | 13 min   | 2 tasks | 1 files |
-| Phase 108 P09 | 15 min   | 2 tasks | 1 files |
-| Phase 108 P10 | 12 min   | 2 tasks | 1 files |
-| Phase 108 P11 | 14 min   | 2 tasks | 1 files |
-| Phase 108 P13 | 14 min   | 2 tasks | 1 files |
-| Phase 108 P14 | 10 min   | 2 tasks | 1 files |
-| Phase 108 P15 | 10 min   | 2 tasks | 1 files |
-| Phase 108 P16 | 16 min   | 2 tasks | 1 files |
-| Phase 108 P17 | 26 min   | 2 tasks | 1 files |
-| Phase 108 P19 | 28 min   | 3 tasks | 5 files |
-| Phase 108 P20 | 12 min   | 2 tasks | 1 files |
-| Phase 108 P18 | 43 min   | 3 tasks | 8 files |
-| Phase 108 P21 | 3h 40m   | 3 tasks | 9 files |
-| Phase 108 P12 | 27 min   | 3 tasks | 5 files |
-| Phase 108 P22 | 42 min   | 3 tasks | 8 files |
-| Phase 108 P02 | 20 min   | 3 tasks | 7 files |
-| Phase 108 P03 | 19 min   | 3 tasks | 8 files |
-| Phase 108 P04 | 22 min   | 3 tasks | 5 files |
-| Phase 108 P05 | 20 min   | 3 tasks | 8 files |
-| Phase 108 P07 | 27 min   | 3 tasks | 9 files |
-| Phase 108 P23 | 20 min   | 3 tasks | 5 files |
-| Phase 109 P01 | 7 min    | 2 tasks | 1 files |
-| Phase 109 P02 | 10 min   | 2 tasks | 1 files |
-| Phase 109 P03 | 12 min   | 2 tasks | 1 files |
-| Phase 109 P04 | 7 min    | 2 tasks | 1 files |
-| Phase 109 P05 | 5 min    | 2 tasks | 1 files |
-| Phase 109 P06 | 7 min    | 2 tasks | 1 files |
-| Phase 109 P07 | 16min    | 2 tasks | 1 files |
-| Phase 109 P08 | 6min     | 2 tasks | 1 files |
-| Phase 109 P09 | 19 min   | 2 tasks | 2 files |
-| Phase 109 P10 | 9 min    | 2 tasks | 1 files |
-| Phase 109 P11 | 6 min    | 2 tasks | 1 files |
-| Phase 109 P12 | 12 min   | 2 tasks | 1 files |
-| Phase 109 P13 | 6 min    | 2 tasks | 1 files |
-| Phase 109 P14 | 40 min   | 3 tasks | 9 files |
-| Phase 109 P15 | 6 min    | 2 tasks | 1 files |
-| Phase 109 P16 | 9 min    | 2 tasks | 1 files |
-| Phase 109 P17 | 11 min   | 2 tasks | 1 files |
-| Phase 109 P18 | 4 min    | 2 tasks | 1 files |
-| Phase 109 P19 | 7 min    | 2 tasks | 1 files |
-| Phase 110 P02 | 11 min   | 2 tasks | 1 files |
-| Phase 110 P06 | 7 min    | 2 tasks | 1 files |
-| Phase 110 P11 | 7 min    | 2 tasks | 1 files |
-| Phase 110 P01 | 8min     | 2 tasks | 1 files |
-| Phase 110 P03 | 11 min   | 2 tasks | 1 files |
-| Phase 110 P05 | 10 min   | 2 tasks | 1 files |
-| Phase 110 P08 | 10min    | 2 tasks | 2 files |
-| Phase 110 P10 | 9 min    | 2 tasks | 1 files |
-| Phase 110 P04 | 11 min   | 2 tasks | 1 files |
-| Phase 110 P07 | 16 min   | 2 tasks | 2 files |
-| Phase 110 P09 | 19 min   | 2 tasks | 3 files |
-| Phase 110 P12 | 17 min   | 2 tasks | 1 files |
-| Phase 111 P01 | 14 min   | 2 tasks | 2 files |
-| Phase 111 P02 | 10 min   | 2 tasks | 1 files |
-| Phase 112 P01 | 14 min   | 2 tasks | 1 files |
-| Phase 112 P03 | 9 min    | 2 tasks | 1 files |
-| Phase 112 P08 | 8 min    | 2 tasks | 1 files |
-| Phase 112 P09 | 9 min    | 2 tasks | 1 files |
-| Phase 112 P10 | 14 min   | 2 tasks | 1 files |
-| Phase 112 P12 | 12 min   | 2 tasks | 1 files |
-| Phase 112 P15 | 6 min    | 2 tasks | 1 files |
-| Phase 112 P16 | 7 min    | 2 tasks | 1 files |
-| Phase 112 P17 | 7 min    | 2 tasks | 1 files |
-| Phase 112 P18 | 3 min    | 2 tasks | 1 files |
-| Phase 112 P19 | 5 min    | 2 tasks | 1 files |
-| Phase 112 P20 | 5 min    | 2 tasks | 1 files |
-| Phase 112 P21 | 8 min    | 2 tasks | 1 files |
-| Phase 112 P22 | 20 min   | 2 tasks | 1 files |
-| Phase 112 P23 | 10 min   | 2 tasks | 1 files |
-| Phase 112 P24 | 10 min   | 2 tasks | 1 files |
-| Phase 112 P27 | 19 min   | 2 tasks | 1 files |
-| Phase 112 P28 | 28 min   | 2 tasks | 3 files |
-| Phase 112 P29 | 13 min   | 2 tasks | 1 files |
-| Phase 112 P30 | 17 min   | 2 tasks | 1 files |
-| Phase 112 P31 | 17 min   | 2 tasks | 1 files |
-| Phase 112 P11 | 14 min   | 2 tasks | 2 files |
-| Phase 112 P13 | 20 min   | 2 tasks | 2 files |
-| Phase 112 P25 | 12 min   | 2 tasks | 1 files |
-| Phase 112 P02 | 45 min   | 2 tasks | 3 files |
-| Phase 112 P06 | 26 min   | 2 tasks | 3 files |
-| Phase 112 P04 | 33 min   | 2 tasks | 3 files |
-| Phase 112 P05 | 18 min   | 2 tasks | 2 files |
-| Phase 112 P26 | 19 min   | 2 tasks | 2 files |
-| Phase 112 P07 | 34 min   | 2 tasks | 3 files |
-| Phase 112 P14 | 16 min   | 2 tasks | 1 file  |
-| Phase 115 P02 | 96 min | 3 tasks | 2 files |
-| Phase 115 P05 | 90min | 3 tasks | 5 files |
-| Phase 116 P00 | 35 min | 2 tasks | 5 files |
-| Phase 116 P01 | 25 min | 1 tasks | 1 files |
-| Phase 116 P02 | 20 min | 1 tasks | 1 files |
-| Phase 116 P04 | 25 min | 1 tasks | 1 files |
-| Phase 116 P06 | 65 min | 1 tasks | 3 files |
-| Phase 116 P30 | 40 min | 1 tasks | 1 files |
-| Phase 116 P12 | 45 min | 1 tasks | 1 files |
-| Phase 116 P23 | 50 min | 1 tasks | 1 files |
-| Phase 116 P26 | 45 min | 1 tasks | 1 files |
-| Phase 116 P27 | 70 min | 2 tasks | 2 files |
-| Phase 116 P29 | 20 min | 1 tasks | 1 files |
-| Phase 116 P03 | 45 min | 1 tasks | 1 files |
-| Phase 116 P10 | 45 min | 1 tasks | 1 files |
-| Phase 116 P13 | 50 min | 1 tasks | 1 files |
-| Phase 116 P07 | 35 min | 1 tasks | 1 files |
-| Phase 116 P11 | 35 min | 1 tasks | 1 files |
-| Phase 116 P05 | 30 min | 1 tasks | 1 files |
-| Phase 116 P17 | 40 min | 2 tasks | 1 files |
-| Phase 116 P28 | 30 min | 1 tasks | 1 files |
-| Phase 117 P01 | 11 min | 1 tasks | 1 files |
-| Phase 117 P02 | 15 min | 2 tasks | 10 files |
-| Phase 117 P03 | 16 min | 1 tasks | 27 files |
-| Phase 117 P04 | 22 min | 2 tasks | 2 files |
-| Phase 117 P05 | 9 min | 1 tasks | 2 files |
-| Phase 117 P06 | 13 min | 1 tasks | 2 files |
-| Phase 117 P07 | 28 min | 2 tasks | 17 files |
-| Phase 117 P08 | 22 min | 2 tasks | 4 files |
-| Phase 117 P09 | 13 min | 1 tasks | 2 files |
-| Phase 117 P10 | 12 min | 1 tasks | 1 files |
-| Phase 117 P11 | 50 min | 1 tasks | 4 files |
-| Phase 117 P11 | 2h 20m | 2 tasks | 16 files |
-| Phase 02 P01 | 58 min | 3 tasks | 5 files |
-| Phase 02 P02 | 28min | 2 tasks | 6 files |
-| Phase 03 P01 | 89min | 3 tasks | 8 files |
-| Phase 03 P02 | 41min | 2 tasks | 4 files |
-| Phase 03 P03 | 4min | 2 tasks | 6 files |
-| Phase 03 P07 | 43min | 2 tasks | 6 files |
-| Phase 03 P04 | 7h 5m | 3 tasks | 5 files |
-| Phase 03 P06 | 72 min | 2 tasks | 16 files |
-| Phase 05 P01 | 47 min | 3 tasks | 26 files |
-| Phase 05 P02 | 54min | 3 tasks | 24 files |
-| Phase 05 P03 | 19 min | 3 tasks | 4 files |
-| Phase 06 P01 | 100 min | 3 tasks | 32 files |
-| Phase 06 P02 | 165min | 3 tasks | 24 files |
-| Phase 06 P03 | 45min | 3 tasks | 20 files |
-| Phase 06 P04 | 20min | 2 tasks | 4 files |
-| Phase 09 P01 | 195 min | 3 tasks | 20 files |
-| Phase 09 P02 | 50 min | 2 tasks | 2 files |
-| Phase 09 P03 | 275min | 2 tasks | 11 files |
-| Phase 09 P04 | 80 min | 3 tasks | 10 files |
-| Phase 10 P01 | 62min | 3 tasks | 24 files |
-| Phase 10 P02 | 1h53m | 3 tasks | 8 files |
-| Phase 10-constraint-aware-update P03 | 56 min | 3 tasks | 26 files |
-| Phase 10 P04 | 48min | 2 tasks | 8 files |
-
-## Accumulated Context
-
-### Roadmap Evolution
-
-- Phases 6-12 added 2026-09-18 (operator decision: extend v1.20 rather than open v1.21): Load-time dependency check and allowed uninstall; Marketplace-repository tag resolution for path-source dependencies; Enablement parity for dependencies; Reload installs missing declared dependencies; Constraint-aware update; Cross-marketplace dependency allowlist; Standalone prune with dry-run. Source: `milestones/v1.20-HANDOFF-upstream-dependency-parity.md`. Order changed from the handoff's: load-time check leads.
-
-### Decisions
-
-Decisions are logged in the PROJECT.md Key Decisions table.
-
-- [Phase 12] Preview uses `(will uninstall) {dependency pruned}` and actual
-  prune uses `(uninstalled) {dependency pruned}`; the preview never writes.
-- [Phase 12] Both empty modes give a scoped informational reason. The
-  standalone command adds only `--dry-run`, without a prompt or `-y`.
-- [Phase 12] The proposed list/info `{orphaned}` marker was dropped.
-- [Phase 11] New foreign dependency installs require exact membership in the
-  governing root marketplace's validated allowlist before lookup or mutation.
-- [Phase 11] Reload checks every eligible original declarer for permission;
-  once B is installed, B's own policy governs B-to-C edges.
-- [Phase 11] Refusal names the blocked dependency and both the narrow manual
-  install remedy and the root marketplace policy edit.
-- Each executable plan and implementation commit owns one source-test pair.
-- Runtime tests use separate lowercase `// arrange`, `// act`, and `// assert` phases.
-- Lowercase `// act & assert` is reserved for one `assert.throws()` or `assert.rejects()` expression.
-- Type-only evidence stays module-scoped and uses `satisfies` or `@ts-expect-error` without fake runtime phases.
-- Retained commits and HEAD triage labels do not close a pair.
-- [Phase 110]: Kept agents-index-schema.ts byte-identical because its compiled validators expose the complete public contract.
-- [Phase 110]: Agents-index schema evidence uses independent literals plus module-scope satisfies and targeted @ts-expect-error checks.
-- [Phase 110]: Kept locations.ts byte-identical because its public seams expose the complete contract.
-- [Phase 110]: Locations evidence uses complete bundles and adjacent safe-path probes with platform-aware separators.
-- [Phase 110]: Kept rollback.ts byte-identical because its public formatter exposes every bypass and wrapping branch.
-- [Phase 110]: Rollback evidence compares whole structured results before pinning original cause and raw partial identities.
-- [Phase 110]: Kept agents-index-io.ts byte-identical because its public load and save functions expose every real branch.
-- [Phase 110]: Agents-index I/O evidence uses case-owned literal documents, complete loaded values, structured failures, and exact stored bytes.
-- [Phase 110]: Kept config-io.ts byte-identical because its public loader, validator, predicate, and saver expose every real branch.
-- [Phase 110]: Config I/O evidence uses independent literal documents, complete load results, and unchanged bytes across validation and containment failures.
-- [Phase 110]: Kept config-write-back.ts byte-identical because its five public operations expose every real write-back branch.
-- [Phase 110]: Config write-back evidence uses independent complete JSON bytes for patches, deletes, cascades, omitted batch arms, and absent-entry creation.
-- [Phase 110]: Refined MigrationResult.marketplaces to object-valued rows while preserving migration runtime logic and exports.
-- [Phase 110]: Kept invalid plugin rows unfilled so the downstream state schema remains the rejection boundary instead of silently coercing corrupt values.
-- [Phase 110]: Migration evidence uses complete independent results, exact fixed-point replay, and complete warning and filesystem effects.
-- [Phase 110]: Kept phase-ledger.ts byte-identical because runPhases exposes every compensation and error branch through its public contract.
-- [Phase 110]: Phase-ledger evidence uses the literal skills, commands, agents, hooks, mcp, state order with complete logs, results, causes, leaks, and final context.
-- [Phase 110]: Kept config-merge.ts byte-identical because its two public functions expose every real merge and load branch.
-- [Phase 110]: Used independent complete reducer values and all nine base/local status pairs to keep provenance and fallback behavior explicit.
-- [Phase 110]: Narrowed buildConfigFromState with an inline intersection return type so existing exports stay unchanged while marketplace and plugin records become statically present.
-- [Phase 110]: Removed only the redundant entry-count fallbacks and left migration runtime ordering, stored bytes, and result arms unchanged.
-- [Phase 110]: Used independent complete state and config values plus exact bytes and metadata to prove first-run replay without sleeps or shared fixtures.
-- [Phase 110]: Removed the redundant post-migration marketplace guard and assertion because Plan 110-08 guarantees object-valued MigrationResult rows.
-- [Phase 110]: State migration persistence uses a pre-registered case-local filesystem watcher and exact file metadata to prove no-write replay without sleeps or polling.
-- [Phase 110]: Kept with-state-guard.ts byte-identical because its public state operations and lockfile collaborator expose every real lifecycle branch.
-- [Phase 110]: Used entered and release promises to prove real lock contention without sleeps, polling, elapsed-time checks, or platform skips.
-- [Phase 110]: Used the existing loadState and saveState dependency seam for deterministic persistence failures and case-local proper-lockfile method restoration for acquisition and release failures.
-- [Phase 111]: Every mirrored owner uses complete case-local inputs and independent expected outcomes; shared fixtures were removed after their last legitimate consumer.
-- [Phase 111]: Supplemental suites remain only for genuine cross-module behavior, and all 31 direct owner gates pass at complete line, branch, and function coverage.
-- [Phase 111]: MCP provenance markers require own outer and identity properties, rejecting inherited marker, plugin, and marketplace values.
-- [Phase 111]: Two provably unreachable private skills-stage fallbacks were removed without adding a test-only seam, export, pragma, or behavior change.
-- [Phase 112]: Kept pid-table.ts byte-for-byte unchanged and covered every branch through its public filesystem contract.
-- [Phase 112]: Used a case-owned _shared regular-file boundary for deterministic filesystem failures without a test seam.
-- [Phase 112]: Kept ring-buffer.ts byte-for-byte unchanged and proved every byte boundary through its public API.
-- [Phase 112]: RingBuffer evidence uses fresh case-local byte inputs and independent complete text/truncation outcomes.
-- [Phase 112]: Kept exec-result.ts byte-for-byte unchanged because its exported type and assertNever function expose the complete contract.
-- [Phase 112]: Kept all HookExecResult positive and negative type evidence at module scope, with runtime execution only for assertNever.
-- [Phase 112]: Proved allow, deny, and ask inline without introducing a new permission type export.
-- [Phase 112]: Kept exec-timer.ts byte-for-byte unchanged because its public timer ladder exposes every scheduling branch.
-- [Phase 112]: Observed exact handles, unref calls, clears, and pending state through the current TestContext fake timers only.
-- [Phase 112]: Kept hook-env.ts byte-for-byte unchanged because prepareHookEnv exposes every environment branch through its public contract.
-- [Phase 112]: Hook environment evidence preserves inherited-key non-interference while proving case-local remote-key absence and exact process restoration.
-- [Phase 112]: Kept glob.ts byte-for-byte unchanged because its public compiled Bash and path objects expose every matching and defensive branch.
-- [Phase 112]: Glob owner evidence uses complete independent metadata and named outcome maps for command boundaries, six anchors, normalization, containment, and globstar behavior.
-- [Phase 112]: Covered defensive sparse and unknown compiled metadata through exported objects with Reflect, without casts, test seams, or production surface changes.
-- [Phase 112]: Kept post-compact.ts byte-for-byte unchanged because translate exposes the complete payload contract through its public signature.
-- [Phase 112]: Replaced the incomplete double assertion with complete SessionCompactEvent values checked by satisfies.
-- [Phase 112]: Treated empty strings as valid context values and did not fabricate an out-of-contract null case.
-- [Phase 112]: Kept post-tool-use-failure.ts byte-for-byte unchanged because translate exposes the complete payload contract through its public signature.
-- [Phase 112]: PostToolUseFailure owner evidence uses complete ToolResultEvent values, independent whole envelopes, and nested identity and non-mutation assertions.
-- [Phase 112]: Kept malformed process output in Plan 112-04 and left the translator supplemental suite unchanged.
-- [Phase 112]: Kept post-tool-use.ts byte-for-byte unchanged because translate exposes the complete payload contract through its public signature.
-- [Phase 112]: Replaced PostToolUse double assertions and shared context with complete case-local values checked by satisfies.
-- [Phase 112]: Kept malformed PostToolUse process output in Plan 112-04 and left the translator supplemental suite unchanged.
-- [Phase 112]: Kept pre-compact.ts byte-for-byte unchanged because translate exposes the complete payload contract through its public signature.
-- [Phase 112]: Replaced the PreCompact double assertion and shared context with complete case-local values checked by satisfies.
-- [Phase 112]: Treated empty strings as valid PreCompact context values and did not add an unsupported null context case.
-- [Phase 112]: Kept pre-tool-use.ts byte-for-byte unchanged because translate exposes the complete payload contract.
-- [Phase 112]: PreToolUse evidence uses independent built-in and custom six-key envelopes with nested identity and non-mutation checks.
-- [Phase 112]: Kept malformed PreToolUse input in Plan 112-04 and left the translator supplemental suite unchanged.
-- [Phase 112]: Kept session-end.ts byte-for-byte unchanged because translate exposes the complete SessionEnd payload contract through its public signature.
-- [Phase 112]: Used one explicit case per shutdown reason plus a dedicated empty-context case, with input-only target session files omitted from exact five-key envelopes.
-- [Phase 112]: Kept malformed SessionEnd input in Plan 112-04 and left the supplemental translator suite unchanged.
-- [Phase 112]: Kept session-start.ts byte-for-byte unchanged because translate exposes the complete payload contract through its public signature.
-- [Phase 112]: SessionStart evidence uses independent whole envelopes for every source branch and accepted empty context values.
-- [Phase 112]: Kept stop-failure.ts byte-for-byte unchanged because its public translator and classifier expose the complete contract.
-- [Phase 112]: Used explicit sibling cases for classifier precedence and status partitions instead of a shared table or test seam.
-- [Phase 112]: Kept object and cause wrapping in Plan 112-27 instead of expanding the StopFailure owner scope.
-- [Phase 112]: Kept stop.ts byte-for-byte unchanged because its public translator exposes the complete contract.
-- [Phase 112]: Used separate case-local values and whole six-key expectations for active, inactive, and empty-text Stop partitions.
-- [Phase 112]: Kept Stop re-entry and observer behavior in Plan 112-26 instead of widening the direct payload owner.
-- [Phase 112]: Kept user-prompt-submit.ts byte-for-byte unchanged because its public translator exposes the complete contract.
-- [Phase 112]: UserPromptSubmit evidence uses separate case-local values and whole five-key expectations for ordinary, multi-line, empty, and multi-byte prompts.
-- [Phase 112]: Kept malformed process-output behavior in Plan 112-04 instead of widening the direct payload owner.
-- [Phase 112]: Preserved spawn planning while the security gate strengthened oversized serialization to a strict final 256 KiB UTF-8 bound.
-- [Phase 112]: Treated defined args, including an empty array, as exec form with shell disabled; absent args retain shell-form behavior.
-- [Phase 112]: Made the truncation marker authoritative without mutating object, primitive, or array inputs and bounded the final UTF-8 output, including metadata, to 256 KiB.
-- [Phase 112]: Removed only the private stage stack-pop undefined guard after live CodeGraph proof established that its guarded state is unreachable.
-- [Phase 112]: Retained readSymlinkTargetSafe as a reachable TOCTOU defense and proved it through restored Node filesystem bindings without a production seam.
-- [Phase 112]: Absorbed the symlink supplemental's unique containment evidence into the stage owner before deleting the duplicate carrier.
-- [Phase 112]: Kept timeout.ts byte-for-byte unchanged because resolveTimeoutSeconds exposes every validation, default, and diagnostic branch through its public contract.
-- [Phase 112]: Preserved every finite positive value exactly, including fractional and large values, while rejecting zero, negative, nonnumeric, and nonfinite declarations.
-- [Phase 112]: Kept scheduling, timer clamping, cancellation, and races in Plan 112-09 instead of widening this pure validation owner.
-- [Phase 112]: Kept translation-context.ts byte-for-byte unchanged because buildTranslationContext exposes the complete snapshot and fallback contract through its public result.
-- [Phase 112]: Used real case-owned file-backed and in-memory SessionManager instances with independently authored whole-context expectations.
-- [Phase 112]: Kept translation-context readonly evidence at module scope and preserved its internal-only barrel scope.
-- [Phase 112]: Kept wire-protocol.ts byte-for-byte unchanged because parseHookStdout exposes every live exit, JSON-shape, precedence, mutation, and no-op branch through its public result.
-- [Phase 112]: Proved semantic diagnostics by category, hook destination, relevant detail, and outcome while separately asserting that reporting never throws.
-- [Phase 112]: Kept every wire case independent and explicit instead of generalizing the mutation contract through a table or shared oracle.
-- [Phase 112]: Restored documented stable first-seen Bash candidate deduplication with only a Set spread after direct evidence exposed the missing behavior. — The Rule 1 fix satisfies the public contract without adding an export, symbol, seam, helper, or parser restructuring.
-- [Phase 112]: Bash if-field evidence uses complete literal commands and independently authored ordered results without invoking a shell. — Direct parser and matcher calls prove syntax, wrapper, recursion, fail-open, and specificity behavior without executing untrusted command text.
-- [Phase 112]: Left the hooks-if-field supplemental file unchanged so Plan 112-13 remains its only final carrier. — The Bash owner absorbs the unique leaf evidence while avoiding a competing shared-file edit.
-- [Phase 112]: Kept if-field/index.ts byte-for-byte unchanged because its public composition exports expose every required compile and evaluation partition.
-- [Phase 112]: Retained only the unique parseHooksConfig side-map-to-RoutingEntry chain, including exact predicate object identity and declaration order.
-- [Phase 112]: Kept the exact five predicate arms and all re-export evidence module-scoped without widening production metadata or adding a test seam.
-- [Phase 112]: Kept routing-state.ts byte-for-byte unchanged because its public operations expose every required state transition and reset effect.
-- [Phase 112]: Used only public lifecycle operations for routing-state setup, observation, and cleanup, without a private-state reader or test-only reset export.
-- [Phase 112]: Left the additional-context supplemental unchanged because Plan 112-07 is its sole deletion carrier and Plan 112-13 owns the unique parser chain.
-- [Phase 112]: Removed the two CodeGraph-confirmed registry test readers and obsolete promise-tracking cell without adding another observer or test seam.
-- [Phase 112]: Retained fire-and-forget PID persistence on async child exit and error, observing rewrites through public filesystem and shutdown effects.
-- [Phase 112]: Restricted the async-rewake supplemental to two cross-lane environment-parity cases and one routing-epoch reload case.
-- [Phase 112]: Proved default orphan probes behind a mocked process.kill signal-0 boundary and used injected probes for all orphan safety partitions.
-- [Phase 112]: Removed the legacy adaptObservationResult export after CodeGraph and historical call-site proof found no production caller.
-- [Phase 112]: Consolidated every direct adapter contract and the duplicate architecture suite into the mirrored event-adapters owner.
-- [Phase 112]: Left the mixed SessionStart additional-context supplemental unchanged for Plan 112-07 to remove after dependent evidence is absorbed.
-- [Phase 112]: Kept dispatch-exec.ts byte-for-byte unchanged because dispatchHookExec exposes the complete process, stream, stdin, timer, parse, and delegation contract.
-- [Phase 112]: Used synchronous child stdin and direct stdout/stderr descriptor writes to remove the portable fixture fast-exit race without sleeps or production changes.
-- [Phase 112]: Consolidated all single-module execution evidence in the dispatch-exec owner and deleted hooks-exec.test.ts.
-- [Phase 112]: Retained only translator-module completeness and shared built-in/custom tool-name mapping in hooks-translators.test.ts.
-- [Phase 112]: Used a live failing diagnostic sink to prove the outer async delegation catch while preserving never-throw noop behavior.
-- [Phase 112]: Kept dispatch.ts byte-for-byte unchanged because its public collection and composite-handler exports expose every reducer and adaptation partition through an injected executor.
-- [Phase 112]: Consolidated all single-module reducer evidence in the mirrored dispatch owner, then deleted hooks-reducer.test.ts.
-- [Phase 112]: Kept hooks-dispatch.test.ts byte-for-byte unchanged as the locked repository-wide static carrier for Plan 112-07.
-- [Phase 112]: Used only public routing lifecycle operations for case-local state setup and cleanup, without a private state reader, reset seam, or shared oracle.
-- [Phase 112]: Removed settleCacheSnapshot and loopProtectionState after live CodeGraph proof showed no production callers, without adding a replacement introspection seam.
-- [Phase 112]: Proved settle state only through public lifecycle handlers, executor events, sent messages, notifications, and fresh follow-up calls.
-- [Phase 112]: Kept StopFailure observation-only: matching noop, block, mutate, and stop results run in declaration order and are all discarded.
-- [Phase 112]: Alphabetized inventories and presentation expectations while preserving exact production declaration and registration order where order is contractual.
-- [Phase 112]: Kept event-router.ts byte-for-byte unchanged because its public cache, hydration, rebuild, handler, and registration operations expose the complete lifecycle contract.
-- [Phase 112]: Split in-memory and persisted child fixtures across user and project cleanup surfaces so exit persistence cannot race the orphan tracer.
-- [Phase 112]: Alphabetized the hook-barrel runtime identity and compiler-negative inventories while leaving production export declarations unchanged.
-- [Phase 113]: Completed all 35 mirrored owners; 33 executable sources reached 971/971 branches, 216/216 functions, and 7,941/7,941 lines, while both type-only owners passed compiler contracts.
-- [Phase 113]: Kept runtime tests on separate lowercase `// arrange`, `// act`, and `// assert` phases and kept presentation-only inventories alphabetical.
-- [Phase 113]: Preserved caller, scope, reason, and lifecycle order wherever sequence carries behavior.
-- [Phase 113]: Proved presenter structure and exact rendered bytes, including severity, dependency, omission, tally, trailer, and reload partitions.
-- [Phase 113]: Proved classifiers, discovery, clone helpers, probes, scope fan-out, import planning, and reconcile planning through complete case-local values.
-- [Phase 113]: Kept read-only support paths offline through fail-fast fakes and architecture prohibitions; all mutable state and collaborators are case-owned.
-- [Phase 113]: Absorbed single-module evidence into mirrored owners and removed seven redundant supplemental suites without losing their unique contracts.
-- [Phase 113]: Removed one unreachable closed-union presenter default instead of fabricating an impossible test value.
-- [Phase 113]: Restored shipped barrel and interface exports after review showed aggregate dead-code cleanup had narrowed public contracts.
-- [Phase 113]: Replaced passive-value mocks and every broad `anyTimes()` expectation with fresh typed data and exact, explicitly verified interaction doubles.
-- [Phase 115]: Removed five structurally unreachable arms from the import cascade after a caller trace, narrowing two private types so a wrong token is a compile error rather than a runtime signal.
-- [Phase 115]: Deleted the last c8 ignore in the extensions tree by running the entrypoint twice with no dependency bundle, so the production default state loader's own answer is what changes the second outcome.
-- [Phase 115]: A defensive guard can be reached and still not be discriminating; the repair builder's undeclared-source guard is redundant with the already-declared merge check and is reported rather than removed.
-- [Phase 115]: D-115-10 delivered: the three reconcile producers carry the mode-discriminated overload, so a dropped cascade row is a gate failure rather than a silent continue.
-- [Phase 115]: Removed the marketplace-add, plugin-install and plugin-toggle catch clauses as unreachable; kept and proved the removal and uninstall clauses with a competing-writer race.
-- [Phase 115]: Deleted all eight source-text pins outright; none encoded a rule that is not already gated by its own owner, so nothing was re-homed under tests/architecture/.
-- [Phase 116]: strong-mock times(0) is inert, so the notification boundary omits the expectation entirely when a count is 0
-- [Phase 116]: The args-schema owner records onError with a plain closure asserted as a whole array, never as an interaction mock — The module promise is its return value; a declared callback parameter is not a port, so its call count proves nothing the result does not
-- [Phase 116]: The tokenizer-failure cases declare a required positional the input satisfies, so an undefined result can only mean the early return fired — It proves the short-circuit through the public result instead of observing an internal call, and a plant that removed the short-circuit turned all three cases RED
-- [Phase 116]: The direct-coverage branch denominator is a property of the suite, not of the source: edge/args.ts measures branches 28/29 under its rewritten owner where it measured 25/26 under the old one, with the same single uncovered branch — V8 emits a block range only when that block's execution count diverges from the enclosing range, so a guard whose false arm is never taken is collapsed and never enters the lcov denominator at all. Covering the false arm raises BRH and BRF together. Diffing BRDA records between the two suites over the same source shows three new ranges (args.ts:46, :75, :84) and no lost ones. Consequence: a full-line coverage verdict pin cannot be authored before the rewrite that strengthens the suite. D-116-01a's recorded number for edge/args.ts is superseded by measurement and the three other claimants (116-26, 116-21, 116-17) carry the same exposure. Operator ratification required; nothing was edited.
-- [Phase 116]: 116-06: deleted the unreachable optional-description branch in completionFlagEntries by making FlagEntry.description required, rather than adding a coverage exception; the exported return type is unchanged
-- [Phase 116]: 116-06: where an architecture gate already pins a data table exactly, the mirrored owner proves the derivation shape (filter, order, key presence, exclusion) and asserts nothing about the table contents
-- [Phase 116]: 116-30: the type-only owner pins EdgeDeps required-versus-optional split only; enumerating the member set or asserting the export surface would restate what the compiler and fallow dead-code already enforce
-- [Phase 116]: 116-30: a clean tsc is itself proof that every ts-expect-error in a file binds, because an unattached directive raises TS2578; the moved-marker plant showed the multi-line satisfies diagnostic landing on the closing line
-- [Phase 116]: The closed-over-API case builds two distinct Pi values instead of one shared value: a same-instance case only repeats the delegation case and cannot discriminate.
-- [Phase 116]: 116-23: a double for a generic export derives from an instantiation-expression type query (Parameters<typeof fn<Chosen>>[N]); the uninstantiated form collapses the type parameter to unknown and loses the exact-argument match
-- [Phase 116]: 116-23: input tokens that the module under test derives from another module are hand-authored literals, not read back from that module; feeding the derivation back in is tautological and cannot fail
-- [Phase 116]: 116-26: a whitespace row set must separate the two claims it looks like one of — dropping empty tokens and splitting on a whitespace CLASS are independent, and a spaces-only row pins neither because /\s+/ is greedy
-- [Phase 116]: 116-26: a D-116-01a pair pins the shortfall identity (one uncovered branch, the exact uncovered line set) and records the measured branch numbers as an observation; the denominator tracks suite strength, so a number pin cannot be authored before the rewrite it gates
-- [Phase 116]: 116-27: all four tools.ts switches are gated — three by TS2366 because their return type excludes undefined, and the version reader by TS7030 because noImplicitReturns makes the end of a default-less switch reachable once an arm goes missing; research's "compiles clean" premise is disproved
-- [Phase 116]: 116-27: an unreachable switch arm is removed by giving the function its producer's row union, derived from the producer's return type rather than named or hand-excluded; re-adding a removed arm raises TS2678, which is the control that proves the removal was forced
-- [Phase 116]: 116-27: a defensive narrowing copied from a shared helper is a branch the local pair can never reach; calling the helper removes it without a cast, a behavior change, or a coverage exception
-- [Phase 116]: 116-27: a mock for a generic method restates that member as a property, because reading a method as a value is an unbound-method lint error; the shared notification boundary cannot serve a registerTool capture for that reason
-- [Phase 116]: 116-29: the two subcommand vocabularies deliberately overlap on list, ls, info and update, so "no marketplace name is also handled by the top level" is false; the anti-shadowing promise is carried instead by proving the shared token reaches a different handler member per dispatch
-- [Phase 116]: 116-29: alias identity is one case with one expectation at a definite count of 2, driven once by the alias and once by the canonical name; two separate cases prove two dispatches, not one identity
-- [Phase 116]: 116-29: a "no duplicate entries" claim cannot be written by deduplicating the exported constant and comparing it back — that is an expectation transformed from an actual; comparing the export against the hand-authored row table that serves it catches the same defect
-- [Phase 116]: 116-24: a destructive seamless verb is owned through its FOOTPRINT — every case, rejections included, compares the surviving install records of both scope roots as one whole value beside the notification; a notification-only proof of an uninstall passes while proving nothing about whether state changed
-- [Phase 116]: 116-24: `parseCommandArgs` with ONE REQUIRED positional rejects zero but DROPS a surplus, because it iterates the schema rather than the input; the arity truth's lower half holds and its surplus half does not
-- [Phase 116]: 116-24: `uninstallPlugin` reads `opts.local` only to pick the CFG-03 precondition target and then sweeps BOTH config layers unconditionally, so the scope-target flag is invisible in the message AND in the footprint on a healthy workspace; the discriminating fixture is an override layer that FAILS SCHEMA VALIDATION, where supplying the flag aborts the command and omitting it completes it
-- [Phase 116]: 116-24: one Group-C plant can yield three distinct frames on a single module when the scope selection is what reaches `locationsFor` — a user-scope call never calls `path.join`, so it runs to completion and is caught by the emission count instead of by an ERR_INVALID_ARG_TYPE
-- [Phase 116]: 116-24: an offline zero needs BOTH reachability questions answered; where the module can reach no transport at all, the zero is an NFR-5 regression guard with neither a positive control nor a reachable input, and must be labelled as one rather than presented as a measurement
-- [Phase 116]: 116-03: the `--partial` option is not an install/update-only narrowing — it SHIFTS the install candidate set (drops `remote`, admits `partially-available`) and narrows uninstall, reinstall, enable and disable identically to update, because it is threaded into the same shared installed-inventory helper
-- [Phase 116]: 116-03: `tests/architecture/scope-order-drift.test.ts` walks `extensions/` only, so a hand-authored scope literal in a test file is not gated; four existing test files already carry one
-- [Phase 116]: 116-03: a counter exposed on a returned interface must be declared `readonly f: () => number`, not `f(): number` — a method signature makes every destructuring site an unbound-method lint error even though the value is a closure
-- [Phase 116]: 116-03: `data.ts:188`'s `allTokens.at(-1) ?? ""` fallback is a fifth D-116-01a-class unreachable branch, outside the four-claimant list; proved unreachable by construction, by a 65,536-code-point probe, and by a plant that stayed green, and left at 109/110 rather than pinned or excepted
-- [Phase 116]: 116-10: an EMPTY positional schema does not reject a surplus token — `parseCommandArgs` iterates the SCHEMA, not the input, so every extra token is dropped and the handler still delegates; the phase-wide `must_haves` truth that both out-of-range arities are "rejected with a usage error" is false for a zero-positional handler
-- [Phase 116]: 116-10: `marketplace/list.ts` never calls `extractLocalFlag`, so the scope-target flag reaches the tokenizer as a positional and is swallowed; supplying it beside `--scope` is accepted, not rejected, and the phase-wide mutually-exclusive-selectors truth has no target on this handler
-- [Phase 116]: 116-10: the Group-C negative fires on the FIRST unstated boundary read, not on the emission count — a handler that forwards `ctx.cwd` dies in `path.join` on strong-mock's pending-call proxy before it can emit, so the G5 excerpt's stated "second `ctx.ui` access past its `times(1)` count" mechanism is only the fallback for handlers that read no `cwd`
-- [Phase 116]: 116-10: a Group-C rejecting case seeds BOTH scopes so the workflow it must not reach would have rows to emit; an unseeded tree makes the negative weaker because the unreached workflow would emit only the empty-state sentinel
-- [Phase 116]: The marketplace update handler's usage-string collapse arm is unreachable through its exports, so the pair stands at branches 11/12 and the shortfall is reported, not pinned or excepted — parseCommandArgs passes the usage string to the callback only for a REQUIRED positional; this schema declares its sole positional optional. Proven by construction, by a 170-shape brute force, by a plant that stayed GREEN, and by an inverted-condition plant that went RED. 116-13 is not a D-116-01a claimant and both production licences are spent, so the reversible default applies. Identity: BRDA:41,11,0,0 in the pair's own lcov.
-- [Phase 116]: An injected port forwarded from two call sites needs one plant per site; a single-site plant leaves the sibling arm's claim unproven — Removing the all-marketplaces arm's pluginUpdate forward left both named-marketplace rows GREEN; removing the single-marketplace arm's forward left the bare and scope-narrowed cases GREEN. Applies to 116-07, 116-14 and 116-17, the remaining injected-port owners.
-- [Phase 116]: 116-07: the marketplace add owner proves the injected git port by driving a url source on a provider-less host and comparing the whole clone recorder, with the randomUUID staging leaf replaced by a token only under the expected scope root
-- [Phase 116]: 116-07: scope and the scope-target flag are proven as an on-disk footprint (which scope root holds state.json, and whether the write-back landed in claude-plugins.json or claude-plugins.local.json) because the edge tier has no injection point against the options bag
-- [Phase 116]: 116-14: a RECORDER-based port-forward proof is weaker than a structural exact-argument `when()` — a re-boxed port AND a port with one member wrapped around a delegating call both stay GREEN under a recorder, while 116-17's `when()` goes RED on the wrapped member; only replacing the implementation goes RED under both, so the claim states that the operation is carried out by the injected implementation
-- [Phase 116]: 116-14: a guard order is only pinnable with an input that satisfies TWO guards at once — the plan's unrecognised-scope-with-no-positional input passes under any order, while `--scope user --local` proves the positional guard precedes the scope guard and `extra --scope nope` proves the parse failure precedes both
-- [Phase 116]: 116-14: `plugin/bootstrap.ts` calls `parseArgs`, the second handler measured to do so, and answers all three inherited questions like `plugin/import.ts` rather than like the marketplace tier — a surplus positional IS rejected, there is no arity below the accepted zero, and `--local` lands on positional
-- [Phase 116]: 116-14: a github-source workflow cannot be driven through a bare `createGitOpsFake` — the GitHub provider attaches a credential bundle whose functions are not structured-clonable and the fake's recorder clones every call, so the port must drop that downstream-owned bundle while still delegating every operation to the fake
-- [Phase 117]: The unit-suite glob control lands before the amendment it guards, so the later glob change must turn it RED and back GREEN rather than tune it to agree
-- [Phase 117]: 117-02: a support-module relocation ships as ONE commit carrying the `git mv` and its consumer import rewrites — a pure-move commit leaves the consumers importing a path that no longer exists, so it cannot typecheck, and git still reports the rename at 96 to 98 percent
-- [Phase 117]: 117-02: ESLint and Prettier disagree on the shape of a shortened import — `eslint --fix` split the two integration children's import onto four lines and `prettier --check` then failed, because the shorter sibling specifier let the statement fit one 94-character line; run both, never either alone
-- [Phase 117]: 117-03: shortening an import specifier re-sorts it INSIDE the parent group, not only across groups — the boundary move reddened `import-x/order` in six suites where the plan predicted two, so the ordering must be read off ESLint rather than reasoned about
-- [Phase 117]: 117-03: a 100 percent rename reading is only evidence once the consumer edits are confirmed staged — the identical number was false in 117-02, produced by an aborted `git add`, so cross-check it against `md5sum` and `git log --follow`
-- [Phase 117]: D-117-04a: both orphan supplements relocate to tests/architecture/ rather than fold into a mirrored owner, because each spans several production modules and none of them owns it — The correspondence gate exempts the architecture root structurally (nonCorrespondingRoots), so the relocation needed no gate change and no exemption entry -- which is what keeps the SUITE-04 ban on name-keyed opt-outs intact
-- [Phase 117]: D-117-04b: each move is one commit carrying the move plus its specifier fix, not a move commit and a rewrite commit — A pure-move commit would leave the reason-parity suite importing a path one level too deep, so it would not typecheck; git still recorded the rename at 95 percent, and the materialization-gate move at 100 percent
-- [Phase 117]: The device-flow prompt supplement folds into tests/domain/github-auth.test.ts as one case, not two: its ordering case restated the owner existing reports-denied-authorization row, so the surviving case pins the catalog byte form on the denied poll and carries both claims at once.
-- [Phase 117]: The folded case builds its transport with createDeviceFlowFake while the credential and notify ports stay strong-mocks, because the house role table makes notifying a mock and a third copy of the owner mock-DeviceFlowHttp arrange block would have risked the fallow dupes threshold of 3.
-- [Phase 117]: 117-06: plant at the granularity the case claims — deleting the whole production step fails the case on its returned outcome, so it cannot prove an on-disk read is load-bearing — The plan's literal plant removed the cascade's hooks slot and the merged case failed on dropped.hooks, not on the readdir; deleting only the rm inside removeHookConfig left the outcome correct and failed exactly one case in the suite, on the disk read
-- [Phase 117]: The seed's own three production specifiers gained a climb because its new home is one directory deeper; no consumer rewrite reveals that, only reading the module does.
-- [Phase 117]: The helpers glob alternative was removed for honesty, not function: both globs match the same 248 paths with and without it, and the 117-01 completeness control is the independent proof.
-- [Phase 117]: Shortening an import specifier re-sorts it inside the parent group with no predictable direction: 13 handler suites moved a line, the mirror image of 117-03's effect.
-- [Phase 117]: The extension entry pair asserts two notifications for an unreadable install state, not one: the reconcile renders its own failure cascade for the same file before the plugin-PATH warning, and the legacy filtered assertion concealed it. — Measured on this tree; the whole two-element notification list is now compared.
-- [Phase 117]: Both entry-pair fixtures use a schema violation rather than a syntax error, because the reconcile renders the runtime JSON parser text into a user-visible message and that text is not part of any contract. — Keeps the whole-value cascade comparisons stable across Node versions; this tree runs v26.7.0 while CI pins 24.
-- [Phase 117]: Barrel-proxy ownership is named as its own gate verdict, proxy-owned, split from wrong-import and decided from the import graph the gate already builds. — D-117-21 gives the verdict its spelling; the split needs no name list, registry or exemption entry, and both sides are planted in the control.
-- [Phase 117]: D-117-20 amended to 190 + 7 + 7: 190 complete numeric records, 7 accepted D-116-01a shortfalls, 7 type-only — Operator decision after plan 117-11 measured it; the gate is deliberately unchanged, no ledger-keyed verdict and no production licence, because a ledger-keyed pass would be the coverage-exception pragma D-116-01a bans
-- [Phase 117]: Concurrency is NOT added to the all-pair run, decided against a measured 533.2 s for all 204 rows — Under nine minutes at a phase boundary does not justify D-117-11's obligation of a second planting control proving a failing pair is still detected under interleaving
-- [Phase 117]: An errno path and errno message text are runtime-owned, not contractual; assertions pin name, code and syscall, and read the runtime's wording back where production composes around it — A package upgrade changed the EISDIR wording mid-phase and reddened 11 assertions with no behaviour change; the ten hardened suites are now identical on v22.22.2 and v26.8.1
-- [Phase 02]: `keepData` guards only data-path resolution and the data `rm`; completion-cache invalidation, hook-route removal, unused-clone collection, config write-back and artifact removal keep their established scheduling — D-02-06; proven by the symlinked-data-dir case that still retires routes, cache and the last clone
-- [Phase 02]: The consuming scanner form takes `{ consumeLongFlags: readonly string[] }` and returns `consumedFlags: ReadonlySet<string>`; the omitted and `readonly string[]` fourth-argument forms keep their exact existing result shape — D-02-05; one token walk owns scope-value precedence, extraction and unknown-option rejection
-- [Phase 02]: DATA-01..03 are NOT marked complete by plan 02-01 — each names the `uninstall --keep-data` command surface, which plan 02-02 delivers; 02-01 proves the operation underneath it
-- [Phase 02]: TruffleHog's pre-commit git-mode scan cannot run in this checkout because `.git` is a worktree file; commits use `SKIP=trufflehog` per CLAUDE.md and a filesystem-mode scan covers the exact staged files
-- [Phase 02]: uninstall keepData is forwarded only when --keep-data is present, so the operation's own default stays the single statement of the promptless deletion policy.
-- [Phase 02]: The uninstall handler joins install/update as a catalog-consuming verb via passThroughFlagNames, so one catalog entry drives usage, completions, the parse set and the drift pin.
-- [Phase 02]: The uninstall handler owner's whole-footprint observation carries both scopes' data bytes, so rejection cases prove no silent deletion rather than only a surviving record.
-- [Phase 02 code review]: D-02-04 reaffirmed — reconcile stays on the promptless-delete default with no `keepData` opt-out despite a code-review critical finding (CR-01); the operator confirmed this is DATA-03 working as specified, not a gap. See `PROJECT.md` Key Decisions for the full rationale.
-- [Phase 02 code review]: WR-07 (route a symlink-containment refusal through the cleanup swallow-catch instead of letting it propagate) was applied then reverted (commit `eeeb80eb`) per operator decision — the original NFR-10 propagating behavior stands. DATA-01..03 are marked Complete in REQUIREMENTS.md via plan 02-02.
-- [Phase 03]: D-03-12: the cascade root is exempt from the closure walk's already-installed, marketplace-known and catalog-absent guards — All three are preconditions of the REQUESTED plugin, and the install ledger owns them: it applies the CMP-3 cross-scope marketplace fallback a pure walk over one snapshot cannot see, and it reports each miss against the right subject (the marketplace for an unadded one, the plugin row for a plugin its manifest does not declare). Enforcing them in the walk pre-empted both with a dependency-shaped verdict on a plugin that is nobody's dependency.
-- [Phase 03]: D-03-13: a cascade phase's undo gates on a context-set 'materialized' sentinel, not on runPhases' executed array alone — The executed array covers the REVERSE walk only. Per the phase ledger's TR-02 contract the FAILING phase runs its own undo first, so installing an already-recorded plugin reached its phase, threw from inside do, and then unstaged the pre-existing install its throw was reporting. Phase.undo's own contract prescribes the remedy: an undo cannot assume its do ran to completion and must gate on a context-set sentinel.
-- [Phase 03]: D-03-14: ClosureLookup takes an already-split subject, and the parse-result mapping lives in domain/ — Handing the lookup {key, name, marketplace} removes a key re-parse from every reader, and with it the unreachable split guard install-flow.ts would otherwise carry under its direct-coverage gate. toClosureLookupResult lives beside the walk so the parse-failure arm has one definition and a reader whose own source cannot produce a failure (loadMarketplaceManifest isolates an unparseable dependencies entry before returning) does not carry an arm its tests cannot reach.
-- [Phase 03]: D-03-15: the conjunct cap walks every input's projected branch count BEFORE any cross-product is allocated, so nothing is built even on the input that trips it; the first input needs no separate check because the running product after it IS its own branch count
-- [Phase 03]: D-03-16: the satisfiability filter tests semver.minVersion ONLY -- the upstream re-validation arm is structurally unreachable here (a conjunct is a concatenation of comparator sets validRange itself produced) and the direct-coverage gate admits no unreachable branch
-- [Phase 03]: D-03-17: the intersected range is rejoined with a bare || and NOT re-validated; validRange renders a union exactly that way, so the result is canonical by construction and carries no second unreachable null arm
-- [Phase 03]: D-03-18: all three dependency-range caps (4096 input chars, 1024 conjuncts, 200 rendered chars) are documented PROJECT-OWNED; research assumption A1 records the upstream conjunct value as inferred, so only the guard-before-the-work mechanism claims parity
-- [Phase 03]: D-03-19: semver ships as a declared runtime dependency because resolution needs a real evaluator, not because one is already present -- the hoisted copy is from the ESLint dev chain and the nested copy from the pi-coding-agent peer, so neither survives a consumer's production install
-- [Phase 03]: D-03-20: the NFR-5 amendment names the constrained-dependency tag query in both files that carry the network policy, and the two bullets are now byte-identical — D-03-03 requires a visible constraint amendment rather than a fact a reader later discovers from a failing architecture test. PROJECT.md's em dash is normalized to the double hyphen CLAUDE.md already carried, because the fix-unicode-dashes pre-commit hook excludes .planning/ and would otherwise keep the two apart on every future edit.
-- [Phase 03]: D-03-21: docs/dependency-resolution.md is RESV-03's written grammar and the nine-cause failure list the later reason tokens must agree with — RESV-03's success criterion states the grammar in writing rather than leaving it implicit. The document also carries the two user-facing trust statements the syntax cannot imply: the plugin-release tag convention is not a git standard, so most third-party sources report no matching tag today, and nothing is added or cloned to satisfy a dependency, so a plugin cannot introduce a new source of code by declaring one.
-- [Phase 03]: D-03-22: the dependency declaration read takes the marketplace entry and parses its `source` itself rather than taking a pre-parsed source beside it — two inputs describing the same thing can disagree, one cannot, and it keeps parsePluginSource out of install-flow.ts
-- [Phase 03]: D-03-23: the declaration read requires an entry and carries no no-entry arm — without an entry there is no source, so no plugin root and no manifest, and install-flow already returns absent for a plugin its marketplace does not declare; the arm would have been unreachable from production, which the direct-coverage gate does not admit
-- [Phase 03]: D-03-24: the declaration read's options omit the plugin key's name and marketplace because nothing in the read consumes them — the entry already answers which plugin this is
-- [Phase 03]: D-03-25: a seeded declareDependencies declaration now lands on BOTH the marketplace entry and the plugin's own manifest — under D-01-32 an entry-only fixture has its own manifest suppress the declaration, which silently turned three cascade cases vacuous, one of them still passing while proving nothing
-- [Phase 03]: D-03-09 confirmed on the record: the tag probe hard-fails a no-match in BOTH query arms, with no fallback to the repository head — Answered at a blocking-human decision checkpoint; the developer replied proceed-as-decided over soften-no-match and stop-and-rescope. Upstream soft-degrades a marketplace-repository no-match to a head copy; this project does not port that asymmetry, matching D-03-08.
-- [Phase 03]: D-03-26: dependency-tag-probe.ts is NOT a CREDENTIAL_LEAK_TARGETS member — It composes a host credential bundle and threads it into the listing call without reading, storing or rendering a credential value, exactly as install-clone-probe.ts does. The gate scans state-write field names and git-credential.ts error interpolation, neither of which has a surface here, and its members are destructured positionally against a pinned module order.
-- [Phase 03]: The tag probe parses and orders candidate versions with semver, but asks domain/dependency-range.ts whether a version satisfies a range — Parsing and ordering a version is not evaluating a range, so one module keeps owning the satisfaction contract and no second evaluator exists.
-- [Phase 03]: D-03-30: the dependency cascade mints exactly seven closed-set reason members and reuses four inherited ones; a listing that could not be read keeps the probe's own transport classification
-- [Phase 03]: D-03-31: dependency marketplace not added is a ContentReason on the marketplace in user scope precedent; the three structural markers are Excluded from ContentReason and cannot type-check into a plugin row
-- [Phase 03]: D-03-32/33: the cascade emits cardinality single and always routes through CASCADE_CONTEXT, so a no-dependency install's bytes stay frozen with no branch
-- [Phase 03]: D-03-34/35: a root-keyed member failure stays on the single-plugin path, and the cascade error is derived from the subject rather than the caught value, which removed an uncoverable branch instead of pinning it
-- [Phase 05]: The uninstall dependents guard is a typed UninstallRefusedError thrown inside the lock closure and rendered by the existing failure channel; uninstallPluginWithTransaction gained no condition (fallow 15/14 unchanged)
-- [Phase 05]: readDependencyDeclaration is typed DeclarationLookupResult (ClosureLookupResult minus the absent arm it can never produce) so the direct-coverage gate carries no unreachable branch
-- [Phase 05]: Index candidates carry the snapshot's own marketplace/record objects (IndexedRecord) so the prune member body needs no state lookup and no unreachable undefined arm
-- [Phase 05]: The prune member body is total: AG-5 and every other cascade failure become a warning row; the one save runs after the sweep, so a member fault cannot ghost the primary's record (NFR-3)
-- [Phase 05]: Pruned rows render in fixpoint removal order: each pass is sorted by key, so a same-pass orphan precedes a next-pass dependency within a marketplace block (A-8 measured)
-- [Phase 05]: marketplace remove keeps bypassing the dependents guard (PRUNE-GUARD-MR-01 backlogged); it is the documented exit for the two-stale-records refusal, so any future guard there must keep that exit open
-- [Phase 06]: D-06-08: the load-time disable runs through setPluginEnabled in orchestrated mode; a record-only write would leave a disabled plugin's artifacts materialized and its config write-back skipped is what keeps the consequence out of claude-plugins.json
-- [Phase 06]: D-06-09: a dependency the same pass holds down is reported as kind disabled, not missing, because an install remedy for an installed plugin would be false
-- [Phase 06]: D-06-10: planReconcile's verdict parameter is optional, so pending and every convergence proof keep their three-argument call; the default means nothing is held down
-- [Phase 06]: D-06-11: the dependency-disabled outcome carries the rendered remedy and the row's brace, not the structured verdict fields, on the plugin-uninstall-failed cause precedent
-- [Phase 06]: D-06-12: a verdict failure is reported as a (failed) {unreadable} row naming the declarer, suppressed when the pass already reported that plugin
-- [Phase 06]: D-06-13: the out-of-range entry carries the canonical folded range, not the declared text
-- [Phase 06]: D-06-14: a disjoint or cap-tripping range fold is out-of-range, never no-constraint
-- [Phase 06]: D-06-15: the out-of-range row carries its own token, chosen by unsatisfied kind
-- [Phase 06]: D-06-16: the stored dependencyDisabled marker has exactly two readers, both asking what the check already did
-- [Phase 06]: D-06-17: the load-time check's lift propagates through a chain in one pass, mirroring the hold
-- [Phase 06]: D-06-06/07 confirmed by the developer as proceed-as-decided: uninstall reports instead of refusing, and the refusal token is retired rather than repurposed
-- [Phase 06]: D-06-18: a declarer the same --prune run sweeps is filtered out of the surviving set by code; the shared snapshot does not already exclude it
-- [Phase 06]: D-06-19: the reconcile uninstall-failure cause field survives the retirement because it also carries the D-05-07 unreadable-declarer refusal
-- [Phase 06]: D-06-20: the uninstalled row gains a cause trailer, on the precedent LOAD-01 set for the disabled row
-- [Phase 06]: D-06-22: the load-time-check prose lands after the pruning section, so the removal section's see-the-next-section pointer stays correct
-- [Phase 06]: D-06-23: docs/dependency-resolution.md was re-triaged against 06-03's edit, not rewritten; only the new section and one cross-reference are this plan's
-- [Phase 06]: D-06-24: PRUNE-GUARD-MR-01 keeps its heading while its body records the guard is retired, because three historical records address it by that heading
-- [Phase 06]: D-06-25: the pending-preview gap got a BACKLOG carrier (PENDING-VERDICT-01) rather than a fourth summary note
-- [Phase 09]: D-09-01/02/05/06: pluginsToDependencyInstall (ninth bucket) filters the verdict's missing arm through a three-armed eligibility predicate, dedupes per dependency key, carries raw unfolded ranges
-- [Phase 09]: D-09-08: the LOAD-02 lift becomes provenance-independent via a record-walk sibling of buildUninstallBucket, recovering a marker-held dependency-provenance record whether or not config names it
-- [Phase 09]: D-09-09: dependency installed lands as the 61st closed-set reason on every pinning surface in one commit, rendering {dependency installed} first on a materialized reload row with no cause line
-- [Phase 09]: D-09-05: effectiveRanges folds the root's caller-supplied rootRanges into the root member's own (empty) range list at the cascade's existing fold site, so a missing dependency's root is pinned by every declarer's constraint exactly like a constrained member.
-- [Phase 09]: D-09-04: treatDisabledAsWall keeps a recorded disabled key in installedKeys (skipping the liveInstalledKeys strip) so the reload path treats it as a wall, not a re-enable-through member.
-- [Phase 09]: 09-03: Both MISS-02 failure shapes fall out of reusing installPlugin's unwrapCascade/handleCascadeThrow/handleInstallThrow verbatim, with no new classification code.
-- [Phase 09]: 09-03: applyDependencyInstalls gates on opts.reason === "reload" in one if; refreshTogglePlan re-plans only pluginsToEnable/Disable/DependencyDisable from a fresh read pass, never the mutating buckets or source-mismatch rows.
-- [Phase 09]: The catalog's reconcile-dependency-install-failed fenced bytes were rendered through the real notify() dispatcher and matched the apply test's own MISS-02 closure-failure assertion exactly. — Never hand-type published-contract bytes (08-03/09-01 precedent).
-- [Phase 09]: check-unused-type-members.contracts.json's remap removed one entry 09-03's own reason: event.reason thread made redundant and added one 09-03 never registered for its new assertOrchestratedFailedOutcome narrowing function; net entry count held at 133. — Task 3's own gate demanded both corrections; neither is a 09-04 addition of new excuse surface.
-- [Phase 10]: D-10-09 checkpoint: operator selected proceed-as-recommended -- the new closed-set reason token is 'dependents constrain', spelled on all nine pinning surfaces (62-member Reason set).
-- [Phase 10]: describeConstraint's detail parameter carries intersectDependencyRanges' own diagnostic text (position/count-only), not a raw declared range or the folded range -- keeps the arm parameter genuinely used under noUnusedParameters without leaking declared-range content.
-- [Phase 10]: ConstraintHolder.range is optional, not the plan artifacts' plain range: string -- a range-less declarer still holds the key for the cause line but is filtered out of the intersectDependencyRanges fold.
-- [Phase 10]: Ctx-undefined git probe path defers to admitsRange rather than an uncoverable notification-context fallback
-- [Phase 10]: UpdateTagPin promoted to a shared exported type so the type-member analyzer credits its .version field as runtime-observed
-- [Phase 10]: update-swap.ts derives memo field types from PreparePluginUpdateOptions instead of importing platform/git.ts, to stay off the network-free gate's import surface
-- [Phase 10]: Path-arm tag-listing-once behavior verified functionally (real local git marketplace fixture) rather than by call-count mocking, since isomorphic-git's package exports are non-configurable
-- [Phase 10]: Phase 10 plan 03 closed stage two (admitResolvedVersion), threaded the required-but-nullable UpdateConstraintDisclosure through PreparedPluginUpdate and both update outcome types (D-10-17a), and gave the autoupdate cascade the same held-row token/cause/warning severity the manual cascade renders (D-10-12). Catalog moved 223 -> 227 states.
-- [Phase 10]: Phase 10 closed with a green whole-tree gate apart from the pre-existing, out-of-scope .planning/config.json format:check drift; UPDT-01/UPDT-02 complete. — Four type-member contract anchors were remapped, one outside the plan's named three-file scope, because it was masking the others every run; all four validated by re-deriving positions from the tool's own reported identity rather than transcribing guesses.
-
-### Pending Todos
-
-Four open decisions carried by the v1.20 roadmap, each bound to the discuss
-session that must settle it:
-
-1. **Version-constraint grammar (RESV-03) — Phase 3 discuss.** No semver library
-   is in the dependency tree and PL-5 compares versions as strings deliberately.
-   Add a dependency or document a constraint subset with a stated refusal.
-2. **Where a dependency-installed plugin stands relative to
-   `claude-plugins.json` — Phase 3 discuss.** `buildUninstallBucket`
-   (`orchestrators/reconcile/plan.ts:352`) uninstalls every recorded plugin the
-   merged config does not name, so a cascade install must be reconciled with that
-   config or it vanishes on the next `/reload`.
-3. **Stale-record wording and recovery command (PROV-04) — Phase 4 discuss.**
-   MIGR-01's own unresolved design question, scoped to the "stale state, absent
-   config" message. Answer that much only.
-4. **`--prune`'s value on the reconcile path — Phase 5 discuss.**
-   `applyPluginUninstalls()` carries no command line and takes the default.
-
-### Blockers/Concerns
-
-- Resolved 2026-09-14: The supported workstream completion command archived
-  defaults-enabled, milestone and workflows-detection under `.planning/milestones/`.
-  All 32 tracked files retain their original bytes. GSD recognizes v1.20 in flat
-  mode. The archive operation did not waive historical verification debt.
-- RESOLVED: Phase 1's canonical verification report (`01-VERIFICATION.md`) exists
-  and passed — this note was stale (the report was already on disk when it was
-  written). Phase 2 also closed clean: `02-VERIFICATION.md` passed 10/10.
-- RESOLVED by 117-12: D-117-20 in `117-CONTEXT.md` now reads 190 complete numeric records + 7 accepted D-116-01a shortfalls + 7 type-only, matching the operator decision taken in plan 117-11 and the retained all-pair artifact. The superseded 197 + 7 wording is gone.
-- [Phase 12] `npm run check` reaches the pre-existing, operator-owned
-  `.planning/config.json` formatting drift. Phase 12 downstream gates passed
-  separately; the local config edit remains intentionally unstaged.
-
-### Quick Tasks Completed
-
-Latest implementation: `260917-hfp` — the phase 5 review's Info items are
-all settled: IN-01/02/03/08 fixed (prune sweeps only in standalone mode, the
-reconcile retry loop counts settled outcomes), IN-07 catalog prose fixed,
-IN-04 carried to BACKLOG `PRUNE-GUARD-MR-01`, 2026-09-17.
-See [task summary](./milestones/any-git-host-quick/260917-hfp-clear-the-phase-5-review-nits-in-01-in-0/260917-hfp-SUMMARY.md).
-
-| #          | Description                                                                                                 | Date       | Commit   | Directory                                                                                            |
-| ---------- | ----------------------------------------------------------------------------------------------------------- | ---------- | -------- | ---------------------------------------------------------------------------------------------------- |
-| 261006-cwq | Pin workflow engine 3.13.1 and update compatibility notes after upstream PRs #233/#234 shipped | 2026-10-06 | e0b0abac | [261006-cwq-update-workflow-engine-compatibility-doc](./quick/261006-cwq-update-workflow-engine-compatibility-doc/) |
-| 261006-kr1 | Adopt workflow engine 3.14.0: mirror PI_CODING_AGENT_DIR storage root and bump pins | 2026-10-06 | 6129e7bd | [261006-kr1-adopt-workflow-engine-3-14-0-mirror-pi-c](./quick/261006-kr1-adopt-workflow-engine-3-14-0-mirror-pi-c/) |
+`IN-03` from the refine-unit-tests `09/` code review. **NFR-10 path containment now rests on an
+injected collaborator honoring a prose-only contract that nothing type-enforces.**
+`IN-01` and `IN-04` are also open by choice but carry no comparable risk.
 
 ## Deferred Items
 
-| Category | Item | Status | Deferred At | Milestone |
-| -------- | ---- | ------ | ----------- | --------- |
-| uat_gaps | 03/03-UAT.md: successful credential challenge against a private GitHub or GitLab repository | resolved 2026-09-30 (passed on the stored-credential path; Device Flow arm not exercised) | 2026-09-24 | v1.20 |
-| Tooling | Detect unused code and unused type members — no gate reports a type member nothing reads (measured: typecheck, lint, and fallow all pass with one planted) | Pending | Phase 116 discussion | v1.19 |
-| quick_tasks | 260720-d8i-move-agent-provenance-from-body-comment- | unknown | 2026-09-04 | v1.19 |
-| todos | 2026-09-02-detect-unused-code-and-type-members.md | (presence-only) | 2026-09-04 | v1.19 |
-| uat_gaps | 89/89-UAT.md (archived v1.16) | passed | 2026-09-04 | v1.19 |
-| uat_gaps | 63/63-UAT.md (archived v1.13) | passed | 2026-09-04 | v1.19 |
-| uat_gaps | 56/56-UAT-FIX-2.md (archived v1.12) | all_fixed | 2026-09-04 | v1.19 |
-| uat_gaps | 56/56-UAT-FIX.md (archived v1.12) | all_fixed | 2026-09-04 | v1.19 |
-| deferred_items | 112/deferred-items.md: Phase 112 deferred items - `npm run check` reaches `format:check` but reports pre-existing format differences in user-owned, untracked `.mcp.json` and | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 117/deferred-items.md: 1. Stale test path in an `install.messaging.ts` doc comment - **Found during:** 117-04 Task 1 - **File:** `extensions/pi-claude-marketplace/orchestrat | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 117/deferred-items.md: 2. Stale byte-form-lock path in the output catalog - **Found during:** 117-05 Task 1 - **File:** `docs/output-catalog.md` (the `### Device Flow user-c | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 117/deferred-items.md: 3. Stale `tests/helpers/` references throughout the codebase map - **Found during:** 117-07 Task 1 - **File:** `.planning/codebase/TESTING.md` (lines  | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 117/deferred-items.md: 4. RESOLVED - `--all` cannot complete: the seven D-116-01a shortfalls are accepted - **Found during:** 117-11 Task 2 - **File:** `scripts/test-coverag | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 117/deferred-items.md: 5. RESOLVED - The PATH interpreter was upgraded mid-phase and reddened 11 tests - **Found during:** 117-11 Task 2 - **File:** ten test suites, led by  | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 117/deferred-items.md: 6. RESOLVED - The direct-coverage sweeps still have no automated control **Resolved 2026-09-04 by operator decision.** Two parts, closed differently:  | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 90/deferred-items.md (archived v1.17): 90-03 execution - **Pre-existing environment failure (pi-subagents global peer):** two integration tests in `tests/integration/skill-path-resolution.t | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 86/deferred-items.md (archived v1.15): Pre-existing integration test failures (NOT introduced by Plan 03) Two `tests/integration/*` cases fail on the current branch. They fail IDENTICALLY w | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 85/deferred-items.md (archived v1.14): Pre-existing integration-test failures (unrelated to this phase) `npm run test:integration` reports 2 failures that also fail on the base commit `2aa2 | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 50/deferred-items.md (archived v1.11): Pre-existing test failure: reinstall README documentation gap - **Test:** `tests/architecture/reinstall-docs.test.ts` -- "PRL-01/03/04/05/13/14/15/16: | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 25/deferred-items.md (archived v1.4.1): `tests/e2e/import-command.test.ts` 3 failures (`import imports enabled Claude settings across both scopes`, `import --scope project narrows writes to  | acknowledged | 2026-09-04 | v1.19 |
+Items acknowledged and deferred at milestone close, most recent first.
 
 | Category       | Item                                                                                                                                                                                          | Status          | Deferred At          | Milestone |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------- | --------- |
+| todos          | 2026-10-13-cucumber-rules-trial.md: try the cucumber rules on another repository (§3; reviewed in Phase 10 and not folded) | acknowledged — still pending | 2026-10-21 | marketplace-features |
+| deferred_items | 07/deferred-items.md: DEP-07-03-01 brace-expansion advisory in the root Pi tree; TEST-07-06-01 optional pi-subagents resolver skip | acknowledged — carried as BACKLOG DEPADV-01; WINDOWS #92 (was #89 before the main merge) | 2026-10-11 | json-output |
+| deferred_items | 08/deferred-items.md: DEF-08-04-01 `windows status --pick` fails when stdout is a pipe | acknowledged — upstream gsd-tools, out of scope | 2026-10-11 | json-output |
+| deferred_items | 05/deferred-items.md: the record (five open comment-drift items, three closed; the scanner reads the file as one entry)                                                                | acknowledged    | 2026-09-18           | test-backlog |
+| deferred_items | 06/deferred-items.md: Six ledger notes name a witness coordinate the fresh report no longer holds (table converted to bullets at this close; item 1 was resolved by the #196 hermetic merge)  | acknowledged    | 2026-09-18           | test-backlog |
 | quick_tasks    | 260907-qqo-hkps-01-if-field-powershell-rule-prefix-                                                                                                                                           | unknown (work is complete; scanner misreads it) | 2026-09-13 | refine-unit-tests |
 | deferred_items | 06/deferred-items.md: 1. Stale notification hub reference outside Plan 06-19 callers                                                                                                          | acknowledged — RESOLVED, condition no longer holds | 2026-09-13 | refine-unit-tests |
 | deferred_items | 06/deferred-items.md: 2. Node 26 direct-coverage negative-control subprocess capture                                                                                                          | acknowledged — promoted to backlog `NEGCTL-01` | 2026-09-13 | refine-unit-tests |
-| deferred_items | 25/deferred-items.md (archived v1.4.1): `tests/e2e/import-command.test.ts` 3 failures                                                                                                         | acknowledged — promoted to backlog `E2EIMP-01` | 2026-09-13 | refine-unit-tests |
-| Tooling        | Detect unused code and unused type members — no gate reports a type member nothing reads (measured: typecheck, lint, and fallow all pass with one planted)                                    | Pending         | Phase 116 discussion | v1.19     |
+| deferred_items | 25/deferred-items.md (archived v1.4.1): `test/e2e/import-command.test.ts` 3 failures                                                                                                         | acknowledged — promoted to backlog `E2EIMP-01` | 2026-09-13 | refine-unit-tests |
+| Tooling        | Detect unused code and unused type members — no gate reports a type member nothing reads (measured: typecheck, lint, and fallow all pass with one planted)                                    | closed — test-backlog `06/` (06-VERIFICATION 2/2); gate `lint:type-members` in `check` | Phase 116 discussion | v1.19     |
 | quick_tasks    | 260720-d8i-move-agent-provenance-from-body-comment-                                                                                                                                           | unknown         | 2026-09-04           | v1.19     |
 | todos          | 2026-09-02-detect-unused-code-and-type-members.md                                                                                                                                             | (presence-only) | 2026-09-04           | v1.19     |
 | uat_gaps       | 89/89-UAT.md (archived v1.16)                                                                                                                                                                 | passed          | 2026-09-04           | v1.19     |
@@ -631,7 +149,7 @@ See [task summary](./milestones/any-git-host-quick/260917-hfp-clear-the-phase-5-
 | deferred_items | 112/deferred-items.md: Phase 112 deferred items - `npm run check` reaches `format:check` but reports pre-existing format differences in user-owned, untracked `.mcp.json` and                 | acknowledged    | 2026-09-04           | v1.19     |
 | deferred_items | 117/deferred-items.md: 1. Stale test path in an `install.messaging.ts` doc comment                                                                                                            | acknowledged    | 2026-09-04           | v1.19     |
 | deferred_items | 117/deferred-items.md: 2. Stale byte-form-lock path in the output catalog                                                                                                                     | acknowledged    | 2026-09-04           | v1.19     |
-| deferred_items | 117/deferred-items.md: 3. Stale `tests/helpers/` references throughout the codebase map                                                                                                       | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 117/deferred-items.md: 3. Stale `test/helpers/` references throughout the codebase map                                                                                                       | acknowledged    | 2026-09-04           | v1.19     |
 | deferred_items | 117/deferred-items.md: 4. RESOLVED - `--all` cannot complete: the seven D-116-01a shortfalls are accepted                                                                                     | acknowledged    | 2026-09-04           | v1.19     |
 | deferred_items | 117/deferred-items.md: 5. RESOLVED - The PATH interpreter was upgraded mid-phase and reddened 11 tests                                                                                        | acknowledged    | 2026-09-04           | v1.19     |
 | deferred_items | 117/deferred-items.md: 6. RESOLVED - The direct-coverage sweeps still have no automated control                                                                                               | acknowledged    | 2026-09-04           | v1.19     |
@@ -658,163 +176,656 @@ hit the same wall; convert it rather than re-disclosing it.
 
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
-| 260919-c5m | Standardize on AGENTS.md instead of CLAUDE.md as the canonical project-instructions file | 2026-09-19 | 8f87272a | Complete | [260919-c5m-standardize-on-agents-md-instead-of-clau](./milestones/test-backlog-quick/260919-c5m-standardize-on-agents-md-instead-of-clau/) |
-| 260917-bh3 | Condense the #181 unreleased CHANGELOG entries | 2026-09-17 | 399dea49 | Complete | [260917-bh3-condense-the-181-unreleased-changelog-en](./milestones/test-backlog-quick/260917-bh3-condense-the-181-unreleased-changelog-en/) |
-| 260913-uwq | Gate and commit the issue-179 fix: agents omitting `tools:` inherit Pi's defaults, and the two dropped agent fields get targeted guidance | 2026-09-13 | a9186816 | Complete | [260913-uwq-issue-179-agent-tools-and-mcpservers-con](./milestones/test-backlog-quick/260913-uwq-issue-179-agent-tools-and-mcpservers-con/) |
-| 260913-ttl | Close the remaining SonarQube branch-coverage gap to reach 100% line and 100% branch coverage | 2026-09-13 | d2ef20fa..46815bd6 | Complete | [260913-ttl-close-the-remaining-sonarqube-branch-cov](./milestones/test-backlog-quick/260913-ttl-close-the-remaining-sonarqube-branch-cov/) |
-| 260913-r2h | Make a FIFO state-harness over-read fail loudly instead of hanging to the test timeout | 2026-09-13 | c45850af | Complete | [260913-r2h-make-a-fifo-harness-over-read-fail-loudl](./milestones/test-backlog-quick/260913-r2h-make-a-fifo-harness-over-read-fail-loudl/) |
-| 260913-n7w | Fix the FIFO state server so each reader open receives exactly one payload | 2026-09-13 | e4f12cce | Complete | [260913-n7w-fix-the-fifo-state-server-reader-pairing](./milestones/test-backlog-quick/260913-n7w-fix-the-fifo-state-server-reader-pairing/) |
-| 260913-l07 | Fix every remaining zizmor finding, drop the severity floor, and simplify the gate comments | 2026-09-13 | 729348b4 | Complete | [260913-l07-fix-remaining-zizmor-findings-and-simpli](./milestones/test-backlog-quick/260913-l07-fix-remaining-zizmor-findings-and-simpli/) |
-| 260913-f6a | Gate the two SonarQube workflow findings, githubactions:S6505 and githubactions:S7637 | 2026-09-13 | 8a8a0396..69797ebc | Complete | [260913-f6a-gate-sonar-workflow-findings-s6505-and-s](./milestones/test-backlog-quick/260913-f6a-gate-sonar-workflow-findings-s6505-and-s/) |
-| 260920-qx0 | Reject `--local` on the merged-read marketplace verbs (info, list, update) | 2026-09-20 | f2fbd402 | complete | [260920-qx0-remove-local-from-marketplace-info](./milestones/any-git-host-quick/260920-qx0-remove-local-from-marketplace-info/) |
-| 260921-t5t | Suppress success-count lines for empty cascades and non-bulk operations | 2026-09-21 | ffdecc5f | shipped in PR #209 | [260921-t5t-when-a-command-returns-an-empty-result-a](./milestones/any-git-host-quick/260921-t5t-when-a-command-returns-an-empty-result-a/) |
-| 260922-ckn | Read the Claude Code compatibility skill during discuss phases; fix a racy coverage test | 2026-09-22 | 0b0623a3 | complete | [260922-ckn-implement-upstream-informed-discuss-phas](./milestones/any-git-host-quick/260922-ckn-implement-upstream-informed-discuss-phas/) |
-| 260923-vk3 | Restore Pi-valid skill names and prepare 0.19.1 | 2026-09-23 | 4a710359 | complete | [260923-vk3-fix-issue-211-generate-pi-valid-skill-na](./milestones/any-git-host-quick/260923-vk3-fix-issue-211-generate-pi-valid-skill-na/) |
-| 260924-bvi | Add bare skill aliases and rewrite plugin Markdown references | 2026-09-24 | b07ae35c | complete | [260924-bvi-add-bare-skill-aliases-and-centrally-rew](./milestones/any-git-host-quick/260924-bvi-add-bare-skill-aliases-and-centrally-rew/) |
-| 260924-q0m | Keep only plugin-qualified interactive skill aliases | 2026-09-24 | 1bae7cd6 | complete | [260924-q0m-keep-only-plugin-qualified-interactive-s](./milestones/any-git-host-quick/260924-q0m-keep-only-plugin-qualified-interactive-s/) |
-| 261001-iad | Deduplicate CI checks and run isolated direct coverage pairs concurrently | 2026-10-01 | b0d45f4f | complete | [261001-iad-deduplicate-ci-checks-and-run-isolated-d](./milestones/any-git-host-quick/261001-iad-deduplicate-ci-checks-and-run-isolated-d/) |
-| 261001-jpu | Remove brittle CI configuration assertions and retain the separate Sonar workflow | 2026-10-01 | f69e5023 | complete | [261001-jpu-remove-brittle-ci-configuration-assertio](./milestones/any-git-host-quick/261001-jpu-remove-brittle-ci-configuration-assertio/) |
-| 261001-jwu | Optimize local checks and GSD verification with native caches and conservative changed-file checks | 2026-10-01 | 462f3f24 | complete | [261001-jwu-optimize-local-checks-and-gsd-verificati](./milestones/any-git-host-quick/261001-jwu-optimize-local-checks-and-gsd-verificati/) |
-| 261001-mlt | Schedule focused task gates and full combined verification without duplicate local runs | 2026-10-01 | d9b672b9 | complete | [261001-mlt-schedule-focused-task-gates-and-full-pha](./milestones/any-git-host-quick/261001-mlt-schedule-focused-task-gates-and-full-pha/) |
-
-## Session Continuity
-
-**Stopped at:** v1.20 archived; awaiting next milestone
-
+| 1 | Run init.sh in new worktrees: SessionStart guard keyed on node_modules/.init-done (7f4c2178) | 2026-10-24 | 7f4c2178 | — | — |
+| 2 | APPLYTHROW-01: report the changes an apply made before it failed | 2026-10-25 | 20ee9b25 | complete | [261025-j40](./quick/261025-j40-report-the-changes-an-apply-made-before-/) |
+| 3 | APPLY1-01: move a plugin and its newer dependency in one apply | 2026-10-25 | a777b12f | complete | [261025-n1z](./quick/261025-n1z-move-a-plugin-and-its-newer-dependency-i/) |
+| 261025-vf1 | UPD-DEP-D1: settle the dependencies of every version a plugin moves to | 2026-10-26 | 1daa12d0 | complete | [261025-vf1-resolve-the-new-version-s-dependency-clo](./quick/261025-vf1-resolve-the-new-version-s-dependency-clo/) |
+| 261026-26d | UPDDEP-REVIEW: plan every dependency move before the first write | 2026-10-26 | 6d57cb9a | complete | [261026-26d-plan-dependency-moves-before-any-write](./quick/261026-26d-plan-dependency-moves-before-any-write/) |
+| 261026-c06 | Lifecycle-coverage leftovers: a lost state lock, apply dependency judgement, cross-marketplace trust | 2026-10-26 | 82ef8cac | complete | [261026-c06-fix-lock-compromise-apply-dependency-jud](./quick/261026-c06-fix-lock-compromise-apply-dependency-jud/) |
+| 261026-gv1 | GV-01: record git plugin versions as Claude Code does; errno wording per Node; two Sonar findings | 2026-10-26 | cf2a1c37 | complete | [261026-gv1-record-git-plugin-versions-as-claude-code](./quick/261026-gv1-record-git-plugin-versions-as-claude-code/) |
+| 261026-gvt | GV-01: record plugins at a range-selected release tag as Claude Code does, the tag semver kept as resolvedVersion | 2026-10-26 | 2638b001 | complete | [261026-gvt-record-plugins-at-release-tags-as-claude-code](./quick/261026-gvt-record-plugins-at-release-tags-as-claude-code/) |
+| 261026-glv | GV-01: an update with no tag drops the tag commit from the record; plugin directory plugins pick no release tag and their listed copy answers the range | 2026-10-26 | 33c9ac69 | complete | [261026-glv-match-claude-code-on-untagged-updates-an](./quick/261026-glv-match-claude-code-on-untagged-updates-an/) |
+| 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
+| 261030-ogp | bootstrap runs only marketplace add | 2026-10-30 | 841e3dc2 | complete | [261030-ogp-bootstrap-runs-only-marketplace-add](./quick/261030-ogp-bootstrap-runs-only-marketplace-add/) |
+| 12 | Fix STATE.md health warnings: archived 03.x phase tokens, milestone-complete status, PR #290 merged | 2026-10-31 | 9847e01b | — | — |
+**Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
-Last session: 2026-09-24
-v1.20 is archived. All 12 phases and 45 requirements are complete. The clean
-committed tree passed the full gate. The Phase 3 private-repository credential
-challenge remains deferred to later UAT and acknowledged in the audit. The
-operator-owned `.planning/config.json` formatting drift remains unstaged.
+**lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
+`claude/plugin-lifecycle-coverage-b1d431`. Next: `/gsd-plan-phase 1` (Suite
+Foundation). After Phase 1 lands, Phases 2-15 run in parallel; each depends on
+Phase 1 only.
 
-Previous session: 2026-09-23T11:47:18.675Z
-Autonomous run (`/gsd-autonomous --from 9`) took Phase 9 from discuss through
-transition in one session: smart discuss (four areas, every decision checked
-against the 2.1.267 binary at the operator's "follow upstream" instruction),
-research, plan (4 plans / 3 waves), sequential execution on this checkout,
-three-iteration review, verification 12/12. It stops here at the phase
-boundary on context budget; resume with `/gsd-autonomous --from 10`. Nothing
-was skipped except the `verify:post` `validate-phase` (Nyquist) step hook for
-Phase 9 (`09-VALIDATION.md` stays `status: draft`; run `/gsd-validate-phase 9`
-if wanted); `09-SECURITY.md` is secured (19/19 closed). Environment debts: the
-leaked-fixture sweep (TEST-TMPLEAK-01) and the operator's local
-`.planning/config.json` formatting drift (never staged).
+**Phase 8 closed (2026-10-20):** all five plans executed, Nyquist-compliant,
+`threats_open: 0`, the code review fix loop closed 7 of 7 findings, and
+`npm run check` exited 0 at `a393bead`; verification passed 12/12. The work
+lives only in the worktree
+`/home/acolomba/src/pi-claude-marketplace-cucumber-behavioral-tests` on
+`features/cucumber-behavioral-tests`, nothing pushed. Next:
+`/gsd-autonomous --from 9 --interactive` from the worktree. Debts: the
+codebase map is stale by 468 elements (advisory drift gate only); Phases 1-6
+verifications are stale for the milestone audit; the un-numbered CHANGELOG
+bullets are consolidated into one at PR time.
 
-Previous session: 2026-09-22T07:50:41.553Z
-Resumed from `HANDOFF.json` (paused 2026-09-20 at 08-01 Task 1, a
-`checkpoint:decision`). Did the handoff's prerequisite first: ported main's
-`InstallTransactionOutcome` union onto `installPluginWithTransaction` as its
-own behaviour-preserving commit (`cd11171c`; typecheck, eslint, install-flow
-and reinstall-flow suites, the 100% unit-coverage gate and `lint:type-members`
-all green; the two install-flow contract pins moved one line). Then the
-operator ruled "proceed as recommended" on the Task 1 checkpoint: Decision A
-confirmed (`dependency enabled`), Decision B = B1 (re-add `dependents remain`
-at the `REASONS` tail in plan 08-02; B2 and B3 rejected), both discretion calls
-confirmed (an already-enabled member reuses `already enabled`; a manual
-`enable` clears `dependencyDisabled` at write time on root and every re-enabled
-member). A fresh `gsd-executor` continuation for 08-01 was dispatched
-sequentially (isolation `none`, sentinel forced immediately before the
-dispatch) carrying that ruling; it records it in `08-01-SUMMARY.md`
-key-decisions and proceeds from Task 2.
+**Main merge (2026-10-11, quick task 261011-bsm):** `origin/main` at
+`94160614` (#248, and #250, the mcp-4 milestone released as 0.20.0) is merged
+into `features/json`, and main's MCP notices are ported to the run and
+row-policy model. The WINDOWS.md ledger now holds 92 entries: 1-87 are shared,
+88-90 are mcp-4's, and json-output's 88 and 89 were renumbered to 91 and 92
+(open 0, waived 51, fixed 41). Dated archives keep the old numbers. The root
+`.planning/research/` files are mcp-4's; json-output's research moved to
+`milestones/json-output-research/`.
 
-**Wave 1 (08-01) closed 2026-09-21:** `enable` cascades to its declared
-closure (EDEP-01, EDEP-03 enable arm); `dependency enabled` landed, `REASONS`
-59 -> 60; the cascade is scoped to standalone `enable` (a reconcile-driven
-call keeps its own dependency handling). Six commits `40bcedd7`..`ae073690`;
-full coverage gate 7364/7364 at 100%.
+**Earlier work:** json-output on `features/json`. Phases 1 and 2 are complete
+and verified. Phase 2's review-fix loop closed after three iterations with ten
+findings fixed (CR-01, WR-01..WR-06, IN-01..IN-03); D-07 now records 29 approved
+corpus replacements (29 / 2,632 / 2,661 against the original blob). The full
+`npm run check` passed at `571b6883`. Phase 3 (Typed Raw Surfaces) has all 4
+plans complete and is verified (11/11). Its review-fix loop converged clean
+after three iterations (three gate warnings fixed in 95237f7c, 16f507cd,
+13729cd8; four Info items open in 03-REVIEW-DISPOSITION.md). The full
+`npm run check` passed at `13729cd8`; corpus 3134 present / 0 extra per the
+D-17 ledger; catalog unchanged. Phase 4 (Wire Schema and JSON Strategy) has
+all 5 plans executed; its review-fix loop converged clean at iteration 2 (CR-01
+and WR-01..WR-05 fixed, WR-06 deferred to Phase 5 criterion 6, nine Info items
+open in 04-REVIEW-DISPOSITION.md), and the full check passed on `ad5348ab`.
+Verification found one gap (SC3 / PMOD-04: marketplace block names and other
+subject names are not redacted). Gap-closure plan 04-06 is executed
+(`c8a45a9b`, `5d988d7d`, SUMMARY `8c861f3b`): `resolveRows` redacts every block
+and plugin row name, `presentNotification` redacts the marketplace-not-added
+name, and AUTH-09 has three subject-name rows, each proven to fail before its
+fix. Corpus 3143 present / 0 extra; catalog unchanged from `4e6c568a`. The
+full-scope pre-commit (`npm run check` plus all-pair coverage) passed on the
+exact code committed as `5d988d7d`. Phase 4 is now complete; its final re-verification is recorded below.
 
-**Wave 2 (08-02) closed 2026-09-21:** `disable` refuses while an enabled
-dependent still declares the target, `(failed) {dependents remain}` with a
-plain-English `cause:` naming dependents in order (EDEP-02, D-08-01, B1);
-`REASONS` 60 -> 61, catalog 219 -> 220 states. The guard skips orchestrated
-(reconcile-driven) disables -- LOAD-02's dependents-first propagation would
-otherwise deadlock on itself; two test fixtures that disabled a still-declared
-dependency through the standalone verb were re-seeded. Six commits
-`00b102a8`..`9dd32b86`.
+**Current resumption (2026-10-06):** Gap review iteration 2 confirmed all
+three fixes. The distinct ledger IDs are CR-02, WR-07, WR-08, and IN-10.
+The user accepted both conservative masking rules. Full `npm run check`
+and corpus passed at `c5494971`, Node v26.10.0: 264 direct coverage pairs,
+3149 corpus entries, zero extras. Validation covers 12 tasks and 10
+requirements; security records 18 mitigated and four accepted threats, zero
+open. Re-verification passed 5/5 with no code gaps. The user explicitly
+confirmed all five prohibition assessments on 2026-10-06 ("sure");
+`04-UAT.md` records 5/5 passed. Phase 4 is complete; Phase 5 discussion is
+next. Current-session checks remain reusable while build inputs are unchanged.
 
-**Phase 8 closed 2026-09-21** (see Current Position). The install-flow
-outcome-union port (`cd11171c`) landed first as its own commit.
+**Corpus determinism (resolved by quick task 261002-dys):** prune rollback
+now receives its backup-directory creator through `PruneRestoreOps`, so tests
+name a fixed `prune-backup-ABC123`. The 8 prune.test.ts corpus entries that
+held random suffixes were re-captured; `node scripts/notify-corpus.mjs check`
+exits 0 (3,133 present, 0 extra). The D-17 ledger then removed 2 and added 3
+entries, so the baseline holds 3,134. Later phases compare the catalog against
+main's `8b6ac3bc` (or the latest merged main) rather than `e40d3dda`, because
+#198 changed catalog bytes.
 
-**Next:** Phase 9 (Reload installs missing declared dependencies) — discuss
-via `/gsd-discuss-phase 9`, or plan directly with `/gsd-plan-phase 9`. Consider
-a BACKLOG entry for IN-09 (D-04-07 promotion re-materializes a disabled
-dependency-provenance root without walking its own disabled dependencies).
-
-### Historical v1.19 completion record
-
-Plan counts here are MEASURED, not carried: 220 total and 220 complete, counted by `find` over
-`1??-??-{PLAN,SUMMARY}.md` after this plan's SUMMARY landed. Every phase 108-117 has a SUMMARY for
-every PLAN.
-
-### What Phase 117 delivered, and what it left open
-
-- **The last pair is closed.** `extensions/pi-claude-marketplace/index.ts` → `tests/index.test.ts`
-  landed in 117-08 and the pair total is 204 of 204.
-- **The `tests/edge/index-handler.test.ts` orphan is gone** — 117-08 deleted both legacy proxies
-  while writing the entry owner, so the edge tier carries no unmirrored test and none of the 7
-  `as any` / `as unknown as` casts it held.
-- **The all-pair duration blocker is discharged.** Plan 117-11 measured 533.2 s for all 204 rows on
-  Node v26.8.1, read from the runner's own printed line, and decided NOT to add concurrency against
-  that number. No Node 24 is installed on this machine; CI pins it.
-- **22 open Broken Windows entries** out of 29 rows, counted in 117-12 by a script that tallies the
-  rows rather than reading the header. Seven are the D-116-01a coverage shortfalls (15-19, 21, 22),
-  pinned by identity and closable only by a production rewrite; they must stay open. Entry 20 is the
-  two `edge/register.ts` comments (18-20 and 104-106) asserting a registration-time `process.cwd()`
-  capture the code does not make — it is read inside the completion arrow, per invocation. Entries
-  23-26 and 29 are stale documentation references this phase created or found; entries 27 and 28,
-  opened and closed by 117-11, are the all-pair reading and the errno hardening.
-- **`BOOLEAN_FLAGS` is still re-exported from `edge/handlers/plugin/list.ts`** solely for
-  `tests/architecture/flag-catalog-drift.test.ts` (`list.ts:82`, consumed at
-  `flag-catalog-drift.test.ts:48`). Verified still present in 117-12 and left alone under D-117-13,
-  which opened no production licence.
-- **`tests/orchestrators/edge-deps.test.ts` still watches `globalThis.fetch`** — the precedent that
-  spread the wrong door across twelve edge suites. It sits outside the edge tier so phase 116 left it;
-  the git transport reaches the wire through `simple-get` → `https.request`, and `globalThis.fetch` has
-  exactly one production caller (`domain/github-auth.ts`'s device flow, correctly watched by
-  `tests/domain/github-auth.test.ts`).
-
-### One open operator decision
-
-1. **The tool's `available` / `unavailable` parameter DESCRIPTIONS** now admit a bucket their wording
-   does not mention, after D-116-15's CR-01 fix made the `remote` and `partially-available` arms
-   reachable. Changing them alters the LLM-facing contract and the pinned registration schema. Held
-   open deliberately by D-117-14: the change is ONE-WAY, so a later revert is a second contract
-   change rather than an undo. 117-12 records it and does NOT decide it.
-
-**Closed by 117-12:** the REQUIREMENTS.md status drift. Measured before the sweep at **154** rows
-reading `Open` — across phases 110, 111, 112, 113, 114, **116** and the phase-117 entry row, not the
-~115 across 110-114 the earlier estimate claimed, because phase 116's own 30 rows were missed
-entirely. All 154 are closed, and MOD-07 and MOD-10 are closed in both the checklist and the
-requirement-to-phase mapping.
-
-### Historical environment notes from v1.19
-
-The current instructions in `CLAUDE.md` supersede the old commit recipe that follows.
-The approved `.mcp.json` formatting removed the format blocker. All required hooks
-must pass. Only `trufflehog` uses the documented filesystem-scan substitute.
-The workstream archive removed the old routing blocker.
-
-- **`npm run check` NEVER runs the tests.** `format:check` fails on the operator's pre-existing
-  untracked files and short-circuits before `test`. Run `npm run typecheck`, `npm run lint`,
-  `npm run fallow`, `npm test` and `npm run test:integration` SEPARATELY, checking each exit code.
-- **Git hooks are not installed in this checkout** — a successful commit is not evidence hooks passed.
-  Use the operator-approved recipe: filesystem trufflehog, per-file `prettier --check`, then
-  `SKIP=trufflehog,npm-format-check pre-commit run --files <explicit paths>`.
-- **This is a linked worktree**, so trufflehog needs the filesystem route.
-- **This shell does not word-split**, and backticks inside `git commit -m` execute — use `git commit -F`.
-- **`workflow.use_worktrees=false`**, so executors run sequentially on the shared tree, one at a time.
-- **`phase.complete` cannot write the root planning files** under workstream mode — neither workstream
-  holds v1.19 — so every phase transition is hand-applied. 114, 115, 116 and 117 all were, and the
-  milestone close will be too.
-- **`roadmap.update-plan-progress` mangles ROADMAP.md every single time** (31 for 31 in phase 116):
-  hand-edit instead. ROADMAP carries the plan count in TWO places that drift independently.
-- **`state.record-metric` double-increments `completed_plans`**; `state.update-progress` writes nothing;
-  `state.advance-plan` increments without appending the plan id.
-- **NEVER name a non-plan artifact `*-SUMMARY.md`** — that glob is counted as a plan summary by
-  `find-phase`, `phase-plan-index` and `progress.bar`, and it silently inflates the phase count.
+**Release context (unchanged):** The 0.19.1 and 0.19.2 releases are tagged and
+published, PR #216 merged `releases/v0.19.2` back into `main`, and PRs #218 and
+#219 landed after it. `main` carries the workflows bridge from PR #205, which no
+tag includes yet. Handoffs for the earlier milestones moved into their archives
+(`milestones/refine-unit-tests-HANDOFF*.md`,
+`milestones/ws-defaults-enabled-2026-09-17/HANDOFF.md`) and the paused phase-117
+handoff moved to `milestones/ws-workflows-2026-09-27/`. Earlier milestone
+continuity is preserved in `inputs/test-backlog/PRE-MILESTONE-STATE.md` and
+archived milestone artifacts.
 
 ## Operator Next Steps
 
+
 - Start the next milestone with $gsd-new-milestone
+
+
+## Performance Metrics
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 01 P01 | 50 min | 3 tasks | 5 files |
+| Phase 01 P02 | 80 min | 2 tasks | 11 files |
+| Phase 01 P03 | 67 min | 2 tasks | 15 files |
+| Phase 01 P04 | 122 min | 2 tasks | 42 files |
+| Phase 01 P05 | 73 min | 2 tasks | 37 files |
+| Phase 01 P06 | 74 min | 2 tasks | 25 files |
+| Phase 01 P07 | 71 min | 2 tasks | 25 files |
+| Phase 01 P08 | 51 min | 2 tasks | 22 files |
+| Phase 01 P09 | 70 min | 2 tasks | 24 files |
+| Phase 01 P10 | 67 min | 2 tasks | 23 files |
+| Phase 01 P11 | 81 min | 2 tasks | 19 files |
+| Phase 01 P12 | 62 min | 2 tasks | 27 files |
+| Phase 01 P13 | 75 min | 2 tasks | 18 files |
+| Phase 01 P14 | 77 min | 2 tasks | 17 files |
+| Phase 01 P15 | 50 min | 2 tasks | 32 files |
+| Phase 01 P16 | 78 min | 2 tasks | 26 files |
+| Phase 03 P01 | 1h 17m | 2 tasks | 10 files |
+| Phase 03 P02 | 1h 15m | 2 tasks | 10 files |
+| Phase 03 P03 | 1h 13m | 2 tasks | 20 files |
+| Phase 03 P04 | 1h 3m | 2 tasks | 4 files |
+| Phase 04 P01 | 89min | 2 tasks | 15 files |
+| Phase 04 P02 | 85min | 2 tasks | 20 files |
+| Phase 04 P03 | 113min | 2 tasks | 17 files |
+| Phase 04 P04 | 84min | 2 tasks | 9 files |
+| Phase 04 P05 | 67 min | 2 tasks | 6 files |
+| Phase 04 P06 | 83 min | 2 tasks | 6 files |
+| Phase 05 P01 | 35 min | 2 tasks | 69 files |
+| Phase 05 P02 | 33 min | 2 tasks | 51 files |
+| Phase 05 P03 | 30 min | 2 tasks | 14 files |
+| Phase 05 P04 | 25 min | 2 tasks | 30 files |
+| Phase 05 P05 | 30 min | 2 tasks | 10 files |
+| Phase 05 P06 | 29 min | 2 tasks | 8 files |
+| Phase 05 P07 | 32 min | 2 tasks | 2 files |
+| Phase 08 P01 | 28 min | 3 tasks | 1 files |
+| Phase 08 P02 | 5 min | 2 tasks | 2 files |
+| Phase 08 P03 | 4 min | 2 tasks | 4 files |
+| Phase 08 P04 | 6 min | 3 tasks | 2 files |
+| Phase 09 P01 | 10 min | 3 tasks | 3 files |
+| Phase 01 P01 | 8 min | 3 tasks | 12 files |
+| Phase 01 P02 | 13 min | 3 tasks | 4 files |
+| Phase 01 P03 | 13 min | 3 tasks | 10 files |
+| Phase 01 P04 | 12 min | 3 tasks | 7 files |
+| Phase 01 P05 | 4 min | 2 tasks | 6 files |
+| Phase 02 P01 | 14min | 2 tasks | 7 files |
+| Phase 02 P02 | 13 min | 2 tasks | 10 files |
+| Phase 02 P03 | 18 min | 3 tasks | 16 files |
+| Phase 02 P04 | 15 min | 3 tasks | 10 files |
+| Phase 02 P05 | 14 min | 3 tasks | 10 files |
+| Phase 03 P01 | 7 min | 2 tasks | 5 files |
+| Phase 03 P02 | 5 min | 2 tasks | 3 files |
+| Phase 03 P03 | 7 min | 2 tasks | 3 files |
+| `03.1/` P01 | 21min | 3 tasks | 12 files |
+| `03.1/` P02 | 20min | 3 tasks | 13 files |
+| `03.1/` P03 | 16min | 2 tasks | 7 files |
+| `03.1/` P04 | 16min | 3 tasks | 11 files |
+| `03.1/` P05 | 11min | 3 tasks | 7 files |
+| `03.2/` P03 | 15min | 3 tasks | 24 files |
+| `03.2/` P04 | 38min | 3 tasks | 11 files |
+| `03.2/` P05 | 25min | 3 tasks | 9 files |
+| `03.3/` P01 | 16min | 1 tasks | 16 files |
+| `03.3/` P02 | 9min | 1 tasks | 12 files |
+| `03.3/` P03 | 31min | 2 tasks | 9 files |
+| `03.3/` P04 | 36min | 2 tasks | 18 files |
+| `03.3/` P05 | 28min | 2 tasks | 19 files |
+| `03.3/` P06 | 37min | 3 tasks | 13 files |
+| `03.3/` P10 | 16min | 2 tasks | 9 files |
+| `03.4/` P06 | 19min | 2 tasks | 10 files |
+| `03.4/` P07 | 15min | 2 tasks | 15 files |
+| `03.4/` P08 | 36min | 3 tasks | 56 files |
+| `03.4/` P10 | 40min | 2 tasks | 20 files |
+| Phase 06 P02 | 50 min | 3 tasks | 6 files |
+| Phase 07 P01 | 10 min | 2 tasks | 8 files |
+| Phase 07 P02 | 11 min | 2 tasks | 6 files |
+| Phase 07 P03 | 7 min | 2 tasks | 9 files |
+| Phase 07 P04 | 7min | 3 tasks | 1 files |
+| Phase 08 P01 | 4 min | 2 tasks | 1 files |
+| Phase 08 P02 | 11 min | 3 tasks | 12 files |
+| Phase 08 P03 | 12 min | 2 tasks | 20 files |
+| Phase 08 P04 | 9 min | 2 tasks | 10 files |
+| Phase 08 P05 | 12 min | 3 tasks | 10 files |
+| Phase 09 P01 | 14 min | 1 tasks | 16 files |
+| Phase 09 P02 | 6min | 2 tasks | 6 files |
+| Phase 09 P03 | 11min | 3 tasks | 6 files |
+| Phase 09 P04 | 12 min | 2 tasks | 4 files |
+| Phase 09 P05 | 11 min | 2 tasks | 13 files |
+| Phase 09 P06 | 7 min | 2 tasks | 8 files |
+| Phase 09 P07 | 6 min | 2 tasks | 3 files |
+| Phase 09 P08 | 8 min | 3 tasks | 4 files |
+| Phase 10 P01 | 8min | 2 tasks | 9 files |
+| Phase 10 P02 | 14min | 2 tasks | 8 files |
+| Phase 10 P03 | 10 min | 3 tasks | 11 files |
+| Phase 10 P04 | 19 min | 2 tasks | 7 files |
+| Phase 10 P05 | 5min | 2 tasks | 4 files |
+| Phase 10 P06 | 14min | 2 tasks | 8 files |
+| Phase 10 P07 | 13min | 2 tasks | 2 files |
+| Phase 01 P01 | 9 min | 3 tasks | 3 files |
+| Phase 01 P02 | 11 min | 2 tasks | 14 files |
+| Phase 01 P03 | 10 min | 2 tasks | 9 files |
+| Phase 01 P04 | 8 min | 2 tasks | 4 files |
+| Phase 01 P05 | 8 min | 2 tasks | 8 files |
+| Phase 01 P06 | 10 min | 3 tasks | 10 files |
+| Phase 01 P07 | 9 min | 2 tasks | 8 files |
+| Phase 01 P08 | 10 min | 2 tasks | 8 files |
+| Phase 01 P09 | 12 min | 2 tasks | 6 files |
+| Phase 01 P10 | 10 min | 3 tasks | 10 files |
+| Phase 29 P01 | 28 min | 2 tasks | 27 files |
+| Phase 29 P02 | 46 min | 2 tasks | 17 files |
+| Phase 29 P03 | 27 min | 2 tasks | 24 files |
+| Phase 29 P04 | 29 min | 2 tasks | 27 files |
+| Phase 29 P05 | 40 min | 2 tasks | 24 files |
+| Phase 29 P06 | 24 min | 2 tasks | 24 files |
+| Phase 29 P07 | 19 min | 2 tasks | 7 files |
+| Phase 29 P08 | 27 min | 2 tasks | 15 files |
+| Phase 29 P09 | 52 min | 3 tasks | 41 files |
+| Phase 29 P10 | 54 min | 3 tasks | 31 files |
+| Phase 29 P11 | 27 min | 2 tasks | 14 files |
+| Phase 29 P12 | 70 min | 3 tasks | 34 files |
+| Phase 29 P13 | 48 min | 3 tasks | 44 files |
+| Phase 29 P14 | 20 min | 2 tasks | 9 files |
+| Phase 10 P05 | 59min | 3 tasks | 37 files |
+| Phase 10 P06 | 28min | 3 tasks | 14 files |
+| Phase 10 P07 | 15min | 3 tasks | 4 files |
+| Phase 11 P06 | 42min | 3 tasks | 13 files |
+| Phase 11 P09 | 15min | 3 tasks | 7 files |
+| Phase 11 P13 | 47min | 3 tasks | 11 files |
+
+## Decisions
+
+- [Phase 01]: Notify corpus scripts carry file-level fallow-ignore markers (unused-file; unused-export on notify-corpus.mjs) instead of a package.json entry, since D-03 keeps the tool out of package.json and npm run check
+- [Phase 01]: resolveEnvelope resolves severity and the summary line before needsReload and the tally, because getter-backed kind cases in notification-dispatch.test.ts pin the bytes of that read order
+- [Phase 01]: emitWithSummary keeps its name and takes a ResolvedEnvelope; every structured emitter renders the body, resolves the envelope, then formats and notifies once
+- [Phase 01]: dispatchInfoMessage keeps rendering the standalone body before it resolves the envelope, and calls resolveRows only in the reconcile-applied arm, because getter-backed kind tests pin that read order
+- [Phase 01]: The context emitters take a required hasRenderArm predicate; resolveRows floors a row with no render arm to error on the input row before the envelope resolves
+- [Phase 01]: Row hints are RowHint ids set in resolveRows; the grammar maps them to frozen literals through a map total over RowHint
+- [Phase 01]: MarkerPolicy and CommandContext.markers use Record spellings, because @typescript-eslint/consistent-indexed-object-style rejects the mapped-type form
+- [Phase 01]: resolveRow stays an if-chain that ends in a fallback return, so an out-of-band row whose status no branch names still resolves and reaches the missing-arm diagnostic
+- [Phase 01]: Each context emitter reads softDepStatus(pi) once, before resolveRows, and reuses that snapshot for the renderers; renderMpHeader takes a ResolvedMarketplace
+- [Phase 01]: RenderFn is (row, mpScope) and composeReasons(reasons) only formats a resolved list; the one softDepStatus(pi) snapshot per emission feeds resolveRows and no renderer (D-13)
+- [Phase 01]: softDepMarkers is called only from notification-resolve.ts, pinned by a filesMatching scan whose planted control copies a real registered orchestrator, because gate files may not name an unregistered production path (D-12, SC-5)
+- [Phase 01]: The /claude:plugin closure opens one NotificationRun per invocation and routes it as every SubcommandHandler's third argument; marketplace list and info render from run.softDeps with no emission-time probe (D-05, D-07 Option A)
+- [Phase 01]: The notify family takes NotificationRun | ToolInventory until 01-16; module-private snapshotOf discriminates on softDeps. register.test.ts states tool reads as { runs, probingEmissions }
+- [Phase 01]: The resources_discover pass opens one NotificationRun inside the reconcile try, before the reconcile reads event.cwd, and hands it to applyReconcile; ApplyReconcileOptions keeps pi only for the nested orchestrators until 01-12 (D-05, D-07)
+- [Phase 01]: withParsedArgs(parse, usage, operation) returns SubcommandHandler and forwards the run; pending renders from it, and the plugin list and info factories return SubcommandHandler while still ignoring the run
+- [Phase 01]: The import cascade renders from ImportClaudeSettingsOptions.run; pi stays only as the forward to the nested install and marketplace add until 01-09/01-10 (D-05)
+- [Phase 01]: marketplace remove and update, including resolveScopeOrNotifyNotAdded, take run in place of pi; their handler factories take no pi, and reconcile hands its load-pass run to the nested removeMarketplace (D-05, D-07)
+- [Phase 01]: The add and autoupdate orchestrator suites drop the strict pi mock: their boundaries return a run seed and have no tool inventory to probe
+- [Phase 01]: fold-adoption's shared context helper carries both pi and run; add reads run, install and list still read pi until they migrate
+- [Phase 01]: bootstrap renders its add, autoupdate flip, and its handler's failed row from the router's one run (D-05)
+- [Phase 01]: Plugin install takes InstallPluginOptions.run: the success row stamps companionSeverity from run.softDeps and notify composes the markers from the same snapshot, so one probe drives both (D-05)
+- [Phase 01]: ImportClaudeSettingsOptions carries no pi; import and reconcile hand their own run to the nested install, and reconcile keeps pi only for uninstall, enable, and backfill (D-07)
+- [Phase 01]: SC-3 is proven through the registered command with a two-answer inventory: [] for the first three reads, subagent after; the case asserts the warning summary with the marker and exactly three reads (D-08)
+- [Phase 01]: Plugin enable and disable take EnableDisablePluginOptions.run: dispatchOutcome passes run.softDeps to composeOutcomeRow, the same snapshot notifyWithContext composes the markers from, so one probe drives both (D-05)
+- [Phase 01]: Uninstall and the shared emitMarketplaceNotAdded take a run; the enable/disable and uninstall handlers take no pi, and reconcile hands its run to both nested verbs, keeping pi only for the backfill (D-07)
+- [Phase 01]: Reinstall takes ReinstallPlugin(s)Options.run and emitMarketplaceNotAddedSignal takes a run; update opens one from pi at its single signal call until it takes the router's run (D-05)
+- [Phase 01]: ApplyReconcileOptions carries no pi: the backfill hands the load pass's run to reinstall, and index.ts passes applyReconcile only the run it opens (D-07)
+- [Phase 01]: Plugin update and fetch take UpdatePluginsOptions.run and FetchPluginsOptions.run; composeUpdateCascade stamps severity from run.softDeps, the snapshot the markers come from, so no orchestrator probes the tool inventory (D-05)
+- [Phase 01]: makeUpdateHandler and makeFetchHandler take no pi; openNotificationRun is constructed only in edge/register.ts and index.ts (D-07)
+- [Phase 01]: list-flow.ts splits its options: PluginListPayloadOptions carries no run, and ListPluginsOptions extends it with run, so the LLM list tool and the browser's plugin loader build payloads without constructing a run (D-05, IL-2)
+- [Phase 01]: Plugin info takes GetPluginInfoOptions.run; the fan-out and the failure loop render from one snapshot per command, and makeListHandler, makePluginInfoHandler, and makeBrowseHandler take no pi, so no edge handler factory takes pi (D-05, D-07)
+- [Phase 01]: createNotificationBoundary takes (emissions, cwd?) and holds no Pi mock; the probe count belongs to the root suites register.test.ts and index.test.ts, which build their own strict Pi mocks, and loadExtension states rootReads (three per discover pass that reaches the reconcile and per registered-command run) (D-05, D-07)
+- [Phase 01]: The notify family takes run: NotificationRun only; the dispatcher reads run.softDeps and imports no probe, and the catalog driver opens one run per fixture from the fixture's inventory (SC-2, D-05, D-06)
+- [Phase 03]: 03-01: RawSurface is spelled as an explicit union while LoadSurface is its only member (sonarjs/redundant-type-aliases); 03-01 Task 2 widened it to UsageErrorSurface | UsageInfoSurface | LoadSurface
+- [Phase 03]: 03-01: each TDD task lands as one feat commit with its owner tests, because the full-check pre-commit hook rejects a failing RED commit; RED is observed locally
+- [Phase 03]: 03-02: diagnostic, async-rewake-summary, and stop-override-cap are typed raw kinds; formatRawSurface returns undefined only for a zero-length line list or summary, and deliver skips it (D-05, D-08, D-15)
+- [Phase 03]: 03-02: HookSurface has its own private emitHookSurface entry; settle passes STOP_OVERRIDE_CAP exported from bridges/hooks/runtime.ts, so the shared layer holds no cap literal (D-07, D-14)
+- [Phase 03]: 03-03: the device-flow prompt is the device-flow-prompt raw kind; the domain passes { verificationUri, userCode } to onDeviceCode and auth-host binds it to notifyDeviceFlowPrompt (D-09, D-10, D-12)
+- [Phase 03]: 03-03: the AUTH-09 gate pairs a positive call count with an exact-form allow-list for onDeviceCode and for the provider binding (D-11)
+- [Phase 03]: 03-03: the D-17 corpus exception is a five-record ledger in its own commit; the baseline holds 3134 entries with 0 extras
+- [Phase 03]: 03-04: assertPlantedCopyRejects is the shared D-07-01 offender control; new architecture gates call it per data row instead of repeating the temp-root sequence
+- [Phase 03]: 03-04: the D-16 presentation-sink gate pairs two pattern clauses with a placement clause (exactly two notify spellings, both inside deliver); each clause is proven by its own planted offender
+- [Phase 04]: Wire closed-set fields use Type.Enum over Record<ClosedSet, true> enrollment keys; typebox 1.3.34 Static of a Union over a non-tuple array is never
+- [Phase 04]: Plugin LLM tool details are wire marketplace blocks with verbatim statuses (details.marketplaces replaces the flat plugins list)
+- [Phase 04]: Marketplace LIST_CONTEXT renamed MARKETPLACE_LIST_CONTEXT so tools.ts can import both list contexts without a fallow duplicate export
+- [Phase 04]: composeContextBlocks stays as the cascade formatter's block composer (only production reader of renderMpHeader/composePluginLines); composeMarketplaceBlock is grammar-private
+- [Phase 04]: renderPruneCommittedWarning takes the scope and the serialized cause chain (or undefined), so the grammar owner test covers the no-cause branch without a new emitting dispatch case
+- [Phase 04]: isInfoKind and StandaloneKind are module-private once dispatchInfoMessage is gone; no production module imports them
+- [Phase 04]: Raw payloads carry no summary, and the async-rewake-summary payload carries its text as text; RAW_SURFACE_SEVERITY is the one raw-kind severity table
+- [Phase 04]: PMOD-04: plugin-info-cascade blocks get the same notes redaction as a single plugin-info
+- [Phase 04]: PMOD-04: the D-08 redaction ledger is empty (corpus 3134 present, 0 extra; no catalog diff)
+- [Phase 04]: WIRE-08: the payload walk's path pattern is redactAbsolutePaths' pattern plus a bare UNC root, which the redactor does not match
+- [Phase 04]: WIRE-08: planted path, Error, and undefined offenders extend the prune committed-warning payload, the one catalog payload with a top-level cause chain
+- [Phase 04]: PMOD-04: block names and plugin row names are redacted in resolveRows, and the marketplace-not-added name in presentNotification; record-backed names and the scp subject pass through unchanged
+- [Phase 04]: PMOD-04: an out-of-band plugin row without a name keeps that shape; resolveRows redacts a row name only when the row carries one
+
+- [Phase 04]: On 2026-10-06 the user accepted both conservative masking rules: split row names ending in scheme://host:port and hyphenated text after Bearer. Resume the review loop, re-verification, and autonomous continuation.
+- [Phase 08]: D-07 applied: root brace-expansion bumped 5.0.9 to 5.0.12 lock-only (--ignore-scripts) after the user approved the artifact at checkpoint 08-01-02; D-08 keeps the Pi-shrinkwrapped nested copy at 5.0.9 as the single npm audit path
+- [Phase 08]: D-06: resolver integration cases look up the global pi-subagents root before the hermetic HOME swap and pass it into the loader
+- [Phase 08]: DEPADV-01 clears only once the lock resolves Pi >=1.0.1 (first release without npm-shrinkwrap.json); Pi 1.0.0 on origin/main still pins nested brace-expansion 5.0.9
+- [Phase 08]: 08-04: all 25 open WINDOWS.md entries disposed (23 waived with full [json-output] reasons, 85 and 89 fixed); ledger open 0 / waived 50 / fixed 39 / total 89
+- [Phase 09]: LLM tool content is redacted at the tool return through one module-private textContent builder (PMOD-04); details stay as presentCascade redacts them
+- [Phase 09]: D-03 kept: both LLM tools return the TC-9 isError shape instead of throwing, though Pi 0.87.1 ignores a returned isError; throwing a redacted Error is left for the user to decide
+- [Phase 09]: 04/ deferred item marked status: resolved (not closed) because audit-open treats only resolved or acknowledged as closed
+- [Phase 01]: [marketplace-features] Given setup commands stay on the strict runCommand path (one cascade, severity info); only When stores every payload via runCommandPayloads
+- [Phase 01]: [marketplace-features] PluginWorld renamed to ScenarioWorld; {scenario time} window has zero tolerance and opens at world construction
+- [Phase 01]: [marketplace-features] check:features (scripts/check-features.mjs) is the unused/undefined/ambiguous step gate; npx cucumber-js --dry-run --format usage honors the @url/@github exclusion and is no longer a substitute
+- [Phase 01]: [marketplace-features] Feature gate findings name the cucumber skill rule file; ambiguous findings list each matching definition by pattern and source location
+- [Phase 01]: The source kind parameter type is named `source kind` (with a space); Cucumber accepts it
+- [Phase 01]: `offers these plugins:` republishes under the recorded source kind, defaulting to dir
+- [Phase 01]: D-02 multi-payload results are read with 'the command reports these results:' (envelope row per payload) and 'the results list these marketplaces and plugins:' (rows across every cascade payload)
+- [Phase 01]: The config read step fails on a missing claude-plugins file and names its path: an absent base file is rebuilt from records on load (MIG-01), so missing is not an empty declaration
+- [Phase 01]: The cucumber skill names source kinds and decision IDs, never phases; reviewers gate on npm run check:features, not the CLI usage report (D-09)
+- [Phase 02]: setGitHubBaseUrl restores the variable once per test (first call), because node:test runs after hooks FIFO
+- [Phase 02]: platform/git.ts fetch passes remote and the wire url together only when the override rewrites the recorded origin; otherwise the previous options
+- [Phase 02]: GitHub auth bundles come from buildGitHubAuth: a stored credential bound to the override host with no Device Flow while PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL is set, today's github.com bundle when unset (GHB-02, D-04)
+- [Phase 02]: GITHUB_HOST lives in shared/github-base-url.ts so the github.com host literal has one home for the D-06 rule
+- [Phase 02]: rethrowInvalidGitHubBaseUrl rethrows InvalidGitHubBaseUrlError from every per-target catch on a GitHub path (add, update, install, missing-dependency install, import, enable), so an invalid override fails the whole command with no new reason token (GHB-03, D-08)
+- [Phase 02]: marketplace add rethrows inside the unclassified branch of handleAddFailure, because an exotic-throw case pins the exact prototype-read count of classification
+- [Phase 02]: Plugin reinstall, fetch, info --fetch, and update (direct, bulk, autoupdate cascade) rethrow InvalidGitHubBaseUrlError from every per-target catch; transport failures keep their existing rows (GHB-03, D-08)
+- [Phase 02]: Bare info never reads PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL; a GHB-04 / NFR-5 case pins its unchanged row and zero git calls with an invalid value set
+- [Phase 02]: D-06 literal gate is a local ESLint rule, local/no-github-literal, on for the extension and turned off (not ignored) for shared/github-base-url.ts; seven per-line disables carry reasons
+- [Phase 02]: canonicalCloneUrl builds the GitHub identity from the exported GITHUB_ORIGIN, the same prefix gitHubWireUrl matches
+- [Phase 03]: [marketplace-features] invalidateManifest takes a ManifestProblem and picks its writer from a total record, so the kind switch stays single (D-04)
+- [Phase 03]: [marketplace-features] The malformed manifest is the valid no-plugin manifest minus its last byte: 56 vs 57 valid vs 61 schema-invalid, so the manifest cache never serves another content's parse
+- [Phase 03]: [marketplace-features] publishMarketplace delegates to publishMarketplaceIn (directory = name), so the kind switch stays single; the second-publish step records nothing on the world (D-01)
+- [Phase 03]: [marketplace-features] remove --local is shown by a second local entry that stays (Option 1), so no remove.steps.ts and no zero-declaration step exist
+- [Phase 03]: [marketplace-features] Review WARNING recorded: the published-marketplace lookup is duplicated in add.steps.ts and publishing.steps.ts; move it to features/lib when publishing.steps.ts next changes
+- [marketplace-features `03.1/`]: The first-run migration leaves out what claude-plugins.local.json declares and declines with local-invalid on an unreadable local file (FIX-02, D-01, D-02)
+- [marketplace-features `03.1/`]: A reload after a local install writes no base file, because the install adopts the marketplace into the local file (CR-02); D-04's plugin-key rule is proven by unit and convergence cases
+- [marketplace-features `03.1/`]: FIX-03: the refusal token is the closed-set reason 'marketplace declared locally' in the shared FailureReason group; the --local remedy rides the cause line (D-07)
+- [marketplace-features `03.1/`]: FIX-03: localOnlyMarketplaceRefusal (plugin/shared.ts) is the single rule; install refuses inside the lock right after the write-target selection, before the D-04-07 promotion and the cascade, standalone only (D-06)
+- [marketplace-features `03.1/`]: Standalone enable and disable refuse a shared write under a local-only marketplace right after the not-installed check; orchestrated calls never refuse (FIX-03, D-06)
+- [marketplace-features `03.1/`]: Update and reinstall keep the flag as the write-back target; without the flag they write nothing for a local key or under a local-only marketplace and report an unreadable local file (D-08, D-MF-03)
+- [marketplace-features `03.1/`]: A named flagless update is refused between the preflight and the swap, and a named flagless reinstall inside the lock before resolution; both read writeBackRefusal over selectLayerWriteBack; nameless forms, autoupdate, and the backfill are never refused (FIX-03, D-08)
+- [marketplace-features `03.1/`]: ReinstallFailedOutcome.cause is set only for MarketplaceDeclaredLocallyError, so no other failed reinstall row gains a cause line (FIX-03, D-07)
+- [marketplace-features `03.1/`]: One catalog state in the install section documents the FIX-03 refusal row for install, enable, disable, named update, and named reinstall (A-12)
+- [marketplace-features `03.2/`]: D-04: the mirror refusal reason is 'marketplace declared in shared config'; MarketplaceDeclaredLocallyError lives in shared/errors.ts so marketplace verbs can raise it
+- [marketplace-features `03.2/`]: An unreadable other layer keeps every plugin installed on a layer remove (A-07 applied to plugin keys)
+- [marketplace-features `03.2/`]: Plugin-clone GC still runs whenever no plugin failed; the marketplace data dir and clone go only when the state record was deleted
+- [marketplace-features `03.2/`]: The full marketplace remove unstages only explicit records; every dependency record under it goes through the retention order (D-04-dep)
+- [marketplace-features `03.2/`]: Remove retention reads dependency candidates from the marketplace record; the scope index answers only who holds what
+- [marketplace-features `03.2/`]: An unreadable declaration index refuses a remove with {unreadable} before any change, in both modes (D-09 Q4)
+- [marketplace-features `03.2/`]: [marketplace-features] A standalone project install declares every marketplace its transaction added (dependencies included) in the root's target config file, under the UAT-05 gate; no dependency plugin key (D-04-02); reload/import write nothing (WR-09)
+- [marketplace-features `03.3/`]: pluginLayerVerdict (plugin/shared.ts) is the one layer verdict for named plugin verbs; a standalone uninstall reads both layers, refuses an invalid other layer with the CFG-03 row, and refuses other-only declarations after the record checks (LAYER-04)
+- [marketplace-features `03.3/`]: Install, enable, and disable pick their layer by the --local flag alone (selectDeclaringConfigWriteTarget reads both layers, either invalid layer stops the command); standalone enable/disable refuse a plugin only the other layer declares, idempotent calls included (LAYER-04)
+- [marketplace-features `03.3/`]: A command that writes a plugin declaration also declares the plugin's marketplace in that layer; dependency marketplaces keep the both-layer gate; CR-06 overwrites enabled:false in every layer with the plain writer (LAYER-06)
+- [marketplace-features `03.3/`]: The install no-op fires only for a standalone call, an explicit record, no version pin, and verdict other-only; it returns the existing installed outcome shape with resourcesChanged false (LAYER-05)
+- [marketplace-features `03.3/`]: A standalone uninstall deletes the plugin key from its target layer only; when both layers declare the plugin it drops only that declaration and reports a warning skipped row with the --local hint (LAYER-05)
+- [marketplace-features `03.3/`]: Uninstall of an undeclared dependency: refused with {dependents remain} while a target-layer plugin needs it, skipped at warning while only other-layer plugins do (LAYER-08, D-07, D-14)
+- [marketplace-features `03.3/`]: A flagless enable or disable that the local layer's opposite enabled overrides is refused with {disabled|enabled in local layer} (LAYER-04, D-13); closed reason set 76
+- [marketplace-features `03.3/`]: Named update and reinstall refuse a plugin only the other layer declares through namedPluginLayerRefusal; update checks before the preflight (NFR-5), reinstall inside the lock before resolve and replace
+- [marketplace-features `03.3/`]: An unreadable layer on a named update or reinstall is InvalidMarketplaceManifestError with the basename-only message, mapped to {invalid manifest}
+- [marketplace-features `03.3/`]: Nameless update and reinstall with --local keep only the targets their scope's local layer declares (keepLocalLayerTargets: own keys, one read per scope)
+- [marketplace-features `03.3/`]: [marketplace-features] Plugin layer docs: the READMEs define the two files as the scope's shared and local layers, and the CHANGELOG states the D-11 load error remedy (marketplace add <source> --local) with no automatic repair
+- [marketplace-features `03.4/`]: IN-02 / D-02: the flag-only layer loader is loadTargetLayers (TargetLayers, arm loaded); seams loadTargetLayers and UninstallTransaction.loadLayerConfig; the other layer's parse is other
+- [marketplace-features `03.4/`]: D-02: the migration helper that builds the base config's plugin entries is basePluginEntries; production comments say base config/local config and base layer/local layer (D-03)
+- [marketplace-features `03.4/`]: D-02: test layer helpers, snapshot keys, and layer values say base and local; test data named shared keeps its name
+- [marketplace-features `03.4/`]: User rule: a layer's file is a config -- LayerConfigUnreadableError, features/lib/layer-config.ts, prose says layer config; plan 10 gates add the layer-file pattern
+- [marketplace-features `03.4/`]: D-03: prose says layer for a level and config for a file; configuration stays only for a scope's effective configuration
+- [marketplace-features `03.4/`]: D-03: the writing step is now 'a config in scope <scope> and layer <layer>, with these plugins:'
+- [Phase 06]: Use bare marketplace update for one-record behavioral checks because only the plural result includes the required tally. — The named form omits tally fields.
+- [Phase 06]: Derive destructive fixture targets from PublishedMarketplace and reject filesystem-root or out-of-root targets. — Missing-source scenarios must not accept arbitrary deletion paths.
+- [Phase 06]: Assert the prior failed refresh inside Given for repair scenarios. — The action under test remains after all setup and runs in the same Pi process.
+- [Phase 07]: D-08 landed: an unscoped autoupdate/noautoupdate miss reports marketplace-not-added with no scope; autoupdate joins OPS_BARE and the catalog byte total is 46_623
+- [Phase 07]: A local autoupdate entry without a value inherits the base value; the base is read once and an invalid base fails a flip only when a valueless local entry needs it (D-02..D-05, fc43090a)
+- [Phase 07]: D-09 allows two layer-config writers (plugins member and whole text); a raw-text read step is an ordinary read step
+- [Phase 07]: Docs say a nameless flip writes a local entry only when the value that applies to it still differs, since an enable also writes a valueless local-only entry
+- [Phase 07]: No step, library, support, production, or cucumber.json change: every step the AU-01..AU-09 pins use already existed, and each pin passed on first run against the final code.
+- [Phase 08]: Usage-error Outlines name columns arguments, message, value, and usage only, so Gherkin never rewrites <name> or <source> inside a usage cell
+- [Phase 08]: Marketplace usage-error rows carry one fault each and no rm or ls alias rows; combined-fault precedence by parser path stays unpinned
+- [Phase 08]: Signature table in edge/router.ts builds both the marketplace help and each verb's usage line; handlers value-import marketplaceUsage
+- [Phase 08]: Marketplace help alias column is computed from the rows; the list line gains 10 spaces to keep (alias: ls) under (alias: rm)
+- [Phase 08]: PositionalSpec.label is required, so every parseCommandArgs call site names its field and an empty value reports <label> must not be empty. (USE-07)
+- [Phase 08]: parsePluginRef in edge/handlers/plugin/shared.ts is the one source of the empty-reference and invalid-reference messages for install, info, and the shared required-reference parser; a bare @ and other partly malformed references keep the invalid-reference message
+- [Phase 08]: An @ followed only by blanks on update, fetch, or reinstall is the marketplace form with an empty name and reports `Marketplace name must not be empty.`, and parsePluginTarget is the one target parser of the three verbs
+- [Phase 09]: The url publication splits PublishedMarketplace into a path and a git variant, and the publishing functions take PublicationSites { marketplacesRoot, gitHost }, so features/lib never imports features/support
+- [Phase 09]: A plan checkpoint commit cannot export a function whose only consumer lands later: fallow dead-code fails the hook (runGit was held back to the final commit)
+- [Phase 09]: The colon-in-value parser case uses an Expires header, because the plan's Content-Type example held no colon in its value
+- [Phase 09]: Url fixture changes go through one private dispatch (changePublication) that writes the work tree, then commits and pushes; removing a url source deletes only its bare repository
+- [Phase 09]: The git host arms one repository by request path (404/500/502/503, drop, or one Basic credential); reset clears the arms and Before() asserts arms: []
+- [Phase 09]: The add-authentication-required catalog child-row shape differs from the measured bare url add 401 row; the scenario pins the code, WINDOWS #100 records it
+- [Phase 09]: D-19 applied: a failed git marketplace add child row carries marketplaceSubject, and rowId in notification-json.ts uses its redacted name alone as the JSON id; marketplaceFailureRows keeps <mp>@<mp> (BACKLOG ROWID-01)
+- [Phase 09]: D-16 uses the existing source missing token for a url add at a missing #ref; only classifyGitSourceAccessFailure (marketplace add) maps NotFoundError, the transport ladder stays unchanged
+- [Phase 09]: The empty-log step compares the whole git host traffic record ({ requests: [], connections: 0 }) in one deepStrictEqual, so a kept-alive request or a non-TLS attempt fails it
+- [Phase 09]: cucumber.json excludes only @github; every @url row runs by default (D-14)
+- [Phase 09]: SC6 evidence uses the local edit in resolveTargetScopeMarketplace: the f78907bf plant now loads but crashes in the Given install, which is not behavioral RED
+- [Phase 10]: The github publication kind shares the url arms; only the source differs (GitRepositoryHost.repositoryShorthand), and the acme owner stays a literal of server.ts
+- [Phase 10]: The git host's unread-body case GETs /acme/tools.git/HEAD; for info/refs the backend forwards a GET body to upload-pack and exits 141, which stays a 500
+- [Phase 10]: The owner/repo shorthand splits at the first # only when no @ comes before it; an empty # ref reads as no ref (D-MF-07)
+- [Phase 10]: A github update 401 under the override gets the git credential approve line as a new Error whose cause is the FetchedUrlCause, so the fetched URL stays the last link (UPD-12, GHB-01)
+- [Phase 10]: cucumber.json excludes no tag; a future source kind without a stand-in excludes its tag until its stand-in lands (D-07)
+- [Phase 10]: A failed add or install that compares its result but no persisted state is a cucumber BLOCKER; a failed update that does not restate the declaration is a WARNING
+- [Phase 10]: The Phase 9 review ledger's IN rows were closed by hand with commit SHAs in the Source cell, matching the WR rows
+- [Phase 01]: Plugin topic module named installation (not a reserved verb); step module moves are rename-only commits (D-08)
+- [Phase 01]: New-session payloads are read through RPC get_entries and kept as the last results; a lasting reconcile failure appears twice and scenarios state both rows
+- [Phase 01]: Result projections shared by command and session steps live in features/lib/result-rows.ts; row steps read reconcile-applied-cascade wherever they read a cascade
+- [Phase 01]: Retry scenarios state a failed first attempt with Given the user has run <command>, which failed (every payload must be an error)
+- [Phase 01]: The marketplace repair step moved to marketplace/publishing.steps.ts because marketplace add and update both use it (D-08)
+- [Phase 01]: the result lists these plugins: reads plugin-info-cascade blocks with the column names of a single plugin-info result
+- [Phase 01]: The installed-skills deletion step removes each recorded skill directory without force, so a skill the install did not stage fails the setup
+- [Phase 01]: The plugin data and skill steps accept only single directory entries for the id parts, the planted file name, and each recorded skill name (T-01-07)
+- [Phase 01]: A session in another project uses a second, short-lived Pi that reads its first session with readSession and never sends new_session; the world releases its directory and process
+- [Phase 01]: Plugin publishing steps live in features/step_definitions/plugin/publishing.steps.ts; publishOutputStyle makes a published plugin partially available on every source kind
+- [Phase 01]: [lifecycle-coverage] Git host steps name a repository through {git repository}; every arm registers a disarming release, and 'the git host serves the <repository> again' lifts it mid-scenario
+- [Phase 01]: [lifecycle-coverage] Another process holds a scope's state lock through a self-spawning features/lib holder with the product's proper-lockfile options; a directory in place of mcp-adapter.json is the rollback obstruction; {project dir} and {agent dir} state sandbox paths
+- [Phase 1]: [lifecycle-coverage 01-08] Git plugin versions are stated as {<repository> revision <n>} run tokens that the world derives from the revisions a scenario published; plugin source kinds go in a 'plugin source kind' Examples column, untagged
+- [Phase 1]: [lifecycle-coverage 01-08] One plugin git-source Outline covers github, url, and git-subdir: each unpinned install made the upload-pack pair twice (clone, then mirror refresh)
+- [Phase 01]: 01-09: The marketplaces config writer expands the run tokens in each source in its step; readLayerMarketplaces keeps the table's text
+- [Phase 01]: 01-09: The Claude Code settings step lives in claude-code-settings.steps.ts (named after the file, not the import verb) and builds its path only from the sandbox tokens
+- [Phase 01]: 01-09: pending never reads the source of a marketplace it would add, so the writer's token expansion is carried to a Phase 11 reconcile seed (WINDOWS #110)
+- [Phase 01]: 01-10: The plugin form of {git repository} resolves through gitRepositoryServing, which fails when no recorded repository or more than one holds the plugin
+- [Phase 01]: 01-10: Git clones are stated by origin URL and revision token, never by their directory key; the clone reader fails on a stray plugin-clones entry or a checkout with no origin
+- [Phase 29]: The apply handler member is SubcommandHandlers.pluginApply, not apply: strong-mock reserves apply/call/bind on every mock
+- [Phase 29]: pending and apply share the withScopeOnlyArgs prelude in edge/handlers/plugin/shared.ts; spelling-only top-level verbs route through TOP_LEVEL_VERB_ROUTES in edge/router.ts
+- [Phase 29]: apply and the load share openScopePass / closeScopePass / notifyScopePasses in orchestrators/reconcile/read-pass.ts; readPassFailureOutcome, migrateScopeIsolated and rebuildScopeRoutingTableIsolated stay module-private
+- [Phase 29]: The load passes no reason to the MCP move, so it skips only the owners the plan installs, uninstalls or disables; MISS-01 dependency installs run nowhere until the reason gate goes
+- [Phase 29]: The pending apply trailer is the fixed literal /claude:plugin apply to make these changes, folded after the reload trailer; isReconcilePlanListEmpty is !planListNeedsApply plus no source mismatch
+- [Phase 29]: A new optional cascade wire field needs its docs/json-output.md row in the same commit as the schema change, because the hook's json-output-docs gate fails otherwise
+- [Phase 29]: An empty apply reports Apply: nothing to change. through the reconcile-pending-empty kind with a required text-only command member; the JSON payload omits it and origin.commandId names the command
+- [Phase 29]: The apply-empty advisory is sent in applyReconcileWithReader, not in the shared notifyScopePasses, so the load stays silent on an empty pass (D-05)
+- [Phase 29]: Every apply report with a realized row ends with the reload trailer: shouldEmitReloadHint reads reconcile-applied-cascade rows through rowsNeedReload, the cascade's RLD-02 OR-reduce (D-08)
+- [Phase 29]: The reason option is gone from ApplyReconcileOptions, McpMigrationInput and ScopePassInput; every apply installs missing declared dependencies and the MCP move skips planned dependency installs (D-02, D-22)
+- [Phase 29]: Pending previews marketplace adds and removes as (will add) / (will remove) headers stamped severity info and needsReload false; each counts as one tally success and toward needsApply, and a remove with no plugin still shows its header (D-20)
+- [Phase 29]: pending previews the LOAD-01 dependency disable and the MISS-01 install apply makes: it computes the satisfaction verdict, mirrors apply's D-09-07 re-plan so a dependent a planned dependency install satisfies shows no disable, and drops a disable of an already-disabled record (D-21)
+- [Phase 29]: The load prints pending's block through the shared composePendingReport / notifyPendingReport on a mismatch, with the apply trailer and no reload hint, and nothing on a match; an invalid config, layer gap or source mismatch is reported only in that block, while per-session warnings and read-pass throws keep their reconcile-applied-cascade payload (D-05, D-06, D-18)
+- [Phase 29]: planConvergence (reconcile/convergence.ts) previews each enabled, listed, path-source record whose catalog candidate on disk is a new revision as a (will update) row in pending and the load's block; it plans against the scope as apply's plan leaves it, fails closed on an unreadable declaration walk, and moves stay beside ReconcilePlan, counted for emptiness and needsApply (APL-02, D-10, D-14)
+- [Phase 29]: With 20 plugin statuses a full switch exceeds fallow's cyclomatic 20, so status switches split at the new isPendingPluginRow partition into two exhaustive halves or become total Record maps (D-15)
+- [Phase 29]: Blocked catalog moves (D-12): planConvergence holds a move a dependent's range does not admit, judged by the network-free constraint-fold.ts on the catalog version alone (D-23), and declines a clean record's partial move; both run to a fixed point that gives a blocked plugin its installed-copy declarations, and pending and the load list update's (skipped) {dependents constrain} and (partially-upgradable) rows at warning, never counted for needsApply
+- [Phase 29]: The catalog decline's hint is the new RowHint catalog-partial-update, set by PluginPartiallyUpgradableMessage.catalogHint, with the frozen trailer 'Run update --partial on this plugin to update it with the supported components.' because apply and pending take no --partial (D-24)
+- [Phase 29]: Git-source and growth catalog moves (D-10, D-11): planConvergence previews a git-source record from the clone cache offline, a cached tree by version and commit (root not compared, GIT-01) and a target with no cached tree only when the catalog pins another commit or declares another version; the BFILL-01 growth test runs on every pass, so a strictly grown supported set is a move (growth-only at the same version, row marked {components now supported}), still subject to the range hold and consent decline
+- [Phase 29]: supportedSetGrew moved to convergence.ts as an export; backfill.ts imports it until the backfill is removed
+- [Phase 29]: apply moves catalog plugins through PluginUpdateOperations.convergePlugin (the update runner, refreshSource off, skipSameRevision on, overwrite off, searchReleaseTags off), never reinstall; a failed move shows the planned move and its closed-set reason
+- [Phase 29]: The cascade failure classifier reads the errno a BridgeStagingError carries on its cause, so an unreadable plugin source is permission denied (also in the autoupdate cascade)
+- [Phase 29]: apply runs growth-only moves through convergePlugin with rematerialize (skipSameRevision off, overwrite off) and reports them with the plugin-backfilled row; the load-time backfill, its stamp gate and EXTENSION_VERSION are deleted, lastReconciledExtensionVersion stays readable and nothing writes it (D-10, D-13, D-25)
+- [Phase 29]: README.md's dependents sentence says apply reinstalls an uninstalled dependency a dependent still declares and disables the dependents only if that install fails; the APL-D1 and APL-D2 rows record the read-only load and the NFR-2 amendment
+- [Phase 10]: Typed lifecycle diagnostics remain structured until outcome rendering.
+- [Phase 10]: Malformed cloned manifests use content-failure framing without transport retry guidance.
+- [Phase 10]: Yarn and pnpm refusal notes require packages listed in package.json.
+- [Phase 10]: A no-op apply is write-free only when the raw config and state bytes both remain identical.
+- [Phase 10]: Unit-only lifecycle rows require a concrete public-harness limitation and an exact owner test.
+- [Phase 10]: Package process-tree coverage stays unit-only because the public 60-second timeout cannot be shortened without a forbidden test-only production seam.
+- [Phase 10]: The Node-only network preload is declined because it cannot govern git or credential-helper subprocesses.
+- [Phase 11]: Install flow now composes a planning leaf and a ledger leaf through typed callbacks, keeping the runtime graph acyclic.
+- [Phase 11]: Shared install-flow test support is fixture-only; assertions stay in each paired owner suite.
+- [Phase 11]: Phase 10 closure extends D-PL3-03, D-PL6-03, and D-PL6-19 instead of duplicating their product decisions.
+- [Phase 11]: Pending keeps its source-mismatch bytes while apply and autoapply use the locked replacement path.
+- [Phase 11]: Only LCCODE-01, LCDOC-01, and UPDDEP-01 close; all carried-forward lifecycle entries stay open.
+- [Phase 11]: Keep transaction composition and architecture-gated call sites in the main install ledger; extracted owners receive narrow typed inputs.
+- [Phase 11]: Preserve the exact five-operation planning port and one-way imports, including type-only edges.
+- [Phase 11]: Give each extracted install-flow owner one compact direct-coverage suite with fixture-level doubles and no cross-test imports.
+
+### mcp-4 decisions
+
+- [mcp-4 Phase 6] info shows the adapter's last-reported server state in
+  Claude Code words (`failed` kept distinct), `status unknown` / `not loaded`
+  when unknown, `overridden by project scope` for the user row when both
+  scopes hold the plugin; severity stays info (D-06-01..10, D-06-06a).
+- [mcp-4 Phase 5] `/reload` moves plugin MCP entries out of `mcp.json`;
+  old entries are cleanup, not input, and the marked entries are the only
+  trigger (D-05-09, D-05-16, COMPAT-01).
+- [mcp-4 Phase 5] Operator 2026-10-09: a left-in-place row names a remedy
+  per cause (reinstall only for a cold git clone); project-file disable
+  stubs go only in the reload move's user pass, written lockless when the
+  project has no extension directory; a collision source outside the scope
+  files is named by its home-relative path (D-05-02, D-05-08, D-05-10).
+- [mcp-4 Phase 5] UAT 2026-10-09: the operator accepted the migration notice
+  wording and the leftover reading as built. 8 info findings stay `open` in
+  `05-REVIEW-DISPOSITION.md`.
+- [mcp-4 Phase 3] Plugin MCP servers use Claude Code's key
+  `plugin_<plugin>_<server>_` with `toolPrefix: "mcp"` and
+  `directTools: "search"`; a closed 2.1.291 field table translates entries
+  (D-03-01, D-03-02, D-03-07).
+- [mcp-4 Phase 3] Keys that collide after normalization or the `-`/`_` fold
+  refuse at install; no tool-name length check exists (D-03-12, D-03-13,
+  D-03-17).
+- [mcp-4 Phase 3] UAT 2026-10-06: the operator accepted review warnings
+  WR-01 (TR-03 accounting with a legacy `mcp.json` entry), WR-02 (OAuth with
+  `headers`), WR-03 (the same-plugin clash refuses inside the ledger) and
+  WR-05 (fallow audit `warn` from the ADET-01 fixture clones) as they stand.
+  All 10 review findings stay `open` in `03-REVIEW-DISPOSITION.md`.
+- [Phase 01]: Pi 1.0 floor: pi-coding-agent peer >=1.0.0 (dev ^1.0.0); pi-subagents >=0.74.0 and pi-mcp-adapter >=5.0.0 are optional peers only, never installed (amended by D-04-12 and D-07-07: the adapter floor is now >=5.2.0)
+- [Phase 01]: dispatchRow reads the render map through a Readonly<Record<string, unknown>> view, so no-unsafe-enum-assignment is fixed in code with no rule override
+- [Phase 01]: One shared Pi ToolInfo seed (test/platform/pi-inventory-seed.ts) replaces the three Pi-typed copies; ToolInventoryItem-typed helpers stay local
+- [Phase 01]: Strict Pi doubles state soft-dependency snapshots through expectSoftDepProbes (test/edge/notification-boundary.ts), the one place that turns a snapshot into Pi reads, so the getCommands() read changes one function
+- [Phase 01]: pi-subagents peer tests share test/integration/pi-subagents-peer.ts; the floor is semver.minVersion of the declared peer range, and an explicit PI_SUBAGENTS_ROOT that names no pi-subagents package fails instead of skipping
+- [Phase 01]: The MCP soft-dependency marker is {requires pi-mcp-adapter}, at the old member's Reason position; MCP marker assertions end at `}` or `,` so neither token passes on a prefix
+- [Phase 01]: pi-mcp-adapter counts as loaded by an extension command named mcp-adapter (optional :<digits> suffix, exact case), or by the sourceInfo.source of an extension command or of a tool containing pi-mcp-adapter; a bare mcp tool and Pi's built-in MCP do not count (ADET-02)
+- [Phase 01]: Both command arms require an extension command (source === extension), the name match and the pi-mcp-adapter sourceInfo.source match; a tool counts by its sourceInfo.source (ADET-02)
+- [Phase 01]: The e2e soft-dep matrix runs one install-and-list case per detection state and compares the whole reasons block of the plugin's installed row, so a missing row or an extra reason fails the case
+- [Phase 01]: Info names each companion a resolved row needs on a requires: line, stamped by the orchestrator from one softDepStatus snapshot and only formatted by the renderer
+- [Phase 01]: Pi 1.0 starts each stdio MCP server in its own process group and stops it on shutdown, so the RPC harness proves its clean-exit group sweep with a same-group sentinel child, not the stub MCP server's PID
+- [Phase 01]: Stop canary exit contract: a proven STOP-07 regression exits 2; the expected headless cap-trip-warning result and an inconclusive drive exit 1 (PIFL-07)
+- [Phase 01]: Every canary passed on Pi 1.0.0 / engine 3.13.1, so the upstream-failure path did not fire; BACKLOG and PIFL-07 text unchanged
+- [Phase 02]: MCP servers stage into <scopeRoot>/mcp-adapter.json, read with strip-json-comments (adapter grammar); unreadable files refuse with a cause-less McpConfigFileError
+- [Phase 02]: readMcpConfigDoc server keys are a non-empty tuple; plan 02-02 PI_MCP_SERVER_KEYS should match
+- [Phase 02]: Ancestor roots follow adapter 5.0.0: only a ~/ prefix expands; a bare ~ entry is skipped
+- [Phase 02]: The MCP collision walk exempts the plugin's own marked entries in every one of the nine sources
+- [Phase 02]: Unstage reads both mcp-adapter.json and the legacy mcp.json before writing either; adapter file written first
+- [Phase 02]: AFILE-06 carry-forward input is { ...ours, ...overlays }: a marker-less stub under the selected key wins over the plugin's previous marked entry
+- [Phase 02]: Entry content (substitution, carry-forward, marker) lives in bridges/mcp/adapter-entry.ts; the carried set is module-private and pinned by a vendored 34-key ServerEntry list tied to the >=5.0.0 floor
+- [Phase 02]: Install outcomes carry mcpConfigNotices in both modes (omitted when empty); only the standalone path sends them
+- [Phase 02]: A failed install restores the exact prior bytes of mcp-adapter.json through the replacement handle; a restore that cannot write is the mcp rollback partial
+- [Phase 02]: InstallMissingDependencyOutcome.mcpConfigNotices is excepted in the unused-type-member gate until reconcile reads it (plan 02-08 drops the row)
+- [Phase 02]: Update takes MCP notices only after commitPreparedMcp returns; a later bridge or finalize failure still carries them on the failed outcome
+- [Phase 02]: Direct update shows MCP notices after the cascade, and after the failure row plus accumulated cascade on a phase-3a abort
+- [Phase 02]: Reinstall's render none arm spreads notes, discoveryWarnings and mcpConfigNotices each only when non-empty
+- [Phase 02]: cascadeUnstagePlugin carries the MCP slot's notices on both arms; a later slot can fail after the MCP slot rewrote the file
+- [Phase 02]: Uninstall, prune and marketplace remove show MCP notices once after their rows, failure rows included; orchestrated uninstall and remove return them on the outcome
+- [Phase 02]: A rolled-back prune sends no MCP notice: its rollback-partial row names the rewritten file and the recovery backup keeps the commented original
+- [Phase 02]: UninstallPluginOutcome.mcpConfigNotices is excepted in the unused-type-member gate until reconcile reads it (plan 02-08 drops both rows)
+- [Phase 02]: Enable and disable carry MCP config notices in result types to the lock-holding helper, which sets a function-local sink before its config write and save, so a later throw still reports the rewrite
+- [Phase 02]: The enable cascade's undo (member or root) reports its unstage notices; the root ledger restores its own bytes when it throws and adds none
+- [Phase 02]: McpConfigNoticesCarrier.mcpConfigNotices is excepted in the unused-type-member gate until reconcile reads it (plan 02-08 drops the row)
+- [Phase 02]: Reconcile notices ride OutcomeBase.mcpConfigNotices; one surfaceMcpConfigNotices call follows surfacePostCommitWarnings, and the empty-reconcile return keeps RECON-05 silence
+- [Phase 02]: Import keeps its notice list module-private and strips it from ClaudeImportExecutionResult; the marketplace update cascade reads notices from updated and failed outcomes
+- [Phase 03]: Plugin MCP entries are keyed plugin_<plugin>_<server>_ by generatedMcpServerKey; state.json keeps declared names and cascade unstage maps keys back
+- [Phase 03]: Stamping warnings and override-kept notices name the generated server key
+- [Phase 03]: Hook matchers accept mcp__<server>__.* as a string server prefix (toolPrefixes on the tool-set arm); every other regex matcher still drops (MATCH-02)
+- [Phase 03]: translateMcpServer in domain/mcp-server-features.ts is the closed Claude Code server table; a server with no type is stdio, and every unnamed key is dropped
+- [Phase 03]: Plugin description resolves once in preflight: plugin.json first, then the marketplace entry; the unavailable arm never carries it
+- [Phase 03]: classifyMcpServer validates every server against compiled Claude Code 2.1.291 schemas; a blocked feature adds the typed mcpServers kind ({unsupported mcp}) with no note, and a schema-invalid config adds a "malformed mcp server" note that makes the plugin unavailable
+- [Phase 03]: Remote-only fields (headersHelper, tools, toolPermissions) are not features on a stdio server, because Claude strip-mode stdio schema drops them; alwaysLoad, bareElicitationCapability and discoveryCache must be booleans
+- [Phase 03]: MCP same-plugin key collisions refuse in keyedServers before readTargetConfig; folded cross-source refusals name the other key via McpServerCollisionError.definedAs
+- [Phase 03]: info shows plugin MCP servers as plugin:<plugin>:<server> on both arms; mcpServerDisplayName builds it and generatedMcpServerKey normalizes the same string
+- [Phase 03]: McpServerSummaryEntry.unsupportedFeature is a plain string: shared/ cannot import domain/
+- [Phase 03]: Agent MCP grants use the longest written-server Claude prefix; an empty or slash-holding tool part is never mapped (ANAME-02)
+- [Phase 03]: A per-tool disallow under a surviving whole-server mcp: grant warns rather than narrowing; async: true is warned, never injected (ANAME-02)
+- [Phase 03]: Plugin-set carried fields (only requestTimeoutMs today) belong to the plugin; carry-forward skips them and the marker lists their names as pluginSetFields
+- [Phase 03]: A field the previous marker lists as plugin-set comes from that marker's kept override, so the user's stub timeout applies again once the plugin drops its timeout
+- [Phase 03]: Write-back restores the kept override's own value for a field the live marker lists as plugin-set
+- [Phase 03]: docs/mcp-compatibility.md is the home of the MCP naming, tool search, length, lifecycle and divergence records; docs cite ANAME-0N, never D-03-NN
+- [Phase 03]: README.es.md carries the same MCP name table, partial-install text and agent MCP rule as README.md (.claude/rules/readme.md)
+- [Phase 04]: Plugin MCP entries translate first, then expand only Claude's five fields; references keep names only and the adapter encoding is a separate serializer
+- [Phase 04]: variables-missing notices derive from the per-server variable reports and carry names only; the row renders after override-kept
+- [Phase 04]: the credential deny-list is a verbatim 2.1.291 snapshot pinned by set digests and differential-fuzzed against the evidence code; mode-gated sets (Gqe, Voo, Gur, tRe) are omitted
+- [Phase 04]: a plain-field deny-listed variable unset at install is written as the split-token literal, never a kept reference, so a value set later cannot reach the server
+- [Phase 04]: A leading ~, ~/, ~\ or ${NAME:-~...} default in a stdio command or args blocks the server as command ~ / args ~ ({unsupported mcp}); remote url and headers never block
+- [Phase 04]: session_start reads ctx.cwd before and outside the session id's try, so adapter variables and the session triple fail independently (AVAR-01, NFR-2)
+- [Phase 04]: The pi-mcp-adapter optional peer is >=5.1.0 <6, pinned by the PIFL-03 gate and the AFILE-06 assertion (D-04-17)
+- [Phase 04]: info lists each written plugin MCP server's unset (no :- default) and withheld (deny-listed) variable names from the environment injected into createGetPluginInfo, as plugin:<plugin>:<server> (unset A; withheld C); left-out servers and the record arm show no lists (AVAR-04, AVAR-05)
+- [Phase 04]: The adapter conformance test finds pi-mcp-adapter only through PI_MCP_ADAPTER_ROOT; CI installs exactly pi-mcp-adapter@5.1.0 with --ignore-scripts into $RUNNER_TEMP, and the install line carries a zizmor adhoc-packages suppression because PIFL-03 keeps the peer out of every lockfile (AVAR-03, AVAR-05)
+- [Phase 04]: Every staging verb (install, update, reinstall, enable, import, reconcile) has an AVAR-04 case asserting its rows then both variable warnings; the import case runs the real install path
+- [Phase 05]: MCP migration step reads the manifest through lookupDeclaredPlugin (D-99-02a drift gate)
+- [Phase 05]: An unreadable mcp-adapter.json makes a movable owner's stage refuse: stopped row, legacy entries kept
+- [Phase 05]: Servers with tool permission rules install and warn; unenforcedToolRules re-checks the remote schema so a malformed server never gets the notice
+- [Phase 05]: Update takes the MCP stage notices right after its commit and appends the legacy removal's, so a removal throw still reports the adapter rewrite (AFILE-04)
+- [Phase 05]: An unparseable mcp.json gives no legacy names at prepare: install, enable, reinstall send no left-unchanged notice for it; update does
+- [Phase 05]: The reload migration passes the recorded-sha presence probe whenever the record has resolvedSha; resolveStrict calls it only for git sources
+- [Phase 05]: An unavailable offline resolve is source-unreadable unless its notes narrow to malformed mcp
+- [Phase 05]: Left-in-place rows sort by scope, plugin key, first old name; a file-unreadable row leads its scope
+- [Phase 05]: The migration unsupported removal cause is "unsupported-feature"; the partial-vocabulary guard forbids the bare literal
+- [Phase 05]: A failed mcp.json removal is an unfinished row only for a moving owner; disabled and malformed owners keep a stopped row
+- [Phase 06]: 06-01: the MCP status lookup keeps unrecognized apart from no-snapshot (both render status unknown) so the shadow token can tell whether a usable snapshot exists
+- [Phase 06]: 06-01: hand-built Pi harnesses that run the real factory carry an events bus, because the factory subscribes to pi-mcp-adapter/status/v1
+- [Phase 06]: Info decides the user-row MCP override from the project scope's installation record; under --scope user it reads it with persistMigration false and treats a failed read as not overriding
+- [Phase 06]: The MCP status conformance test builds the snapshot by hand in pi-mcp-adapter's shape, keyed by the names a real install wrote, because the adapter ships its snapshot builder only as TypeScript source
+- [Phase 07]: [mcp-4 Phase 7] The pi-mcp-adapter optional peer is >=5.2.0 <6 (MCP SDK 2.3.1 fixes GHSA-6qxp-vccf-f47h); cited adapter files are byte-identical to 5.1.0, so citations keep their line references and PI_MCP_ADAPTER_ROOT must now name a 5.2.0 install (D-07-07).
+- [Phase 07]: [mcp-4 Phase 7] scripts/pi.sh passes -e builtin:tool-search after --no-extensions so tool_search stays available; builtin:mcp stays off (D-07-05).
+- [Phase 07]: [mcp-4 Phase 7] Live canary routing: a contradicting observation (missing migration notice, missing fresh-install row, A1 token other than status unknown) exits 2; an unobservable drive exits 1
+- [Phase 07]: [mcp-4 Phase 7] The move from mcp.json to mcp-adapter.json takes exactly 1 reload on Pi 1.0.0 with pi-mcp-adapter 5.2.0, measured live by the mcp-adapter canary
+- [Phase 07]: [mcp-4 Phase 7] CHANGELOG [Unreleased] uses D-07-10 grouped bullets with no PR numbers and no version bump; the 0.20.0 offer is recorded for the PR (D-07-11)
+- [Phase 07]: [mcp-4 Phase 7] env-vars.md gives AI_AGENT its own footnote: Pi sets it at process start, so it has no spawn-order caveat
+- [Phase 07]: [mcp-4 Phase 7] PRD PI-11 (pi-subagents only) stays stale; D-07-14 scopes the PRD update to MCP mentions
+- [Phase 07]: [mcp-4 Phase 7] Both live-canary search routes run through one route driver; the --no-extensions probes are recorded, never asserted
+- [Phase 07]: [07-05] Upgrade notes give the old Pi tool name as <old-name>_<tool> (pi-mcp-adapter default server prefix; 0.19.2 entries carried no toolPrefix), not mcp__<old-name>__<tool>
+- [Phase 08]: Plugin-info clone groups removed by hoisting one shared fixture row, never suppressed (D-08-08)
+- [Phase 08]: info requires line counts only MCP servers the install writes (ADET-01)
+- [Phase 08]: D-08-05: a warm recorded-sha clone with no plugin at the declared path gets the source-outdated migration row, whose remedy is /claude:plugin update
+- [Phase 08]: A failed project stub probe keeps every staged owner's legacy entries with an unfinished row (NFR-2, NFR-3)
+- [Phase 08]: A stored MCP server choice is { plugin, marketplace, fields } under _piClaudeMarketplace.serverChoices; only the recording plugin@marketplace consumes it (D-08-02; marketplace added by review fix WR-02, 28a1bf0c)
+- [Phase 08]: Unstage keeps choices only in mcp-adapter.json; legacy mcp.json composes with withPluginServers
+- [Phase 08]: An override the user emptied leaves the file at unstage; a kept {} stub round-trips (AFILE-06)
+- [Phase 08]: D-08-05: reinstall treats a mirror whose HEAD cannot be read as unusable and materializes the recorded-sha clone; the reload migration's presence probe makes the same choice with file reads only
+- [Phase 08]: holdsBytes takes its read through an optional readMetadata restore op, so the lstat-read race and the rethrow are testable for 100% direct coverage
+- [Phase 08]: The agents and skills rollback marker sits above the throw in the else-if arm (bridges/agents/stage.ts:517): the first span line carries an eslint-disable-next-line directive, and a fallow marker above the directive does not hide the group.
+- [Phase 08]: dispatchRow keeps an unknown-valued view of the render map and casts the looked-up arm once; a typed RenderFn view fails tsc (function parameters are contravariant)
+- [Phase 08]: D-08-03: the adapter-loaded enable and import shapes are pinned by tests; SEV-01 kept, no renderer change
+- [Phase 08]: D-08-07: shared/own-key.ts (ownValue, setOwn) is the own-key helper every zone imports; isReservedRecordKey reserves only __proto__; marketplace add checks reserved and duplicate names in one helper (newMarketplaceName)
+- [Phase 08]: D-08-04 header cleanliness is checked on written values with the adapter's own reference regex; the split token is unclean even if its variable is set
+- [Phase 08]: A non-string written header value withdraws auth (defense in depth; the resolver marks it malformed)
+- [Phase 08]: An unparseable authServerMetadataUrl is malformed before any feature blocks
+- [Phase 08]: D-08-06 enable threading: env rides a module-private SetEnabledRunOptions bound once in createSetPluginEnabled; install-flow threads env positionally and via PromotionArgs
+- [Phase 08]: update-flow bundles hooksRouting, completionCache and env into a module-private UpdateBindings to stay within max-params 7 (D-08-06)
+- [Phase 08]: Own-key target resolution: resolveCrossScopePluginTarget and resolveInstalledMarketplaceTarget share one private explicit-scope helper (resolveExplicitScope) and one two-scope loader (loadBothScopes); the audit stays pass with no marker (D-08-07, D-08-08)
+- [Phase 08]: Stage tests that drive no variable pass env {}; process-environment AVAR-02 cases set and restore the variable through t.after
+- [Phase 08]: README prerequisites name the pi-subagents 0.74.0 floor; per-scope choice storage is recorded as a User choices divergence (D-08-02)
+- [Phase 08]: Own-key install, enable, disable and uninstall: test Proxies that fake a record answer getOwnPropertyDescriptor, and ones that drop a write trap defineProperty, because ownValue and setOwn bypass get and set (D-08-07)
+- [Phase 08]: Reinstall, update and list read state records by own key; the reinstalled record is written with setOwn (D-08-07)
+- [Phase 08]: Reconcile, import, config write-back and marketplace modules read by own key and write config maps with setOwn; mcp-migration imports the shared ownValue (D-08-07)
+- [Phase 08]: End-to-end reserved-name proof runs the registered /claude:plugin handler and the real applyReconcile in a hermetic home; install __proto__@<mp> is refused at the closure root-key token rule as (failed) {invalid manifest}, and the resolver's (unavailable) {unsupported source} row surfaces through list
+- [Phase 08]: The MCP bridge keeps one isPlainObject, exported from bridges/mcp/marker.ts (a module with no sibling imports); the ENOTDIR-as-absent change in stage.ts readOptionalBytes is declined because such a stage throws before it records a prior file
+- [Phase 08]: Every Phase 1-7 review ledger is closed by hand with open: 0; fixed rows cite commits, wontfix rows carry reasons, and ledgers holding wontfix note the code-review parser reads it as open (DEBT-02)
+- [Phase 08]: Broken-windows entry 90 (misleading dependency cause for an invalid root plugin name) is carried by BACKLOG ROOTKEY-01 and waived in the ledger; code unchanged
+
+## Current Verification Checkpoint
+
+Phase 6 implements all four plans. CR-01 is fixed by `e7a8182f`, `6680ff1b`,
+and `045f53cd`. The independent review is clean and all fifteen declared
+security threats are closed. `npm run check` passed at `045f53cd`, Node
+`v26.11.0`, with all 266 direct pairs. The strict corpus retains 3149 entries
+and zero extras. Only planning Markdown changed after these checks.
+
+The code-fixer workflow requires developer confirmation of redaction logic
+before goal verification. Recognized local paths become `[path]`.
+Ambiguous affected causes become `Command failure details omitted.`.
+Text output remains unchanged. The user accepted this behavior with option 1
+on 2026-10-09. The redaction confirmation is resolved.
+
+The final verifier confirmed all 15 positive truths with no implementation
+gaps. The user accepted both remaining judgments with option 1 on 2026-10-09:
+per-command correlation does not introduce tracking or telemetry, and failure
+output does not promise rollback. `06-UAT.md` records both checks as passed.
+`06-VERIFICATION.md` is passed with a current fingerprint. Phase 6 is complete.
+
+**Current work:** Phase 7 is complete. All seven UAT reviews passed explicitly
+on 2026-10-10; canonical verification and the phase-completion predicate pass.
+The six phase requirements are complete. Full `npm run check` passed at
+`bfd0d2db` on Node `v26.11.1`; only planning Markdown changed afterwards.
+The root dependency advisory and optional-peer integration skip remain recorded
+in the phase deferred items. The milestone remains open for audit and archival.
+
+## Accumulated Context
+
+### Roadmap Evolution
+
+- lifecycle-coverage roadmap created 2026-10-22: Phase 1 (Suite Foundation)
+  then Phases 2-15 in parallel, each owning disjoint feature files and step
+  modules
+- Phase 8 added: Address tech debt: ledger dispositions and advisory
+- Phase 9 added: Address tech debt: redact LLM tool error text
+- `03.1/` inserted after `03/`: Local Declaration Leak Fix: a --local marketplace leaks into claude-plugins.json on the first-run migration (FIX-02), found in Phase 3 discussion
+- `03.2/` inserted after `03.1/`: Marketplace Layer Partition (LAYER-01..03, D-MF-03)
+- `03.3/` inserted after `03.2/`: Plugin Layer Partition (LAYER-04..06, D-MF-03)
+
+### Recent Decisions
+
+- D-MF-05: unscoped marketplace removal selects project before user, falls
+  back to a sole user record, and never falls through after selecting a
+  project record whose base layer does not declare the marketplace.
+- D-MF-06: marketplace info evaluates both scopes independently in
+  project-first order, keeps the shipped invalid-manifest failed row, and
+  preserves manifest declaration order for allowed dependency marketplaces.
+
+### Blockers/Concerns
+
+- [lifecycle-coverage] Parallel Phases 2-15 own disjoint `features/` files,
+  but a product fix can touch production code or `CHANGELOG.md` that another
+  phase also changes; the later merge resolves the overlap and re-runs
+  `npm run check`.
+- [Phase 9] The url stand-in is proven only locally (OpenSSL 4, Node 26, git 2.55);
+  CI (OpenSSL 3.0.13, Node 24) first runs it when the branch is pushed.
+- [Phase 10] Resolved: no tag is excluded; every `@github` row runs (48 pass).
+- [Phase 10] BACKLOG SHORTREF-01: the `owner/repo@ref` shorthand splits at the
+  last `@` (D-76-04), Claude Code at the first; a parity decision for later.
+- [Milestone] Phases 1-7 read stale verification (later phases touched files
+  their reports cover); the milestone audit must re-verify them.
+
+## Session Continuity
+
+Last session: 2026-10-28T11:38:54.366Z
+Stopped at: Phase 11 complete — all phases complete
+Resume file: None

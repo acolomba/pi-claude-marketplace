@@ -9,17 +9,28 @@ import {
 import { registerClaudeMarketplaceTools, registerClaudePluginCommand } from "./edge/register.ts";
 import { registerSkillAliases } from "./edge/skill-aliases.ts";
 import { aggregateDiscoveredResources } from "./orchestrators/discover.ts";
-import { DEFAULT_GIT_OPS } from "./orchestrators/marketplace/shared.ts";
-import { createPluginUpdateOperations } from "./orchestrators/plugin/update-flow.ts";
+import { createBackgroundGate } from "./orchestrators/marketplace/background-gate.ts";
+import { createBackgroundPass } from "./orchestrators/marketplace/background-pass.ts";
+import { createBackgroundUpdate } from "./orchestrators/marketplace/background-update.ts";
+import { DEFAULT_GIT_OPS, runWithGitAbortSignal } from "./orchestrators/marketplace/shared.ts";
+import { updateMarketplace } from "./orchestrators/marketplace/update.ts";
+import { createUpdateOperations } from "./orchestrators/plugin/operations.ts";
+import { composePackageInstallAbortScope } from "./orchestrators/plugin/package-install.ts";
 import { recomputePluginPath } from "./orchestrators/plugin-path.ts";
-import { createApplyReconcile } from "./orchestrators/reconcile/apply.ts";
+import {
+  createApplyReconcile,
+  createScopeDependencyInstall,
+} from "./orchestrators/reconcile/apply.ts";
+import { createLoadReconcile } from "./orchestrators/reconcile/load.ts";
 import { locationsFor } from "./persistence/locations.ts";
 import { loadState } from "./persistence/state-io.ts";
+import { createMcpStatusTracker } from "./platform/mcp-status.ts";
 import { createCompletionCache } from "./shared/completion-cache.ts";
 import { hookDebugLog } from "./shared/debug-log.ts";
 import { errorMessage } from "./shared/errors.ts";
-import { makeRawNotifyFn } from "./shared/notification-dispatch.ts";
-import { applySessionEnv } from "./shared/session-env.ts";
+import { notifyPluginPathSkipped, notifyReconcileAborted } from "./shared/notification-dispatch.ts";
+import { openNotificationRun, requireNotificationMode } from "./shared/notification-run.ts";
+import { applyMcpAdapterEnv, applySessionEnv } from "./shared/session-env.ts";
 
 import type {
   ExtensionAPI,
@@ -27,6 +38,23 @@ import type {
   ResourcesDiscoverEvent,
   ResourcesDiscoverResult,
 } from "./platform/pi-api.ts";
+
+/**
+ * AVAR-01 / AVAR-03: sets pi-mcp-adapter's variables from the given working
+ * directory. A throw from `readCwd` is debug-logged and never escapes (NFR-2).
+ */
+function applyMcpAdapterEnvFrom(readCwd: () => string): void {
+  try {
+    if (!applyMcpAdapterEnv(readCwd)) {
+      hookDebugLog(
+        "CLAUDE_PROJECT_DIR removed: the working directory holds a pi-mcp-adapter variable marker or ends in the start of one",
+        "env",
+      );
+    }
+  } catch (err) {
+    hookDebugLog(`MCP adapter env apply skipped: ${errorMessage(err)}`, "env");
+  }
+}
 
 /**
  * Registers the extension's Pi hooks, tools, and slash command surface.
@@ -47,16 +75,38 @@ import type {
 // still reported, and an unrelated default elsewhere is still reported.
 // fallow-ignore-next-line unused-export -- package.json `pi.extensions` loads this default.
 export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Promise<void> {
+  // AVAR-03 / NFR-2: pi-mcp-adapter may load first and connect servers from its
+  // own `session_start`, so the values must exist before this extension's
+  // handlers run.
+  applyMcpAdapterEnvFrom(() => process.cwd());
   const hooksRuntime = createHooksRuntime();
   const hooksRouting = createHooksRouting(hooksRuntime, { readHooksJson });
   const completionCache = createCompletionCache();
-  const pluginUpdateOperations = createPluginUpdateOperations(hooksRouting, completionCache);
+  // D-PL8-04: one gate per extension runtime. Every `/claude:plugin` command
+  // runs through it, so it waits for the background autoupdate step in flight,
+  // for at most the gate's default wait cap (D-PL8-23).
+  const backgroundGate = createBackgroundGate();
+  // ASTAT-01: one status tracker per extension load. Pi drops its subscription
+  // when it invalidates this runtime, and the next load starts empty.
+  const mcpStatus = createMcpStatusTracker(pi.events);
+  const pluginUpdateOperations = createUpdateOperations(hooksRouting, completionCache);
   const hooksHydration = createHooksHydration(hooksRuntime, { loadState, readHooksJson });
-  // RECON-01..05: one reconcile operation per extension load, bound to the
-  // production state reader. The `resources_discover` handler below drives it;
-  // constructing it here keeps the single binding at extension lifetime rather
-  // than rebuilding it on every event.
+  // RECON-01..05: one reconcile apply operation and one load reconcile step
+  // per extension load, both bound to the production state reader.
+  // `/claude:plugin apply` (APL-01) drives the apply operation; the
+  // `resources_discover` handler below drives the load step, which changes no
+  // installation state (APL-03 / D-02) unless the configs turn `autoapply` on,
+  // when it runs the same apply operation before resource discovery (AAP-02).
+  // Constructing them here keeps each binding at extension lifetime rather
+  // than rebuilding it on every event. D-PL2-09: `marketplace add` runs the
+  // apply operation's missing-dependency step over its own scope, injected
+  // because no marketplace orchestrator may import the apply operation.
   const applyReconcile = createApplyReconcile({ loadState });
+  const loadReconcile = createLoadReconcile({ loadState }, applyReconcile);
+  const installMissingDependencies = createScopeDependencyInstall(
+    { loadState },
+    { hooksRouting, completionCache },
+  );
 
   // DISP-01 / DISP-02 / D-59-02 / D-59-03: register the hooks bridge at
   // factory time. The bridge's signature requires a `cwd`, which does not
@@ -72,13 +122,51 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   //      `session_start` BEFORE `resources_discover`, so a project-scope
   //      SessionStart hook would otherwise dispatch against an empty bucket),
   //      then `hydrateProjectScopeForCwd(event.cwd)` BELOW re-runs it so the
-  //      routing-table rebuild inside `applyReconcile` sees the correct
+  //      routing-table rebuild inside `loadReconcile` sees the correct
   //      project cache. Both are idempotent against the same cwd.
   //
   // The `await` is LOAD-BEARING: Pi's loader awaits the factory Promise, so
   // the 11 pi.on calls + user-scope cache hydrate inside `registerHooksBridge`
   // are guaranteed to complete BEFORE the first Pi event fires.
   await hooksHydration.registerHooksBridge(pi, { cwd: homedir() });
+
+  async function prepareResources(
+    event: ResourcesDiscoverEvent,
+    ctx: ExtensionContext,
+  ): Promise<void> {
+    requireNotificationMode(ctx.mode);
+    const run = openNotificationRun(pi, { kind: "load" });
+    try {
+      await hooksHydration.hydrateProjectScopeForCwd(event.cwd);
+    } catch (err) {
+      hookDebugLog(`project-scope hydrate threw unexpectedly: ${errorMessage(err)}`, "hydrate");
+    }
+
+    requireNotificationMode(ctx.mode);
+    try {
+      await loadReconcile({ ctx, run, cwd: event.cwd, hooksRouting, completionCache });
+    } catch (err) {
+      try {
+        notifyReconcileAborted(ctx, run, err);
+      } catch (notifyErr) {
+        hookDebugLog(`reconcile-abort notify failed: ${errorMessage(notifyErr)}`, "env");
+      }
+    }
+
+    requireNotificationMode(ctx.mode);
+    try {
+      const pathResult = await recomputePluginPath(event.cwd);
+      for (const skip of pathResult.skipped) {
+        try {
+          notifyPluginPathSkipped(ctx, run, skip.scope, skip.reason);
+        } catch (notifyErr) {
+          hookDebugLog(`plugin PATH warning notify failed: ${errorMessage(notifyErr)}`, "env");
+        }
+      }
+    } catch (err) {
+      hookDebugLog(`plugin PATH recompute skipped: ${errorMessage(err)}`, "env");
+    }
+  }
 
   // The peer's own `ExtensionAPI.on("resources_discover", ...)` overload checks
   // this callback: its parameter and its return are compared against the
@@ -92,84 +180,11 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
       event: ResourcesDiscoverEvent,
       ctx: ExtensionContext,
     ): Promise<ResourcesDiscoverResult> => {
-      // D-59-02 deferred project-scope hydrate: the factory-time bridge
-      // registration could not know the project cwd, so re-run project hydrate
-      // here BEFORE applyReconcile rebuilds the per-scope routing tables.
-      // Failures are swallowed by the helper itself via the OBS-01 seam.
+      // D-05-01/02: initialization and live mode guards cannot block read-only discovery.
       try {
-        await hooksHydration.hydrateProjectScopeForCwd(event.cwd);
+        await prepareResources(event, ctx);
       } catch (err) {
-        // Defensive: hydrateProjectScopeForCwd already swallows loadState
-        // failures internally via hookDebugLog. A bubbled throw here would
-        // be a programmer error in the bridge; we still must not let it
-        // propagate past resources_discover (NFR-2). Record it on the debug
-        // seam so a programmer-error throw does not vanish without a trace.
-        hookDebugLog(`project-scope hydrate threw unexpectedly: ${errorMessage(err)}`, "hydrate");
-      }
-
-      // RECON-01..05: apply the load-time reconcile BEFORE
-      // discovering resources so newly-materialized artifacts are picked up on
-      // the SAME load. The outer try/catch enforces NFR-2: a catastrophic
-      // throw NEVER blocks Pi load -- it surfaces as a single last-ditch
-      // notify (inside its own try/catch so a UI failure can't propagate
-      // either) and aggregateDiscoveredResources still runs.
-      //
-      // D-09-13: `event.reason` is threaded straight through -- only an
-      // explicit `/reload` runs the dependency-install step; a session
-      // start stays offline even with a missing dependency.
-      try {
-        await applyReconcile({
-          ctx,
-          pi,
-          cwd: event.cwd,
-          hooksRouting,
-          completionCache,
-          reason: event.reason,
-        });
-      } catch (err) {
-        try {
-          // AUTH-01 / IL-2 escape: makeRawNotifyFn is the sanctioned raw-text
-          // notify wrapper -- the last-ditch error path predates any structured
-          // NotificationMessage construction and routes through this seam to
-          // surface a single error string. The inner try/catch ensures a notify
-          // failure NEVER propagates past resources_discover (NFR-2).
-          // Y7 (PR #51): route through shared errorMessage so a non-Error
-          // throw (e.g. a literal string) renders its stringified form
-          // instead of `reconcile aborted: undefined`.
-          makeRawNotifyFn(ctx)(`reconcile aborted: ${errorMessage(err)}`, "error");
-        } catch (notifyErr) {
-          // Last-ditch: never let a notify failure propagate past
-          // resources_discover (NFR-2 boundary preservation); record it on
-          // the debug seam so the reconcile-abort notify does not vanish
-          // without a trace.
-          hookDebugLog(`reconcile-abort notify failed: ${errorMessage(notifyErr)}`, "env");
-        }
-      }
-
-      // PENV-01 / D-90-03 / D-90-04: recompute the plugin-PATH (both scopes)
-      // AFTER applyReconcile has settled install state and BEFORE resource
-      // aggregation. Scope failures are isolated inside recomputePluginPath and
-      // reported back; each skipped scope surfaces as a warning notify (load
-      // carried out, PATH parity short for that scope). The outer wrap is the
-      // NFR-2 backstop -- a throw must never propagate past resources_discover,
-      // and a notify failure must not either.
-      try {
-        const pathResult = await recomputePluginPath(event.cwd);
-        for (const skip of pathResult.skipped) {
-          try {
-            makeRawNotifyFn(ctx)(
-              `plugin PATH not refreshed for ${skip.scope} scope (install state unreadable): ${skip.reason}`,
-              "warning",
-            );
-          } catch (notifyErr) {
-            // A notify failure must never propagate past resources_discover
-            // (NFR-2 boundary preservation); record it on the debug seam so the
-            // skipped-scope warning does not vanish without a trace.
-            hookDebugLog(`plugin PATH warning notify failed: ${errorMessage(notifyErr)}`, "env");
-          }
-        }
-      } catch (err) {
-        hookDebugLog(`plugin PATH recompute skipped: ${errorMessage(err)}`, "env");
+        hookDebugLog(`load preparation skipped: ${errorMessage(err)}`, "resources");
       }
 
       try {
@@ -188,6 +203,9 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     },
   );
 
+  // AVAR-01: refresh pi-mcp-adapter's variables from the session's cwd first,
+  // outside the session id's try, so a session id failure cannot skip them.
+  //
   // SENV-01/02/03: reset the Claude-Code session env on every session_start
   // (startup/reload/new/resume/fork). Overwrite is unconditional -- that IS the
   // SENV-02 freshness contract -- so re-registration is harmless (idempotent).
@@ -198,22 +216,50 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   // `ctx.sessionManager` be undefined); wrap so a throw never propagates past
   // session_start, matching the NFR-2 boundary discipline of the handlers above.
   pi.on("session_start", (_event, ctx) => {
+    applyMcpAdapterEnvFrom(() => ctx.cwd);
     try {
+      requireNotificationMode(ctx.mode);
       applySessionEnv(ctx.sessionManager.getSessionId());
     } catch (err) {
       hookDebugLog(`session env apply skipped: ${errorMessage(err)}`, "env");
     }
   });
 
+  // AUP-01 / D-PL8-01 / D-PL8-13: the first message arms one background
+  // autoupdate pass. It is a separate run, not a load, so `resources_discover`
+  // still changes no installation state (APL-D1). The listeners come after
+  // `registerHooksBridge`, so a prompt that a UserPromptSubmit hook blocks arms
+  // nothing. `Math.random` is passed by reference, not called.
+  const backgroundUpdate = createBackgroundUpdate({
+    gate: backgroundGate,
+    pass: createBackgroundPass({
+      pi,
+      gate: backgroundGate,
+      completionCache,
+      beginPluginUpdateRun: pluginUpdateOperations.beginPluginUpdateRun,
+      updateMarketplace,
+      installMissingDependencies,
+      runWithAbortSignal: composePackageInstallAbortScope(runWithGitAbortSignal),
+    }),
+    env: process.env,
+    random: Math.random,
+  });
+  pi.on("input", backgroundUpdate.onInput);
+  pi.on("session_shutdown", backgroundUpdate.onShutdown);
+
   registerClaudePluginCommand(
     pi,
     {
       completionCache,
+      mcpStatus,
       gitOps: DEFAULT_GIT_OPS,
       beginPluginUpdateRun: pluginUpdateOperations.beginPluginUpdateRun,
+      applyReconcile,
+      installMissingDependencies,
     },
     hooksRouting,
     pluginUpdateOperations.updatePlugins,
+    { runForeground: backgroundGate.runForeground },
   );
   registerClaudeMarketplaceTools(pi);
   registerSkillAliases(pi);

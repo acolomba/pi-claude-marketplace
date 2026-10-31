@@ -9,7 +9,7 @@
 // `edge/register.ts` (which legally imports from `orchestrators/`) can
 // reach all four underlying modules without violating BLOCK C's
 // edge/ -> persistence/ restriction (edge/ -> domain/ has been allowed
-// directly since Phase 21 / D-21-02; the domain/manifest read still routes
+// directly (D-21-02); the domain/manifest read still routes
 // through here because it's paired with the persistence/ read in the same
 // resolver interface).
 //
@@ -40,13 +40,16 @@ import { loadState } from "../persistence/state-io.ts";
 import { ManifestSoftFailError } from "../shared/completion-cache.ts";
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
+import { ownValue, setOwn } from "../shared/own-key.ts";
 
-import { probeManifestEntry, probeUpgradeCandidate } from "./plugin/git-source-probe.ts";
+import { probeManifestEntry } from "./plugin/git-source-probe.ts";
+import { upgradeCandidate } from "./plugin/list-installed-row.ts";
 import { classifyInstalledRecord } from "./plugin/plugin-state-classifier.ts";
 
 import type { MarketplaceManifest } from "../domain/manifest.ts";
 import type { ResolveContext } from "../domain/resolver-types.ts";
 import type { ScopedLocations } from "../persistence/locations.ts";
+import type { UpgradeCandidate } from "./plugin/plugin-state-classifier.ts";
 import type { ExtensionState } from "../persistence/state-io.ts";
 import type { PluginIndexRow } from "../shared/completion-cache.ts";
 import type { Scope } from "../shared/types.ts";
@@ -107,37 +110,39 @@ export interface LocationsResolverLike {
 
 /**
  * LIST-02 / D-67-02: build the cache row for ONE installed plugin via the
- * shared `classifyInstalledRecord`. The upgrade-candidate resolve stays
- * NO-NETWORK (`resolveStrict`, NFR-5) and runs only when the manifest carries
- * a newer version (PL-5 string compare; `upgradable === true` narrows
- * `manifestEntry` to defined). CR-01: a candidate probe failure degrades to
- * plain `upgradable` (the classifier reads `undefined` as "could not assert").
+ * shared `classifyInstalledRecord`. Whether a newer candidate exists is list's
+ * own rule (VER-01 / VER-02, D-PL7-09): `upgradeCandidate` reads the version
+ * offline (NFR-5) from plugin.json, then the entry, then the commit, so
+ * completion offers `update` for exactly the plugins `list` marks upgradable.
+ * A candidate that fails to resolve degrades to plain `upgradable` (CR-01).
  */
 async function classifyInstalledPluginRow(
   pluginName: string,
   installed: ExtensionState["marketplaces"][string]["plugins"][string],
   manifestEntry: MarketplaceManifest["plugins"][number] | undefined,
-  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
-  locations: ScopedLocations,
+  scope: Scope,
+  marketplaceContext: Pick<
+    ResolveContext,
+    "marketplaceRoot" | "marketplaceName" | "marketplaceSource"
+  >,
+  cwd: string,
 ): Promise<PluginIndexRow> {
-  const upgradable =
-    manifestEntry?.version !== undefined && manifestEntry.version !== installed.version;
-
-  // PURL-08 / D-78-04 / CR-01: the shared probe injects the fs-only presence
-  // probe so a git-source upgrade candidate resolves against the WARM clone
-  // cache without cloning, and folds a probe failure to `undefined` (the CR-01
-  // degrade). `upgradable === true` narrows `manifestEntry` to defined.
-  let candidateResolved: Awaited<ReturnType<typeof probeUpgradeCandidate>>;
-  if (upgradable) {
-    candidateResolved = await probeUpgradeCandidate(manifestEntry, marketplaceContext, locations);
-  }
+  const candidate: UpgradeCandidate =
+    manifestEntry === undefined
+      ? { upgradable: false }
+      : await upgradeCandidate(manifestEntry, {
+          pluginName,
+          pluginScope: scope,
+          marketplaceScope: scope,
+          ...marketplaceContext,
+          record: installed,
+          lookup: { kind: "declared", entry: manifestEntry },
+          cwd,
+        });
 
   return {
     name: pluginName,
-    status: classifyInstalledRecord(
-      installed,
-      upgradable ? { upgradable: true, resolved: candidateResolved } : { upgradable: false },
-    ),
+    status: classifyInstalledRecord(installed, candidate),
     version: installed.version,
   };
 }
@@ -151,7 +156,10 @@ async function classifyInstalledPluginRow(
  */
 async function classifyNotInstalledPluginRow(
   entry: MarketplaceManifest["plugins"][number],
-  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
+  marketplaceContext: Pick<
+    ResolveContext,
+    "marketplaceRoot" | "marketplaceName" | "marketplaceSource"
+  >,
   locations: ScopedLocations,
 ): Promise<PluginIndexRow> {
   // RSTA-01 / RSTA-03: the shared presence-derived probe owns the git-source
@@ -196,7 +204,7 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
       // exists to document the contract surface explicitly.
       const projected: Record<string, MarketplaceStateRecordLike> = {};
       for (const [name, record] of Object.entries(state.marketplaces)) {
-        projected[name] = { plugins: record.plugins };
+        setOwn(projected, name, { plugins: record.plugins });
       }
 
       return { marketplaces: projected };
@@ -209,7 +217,7 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
       try {
         const locations = locationsFor(scope, cwd);
         const state = await loadState(locations.extensionRoot);
-        const mp = state.marketplaces[marketplace];
+        const mp = ownValue(state.marketplaces, marketplace);
         if (mp === undefined) {
           // No state record for the requested marketplace in this scope.
           // The cache layer treats ManifestSoftFailError as the TC-8 poison
@@ -225,6 +233,7 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
         const marketplaceContext = {
           marketplaceRoot: mp.marketplaceRoot,
           marketplaceName: marketplace,
+          marketplaceSource: mp.source,
         };
 
         const installedNames = new Set(Object.keys(mp.plugins));
@@ -242,8 +251,9 @@ export function makeLocationsResolver(cwd: string): LocationsResolverLike {
               pluginName,
               installed,
               parsed.plugins.find((p) => p.name === pluginName),
+              scope,
               marketplaceContext,
-              locations,
+              cwd,
             ),
           );
         }

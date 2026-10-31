@@ -3,7 +3,6 @@
 // Owns update result projection, marketplace grouping, exact tally selection,
 // severity, and reload-hint routing. Invocation cardinality remains structural.
 
-import { softDepStatus } from "../../platform/pi-api.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import {
   notifyUpdateNoOpWithContext,
@@ -13,12 +12,13 @@ import {
 } from "../../shared/notify-context.ts";
 import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
 
-import { constraintCauseFor, updatedRowFromOutcome } from "./update-row.ts";
+import { constraintCauseFor, revisionVersionSlot, updatedRowFromOutcome } from "./update-row.ts";
 import { UPDATE_CONTEXT, type UpdateMsg } from "./update.messaging.ts";
 
 import type { DirectRenderableOutcome } from "./update-swap.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
-import type { NotificationContext, SoftDepStatus, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateSkippedOutcome } from "../types.ts";
@@ -45,10 +45,6 @@ function cascadeSkipSeverity(
   reasons: readonly ContentReason[],
   cardinality: "single" | "plural",
 ): "info" | "warning" | "error" {
-  if (reasons.includes("not installed") || reasons.includes("not found")) {
-    return "error";
-  }
-
   if (reasons.includes("no longer installable")) {
     return cardinality === "single" ? "warning" : "info";
   }
@@ -142,7 +138,10 @@ function outcomeToCascadePluginMessage(
         status: "failed",
         name: outcome.name,
         scope: target.scope,
+        // UPR-03: a failure before any candidate names the installed version.
+        ...revisionVersionSlot(outcome),
         reasons: outcome.reasons,
+        ...(outcome.cause !== undefined && { cause: outcome.cause }),
         severity: "error",
         needsReload: false,
       };
@@ -167,16 +166,16 @@ function groupCascadeOutcomes(
     }
 
     const key = `${target.scope}:${target.marketplace}`;
-    const row = outcomeToCascadePluginMessage(target, outcome, probe, cardinality);
+    // UPD-DEP-D1: the dependencies the update changed render beside its row.
+    const rows = [
+      outcomeToCascadePluginMessage(target, outcome, probe, cardinality),
+      ...(outcome.dependencyRows ?? []),
+    ];
     const existing = byMarketplace.get(key);
     if (existing === undefined) {
-      byMarketplace.set(key, {
-        name: target.marketplace,
-        scope: target.scope,
-        plugins: [row],
-      });
+      byMarketplace.set(key, { name: target.marketplace, scope: target.scope, plugins: rows });
     } else {
-      existing.plugins.push(row);
+      existing.plugins.push(...rows);
     }
   }
 
@@ -195,15 +194,19 @@ function groupCascadeOutcomes(
     }));
 }
 
-/** Composes and emits one exact update cascade from ordered plugin outcomes. */
+/**
+ * Composes and emits one exact update cascade from ordered plugin outcomes.
+ * D-05: the row severity stamps and the emitted markers read the run's one
+ * soft-dependency snapshot.
+ */
 export function composeUpdateCascade(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  run: NotificationRun,
   outcomes: readonly UpdateCascadeOutcome[],
   cardinality: "single" | "plural",
   abortedByFailure = false,
 ): void {
-  const marketplaces = groupCascadeOutcomes(outcomes, softDepStatus(pi), cardinality);
+  const marketplaces = groupCascadeOutcomes(outcomes, run.softDeps, cardinality);
   const updatedCount = outcomes.filter(({ outcome }) => outcome.partition === "updated").length;
   const hasErrorOrWarningRow = marketplaces.some((marketplace) =>
     marketplace.plugins.some(
@@ -217,7 +220,7 @@ export function composeUpdateCascade(
     !hasErrorOrWarningRow &&
     !abortedByFailure
   ) {
-    notifyUpdateNoOpWithContext(ctx, pi, UPDATE_CONTEXT, marketplaces, cardinality);
+    notifyUpdateNoOpWithContext(ctx, run, UPDATE_CONTEXT, marketplaces, cardinality);
     return;
   }
 
@@ -225,7 +228,7 @@ export function composeUpdateCascade(
     return;
   }
 
-  notifyUpdateWithContext(ctx, pi, UPDATE_CONTEXT, marketplaces, cardinality, {
+  notifyUpdateWithContext(ctx, run, UPDATE_CONTEXT, marketplaces, cardinality, {
     verb: "updated",
     count: updatedCount,
   });

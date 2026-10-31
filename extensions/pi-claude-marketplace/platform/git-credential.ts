@@ -6,11 +6,11 @@
  * node_modules/@earendil-works/pi-coding-agent/dist/core/exec.js:15 to use
  * `stdio: ["ignore", ...]`. git credential REQUIRES stdin.
  *
- * D-21: this is one of three files in
+ * D-21: this is one of four files in
  * extensions/pi-claude-marketplace/ permitted to import node:child_process
- * (whitelist asserted in tests/architecture/no-shell-out.test.ts; the other
- * two are bridges/hooks/dispatch-exec.ts and
- * bridges/hooks/async-rewake/registry.ts).
+ * (whitelist asserted in test/architecture/no-shell-out.test.ts; the other
+ * three are bridges/hooks/dispatch-exec.ts,
+ * bridges/hooks/async-rewake/registry.ts, and platform/package-manager.ts).
  *
  * Failure-mode contract: when git is absent from PATH, the
  * subprocess spawn emits ENOENT. `credentialFill` catches and returns null;

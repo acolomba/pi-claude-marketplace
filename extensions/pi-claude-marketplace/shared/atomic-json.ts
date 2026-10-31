@@ -20,12 +20,15 @@ import writeFileAtomic from "write-file-atomic";
  * `chown` left at the library default (inherits from existing file). This is
  * the right per-user behavior; pass `chown: false` only if a future audit
  * surfaces a privilege concern.
+ *
+ * Returns the exact bytes written, so a caller can later tell its own write
+ * from a later edit (NFR-3).
  */
-export async function atomicWriteJson(filePath: string, value: unknown): Promise<void> {
+export async function atomicWriteJson(filePath: string, value: unknown): Promise<Buffer> {
   await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFileAtomic(filePath, JSON.stringify(value, null, 2) + "\n", {
-    encoding: "utf8",
-    // fsync defaults to true (NFR-1 durability) -- not specified to keep the
-    // intent self-evident at the call site.
-  });
+  const bytes = Buffer.from(JSON.stringify(value, null, 2) + "\n", "utf8");
+  // fsync defaults to true (NFR-1 durability) -- not specified to keep the
+  // intent self-evident at the call site.
+  await writeFileAtomic(filePath, bytes);
+  return bytes;
 }

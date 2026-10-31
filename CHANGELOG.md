@@ -6,6 +6,160 @@
 
   - The tests that deny access with `chmod` now probe whether the mode denies the process, instead of refusing uid 0.
 
+## [0.21.0] - 2026-10-31
+
+- Autoupdate marketplaces now update in the background, plugins get their npm or bun packages, and more commands match Claude Code. (#290)
+
+  - After your first message in the terminal UI, Pi updates the plugins of each autoupdate marketplace in the background. One notice names them and asks for `/reload`. `DISABLE_AUTOUPDATER` and Claude Code's other opt-out variables turn this off.
+  - Claude Code's official marketplaces now have autoupdate on by default. A config file that Pi cannot read turns autoupdate off for its whole scope.
+  - `bootstrap` now only adds the official marketplace. It keeps the autoupdate setting you chose for it.
+  - A plugin with `package.json` and a `package-lock.json`, `npm-shrinkwrap.json`, or `bun.lock` gets its npm or bun packages on install and update, as in Claude Code. A failed or refused package install leaves the plugin installed, with a note.
+  - `uninstall` and `prune` remove the packages that Pi installed for a plugin.
+  - `marketplace add` accepts an https URL to a hosted `marketplace.json`, and `marketplace update` downloads it again. A plugin that a hosted marketplace lists by a relative path is unavailable, as in Claude Code.
+  - `marketplace add` and `update` refuse every name that Claude Code reserves. Each load reports a marketplace recorded under such a name until you remove it.
+  - `/claude:plugin market` works as an alias of `marketplace`. The `owner/repo@ref` shorthand splits at the first `@` or `#`. Adding a marketplace again restores a missing checkout.
+  - `import` now adds every marketplace your Claude settings list. A marketplace whose source you added under another name is reused, and its plugins fail as not added. `import` and `apply` replace a changed marketplace source in place.
+  - `import` and `apply` now name each step of a failed install whose rollback failed, as `install` does. All three name the skill that a failed rollback leaves behind.
+  - Staging warnings now show for `enable`, failed installs, updates, reinstalls, `marketplace update`, autoupdate, and `apply`, under a header that names the plugin's scope. `update` also shows its dependencies' MCP config notices.
+  - `pending` and `apply` now list and make catalog moves, missing dependency installs, and enables in the same order. One `apply` installs a missing dependency that needs a version the same `apply` moves to.
+  - `marketplace add`, `bootstrap`, and autoupdate now install the missing dependencies of installed plugins, and report any they cannot install.
+  - `enable` and `update` now read an installed git plugin's dependencies from its installed copy, as Claude Code does. A plugin whose manifest link leads outside the plugin fails to install.
+  - A failed install now lists each new dependency it did not install as `{dependency failed}`. Its errors show file names, not absolute paths.
+  - Dependency refusals now name every plugin that asked for a range and cut long versions and ranges as Claude Code does. They suggest `/claude:plugin update <dependency>` when that can help.
+  - Installing a plugin whose name breaks the plugin id rule now gets Claude Code's invalid-id refusal.
+  - An install fetches each new git dependency once and installs the commit it checked. An install or update fails and changes nothing when your own file in `agents/` has the name of a new agent.
+  - `update`, `fetch`, `info --fetch`, and dependency range checks report a git host 404 or 5xx as `install` does. `fetch` and completion show `list`'s version.
+  - `install`, `enable`, `disable`, `update`, `reinstall`, `marketplace add`, and `marketplace remove` now report a held state lock as `{lock held}` with its cause.
+  - Extra arguments now read `Too many arguments.` Unknown flags read `Unknown flag: "<flag>".` This applies to `list`, `ls`, `pending`, `import`, `bootstrap`, `browse`, and `help`. A failed `bootstrap` now shows the `marketplace add` failure row.
+  - `list <marketplace>` now fails as not added when the marketplace is unknown. A scope filter shows each installation under that scope's own marketplace block.
+  - Local file failures during `update` now read `{unreadable}`. `info --fetch` fetches once and shows a warm commit version when none is declared. `import` now shows installed versions and continues after `{not in manifest}`.
+
+- A new session now lists pending plugin changes, the new `/claude:plugin apply` makes them, and several plugin commands behave more like Claude Code. (#274)
+
+  - A new session or `/reload` lists the changes your configs and marketplaces need. `apply` makes them and moves plugins to the version their marketplace offers. Run `/reload` after it.
+  - When a marketplace ships a plugin with the newer dependency it needs, one `apply` moves both. No `apply` leaves a plugin enabled on a missing, disabled, or out-of-range dependency, and `pending` lists those disables first.
+  - `install`, `import`, `update`, and autoupdate now install, enable, or move the dependencies a plugin needs, the dependencies first. Each dependency gets the highest version every plugin that needs it allows. When none fits, the command fails and changes nothing.
+  - `pending` shows a move that a dependent's version range blocks as `(skipped) {dependents constrain}`, and a move that needs `--partial` as `(partially-upgradable)`.
+  - A marketplace that you add to a config by hand shows as `(will add)`. A config that Pi cannot read shows its error under its row.
+  - The new `autoapply` setting makes each new session run `apply`. Any config can turn it on, so read a cloned project's `.pi/claude-plugins.json` before you start `pi` in it.
+  - `/claude:plugin autoapply` shows the value in effect and each config's own value. `on` or `off` sets it in the user base config, unless you add `--scope` or `--local`.
+  - A plugin that its marketplace no longer lists no longer blocks commands on other plugins in its scope. Pi reads its dependencies from its installed copy.
+  - `enable` fails with `{dependency unsatisfied}` and changes nothing when a dependency of the plugin is not installed.
+  - The first clone of an unpinned git source no longer fetches again. An install that the git host refuses fails as `{source missing}`, `{network error}`, or `{network unreachable}`.
+  - When `apply` installs a plugin, its `(installed)` row shows the version, as `install` does.
+  - `apply` no longer disables a plugin whose new version needs a plugin that the same `apply` installs from a config. `pending` lists the move instead.
+  - An install refuses a disabled dependency from another marketplace with `{cross-marketplace}` unless the plugin's marketplace allows that marketplace.
+  - A state lock that another process takes or removes during a long command no longer crashes Pi. The command fails and saves no installation record after the loss.
+  - A git plugin with no declared version now records the commit's first 12 characters, without `sha-`. A `git-subdir` source adds a hash of its path, and a pinned `anthropic-plugin-directory` plugin adds its pin.
+  - A dependency that a version range installs at a release tag now records the tag's commit in its version. An update that finds no tag removes the commit.
+  - A version range now checks the listed copy of an `anthropic-plugin-directory` plugin instead of picking a release tag. A refusal names every plugin that asked for that range, also in `apply`.
+  - An update reports a pinned `anthropic-plugin-directory` plugin up to date when its listed commit has not changed, before any range check.
+  - `list` and completion show a plugin recorded at a release tag's commit as upgradable when the marketplace offers the version without that commit.
+
+- Internal: a new worktree session now runs `scripts/init.sh` once when it starts, also in the Claude desktop app. (#273)
+
+- Internal: the test suite moves from `tests/` to `test/`, and the duplication check now fails on every repeated block of code. (#272)
+
+- You can now declare plugins and marketplaces in both the base config and the local config, and marketplace commands report failures more clearly. (#271)
+
+  - You can now declare a plugin in both the base config (`claude-plugins.json`) and the local config (`claude-plugins.local.json`), and the scope installs it once. With a plugin name, `uninstall`, `enable`, `disable`, `update`, and `reinstall` change only the layer you target.
+  - Named commands fail with `{plugin in local layer only}` or `{plugin in base layer only}` and change nothing when only the other layer declares it.
+  - An `install` into one layer only adds the declaration when the other layer declares the plugin and it is already installed. The row reads `{already installed in base layer}` or `{already installed in local layer}`.
+  - An `uninstall` from one layer keeps a plugin installed while the other layer declares it, and drops only that layer's declaration. The warning `{still installed in base layer}` or `{still installed in local layer}` says how to uninstall it.
+  - A named `uninstall` of a dependency that no layer declares fails with `{dependents remain}` while a plugin of the target layer needs it. While only plugins of the other layer need it, the command skips it with a warning.
+  - A flagless `enable` or `disable` fails with `{disabled in local layer}` or `{enabled in local layer}` when the local config sets the opposite `enabled` value. Run it again with `--local`.
+  - `update` and `reinstall` no longer write plugin declarations. Without a plugin name, `--local` limits them to the plugins that the local config declares and the dependencies those plugins need.
+  - Without a plugin name, `update --local` and `reinstall --local` fail with `{unreadable}` and change nothing when they cannot read a local plugin's dependencies.
+  - A plugin entry in the local config now takes the fields it leaves out from the base config. If your local config declares a plugin that your base config disables, run `/claude:plugin list` to see whether it is enabled.
+  - `install --local` also declares the plugin's marketplace in the local config.
+  - A reload stops with `{invalid manifest}` when one layer declares a plugin and only the other declares its marketplace. Older `--local` runs of `install`, `enable`, `disable`, `update`, and `reinstall` left configs this way. The error says how to fix it.
+  - You can now declare a marketplace in both the base config (`claude-plugins.json`) and the local config (`claude-plugins.local.json`). With a name, `marketplace remove`, `autoupdate`, and `noautoupdate` change only the layer you target and fail when that layer does not declare it.
+  - Removing a marketplace from one layer uninstalls only the plugins that layer declares and the dependencies only those plugins needed. The marketplace stays while the other layer declares it.
+  - A remove from one layer fails and changes nothing when the config of the other layer is not valid. It also fails when a plugin that stays needs a plugin the remove takes (`{dependents remain}`).
+  - Removing a marketplace from the scope clears its plugin keys from both configs. It keeps a dependency another plugin still needs, so the marketplace stays listed.
+  - `marketplace remove` fails with `{unreadable}` and changes nothing when it cannot read a plugin's dependencies.
+  - Without a name, `autoupdate` and `noautoupdate` set the value in the base config. They write a local entry only when its setting still differs. With `--local`, they change only the local config.
+  - A local marketplace entry now takes the fields it leaves out from the base config, so one without `autoupdate` follows the base config's setting. If your local config declares a marketplace, run `marketplace list` to see which `autoupdate` setting applies.
+  - With `--local`, `autoupdate` and `noautoupdate` write a value only when it changes the setting that applies. They fail with `{invalid manifest}` when they need the base config's setting and cannot read that config.
+  - A project-scope install from a user-scope marketplace now adds that marketplace, and those of its dependencies, to the project as `marketplace add --scope project` does. The project's base config declares them, and each git marketplace gets its own project clone.
+  - The `owner/repo#ref` shorthand now adds the marketplace at that ref, as `owner/repo@ref` does.
+  - An empty `#`, as in `owner/repo#`, adds `owner/repo` with no ref.
+  - Adding a git marketplace at a missing `#ref` now fails as `{source missing}`. It used to fail as `Command failed unexpectedly.`, or as `{unparseable}` on a reload or an import.
+  - In JSON output, the row of a failed git `marketplace add` names the source with any credentials removed. Its `id` is that name alone, not that name twice around an `@`.
+  - When a host with no Device Flow rejects your stored credential, `marketplace update` and plugin `fetch` say `<host> rejected the stored credential`. So does a GitHub-source add under `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`, and `marketplace update` no longer asks you to store one.
+  - An empty argument now fails with a message that names it, such as `Source must not be empty.` or `Marketplace name must not be empty.`.
+  - Plugin commands report an empty `<plugin>@<marketplace>` as `Plugin name must not be empty.`. `update`, `fetch`, and `reinstall` report an `@` with no marketplace name as `Marketplace name must not be empty.`.
+  - `/claude:plugin list ""` now fails with `Marketplace name must not be empty.` instead of listing no plugins.
+  - `/claude:plugin marketplace help` now shows `--local` on `add`, `remove`, `autoupdate`, and `noautoupdate`, as their own usage lines do.
+  - When a command cannot read a plugin's dependencies, its `{unreadable}` cause says whether the manifest is missing, unreadable, or invalid, without its parser error.
+  - Without `--scope`, `marketplace autoupdate <name>` and `marketplace noautoupdate <name>` now report a marketplace that no scope holds without a scope name, like other marketplace commands.
+  - A marketplace you add or a plugin you install with `--local` now stays out of the base config (`claude-plugins.json`). If a reload already copied one there, remove that entry and run `/reload`.
+  - Installing, enabling, or disabling a plugin into the base config now fails and suggests `--local` when only the local config declares its marketplace.
+  - The completion hint for `--local` and the scope choices of `browse` now call `claude-plugins.local.json` the local config and `claude-plugins.json` the base config.
+  - GitHub sources clone and fetch from another https git host, such as a mirror, when you set `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`.
+  - With that setting, a `marketplace update` that the host answers with 401 now shows the `git credential approve` command for that host.
+
+- Internal: the repository no longer tracks the generated `.planning/state.json` file. (#264)
+
+- Internal: the `new-gsd-workspace` skill is now `new-workspace`, and the project skills match the latest TypeScript blueprint. (#263)
+
+- Internal: the project skills match the latest TypeScript blueprint again, and ESLint now checks that variables are declared before use. (#262)
+
+- Internal: a state I/O test no longer fails now and then on macOS. (#254)
+
+- Internal: the planning records now archive quick tasks by milestone. (#253)
+
+- Scripts can now read `/claude:plugin` output. In Pi's `json` and `rpc` modes, every message arrives as a `claude-plugin` session entry that matches `schema/claude-plugin.schema.json`. See [JSON output](docs/json-output.md). (#251)
+
+  - The `tui` and `print` modes keep their text output byte for byte.
+  - Each entry names its origin, its command and invocation ID, its severity, and whether `/reload` is needed. A command that throws still ends with an `internal-error` entry.
+  - `browse` outside `tui`, and a new device-flow login in `print` mode, now refuse with a message that names the mode and the alternative.
+  - The two LLM tools return the same structured rows as their `details`.
+  - Credentials no longer appear in any output, including JSON entries and the text the LLM tools return to the model.
+  - Internal: integration tests now install the optional peers at their declared floors, so they run the same locally and in CI, with no skips.
+
+- Internal: the project tooling and agent skills now follow the latest TypeScript blueprint. (#261)
+
+## [0.20.1] - 2026-10-11
+
+- `/claude:plugin update` now authenticates when it refreshes a marketplace from a private GitHub repository, as `/claude:plugin marketplace update` does. Before, the refresh failed with `{authentication required}` ([#249](https://github.com/acolomba/pi-claude-marketplace/issues/249)).
+- `/claude:plugin update` now fetches a marketplace that you added from a git URL before it reads the manifest, as it already did for a GitHub marketplace. It also authenticates to a private host. Before, it read the clone from the last `marketplace add` or `marketplace update` and did not see new plugin versions.
+- `/claude:plugin update` now reports the plugins that it updated before a later plugin or marketplace failed and stopped the run. Before, those updates took effect but the run did not report them.
+
+## [0.20.0] - 2026-10-10
+
+- Pi Coding Agent 1.0.0 or newer is now required.
+
+  - Plugin agents now need pi-subagents 0.74.0 or newer.
+
+- Plugin MCP servers now need pi-mcp-adapter 5.2.0 or newer, which fixes the security advisory GHSA-6qxp-vccf-f47h.
+
+  - pi-mcp-adapter 5.2.0 no longer follows a server URL that redirects to another host (a redirect from `http` to `https` on the same host still works).
+  - Only pi-mcp-adapter now clears the `{requires pi-mcp-adapter}` marker, which replaces `{requires pi-mcp}`, and Pi's built-in MCP client does not.
+  - `/claude:plugin info` lists the companion extensions that a plugin needs on a `requires:` line and tags a missing one `(missing)`.
+
+- Plugin MCP servers now go into pi-mcp-adapter's `mcp-adapter.json`, and your own servers, settings and overrides in that file stay as they are.
+
+  - Each plugin MCP tool keeps its Claude Code name, `mcp__plugin_<plugin>_<server>__<tool>`, in Pi, in hook matchers and in agent tool lists.
+  - Plugin MCP tools load on demand through tool search, and the tools of an `alwaysLoad` server stay in every request.
+  - `${VAR:-default}` resolves at install, plain `${VAR}` stays for pi-mcp-adapter, and install warns about unset variables and about credentials that Claude Code's deny-list withholds.
+  - A server that uses an MCP feature Pi cannot run makes its plugin partially available with `{unsupported mcp}`. Pass `--partial` to install the rest.
+  - A server with per-tool permission rules installs with the warning `MCP server tool rules not enforced.`
+  - `/reload` moves the servers that earlier releases wrote to `mcp.json` and shows one notice that lists each `old -> new` name.
+  - Your own choices for a plugin MCP server in `mcp-adapter.json`, such as `disabled` or `approveTools`, survive an update, a reinstall, a plugin disable then enable, and an uninstall then reinstall. `openUi` and `trace` are now kept too.
+  - A remote server whose headers hold no `Authorization` key keeps OAuth, as in Claude Code, when every header value is set.
+  - When a plugin moved in its source, the `/reload` notice now tells you to run `/claude:plugin update`. `/claude:plugin reinstall` now works when the cached git mirror cannot be read.
+
+- `/claude:plugin info` now shows the state that pi-mcp-adapter reports for each plugin MCP server, such as `connected` or `status unknown`.
+
+- Plugins and marketplaces named like built-in JavaScript properties, such as `constructor`, now work in every command. `__proto__` is refused as a name.
+
+- Action needed after upgrading: sign in to OAuth servers again, approve project servers again, and run `/reload` once more to see the new names. Edit pi-subagents `mcp:` overrides and agent files that name old servers by hand. See [Upgrading](docs/mcp-compatibility.md#upgrading).
+
+- Internal: CI checks the MCP entries against pi-mcp-adapter 5.2.0, and an operator-run canary proves that a real adapter loads them.
+
+  - `scripts/pi.sh` keeps its Pi home out of `~/.pi/agent` and keeps Pi's `tool_search`.
+
 - More plugins with components that Pi cannot install are now partially available. Pass `--partial` to install the components that Pi supports. (#246)
 
   - A hooks module (a non-empty `modules` array in a hooks file) makes its plugin partially available. A `hooks.json` with only a module no longer makes its plugin unavailable.

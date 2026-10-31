@@ -1,6 +1,7 @@
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
+import { ownValue } from "../../shared/own-key.ts";
 
 import { MarketplaceNotAddedSignal } from "./shared.ts";
 
@@ -93,7 +94,7 @@ async function selectMarketplaceTargets(
 ): Promise<readonly SelectedReinstallTarget[]> {
   const resolved = await resolveMarketplaceScope(load, explicitScope, target);
   const state = await load(resolved.scope);
-  const record = state.marketplaces[target.marketplace];
+  const record = ownValue(state.marketplaces, target.marketplace);
   if (record === undefined) {
     throw new MarketplaceNotAddedSignal(target.marketplace, explicitScope);
   }
@@ -126,13 +127,13 @@ async function resolvePluginMarketplaceScope(
   }
 
   const [projectState, userState] = await Promise.all([load("project"), load("user")]);
-  const projectRecord = projectState.marketplaces[target.marketplace];
-  const userRecord = userState.marketplaces[target.marketplace];
-  if (projectRecord?.plugins[target.plugin] !== undefined) {
+  const projectRecord = ownValue(projectState.marketplaces, target.marketplace);
+  const userRecord = ownValue(userState.marketplaces, target.marketplace);
+  if (ownValue(projectRecord?.plugins, target.plugin) !== undefined) {
     return { scope: "project" };
   }
 
-  if (userRecord?.plugins[target.plugin] !== undefined) {
+  if (ownValue(userRecord?.plugins, target.plugin) !== undefined) {
     return { scope: "user" };
   }
 
@@ -153,14 +154,14 @@ async function resolveExplicitPluginScope(
   target: Extract<ReinstallPluginsTarget, { kind: "plugin" }>,
 ): Promise<ResolvedTargetScope> {
   const requestedState = await load(explicitScope);
-  const requestedRecord = requestedState.marketplaces[target.marketplace];
+  const requestedRecord = ownValue(requestedState.marketplaces, target.marketplace);
   if (requestedRecord !== undefined) {
     return { scope: explicitScope };
   }
 
   const otherScope = explicitScope === "project" ? "user" : "project";
   const otherState = await load(otherScope);
-  const otherRecord = otherState.marketplaces[target.marketplace];
+  const otherRecord = ownValue(otherState.marketplaces, target.marketplace);
   throw new MarketplaceNotAddedSignal(
     target.marketplace,
     explicitScope,
@@ -175,7 +176,7 @@ async function resolveMarketplaceTargetScope(
 ): Promise<ResolvedTargetScope> {
   if (explicitScope !== undefined) {
     const requestedState = await load(explicitScope);
-    const requestedRecord = requestedState.marketplaces[marketplace];
+    const requestedRecord = ownValue(requestedState.marketplaces, marketplace);
     if (requestedRecord !== undefined) {
       return { scope: explicitScope };
     }
@@ -186,12 +187,12 @@ async function resolveMarketplaceTargetScope(
   }
 
   const [userState, projectState] = await Promise.all([load("user"), load("project")]);
-  const projectRecord = projectState.marketplaces[marketplace];
+  const projectRecord = ownValue(projectState.marketplaces, marketplace);
   if (projectRecord !== undefined) {
     return { scope: "project" };
   }
 
-  const userRecord = userState.marketplaces[marketplace];
+  const userRecord = ownValue(userState.marketplaces, marketplace);
   if (userRecord !== undefined) {
     return { scope: "user" };
   }

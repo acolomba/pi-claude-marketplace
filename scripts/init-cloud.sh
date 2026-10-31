@@ -37,6 +37,8 @@
 # - The GitHub proxy cannot fetch Git LFS objects, so a checkout that smudges
 #   one fails, and `git worktree add` with it. LFS skips the smudge and leaves
 #   the pointer files in place.
+# - V8 caps the heap near 2 GB on the VM, and ESLint's typed rules over the
+#   whole tree on a cold cache need more, so NODE_OPTIONS raises the cap.
 set -euo pipefail
 
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
@@ -60,17 +62,19 @@ trap 'say "scripts/init-cloud.sh failed at line $LINENO. Last lines of $log:"; t
 
 export PATH="$node_prefix/bin:$HOME/.local/bin:$PATH"
 export npm_config_prefix="$global_prefix"
+export NODE_OPTIONS=--max-old-space-size=4096
 case ",${SKIP-}," in
     *,trufflehog,*) ;;
     *) export SKIP="trufflehog${SKIP:+,$SKIP}" ;;
 esac
 
 # Bash commands of the session, and so the checks that GSD runs, need the
-# same three variables.
+# same four variables.
 if [[ -n ${CLAUDE_ENV_FILE-} ]]; then
     {
         echo "export PATH=\"$node_prefix/bin:\$PATH\""
         echo "export npm_config_prefix=$global_prefix"
+        echo 'export NODE_OPTIONS=--max-old-space-size=4096'
         echo 'export SKIP=trufflehog'
     } >>"$CLAUDE_ENV_FILE"
 fi
@@ -79,7 +83,7 @@ installed() {
     [[ -x $node_real ]] &&
         command -v pre-commit >/dev/null 2>&1 &&
         [[ -x $(git rev-parse --git-path hooks/pre-commit) ]] &&
-        [[ -e node_modules/.package-lock.json ]] &&
+        [[ -e node_modules/.package-lock.json && -e node_modules/.init-done ]] &&
         [[ -d .agents/skills/humanizer && -d .agents/skills/simple-english ]] &&
         [[ -f .claude/gsd-core/VERSION && -f .codex/gsd-core/VERSION ]] &&
         command -v codegraph >/dev/null 2>&1 && [[ -d .codegraph ]] &&

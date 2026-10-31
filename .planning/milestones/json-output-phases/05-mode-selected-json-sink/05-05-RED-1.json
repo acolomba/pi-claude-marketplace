@@ -1,0 +1,10 @@
+{
+  "command": "node --test --test-reporter=tap --test-name-pattern='unsupported loading preserves disk' tests/index.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: unsupported loading preserves disk and environment while discovering existing resources\nnot ok 1 - unsupported loading preserves disk and environment while discovering existing resources\n  ---\n  duration_ms: 123.327821\n  type: 'test'\n  location: '/home/acolomba/src/pi-claude-marketplace-json/.claude/worktrees/agent-p05-05-1791376612/tests/index.test.ts:910:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly deep-equal:\n    + actual - expected\n    \n      [\n    +   '/usr/bin:/tmp/index-unsupported-load-4sp6S9/project/plugin/bin',\n    +   '/tmp/index-unsupported-load-4sp6S9/project/plugin/bin'\n    -   '/usr/bin',\n    -   'unchanged'\n      ]\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected:\n    0: '/usr/bin'\n    1: 'unchanged'\n  actual:\n    0: '/usr/bin:/tmp/index-unsupported-load-4sp6S9/project/plugin/bin'\n    1: '/tmp/index-unsupported-load-4sp6S9/project/plugin/bin'\n  operator: 'deepStrictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///home/acolomba/src/pi-claude-marketplace-json/.claude/worktrees/agent-p05-05-1791376612/tests/index.test.ts:930:10)\n    async Test.run (node:internal/test_runner/test:1409:7)\n    async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 4027.595107\n",
+  "targetTest": "unsupported loading preserves disk and environment while discovering existing resources",
+  "targetFile": "tests/index.test.ts",
+  "expected": "PATH and plugin PATH remain unchanged",
+  "actual": "Both PATH variables changed to include the seeded plugin bin",
+  "semanticAssessment": "The target executed and failed the planned environment equality assertion after successful read-only discovery; no fixture or loader failure."
+}

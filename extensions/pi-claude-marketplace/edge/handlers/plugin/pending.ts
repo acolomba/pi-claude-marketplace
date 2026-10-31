@@ -5,52 +5,36 @@
 //
 // Pattern: mirrors `edge/handlers/marketplace/info.ts` (read-only orchestrator
 // dispatch with a single optional `--scope` flag, no positionals).
-// The shim:
+// The shim, through the shared `withScopeOnlyArgs` prelude:
 //   1. parses raw args via `parseArgs` (validates --scope shape);
 //   2. rejects any positional argument (pending takes none) and any unknown flag;
-//   3. delegates to `pendingReconcile({ ctx, pi, cwd, scope? })`.
+//   3. delegates to `pendingReconcile({ ctx, run, cwd, scope? })` with the
+//      router's notification run (D-05).
 //
 // NFR-5: the orchestrator never touches the network or writes any file; this
 // shim is the edge entry, structurally narrowed by `parseArgs` + the no-positional
 // guard.
 
 import { pendingReconcile } from "../../../orchestrators/reconcile/pending.ts";
-import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
-import { parseArgs } from "../../args.ts";
 
-import { withParsedArgs } from "./shared.ts";
+import { withScopeOnlyArgs } from "./shared.ts";
 
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE = "Usage: /claude:plugin pending [--scope user|project]";
 
 /**
- * Factory: returns the async handler closed over `pi`. The orchestrator is
- * read-only -- no `gitOps` / `pluginsToInstall` deps need threading.
+ * Factory: returns the async handler, which renders from the notification run
+ * the router hands it. The orchestrator is read-only -- no `gitOps` /
+ * `pluginsToInstall` deps need threading.
  */
-export function makePendingHandler(
-  pi: ExtensionAPI,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return withParsedArgs(parseArgs, USAGE, async (parsed, ctx): Promise<void> => {
-    // `pending` takes NO positional arguments. Any non-flag token (or an
-    // unknown long flag passed through parseArgs as a positional) is a
-    // usage error.
-    const [first] = parsed.positional;
-    if (first !== undefined) {
-      if (first.startsWith("--")) {
-        notifyUsageError(ctx, { message: `Unknown option: "${first}".`, usage: USAGE });
-      } else {
-        notifyUsageError(ctx, { message: "Too many arguments.", usage: USAGE });
-      }
-
-      return;
-    }
-
+export function makePendingHandler(): SubcommandHandler {
+  return withScopeOnlyArgs(USAGE, async (scope, ctx, run): Promise<void> => {
     await pendingReconcile({
       ctx,
-      pi,
+      run,
       cwd: ctx.cwd,
-      ...(parsed.scope !== undefined && { scope: parsed.scope }),
+      ...(scope !== undefined && { scope }),
     });
   });
 }

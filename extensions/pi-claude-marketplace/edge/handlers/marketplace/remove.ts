@@ -1,12 +1,12 @@
 // edge/handlers/marketplace/remove.ts
 //
-// Thin-shim handler factory for
-// `/claude:plugin marketplace <remove|rm> <name> [--scope user|project]`.
+// Thin-shim handler factory for `marketplace remove`; its usage line comes
+// from `marketplaceUsage("remove")`.
 // (Also reached via the `rm` alias -- routed through this same handler by
 // `routeMarketplace` in edge/router.ts.)
 //
-// `removeMarketplace` orchestrator requires a `pi: ExtensionAPI` reference
-// for the RH-5 soft-dep probes; the shim factory takes it as a dependency.
+// D-05: the orchestrator renders from the router's notification run, which
+// the handler forwards.
 //
 // Argument-parsing failures route through `notifyUsageError`. The
 // CMC-31 / CMC-15 conditional remove form is emitted by the
@@ -14,23 +14,21 @@
 // positional/scope shape.
 
 import { removeMarketplace } from "../../../orchestrators/marketplace/remove.ts";
+import { marketplaceUsage } from "../../router.ts";
 
 import { openMarketplaceCommand } from "./shared.ts";
 
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { SubcommandHandler } from "../../router.ts";
 import type { EdgeDeps } from "../../types.ts";
 
-const USAGE =
-  "Usage: /claude:plugin marketplace <remove|rm> <name> [--scope user|project] [--local]";
+const USAGE = marketplaceUsage("remove");
 
-export function makeRemoveHandler(
-  pi: ExtensionAPI,
-  deps: Pick<EdgeDeps, "completionCache">,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return async (args, ctx): Promise<void> => {
-    const opened = openMarketplaceCommand(args, ctx, {
+export function makeRemoveHandler(deps: Pick<EdgeDeps, "completionCache">): SubcommandHandler {
+  return async (args, ctx, run): Promise<void> => {
+    const opened = openMarketplaceCommand(args, ctx, run, {
       usage: USAGE,
       positionalName: "name",
+      positionalLabel: "Marketplace name",
     });
     if (opened === undefined) {
       return;
@@ -38,7 +36,7 @@ export function makeRemoveHandler(
 
     await removeMarketplace({
       ctx,
-      pi,
+      run,
       name: opened.name,
       completionCache: deps.completionCache,
       cwd: ctx.cwd,

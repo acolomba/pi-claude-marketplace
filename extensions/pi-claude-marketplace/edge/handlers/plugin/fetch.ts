@@ -20,11 +20,13 @@ import { errorMessage } from "../../../shared/errors.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
 
-import { splitPluginMarketplaceRef } from "./shared.ts";
+import { parsePluginTarget } from "./shared.ts";
 
 import type { FetchTarget } from "../../../orchestrators/plugin/fetch.ts";
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { NotificationRun } from "../../../shared/notification-run.ts";
 import type { Scope } from "../../../shared/types.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE =
   "Usage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]";
@@ -43,6 +45,7 @@ interface ParsedFetchTarget {
 function parseFetchTarget(
   args: string,
   ctx: ExtensionCommandContext,
+  run: NotificationRun,
 ): ParsedFetchTarget | undefined {
   let parsed;
   try {
@@ -50,14 +53,14 @@ function parseFetchTarget(
   } catch (err) {
     // MSG-NC-2: argument-parsing failure (invalid --scope value) -- sentence
     // form with Usage block appended after a blank line.
-    notifyUsageError(ctx, { message: errorMessage(err), usage: USAGE });
+    notifyUsageError(ctx, run, { message: errorMessage(err), usage: USAGE });
     return undefined;
   }
 
   const nonFlagPositionals: string[] = [];
   for (const token of parsed.positional) {
     if (token.startsWith("--")) {
-      notifyUsageError(ctx, { message: `Unknown flag: "${token}".`, usage: USAGE });
+      notifyUsageError(ctx, run, { message: `Unknown flag: "${token}".`, usage: USAGE });
       return undefined;
     }
 
@@ -65,11 +68,11 @@ function parseFetchTarget(
   }
 
   if (nonFlagPositionals.length > 1) {
-    notifyUsageError(ctx, { message: "Too many arguments.", usage: USAGE });
+    notifyUsageError(ctx, run, { message: "Too many arguments.", usage: USAGE });
     return undefined;
   }
 
-  const target = toFetchTarget(nonFlagPositionals[0], ctx);
+  const target = parsePluginTarget(nonFlagPositionals[0], ctx, run, USAGE);
   if (target === undefined) {
     return undefined;
   }
@@ -78,52 +81,20 @@ function parseFetchTarget(
 }
 
 /**
- * Map a single positional token (or its absence) to a `FetchTarget`. A bare
- * `@<marketplace>` yields the marketplace form; a `<plugin>@<marketplace>` ref
- * yields the plugin form; no positional yields the all form. A malformed ref
- * emits a USAGE error and returns `undefined`.
- */
-function toFetchTarget(
-  ref: string | undefined,
-  ctx: ExtensionCommandContext,
-): FetchTarget | undefined {
-  if (ref === undefined) {
-    return { kind: "all" };
-  }
-
-  if (ref.startsWith("@") && ref.length > 1) {
-    return { kind: "marketplace", marketplace: ref.slice(1) };
-  }
-
-  const split = splitPluginMarketplaceRef(ref);
-  if (split === undefined) {
-    notifyUsageError(ctx, {
-      message: `Invalid <plugin>@<marketplace> ref: "${ref}".`,
-      usage: USAGE,
-    });
-    return undefined;
-  }
-
-  return { kind: "plugin", ...split };
-}
-
-/**
- * Factory: returns the async handler closed over `pi` (required by `notify()`
- * for the soft-dep probe). `register.ts` wires this into `SubcommandHandlers`
+ * Factory: returns the async handler, which forwards the router's command run
+ * to `fetchPlugins` (D-05). `register.ts` wires this into `SubcommandHandlers`
  * under the `fetch` key.
  */
-export function makeFetchHandler(
-  pi: ExtensionAPI,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return async (args, ctx): Promise<void> => {
-    const parsed = parseFetchTarget(args, ctx);
+export function makeFetchHandler(): SubcommandHandler {
+  return async (args, ctx, run): Promise<void> => {
+    const parsed = parseFetchTarget(args, ctx, run);
     if (parsed === undefined) {
       return;
     }
 
     await fetchPlugins({
       ctx,
-      pi,
+      run,
       cwd: ctx.cwd,
       target: parsed.target,
       ...(parsed.scope !== undefined && { scope: parsed.scope }),

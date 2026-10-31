@@ -16,7 +16,11 @@
  */
 
 import { hookDebugLog } from "../shared/debug-log.ts";
-import { errorMessage } from "../shared/errors.ts";
+import {
+  DeviceFlowUnavailableError,
+  errorMessage,
+  StoredCredentialRejectedError,
+} from "../shared/errors.ts";
 
 import type { CredentialOps } from "./git-credential.ts";
 import type { GitCredentials } from "./git.ts";
@@ -39,7 +43,7 @@ export type AuthAttemptResult = { ok: true; cred: GitCredentials } | { ok: false
  * `credentialOps.fill` returns null (no stored credential). The orchestrator
  * binds whatever the Device Flow needs at the call site, so this seam takes no
  * parameters: `orchestrators/auth-host.ts` binds `host`, `credentialOps`, and
- * `notifyFn`.
+ * `onDeviceCode`.
  */
 export type OnAuthRequiredFn = () => Promise<AuthAttemptResult>;
 
@@ -102,7 +106,9 @@ export type BuildAuthCallbacksOpts =
  *   `credentialOps.reject(opts.host, cred)` to evict the credential the server
  *   rejected (AUTH-07), then return `{ cancel: true }`. For a
  *   `stored-credential` bundle, skip the eviction -- routing the skip through
- *   `hookDebugLog` -- and return `{ cancel: true }`.
+ *   `hookDebugLog` -- and throw `StoredCredentialRejectedError`, so a caller
+ *   can tell a refused credential from a helper miss, which cancels
+ *   (GAUTH-04).
  *
  * Discipline:
  *
@@ -131,14 +137,18 @@ export type BuildAuthCallbacksOpts =
  *   path exists the eviction clears a stale value the next `onAuth` replaces;
  *   where none exists it deletes the user's only copy of a secret their host
  *   displayed once.
- * - CP-9 (no infinite retry): onAuthFailure ALWAYS returns
- *   `{ cancel: true }`. Inline Device Flow retries from this seam would
- *   re-enter the same code path and loop forever; instead, isomorphic-git's
+ * - CP-9 (no infinite retry): onAuthFailure never returns a credential. It
+ *   returns `{ cancel: true }`, or throws for a `stored-credential` bundle,
+ *   and either one ends the operation. Inline Device Flow retries from this
+ *   seam would re-enter the same code path and loop forever; instead, isomorphic-git's
  *   next invocation re-enters via onAuth, which falls through to
  *   `onAuthRequired` on the (now-empty) fill miss.
  * - CP-10 (no raw exception escape): both callbacks wrap their bodies in
- *   try/catch and convert any thrown error into `{ cancel: true }` -- the
- *   value isomorphic-git receives is unchanged. Error messages from
+ *   try/catch and convert unrelated errors into `{ cancel: true }`, except
+ *   the typed StoredCredentialRejectedError, which is rethrown (AUTH-09).
+ *   DeviceFlowUnavailableError preserves the fixed print-mode remedy, and
+ *   StoredCredentialRejectedError names only the host (AUTH-09).
+ *   Error messages from
  *   CredentialOps and onAuthRequired are intentionally NOT interpolated into
  *   RETURN VALUES or notify calls -- a credential could be interpolated into
  *   an upstream Error, so surfacing it to the user or to isomorphic-git
@@ -207,7 +217,11 @@ export function buildAuthCallbacks(opts: BuildAuthCallbacksOpts): {
       hookDebugLog(`onAuth: Device Flow failed for ${opts.host}: ${result.reason}`, "auth");
       return { cancel: true };
     } catch (err) {
-      // CP-10: catch ANY thrown error from the URL parse / fill /
+      if (err instanceof DeviceFlowUnavailableError) {
+        throw err;
+      }
+
+      // CP-10: catch other errors from the URL parse / fill /
       // onAuthRequired and turn it into a cancel; isomorphic-git never sees
       // the raw error. The caught message is still routed through
       // hookDebugLog rather than dropped -- platform/git-credential.ts's own
@@ -223,12 +237,14 @@ export function buildAuthCallbacks(opts: BuildAuthCallbacksOpts): {
     if (opts.kind === "stored-credential") {
       // AUTH-07 / GAUTH-04: eviction is for a credential something can
       // re-mint. Here nothing can, so the stored value stays and the user
-      // keeps a recoverable failure. AUTH-09: name the host only.
+      // keeps a recoverable failure. The typed throw tells this refusal apart
+      // from a helper miss, which cancels in `onAuth`. AUTH-09: name the host
+      // only.
       hookDebugLog(
         `onAuthFailure: keeping the stored credential for ${opts.host}, nothing can re-mint it`,
         "auth",
       );
-      return { cancel: true };
+      throw new StoredCredentialRejectedError(opts.host);
     }
 
     try {

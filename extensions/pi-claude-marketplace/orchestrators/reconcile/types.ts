@@ -46,7 +46,7 @@
 // `emptyReconcilePlan(scope)` is the canonical empty target used by the
 // deferred convergence proof:
 //
-//   planReconcile(mergeScopeConfigs(buildConfigFromState(state), {}), state, scope)
+//   planReconcile(mergeScopeConfigs(buildConfigFromState(state, {}), {}), state, scope)
 //     deepEqual emptyReconcilePlan(scope)
 //
 // for any populated state.
@@ -54,12 +54,10 @@
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ScopeSatisfactionVerdict, UnsatisfiedKind } from "./dependency-verdict.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type {
-  NotificationContext,
-  ResourcesDiscoverEvent,
-  ToolInventory,
-} from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { McpConfigNotice, McpMigrationRow } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { GitOps } from "../marketplace/shared.ts";
 import type { InstallHooksRouting } from "../plugin/install-disable-cascade.ts";
@@ -90,9 +88,8 @@ export interface PlannedMarketplaceRemove {
   /**
    * Recorded plugin names under this marketplace
    * (`state.marketplaces[mp].plugins` keys). The PENDING projection
-   * synthesizes one `will uninstall` child row per name under a bare list-arm
-   * header: de-registration is immediate, only the plugin-uninstall cascade is
-   * reload-deferred (WILL-03 / D-65.1-03). These are deliberately NOT routed
+   * synthesizes one `will uninstall` child row per name under the
+   * marketplace's `will remove` header (D-20). These are deliberately NOT routed
    * through `pluginsToUninstall` -- the apply path cascades them internally, so
    * enumerating them there would double-bill (see `buildUninstallBucket`).
    */
@@ -167,7 +164,10 @@ export interface PlannedDependencyDisable {
   /** `name@marketplace` of the declared dependency the scope does not satisfy. */
   readonly dependency: string;
   readonly kind: UnsatisfiedKind;
-  /** The declared range, present only on the out-of-range kind. */
+  /**
+   * The declared ranges as the verdict rendered them, joined and bounded once
+   * (INR-05), present only on the out-of-range kind.
+   */
   readonly range?: string;
 }
 
@@ -182,6 +182,9 @@ export interface PlannedDependencyDisable {
  * true). `requiredBy` is the first eligible declarer in verdict order, the
  * key a closure failure on this root names as its dependent. `declarers`
  * retains each eligible source key once in that order for original-edge policy.
+ * `requirers` keeps, in the same order, only the declarers that carry a range,
+ * which a plugin directory copy outside the ranges names (GV-01); it is
+ * absent when no declarer constrained the dependency.
  */
 export interface PlannedDependencyInstall {
   readonly scope: Scope;
@@ -190,6 +193,7 @@ export interface PlannedDependencyInstall {
   readonly ranges: readonly string[];
   readonly requiredBy: string;
   readonly declarers: readonly string[];
+  readonly requirers?: readonly string[];
 }
 
 /**
@@ -313,9 +317,7 @@ export function emptyReconcilePlan(scope: Scope): ReconcilePlan {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Both moved from apply.ts when the backfill pass became its own module: two
-// files in this folder now name them, so leaving them in one of those files
-// would have made the other import back into it (FLOW-09).
+// The `/claude:plugin apply` options and the step seams its tests inject.
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
@@ -328,13 +330,28 @@ export type DependencyDisableStamp = (
 ) => Promise<void>;
 
 /**
+ * Puts a deferred record's pin back to what `before` recorded, in the
+ * scope its failed enable left it, for the plugin named `key`.
+ */
+export type DeferredPinRestore = (
+  scope: Scope,
+  key: string,
+  before: ExtensionState,
+) => Promise<void>;
+
+/**
  * RECON-01..05 options bundle. When `scope` is omitted, applyReconcile fans
  * out across BOTH scopes project-first (mirrors
  * `pending.ts::pendingReconcile`'s scope fan-out).
  */
 export interface ApplyReconcileOptions {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  /**
+   * D-05 / D-07: the run the `apply` command, or an autoapply load (AAP-02),
+   * opens before the pass. The reconcile-applied cascade renders from its
+   * soft-dependency snapshot.
+   */
+  readonly run: NotificationRun;
   /** Project-scope cwd (ignored for the user scope). */
   readonly cwd: string;
   /** Lifecycle-owned route effects shared with registered hook callbacks. */
@@ -377,15 +394,36 @@ export interface ApplyReconcileOptions {
    */
   readonly stampDependencyDisabled?: DependencyDisableStamp;
   /**
-   * D-09-13: the host's `resources_discover` reason. Only `"reload"` runs the
-   * dependency-install step (`apply.ts::applyDependencyInstalls`) and its
-   * D-09-07 re-plan; an omitted value keeps the safer startup posture every
-   * caller that does not opt in already has -- the bucket still plans (the
-   * planner is reason-blind), but nothing installs and the scope stays
-   * offline.
+   * AMIG-01 injection seam for the load-time MCP move. Production callers
+   * (index.ts) omit it and `mcp-migration.ts::migrateLegacyMcpEntries`
+   * applies. The seam exists because the step's call position is a contract
+   * no file layout distinguishes: it runs once per scope after the read pass
+   * and before the plan is applied, also when the scope's config is invalid,
+   * and never after a read pass that threw. Its NFR-2 isolation is the other
+   * contract: a throwing step becomes a stopped row and never escapes
+   * `applyReconcile`.
    */
-  readonly reason?: ResourcesDiscoverEvent["reason"];
+  readonly migrateMcpEntries?: McpMigrationStep;
 }
+
+/**
+ * AMIG-01 / AMIG-03: one scope's input to the load-time MCP move. `plan` is
+ * the scope's reconcile plan, undefined when the config is invalid. The step
+ * appends its rows and the MCP config facts of the files it wrote to the two
+ * accumulators, which collect both scopes for the one migration notice. The
+ * types live here, not in `mcp-migration.ts`, so the step and `apply.ts`,
+ * which imports the step, share them without an import back (FLOW-09).
+ */
+export interface McpMigrationInput {
+  readonly scope: Scope;
+  readonly cwd: string;
+  readonly plan: ReconcilePlan | undefined;
+  readonly rows: McpMigrationRow[];
+  readonly notices: McpConfigNotice[];
+}
+
+/** AMIG-01: the load-time MCP move for one scope. */
+export type McpMigrationStep = (input: McpMigrationInput) => Promise<void>;
 
 /**
  * Per-scope read-pass result. `plan` is undefined when CFG-03 aborted the
@@ -398,22 +436,11 @@ export interface ScopeReadResult {
   /** CFG-03 + state-load failure rows surfaced from the read pass. */
   readonly invalidOutcomes: readonly PerEntryOutcome[];
   /**
-   * BFILL-02: the read-pass state snapshot, carried out so the load-time
-   * backfill gate can read its persisted `lastReconciledExtensionVersion`
-   * stamp + scan every plugin the scope records (WCONV-01). Undefined for a
-   * pristine scope (no state.json) -- backfill MUST NOT create state.json there
-   * (WR-05).
+   * DLS-01: the read-pass state snapshot, carried out so the closing step can
+   * report a recorded plugin its marketplace no longer lists. Undefined for a
+   * pristine scope (no state.json) and for a CFG-03 abort.
    */
   readonly state?: ExtensionState;
-  /**
-   * WR-01: whether state.json existed ON DISK at read time. A config-present /
-   * state.json-absent scope loads DEFAULT_STATE inside the read pass (so
-   * `state` is defined) even though no state.json exists; the backfill stamp
-   * must NOT bring an unsolicited state.json into existence purely to record
-   * the version when there is nothing to promote (WR-05). False for the
-   * pristine arm (no `state` carried anyway).
-   */
-  readonly stateExisted: boolean;
   /**
    * LOAD-01: the satisfaction verdict computed inside the locked read pass,
    * over the same snapshot the planner saw. Carried out so the apply pass can
@@ -423,4 +450,16 @@ export interface ScopeReadResult {
    * record was walked.
    */
   readonly verdict?: ScopeSatisfactionVerdict;
+  /**
+   * APPLY1-01: the enables of records held down for a dependency that wait on
+   * a catalog move; `plan.pluginsToEnable` leaves them out, and `apply` runs
+   * them once the moves they wait on land.
+   */
+  readonly deferredEnables?: readonly PlannedPluginEnable[];
+  /**
+   * D-PL2-16: the enables of records that wait on an install the plan
+   * schedules. `enable` refuses a record whose closure holds an uninstalled
+   * member, so `apply` runs them after its missing-dependency install.
+   */
+  readonly enablesAfterInstalls?: readonly PlannedPluginEnable[];
 }

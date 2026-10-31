@@ -13,6 +13,7 @@
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 
 /** A skill enumerated by `discoverPluginSkills` (one entry per source skill dir). */
 export interface DiscoveredSkill {
@@ -84,7 +85,8 @@ export interface StageSkillsCommitResult {
   readonly stagedNames: readonly string[];
   /** W-05: callers read `recorded` to populate state.json. */
   readonly recorded: readonly StagedSkillRecord[];
-  readonly warnings: readonly string[];
+  /** D-PL1-02: every skills warning is a `discovery` warning. */
+  readonly warnings: readonly StagingWarning[];
   /**
    * The orchestrator maps these to the `{malformed skill}` reason token and the
    * per-component parse-error detail line. Empty on the all-valid path (NREG-01).
@@ -117,19 +119,6 @@ export interface PreparedSkillsStaged {
   readonly _previousNames: readonly string[];
   /** Internal -- per-skill staging-to-target rename pairs for commit. */
   readonly _renamePairs: readonly { from: string; to: string }[];
-}
-
-/** Opaque reinstall replacement handle for staged skills. */
-export type SkillsReplacement = SkillsReplacementNoop | SkillsReplacementReplaced;
-
-export interface SkillsReplacementNoop {
-  readonly kind: "noop";
-  readonly prepared: Extract<PreparedSkillsStaging, { kind: "noop" }>;
-}
-
-export interface SkillsReplacementReplaced {
-  readonly kind: "replaced";
-  readonly prepared: PreparedSkillsStaged;
 }
 
 /** Input bundle for `unstagePluginSkills`. */

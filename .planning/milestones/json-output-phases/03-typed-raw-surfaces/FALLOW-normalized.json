@@ -1,0 +1,130 @@
+{
+  "summary": {
+    "unused_exports": 0,
+    "unused_files": 0,
+    "duplicates": 17,
+    "circular_dependencies": 0,
+    "total": 17
+  },
+  "findings": [
+    {
+      "type": "duplicate_block",
+      "message": "Duplicate block (5 instances)",
+      "file": "scripts/check-corresponding-tests.mjs",
+      "line": 205,
+      "related_file": "scripts/check-unused-type-members.audit.mjs"
+    },
+    {
+      "type": "duplicate_block",
+      "message": "Duplicate block (4 instances)",
+      "file": "scripts/check-corresponding-tests.mjs",
+      "line": 202,
+      "related_file": "scripts/check-unused-type-members.mjs"
+    },
+    {
+      "type": "duplicate_block",
+      "message": "Duplicate block (3 instances)",
+      "file": "scripts/check-corresponding-tests.mjs",
+      "line": 202,
+      "related_file": "scripts/check-workflow-install-scripts.mjs"
+    },
+    {
+      "type": "duplicate_block",
+      "message": "Duplicate block (2 instances)",
+      "file": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts",
+      "line": 293,
+      "related_file": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts"
+    },
+    {
+      "type": "duplicate_block",
+      "message": "Duplicate block (4 instances)",
+      "file": "scripts/check-changed.mjs",
+      "line": 248,
+      "related_file": "scripts/check-corresponding-tests.mjs"
+    },
+    {
+      "type": "duplicate_block",
+      "message": "Duplicate block (2 instances)",
+      "file": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts",
+      "line": 187,
+      "related_file": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts"
+    },
+    {
+      "type": "duplicate_block",
+      "message": "Duplicate block (2 instances)",
+      "file": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts",
+      "line": 311,
+      "related_file": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts"
+    },
+    {
+      "type": "duplicate_block",
+      "message": "Duplicate block (2 instances)",
+      "file": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts",
+      "line": 1633,
+      "related_file": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts"
+    },
+    {
+      "type": "duplicate_block",
+      "message": "Duplicate block (2 instances)",
+      "file": "extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts",
+      "line": 52,
+      "related_file": "extensions/pi-claude-marketplace/edge/handlers/plugin/update.ts"
+    },
+    {
+      "type": "duplicate_block",
+      "message": "Duplicate block (2 instances)",
+      "file": "extensions/pi-claude-marketplace/edge/handlers/plugin/bootstrap.ts",
+      "line": 37,
+      "related_file": "extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts"
+    },
+    {
+      "type": "duplicate_block",
+      "message": "Duplicate block (2 instances)",
+      "file": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
+      "line": 1701,
+      "related_file": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts"
+    },
+    {
+      "type": "duplicate_block",
+      "message": "Duplicate block (2 instances)",
+      "file": "tests/architecture/catalog-uat/fixtures/plugin-list.ts",
+      "line": 93,
+      "related_file": "tests/architecture/catalog-uat/fixtures/plugin-list.ts"
+    },
+    {
+      "type": "duplicate_block",
+      "message": "Duplicate block (2 instances)",
+      "file": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts",
+      "line": 317,
+      "related_file": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts"
+    },
+    {
+      "type": "duplicate_block",
+      "message": "Duplicate block (2 instances)",
+      "file": "tests/integration/concurrent-install-child.ts",
+      "line": 34,
+      "related_file": "tests/integration/load-reconcile-race-child.ts"
+    },
+    {
+      "type": "duplicate_block",
+      "message": "Duplicate block (2 instances)",
+      "file": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
+      "line": 2070,
+      "related_file": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+    },
+    {
+      "type": "duplicate_block",
+      "message": "Duplicate block (2 instances)",
+      "file": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts",
+      "line": 796,
+      "related_file": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts"
+    },
+    {
+      "type": "duplicate_block",
+      "message": "Duplicate block (2 instances)",
+      "file": "extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts",
+      "line": 153,
+      "related_file": "extensions/pi-claude-marketplace/bridges/hooks/runtime.ts"
+    }
+  ]
+}

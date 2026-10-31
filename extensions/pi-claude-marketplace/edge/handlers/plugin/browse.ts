@@ -4,8 +4,7 @@
 // SelectList browser over configured marketplaces and their plugins.
 //
 // TUI-only: `ctx.mode === "tui"` guards `ctx.ui.custom` (a terminal
-// component). In non-TUI modes (rpc/json/print) the handler falls back to
-// the `list` subcommand so the user still gets a useful inventory.
+// component). Non-TUI modes receive a refusal naming the `list` command.
 //
 // Data is read-only (`loadMarketplaceEntries` -> `loadVisibleMarketplaces`,
 // and the per-marketplace `pluginLoader` -> `loadPluginListPayload`). The
@@ -22,32 +21,37 @@ import { sourceLogical } from "../../../domain/source.ts";
 import { loadVisibleMarketplaces } from "../../../orchestrators/marketplace/shared.ts";
 import { loadPluginListPayload } from "../../../orchestrators/plugin/list-flow.ts";
 import { notify, notifyUsageError } from "../../../shared/notification-dispatch.ts";
+import { tokenizeArgs } from "../../args.ts";
 import {
   PluginBrowser,
   type MarketplaceEntry,
   type PickerResult,
 } from "../../browser/plugin-browser.ts";
 
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import { rejectUnknownFlag } from "./shared.ts";
+
+import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { NotificationRun } from "../../../shared/notification-run.ts";
 import type {
   PluginFailedMessage,
   PluginNotificationMessage,
 } from "../../../shared/notification-types.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE = "Usage: /claude:plugin browse";
 
 /**
  * The existing subcommand handlers the browser dispatches into. Passed in by
  * `register.ts` so the browse handler does not reconstruct the handler map
- * (no circular factory). `list` is the non-TUI fallback.
+ * (no circular factory). Each handler receives the browse command's own
+ * notification run.
  */
 export interface BrowseActionHandlers {
-  readonly list: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  readonly install: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  readonly uninstall: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  readonly pluginInfo: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  readonly enable: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
-  readonly disable: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
+  readonly install: SubcommandHandler;
+  readonly uninstall: SubcommandHandler;
+  readonly pluginInfo: SubcommandHandler;
+  readonly enable: SubcommandHandler;
+  readonly disable: SubcommandHandler;
 }
 
 /**
@@ -73,15 +77,14 @@ async function loadMarketplaceEntries(cwd: string): Promise<readonly Marketplace
  * `loadPluginListPayload`, selects the matching marketplace block (falling
  * back to the first block for a synthetic `(list)` failure), and returns the
  * raw `PluginNotificationMessage` rows. The browser projects them onto its
- * display entries.
+ * display entries. The loader only reads, so it takes no notification run.
  */
 function makePluginLoader(
-  pi: ExtensionAPI,
   ctx: ExtensionCommandContext,
   cwd: string,
 ): (marketplace: MarketplaceEntry) => Promise<readonly PluginNotificationMessage[]> {
   return async (mp): Promise<readonly PluginNotificationMessage[]> => {
-    const payload = await loadPluginListPayload({ ctx, pi, cwd, marketplace: mp.name });
+    const payload = await loadPluginListPayload({ ctx, cwd, marketplace: mp.name });
     const block = payload.find((b) => b.name === mp.name && b.scope === mp.scope);
     return block?.plugins ?? [];
   };
@@ -104,41 +107,47 @@ async function dispatch(
   handlers: BrowseActionHandlers,
   result: PickerResult,
   ctx: ExtensionCommandContext,
+  run: NotificationRun,
 ): Promise<void> {
   const args = actionArgs(result);
   switch (result.action) {
     case "install":
-      return handlers.install(args, ctx);
+      return handlers.install(args, ctx, run);
     case "uninstall":
-      return handlers.uninstall(args, ctx);
+      return handlers.uninstall(args, ctx, run);
     case "info":
-      return handlers.pluginInfo(args, ctx);
+      return handlers.pluginInfo(args, ctx, run);
     case "enable":
-      return handlers.enable(args, ctx);
+      return handlers.enable(args, ctx, run);
     case "disable":
-      return handlers.disable(args, ctx);
+      return handlers.disable(args, ctx, run);
   }
 }
 
 /**
- * Factory: returns the async handler closed over `pi` (needed by the
- * plugin loader's `loadPluginListPayload` soft-dep probe) and the action
- * handlers.
+ * Factory: returns the async handler closed over the action handlers. The
+ * browser's own notifications render from the router's command run (D-05),
+ * and the handler forwards that run to every action handler it calls.
  */
-export function makeBrowseHandler(
-  pi: ExtensionAPI,
-  handlers: BrowseActionHandlers,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return async (args, ctx): Promise<void> => {
-    if (args.trim() !== "") {
-      notifyUsageError(ctx, { message: "browse takes no arguments.", usage: USAGE });
+export function makeBrowseHandler(handlers: BrowseActionHandlers): SubcommandHandler {
+  return async (args, ctx, run): Promise<void> => {
+    const tokens = tokenizeArgs(args).map((token) => token.value);
+    if (rejectUnknownFlag(tokens, { ctx, run, usage: USAGE })) {
       return;
     }
 
-    // Non-TUI modes have no terminal for `ctx.ui.custom`; fall back to the
-    // inventory surface so `browse` is never a no-op.
-    if (ctx.mode !== "tui") {
-      await handlers.list("", ctx);
+    if (tokens.length > 0) {
+      notifyUsageError(ctx, run, { message: "browse takes no arguments.", usage: USAGE });
+      return;
+    }
+
+    // Non-TUI modes have no terminal for the picker.
+    const mode = ctx.mode;
+    if (mode !== "tui") {
+      notifyUsageError(ctx, run, {
+        message: `Browse is unavailable in ${mode} mode. Use /claude:plugin list instead.`,
+        usage: mode === "print" ? "" : USAGE,
+      });
       return;
     }
 
@@ -156,7 +165,7 @@ export function makeBrowseHandler(
         severity: "error",
         needsReload: false,
       };
-      notify(ctx, pi, {
+      notify(ctx, run, {
         marketplaces: [
           {
             name: "(browse)",
@@ -169,11 +178,11 @@ export function makeBrowseHandler(
     }
 
     if (marketplaces.length === 0) {
-      notify(ctx, pi, { marketplaces: [] });
+      notify(ctx, run, { marketplaces: [] });
       return;
     }
 
-    const pluginLoader = makePluginLoader(pi, ctx, ctx.cwd);
+    const pluginLoader = makePluginLoader(ctx, ctx.cwd);
 
     const result = await ctx.ui.custom<PickerResult | null>((tui, theme, _kb, done) => {
       const browser = new PluginBrowser({
@@ -203,6 +212,6 @@ export function makeBrowseHandler(
       return;
     }
 
-    await dispatch(handlers, result, ctx);
+    await dispatch(handlers, result, ctx, run);
   };
 }

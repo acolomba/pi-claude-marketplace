@@ -1,491 +1,335 @@
-# Architecture Research: v1.19 Unit Test Refactor
+# Architecture Research
 
-**Domain:** Brownfield TypeScript unit-test ownership and direct-coverage refactor
-**Researched:** 2026-08-28
-**Confidence:** HIGH
+**Domain:** Behavioral (cucumber) test suite for `/claude:plugin marketplace`, driven through a real headless Pi in RPC mode, plus one production seam (`GITHUB_BASE_URL`, D-MF-01)
+**Milestone:** marketplace-features
+**Researched:** 2026-10-15
+**Confidence:** HIGH for integration points and boundaries (read from the code on this branch). HIGH for `NODE_EXTRA_CA_CERTS` timing (quoted from the Node CLI docs). MEDIUM for the git-host CGI details: the spike proved them, but they have not yet run inside Pi's `--offline` RPC child.
 
-## Executive Recommendation
+## Standard Architecture
 
-Keep the production architecture that exists at HEAD. Build the milestone around its
-204 current production modules, not around the abandoned Phase 106/107 partition.
-Each executable plan must own exactly one production source and its mirrored unit
-test. Each plan must finish with one atomic commit for that pair.
+### System Overview
 
-The roadmap should start at Phase 108 and follow the live dependency direction:
-domain and platform, shared contracts, persistence and transaction, bridges,
-orchestrators, edge commands, and finally the extension entry point. This order lets
-lower-level public contracts stabilize before their consumers receive direct tests.
-It also makes the large lifecycle and composition modules depend on already-proven
-seams.
-
-Treat every one of the 204 pairs as open. The audit labels and retained commits are
-diagnostic brownfield evidence. They are never completion proof. A `PASS` pair still
-needs a v1.19 plan, current direct-coverage evidence, and its own commit.
-
-Cross-cutting work must ride with a source-test pair that owns the contract. For
-example, the resolver pair owns the required `installable: true | false`
-discriminant. Structural gates run throughout the milestone, but they do not justify
-gate-only executable plans.
-
-## Current HEAD Architecture
-
-The live extension is a layered TypeScript system under
-`extensions/pi-claude-marketplace/`. The dependency flow is mostly inward from the
-entry point and command surface toward orchestration, domain, persistence, and
-platform seams.
-
-```text
-Pi extension entry (index.ts)
-            |
-            v
-       edge commands
-            |
-            v
- lifecycle and composition orchestrators
-       |          |          |
-       v          v          v
-    bridges   transaction  persistence
-       |          |          |
-       +----------+----------+
-                  |
-                  v
-          domain / shared / platform
+```
+cucumber worker (one of 8, random order)
+┌────────────────────────────────────────────────────────────────────────────┐
+│ step_definitions/                                                            │
+│   command.steps.ts      marketplace/*.steps.ts    config.steps.ts            │
+│   session.steps.ts      git-host.steps.ts                                    │
+│        │ this.pi / this.gitHost / this.results (ScenarioWorld)               │
+├────────┼────────────────────────────────────────────────────────────────────┤
+│ support/world.ts      (fresh world per scenario, onRelease, After)           │
+│ support/pi-process.ts (the run's ONLY module state: PiRun)                   │
+│   BeforeAll: mkdtemp root -> start HttpsGitHost -> start Pi(env)             │
+│   Before:    host.reset() + empty sandbox + new_session + assert all empty   │
+│   AfterAll:  stop Pi -> stop host -> rm root                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ lib/ (registers nothing)                                                     │
+│   pi-process.ts     PiProcess (JSONL, one request at a time)                 │
+│   pi-commands.ts    runCommand (1 cascade) + runCommandPayloads (all, union) │
+│   path-marketplace.ts  (existing fixture: directory + marketplace.json)      │
+│   git-marketplace.ts   NEW fixture: commit a marketplace into a bare repo    │
+│   https-git-host.ts    NEW fake: node:https -> `git http-backend` CGI        │
+│        ▲ https://127.0.0.1:<port>/<owner>/<repo>.git                         │
+└────────┼────────────────────────────────────────────────────────────────────┘
+         │ isomorphic-git clone/fetch (trusts the cert via NODE_EXTRA_CA_CERTS)
+┌────────┴────────────────────────────────────────────────────────────────────┐
+│ Pi child (tests/e2e/_rpc.ts startRpcPi; env = allowlist + run-fixed extras)  │
+│   HOME, PI_CODING_AGENT_DIR, PI_OFFLINE, PATH                                │
+│   + NODE_EXTRA_CA_CERTS=<root>/git-host/cert.pem                             │
+│   + GITHUB_BASE_URL=https://127.0.0.1:<port>  (name: see Open Decision 1)    │
+│   + GIT_CONFIG_NOSYSTEM=1                                                    │
+│   extension: domain/clone-key.ts ─┐                                          │
+│              orchestrators/auth-host.ts ─┼─> shared/github-base-url.ts (NEW) │
+│              marketplace/add.ts, update.ts, plugin/update-flow.ts ─┘         │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-This is a dependency diagram, not a request to create new directories. Some shared
-and platform modules are intentionally used by higher and lower layers. The roadmap
-must use actual imports and callers to sequence pairs, not enforce a theoretical
-layer model that the repository does not have.
+### Component Responsibilities
 
-### Component Boundaries
+| Component | New / Modified | Responsibility |
+|-----------|----------------|----------------|
+| `features/lib/https-git-host.ts` | NEW | A loopback-only `node:https` server. It writes a run-time openssl key and certificate (SAN `IP:127.0.0.1`), runs `git http-backend` as a CGI per request against a repos root, records each request (method, path, service, status), can be armed per repo to answer 401, 404, 5xx, or drop the connection, and exposes `reset()` and `stop()`. |
+| `features/lib/git-marketplace.ts` | NEW | A fixture that creates `<reposRoot>/<owner>/<repo>.git` as a bare repo. It reuses `path-marketplace.ts` to write the tree and commits it with `git --git-dir=<bare> --work-tree=<tmp>` in a hermetic git env. Committing again publishes an update. |
+| `features/lib/path-marketplace.ts` | unchanged (maybe a `writeManifestOnly` variant) | Writes a directory marketplace. The direct-`marketplace.json` source points at `<root>/.claude-plugin/marketplace.json` of the same tree. |
+| `features/lib/pi-commands.ts` | MODIFIED | Adds `runCommandPayloads()`. It validates every `claude-plugin` entry against `NOTIFICATION_PAYLOAD_SCHEMA` and returns all of them. `runCommand()` becomes "exactly one payload, of kind `cascade`", built on top of it, so the plugin steps do not change. |
+| `features/lib/pi-process.ts` | unchanged | Already collects every entry per request. |
+| `tests/e2e/_rpc.ts` | MODIFIED (small) | `startRpcPi(sandbox, extraEnv?)`. Explicit extra keys are merged after the allowlist. There is still no `process.env` passthrough. Today it is used only by `features/`. |
+| `features/support/pi-process.ts` | MODIFIED | `PiRun` gains `gitHost`. BeforeAll starts the host before Pi and passes its env. Before resets the host and asserts it empty: no repos, nothing armed, no requests. That reset doubles as an NFR-5 check, because the reset's own `/claude:plugin list` must reach no network. A replaced Pi reuses the same env. |
+| `features/support/world.ts` | MODIFIED | `results: NotificationPayload[]`. `lastResult()` asserts exactly one payload. Adds getters `gitHost` and `configPath(scope)`. Optional rename `PluginWorld` -> `ScenarioWorld`. |
+| `features/step_definitions/marketplace/*.steps.ts` | NEW (split of `marketplace.steps.ts`) | Publishing marketplaces (directory, manifest file, git host, GitHub `owner/repo`) and reading marketplace-shaped results (list blocks, info, info-cascade, not-added). |
+| `features/step_definitions/git-host.steps.ts` | NEW | Arming the host (`the git host answers 401 for "acme/tools"`) and asserting what it received (`the git host receives no requests`). |
+| `features/step_definitions/config.steps.ts` | NEW | Reads the user-owned `claude-plugins.json` of a scope and compares its whole `marketplaces` map. |
+| `features/step_definitions/command.steps.ts` | MODIFIED | `When the user runs` stores all payloads. Adds a usage-error step. Expands the host token in commands and projects it back in result cells. |
+| `features/marketplace/{add,remove,list,info,update,autoupdate}.feature` | NEW | One feature per verb. Usage errors and refused source forms go into the verb whose parser refuses them. |
+| `extensions/.../shared/github-base-url.ts` | NEW (production) | `gitHubBaseUrl(): string`. Reads the env var on every call and holds no state (the `workflow-home.ts` / `debug-log.ts` precedent). Unset or empty returns `https://github.com`. |
+| `extensions/.../domain/clone-key.ts` | MODIFIED | The `github` arm of `canonicalCloneUrl` builds `${gitHubBaseUrl()}/${owner}/${repo}`. Identity, wire URL (`networkCloneUrl`), and `originMatchesSource` then all follow from one seam. |
+| `extensions/.../orchestrators/auth-host.ts` | MODIFIED | The `GITHUB_HOST` constant becomes `gitHubHost()` (`new URL(gitHubBaseUrl()).host`). The `github` arm of `hostFromCloneUrl` returns it. |
+| `orchestrators/marketplace/add.ts:974`, `orchestrators/plugin/update-flow.ts:151`, `orchestrators/marketplace/update.ts:398-401` | MODIFIED | Replace the `GITHUB_HOST` literal and the hand-built `https://github.com/...` URL with `gitHubHost()` / `networkCloneUrl(source)`. |
 
-| Component           | Modules | Responsibility                                                                                   | Main dependencies                                         |
-| ------------------- | ------: | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
-| `domain/`           |      20 | Resolution, manifests, identities, versions, hook metadata, GitHub authentication rules          | `platform/`, `shared/`                                    |
-| `platform/`         |       3 | Git, credential, and Pi runtime ports                                                            | `shared/`                                                 |
-| `shared/`           |      19 | Errors, notifications, formatting, paths, configuration, concurrency, and common value utilities | selected platform types/APIs                              |
-| `persistence/`      |       9 | Atomic durable stores for registries, ledgers, settings, caches, and snapshots                   | `domain/`, `platform/`, `shared/`                         |
-| `transaction/`      |       3 | Install and lifecycle transaction coordination and rollback                                      | `persistence/`, `shared/`                                 |
-| `bridges/agents/`   |       9 | Claude agent to Pi agent translation and staging                                                 | domain, persistence, platform, shared                     |
-| `bridges/commands/` |       5 | Claude command to Pi prompt-template translation and staging                                     | domain, persistence, platform, shared                     |
-| `bridges/skills/`   |       8 | Claude skill to Pi skill translation and staging                                                 | domain, persistence, platform, shared                     |
-| `bridges/mcp/`      |       9 | Claude MCP to Pi MCP adapter translation and staging                                             | domain, persistence, platform, shared                     |
-| `bridges/hooks/`    |      31 | Hook conversion, routing, dispatch, execution, and state                                         | domain, persistence, platform, shared                     |
-| `orchestrators/`    |      57 | Plugin, marketplace, import, reconcile, discovery, and presentation workflows                    | all lower layers                                          |
-| `edge/`             |      30 | Command parsing, validation, scope choice, and user-facing dispatch                              | orchestrators, domain, shared, platform                   |
-| root `index.ts`     |       1 | Extension composition, command registration, hook installation, and reload lifecycle             | edge, hooks, orchestrators, persistence, platform, shared |
+## Recommended Project Structure
 
-### Boundary Facts That Plans Must Preserve
-
-- Hook routing state is isolated in `bridges/hooks/routing-state.ts` to break a live
-  dependency cycle.
-- Plugin and marketplace ledgers do not import each other. Workflows cross that
-  boundary through leaf seams such as `orchestrators/marketplace/shared.ts` or through
-  injected dependencies.
-- The bridge families do not import one another. They share domain and persistence
-  contracts instead.
-- Plugin install uses the transaction runner. Other lifecycle operations have their
-  own rollback shapes and must not be forced into install's transaction abstraction.
-- Offline and no-network behavior is an architectural contract. Read-only commands
-  and warm-cache paths must not gain network dependencies.
-- User-visible output goes through `ctx.ui.notify`. Direct stdout or stderr writes are
-  outside the command and bridge contract.
-- Whole-repository cycle and unused-boundary checks remain the job of Fallow. Pair
-  tests should not reproduce a second dependency scanner.
-
-## Unit-Test Ownership Architecture
-
-The milestone adds a strict one-to-one ownership view over the existing production
-tree.
-
-```text
-extensions/pi-claude-marketplace/<relative-path>.ts
-                         |
-                         | exactly one mirrored owner
-                         v
-tests/<relative-path>.test.ts
-                         |
-                         +-- imports the production module directly
-                         +-- covers its exported behavior directly
-                         +-- reaches 100% functions, lines, and branches
+```
+features/
+├── marketplace/                     # NEW function dir: .feature files only
+│   ├── add.feature                  # every source kind + refused forms (Outline) + usage errors
+│   ├── remove.feature               # incl. the cascade onto installed plugins
+│   ├── list.feature
+│   ├── info.feature                 # single + fan-out (marketplace-info-cascade) + not-added
+│   ├── update.feature               # single, bare (one payload per marketplace), armed failures
+│   └── autoupdate.feature           # autoupdate / noautoupdate
+├── plugin/                          # existing, untouched
+├── step_definitions/
+│   ├── command.steps.ts             # run a command, read the generic envelope (modified)
+│   ├── config.steps.ts              # NEW: claude-plugins.json of a scope
+│   ├── git-host.steps.ts            # NEW: arm the host, read its request log
+│   ├── session.steps.ts             # existing
+│   └── marketplace/                 # SPLIT of marketplace.steps.ts (layout.md "a module that grows")
+│       ├── publishing.steps.ts      # "the marketplace X offers these plugins" (dir / git host / github)
+│       └── results.steps.ts         # "the result lists these marketplaces:", info, not-added
+├── support/
+│   ├── pi-process.ts                # PiRun = sandbox + Pi + git host (modified)
+│   └── world.ts                     # modified
+└── lib/
+    ├── https-git-host.ts            # NEW fake
+    ├── git-marketplace.ts           # NEW fixture
+    ├── path-marketplace.ts          # existing fixture
+    ├── pi-commands.ts               # modified driver
+    └── pi-process.ts                # existing
 ```
 
-Tests in `tests/architecture/` and `tests/integration/` can prove cross-module
-contracts. They are supplemental evidence only. They cannot replace a mirrored unit
-test or contribute ownership credit for a source pair.
+### Structure Rationale
 
-### Current Pair Baseline
+- **No `features/lib/github*.ts`.** GitHub is not a second server. It is a path layout (`/<owner>/<repo>.git`) on the same host, chosen so `canonicalCloneUrl` maps `owner/repo` straight onto it. URL-source scenarios use the same layout, so one fixture (`git-marketplace.ts`) publishes for both, and a step such as `the marketplace "tools" is published at github as "acme/tools"` only picks the owner/repo. A separate GitHub module would duplicate the fixture and break layout.md's rule to "name the kind, not the role".
+- **`https-git-host.ts`, not `git-server.ts` or `http-backend.ts`.** layout.md says to name the kind. An ssh or plain-http host would be another kind. `http-backend` names the implementation, not what it stands in for.
+- **Split `marketplace.steps.ts` now.** It gains about four publishing variants and four result shapes. layout.md says a module that grows becomes `step_definitions/<function>/<topic>.steps.ts`. The existing two `Given`s move to `publishing.steps.ts` unchanged.
+- **`config.steps.ts` is its own function.** `claude-plugins.json` is the user's declarative config: it declares plugins and marketplaces both, so it is neither the plugin nor the marketplace vertical.
+- **The host's lifetime lives in `support/pi-process.ts`, not in a `support/https-git-host.ts`.** Cucumber runs `BeforeAll` hooks in load order, and the host must be listening before Pi spawns. Two modules would also mean two pieces of module state, which world-and-stand-ins.md forbids.
 
-The canonical pair audit contains 204 rows.
+## Architectural Patterns
 
-| Audit label     |   Pairs | Planning meaning                                       |
-| --------------- | ------: | ------------------------------------------------------ |
-| `PASS`          |      59 | Existing evidence to inspect; pair remains open        |
-| `COVERAGE_FAIL` |      83 | Mirrored test exists but direct coverage is incomplete |
-| `MISSING`       |      60 | Mirrored test is absent                                |
-| `TEST_FAIL`     |       2 | Focused test or environment failed; pair remains open  |
-| **Total open**  | **204** | **Every pair receives one executable plan and commit** |
+### Pattern 1: Run-fixed stand-in, per-scenario reset (the host rides on PiRun)
 
-The current corresponding-test gate reports 107 violations: 60 missing tests, 43
-unexpected tests, and four wrong imports. Both planted negative controls pass. These
-numbers are a starting diagnostic, not a completion ledger.
+**What:** One `HttpsGitHost` per worker, started in `BeforeAll` before Pi and stored on the existing `PiRun`. The certificate path and the port are written into Pi's env once. Per-scenario state is the repos root, the arming table, and the request log. `Before()` clears all three and asserts they are clear, just as it already empties the sandbox.
 
-One audit failure for `orchestrators/marketplace/add.ts` passes when the unchanged
-test can create its Unix socket, so its plan must preserve the behavior while making
-the test hermetic. `orchestrators/plugin/update.ts` has three reproducible assertion
-failures around unavailable Git-source candidates. Its own lifecycle pair must own
-that correction.
+**Why this lifetime and not per scenario:**
+- `NODE_EXTRA_CA_CERTS` "is only read when the Node.js process is first launched. Changing the value at runtime ... has no effect" (Node CLI docs). If the file is missing at launch, Node only warns, and every clone then fails as self-signed. So the certificate must exist before Pi spawns and must outlive scenarios.
+- `GITHUB_BASE_URL` contains the port. Per-scenario servers would need the same port every time, and with 8 parallel workers, TIME_WAIT, and random order that is not reliable. The variable is fixed at Pi start, so the port is too.
+- A hybrid (run-level host for GitHub sources, per-scenario hosts for URL sources) means two lifetimes, two reset paths, and two sets of arming code for no extra coverage.
 
-## Recommended Phase Architecture
+**Rule change required.** world-and-stand-ins.md allows module state only for "a process under test that is too slow to start per scenario". The host is neither the process under test nor slow. Its lifetime is forced because the slow process pins its address and trust root. Amend the exception, for example: *"A stand-in whose address or trust root that process fixes when it starts lives in the same run state; the same `Before()` resets it and asserts it is empty."* This is a skill-rule edit, so it needs the user's approval (Open Decision 2).
 
-The following grouping covers each production module exactly once. The phase counts
-sum to 204.
-
-| Phase | Group                               | Pair count | Dependency rationale                                                                                                  |
-| ----: | ----------------------------------- | ---------: | --------------------------------------------------------------------------------------------------------------------- |
-|   108 | Domain and Platform                 |         23 | Stabilize foundational values, resolver result, Git ports, credentials, and GitHub authentication before consumers    |
-|   109 | Shared Contracts                    |         19 | Prove errors, paths, configuration, notifications, and common utilities used by all later layers                      |
-|   110 | Persistence and Transaction         |         12 | Prove formats, atomic writes, idempotency, ledger isolation, and rollback coordination after their value contracts    |
-|   111 | Non-Hook Component Bridges          |         31 | Cover agents, commands, skills, and MCP conversion and staging on stable lower seams                                  |
-|   112 | Hook Runtime                        |         31 | Isolate the larger hook conversion, routing, dispatch, and execution subsystem                                        |
-|   113 | Orchestrator Support and Presenters |         35 | Prove small seams, classifiers, discovery helpers, messaging modules, and planning helpers before lifecycle composers |
-|   114 | Plugin and Marketplace Lifecycle    |         14 | Cover the large state-changing plugin and marketplace workflows after their collaborators                             |
-|   115 | Composition Orchestrators           |          8 | Cover import, reconcile, bootstrap, and edge-dependency composition after lifecycle primitives                        |
-|   116 | Edge Surface                        |         30 | Cover parsing and command dispatch after all invoked workflows have stable contracts                                  |
-|   117 | Extension Entry and Final Gate      |          1 | Cover root registration and composition, then close all global structural gates                                       |
-
-Phases 111 and 112 can be prepared in parallel after Phase 110 because their source
-trees are independent. Keep their commits and plans separate. Phase 113 must precede
-the lifecycle phase because the lifecycle modules depend on these helpers and
-presenters. Phase 115 follows lifecycle because its modules compose those workflows.
-
-### Phase 113 Boundary
-
-Use the live modules, not a new support directory. The intended 35 pairs are:
-
-- Five top-level support modules: authentication host, discovery, plugin path,
-  scope fan-out, and orchestrator types.
-- Fifteen plugin support and presentation modules: clone cache, clone garbage
-  collection, name discovery, Git-source probing, state classification, shared
-  helpers, update-row formatting, and the eight current messaging modules.
-- Six marketplace support and presentation modules: shared helpers and five current
-  messaging modules.
-- Five import support modules: execute messaging, marketplaces, references, settings,
-  and types.
-- Four reconcile support modules: apply outcomes, planning, reconcile messaging, and
-  types.
-
-### Phase 114 Boundary
-
-The 14 lifecycle pairs are the eight plugin workflows (`enable-disable`, `fetch`,
-`info`, `install`, `list`, `reinstall`, `uninstall`, and `update`) and the six
-marketplace workflows (`add`, `autoupdate`, `info`, `list`, `remove`, and `update`).
-These are high-value integration boundaries, but each remains one source-test pair.
-
-### Phase 115 Boundary
-
-The eight composition pairs are `edge-deps`, the two import composers (`execute` and
-the import barrel), plugin bootstrap, and four reconcile composers (`apply`,
-`backfill`, `notify`, and `pending`).
-
-## Within-Phase Execution Sequence
-
-The pair is the smallest executable unit. A phase can use waves, but a wave must not
-change pair ownership.
-
-1. Test type-only contracts, leaf values, and leaf adapter ports first.
-2. Test small exported helpers that are imported by other modules in the phase.
-3. Test stateful modules and persistence adapters after their schemas and values.
-4. Test presenters before the workflows that call them.
-5. Test lifecycle workflows before composition modules.
-6. Test barrels after their leaf exports are stable.
-7. Test the root entry point last.
-
-Serialize pairs when one changes a public contract used by the other or when both
-must edit the same concern-local test support file. Other pairs in the same phase can
-run in parallel. Never let parallel plans share ownership of a source, mirrored test,
-or commit.
-
-## Executable Pair Plan Shape
-
-Every plan should use the same evidence-producing sequence.
-
-### 1. Declare Ownership
-
-Name one exact production source and its one exact mirrored test. Record the audit
-label as baseline context only. Name any supplemental tests that contain behavior
-currently owned by the source.
-
-### 2. Trace the Public Contract
-
-Read the source, its exports, its callers and importers, the mirrored test, and related
-architecture or integration tests. Decide which observable behavior belongs in the
-mirrored test. Do not infer the contract from the old patch or retired phase plans.
-
-### 3. Consolidate Test Ownership
-
-Move source-owned cases from unexpected supplemental unit files into the mirrored
-test. Keep a supplemental test only when it genuinely proves a multi-module contract.
-Do not delete tests solely to make the corresponding-test gate green.
-
-### 4. Make the Smallest Production Change
-
-If the module cannot be tested through its exported surface, add a narrow production
-dependency or port that improves the real design. Prefer an optional dependency,
-explicit callback, clock, filesystem port, process boundary, or existing adapter.
-Keep the change inside the current module boundary unless current callers prove that
-a new production module is necessary.
-
-### 5. Write Direct Unit Tests
-
-Use `node:test` and `node:assert/strict`. Use explicit Arrange, Act, and Assert
-comments. Create fresh mutable state and a fresh temporary directory per case. Use
-strong mocks for promised interactions. Cover success, failure, absence, boundary,
-and retry behavior through exports only.
-
-Type-only files still require a mirrored test with compile-time contract assertions.
-Barrels must prove runtime binding identity for value exports and compile-time
-availability for type exports. The behaviorful root `index.ts` is not a barrel.
-
-### 6. Prove the Pair
-
-Run the focused test and the direct-coverage command for the exact source. Require
-100% functions, lines, and branches. Run type checking, linting, and affected
-contract tests when the public surface changes. Confirm that no test-only export,
-module replacement, or shared mutable state was introduced.
-
-### 7. Commit the Pair
-
-Create one commit that represents one source-test pair. Concern-local support edits
-may ride in the commit only when they exist to test that pair. A plan must not combine
-two production sources to reduce commit count.
-
-## Cross-Cutting Contract Carriers
-
-Cross-cutting concerns still need a single accountable source pair. Use these carrier
-pairs instead of creating non-pair executable plans.
-
-| Contract                                                          | Owning pair or pairs                                               |    Phase | Verification boundary                                                                |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------ | -------: | ------------------------------------------------------------------------------------ |
-| Resolver root safety                                              | `domain/resolver.ts`                                               |      108 | Runtime arm tests plus compile-time rejection of `pluginRoot` on unavailable results |
-| Git and credential adapter parity                                 | `platform/git.ts`, `platform/git-credential.ts`                    |      108 | Public port behavior and concern-local adapter contract cases                        |
-| Device Flow HTTP reachability                                     | `domain/github-auth.ts`                                            |      108 | Public authentication workflow with a production-reachable injected HTTP port        |
-| Version internals remain private                                  | `domain/version.ts`                                                |      108 | Test public version behavior; remove tests of private hashing constants              |
-| Hook metadata and diagnostics                                     | Relevant domain metadata pair and hook routing/dispatch pairs      | 108, 112 | Public translation and dispatch behavior; no private tool-name exports               |
-| Notification grammar and output routing                           | Shared notify/reason/context pairs and each current messaging pair | 109, 113 | Direct message tests plus supplemental architecture checks                           |
-| Durable formats and atomic writes                                 | Each persistence module                                            |      110 | Round trip, corrupted/absent state, retry, and atomic replacement behavior           |
-| Bridge atomicity and foreign-content preservation                 | Each bridge stage/unstage module                                   | 111, 112 | Direct bridge pair tests plus supplemental cross-bridge integration cases            |
-| Update preload, staging warnings, and unavailable-source behavior | `orchestrators/plugin/update.ts`                                   |      114 | Public update outcomes and rollback/notification effects                             |
-| Reconcile entry isolation                                         | `orchestrators/reconcile/apply.ts`                                 |      115 | One entry failure does not stop other entries or arms                                |
-| Correspondence and direct-coverage enforcement                    | Every pair; final closure with root `index.ts`                     | All, 117 | Pair checks continuously; full gates and negative controls at milestone close        |
-
-If a carrier exposes a defect in gate code, repair that gate in the carrier's pair
-commit. Do not introduce a gate-only phase or plan. Gate implementation already at
-HEAD is baseline infrastructure, not proof that any pair is complete.
-
-## Resolver Discriminant Contract
-
-The resolver's three-state `state` field and the new boolean discriminant serve
-different purposes. Keep both. `state` distinguishes fully installable from partially
-available results. `installable` makes root access type-safe.
+**Trade-off:** Arming is mutable state that crosses scenarios, but only through `PiRun`, and the reset asserts it is empty. A leak shows up under `order: random` as a reset failure, not as a wrong result.
 
 ```typescript
-type ResolvedPlugin =
-  | {
-      installable: true;
-      state: "installable";
-      pluginRoot: string;
-      // Current installable fields remain here.
-    }
-  | {
-      installable: true;
-      state: "partially-available";
-      pluginRoot: string;
-      // Current partial-result fields remain here.
-    }
-  | {
-      installable: false;
-      state: "unavailable";
-      name: string;
-      notes: readonly string[];
-      // No pluginRoot.
-    };
+// support/pi-process.ts (shape only)
+BeforeAll(async (): Promise<void> => {
+  const root = await mkdtemp(path.join(tmpdir(), "pi-cm-features-"));
+  const gitHost = await HttpsGitHost.start(path.join(root, "git-host"));
+  const sandbox = { home: ..., agentDir: ..., cwd: ... };
+  piRun = { root, sandbox, gitHost, pi: await PiProcess.start(sandbox, gitHost.piEnvironment()) };
+});
+
+Before(async (): Promise<void> => {
+  const run = currentRun();
+  if (!run.pi.idle) { await run.pi.stop(); run.pi = await PiProcess.start(run.sandbox, run.gitHost.piEnvironment()); }
+  await run.gitHost.reset();                 // rm repos, disarm, clear log
+  /* empty sandbox, new_session, list */
+  assert.deepStrictEqual(
+    { skills, marketplaces: listed.marketplaces, gitHostRequests: run.gitHost.requests() },
+    { skills: [], marketplaces: [], gitHostRequests: [] },
+  );
+});
 ```
 
-The `domain/resolver.ts` pair must update its runtime schema or constructors together
-with the exported type. Its mirrored test must prove all runtime arms and include a
-compile-time negative assertion for `pluginRoot` on the unavailable arm. The change
-is additive for consumers that only inspect `state`, so it does not require a mass
-consumer rewrite or a separate migration plan. It does not change a persisted format.
+### Pattern 2: Widened driver, narrowed by kind at the step
 
-## Verification Boundaries
+**What:** `runCommandPayloads(pi, command)` asserts the exchange was quiet (no extension errors, no dialogs) and `disposition: "handled"`. It validates every `claude-plugin` entry with `Compile(NOTIFICATION_PAYLOAD_SCHEMA)` (`shared/notification-wire.ts:800`), asserts there is at least one, and returns `NotificationPayload[]` in emission order. `runCommand` stays the strict single-cascade wrapper for setup `Given`s. Steps narrow on `kind` with an assertion that compares whole values, never with a silent filter.
 
-### Pair Boundary
+**When:** Every marketplace `When`. A bare `marketplace update` emits one cascade per marketplace. Any mutating command can add an `mcp-config-notices` payload. `info` emits `marketplace-info`, `marketplace-info-cascade`, or `marketplace-not-added`. The parser emits `usage-error`.
 
-- The mirrored test imports the production source directly.
-- The focused test passes.
-- Direct coverage for that source is 100% functions, lines, and branches.
-- Tests use only the exported surface.
-- Exactly one mirrored test owns the source.
-- The commit contains one production source-test pair.
+**World shape:** `results: NotificationPayload[] | undefined`. `lastResult()` asserts `results.length === 1` and returns it. The existing `the result has these fields:` step works for any kind once `UNSTATED_FIELDS` also hides `blocks` (it already hides `marketplaces`), because `flatten` already folds `source.sourceKind` to `source kind`. Bare `update` gets its own step, `the results list these marketplaces:`, which flattens the `marketplaces` blocks of every cascade payload in order. Verify the per-marketplace emission order is deterministic (sorted by name?) before writing an ordered table.
 
-### Wave Boundary
+```typescript
+export type NotificationPayload = Type.Static<typeof NOTIFICATION_PAYLOAD_SCHEMA>;
+const PAYLOAD_VALIDATOR = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
 
-- Type checking and linting pass for the accumulated wave.
-- Direct dependents are retested when a public contract changes.
-- Shared support files have one current owner and no parallel edit collision.
+export async function runCommandPayloads(pi: PiProcess, command: string): Promise<NotificationPayload[]> {
+  const exchange = await pi.request({ type: "prompt", message: command });
+  assertQuiet(exchange);
+  assert.deepStrictEqual(exchange.response.data, { disposition: "handled" }, command);
+  const payloads = exchange.entries.filter((e) => e.customType === "claude-plugin").map((e) => e.data);
+  for (const payload of payloads) {
+    assert.ok(PAYLOAD_VALIDATOR.Check(payload), JSON.stringify(PAYLOAD_VALIDATOR.Errors(payload)));
+  }
+  assert.notDeepStrictEqual(payloads, [], command);
+  return payloads as NotificationPayload[]; // after Check; or narrow via a type guard
+}
+```
 
-### Phase Boundary
+(`as` after a `Check` is a test-side cast. If lint objects, use a type-guard function, as `CASCADE_VALIDATOR.Check` already narrows today.)
 
-- Every pair in the phase passes direct coverage independently.
-- Relevant architecture and integration suites pass.
-- `npm run check` remains green, apart from a separately recorded pre-existing
-  structural-gate gap that the phase has strictly reduced.
-- The global corresponding-test violation count never increases. It may remain nonzero
-  until later phases because the later source pairs are still open.
+### Pattern 3: Symbolic addresses in step text, exact values in assertions
 
-### Milestone Boundary
+**What:** Steps never name temp paths or the port (features.md). Two run-specific values appear in what users type and see:
+- **Path sources:** place local marketplaces under the sandbox HOME and type them as `~/marketplaces/<name>`. `~/` parses as a path source (`domain/source.ts:348`). Pi expands it against the sandbox HOME, and `claude-plugins.json` records the user-typed form verbatim (`config-write-back.ts` source contract). So a config table reads exactly `~/marketplaces/fixtures`. For `marketplace-info.source.absPath`, the result step projects the sandbox HOME prefix back to `~`, so the comparison stays whole-value.
+- **Git URLs:** one token, for example `https://<git host>/acme/tools.git`, expanded by `command.steps.ts` before sending. Actual result cells, such as a cause chain that names the URL, are projected back with the reverse substitution. Put both directions in `lib/https-git-host.ts` (`expandAddress`, `projectAddress`). Do not use `<...>` if any Outline has a column of the same name, because Outline substitution runs first. A different sigil is safer; the writer picks it.
+- **GitHub sources need no token.** `owner/repo` and `https://github.com/owner/repo` are typed literally. That is the point of the override.
 
-Phase 117 closes the full repository, not only the entry pair. Require all of the
-following:
+**Trade-off:** Projecting results risks hiding a bug that writes the wrong host. Mitigation: the projection replaces only the exact run base `https://127.0.0.1:<port>`, so any other host still shows up and fails the comparison.
 
-- `npm run test:corresponding`
-- `npm run test:coverage:direct:all`
-- the corresponding-test planted negative control
-- the direct-coverage planted negative control
-- `npm run check`
-- no missing, unexpected, or wrong-import pair violations
-- 204 pair commits represented by 204 completed pair plans
+### Pattern 4: One production seam for the GitHub base (D-MF-01)
 
-If the new structural gates are not yet part of `npm run check`, the root entry pair
-plan can own the final package-script wiring as a supporting task. This keeps the
-roadmap free of a non-pair executable plan. Supplemental architecture and integration
-tests remain contract evidence; they never replace direct pair proof.
+**What:** `shared/github-base-url.ts` exports `gitHubBaseUrl()`. `canonicalCloneUrl`'s `github` arm reads it, and a `gitHubHost()` derived from it replaces the `GITHUB_HOST` constant. Every downstream path then follows with no other edits: `networkCloneUrl` (marketplace add, plugin clone, `install-clone-probe`, `dependency-tag-probe`), `originMatchesSource` (MA-12 leftover recognition), and plugin-clone cache keys.
 
-## Patterns to Follow
+**Why `canonicalCloneUrl` and not only the wire URL:** If only `networkCloneUrl` changed, a clone's recorded `origin` would be the stand-in URL while the source identity stayed `github.com`. `originMatchesSource` would then reject the extension's own leftover (MA-12/MA-13), and `hostFromCloneUrl` would still bind `github.com`. `buildAuthCallbacks.onAuth` compares `new URL(url).host` with the bound host (`platform/git-auth-callbacks.ts:178`) and cancels on a mismatch, so every 401 path would fail with a host-mismatch instead of the real behavior. Unset, the identity string stays byte-identical, so warm caches are untouched.
 
-### Public-Surface Testability
+**Why the host must come from the base (security):** If the wire URL moved to the override host while auth stayed bound to `github.com`, the `credentialOps.fill("github.com")` result would be keyed to github.com. The `onAuth` host guard cancels before offering it, but that guard is the only thing that keeps a GitHub token from being sent to another origin. Binding auth to the override host makes the helper lookup itself host-correct. It also means `findProviderForHost(127.0.0.1:<port>)` finds no provider, so the Device Flow can never fire under the override. Without that, `domain/github-auth.ts` would `fetch` the real `github.com/login/device/code` from a hermetic test, which breaks the "no network" rule.
 
-Refactor a hidden dependency into a production-useful port, then test behavior through
-the exported workflow. Good seams include the existing filesystem, Git, Pi API,
-process, clock, and notification boundaries.
+**What does NOT follow the override:** `sourceLogical` (the `marketplace list` label and the same/different source compare), the `marketplace-info` GitHub `owner`/`repo` fields, `claude-plugins.json` (raw user input), the `github.com` host fold in `source.ts` parsing, and `auth-registry.ts`'s `github.com` provider. Users keep seeing GitHub, which keeps parity.
 
-### Concern-Local Test Support
+**Boundary placement:**
+- `domain` may import only `shared` and `platform` (`.fallowrc.json`). `shared` is a leaf and already reads an extension-owned env var (`shared/debug-log.ts`).
+- **Do not put it at `platform/github-*.ts`.** ESLint BLOCK F's `no-restricted-imports` regex is the bare substring `platform/git` (`eslint.config.js:379`). It would match `platform/github-base-url.ts` and fail `domain/clone-key.ts`, which is not in `NETWORK_SEAMS`, and so is every other network-free importer.
+- The module names no `gitOps`, so it does not belong in `NETWORK_SEAMS`.
+- No fallow rule-pack rule bans `process.env` reads.
 
-Place a fake or contract suite with the concern it represents. A Git fake can support
-Git adapter pairs. A generic mock bucket shared by unrelated layers weakens ownership
-and creates parallel edit conflicts.
+## Data Flow
 
-### Stable Mutable-State Isolation
+### Scenario flow (`marketplace add` of a git URL)
 
-Construct ledgers, registries, hook routers, environment views, and temporary paths
-inside each test. An explicit state holder is preferable to a module-reset hook or
-module replacement.
+```
+Given the marketplace "tools" is published at the git host as "acme/tools"
+  git-marketplace.ts: writeMarketplace(tmp) -> git init --bare <repos>/acme/tools.git
+                      -> git --git-dir --work-tree add/commit (hermetic env)
+When the user runs "/claude:plugin marketplace add https://<host>/acme/tools.git --scope project"
+  command.steps.ts: expandAddress -> runCommandPayloads(pi, cmd)
+    Pi child: edge/router -> orchestrators/marketplace/add.ts -> addUrlInGuard
+      -> hostFromCloneUrl(url) = 127.0.0.1:<port> -> buildAuthForHost
+      -> gitOps.clone(networkCloneUrl) ==HTTPS==> HttpsGitHost
+           (arming check -> spawn git http-backend CGI -> record request)
+      -> rename into <project>/.pi/pi-claude-marketplace/sources/tools
+      -> write-back <project>/.pi/claude-plugins.json {source: raw}
+      -> pi.appendEntry("claude-plugin", cascade)
+    PiProcess collects entries until the response -> validated union payloads
+  world.results = [cascade]
+Then the result lists these marketplaces:     (payload, user-visible)
+Then the project config declares these marketplaces:  (claude-plugins.json, user-owned)
+Then the git host received these requests:   (fake log; optional)
+```
 
-### Supplemental Contract Catalogs
+### What a `Then` may observe (from most to least preferred)
 
-Keep architecture tests for invariants that span multiple modules: import direction,
-no-network commands, output routing, persistence compatibility, foreign-content
-preservation, and public-surface shape. Use these tests at phase boundaries while
-unit pairs retain direct behavior ownership.
+1. **The command's own payload.** It is schema-validated and compared whole, as the plugin suite does today.
+2. **A follow-up read the user would run:** `marketplace list` / `marketplace info` after an add or remove, `plugin list` after a remove cascade, and `new_session` skills after a cascade uninstall. This is the session.steps.ts principle ("look where the user looks"). Use it as a separate scenario, not as a second `When` in the same one.
+3. **User-owned files:** `claude-plugins.json` in `<cwd>/.pi/` (project) or `<agentDir>/` (user), read through a world getter `configPath(scope)`. Compare the whole `marketplaces` map projected to rows (`name | source | autoupdate`, plus every other key present).
+4. **The fake's request log:** for NFR-5 (list, info, remove, path sources reach the network zero times) and for retry and `.git`-suffix behavior.
 
-## Anti-Patterns to Avoid
+**Never assert:** `state.json`, clone directories under `pi-claude-marketplace/sources/`, `plugin-clones/` keys, or lock files. These are internal (features.md: "files the user owns" only), and asserting them couples the suite to internals that unit tests already cover.
 
-### Replaying the Abandoned Partition
+### Env flow (fixed at Pi start)
 
-Do not recreate the retired resolver subtrees, source schema subtrees, notify shards,
-hook dispatcher shards, or per-verb orchestrator partitions from the old patch. Those
-paths describe an abandoned implementation attempt, not the current architecture.
+```
+BeforeAll: HttpsGitHost.start(dir) -> {certPath, baseUrl}
+  -> piEnvironment() = { NODE_EXTRA_CA_CERTS: certPath, GITHUB_BASE_URL: baseUrl, GIT_CONFIG_NOSYSTEM: "1" }
+  -> startRpcPi(sandbox, extraEnv) -> childEnvironment(sandbox) ∪ extraEnv (explicit keys only)
+```
 
-### Migration-History Commentary
+`GIT_CONFIG_NOSYSTEM=1` matters because `platform/git-credential.ts` shells out to `git credential fill` for every non-provider host (127.0.0.1 included). HOME is already the sandbox, but `/etc/gitconfig` can name a system credential helper (libsecret, GCM) and reach the developer's keyring. Set the same on the host's own `git http-backend` and fixture `git` calls, plus `GIT_CONFIG_GLOBAL=/dev/null` and `HOME=<root>/git-host/home`, so a developer's `commit.gpgsign=true` or hooks never run.
 
-Do not add source comments that explain the retired patch, Phase 106/107, old sharded
-coverage, or previous ownership mechanisms. Comments must explain current behavior
-only.
+## Scaling Considerations
 
-### Test-Only Production Surface
+| Scale | Adjustment |
+|-------|------------|
+| Today (about 15 plugin scenarios) | One Pi per worker, parallel 8. |
+| +40-60 marketplace scenarios | 8 hosts, 8 certificates (one openssl call each, under 100 ms), 8 Pis. Each git request forks `git http-backend`; a clone is 2-3 requests. Expect about 50 ms per git scenario, which is fine. |
+| CI `static`/`integration` timeouts | `test:cucumber` runs inside `npm run check` and its own `ci.yml` step (line 145). Watch that job's timeout once git scenarios land. |
 
-Do not export private constants, reset functions, singleton accessors, default
-adapters, or internal hook names only for tests. Use public workflow assertions or a
-real dependency seam.
+### Bottlenecks
 
-### Parallel Coverage Systems
+1. **Pi replacement after a failed scenario** (about 1 s): the existing cost. The host survives the replacement, so nothing new.
+2. **Keep-alive sockets from Pi to the host:** `stop()` must call `server.closeAllConnections()` and kill in-flight CGI children, or `AfterAll` hangs until the step timeout.
 
-Do not restore the sharded LCOV runner, reconciliation protocol, direct-coverage
-matrix baseline, ownership registry, adapter participation scanner, or targeted
-Fallow inventory. Use the current direct pair runner, correspondence gate, negative
-controls, normal type/lint checks, and whole-repository Fallow.
+## Anti-Patterns
 
-### Historical Completion Credit
+### Anti-Pattern 1: A second module-level variable for the host
 
-Do not convert an audit `PASS`, an existing test, a retained commit, or a green
-supplemental suite directly into roadmap completion. Current isolated pair evidence is
-the only completion proof.
+**What people do:** `let host: HttpsGitHost | undefined` in a new `support/https-git-host.ts`, with its own `BeforeAll`.
+**Why it's wrong:** It breaks the single module-state exception, and `BeforeAll` order across modules decides whether Pi spawns before the certificate exists. Node then only warns, and every clone fails as a self-signed certificate.
+**Do this instead:** Put it on `PiRun` and start it in the same `BeforeAll`, before `PiProcess.start`.
 
-### Large Refactors for Coverage
+### Anti-Pattern 2: Overriding only the wire URL, or keeping `GITHUB_HOST`
 
-Do not split a production file simply because it is large or hard to cover. First add
-the smallest real seam within the current module. A new production extraction creates
-another source pair and changes callers, so it requires explicit architectural need
-and revised pair accounting.
+**What people do:** Patch `networkCloneUrl` or `add.ts` to swap the host and leave `GITHUB_HOST = "github.com"`.
+**Why it's wrong:** `onAuth` cancels on the host mismatch, so the 401 scenarios test a guard instead of auth. `originMatchesSource` stops recognizing leftovers. A missed literal (`update.ts:399`, `update-flow.ts:151`) keeps sending update fetches to the real github.com, which in a hermetic test is a network leak.
+**Do this instead:** One read in `canonicalCloneUrl`, and replace the constant with a function, so the compiler lists every site.
 
-## Hotspots and Integration Risks
+### Anti-Pattern 3: Filtering payloads to find "the" result
 
-Large files deserve smaller test scenarios and stricter caller tracing, not automatic
-module splits.
+**What people do:** `payloads.find((p) => p.kind === "cascade")`.
+**Why it's wrong:** An unexpected extra payload (a stray `diagnostic`, a duplicate cascade) passes silently. That is the skill's top BLOCKER: a scenario a wrong implementation still passes.
+**Do this instead:** `lastResult()` asserts exactly one payload. A multi-payload step compares the whole ordered list.
 
-| Hotspot                                  | Approximate size | Main risk                                                                 | Recommended handling                                                 |
-| ---------------------------------------- | ---------------: | ------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `shared/notify.ts`                       |      4,135 lines | Message grammar and output paths are shared broadly                       | Stabilize in Phase 109; keep catalog-level checks supplemental       |
-| `orchestrators/plugin/update.ts`         |      3,240 lines | Network/cache selection, preload, staging warnings, and rollback interact | Give its pair a late lifecycle wave and retest all direct dependents |
-| `orchestrators/plugin/install.ts`        |      2,442 lines | Transaction phases and bridge staging interact                            | Prove transaction and bridge ports first                             |
-| `orchestrators/plugin/info.ts`           |      2,403 lines | Read-only behavior and presentation are intertwined                       | Prove presenters first; retain no-network checks                     |
-| `domain/resolver.ts`                     |      1,744 lines | Public union, schemas, paths, and availability rules meet                 | Make the discriminant change in Phase 108 before consumers           |
-| `orchestrators/plugin/reinstall.ts`      |      1,687 lines | Uninstall/install state preservation and retry behavior                   | Reuse public lifecycle seams; avoid shared mutable fixtures          |
-| `orchestrators/plugin/list.ts`           |      1,589 lines | Scope aggregation and presentation                                        | Prove fan-out and messaging modules first                            |
-| `orchestrators/plugin/enable-disable.ts` |      1,252 lines | Install ledger and staged artifact state must agree                       | Test durable state and retry paths directly                          |
-| `orchestrators/plugin/shared.ts`         |      1,243 lines | Many lifecycle callers depend on small semantic details                   | Complete in Phase 113 before lifecycle pairs                         |
-| `orchestrators/import/execute.ts`        |      1,130 lines | Multiple external formats converge into lifecycle calls                   | Complete import leaf helpers before composer                         |
+### Anti-Pattern 4: Asserting `state.json` or clone directories
 
-The pair for marketplace add must account for sandbox-sensitive Unix socket setup.
-The pair should inject or isolate the relevant boundary so ordinary unit execution
-does not depend on host socket permission, without changing marketplace behavior.
+**Why it's wrong:** Steps must name user-visible things, and these files change with internal refactors.
+**Do this instead:** Use follow-up `list`/`info`, `claude-plugins.json`, and the request log.
 
-## Scalability Considerations
+### Anti-Pattern 5: Naming the production module `platform/github-*.ts`
 
-This milestone scales by pair count and dependency coordination, not by runtime user
-load.
+**Why it's wrong:** BLOCK F's `platform/git` substring regex matches it and fails every network-free importer.
+**Do this instead:** `shared/github-base-url.ts`.
 
-| Concern               | Early phases                                    | Middle phases                                       | Final phases                                             |
-| --------------------- | ----------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------- |
-| Parallel work         | Leaf pairs with separate files can run together | Serialize public-contract carriers before consumers | Serialize edge and entry composition behind workflows    |
-| Shared test support   | Add only concern-local support                  | Assign one owner per shared support edit            | Freeze support before final global proof                 |
-| Structural-gate noise | Record baseline and prevent regression          | Violation count must decline as pairs close         | Require zero violations and passing negative controls    |
-| Coverage runtime      | Run exact source pair per plan                  | Run phase direct suite at phase close               | Run all 204 pairs plus full check                        |
-| Failure localization  | Pair command identifies one owner               | Phase suites identify integration regressions       | Global gates validate completeness only after pair proof |
+## Integration Points
 
-## Sources and Confidence
+### External services (stand-ins)
 
-All conclusions come from repository-local primary evidence at HEAD. External ecosystem
-research is not needed for this architecture decision.
+| Service | Stand-in | Notes |
+|---------|----------|-------|
+| Any HTTPS git host (url sources) | `lib/https-git-host.ts` | CGI env: `GIT_PROJECT_ROOT`, `GIT_HTTP_EXPORT_ALL=1`, `PATH_INFO`, `QUERY_STRING`, `REQUEST_METHOD`, `CONTENT_TYPE`, `HTTP_CONTENT_ENCODING` (isomorphic-git may gzip upload-pack bodies). Parse the CGI `Status:` header. Arm per repo path; "drop" = `socket.destroy()` before headers. |
+| GitHub (`owner/repo`, `https://github.com/...`) | the same host through the base-URL override | Layout `/<owner>/<repo>.git`. The Device Flow stays unreachable by design (no provider for the loopback host), so GitHub-specific auth (Device Flow prompt) is out of scope for this suite. Say so in the feature description. |
+| Local directory / direct `marketplace.json` | `lib/path-marketplace.ts` | Move the root under the sandbox HOME so commands can type `~/marketplaces/<name>`. Before already empties HOME, so the per-scenario `onRelease(rm)` becomes optional (keep it for symmetry). |
 
-| Source                                                  | Use                                                                        | Confidence                                      |
-| ------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------- |
-| `.planning/PROJECT.md`                                  | v1.19 decisions, constraints, and Phase 108 start                          | HIGH                                            |
-| `.planning/codebase/ARCHITECTURE.md`                    | Live layer and dependency descriptions                                     | HIGH                                            |
-| `extensions/pi-claude-marketplace/**/*.ts`              | Actual modules, exports, callers, and imports                              | HIGH                                            |
-| `tests/**/*.test.ts`                                    | Current mirrored and supplemental test topology                            | HIGH                                            |
-| `docs/guidelines/typescript-unit-testing-guidelines.md` | Required pair, public-surface, coverage, and gate model                    | HIGH                                            |
-| `.claude/rules/typescript-unit-testing.md`              | Repository-enforced testing rules                                          | HIGH                                            |
-| `.planning/inputs/unit-test-refactor-handoff/`          | Retained contracts, corrections, abandoned mechanisms, and replay cautions | HIGH for decisions; LOW as implementation proof |
-| `/tmp/pi-cm-pair-audit.CJWiph/results.tsv`              | Current 204-pair diagnostic inventory                                      | HIGH as baseline; NONE as completion proof      |
-| `package.json` and test runner scripts                  | Current check and structural-gate wiring                                   | HIGH                                            |
+### Internal boundaries
 
-## Open Planning Questions
+| Boundary | Communication | Notes |
+|----------|---------------|-------|
+| `features/lib` -> `tests/e2e/_rpc.ts` | import `startRpcPi`, `killProcessGroup` | layout.md permits reusing a process harness. Widen the signature and do not copy it. The only consumer today is `features/lib/pi-process.ts`. |
+| `features/lib` -> `extensions/.../shared/notification-wire.ts` | import `NOTIFICATION_PAYLOAD_SCHEMA` (value) | Same as today's `CASCADE_PAYLOAD_SCHEMA` import. The schema is the published contract world-and-stand-ins.md asks drivers to validate against. |
+| `domain/clone-key.ts` -> `shared/github-base-url.ts` | import | Allowed by the `domain -> shared` zone. Not a BLOCK F import. |
+| `orchestrators/auth-host.ts` -> `shared/github-base-url.ts` | import | auth-host is already a `NETWORK_SEAM`, which doesn't matter for this import. |
+| Unit tests for the new module | `tests/shared/github-base-url.test.ts` | Required by the source-test pairing and the 100% direct coverage gate. Each case sets the env var and registers its restore with `t.after()` (the workflow-home precedent). `clone-key`, `auth-host`, `add`, `update`, and `update-flow` tests gain one override case each. |
 
-- Decide the exact wave size within each phase after the planner builds the caller
-  graph for that phase. Do not change pair ownership to meet a target wave size.
-- Decide whether structural-gate package-script wiring is still absent when Phase 117
-  starts. If it is absent, keep it as support work in the root entry pair.
-- Re-run the audit immediately before roadmap finalization if HEAD changes. Counts in
-  this document describe the researched HEAD and must not silently drift.
+## Suggested Build Order
+
+| # | Phase | Depends on | Delivers |
+|---|-------|-----------|----------|
+| 1 | **Driver widening + path-source marketplace features** | none | `runCommandPayloads` + union validation, `results` on the world, the `marketplace.steps.ts` split, `config.steps.ts`, `~/marketplaces` relocation. Features: `add` (directory, manifest file, refused forms Outline, usage errors), `list`, `info` (single, fan-out, not-added), `remove` (incl. cascade onto an installed plugin), `update` single + bare multi-payload (path sources), `autoupdate`/`noautoupdate`. No network anywhere, so most scenarios land early. |
+| 2 | **`GITHUB_BASE_URL` production seam (D-MF-01)** | none (can run parallel to 1) | `shared/github-base-url.ts`, `canonicalCloneUrl`, `gitHubHost()` replacing `GITHUB_HOST` at 3 sites plus the `update.ts` literal, unit tests, CHANGELOG/README note of the divergence. Settle the env var name first (Open Decision 1). |
+| 3 | **HTTPS git host stand-in + url sources** | 1 | `lib/https-git-host.ts`, `lib/git-marketplace.ts`, `_rpc.ts` extra env, `PiRun.gitHost` + reset assertion, skill-rule amendment (Open Decision 2), `git-host.steps.ts`. Features: https URL add/update/remove/info, armed 401/404/5xx/drop failures, `.git`-suffix verbatim behavior, NFR-5 "no requests" checks for list/info/remove. Its first plan should be one walking-skeleton scenario through Pi `--offline` before the rest. |
+| 4 | **GitHub sources through the override** | 2 + 3 | `owner/repo`, `https://github.com/owner/repo[.git][#ref]` add/update; info shows `owner`/`repo`; the config records the raw form; `ref` pinning. Pi env gains `GITHUB_BASE_URL` here (harmless if set in phase 3 already). |
+| 5 | **Suite review gate** (may fold into 4) | 1-4 | `npx cucumber-js --dry-run --format usage` shows no UNUSED steps, `fallow dupes` on `path-marketplace`/`git-marketplace`, CI timing, and the cucumber skill review pass. |
+
+**Ordering rationale:** Phase 1 carries the driver and world changes every later phase consumes, and it needs no new infrastructure. Phase 2 is a production change with its own unit-test gate, independent of `features/`, so it can be reviewed in isolation and parallelized. Phase 3 is the riskiest (CGI, TLS trust inside Pi `--offline`, rule amendment) and needs the widened driver. Phase 4 is thin once 2 and 3 exist.
+
+**Research flags:**
+- Phase 3 needs a walking-skeleton check that Pi's `--offline`/`PI_OFFLINE=1` does not block extension-initiated HTTPS. The spike ran isomorphic-git, not inside Pi.
+- Phase 1 needs the bare-`update` payload order and any trailing `mcp-config-notices` payloads checked by running them.
+- Phases 1 and 2 are standard patterns.
+
+## Open Decisions for the User
+
+1. **The env var name.** The Terraform GitHub provider and others already read `GITHUB_BASE_URL`, and there it points at an **API** URL (`https://ghe.example.com/api/v3/`). A Pi user with it exported for Terraform would have every GitHub marketplace clone silently redirected to a wrong URL. That breaks D-MF-01's "unset is byte-identical" promise in practice. Recommend `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`, which matches the `PI_CLAUDE_MARKETPLACE_DEBUG` precedent. This means amending D-MF-01.
+2. **Amend `.agents/skills/cucumber/rules/world-and-stand-ins.md`** to allow a stand-in whose address or trust root the slow process pins at start to live in the same run state (Pattern 1).
+3. **A set but invalid override** (not `https:`, or has a path, query, or userinfo): throw a typed error at use (fail-clean, recommended) or treat it as unset (silent).
+4. **Optional:** rename `PluginWorld` -> `ScenarioWorld` now that marketplace steps share it.
+
+## Sources
+
+- Code on this branch (HIGH): `features/**`, `tests/e2e/_rpc.ts:167-174,400-404`, `extensions/pi-claude-marketplace/domain/clone-key.ts:81-128`, `domain/source.ts:348-357,604-650,755-764`, `orchestrators/auth-host.ts:76-98,229-249`, `orchestrators/marketplace/add.ts:850-1030`, `orchestrators/marketplace/update.ts:386-420`, `orchestrators/plugin/update-flow.ts:145-158`, `platform/git-auth-callbacks.ts:84-120,170-190`, `platform/workflow-home.ts`, `shared/debug-log.ts:23`, `shared/notification-wire.ts:291-560,800-833`, `persistence/config-write-back.ts`, `domain/manifest-cache.ts` (same-size mtime residual risk), `.fallowrc.json` boundaries, `eslint.config.js:44-106,364-381`, `cucumber.json`, `.agents/skills/cucumber/rules/*.md`.
+- [Node.js CLI docs, `NODE_EXTRA_CA_CERTS`](https://nodejs.org/api/cli.html#node_extra_ca_certsfile): read only at launch; a missing file only warns. Quoted verbatim; the seam rates the provider tier LOW, but the content is the official docs.
+- Web search for `GITHUB_BASE_URL` usage (MEDIUM): [terraform-aws-atlantis#244](https://github.com/terraform-aws-modules/terraform-aws-atlantis/issues/244), [git_store GitHub config](https://git-store.hexdocs.pm/1.0.0/git_store/github_config.html), [Codespaces default env vars](https://docs.github.com/en/codespaces/developing-in-a-codespace/default-environment-variables-for-your-codespace).
+- `.planning/BACKLOG.md` GHCAN-01/02: an earlier manual `git http-backend` behind HTTPS stand-in drove `marketplace add`/`update` through Pi (precedent for the CGI approach).
+
+---
+*Architecture research for: marketplace-features (cucumber behavioral tests for `/claude:plugin marketplace`)*
+*Researched: 2026-10-15*

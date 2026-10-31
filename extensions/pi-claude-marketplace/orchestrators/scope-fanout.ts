@@ -12,9 +12,11 @@
 // NFR-5: `loadState` and `loadMergedScopeConfig` are both read-only local
 // reads. Nothing here touches the network.
 
-import { loadMergedScopeConfig } from "../persistence/config-merge.ts";
+import { effectiveMarketplaceAutoupdate } from "../domain/official-marketplaces.ts";
+import { hasInvalidConfigLayer, loadMergedScopeConfig } from "../persistence/config-merge.ts";
 import { locationsFor } from "../persistence/locations.ts";
 import { loadState } from "../persistence/state-io.ts";
+import { ownValue } from "../shared/own-key.ts";
 
 import type { ExtensionState } from "../persistence/state-io.ts";
 import type { Scope } from "../shared/types.ts";
@@ -75,19 +77,25 @@ async function readScopeMarketplaceRecord(
 ): Promise<ScopedMarketplaceRecord | undefined> {
   const locations = locationsFor(scope, opts.cwd);
   const state = await loadState(locations.extensionRoot);
-  const record = state.marketplaces[opts.marketplace];
+  const record = ownValue(state.marketplaces, opts.marketplace);
   if (record === undefined) {
     return undefined;
   }
 
   // No extra I/O: the merged load was already happening for autoupdate, and it
   // answers the `enabled` opinion from the same parse.
-  const { merged } = await loadMergedScopeConfig(locations);
+  const outcome = await loadMergedScopeConfig(locations);
+  const { merged } = outcome;
 
   return {
     scope,
     record,
-    autoupdate: merged.marketplaces[opts.marketplace]?.entry.autoupdate ?? false,
+    autoupdate:
+      !hasInvalidConfigLayer(outcome) &&
+      effectiveMarketplaceAutoupdate(
+        opts.marketplace,
+        ownValue(merged.marketplaces, opts.marketplace)?.entry.autoupdate,
+      ),
     declaredEnabled: declaredEnabledFor(merged, opts.pluginKey),
   };
 }
@@ -96,5 +104,5 @@ function declaredEnabledFor(
   merged: MergedScopeConfig,
   pluginKey: string | undefined,
 ): boolean | undefined {
-  return pluginKey === undefined ? undefined : merged.plugins[pluginKey]?.entry.enabled;
+  return pluginKey === undefined ? undefined : ownValue(merged.plugins, pluginKey)?.entry.enabled;
 }

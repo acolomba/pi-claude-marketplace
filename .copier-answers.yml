@@ -1,0 +1,19 @@
+# changes here will be overwritten by copier
+_commit: 904d340
+_src_path: gh:acolomba/blueprint-typescript
+author_email: acolomba@gmail.com
+author_name: Alessandro Colomba
+behavioral_tests: true
+build: false
+codegraph: true
+copyright_license: MIT
+description: Access Claude plugin marketplaces from Pi Coding Agent. Supports Claude commands, skills, agents, hooks, MCP servers, and workflows.
+github_owner: acolomba
+gsd: true
+integration_tests: true
+node_version: '22'
+package_name: pi-claude-marketplace
+project_name: pi-claude-marketplace
+publish_npm: true
+publish_registry: npm
+source_layout: extensions

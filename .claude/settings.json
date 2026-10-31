@@ -6,6 +6,16 @@
   "hooks": {
     "SessionStart": [
       {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/init-session.sh",
+            "timeout": 900
+          }
+        ]
+      },
+      {
         "matcher": "startup|resume",
         "hooks": [
           {

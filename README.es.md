@@ -26,18 +26,18 @@ Esta extensión instala complementos desde los mercados de complementos de Claud
 - Habilidades.
 - Agentes. Requiere [pi-subagents](https://pi.dev/packages/pi-subagents).
 - Hooks (ganchos). Soporte parcial. Para más información, consulta [Compatibilidad de hooks](docs/hooks-compatibility.md).
-- Servidores MCP. Requiere [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter).
+- Servidores MCP. Requiere [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). Para más información, consulta [Compatibilidad de MCP](docs/mcp-compatibility.md).
 - Workflows (flujos de trabajo). Requiere [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). Para más información, consulta [Compatibilidad de workflows](docs/workflows-compatibility.md).
 
 Los complementos que contienen componentes no compatibles pueden instalarse parcialmente. Un complemento instalado parcialmente puede no funcionar según lo previsto.
 
-El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como `/plugin` de Claude Code. Una configuración de estado deseado en los archivos `[~/].pi/agent/claude-plugins[.local].json` hace que las instalaciones de complementos sean automáticas y repetibles. Puedes compartir estos archivos entre máquinas o miembros del equipo.
+El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como `/plugin` de Claude Code. Las configuraciones de estado deseado en `[~/].pi/agent/claude-plugins[.local].json` hacen que las instalaciones de complementos sean automáticas y repetibles. Puedes compartir estas configuraciones entre máquinas o miembros del equipo.
 
 ## Requisitos previos
 
-- [Pi Coding Agent](https://pi.dev) 0.86.1 o posterior
-- [pi-subagents](https://pi.dev/packages/pi-subagents) (opcional pero recomendado, `pi install npm:pi-subagents`)
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) (opcional pero recomendado, `pi install npm:pi-mcp-adapter`)
+- [Pi Coding Agent](https://pi.dev) 1.0.0 o posterior
+- [pi-subagents](https://pi.dev/packages/pi-subagents) 0.74.0 o posterior (opcional pero recomendado, `pi install npm:pi-subagents`)
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 5.2.0 o una versión 5.x posterior (opcional pero recomendado, `pi install npm:pi-mcp-adapter`). La compatibilidad con MCP integrada en Pi no cumple este requisito.
 - [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) (opcional pero recomendado, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
 ## Uso
@@ -118,38 +118,13 @@ Las habilidades usan la forma `/skill:` de Pi y también tienen un alias en las 
 
 Los alias de habilidades usan dos puntos en todas las plataformas. Si un alias entra en conflicto con un comando, el comando tiene prioridad. Usa `/skill:foo-bar` para ejecutar la habilidad.
 
-Los nombres de los servidores MCP no cambian. Si otra configuración de MCP ya utiliza ese nombre, la instalación o actualización del complemento fallará.
+Los servidores MCP de los complementos reciben los nombres que les da Claude Code. El modelo ve cada herramienta como `mcp__plugin_<plugin>_<server>__<tool>`. pi-mcp-adapter guarda cada servidor bajo una clave que termina en `_`. `/claude:plugin info` muestra cada servidor como `plugin:<plugin>:<server>`.
 
-| Nombre del complemento | Clave de `mcpServers` | Nombre del servidor MCP en Pi  |
-| ---------------------- | --------------------- | ------------------------------ |
-| `foo`                  | `api`                 | `api`                          |
-| `foo`                  | `foo-api`             | `foo-api`                      |
-| `bar`                  | `api`                 | _conflicto si `api` ya existe_ |
-
-### Personalización de los agentes generados
-
-Esta extensión convierte cada agente de complemento en un archivo de agente de pi-subagents llamado `pi-claude-marketplace-<plugin>-<agent>`. No edites estos archivos: install, update y reinstall los regeneran.
-
-Dos reglas de conversión que conviene conocer:
-
-- Si el agente de origen no declara `tools:`, el agente generado no tiene lista de herramientas permitidas. pi-subagents entonces otorga sus herramientas integradas predeterminadas, igual que Claude Code otorga todas las herramientas disponibles para subagentes. Los procesos hijos en segundo plano también reciben herramientas de extensiones del entorno, como las herramientas MCP de pi-mcp-adapter. Si el agente de origen define `disallowedTools`, esos nombres se convierten en `excludeTools`, que necesita pi-subagents 0.62.0 o posterior. Las versiones anteriores ignoran ese campo.
-- Los campos de agente `allowed-tools`, `mcpServers`, `permissionMode` y `hooks` se descartan, con una advertencia que explica el motivo. Claude Code ignora los cuatro en agentes de complementos (`allowed-tools` es un campo de comandos de barra). Los servidores MCP propios del complemento y su hooks.json sí se instalan.
-
-Para cambiar la configuración de un agente generado de forma que el cambio sobreviva a las actualizaciones del complemento, usa las anulaciones de agentes de pi-subagents en tu archivo de configuración de Pi (`~/.pi/agent/settings.json` para el ámbito de usuario, `<project>/.pi/settings.json` para el ámbito del proyecto):
-
-```json
-{
-  "subagents": {
-    "agentOverrides": {
-      "pi-claude-marketplace-foo-reviewer": {
-        "tools": "read,bash,mcp:github"
-      }
-    }
-  }
-}
-```
-
-Una anulación reemplaza el mismo campo en el frontmatter generado. Las entradas `mcp:<server>` otorgan herramientas MCP directas cuando pi-mcp-adapter está instalado. pi-subagents carga herramientas MCP solo para procesos hijos en segundo plano (`async: true`).
+| Nombre del complemento | Clave de `mcpServers` | Clave del servidor en el adaptador | Nombres de las herramientas     | Nombre que muestra `info` |
+| ---------------------- | --------------------- | ---------------------------------- | ------------------------------- | ------------------------- |
+| `foo`                  | `api`                 | `plugin_foo_api_`                  | `mcp__plugin_foo_api__<tool>`   | `plugin:foo:api`          |
+| `foo`                  | `my.db`               | `plugin_foo_my_db_`                | `mcp__plugin_foo_my_db__<tool>` | `plugin:foo:my.db`        |
+| `bar`                  | `api`                 | `plugin_bar_api_`                  | `mcp__plugin_bar_api__<tool>`   | `plugin:bar:api`          |
 
 ### Ámbito (Scoping)
 
@@ -161,7 +136,7 @@ También puedes instalar el mismo complemento en ambos ámbitos, el de usuario y
 
 ### Complementos parcialmente disponibles
 
-Algunos complementos contienen componentes no compatibles: un hook que no se puede mapear, un servidor LSP o un tema. Para instalar o actualizar estos complementos parcialmente, pasa la opción `--partial`. Esta extensión instala los componentes compatibles e ignora los incompatibles.
+Algunos complementos contienen componentes no compatibles: un hook que no se puede mapear, un servidor LSP, un tema o un servidor MCP que usa una función que pi-mcp-adapter no puede ejecutar. Para instalar o actualizar estos complementos parcialmente, pasa la opción `--partial`. Esta extensión instala los componentes compatibles e ignora los incompatibles.
 
 Lista los complementos parcialmente disponibles.
 
@@ -177,48 +152,80 @@ Instala un complemento parcialmente disponible. Coloca `--partial` primero para 
 
 ## Archivos de configuración
 
-Cada ámbito almacena su configuración declarativa de mercados y complementos en `claude-plugins.json`, bajo la raíz del ámbito.
+Cada ámbito declara sus mercados y complementos en dos capas: la capa base y la capa local. El archivo de una capa es su configuración. La configuración base, `claude-plugins.json`, está bajo la raíz del ámbito.
 
 | Ámbito    | Ruta del archivo                  |
 | --------- | --------------------------------- |
 | `user`    | `~/.pi/agent/claude-plugins.json` |
 | `project` | `<cwd>/.pi/claude-plugins.json`   |
 
-Estos archivos son el registro definitivo de los mercados y complementos instalados. Pi aplica su contenido al cargar la extensión (`/reload`).
+Las configuraciones de un ámbito son el estado deseado de sus mercados y complementos. El catálogo de un mercado es la lista de complementos y versiones que ofrece. Una sesión nueva o `/reload` no cambia tus complementos instalados, salvo que actives la [aplicación automática](#aplicaci%C3%B3n-autom%C3%A1tica). Solo lista los cambios que necesitan tus configuraciones y los catálogos de los mercados.
+
+Para ver esos cambios, ejecuta `/claude:plugin pending`. Para hacerlos, ejecuta `/claude:plugin apply`. Después ejecuta `/reload` para que Pi cargue el resultado.
+
+```text
+/claude:plugin pending
+/claude:plugin apply
+/reload
+```
 
 Que Pi aplique los componentes de un complemento declarado depende de la clave opcional `enabled` de la entrada y del valor predeterminado de instalación que declara el autor del complemento. Para más información, consulta [Activación de complementos](docs/plugin-enablement.md).
 
-### Archivos de configuración local
+### Aplicación automática
 
-Cada ámbito también puede tener un archivo `claude-plugins.local.json` junto al archivo base.
+Para que cada sesión nueva y cada `/reload` apliquen tus configuraciones, activa `autoapply`:
+
+```text
+/claude:plugin autoapply on
+```
+
+Esto pone la clave de primer nivel `autoapply` de una configuración en `true`. Como `enable`, escribe la configuración base del usuario salvo que añadas `--scope project` o `--local`. `/claude:plugin autoapply off` pone la clave en `false`. Ejecuta `/claude:plugin autoapply` sin valor para ver el valor en vigor, la configuración que lo fija y el valor propio de cada configuración. Con `--scope` o `--local`, solo lista esas configuraciones. Fijar el valor no ejecuta `apply`: la carga siguiente lee el valor nuevo. También puedes editar la clave a mano:
+
+```json
+{
+  "autoapply": true,
+  "plugins": { "context7-plugin@context7-marketplace": {} }
+}
+```
+
+El valor predeterminado es `false`. Cuando `autoapply` está activada, la carga ejecuta `/claude:plugin apply` en los dos ámbitos antes de que Pi busque habilidades y prompts. Así, los complementos que instala están listos en la misma sesión. La carga puede clonar repositorios desde la red, como hace `apply`. Un cambio que falla aparece como una fila fallida y sigue en `pending`. La carga siguiente lo intenta otra vez.
+
+Cualquier configuración puede fijar `autoapply`. Gana la configuración más específica que la fija, en este orden: la configuración local del proyecto, la configuración base del proyecto, la configuración local del usuario y la configuración base del usuario. Si una configuración no es válida, por ejemplo porque `autoapply` no es `true` ni `false`, la carga no aplica nada e informa de esa configuración.
+
+Una configuración de usuario no puede desactivar el `autoapply` de un proyecto, porque las configuraciones del proyecto son más específicas. Para desactivarlo en tu máquina, pon `"autoapply": false` en la configuración local del proyecto. Una carga nunca te pide iniciar sesión. Si un clon necesita una credencial que no guardaste, su fila falla, y después `/claude:plugin apply` puede pedirte que inicies sesión.
+
+> [!WARNING]
+> La configuración base de un proyecto suele estar en el control de versiones. Si fija `autoapply` en `true`, iniciar `pi` en ese proyecto instala sus complementos, incluidos sus hooks y servidores MCP, sin preguntar. Lee `.pi/claude-plugins.json` antes de iniciar `pi` en un proyecto que clonaste. Claude Code no tiene este ajuste: no instala un complemento que solo activa la configuración de un proyecto, y tú lo instalas con un comando.
+
+### La configuración local
+
+La configuración local, `claude-plugins.local.json`, está junto a la configuración base.
 
 | Ámbito    | Ruta del archivo                        |
 | --------- | --------------------------------------- |
 | `user`    | `~/.pi/agent/claude-plugins.local.json` |
 | `project` | `<cwd>/.pi/claude-plugins.local.json`   |
 
-El archivo local anula las entradas individuales del archivo base. Una entrada en `claude-plugins.local.json` reemplaza por completo la entrada con la misma clave en `claude-plugins.json`.
-
-Pasa `--local` a cualquier comando de modificación para dirigirse únicamente al archivo local.
+La configuración local anula entradas de la configuración base. Para escribir en la configuración local, agrega `--local`:
 
 ```text
+/claude:plugin marketplace add upstash/context7 --local
 /claude:plugin install context7-plugin@context7-marketplace --local
-/claude:plugin marketplace autoupdate context7-marketplace --local
 ```
 
 ### Convención de Gitignore
 
-En el ámbito del proyecto, confirma (`commit`) `claude-plugins.json`. Así, tus colaboradores instalan los mismos mercados y complementos. Mantén `claude-plugins.local.json` fuera del control de versiones. Agrega esta línea al `.gitignore` de tu proyecto:
+En el ámbito del proyecto, confirma (`commit`) la configuración base, `claude-plugins.json`. Así, tus colaboradores instalan los mismos mercados y complementos. Mantén la configuración local, `claude-plugins.local.json`, fuera del control de versiones. Agrega esta línea al `.gitignore` de tu proyecto:
 
 ```text
 .pi/claude-plugins.local.json
 ```
 
-Los archivos de ámbito de usuario se encuentran en tu directorio de inicio. Son personales y nunca se comparten.
+Las configuraciones de ámbito de usuario se encuentran en tu directorio de inicio. Son personales y nunca se comparten.
 
 ## Referencia de comandos
 
-Esta extensión replica el comando `/plugin` de Claude Code. Usa `/claude:plugin` en Pi para operaciones de mercado y complementos. Después de instalar, desinstalar, actualizar o reinstalar complementos, ejecuta `/reload`. Así, Pi detecta los recursos modificados.
+Esta extensión replica el comando `/plugin` de Claude Code. Usa `/claude:plugin` en Pi para operaciones de mercado y complementos. Después de instalar, desinstalar, actualizar o reinstalar complementos, ejecuta `/reload`. Así, Pi detecta los recursos modificados. Si editas una configuración a mano, ejecuta `/claude:plugin apply` antes de `/reload`.
 
 ### Mercado
 
@@ -277,19 +284,28 @@ Actualiza un mercado. Si omites el nombre, el comando actualiza todos los mercad
 /claude:plugin marketplace update
 ```
 
-Elimina un mercado y todos los complementos instalados desde él.
+Elimina un mercado y desinstala sus complementos. Una dependencia que otro complemento todavía necesita sigue instalada.
 
 ```text
 /claude:plugin marketplace remove context7-marketplace
 /claude:plugin marketplace rm context7-marketplace
 ```
 
-Activa o desactiva las actualizaciones automáticas de complementos del mercado. Cuando actualizas el mercado manualmente, esta extensión también actualiza los complementos instalados.
+### Actualización automática
+
+`autoupdate` es un ajuste de cada mercado. Controla lo que pasa cuando el mercado se actualiza:
+
+- Si `autoupdate` está activado, la extensión actualiza el mercado y sus complementos instalados en segundo plano. La actualización empieza después del primer mensaje de una sesión `tui`, con un retraso aleatorio de hasta diez minutos. Un `marketplace update` manual también actualiza los complementos instalados del mercado.
+- Si `autoupdate` está desactivado, `marketplace update` solo actualiza la lista de complementos del mercado.
+
+Activa o desactiva `autoupdate` para un mercado.
 
 ```text
 /claude:plugin marketplace autoupdate context7-marketplace
 /claude:plugin marketplace noautoupdate context7-marketplace
 ```
+
+Si un mercado no tiene ajuste de `autoupdate`, `autoupdate` está desactivado. Los mercados oficiales de Claude son la excepción, como en Claude Code. Un mercado oficial es uno cuyo nombre Claude Code reserva para Anthropic, como `claude-plugins-official`. `autoupdate` está activado de forma predeterminada para estos mercados, excepto para `knowledge-work-plugins` y `first-party-plugins`.
 
 ### Complemento
 
@@ -335,7 +351,7 @@ Instala en el ámbito del proyecto en lugar del ámbito de usuario.
 /claude:plugin install context7-plugin@context7-marketplace --scope project
 ```
 
-Un complemento puede declarar los otros complementos que necesita. La instalación también los agrega, en el mismo ámbito y en el mismo archivo de configuración. Para más información, consulta [Resolución de dependencias](docs/dependency-resolution.md).
+Un complemento puede declarar los otros complementos que necesita. La instalación también los agrega, en el mismo ámbito. Para más información, consulta [Resolución de dependencias](docs/dependency-resolution.md).
 
 Actualiza un complemento instalado, todos los complementos instalados de un mercado, o todos los complementos instalados.
 
@@ -407,17 +423,10 @@ El comando `/claude:plugin install` obtiene automáticamente un complemento remo
 
 ### Bootstrap
 
-`Bootstrap` es una configuración en un solo paso. Agrega el mercado oficial de Anthropic en el ámbito de usuario y habilita `autoupdate`.
+`Bootstrap` es una configuración en un solo paso. Agrega el mercado oficial de Anthropic, `claude-plugins-official`, en el ámbito de usuario. `autoupdate` está activado de forma predeterminada para este mercado. Si el mercado ya está agregado, `bootstrap` no cambia su ajuste de [`autoupdate`](#actualizaci%C3%B3n-autom%C3%A1tica).
 
 ```text
 /claude:plugin bootstrap
-```
-
-Equivale a ejecutar estos comandos:
-
-```text
-/claude:plugin marketplace add anthropics/claude-plugins-official
-/claude:plugin marketplace autoupdate claude-plugins-official
 ```
 
 ### Import

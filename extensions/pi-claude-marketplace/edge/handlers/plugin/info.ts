@@ -12,9 +12,10 @@ import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
 import { parseFlagNames } from "../../flag-catalog.ts";
 
-import { splitPluginMarketplaceRef, withParsedArgs } from "./shared.ts";
+import { parsePluginRef, withParsedArgs } from "./shared.ts";
 
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { McpStatusReader } from "../../../platform/mcp-status.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE = "Usage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user|project]";
 
@@ -22,14 +23,14 @@ const USAGE = "Usage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--sc
 const ACCEPTED_FLAGS = parseFlagNames("info");
 
 /**
- * Factory: returns the async handler closed over `pi` (required by
- * `notify()` for the soft-dep probe). `register.ts` wires this into
- * the `SubcommandHandlers` map under the `pluginInfo` key.
+ * Factory: returns the async handler, which forwards the router's command run
+ * to `getPluginInfo` (D-05) with the extension load's MCP status tracker
+ * (ASTAT-01), whose last snapshot info stamps on each written MCP server.
+ * `register.ts` wires this into the `SubcommandHandlers` map under the
+ * `pluginInfo` key.
  */
-export function makePluginInfoHandler(
-  pi: ExtensionAPI,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return withParsedArgs(parseArgs, USAGE, async (parsed, ctx): Promise<void> => {
+export function makePluginInfoHandler(mcpStatus: McpStatusReader): SubcommandHandler {
+  return withParsedArgs(parseArgs, USAGE, async (parsed, ctx, run): Promise<void> => {
     // FTCH-03: `info` accepts the single boolean `--fetch` flag (the catalog-owned
     // accepted set); every other long flag is rejected inline.
     let fetch = false;
@@ -41,34 +42,36 @@ export function makePluginInfoHandler(
       }
 
       if (token.startsWith("--")) {
-        notifyUsageError(ctx, { message: `Unknown flag: "${token}".`, usage: USAGE });
+        notifyUsageError(ctx, run, { message: `Unknown flag: "${token}".`, usage: USAGE });
         return;
       }
 
       nonFlagPositionals.push(token);
     }
 
+    if (nonFlagPositionals.length > 1) {
+      notifyUsageError(ctx, run, { message: "Too many arguments.", usage: USAGE });
+      return;
+    }
+
     const positional = nonFlagPositionals[0];
-    if (nonFlagPositionals.length !== 1 || positional === undefined) {
-      notifyUsageError(ctx, {
+    if (positional === undefined) {
+      notifyUsageError(ctx, run, {
         message: "info requires exactly one <plugin>@<marketplace> argument.",
         usage: USAGE,
       });
       return;
     }
 
-    const ref = splitPluginMarketplaceRef(positional);
+    const ref = parsePluginRef(positional, ctx, run, USAGE);
     if (ref === undefined) {
-      notifyUsageError(ctx, {
-        message: `Invalid <plugin>@<marketplace> ref: "${positional}".`,
-        usage: USAGE,
-      });
       return;
     }
 
     await getPluginInfo({
       ctx,
-      pi,
+      run,
+      mcpStatus,
       marketplace: ref.marketplace,
       plugin: ref.plugin,
       cwd: ctx.cwd,

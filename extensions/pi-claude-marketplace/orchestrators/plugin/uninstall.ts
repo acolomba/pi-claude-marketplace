@@ -5,11 +5,18 @@
 // Composition (D-09):
 //   withLockedStateTransaction(locations, async (tx) => {
 //     PU-5 silent converge: if record absent, set alreadyGone=true and return (NO save)
+//     LAYER-04 layer verdict (standalone only, WR-09): throw UninstallRefusedError
+//       when only the layer the command does not target declares the plugin
+//     LAYER-05: when both layers declare it, drop the target declaration and
+//       return with a skipped row
 //     D-06-06 declarer read: collect the OTHER records in this scope that
 //       declare the target, and throw UninstallRefusedError only when some
 //       record's declarations cannot be read (D-05-07) -- BEFORE the cascade,
 //       so a refusal leaves nothing off disk; the read hands back the
 //       declaration index, the walked records and the dependent keys
+//     LAYER-08 (standalone only): when no layer declares the plugin, throw
+//       UninstallRefusedError while a plugin of the target layer needs it,
+//       and return with a skipped row while only plugins of the other layer do
 //     outcome = await cascadeUnstagePlugin(plugin, marketplace, locations, installed)
 //     if (!outcome.ok) throw outcome.cause  // PU-7 propagation; state record retained
 //     delete state.marketplaces[mp].plugins[plugin]
@@ -25,6 +32,9 @@
 //   D-19-01 -- the underlying rm() still runs, only the user-visible
 //   warning surface is gone. The same cleanup then runs once per removed
 //   member with the same `keepData` (D-05-09).
+//   D-PL9-22: the same cleanup then removes the node_modules that the package
+//   step wrote into the removed record's plugin root, unless another record of
+//   the scope still runs from that root.
 //   PU-8 reload hint: set explicitly on the row (severity: "info",
 //   needsReload: true, D-03/D-06) because uninstalled is a realized,
 //   state-changing transition; notify() aggregates it into the cascade's
@@ -52,62 +62,81 @@
 // `resources.agents` / `resources.mcpServers` is normalized to [] by
 // loadState BEFORE the withStateGuard closure observes it.
 //
-// API parameter shape note: `pi` is required because `notify(ctx, pi,
-// message)` consumes it for the single softDepStatus(pi) probe per call.
-// The uninstalled variant has no `dependencies` field by
-// construction (D-15-02 / MSG-SD-3) so the renderer cannot emit
-// `{requires pi-subagents}` / `{requires pi-mcp}` markers on (uninstalled)
-// rows even though the probe is uniformly threaded.
+// API parameter shape note: `run` is required because every emission renders
+// from the command run's one soft-dep snapshot (D-05). The uninstalled variant
+// has no `dependencies` field by construction (D-15-02 / MSG-SD-3), so the
+// renderer cannot emit `{requires pi-subagents}` / `{requires pi-mcp-adapter}`
+// markers on (uninstalled) rows even though the run is uniformly threaded.
 
 import { rm } from "node:fs/promises";
 import path from "node:path";
 
-import { findDependents, isHeldBy, pruneOrphans } from "../../domain/dependency-orphans.ts";
+import {
+  declaredNeedersByLayer,
+  findDependents,
+  isHeldBy,
+  pruneOrphans,
+} from "../../domain/dependency-orphans.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts";
+import { loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { StateLockHeldError, errorMessage, isErrnoException } from "../../shared/errors.ts";
+import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type PluginFailedMessage,
   type PluginUninstalledMessage,
+  type PluginUninstallSkippedMessage,
   type Reason,
 } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
-import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
-import { AgentsUnstageFailureError, cascadeUnstagePlugin } from "../marketplace/shared.ts";
+import { ownValue } from "../../shared/own-key.ts";
+import {
+  withExistingScopeLock,
+  withLockedStateTransaction,
+} from "../../transaction/with-state-guard.ts";
+import {
+  AgentsUnstageFailureError,
+  cascadeUnstagePlugin,
+  mcpConfigNoticesMember,
+} from "../marketplace/shared.ts";
 
-import { garbageCollectPluginClones } from "./clone-gc.ts";
-import { buildScopeDeclarationIndex } from "./dependency-index.ts";
+import { collectPluginClonesLocked } from "./clone-gc.ts";
+import { buildScopeDeclarationIndex, withoutDisabledHolders } from "./dependency-index.ts";
+import { DEFAULT_PACKAGE_INSTALL_OPS, removeInstalledPackages } from "./package-install.ts";
 import {
   absentTargetReasons,
   applyPartialCascadeFold,
+  configOrEmpty,
   emitMarketplaceNotAdded,
   missIsNotInstalled,
+  pluginLayerVerdict,
   resolveCrossScopePluginTarget,
+  sweepWorkflowsStaging,
 } from "./shared.ts";
 import {
+  composeDependencyRefusalCause,
+  composeKeptInstalledRow,
+  composeNeededElsewhereRow,
   composePrunedRow,
   composeRemovalBlocks,
   composeUninstalledRow,
   UNINSTALL_CONTEXT,
 } from "./uninstall.messaging.ts";
-import { garbageCollectWorkflowsStaging } from "./workflows-staging-gc.ts";
 
 import type { IndexedRecord, ScopeDeclarationIndexResult } from "./dependency-index.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
+import type { DeclarationIndex, DeclaringLayers } from "../../domain/dependency-orphans.ts";
+import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";
-
-/** The config-layer paths the cross-layer sweep writes through. */
-type UninstallLocations = Pick<
-  ScopedLocations,
-  "configJsonPath" | "configLocalJsonPath" | "scopeRoot"
->;
 
 /**
  * RECON-03: controls how `uninstallPlugin` surfaces
@@ -136,15 +165,26 @@ export type UninstallPluginNotifications =
  * `reason` is typed as `Reason` (broader than `ContentReason`) so the
  * structural `"marketplace not added"` sentinel returned by the missing-marketplace arm
  * flows through the same field; mirrors `RemoveMarketplaceOutcome`.
+ *
+ * AFILE-04: `mcpConfigNotices` carries the cascade's MCP config notices for
+ * the caller to show, set only when non-empty. A failed uninstall can carry
+ * them too, because the cascade can rewrite the MCP file before a later step
+ * fails.
  */
 export type UninstallPluginOutcome =
-  | { readonly status: "uninstalled"; readonly name: string; readonly version?: string }
+  | {
+      readonly status: "uninstalled";
+      readonly name: string;
+      readonly version?: string;
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
+    }
   | { readonly status: "converged"; readonly name: string }
   | {
       readonly status: "failed";
       readonly reason: Reason;
       readonly error: Error;
       readonly cause: string;
+      readonly mcpConfigNotices?: readonly McpConfigNotice[];
     };
 
 /**
@@ -158,8 +198,8 @@ export type UninstallPluginOutcome =
  */
 export interface UninstallPluginOptions {
   readonly ctx: NotificationContext;
-  /** Factory `pi` reference -- threaded into `notify()` for the single softDepStatus(pi) probe. */
-  readonly pi: ToolInventory;
+  /** The command run. D-05: every emission renders from its one soft-dep snapshot. */
+  readonly run: NotificationRun;
   readonly scope?: Scope;
   /** Project-scope cwd (ignored for user scope; see locationsFor). */
   readonly cwd: string;
@@ -189,8 +229,9 @@ export interface UninstallPluginOptions {
    */
   readonly notifications?: UninstallPluginNotifications;
   /**
-   * WB-01 / WB-02: when true, target `claude-plugins.local.json` instead
-   * of `claude-plugins.json`. The base file is NEVER touched on the
+   * WB-01 / WB-02: when true, target the local config
+   * (`claude-plugins.local.json`) instead of the base config
+   * (`claude-plugins.json`). The base config is NEVER touched on the
    * --local path; loadConfig's `absent` arm yields an empty starting
    * shape that saveConfig writes back to the local path.
    */
@@ -201,9 +242,10 @@ export interface UninstallPluginOptions {
 export interface UninstallTransaction {
   readonly cascadeUnstagePlugin: typeof cascadeUnstagePlugin;
   readonly commitPluginRemoval: typeof commitPluginRemoval;
-  readonly loadTargetConfig: typeof loadConfig;
+  /** Loads one layer's config; called for the target layer and the other layer. */
+  readonly loadLayerConfig: typeof loadConfig;
   readonly runPostCommitCleanup: typeof runPostUninstallCleanup;
-  readonly sweepConfigLayers: typeof sweepPluginFromConfigLayers;
+  readonly deleteLayerDeclaration: typeof deletePluginFromLayer;
   readonly withLockedStateTransaction: typeof withLockedStateTransaction;
 }
 
@@ -221,9 +263,9 @@ export type UninstallHooksRouting = Pick<
  * declarer's own read-failure token would make a false claim about the
  * target's manifest; the cause line names the declarer.
  *
- * D-06-06 narrowed this class to that ONE outcome. A target other installed
- * plugins still declare is no longer refused -- it is removed, and the
- * dependents are named on the success row.
+ * D-06-06 limits this class to that ONE outcome. A target other installed
+ * plugins still declare is removed, and the dependents are named on the
+ * success row.
  *
  * `message` IS the rendered cause line, so it carries only `name@marketplace`
  * keys, field paths or already-redacted text -- never an absolute path -- and
@@ -246,7 +288,14 @@ type DeclarationSnapshot = Extract<ScopeDeclarationIndexResult, { readonly ok: t
 /** The declaration walk, plus the records that declare the plugin being removed. */
 interface DeclarerReading {
   readonly snapshot: DeclarationSnapshot;
-  /** Sorted `name@marketplace` keys, empty when nothing declares the target. */
+  /**
+   * UNI-01 / D-23-07: the snapshot's index without its disabled holders, the
+   * index the dependents report and the LAYER-08 needer walk read. The orphan
+   * sweep keeps reading `snapshot.index`, where a disabled plugin still holds
+   * its declarations (D-05-04).
+   */
+  readonly enabledIndex: DeclarationIndex;
+  /** Sorted `name@marketplace` keys of the enabled declarers, empty when none. */
   readonly dependents: readonly string[];
 }
 
@@ -258,12 +307,12 @@ interface DeclarerReading {
  * through, because the orphan sweep that follows the removal consumes both its
  * index and its candidate records.
  *
- * A non-empty dependent set no longer blocks the removal (D-06-06, superseding
- * D-05-14): it is reported on the success row, and each dependent is disabled
+ * A non-empty dependent set does not block the removal (D-06-06): it is reported on the success row, and each dependent is disabled
  * with a remedy at the next load by the load-time check. Who counts as a
- * declarer is unchanged -- a disabled record still holds its declarations
- * (D-05-04), only this scope is consulted (D-05-05), and every declaration is
- * read offline (D-05-06).
+ * dependent: only an enabled record (UNI-01 / D-23-07, Claude Code's reverse
+ * dependents), only this scope is consulted (D-05-05), and every declaration
+ * is read offline (D-05-06). The returned snapshot keeps every holder for the
+ * orphan sweep (D-05-04).
  */
 async function readDeclarers(args: {
   readonly state: ExtensionState;
@@ -275,16 +324,251 @@ async function readDeclarers(args: {
     locations: args.locations,
     exclude: args.key,
   });
-  // D-05-07 fail-closed, PRESERVED by D-06-06 and NOT to be relaxed alongside
-  // the dependents refusal it used to sit beside: an unreadable record is
-  // never read as "declares nothing". Without this throw a damaged manifest
-  // would turn into a silent removal of something another plugin needs, which
+  // D-05-07 fail-closed, independent of the dependents report (D-06-06): an
+  // unreadable record is never read as "declares nothing". Without this throw
+  // a damaged manifest would turn into a silent removal of something another plugin needs, which
   // is the one outcome this read must never produce.
   if (!result.ok) {
     throw new UninstallRefusedError("unreadable", result.cause.message);
   }
 
-  return { snapshot: result, dependents: findDependents(args.key, result.index) };
+  const enabledIndex = withoutDisabledHolders(result.index, result.candidates);
+  return { snapshot: result, enabledIndex, dependents: findDependents(args.key, enabledIndex) };
+}
+
+/** The layer configs a named uninstall reads: its target and, standalone, the other one. */
+interface UninstallLayerPaths {
+  readonly target: string;
+  /** Undefined under orchestration, which applies no layer rule (WR-09). */
+  readonly other: string | undefined;
+}
+
+/**
+ * WB-01: the target layer is chosen by the flag alone, once, before the lock,
+ * so the command never falls back to the base config when the local config
+ * is absent.
+ */
+function uninstallLayerPaths(
+  locations: Pick<ScopedLocations, "baseConfigJsonPath" | "localConfigJsonPath">,
+  local: boolean,
+  orchestrated: boolean,
+): UninstallLayerPaths {
+  const [target, other] = local
+    ? [locations.localConfigJsonPath, locations.baseConfigJsonPath]
+    : [locations.baseConfigJsonPath, locations.localConfigJsonPath];
+  return { target, other: orchestrated ? undefined : other };
+}
+
+/** Both layer parses, or the basename of the first file that cannot be read. */
+type UninstallLayers =
+  | { readonly kind: "invalid"; readonly basename: string }
+  | { readonly kind: "readable"; readonly target: ScopeConfig; readonly other?: ScopeConfig };
+
+/**
+ * CFG-03 / T-56-03-04: read the target layer and, for a standalone uninstall,
+ * the other one, inside the lock. An invalid file stops the uninstall before
+ * any change, named by its basename only. An invalid other layer is never read
+ * as declaring nothing: it may declare the plugin.
+ */
+async function readUninstallLayers(
+  loadConfigFile: UninstallTransaction["loadLayerConfig"],
+  paths: UninstallLayerPaths,
+): Promise<UninstallLayers> {
+  const target = await loadConfigFile(paths.target);
+  if (target.status === "invalid") {
+    return { kind: "invalid", basename: path.basename(paths.target) };
+  }
+
+  if (paths.other === undefined) {
+    return { kind: "readable", target: configOrEmpty(target) };
+  }
+
+  const other = await loadConfigFile(paths.other);
+  if (other.status === "invalid") {
+    return { kind: "invalid", basename: path.basename(paths.other) };
+  }
+
+  return { kind: "readable", target: configOrEmpty(target), other: configOrEmpty(other) };
+}
+
+/**
+ * LAYER-04 / D-MF-03: a named uninstall acts on its target layer, so it is
+ * refused when only the other layer declares the plugin. The refusal leaves
+ * the closure before the declarer read, the cascade, any config write, and the
+ * save. A reconcile-driven uninstall read no other layer and is never refused
+ * (WR-09).
+ *
+ * LAYER-05: when both layers declare the plugin, the answer is the other
+ * layer, whose declaration keeps the plugin installed.
+ */
+function checkOtherLayerDeclaration(
+  layers: Extract<UninstallLayers, { kind: "readable" }>,
+  args: { readonly local: boolean; readonly marketplace: string; readonly plugin: string },
+): "base" | "local" | undefined {
+  if (layers.other === undefined) {
+    return undefined;
+  }
+
+  const verdict = pluginLayerVerdict({
+    target: layers.target,
+    other: layers.other,
+    targetIsLocal: args.local,
+    marketplace: args.marketplace,
+    plugin: args.plugin,
+  });
+  if (verdict.kind === "other-only") {
+    throw new UninstallRefusedError(verdict.reason, verdict.refusal.message);
+  }
+
+  if (verdict.kind !== "both") {
+    return undefined;
+  }
+
+  return args.local ? "base" : "local";
+}
+
+/**
+ * LAYER-05: a standalone uninstall deletes the plugin key from its target
+ * layer only. WR-09: a reconcile-driven uninstall, which reads no other layer,
+ * writes no layer, because reconcile derives the desired state from the
+ * layers.
+ */
+async function deleteTargetDeclaration(
+  transaction: UninstallTransaction,
+  layerPaths: UninstallLayerPaths,
+  locations: Pick<ScopedLocations, "scopeRoot">,
+  target: { readonly plugin: string; readonly marketplace: string },
+): Promise<void> {
+  if (layerPaths.other === undefined) {
+    return;
+  }
+
+  await transaction.deleteLayerDeclaration(
+    layerPaths.target,
+    locations.scopeRoot,
+    target.plugin,
+    target.marketplace,
+  );
+}
+
+/** Which layers declare a key, from the target layer's side. */
+function declaringLayers(inTarget: boolean, inOther: boolean): DeclaringLayers {
+  if (inTarget) {
+    return inOther ? "both" : "target";
+  }
+
+  return inOther ? "other" : "none";
+}
+
+/**
+ * LAYER-08 / D-MF-03: a plugin no layer declares is a dependency, and a named
+ * uninstall of it is decided by the declared plugins that still need it,
+ * walked through undeclared holders. A needer the target layer declares
+ * refuses the uninstall. Only needers the other layer declares give the
+ * skipped row, because the uninstall would break plugins this command does
+ * not manage. With no needer, the uninstall goes ahead.
+ *
+ * The refusal is the divergence D-MF-03 records: Claude Code uninstalls a
+ * needed plugin and reports its dependents. The walk reads the snapshot of the
+ * D-06-06 declarer read, under the same lock, and runs before the cascade and
+ * the save, so both arms change nothing. A reconcile-driven uninstall read no
+ * other layer and applies no layer rule (WR-09).
+ */
+function checkDependencyNeeders(
+  layers: Extract<UninstallLayers, { kind: "readable" }>,
+  index: DeclarationIndex,
+  args: {
+    readonly local: boolean;
+    readonly marketplace: string;
+    readonly plugin: string;
+    readonly version: string;
+  },
+): PluginUninstallSkippedMessage | undefined {
+  const { target, other } = layers;
+  if (other === undefined) {
+    return undefined;
+  }
+
+  const layerOf = (key: string): DeclaringLayers =>
+    declaringLayers(
+      ownValue(target.plugins, key) !== undefined,
+      ownValue(other.plugins, key) !== undefined,
+    );
+  const key = `${args.plugin}@${args.marketplace}`;
+  if (layerOf(key) !== "none") {
+    return undefined;
+  }
+
+  const needers = declaredNeedersByLayer(key, index, layerOf);
+  if (needers.target.length > 0) {
+    throw new UninstallRefusedError(
+      "dependents remain",
+      composeDependencyRefusalCause({ ...args, needers: needers.target }),
+    );
+  }
+
+  if (needers.other.length === 0) {
+    return undefined;
+  }
+
+  return composeNeededElsewhereRow({
+    ...args,
+    needers: needers.other,
+    otherLayer: args.local ? "base" : "local",
+  });
+}
+
+/** What the locked read decided: a row that ends the uninstall, or the walk to remove with. */
+type RemovalDecision =
+  | { readonly kind: "skipped"; readonly row: PluginUninstallSkippedMessage }
+  | { readonly kind: "remove"; readonly reading: DeclarerReading };
+
+/**
+ * The layer rules and the declarer read, in order, inside the lock: the
+ * LAYER-04 refusal, the LAYER-05 drop of the target declaration while the
+ * other layer keeps the plugin, the D-06-06 / D-05-07 declarer read, and the
+ * LAYER-08 dependency rule over that read's snapshot. A skipped decision
+ * leaves before the cascade, `--prune`, and the save.
+ */
+async function decideRemoval(args: {
+  readonly transaction: UninstallTransaction;
+  readonly layers: Extract<UninstallLayers, { kind: "readable" }>;
+  readonly layerPaths: UninstallLayerPaths;
+  readonly state: ExtensionState;
+  readonly locations: ScopedLocations;
+  readonly local: boolean;
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly version: string;
+}): Promise<RemovalDecision> {
+  const { transaction, layers, layerPaths, locations, local, marketplace, plugin } = args;
+  const otherLayer = checkOtherLayerDeclaration(layers, { local, marketplace, plugin });
+  if (otherLayer !== undefined) {
+    await deleteTargetDeclaration(transaction, layerPaths, locations, { plugin, marketplace });
+    return {
+      kind: "skipped",
+      row: composeKeptInstalledRow({ plugin, version: args.version, otherLayer }),
+    };
+  }
+
+  // D-06-06 / D-05-07: the declarer read runs AFTER the two converge arms (a
+  // target that is not installed is `{not installed}`, never a refusal --
+  // D-05-03) and BEFORE the cascade, so the declarer set and the removal
+  // decision share one snapshot, and an unreadable declarer throws out of the
+  // closure with nothing removed and NO save. The walk it hands back is the
+  // sweep's input (same snapshot, same lock).
+  const reading = await readDeclarers({
+    state: args.state,
+    locations,
+    key: `${plugin}@${marketplace}`,
+  });
+  const row = checkDependencyNeeders(layers, reading.enabledIndex, {
+    local,
+    marketplace,
+    plugin,
+    version: args.version,
+  });
+  return row === undefined ? { kind: "remove", reading } : { kind: "skipped", row };
 }
 
 /**
@@ -297,9 +581,9 @@ async function readDeclarers(args: {
 export const REAL_UNINSTALL_TRANSACTION: UninstallTransaction = {
   cascadeUnstagePlugin,
   commitPluginRemoval,
-  loadTargetConfig: loadConfig,
+  loadLayerConfig: loadConfig,
   runPostCommitCleanup: runPostUninstallCleanup,
-  sweepConfigLayers: sweepPluginFromConfigLayers,
+  deleteLayerDeclaration: deletePluginFromLayer,
   withLockedStateTransaction,
 };
 
@@ -359,27 +643,32 @@ function narrowCascadeFailure(cause: Error): ContentReason {
  * severity and the absent reload hint are already what a refused row needs.
  * Extracted from `uninstallPlugin` to keep cognitive complexity inside the
  * SonarJS lint budget.
+ *
+ * AFILE-04: notices from an MCP rewrite that ran before the failure follow
+ * the row in standalone mode and ride the outcome in orchestrated mode.
  */
 function emitCascadeFailure(args: {
   ctx: NotificationContext;
-  pi: ToolInventory;
+  run: NotificationRun;
   marketplace: string;
   scope: Scope;
   plugin: string;
   cause: Error;
   removedVersion: string | undefined;
   staleWorkflowCommand: boolean;
+  mcpConfigNotices: readonly McpConfigNotice[];
   orchestrated: boolean;
 }): UninstallPluginOutcome {
   const {
     ctx,
-    pi,
+    run,
     marketplace,
     scope,
     plugin,
     cause,
     removedVersion,
     staleWorkflowCommand,
+    mcpConfigNotices,
     orchestrated,
   } = args;
   const outcome: UninstallPluginOutcome = {
@@ -387,6 +676,7 @@ function emitCascadeFailure(args: {
     reason: narrowCascadeFailure(cause),
     error: cause,
     cause: errorMessage(cause),
+    ...mcpConfigNoticesMember(mcpConfigNotices),
   };
 
   if (!orchestrated) {
@@ -412,7 +702,7 @@ function emitCascadeFailure(args: {
     };
     notifyWithContext(
       ctx,
-      pi,
+      run,
       UNINSTALL_CONTEXT,
       [
         {
@@ -424,6 +714,7 @@ function emitCascadeFailure(args: {
       undefined,
       "single",
     );
+    notifyMcpConfigNotices(ctx, run, mcpConfigNotices);
   }
 
   return outcome;
@@ -436,14 +727,14 @@ function emitCascadeFailure(args: {
  */
 function emitConfigInvalid(args: {
   ctx: NotificationContext;
-  pi: ToolInventory;
+  run: NotificationRun;
   marketplace: string;
   scope: Scope;
   plugin: string;
   configBasename: string;
   orchestrated: boolean;
 }): UninstallPluginOutcome {
-  const { ctx, pi, marketplace, scope, plugin, configBasename, orchestrated } = args;
+  const { ctx, run, marketplace, scope, plugin, configBasename, orchestrated } = args;
   const cause = `Config file "${configBasename}" failed schema validation.`;
   const invalidErr = new Error(cause);
   const outcome: UninstallPluginOutcome = {
@@ -456,7 +747,7 @@ function emitConfigInvalid(args: {
   if (!orchestrated) {
     notifyWithContext(
       ctx,
-      pi,
+      run,
       UNINSTALL_CONTEXT,
       [
         {
@@ -491,8 +782,8 @@ function emitConfigInvalid(args: {
  * An absent/invalid layer, or a valid layer that does not declare the key, is
  * left untouched (never rewritten) -- writing anyway would rewrite the file, or
  * CREATE it with empty maps when absent, for a semantic no-op (RECON-05
- * byte/mtime stability). The sibling layer being invalid is NOT a CFG-03 abort
- * (that is scoped to the target layer inside the guard closure).
+ * byte/mtime stability). A standalone uninstall reads both layers for CFG-03
+ * inside the guard closure, so an invalid layer here is one that changed since.
  */
 async function deletePluginFromLayer(
   configPath: string,
@@ -501,7 +792,10 @@ async function deletePluginFromLayer(
   marketplace: string,
 ): Promise<void> {
   const cfg = await loadConfig(configPath);
-  if (cfg.status !== "valid" || cfg.config.plugins?.[`${plugin}@${marketplace}`] === undefined) {
+  if (
+    cfg.status !== "valid" ||
+    ownValue(cfg.config.plugins, `${plugin}@${marketplace}`) === undefined
+  ) {
     return;
   }
 
@@ -549,6 +843,8 @@ function cascadeFailureCause(plugin: string, localOutcome: UnstageOutcome): Erro
  * cleanup; a failed member keeps its (possibly shrunken)
  * record and renders a warning row. `hooksDropped` is the routing-cache fact:
  * a hooks config left disk, so the cache must forget it after the save.
+ * `mcpConfigNotices` holds the member cascade's MCP config notices (AFILE-04),
+ * on a removed and on a failed member alike.
  */
 export interface PrunedMember {
   readonly marketplace: string;
@@ -556,6 +852,9 @@ export interface PrunedMember {
   readonly row: PluginUninstalledMessage | PluginFailedMessage;
   readonly removed: boolean;
   readonly hooksDropped: boolean;
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
+  /** D-PL9-22: the member record's `resolvedSource`, its plugin root. */
+  readonly pluginRoot: string;
 }
 
 /**
@@ -615,6 +914,8 @@ async function removeDependencyMember(args: {
       }),
       removed: true,
       hooksDropped: true,
+      mcpConfigNotices: outcome.mcpConfigNotices ?? [],
+      pluginRoot: member.record.resolvedSource,
     };
   }
 
@@ -629,6 +930,8 @@ async function removeDependencyMember(args: {
     row: buildMemberFailedRow(member, cause),
     removed: false,
     hooksDropped: outcome.dropped.hooks.length > 0,
+    mcpConfigNotices: outcome.mcpConfigNotices ?? [],
+    pluginRoot: member.record.resolvedSource,
   };
 }
 
@@ -733,6 +1036,7 @@ export async function finalizePrunedMembers(args: {
         marketplace: member.marketplace,
         plugin: member.plugin,
         keepData: args.keepData,
+        pluginRoot: member.pluginRoot,
       });
     }
   }
@@ -773,32 +1077,6 @@ function dropCachedHooks(
 }
 
 /**
- * WB-01 / WR-09: delete the plugin entry from the user-authored config.
- *
- * Cross-layer sweep: the `plugin@marketplace` key may live in either
- * `claude-plugins.json` or `claude-plugins.local.json` -- a prior `--local`
- * install can have left it in the sibling layer. Both files are inside the
- * NFR-10 sanctioned write set, and deleting from only the target layer would
- * leave the sibling declaration as a perpetual dangling reference. Each layer
- * loads fresh and is swept independently (WR-02 no-op guard per file: an
- * absent or invalid layer, or one not declaring the key, is skipped and never
- * rewritten, preserving RECON-05 byte and mtime stability).
- */
-async function sweepPluginFromConfigLayers(
-  locations: UninstallLocations,
-  plugin: string,
-  marketplace: string,
-): Promise<void> {
-  await deletePluginFromLayer(locations.configJsonPath, locations.scopeRoot, plugin, marketplace);
-  await deletePluginFromLayer(
-    locations.configLocalJsonPath,
-    locations.scopeRoot,
-    plugin,
-    marketplace,
-  );
-}
-
-/**
  * IN-05: the post-commit cleanup's inputs as one bag rather than six
  * positionals. TypeScript accepts a function of FEWER parameters where more are
  * expected, so a positional signature would let a five-parameter double
@@ -814,10 +1092,40 @@ interface PostUninstallCleanupOptions {
   readonly plugin: string;
   /** DATA-01: true preserves the plugin's data directory; false removes it. */
   readonly keepData: boolean;
+  /**
+   * D-PL9-22: the removed record's `resolvedSource`. The named uninstall
+   * hoists it out of its locked closure, so the type admits `undefined`.
+   */
+  readonly pluginRoot: string | undefined;
 }
 
 /**
- * The three POST-state-commit cleanups, all of them hygienic and all of them
+ * D-PL9-22: removes the step's node_modules from a plugin root that no record
+ * of the saved state runs from any more. A fresh scope lock covers both the
+ * reference check and removal. A failure is debug-logged only (D-19-01).
+ */
+async function removeUnusedPackages(
+  locations: ScopedLocations,
+  pluginRoot: string,
+  pluginRef: string,
+): Promise<void> {
+  try {
+    await withExistingScopeLock(locations, async () => {
+      const state = await loadState(locations.extensionRoot);
+      const inUse = Object.values(state.marketplaces).some((mp) =>
+        Object.values(mp.plugins).some((record) => record.resolvedSource === pluginRoot),
+      );
+      if (!inUse) {
+        await removeInstalledPackages(DEFAULT_PACKAGE_INSTALL_OPS, locations, pluginRoot);
+      }
+    });
+  } catch (err) {
+    hookDebugLog(`uninstall: package removal failed for ${pluginRef}: ${errorMessage(err)}`);
+  }
+}
+
+/**
+ * The four POST-state-commit cleanups, all of them hygienic and all of them
  * swallowed per D-19-01: the underlying side effect still fires, only the
  * user-visible warning surface is gone, because
  * `MarketplaceNotificationMessage` has no field for a soft warning after a
@@ -835,8 +1143,15 @@ interface PostUninstallCleanupOptions {
  * record references it. The GC derives live keys from the just-committed
  * state, so a shared clone survives while any other plugin still references
  * it. NFR-3: a crash before this leaves an orphan the next idempotent pass
- * removes. `garbageCollectPluginClones` already folds per-dir rm leaks into a
- * returned string[] rather than throwing; the try/catch is belt and braces.
+ * removes. D-PL7-05: the GC runs under a fresh scope lock, taken after the
+ * uninstall's own lock is released. The GC folds per-dir rm leaks into a
+ * returned string[]; the try/catch traces what it throws, such as the
+ * StateLockHeldError of a held lock, which leaves the clone for the next
+ * lifecycle operation.
+ *
+ * D-PL9-22: the node_modules that the package step wrote into the plugin root
+ * goes too, so a later install of the plugin runs the step again. It stays
+ * while another record of the saved state runs from the same root.
  *
  * WLIF-01: the workflow staging sweep runs last. Its trees live under the home
  * directory rather than under any scope root, so no other arm of this cleanup
@@ -849,6 +1164,7 @@ async function runPostUninstallCleanup({
   marketplace,
   plugin,
   keepData,
+  pluginRoot,
 }: PostUninstallCleanupOptions): Promise<void> {
   try {
     await completionCache.dropMarketplaceCache(
@@ -886,8 +1202,12 @@ async function runPostUninstallCleanup({
     }
   }
 
+  if (pluginRoot !== undefined) {
+    await removeUnusedPackages(locations, pluginRoot, `${plugin}@${marketplace}`);
+  }
+
   try {
-    await garbageCollectPluginClones(locations);
+    await collectPluginClonesLocked(locations);
   } catch (err) {
     // D-19-01: hygienic cleanup never becomes the primary user-facing path.
     hookDebugLog(`uninstall: clone GC failed for ${plugin}@${marketplace}: ${errorMessage(err)}`);
@@ -896,19 +1216,7 @@ async function runPostUninstallCleanup({
   // WLIF-01: workflow staging trees live under the home directory rather than
   // under any scope root, so nothing else in this cleanup reaches them.
   // Debug-logged, leaks included, and never user-facing (D-19-01).
-  try {
-    const leaks = await garbageCollectWorkflowsStaging(locations);
-    if (leaks.length > 0) {
-      hookDebugLog(
-        `uninstall: workflows staging GC left ${leaks.length.toString()} tree(s) for ${plugin}@${marketplace}: ${leaks.join("; ")}`,
-      );
-    }
-  } catch (err) {
-    // D-19-01: hygienic cleanup never becomes the primary user-facing path.
-    hookDebugLog(
-      `uninstall: workflows staging GC failed for ${plugin}@${marketplace}: ${errorMessage(err)}`,
-    );
-  }
+  await sweepWorkflowsStaging(locations, "uninstall", `${plugin}@${marketplace}`);
 }
 
 /**
@@ -921,8 +1229,8 @@ async function runPostUninstallCleanup({
  *
  * D-01: the STANDALONE user command names an absent target it cannot operate
  * on, so it emits an error row (it was literal silence before). The row is
- * `failed` carrying the `not installed` reason -- uninstall's render map has
- * no `skipped` arm -- and carries no `cause`, so no path redaction applies.
+ * `failed` carrying the `not installed` reason -- uninstall has no `skipped`
+ * row policy -- and carries no `cause`, so no path redaction applies.
  *
  * SCOPE-01: `notInstalledAt` separates the two callers. The cross-scope caller
  * passes the scope the operator named, and the brace additionally names where
@@ -931,14 +1239,14 @@ async function runPostUninstallCleanup({
  */
 function emitAlreadyGone(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly run: NotificationRun;
   readonly marketplace: string;
   readonly scope: Scope;
   readonly plugin: string;
   readonly orchestrated: boolean;
   readonly notInstalledAt?: Scope;
 }): UninstallPluginOutcome {
-  const { ctx, pi, marketplace, scope, plugin, orchestrated } = args;
+  const { ctx, run, marketplace, scope, plugin, orchestrated } = args;
   if (orchestrated) {
     return { status: "converged", name: plugin };
   }
@@ -952,7 +1260,7 @@ function emitAlreadyGone(args: {
   };
   notifyWithContext(
     ctx,
-    pi,
+    run,
     UNINSTALL_CONTEXT,
     [{ name: marketplace, scope, plugins: [failedRow] }],
     undefined,
@@ -960,6 +1268,33 @@ function emitAlreadyGone(args: {
   );
 
   return { status: "converged", name: plugin };
+}
+
+/**
+ * LAYER-05 / LAYER-08: the one row of a standalone uninstall that uninstalled
+ * nothing, because the other layer still declares the plugin or only plugins
+ * the other layer declares still need it. Only the standalone path reaches it,
+ * and the standalone entrypoint discards the outcome (WR-01), so it returns
+ * the existing `converged` shape.
+ */
+function emitKeptInstalled(args: {
+  readonly ctx: NotificationContext;
+  readonly run: NotificationRun;
+  readonly marketplace: string;
+  readonly scope: Scope;
+  readonly plugin: string;
+  readonly row: PluginUninstallSkippedMessage;
+}): UninstallPluginOutcome {
+  const { row } = args;
+  notifyWithContext(
+    args.ctx,
+    args.run,
+    UNINSTALL_CONTEXT,
+    [{ name: args.marketplace, scope: args.scope, plugins: [row] }],
+    undefined,
+    "single",
+  );
+  return { status: "converged", name: args.plugin };
 }
 
 /**
@@ -1018,7 +1353,7 @@ async function runUninstallOutcome(
   opts: UninstallPluginOptions,
   orchestrated: boolean,
 ): Promise<UninstallPluginOutcome> {
-  const { ctx, pi, cwd, marketplace, plugin } = opts;
+  const { ctx, run, cwd, marketplace, plugin } = opts;
   const cascade = opts.cascade ?? transaction.cascadeUnstagePlugin;
 
   // ATTR-04 / SCOPE-01 / M3 / M4: the discriminated cross-scope resolver
@@ -1045,7 +1380,7 @@ async function runUninstallOutcome(
     if (notInstalledAt !== undefined) {
       return emitAlreadyGone({
         ctx,
-        pi,
+        run,
         marketplace,
         scope: notInstalledAt,
         plugin,
@@ -1056,7 +1391,7 @@ async function runUninstallOutcome(
 
     return emitMarketplaceNotAdded({
       ctx,
-      pi,
+      run,
       marketplace,
       requestedScope: resolution.requestedScope,
       orchestrated,
@@ -1065,20 +1400,19 @@ async function runUninstallOutcome(
 
   const { scope, locations } = resolution;
 
-  // WB-01: target-path selection happens ONCE before the lock so
-  // the orchestrator NEVER falls back to the base file on ENOENT.
-  const targetConfigPath =
-    opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath;
-  const configBasename = path.basename(targetConfigPath);
+  const local = opts.local === true;
+  const layerPaths = uninstallLayerPaths(locations, local, orchestrated);
 
   let alreadyGone = false;
-  // WB-01 / CFG-03: invalid-config sentinel; surfaced post-guard with a
-  // basename-only cause (T-56-03-04 information-disclosure mitigation).
-  let configInvalid = false;
+  // WB-01 / CFG-03: the basename of an invalid layer config; surfaced post-guard
+  // as a basename-only cause (T-56-03-04 information-disclosure mitigation).
+  let invalidConfigBasename: string | undefined;
   // Lifted from inside the guard closure so the post-guard success path can
   // populate the PluginUninstalledMessage.version slot without re-reading
   // state. Undefined when alreadyGone (no row to render in that case).
   let removedVersion: string | undefined;
+  // D-PL9-22: the removed record's plugin root, for the post-commit cleanup.
+  let removedRoot: string | undefined;
   // TR-03: captured outside the guard so the post-guard branch can
   // emit the PluginFailedMessage for non-AG-5 cascade failures AFTER the
   // shrunken-row save has committed. AG-5 still throws (preserves row);
@@ -1095,6 +1429,9 @@ async function runUninstallOutcome(
   // split, so the failing arms see what was already dropped.
   let retiredWorkflowCommand = false;
   const routeEffect = { removeAfterSave: false };
+  // LAYER-05 / LAYER-08: the skipped row of an uninstall that uninstalled
+  // nothing.
+  const kept: { row: PluginUninstallSkippedMessage | undefined } = { row: undefined };
   // D-05-10: the sweep's members, carried out of the closure for the
   // post-commit cleanup and the report.
   const prunedMembers: PrunedMember[] = [];
@@ -1102,6 +1439,10 @@ async function runUninstallOutcome(
   // of the guard closure the way `removedVersion` already is, so the success
   // emission can name them without re-reading state outside the lock.
   let dependents: readonly string[] = [];
+  // AFILE-04: the MCP config notices of every cascade this command ran, the
+  // primary's first and then each pruned member's, hoisted so the failure
+  // arms and the success emission can all report them.
+  const mcpConfigNotices: McpConfigNotice[] = [];
   const keepData = opts.keepData ?? false;
 
   try {
@@ -1112,16 +1453,15 @@ async function runUninstallOutcome(
     // documented no-save abort discipline the sibling commands follow.
     await transaction.withLockedStateTransaction(locations, async (tx) => {
       const state = tx.state;
-      // CFG-03 / T-56-03-04: abort BEFORE any state mutation. The
-      // basename-only message prevents an absolute-path information leak.
-      // NO tx.save() -- state.json bytes and mtime are untouched.
-      const cfg = await transaction.loadTargetConfig(targetConfigPath);
-      if (cfg.status === "invalid") {
-        configInvalid = true;
+      // CFG-03 / T-56-03-04: abort BEFORE any state mutation. NO tx.save() --
+      // state.json bytes and mtime are untouched.
+      const layers = await readUninstallLayers(transaction.loadLayerConfig, layerPaths);
+      if (layers.kind === "invalid") {
+        invalidConfigBasename = layers.basename;
         return;
       }
 
-      const mp = state.marketplaces[marketplace];
+      const mp = ownValue(state.marketplaces, marketplace);
       if (mp === undefined) {
         // ATTR-04 reachability note. The "marketplace never added" case is
         // now caught BEFORE the guard by `resolveCrossScopePluginTarget`
@@ -1136,7 +1476,7 @@ async function runUninstallOutcome(
         return;
       }
 
-      const installed = mp.plugins[plugin];
+      const installed = ownValue(mp.plugins, plugin);
       if (installed === undefined) {
         // PU-5 silent converge: record already gone (another process completed
         // first or there was never an install). PRD §5.2.2 specifies literal
@@ -1146,22 +1486,34 @@ async function runUninstallOutcome(
       }
 
       removedVersion = installed.version;
+      removedRoot = installed.resolvedSource;
+      // LAYER-05 / LAYER-08 / D-MF-03: a skipped decision is the whole
+      // uninstall: no cascade, no prune, and no save.
+      const decision = await decideRemoval({
+        transaction,
+        layers,
+        layerPaths,
+        state,
+        locations,
+        local,
+        marketplace,
+        plugin,
+        version: installed.version,
+      });
+      if (decision.kind === "skipped") {
+        kept.row = decision.row;
+        return;
+      }
 
-      // D-06-06 / D-05-07: the declarer read runs AFTER the two converge arms
-      // (a target that is not installed is `{not installed}`, never a refusal
-      // -- D-05-03) and BEFORE the cascade, so the declarer set and the
-      // removal decision share one snapshot, and an unreadable declarer throws
-      // out of the closure with nothing removed and NO save. The walk it hands
-      // back is the sweep's input (same snapshot, same lock).
       const primaryKey = `${plugin}@${marketplace}`;
-      const reading = await readDeclarers({ state, locations, key: primaryKey });
-      const snapshot = reading.snapshot;
-      dependents = reading.dependents;
+      const snapshot = decision.reading.snapshot;
+      dependents = decision.reading.dependents;
 
       // PU-1 ordering enforced INSIDE cascadeUnstagePlugin (D-03:
       // skills -> commands -> agents -> mcp).
       const localOutcome = await cascade(plugin, marketplace, locations, installed);
       retiredWorkflowCommand = localOutcome.dropped.workflows.length > 0;
+      mcpConfigNotices.push(...(localOutcome.mcpConfigNotices ?? []));
 
       // TR-03: split the failure handling by cause type.
       //   - AG-5 (AgentsUnstageFailureError): foreign content owned by
@@ -1191,9 +1543,7 @@ async function runUninstallOutcome(
 
       transaction.commitPluginRemoval(mp, { plugin });
 
-      if (!orchestrated) {
-        await transaction.sweepConfigLayers(locations, plugin, marketplace);
-      }
+      await deleteTargetDeclaration(transaction, layerPaths, locations, { plugin, marketplace });
 
       // D-05-03 / D-05-10: the sweep runs on THIS arm only -- the named plugin
       // is off disk and out of the snapshot -- and before the one save, so the
@@ -1213,6 +1563,7 @@ async function runUninstallOutcome(
           })),
         );
         dependents = survivingDependents(dependents, prunedMembers);
+        mcpConfigNotices.push(...prunedMembers.flatMap((member) => member.mcpConfigNotices));
       }
 
       // WR-04: explicit save on the mutating success arm, ONCE, after the
@@ -1230,35 +1581,39 @@ async function runUninstallOutcome(
     const cause = err as Error;
     return emitCascadeFailure({
       ctx,
-      pi,
+      run,
       marketplace,
       scope,
       plugin,
       cause,
       removedVersion,
       staleWorkflowCommand: retiredWorkflowCommand,
+      mcpConfigNotices,
       orchestrated,
     });
   }
 
   // WB-01 / CFG-03 / T-56-03-04: invalid-config abort. No state mutation
   // (the closure returned before reading state); no write-back.
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- mutated inside the withLockedStateTransaction closure above.
-  if (configInvalid) {
+  if (invalidConfigBasename !== undefined) {
     return emitConfigInvalid({
       ctx,
-      pi,
+      run,
       marketplace,
       scope,
       plugin,
-      configBasename,
+      configBasename: invalidConfigBasename,
       orchestrated,
     });
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- `alreadyGone` is mutated inside the withLockedStateTransaction closure above; TS flow analysis cannot prove the closure executed, so it sees the variable as still `false`. The check is required at runtime.
   if (alreadyGone) {
-    return emitAlreadyGone({ ctx, pi, marketplace, scope, plugin, orchestrated });
+    return emitAlreadyGone({ ctx, run, marketplace, scope, plugin, orchestrated });
+  }
+
+  if (kept.row !== undefined) {
+    return emitKeptInstalled({ ctx, run, marketplace, scope, plugin, row: kept.row });
   }
 
   if (routeEffect.removeAfterSave) {
@@ -1269,13 +1624,14 @@ async function runUninstallOutcome(
   if (cascadeFailure !== undefined) {
     return emitCascadeFailure({
       ctx,
-      pi,
+      run,
       marketplace,
       scope,
       plugin,
       cause: cascadeFailure,
       removedVersion,
       staleWorkflowCommand: retiredWorkflowCommand,
+      mcpConfigNotices,
       orchestrated,
     });
   }
@@ -1288,6 +1644,7 @@ async function runUninstallOutcome(
     plugin,
     // DATA-01 / D-02-04: omission is the deletion default.
     keepData,
+    pluginRoot: removedRoot,
   });
   await finalizePrunedMembers({
     members: prunedMembers,
@@ -1311,7 +1668,7 @@ async function runUninstallOutcome(
   // CMC-24 / D-13-05 / D-13-06: emit via PluginUninstalledMessage.
   // The uninstalled variant has NO per-row soft-dep predicate fields by
   // construction -- MSG-SD-3 is structurally enforced: the renderer CANNOT
-  // emit `{requires pi-subagents}` / `{requires pi-mcp}` markers on
+  // emit `{requires pi-subagents}` / `{requires pi-mcp-adapter}` markers on
   // (uninstalled) rows. There are no aggregated PI_*_NOT_LOADED trailers on
   // uninstall success per D-13-07 + MSG-SD-3 (the soft-dep state
   // is no-op for the operator after uninstall -- the content is gone, so no
@@ -1334,6 +1691,7 @@ async function runUninstallOutcome(
     status: "uninstalled",
     name: plugin,
     ...(removedVersion !== undefined && { version: removedVersion }),
+    ...mcpConfigNoticesMember(mcpConfigNotices),
   };
   if (orchestrated) {
     return outcome;
@@ -1352,7 +1710,7 @@ async function runUninstallOutcome(
   });
   notifyWithContext(
     ctx,
-    pi,
+    run,
     UNINSTALL_CONTEXT,
     composeRemovalBlocks({
       primary: { marketplace, row: uninstalledRow },
@@ -1362,6 +1720,7 @@ async function runUninstallOutcome(
     undefined,
     "single",
   );
+  notifyMcpConfigNotices(ctx, run, mcpConfigNotices);
   return outcome;
 }
 

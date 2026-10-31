@@ -1,8 +1,12 @@
 // edge/handlers/marketplace/add.ts
 //
-// Thin-shim handler factory for
-// `/claude:plugin marketplace add <source> [--scope user|project]`.
-// Delegates to `addMarketplace` orchestrator, threading deps.gitOps through.
+// Thin-shim handler factory for `marketplace add`; its usage line comes from
+// `marketplaceUsage("add")`.
+// Delegates to `addMarketplace` orchestrator, threading deps.gitOps and the
+// missing-dependency step (D-PL2-09) through.
+//
+// D-05: the orchestrator renders from the router's notification run, which
+// the handler forwards.
 //
 // Argument-parsing failures route through `notifyUsageError` so the
 // rendered surface is `${message}\n\n${USAGE}` (sentence form +
@@ -14,22 +18,23 @@
 // `EntityErrorRow` compact lines per CMC-34.
 
 import { addMarketplace } from "../../../orchestrators/marketplace/add.ts";
+import { marketplaceUsage } from "../../router.ts";
 
 import { openMarketplaceCommand } from "./shared.ts";
 
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { SubcommandHandler } from "../../router.ts";
 import type { EdgeDeps } from "../../types.ts";
 
-const USAGE = "Usage: /claude:plugin marketplace add <source> [--scope user|project] [--local]";
+const USAGE = marketplaceUsage("add");
 
 export function makeAddHandler(
-  pi: ExtensionAPI,
-  deps: Pick<EdgeDeps, "completionCache" | "gitOps">,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return async (args, ctx): Promise<void> => {
-    const opened = openMarketplaceCommand(args, ctx, {
+  deps: Pick<EdgeDeps, "completionCache" | "gitOps" | "installMissingDependencies">,
+): SubcommandHandler {
+  return async (args, ctx, run): Promise<void> => {
+    const opened = openMarketplaceCommand(args, ctx, run, {
       usage: USAGE,
       positionalName: "source",
+      positionalLabel: "Source",
     });
     if (opened === undefined) {
       return;
@@ -37,12 +42,13 @@ export function makeAddHandler(
 
     await addMarketplace({
       ctx,
-      pi,
+      run,
       scope: opened.scope ?? "user",
       cwd: ctx.cwd,
       rawSource: opened.source,
       completionCache: deps.completionCache,
       gitOps: deps.gitOps,
+      installMissingDependencies: deps.installMissingDependencies,
       ...(opened.local && { local: true }),
     });
   };

@@ -1,0 +1,119 @@
+import { mock, verify, when } from "strong-mock";
+
+import { expectSoftDepProbes } from "../../edge/notification-boundary.ts";
+import { adapterCommand } from "../../platform/pi-inventory-seed.ts";
+
+import type {
+  CommandInventoryItem,
+  NotificationContext,
+  PiInventory,
+  ToolInventoryItem,
+} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationEntrySink } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+
+export type MockCtx = NotificationContext;
+export type MockPi = PiInventory & NotificationEntrySink;
+type NotifyArguments = [message: string, severity?: "info" | "warning" | "error"];
+interface MockNotificationUi {
+  readonly notify: (...args: NotifyArguments) => void;
+}
+
+export interface CapturedNotification {
+  readonly message: string;
+  readonly severity?: "info" | "warning" | "error";
+  readonly argumentCount: 1 | 2;
+}
+
+export interface MockContextBoundary {
+  readonly ctx: MockCtx;
+  readonly notifications: readonly CapturedNotification[];
+  readonly verifyContext: () => void;
+}
+
+/** Creates a strict notification boundary sized for one catalog emission. */
+export function makeCtx(): MockContextBoundary {
+  const notifications: CapturedNotification[] = [];
+  const ctx = mock<NotificationContext>({ exactParams: true, name: "catalog context" });
+  const ui = mock<MockNotificationUi>({ exactParams: true, name: "catalog notification UI" });
+  when(() => ctx.mode)
+    .thenReturn("tui")
+    .times(1);
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(1);
+  when(() => ui.notify)
+    .thenReturn((...args: NotifyArguments) => {
+      const [message, severity] = args;
+      const argumentCount = args.length === 1 ? 1 : 2;
+      notifications.push(
+        severity === undefined ? { message, argumentCount } : { message, severity, argumentCount },
+      );
+    })
+    .times(1);
+
+  return {
+    ctx,
+    notifications,
+    verifyContext: (): void => {
+      verify(ctx);
+      verify(ui);
+    },
+  };
+}
+
+function makePi(
+  tools: readonly ToolInventoryItem[],
+  commands: readonly CommandInventoryItem[] = [],
+): MockPi {
+  const pi = mock<MockPi>({ exactParams: true, name: "catalog Pi API" });
+  expectSoftDepProbes(pi, 1, tools, commands);
+  return pi;
+}
+
+/**
+ * Probe reports all three companions loaded -- pi-subagents, pi-mcp-adapter and
+ * the host workflow engine -- so no soft-dep marker fires on any row, whatever
+ * that row declares.
+ */
+export function piWithAllLoaded(): MockPi {
+  return makePi([{ name: "subagent" }, { name: "workflow_control" }], [adapterCommand()]);
+}
+
+/** Reports pi-subagents and pi-mcp-adapter loaded, the host workflow engine NOT loaded. */
+export function piWithBothLoaded(): MockPi {
+  return makePi([{ name: "subagent" }], [adapterCommand()]);
+}
+
+/**
+ * Probe reports pi-subagents and pi-mcp-adapter loaded, the host workflow engine
+ * NOT loaded -- `{requires pi-dynamic-workflows}` fires on dep-bearing rows
+ * declaring workflows, and no other soft-dep marker fires (WDEP-01). Byte-identical
+ * to `piWithBothLoaded`; this name is for call sites specifically exercising the
+ * workflow-engine-absent scenario.
+ */
+export function piWithoutWorkflowEngine(): MockPi {
+  return piWithBothLoaded();
+}
+
+/** Reports only pi-subagents loaded, through its `subagent` tool. */
+export function piWithSubagentsLoaded(): MockPi {
+  return makePi([{ name: "subagent" }]);
+}
+
+/** Reports only the MCP companion extension loaded. */
+export function piWithMcpLoaded(): MockPi {
+  return makePi([], [adapterCommand()]);
+}
+
+/** Reports no companion extension loaded. */
+export function piWithNothingLoaded(): MockPi {
+  return makePi([]);
+}
+
+/**
+ * Verifies the run constructor took exactly one soft-dependency probe: one
+ * `openNotificationRun` per catalog fixture (D-05).
+ */
+export function verifyPi(pi: MockPi): void {
+  verify(pi);
+}

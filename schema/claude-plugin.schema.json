@@ -1,0 +1,2762 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "claude-plugin session-entry notification payload",
+  "description": "One union of notification payloads, discriminated by kind and versioned by the integer schemaVersion.",
+  "anyOf": [
+    {
+      "type": "object",
+      "required": ["schemaVersion", "origin", "severity", "needsReload", "kind", "marketplaces"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "summary": { "type": "string" },
+        "kind": { "type": "string", "const": "cascade" },
+        "tally": {
+          "type": "object",
+          "required": ["label", "failures", "warnings"],
+          "properties": {
+            "label": { "type": "string" },
+            "failures": { "type": "integer", "minimum": 0 },
+            "warnings": { "type": "integer", "minimum": 0 },
+            "success": {
+              "type": "object",
+              "required": ["count"],
+              "properties": {
+                "count": { "type": "integer", "minimum": 0 },
+                "verb": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "noOp": { "type": "boolean", "const": true },
+        "needsApply": { "type": "boolean", "const": true },
+        "marketplaces": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "scope", "plugins"],
+            "properties": {
+              "name": { "type": "string" },
+              "scope": { "enum": ["user", "project"] },
+              "plugins": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["status", "name", "id", "reasons"],
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "installed",
+                        "updated",
+                        "reinstalled",
+                        "uninstalled",
+                        "available",
+                        "unavailable",
+                        "upgradable",
+                        "failed",
+                        "skipped",
+                        "manual recovery",
+                        "will install",
+                        "will uninstall",
+                        "will enable",
+                        "will disable",
+                        "will update",
+                        "disabled",
+                        "partially-installed",
+                        "partially-upgradable",
+                        "partially-available",
+                        "remote"
+                      ]
+                    },
+                    "name": { "type": "string" },
+                    "id": { "type": "string" },
+                    "reasons": {
+                      "type": "array",
+                      "items": {
+                        "enum": [
+                          "up-to-date",
+                          "not found",
+                          "already installed",
+                          "not installed",
+                          "not in manifest",
+                          "invalid manifest",
+                          "no longer installable",
+                          "unsupported source",
+                          "unsupported component",
+                          "unsupported hooks",
+                          "lsp",
+                          "requires pi-subagents",
+                          "requires pi-mcp-adapter",
+                          "rollback partial",
+                          "unreadable",
+                          "unparseable",
+                          "unreadable manifest",
+                          "source mismatch",
+                          "plugins remain",
+                          "concurrently uninstalled",
+                          "concurrently updated",
+                          "stale clone",
+                          "duplicate name",
+                          "lock held",
+                          "already autoupdate",
+                          "already no autoupdate",
+                          "already enabled",
+                          "already disabled",
+                          "permission denied",
+                          "source missing",
+                          "network unreachable",
+                          "marketplace not added",
+                          "marketplace not added to user scope",
+                          "marketplace not added to project scope",
+                          "orphan rewake",
+                          "authentication required",
+                          "dangling reference",
+                          "malformed mcp",
+                          "malformed skill",
+                          "malformed command",
+                          "installs disabled",
+                          "marketplace in user scope",
+                          "marketplace in project scope",
+                          "data kept",
+                          "no matching version",
+                          "version conflict",
+                          "constraint too complex",
+                          "invalid version constraint",
+                          "dependency marketplace not added",
+                          "dependency cycle",
+                          "dependency failed",
+                          "dependency promoted",
+                          "dependency pruned",
+                          "dependency unsatisfied",
+                          "dependency version unsatisfied",
+                          "dependents unsatisfied",
+                          "dependency current copy",
+                          "dependency enabled",
+                          "dependents remain",
+                          "dependency installed",
+                          "dependents constrain",
+                          "cross-marketplace",
+                          "stale workflow command",
+                          "requires pi-dynamic-workflows",
+                          "components now supported",
+                          "unsupported mcp",
+                          "marketplace in local layer only",
+                          "marketplace in base layer only",
+                          "plugin in local layer only",
+                          "plugin in base layer only",
+                          "already installed in base layer",
+                          "already installed in local layer",
+                          "still installed in base layer",
+                          "still installed in local layer",
+                          "disabled in local layer",
+                          "enabled in local layer",
+                          "network error",
+                          "already added"
+                        ]
+                      }
+                    },
+                    "version": { "type": "string" },
+                    "from": { "type": "string" },
+                    "to": { "type": "string" },
+                    "fromCommit": { "type": "string" },
+                    "toCommit": { "type": "string" },
+                    "scope": { "enum": ["user", "project"] },
+                    "description": { "type": "string" },
+                    "partial": { "type": "boolean" },
+                    "hint": {
+                      "enum": [
+                        "partial-install",
+                        "partial-update",
+                        "catalog-partial-update",
+                        "stale-gate-update",
+                        "enable"
+                      ]
+                    },
+                    "cause": {
+                      "type": "object",
+                      "required": ["causeChain", "truncated"],
+                      "properties": {
+                        "causeChain": { "type": "array", "items": { "type": "string" } },
+                        "truncated": { "type": "boolean" }
+                      },
+                      "additionalProperties": false
+                    },
+                    "leaks": { "type": "array", "items": { "type": "string" } },
+                    "rollbackPartial": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["phase"],
+                        "properties": {
+                          "phase": { "type": "string" },
+                          "cause": {
+                            "type": "object",
+                            "required": ["causeChain", "truncated"],
+                            "properties": {
+                              "causeChain": { "type": "array", "items": { "type": "string" } },
+                              "truncated": { "type": "boolean" }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "status": {
+                "enum": [
+                  "added",
+                  "removed",
+                  "updated",
+                  "failed",
+                  "autoupdate enabled",
+                  "autoupdate disabled",
+                  "skipped",
+                  "will add",
+                  "will remove"
+                ]
+              },
+              "details": {
+                "type": "object",
+                "required": ["autoupdate"],
+                "properties": {
+                  "autoupdate": { "type": "boolean" },
+                  "lastUpdatedAt": { "type": "string" }
+                },
+                "additionalProperties": false
+              },
+              "reasons": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "up-to-date",
+                    "not found",
+                    "already installed",
+                    "not installed",
+                    "not in manifest",
+                    "invalid manifest",
+                    "no longer installable",
+                    "unsupported source",
+                    "unsupported component",
+                    "unsupported hooks",
+                    "lsp",
+                    "requires pi-subagents",
+                    "requires pi-mcp-adapter",
+                    "rollback partial",
+                    "unreadable",
+                    "unparseable",
+                    "unreadable manifest",
+                    "source mismatch",
+                    "plugins remain",
+                    "concurrently uninstalled",
+                    "concurrently updated",
+                    "stale clone",
+                    "duplicate name",
+                    "lock held",
+                    "already autoupdate",
+                    "already no autoupdate",
+                    "already enabled",
+                    "already disabled",
+                    "permission denied",
+                    "source missing",
+                    "network unreachable",
+                    "marketplace not added",
+                    "marketplace not added to user scope",
+                    "marketplace not added to project scope",
+                    "orphan rewake",
+                    "authentication required",
+                    "dangling reference",
+                    "malformed mcp",
+                    "malformed skill",
+                    "malformed command",
+                    "installs disabled",
+                    "marketplace in user scope",
+                    "marketplace in project scope",
+                    "data kept",
+                    "no matching version",
+                    "version conflict",
+                    "constraint too complex",
+                    "invalid version constraint",
+                    "dependency marketplace not added",
+                    "dependency cycle",
+                    "dependency failed",
+                    "dependency promoted",
+                    "dependency pruned",
+                    "dependency unsatisfied",
+                    "dependency version unsatisfied",
+                    "dependents unsatisfied",
+                    "dependency current copy",
+                    "dependency enabled",
+                    "dependents remain",
+                    "dependency installed",
+                    "dependents constrain",
+                    "cross-marketplace",
+                    "stale workflow command",
+                    "requires pi-dynamic-workflows",
+                    "components now supported",
+                    "unsupported mcp",
+                    "marketplace in local layer only",
+                    "marketplace in base layer only",
+                    "plugin in local layer only",
+                    "plugin in base layer only",
+                    "already installed in base layer",
+                    "already installed in local layer",
+                    "still installed in base layer",
+                    "still installed in local layer",
+                    "disabled in local layer",
+                    "enabled in local layer",
+                    "network error",
+                    "already added"
+                  ]
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "advisories": { "type": "array", "items": { "type": "string" } },
+        "retainedWorkflows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string" },
+              "envelopeCount": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "origin", "severity", "needsReload", "kind", "marketplaces"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "summary": { "type": "string" },
+        "kind": { "type": "string", "const": "reconcile-applied-cascade" },
+        "tally": {
+          "type": "object",
+          "required": ["label", "failures", "warnings"],
+          "properties": {
+            "label": { "type": "string" },
+            "failures": { "type": "integer", "minimum": 0 },
+            "warnings": { "type": "integer", "minimum": 0 },
+            "success": {
+              "type": "object",
+              "required": ["count"],
+              "properties": {
+                "count": { "type": "integer", "minimum": 0 },
+                "verb": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "marketplaces": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "scope", "plugins"],
+            "properties": {
+              "name": { "type": "string" },
+              "scope": { "enum": ["user", "project"] },
+              "plugins": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["status", "name", "id", "reasons"],
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "installed",
+                        "updated",
+                        "reinstalled",
+                        "uninstalled",
+                        "available",
+                        "unavailable",
+                        "upgradable",
+                        "failed",
+                        "skipped",
+                        "manual recovery",
+                        "will install",
+                        "will uninstall",
+                        "will enable",
+                        "will disable",
+                        "will update",
+                        "disabled",
+                        "partially-installed",
+                        "partially-upgradable",
+                        "partially-available",
+                        "remote"
+                      ]
+                    },
+                    "name": { "type": "string" },
+                    "id": { "type": "string" },
+                    "reasons": {
+                      "type": "array",
+                      "items": {
+                        "enum": [
+                          "up-to-date",
+                          "not found",
+                          "already installed",
+                          "not installed",
+                          "not in manifest",
+                          "invalid manifest",
+                          "no longer installable",
+                          "unsupported source",
+                          "unsupported component",
+                          "unsupported hooks",
+                          "lsp",
+                          "requires pi-subagents",
+                          "requires pi-mcp-adapter",
+                          "rollback partial",
+                          "unreadable",
+                          "unparseable",
+                          "unreadable manifest",
+                          "source mismatch",
+                          "plugins remain",
+                          "concurrently uninstalled",
+                          "concurrently updated",
+                          "stale clone",
+                          "duplicate name",
+                          "lock held",
+                          "already autoupdate",
+                          "already no autoupdate",
+                          "already enabled",
+                          "already disabled",
+                          "permission denied",
+                          "source missing",
+                          "network unreachable",
+                          "marketplace not added",
+                          "marketplace not added to user scope",
+                          "marketplace not added to project scope",
+                          "orphan rewake",
+                          "authentication required",
+                          "dangling reference",
+                          "malformed mcp",
+                          "malformed skill",
+                          "malformed command",
+                          "installs disabled",
+                          "marketplace in user scope",
+                          "marketplace in project scope",
+                          "data kept",
+                          "no matching version",
+                          "version conflict",
+                          "constraint too complex",
+                          "invalid version constraint",
+                          "dependency marketplace not added",
+                          "dependency cycle",
+                          "dependency failed",
+                          "dependency promoted",
+                          "dependency pruned",
+                          "dependency unsatisfied",
+                          "dependency version unsatisfied",
+                          "dependents unsatisfied",
+                          "dependency current copy",
+                          "dependency enabled",
+                          "dependents remain",
+                          "dependency installed",
+                          "dependents constrain",
+                          "cross-marketplace",
+                          "stale workflow command",
+                          "requires pi-dynamic-workflows",
+                          "components now supported",
+                          "unsupported mcp",
+                          "marketplace in local layer only",
+                          "marketplace in base layer only",
+                          "plugin in local layer only",
+                          "plugin in base layer only",
+                          "already installed in base layer",
+                          "already installed in local layer",
+                          "still installed in base layer",
+                          "still installed in local layer",
+                          "disabled in local layer",
+                          "enabled in local layer",
+                          "network error",
+                          "already added"
+                        ]
+                      }
+                    },
+                    "version": { "type": "string" },
+                    "from": { "type": "string" },
+                    "to": { "type": "string" },
+                    "fromCommit": { "type": "string" },
+                    "toCommit": { "type": "string" },
+                    "scope": { "enum": ["user", "project"] },
+                    "description": { "type": "string" },
+                    "partial": { "type": "boolean" },
+                    "hint": {
+                      "enum": [
+                        "partial-install",
+                        "partial-update",
+                        "catalog-partial-update",
+                        "stale-gate-update",
+                        "enable"
+                      ]
+                    },
+                    "cause": {
+                      "type": "object",
+                      "required": ["causeChain", "truncated"],
+                      "properties": {
+                        "causeChain": { "type": "array", "items": { "type": "string" } },
+                        "truncated": { "type": "boolean" }
+                      },
+                      "additionalProperties": false
+                    },
+                    "leaks": { "type": "array", "items": { "type": "string" } },
+                    "rollbackPartial": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["phase"],
+                        "properties": {
+                          "phase": { "type": "string" },
+                          "cause": {
+                            "type": "object",
+                            "required": ["causeChain", "truncated"],
+                            "properties": {
+                              "causeChain": { "type": "array", "items": { "type": "string" } },
+                              "truncated": { "type": "boolean" }
+                            },
+                            "additionalProperties": false
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "status": {
+                "enum": [
+                  "added",
+                  "removed",
+                  "updated",
+                  "failed",
+                  "autoupdate enabled",
+                  "autoupdate disabled",
+                  "skipped",
+                  "will add",
+                  "will remove"
+                ]
+              },
+              "details": {
+                "type": "object",
+                "required": ["autoupdate"],
+                "properties": {
+                  "autoupdate": { "type": "boolean" },
+                  "lastUpdatedAt": { "type": "string" }
+                },
+                "additionalProperties": false
+              },
+              "reasons": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "up-to-date",
+                    "not found",
+                    "already installed",
+                    "not installed",
+                    "not in manifest",
+                    "invalid manifest",
+                    "no longer installable",
+                    "unsupported source",
+                    "unsupported component",
+                    "unsupported hooks",
+                    "lsp",
+                    "requires pi-subagents",
+                    "requires pi-mcp-adapter",
+                    "rollback partial",
+                    "unreadable",
+                    "unparseable",
+                    "unreadable manifest",
+                    "source mismatch",
+                    "plugins remain",
+                    "concurrently uninstalled",
+                    "concurrently updated",
+                    "stale clone",
+                    "duplicate name",
+                    "lock held",
+                    "already autoupdate",
+                    "already no autoupdate",
+                    "already enabled",
+                    "already disabled",
+                    "permission denied",
+                    "source missing",
+                    "network unreachable",
+                    "marketplace not added",
+                    "marketplace not added to user scope",
+                    "marketplace not added to project scope",
+                    "orphan rewake",
+                    "authentication required",
+                    "dangling reference",
+                    "malformed mcp",
+                    "malformed skill",
+                    "malformed command",
+                    "installs disabled",
+                    "marketplace in user scope",
+                    "marketplace in project scope",
+                    "data kept",
+                    "no matching version",
+                    "version conflict",
+                    "constraint too complex",
+                    "invalid version constraint",
+                    "dependency marketplace not added",
+                    "dependency cycle",
+                    "dependency failed",
+                    "dependency promoted",
+                    "dependency pruned",
+                    "dependency unsatisfied",
+                    "dependency version unsatisfied",
+                    "dependents unsatisfied",
+                    "dependency current copy",
+                    "dependency enabled",
+                    "dependents remain",
+                    "dependency installed",
+                    "dependents constrain",
+                    "cross-marketplace",
+                    "stale workflow command",
+                    "requires pi-dynamic-workflows",
+                    "components now supported",
+                    "unsupported mcp",
+                    "marketplace in local layer only",
+                    "marketplace in base layer only",
+                    "plugin in local layer only",
+                    "plugin in base layer only",
+                    "already installed in base layer",
+                    "already installed in local layer",
+                    "still installed in base layer",
+                    "still installed in local layer",
+                    "disabled in local layer",
+                    "enabled in local layer",
+                    "network error",
+                    "already added"
+                  ]
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "origin",
+        "severity",
+        "needsReload",
+        "kind",
+        "name",
+        "scope",
+        "details",
+        "source"
+      ],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "summary": { "type": "string" },
+        "kind": { "type": "string", "const": "marketplace-info" },
+        "name": { "type": "string" },
+        "scope": { "enum": ["user", "project"] },
+        "details": {
+          "type": "object",
+          "required": ["autoupdate"],
+          "properties": {
+            "autoupdate": { "type": "boolean" },
+            "lastUpdatedAt": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["sourceKind", "owner", "repo"],
+              "properties": {
+                "sourceKind": { "type": "string", "const": "github" },
+                "owner": { "type": "string" },
+                "repo": { "type": "string" },
+                "ref": { "type": "string" }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["sourceKind", "url"],
+              "properties": {
+                "sourceKind": { "type": "string", "const": "url" },
+                "url": { "type": "string" },
+                "ref": { "type": "string" }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["sourceKind", "absPath"],
+              "properties": {
+                "sourceKind": { "type": "string", "const": "path" },
+                "absPath": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "description": { "type": "string" },
+        "allowedMarketplaces": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "origin",
+        "severity",
+        "needsReload",
+        "kind",
+        "marketplaceName",
+        "marketplaceScope",
+        "marketplaceDetails",
+        "plugin"
+      ],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "summary": { "type": "string" },
+        "kind": { "type": "string", "const": "plugin-info" },
+        "marketplaceName": { "type": "string" },
+        "marketplaceScope": { "enum": ["user", "project"] },
+        "marketplaceDetails": {
+          "type": "object",
+          "required": ["autoupdate"],
+          "properties": {
+            "autoupdate": { "type": "boolean" },
+            "lastUpdatedAt": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "plugin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["status", "name", "id", "reasons", "componentsResolved", "components"],
+              "properties": {
+                "status": {
+                  "enum": [
+                    "installed",
+                    "available",
+                    "remote",
+                    "unavailable",
+                    "partially-available",
+                    "failed",
+                    "partially-installed",
+                    "disabled"
+                  ]
+                },
+                "name": { "type": "string" },
+                "id": { "type": "string" },
+                "reasons": {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "up-to-date",
+                      "not found",
+                      "already installed",
+                      "not installed",
+                      "not in manifest",
+                      "invalid manifest",
+                      "no longer installable",
+                      "unsupported source",
+                      "unsupported component",
+                      "unsupported hooks",
+                      "lsp",
+                      "requires pi-subagents",
+                      "requires pi-mcp-adapter",
+                      "rollback partial",
+                      "unreadable",
+                      "unparseable",
+                      "unreadable manifest",
+                      "source mismatch",
+                      "plugins remain",
+                      "concurrently uninstalled",
+                      "concurrently updated",
+                      "stale clone",
+                      "duplicate name",
+                      "lock held",
+                      "already autoupdate",
+                      "already no autoupdate",
+                      "already enabled",
+                      "already disabled",
+                      "permission denied",
+                      "source missing",
+                      "network unreachable",
+                      "marketplace not added",
+                      "marketplace not added to user scope",
+                      "marketplace not added to project scope",
+                      "orphan rewake",
+                      "authentication required",
+                      "dangling reference",
+                      "malformed mcp",
+                      "malformed skill",
+                      "malformed command",
+                      "installs disabled",
+                      "marketplace in user scope",
+                      "marketplace in project scope",
+                      "data kept",
+                      "no matching version",
+                      "version conflict",
+                      "constraint too complex",
+                      "invalid version constraint",
+                      "dependency marketplace not added",
+                      "dependency cycle",
+                      "dependency failed",
+                      "dependency promoted",
+                      "dependency pruned",
+                      "dependency unsatisfied",
+                      "dependency version unsatisfied",
+                      "dependents unsatisfied",
+                      "dependency current copy",
+                      "dependency enabled",
+                      "dependents remain",
+                      "dependency installed",
+                      "dependents constrain",
+                      "cross-marketplace",
+                      "stale workflow command",
+                      "requires pi-dynamic-workflows",
+                      "components now supported",
+                      "unsupported mcp",
+                      "marketplace in local layer only",
+                      "marketplace in base layer only",
+                      "plugin in local layer only",
+                      "plugin in base layer only",
+                      "already installed in base layer",
+                      "already installed in local layer",
+                      "still installed in base layer",
+                      "still installed in local layer",
+                      "disabled in local layer",
+                      "enabled in local layer",
+                      "network error",
+                      "already added"
+                    ]
+                  }
+                },
+                "version": { "type": "string" },
+                "scope": { "enum": ["user", "project"] },
+                "description": { "type": "string" },
+                "notes": { "type": "array", "items": { "type": "string" } },
+                "dependencies": { "type": "array", "items": { "type": "string" } },
+                "componentsResolved": { "type": "boolean", "const": true },
+                "components": {
+                  "type": "object",
+                  "properties": {
+                    "agents": { "type": "array", "items": { "type": "string" } },
+                    "commands": { "type": "array", "items": { "type": "string" } },
+                    "hooks": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "required": ["event"],
+                            "properties": {
+                              "event": { "type": "string" },
+                              "matcher": { "type": "string" }
+                            },
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "required": ["kind", "event", "supported"],
+                            "properties": {
+                              "kind": { "type": "string", "const": "lenient" },
+                              "event": { "type": "string" },
+                              "supported": { "type": "boolean" },
+                              "matcher": { "type": "string" }
+                            },
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "mcp": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": ["name"],
+                        "properties": {
+                          "name": { "type": "string" },
+                          "unsupportedFeature": { "type": "string" },
+                          "unsetVariables": { "type": "array", "items": { "type": "string" } },
+                          "withheldVariables": { "type": "array", "items": { "type": "string" } },
+                          "status": {
+                            "enum": [
+                              "connected",
+                              "cached, connects on first use",
+                              "needs authentication",
+                              "pending approval",
+                              "disabled",
+                              "not connected",
+                              "failed",
+                              "status unknown",
+                              "not loaded",
+                              "overridden by project scope"
+                            ]
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "skills": { "type": "array", "items": { "type": "string" } },
+                    "workflows": { "type": "array", "items": { "type": "string" } }
+                  },
+                  "additionalProperties": false
+                },
+                "requires": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["companion", "missing"],
+                    "properties": {
+                      "companion": {
+                        "enum": ["pi-dynamic-workflows", "pi-mcp-adapter", "pi-subagents"]
+                      },
+                      "missing": { "type": "boolean" }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["status", "name", "id", "reasons", "componentsResolved"],
+              "properties": {
+                "status": {
+                  "enum": [
+                    "installed",
+                    "available",
+                    "remote",
+                    "unavailable",
+                    "partially-available",
+                    "failed",
+                    "partially-installed",
+                    "disabled"
+                  ]
+                },
+                "name": { "type": "string" },
+                "id": { "type": "string" },
+                "reasons": {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "up-to-date",
+                      "not found",
+                      "already installed",
+                      "not installed",
+                      "not in manifest",
+                      "invalid manifest",
+                      "no longer installable",
+                      "unsupported source",
+                      "unsupported component",
+                      "unsupported hooks",
+                      "lsp",
+                      "requires pi-subagents",
+                      "requires pi-mcp-adapter",
+                      "rollback partial",
+                      "unreadable",
+                      "unparseable",
+                      "unreadable manifest",
+                      "source mismatch",
+                      "plugins remain",
+                      "concurrently uninstalled",
+                      "concurrently updated",
+                      "stale clone",
+                      "duplicate name",
+                      "lock held",
+                      "already autoupdate",
+                      "already no autoupdate",
+                      "already enabled",
+                      "already disabled",
+                      "permission denied",
+                      "source missing",
+                      "network unreachable",
+                      "marketplace not added",
+                      "marketplace not added to user scope",
+                      "marketplace not added to project scope",
+                      "orphan rewake",
+                      "authentication required",
+                      "dangling reference",
+                      "malformed mcp",
+                      "malformed skill",
+                      "malformed command",
+                      "installs disabled",
+                      "marketplace in user scope",
+                      "marketplace in project scope",
+                      "data kept",
+                      "no matching version",
+                      "version conflict",
+                      "constraint too complex",
+                      "invalid version constraint",
+                      "dependency marketplace not added",
+                      "dependency cycle",
+                      "dependency failed",
+                      "dependency promoted",
+                      "dependency pruned",
+                      "dependency unsatisfied",
+                      "dependency version unsatisfied",
+                      "dependents unsatisfied",
+                      "dependency current copy",
+                      "dependency enabled",
+                      "dependents remain",
+                      "dependency installed",
+                      "dependents constrain",
+                      "cross-marketplace",
+                      "stale workflow command",
+                      "requires pi-dynamic-workflows",
+                      "components now supported",
+                      "unsupported mcp",
+                      "marketplace in local layer only",
+                      "marketplace in base layer only",
+                      "plugin in local layer only",
+                      "plugin in base layer only",
+                      "already installed in base layer",
+                      "already installed in local layer",
+                      "still installed in base layer",
+                      "still installed in local layer",
+                      "disabled in local layer",
+                      "enabled in local layer",
+                      "network error",
+                      "already added"
+                    ]
+                  }
+                },
+                "version": { "type": "string" },
+                "scope": { "enum": ["user", "project"] },
+                "description": { "type": "string" },
+                "notes": { "type": "array", "items": { "type": "string" } },
+                "dependencies": { "type": "array", "items": { "type": "string" } },
+                "componentsResolved": { "type": "boolean", "const": false }
+              },
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "origin", "severity", "needsReload", "kind", "blocks"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "summary": { "type": "string" },
+        "kind": { "type": "string", "const": "marketplace-info-cascade" },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "scope", "details", "source"],
+            "properties": {
+              "name": { "type": "string" },
+              "scope": { "enum": ["user", "project"] },
+              "details": {
+                "type": "object",
+                "required": ["autoupdate"],
+                "properties": {
+                  "autoupdate": { "type": "boolean" },
+                  "lastUpdatedAt": { "type": "string" }
+                },
+                "additionalProperties": false
+              },
+              "source": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": ["sourceKind", "owner", "repo"],
+                    "properties": {
+                      "sourceKind": { "type": "string", "const": "github" },
+                      "owner": { "type": "string" },
+                      "repo": { "type": "string" },
+                      "ref": { "type": "string" }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": ["sourceKind", "url"],
+                    "properties": {
+                      "sourceKind": { "type": "string", "const": "url" },
+                      "url": { "type": "string" },
+                      "ref": { "type": "string" }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": ["sourceKind", "absPath"],
+                    "properties": {
+                      "sourceKind": { "type": "string", "const": "path" },
+                      "absPath": { "type": "string" }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "description": { "type": "string" },
+              "allowedMarketplaces": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "origin", "severity", "needsReload", "kind", "blocks"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "summary": { "type": "string" },
+        "kind": { "type": "string", "const": "plugin-info-cascade" },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["marketplaceName", "marketplaceScope", "marketplaceDetails", "plugin"],
+            "properties": {
+              "marketplaceName": { "type": "string" },
+              "marketplaceScope": { "enum": ["user", "project"] },
+              "marketplaceDetails": {
+                "type": "object",
+                "required": ["autoupdate"],
+                "properties": {
+                  "autoupdate": { "type": "boolean" },
+                  "lastUpdatedAt": { "type": "string" }
+                },
+                "additionalProperties": false
+              },
+              "plugin": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "status",
+                      "name",
+                      "id",
+                      "reasons",
+                      "componentsResolved",
+                      "components"
+                    ],
+                    "properties": {
+                      "status": {
+                        "enum": [
+                          "installed",
+                          "available",
+                          "remote",
+                          "unavailable",
+                          "partially-available",
+                          "failed",
+                          "partially-installed",
+                          "disabled"
+                        ]
+                      },
+                      "name": { "type": "string" },
+                      "id": { "type": "string" },
+                      "reasons": {
+                        "type": "array",
+                        "items": {
+                          "enum": [
+                            "up-to-date",
+                            "not found",
+                            "already installed",
+                            "not installed",
+                            "not in manifest",
+                            "invalid manifest",
+                            "no longer installable",
+                            "unsupported source",
+                            "unsupported component",
+                            "unsupported hooks",
+                            "lsp",
+                            "requires pi-subagents",
+                            "requires pi-mcp-adapter",
+                            "rollback partial",
+                            "unreadable",
+                            "unparseable",
+                            "unreadable manifest",
+                            "source mismatch",
+                            "plugins remain",
+                            "concurrently uninstalled",
+                            "concurrently updated",
+                            "stale clone",
+                            "duplicate name",
+                            "lock held",
+                            "already autoupdate",
+                            "already no autoupdate",
+                            "already enabled",
+                            "already disabled",
+                            "permission denied",
+                            "source missing",
+                            "network unreachable",
+                            "marketplace not added",
+                            "marketplace not added to user scope",
+                            "marketplace not added to project scope",
+                            "orphan rewake",
+                            "authentication required",
+                            "dangling reference",
+                            "malformed mcp",
+                            "malformed skill",
+                            "malformed command",
+                            "installs disabled",
+                            "marketplace in user scope",
+                            "marketplace in project scope",
+                            "data kept",
+                            "no matching version",
+                            "version conflict",
+                            "constraint too complex",
+                            "invalid version constraint",
+                            "dependency marketplace not added",
+                            "dependency cycle",
+                            "dependency failed",
+                            "dependency promoted",
+                            "dependency pruned",
+                            "dependency unsatisfied",
+                            "dependency version unsatisfied",
+                            "dependents unsatisfied",
+                            "dependency current copy",
+                            "dependency enabled",
+                            "dependents remain",
+                            "dependency installed",
+                            "dependents constrain",
+                            "cross-marketplace",
+                            "stale workflow command",
+                            "requires pi-dynamic-workflows",
+                            "components now supported",
+                            "unsupported mcp",
+                            "marketplace in local layer only",
+                            "marketplace in base layer only",
+                            "plugin in local layer only",
+                            "plugin in base layer only",
+                            "already installed in base layer",
+                            "already installed in local layer",
+                            "still installed in base layer",
+                            "still installed in local layer",
+                            "disabled in local layer",
+                            "enabled in local layer",
+                            "network error",
+                            "already added"
+                          ]
+                        }
+                      },
+                      "version": { "type": "string" },
+                      "scope": { "enum": ["user", "project"] },
+                      "description": { "type": "string" },
+                      "notes": { "type": "array", "items": { "type": "string" } },
+                      "dependencies": { "type": "array", "items": { "type": "string" } },
+                      "componentsResolved": { "type": "boolean", "const": true },
+                      "components": {
+                        "type": "object",
+                        "properties": {
+                          "agents": { "type": "array", "items": { "type": "string" } },
+                          "commands": { "type": "array", "items": { "type": "string" } },
+                          "hooks": {
+                            "type": "array",
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "required": ["event"],
+                                  "properties": {
+                                    "event": { "type": "string" },
+                                    "matcher": { "type": "string" }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "required": ["kind", "event", "supported"],
+                                  "properties": {
+                                    "kind": { "type": "string", "const": "lenient" },
+                                    "event": { "type": "string" },
+                                    "supported": { "type": "boolean" },
+                                    "matcher": { "type": "string" }
+                                  },
+                                  "additionalProperties": false
+                                }
+                              ]
+                            }
+                          },
+                          "mcp": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": ["name"],
+                              "properties": {
+                                "name": { "type": "string" },
+                                "unsupportedFeature": { "type": "string" },
+                                "unsetVariables": {
+                                  "type": "array",
+                                  "items": { "type": "string" }
+                                },
+                                "withheldVariables": {
+                                  "type": "array",
+                                  "items": { "type": "string" }
+                                },
+                                "status": {
+                                  "enum": [
+                                    "connected",
+                                    "cached, connects on first use",
+                                    "needs authentication",
+                                    "pending approval",
+                                    "disabled",
+                                    "not connected",
+                                    "failed",
+                                    "status unknown",
+                                    "not loaded",
+                                    "overridden by project scope"
+                                  ]
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "skills": { "type": "array", "items": { "type": "string" } },
+                          "workflows": { "type": "array", "items": { "type": "string" } }
+                        },
+                        "additionalProperties": false
+                      },
+                      "requires": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": ["companion", "missing"],
+                          "properties": {
+                            "companion": {
+                              "enum": ["pi-dynamic-workflows", "pi-mcp-adapter", "pi-subagents"]
+                            },
+                            "missing": { "type": "boolean" }
+                          },
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "required": ["status", "name", "id", "reasons", "componentsResolved"],
+                    "properties": {
+                      "status": {
+                        "enum": [
+                          "installed",
+                          "available",
+                          "remote",
+                          "unavailable",
+                          "partially-available",
+                          "failed",
+                          "partially-installed",
+                          "disabled"
+                        ]
+                      },
+                      "name": { "type": "string" },
+                      "id": { "type": "string" },
+                      "reasons": {
+                        "type": "array",
+                        "items": {
+                          "enum": [
+                            "up-to-date",
+                            "not found",
+                            "already installed",
+                            "not installed",
+                            "not in manifest",
+                            "invalid manifest",
+                            "no longer installable",
+                            "unsupported source",
+                            "unsupported component",
+                            "unsupported hooks",
+                            "lsp",
+                            "requires pi-subagents",
+                            "requires pi-mcp-adapter",
+                            "rollback partial",
+                            "unreadable",
+                            "unparseable",
+                            "unreadable manifest",
+                            "source mismatch",
+                            "plugins remain",
+                            "concurrently uninstalled",
+                            "concurrently updated",
+                            "stale clone",
+                            "duplicate name",
+                            "lock held",
+                            "already autoupdate",
+                            "already no autoupdate",
+                            "already enabled",
+                            "already disabled",
+                            "permission denied",
+                            "source missing",
+                            "network unreachable",
+                            "marketplace not added",
+                            "marketplace not added to user scope",
+                            "marketplace not added to project scope",
+                            "orphan rewake",
+                            "authentication required",
+                            "dangling reference",
+                            "malformed mcp",
+                            "malformed skill",
+                            "malformed command",
+                            "installs disabled",
+                            "marketplace in user scope",
+                            "marketplace in project scope",
+                            "data kept",
+                            "no matching version",
+                            "version conflict",
+                            "constraint too complex",
+                            "invalid version constraint",
+                            "dependency marketplace not added",
+                            "dependency cycle",
+                            "dependency failed",
+                            "dependency promoted",
+                            "dependency pruned",
+                            "dependency unsatisfied",
+                            "dependency version unsatisfied",
+                            "dependents unsatisfied",
+                            "dependency current copy",
+                            "dependency enabled",
+                            "dependents remain",
+                            "dependency installed",
+                            "dependents constrain",
+                            "cross-marketplace",
+                            "stale workflow command",
+                            "requires pi-dynamic-workflows",
+                            "components now supported",
+                            "unsupported mcp",
+                            "marketplace in local layer only",
+                            "marketplace in base layer only",
+                            "plugin in local layer only",
+                            "plugin in base layer only",
+                            "already installed in base layer",
+                            "already installed in local layer",
+                            "still installed in base layer",
+                            "still installed in local layer",
+                            "disabled in local layer",
+                            "enabled in local layer",
+                            "network error",
+                            "already added"
+                          ]
+                        }
+                      },
+                      "version": { "type": "string" },
+                      "scope": { "enum": ["user", "project"] },
+                      "description": { "type": "string" },
+                      "notes": { "type": "array", "items": { "type": "string" } },
+                      "dependencies": { "type": "array", "items": { "type": "string" } },
+                      "componentsResolved": { "type": "boolean", "const": false }
+                    },
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "origin", "severity", "needsReload", "kind", "name", "reasons"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "summary": { "type": "string" },
+        "kind": { "type": "string", "const": "marketplace-not-added" },
+        "name": { "type": "string" },
+        "scope": { "enum": ["user", "project"] },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "up-to-date",
+              "not found",
+              "already installed",
+              "not installed",
+              "not in manifest",
+              "invalid manifest",
+              "no longer installable",
+              "unsupported source",
+              "unsupported component",
+              "unsupported hooks",
+              "lsp",
+              "requires pi-subagents",
+              "requires pi-mcp-adapter",
+              "rollback partial",
+              "unreadable",
+              "unparseable",
+              "unreadable manifest",
+              "source mismatch",
+              "plugins remain",
+              "concurrently uninstalled",
+              "concurrently updated",
+              "stale clone",
+              "duplicate name",
+              "lock held",
+              "already autoupdate",
+              "already no autoupdate",
+              "already enabled",
+              "already disabled",
+              "permission denied",
+              "source missing",
+              "network unreachable",
+              "marketplace not added",
+              "marketplace not added to user scope",
+              "marketplace not added to project scope",
+              "orphan rewake",
+              "authentication required",
+              "dangling reference",
+              "malformed mcp",
+              "malformed skill",
+              "malformed command",
+              "installs disabled",
+              "marketplace in user scope",
+              "marketplace in project scope",
+              "data kept",
+              "no matching version",
+              "version conflict",
+              "constraint too complex",
+              "invalid version constraint",
+              "dependency marketplace not added",
+              "dependency cycle",
+              "dependency failed",
+              "dependency promoted",
+              "dependency pruned",
+              "dependency unsatisfied",
+              "dependency version unsatisfied",
+              "dependents unsatisfied",
+              "dependency current copy",
+              "dependency enabled",
+              "dependents remain",
+              "dependency installed",
+              "dependents constrain",
+              "cross-marketplace",
+              "stale workflow command",
+              "requires pi-dynamic-workflows",
+              "components now supported",
+              "unsupported mcp",
+              "marketplace in local layer only",
+              "marketplace in base layer only",
+              "plugin in local layer only",
+              "plugin in base layer only",
+              "already installed in base layer",
+              "already installed in local layer",
+              "still installed in base layer",
+              "still installed in local layer",
+              "disabled in local layer",
+              "enabled in local layer",
+              "network error",
+              "already added"
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "origin", "severity", "needsReload", "kind"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "summary": { "type": "string" },
+        "kind": { "type": "string", "const": "reconcile-pending-empty" },
+        "advisories": { "type": "array", "items": { "type": "string" } },
+        "retainedWorkflows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string" },
+              "envelopeCount": { "type": "integer", "minimum": 0 }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "origin", "severity", "needsReload", "kind", "scope"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "summary": { "type": "string" },
+        "kind": { "type": "string", "const": "prune-empty" },
+        "scope": { "enum": ["user", "project"] }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "origin", "severity", "needsReload", "kind", "scope"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "summary": { "type": "string" },
+        "kind": { "type": "string", "const": "prune-committed-warning" },
+        "scope": { "enum": ["user", "project"] },
+        "cause": {
+          "type": "object",
+          "required": ["causeChain", "truncated"],
+          "properties": {
+            "causeChain": { "type": "array", "items": { "type": "string" } },
+            "truncated": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "origin",
+        "severity",
+        "needsReload",
+        "kind",
+        "message",
+        "usage"
+      ],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "kind": { "type": "string", "const": "usage-error" },
+        "message": { "type": "string" },
+        "usage": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "origin", "severity", "needsReload", "kind", "usage"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "kind": { "type": "string", "const": "usage-info" },
+        "usage": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "origin",
+        "severity",
+        "needsReload",
+        "kind",
+        "enabled",
+        "files"
+      ],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "kind": { "type": "string", "const": "autoapply-status" },
+        "enabled": { "type": "boolean" },
+        "source": {
+          "type": "object",
+          "required": ["scope", "file"],
+          "properties": {
+            "scope": { "enum": ["user", "project"] },
+            "file": {
+              "anyOf": [
+                { "type": "string", "const": "claude-plugins.json" },
+                { "type": "string", "const": "claude-plugins.local.json" }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["scope", "file"],
+            "properties": {
+              "scope": { "enum": ["user", "project"] },
+              "file": {
+                "anyOf": [
+                  { "type": "string", "const": "claude-plugins.json" },
+                  { "type": "string", "const": "claude-plugins.local.json" }
+                ]
+              },
+              "value": { "type": "boolean" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "set": {
+          "type": "object",
+          "required": ["scope", "file", "value"],
+          "properties": {
+            "scope": { "enum": ["user", "project"] },
+            "file": {
+              "anyOf": [
+                { "type": "string", "const": "claude-plugins.json" },
+                { "type": "string", "const": "claude-plugins.local.json" }
+              ]
+            },
+            "value": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "origin", "severity", "needsReload", "kind", "header", "lines"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "kind": { "type": "string", "const": "diagnostic" },
+        "header": { "type": "string" },
+        "lines": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "origin",
+        "severity",
+        "needsReload",
+        "kind",
+        "verificationUri",
+        "userCode"
+      ],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "kind": { "type": "string", "const": "device-flow-prompt" },
+        "verificationUri": { "type": "string" },
+        "userCode": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "origin", "severity", "needsReload", "kind", "text"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "kind": { "type": "string", "const": "async-rewake-summary" },
+        "text": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "origin", "severity", "needsReload", "kind", "pluginId", "cap"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "kind": { "type": "string", "const": "stop-override-cap" },
+        "pluginId": { "type": "string" },
+        "cap": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "origin", "severity", "needsReload", "kind", "causeMessage"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "kind": { "type": "string", "const": "reconcile-aborted" },
+        "causeMessage": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "origin", "severity", "needsReload", "kind", "scope", "reason"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "kind": { "type": "string", "const": "plugin-path-skipped" },
+        "scope": { "enum": ["user", "project"] },
+        "reason": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "origin", "severity", "needsReload", "kind", "notices"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "kind": { "type": "string", "const": "mcp-config-notices" },
+        "notices": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": ["kind", "scope", "file"],
+                "properties": {
+                  "kind": { "enum": ["comments-dropped", "left-unchanged"] },
+                  "scope": { "enum": ["user", "project"] },
+                  "file": { "enum": ["mcp-adapter.json", "mcp.json"] }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "file", "plugin", "server", "fields"],
+                "properties": {
+                  "kind": { "type": "string", "const": "override-kept" },
+                  "scope": { "enum": ["user", "project"] },
+                  "file": { "type": "string", "const": "mcp-adapter.json" },
+                  "plugin": { "type": "string" },
+                  "server": { "type": "string" },
+                  "fields": { "type": "array", "items": { "type": "string" } }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "file", "plugin", "server", "names"],
+                "properties": {
+                  "kind": { "type": "string", "const": "variables-missing" },
+                  "scope": { "enum": ["user", "project"] },
+                  "file": { "type": "string", "const": "mcp-adapter.json" },
+                  "plugin": { "type": "string" },
+                  "server": { "type": "string" },
+                  "names": { "type": "array", "items": { "type": "string" } }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "file", "plugin", "server", "names"],
+                "properties": {
+                  "kind": { "type": "string", "const": "credentials-blanked" },
+                  "scope": { "enum": ["user", "project"] },
+                  "file": { "type": "string", "const": "mcp-adapter.json" },
+                  "plugin": { "type": "string" },
+                  "server": { "type": "string" },
+                  "names": { "type": "array", "items": { "type": "string" } }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "file", "plugin", "server", "fields"],
+                "properties": {
+                  "kind": { "type": "string", "const": "tool-rules-unenforced" },
+                  "scope": { "enum": ["user", "project"] },
+                  "file": { "type": "string", "const": "mcp-adapter.json" },
+                  "plugin": { "type": "string" },
+                  "server": { "type": "string" },
+                  "fields": { "type": "array", "items": { "type": "string" } }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "file", "plugin", "server"],
+                "properties": {
+                  "kind": { "type": "string", "const": "leftover-removed" },
+                  "scope": { "enum": ["user", "project"] },
+                  "file": { "type": "string", "const": "mcp-adapter.json" },
+                  "plugin": { "type": "string" },
+                  "server": { "type": "string" }
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "origin", "severity", "needsReload", "kind", "rows", "notices"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "kind": { "type": "string", "const": "mcp-migration" },
+        "rows": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": ["kind", "scope", "plugin", "marketplace", "from", "to"],
+                "properties": {
+                  "kind": { "type": "string", "const": "moved" },
+                  "scope": { "enum": ["user", "project"] },
+                  "plugin": { "type": "string" },
+                  "marketplace": { "type": "string" },
+                  "from": { "type": "string" },
+                  "to": { "type": "string" }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "plugin", "marketplace", "server", "cause"],
+                "properties": {
+                  "kind": { "type": "string", "const": "removed" },
+                  "scope": { "enum": ["user", "project"] },
+                  "plugin": { "type": "string" },
+                  "marketplace": { "type": "string" },
+                  "server": { "type": "string" },
+                  "cause": {
+                    "enum": ["not-declared", "disabled", "unsupported-feature", "malformed"]
+                  },
+                  "feature": { "type": "string" }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "detail"],
+                "properties": {
+                  "kind": { "type": "string", "const": "stopped" },
+                  "scope": { "enum": ["user", "project"] },
+                  "detail": { "type": "string" }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "plugin", "marketplace", "servers"],
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "unowned",
+                      "not-listed",
+                      "source-unreadable",
+                      "source-outdated",
+                      "marketplace-unreadable"
+                    ]
+                  },
+                  "scope": { "enum": ["user", "project"] },
+                  "plugin": { "type": "string" },
+                  "marketplace": { "type": "string" },
+                  "servers": { "type": "array", "items": { "type": "string" } }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "plugin", "marketplace", "servers", "key", "source"],
+                "properties": {
+                  "kind": { "type": "string", "const": "collision" },
+                  "scope": { "enum": ["user", "project"] },
+                  "plugin": { "type": "string" },
+                  "marketplace": { "type": "string" },
+                  "servers": { "type": "array", "items": { "type": "string" } },
+                  "key": { "type": "string" },
+                  "source": { "type": "string" }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "file"],
+                "properties": {
+                  "kind": { "type": "string", "const": "file-unreadable" },
+                  "scope": { "enum": ["user", "project"] },
+                  "file": { "enum": ["mcp-adapter.json", "mcp.json"] }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "plugin", "marketplace", "servers", "file", "detail"],
+                "properties": {
+                  "kind": { "type": "string", "const": "unfinished" },
+                  "scope": { "enum": ["user", "project"] },
+                  "plugin": { "type": "string" },
+                  "marketplace": { "type": "string" },
+                  "servers": { "type": "array", "items": { "type": "string" } },
+                  "file": { "enum": ["mcp.json", "project-scope mcp-adapter.json"] },
+                  "detail": { "type": "string" }
+                },
+                "additionalProperties": false
+              }
+            ]
+          },
+          "minItems": 1
+        },
+        "notices": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "required": ["kind", "scope", "file"],
+                "properties": {
+                  "kind": { "enum": ["comments-dropped", "left-unchanged"] },
+                  "scope": { "enum": ["user", "project"] },
+                  "file": { "enum": ["mcp-adapter.json", "mcp.json"] }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "file", "plugin", "server", "fields"],
+                "properties": {
+                  "kind": { "type": "string", "const": "override-kept" },
+                  "scope": { "enum": ["user", "project"] },
+                  "file": { "type": "string", "const": "mcp-adapter.json" },
+                  "plugin": { "type": "string" },
+                  "server": { "type": "string" },
+                  "fields": { "type": "array", "items": { "type": "string" } }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "file", "plugin", "server", "names"],
+                "properties": {
+                  "kind": { "type": "string", "const": "variables-missing" },
+                  "scope": { "enum": ["user", "project"] },
+                  "file": { "type": "string", "const": "mcp-adapter.json" },
+                  "plugin": { "type": "string" },
+                  "server": { "type": "string" },
+                  "names": { "type": "array", "items": { "type": "string" } }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "file", "plugin", "server", "names"],
+                "properties": {
+                  "kind": { "type": "string", "const": "credentials-blanked" },
+                  "scope": { "enum": ["user", "project"] },
+                  "file": { "type": "string", "const": "mcp-adapter.json" },
+                  "plugin": { "type": "string" },
+                  "server": { "type": "string" },
+                  "names": { "type": "array", "items": { "type": "string" } }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "file", "plugin", "server", "fields"],
+                "properties": {
+                  "kind": { "type": "string", "const": "tool-rules-unenforced" },
+                  "scope": { "enum": ["user", "project"] },
+                  "file": { "type": "string", "const": "mcp-adapter.json" },
+                  "plugin": { "type": "string" },
+                  "server": { "type": "string" },
+                  "fields": { "type": "array", "items": { "type": "string" } }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "file", "plugin", "server"],
+                "properties": {
+                  "kind": { "type": "string", "const": "leftover-removed" },
+                  "scope": { "enum": ["user", "project"] },
+                  "file": { "type": "string", "const": "mcp-adapter.json" },
+                  "plugin": { "type": "string" },
+                  "server": { "type": "string" }
+                },
+                "additionalProperties": false
+              }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["schemaVersion", "origin", "severity", "needsReload", "kind", "plugins"],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean", "const": true },
+        "kind": { "type": "string", "const": "background-update" },
+        "plugins": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "marketplace", "scope", "toVersion"],
+            "properties": {
+              "name": { "type": "string" },
+              "marketplace": { "type": "string" },
+              "scope": { "enum": ["user", "project"] },
+              "fromVersion": { "type": "string" },
+              "toVersion": { "type": "string" }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "kind",
+        "origin",
+        "severity",
+        "needsReload",
+        "summary",
+        "cause"
+      ],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "kind": { "type": "string", "const": "internal-error" },
+        "origin": {
+          "type": "object",
+          "required": ["kind", "commandId", "invocationId"],
+          "properties": {
+            "kind": { "type": "string", "const": "command" },
+            "commandId": { "type": "string", "minLength": 1 },
+            "invocationId": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        },
+        "severity": { "type": "string", "const": "error" },
+        "needsReload": { "type": "boolean" },
+        "summary": { "type": "string" },
+        "cause": {
+          "type": "object",
+          "required": ["causeChain", "truncated"],
+          "properties": {
+            "causeChain": { "type": "array", "items": { "type": "string" } },
+            "truncated": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

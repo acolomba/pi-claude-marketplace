@@ -1,502 +1,411 @@
-# Pitfalls Research: v1.19 Unit Test Refactor
+# Pitfalls Research
 
-**Domain:** Refactoring a mature strict-TypeScript test suite into one mirrored,
-guideline-compliant test per production module without changing product behavior
-**Researched:** 2026-08-28
-**Confidence:** HIGH — findings come from the repository at HEAD, the authoritative
-testing guidelines, the preserved handoff contracts, the live structural gates, and
-the complete 204-row pair audit
+**Domain:** Brownfield Pi extension: a cucumber behavioral suite for every `/claude:plugin marketplace` command, driven through a real headless Pi in RPC mode against local stand-ins (path, direct `marketplace.json`, loopback HTTPS `git http-backend`, and GitHub sources redirected by a new `GITHUB_BASE_URL`). Milestone `marketplace-features`.
+**Researched:** 2026-10-15
+**Confidence:** HIGH for everything read in this tree's source (`tests/e2e/_rpc.ts`, `features/**`, `orchestrators/auth-host.ts`, `domain/auth-registry.ts`, `orchestrators/marketplace/{add,update}.ts`, `domain/clone-key.ts`, `platform/git.ts`, `shared/redact-absolute-paths.ts`, `shared/notification-wire.ts`, `node_modules/isomorphic-git`, `node_modules/simple-get`) and in the archived any-git-host UAT (`.planning/milestones/ws-git-hosts-2026-10-01/.../01-UAT.md`, `02-UAT.md`). HIGH for the upstream-parity fact (grep of the installed Claude Code 2.1.296 binary: GitHub clone URLs are the literal `https://github.com/${repo}.git`, and no `GITHUB_BASE_URL` string exists). MEDIUM for `git http-backend` CGI behavior (from the spike and the earlier canaries, not re-read in git's source). MEDIUM for the Terraform `GITHUB_BASE_URL` collision (web search; the research seam rates that tier LOW, but two independent sources agree). LOW for macOS/LibreSSL behavior (not checked).
 
-## Summary
+## Phase vocabulary used below
 
-This milestone is not a test-file relocation exercise. It is a 204-pair proof of
-ownership, direct coverage, isolation, and preserved public behavior. The audit is a
-triage snapshot only: 59 pairs passed its focused coverage probe, 83 lacked complete
-direct coverage, 60 lacked a mirrored test, and two focused tests failed. All 204 pairs
-remain open until a new one-pair plan proves the complete guideline.
+The roadmap does not exist yet. This file names phases by concern, in the order the pitfalls suggest:
 
-The main danger is false completion. Current HEAD already contains useful source and
-test refactors, a corresponding-test gate, a direct-coverage runner, and passing
-negative controls. None supplies completion credit by itself. The corresponding-test
-gate currently reports 107 violations: 60 missing tests, four mirrored tests that do
-not import their source, and 43 tests whose names do not map to a production module.
-`npm run check` does not currently invoke either the corresponding-test gate or the
-direct-coverage gate.
-
-The second danger is behavioral drift disguised as test cleanup. The handoff preserves
-20 product/test behavior contracts, eight public surfaces, ten persistence artifacts,
-three adapter contracts, and eight named product corrections. Old test expectations
-can also be stale: the focused `plugin/update.ts` test currently expects a former
-`{no longer installable}` path but reaches the supported git-source network path and
-gets `{network unreachable}`. Neither the current output nor the old assertion is
-authority by itself. Each pair must resolve such conflicts against the preserved
-public contract before changing code or expected bytes.
-
-The third danger is violating the milestone's atomic work boundary. Every executable
-plan and implementation commit owns exactly one source-test pair. Shared-helper
-rewrites, production module splits, broad formatting passes, and mechanical replay of
-the abandoned module graph can silently turn one plan into a multi-pair refactor.
+| Tag | Concern |
+| --- | --- |
+| **OVERRIDE** | `GITHUB_BASE_URL` in production code, with its unit tests (D-MF-01) |
+| **STAND-IN** | `features/lib/` loopback HTTPS git server: openssl cert, `node:https` CGI wrapper around `git http-backend`, request log, arming (401/404/5xx/drop), fixture repos |
+| **RUN** | Pi run plumbing: env for the child (`NODE_EXTRA_CA_CERTS`, `GITHUB_BASE_URL`, git isolation), per-worker lifetime, the `Before()` reset |
+| **DRIVER** | `features/lib/pi-commands.ts`: non-cascade payload kinds, one payload per marketplace from bare `update`, normalizing run tokens (paths, ports, timestamps) |
+| **SCENARIOS** | `features/marketplace/*.feature` and their step modules |
+| **GATE** | `npm run check` duration, CI job, unused-step check, milestone close |
 
 ## Critical Pitfalls
 
-### Pitfall 1: Treating audit `PASS` or a retained commit as completion proof
+### Pitfall 1: A 401 scenario consults the developer's real git credential helper
 
 **What goes wrong:**
-A roadmap marks the 59 audit `PASS` rows, or modules touched by retained commits, as
-done. Those rows proved only that one focused run happened to reach 100% LCOV at the
-audit point. They did not prove case structure, exported-surface testing, hermeticity,
-meaningful assertions, strong interaction mocks, or one-pair commit ownership.
+On a 401, `platform/git-auth-callbacks.ts::onAuth` runs `git credential fill` (5 s timeout, `orchestrators/auth-host.ts`). `platform/git-credential.ts` spawns it with `{ ...process.env, GIT_TERMINAL_PROMPT: "0" }`, so the subprocess inherits Pi's environment. `tests/e2e/_rpc.ts::childEnvironment` builds that environment from scratch, with `HOME`, `PI_CODING_AGENT_DIR`, `PI_OFFLINE`, and `PATH`. A sandboxed `HOME` keeps `~/.gitconfig` and `$HOME/.config/git/config` out. Nothing keeps the **system** config out. On this machine `/etc/gitconfig` exists (it holds git-lfs filters only). Homebrew and Apple git on macOS put `credential.helper=osxkeychain` in their system config, and some Linux images put `libsecret` there. With such a helper, a 401 scenario reads the developer's keychain for `127.0.0.1:<port>`. If a scenario then reaches `onAuthFailure` on a Device Flow host, it runs `git credential reject` and **erases a real stored credential**. Pitfall 3 shows how a Device Flow host can be bound while the override is set.
 
 **Why it happens:**
-Coverage percentages and green retained commits look objective. They are cheaper to
-count than the full guideline.
+"HOME is sandboxed" feels like full isolation. Git has three config levels, and only `GIT_CONFIG_NOSYSTEM` turns off the system level. A credential helper also reaches state outside `HOME`: a keychain, a D-Bus secret service, or a cache socket.
 
 **How to avoid:**
-- Initialize all 204 pairs as open.
-- Close one pair only from its new executable plan and its one-pair implementation
-  commit.
-- Require focused test, direct function/line/branch coverage, guideline review, and
-  the project quality gate as evidence.
-- Keep audit classifications as ordering data only.
+- Add `GIT_CONFIG_NOSYSTEM: "1"` to the Pi child environment. Also set `GIT_CONFIG_GLOBAL` to a path inside the sandbox (or `/dev/null`) so a future `XDG_CONFIG_HOME` leak cannot reach the real global config. Build the environment from scratch; never spread `process.env`.
+- To give a scenario a stored credential, have its `Given` write `<sandbox home>/.gitconfig` with `credential.helper=store --file=<sandbox home>/.git-credentials`, plus a `https://user:token@127.0.0.1:<port>` line. Git rereads both files on every `git credential` spawn, so the setup is per scenario, and the `Before()` reset deletes it. Do not use `GIT_CONFIG_COUNT/KEY/VALUE` as the UAT canaries did: Pi's env is fixed at start, so that would apply the helper to every scenario in the worker.
+- `_rpc.ts` is shared with `tests/e2e`. Extend it with an optional `extraEnv` (an allowlist the caller passes) rather than forking it. The new git-isolation variables are safe defaults for e2e too.
 
 **Warning signs:**
-- A requirement or roadmap begins with fewer than 204 open pairs.
-- A row closes with only `PASS`, an old summary, or a commit hash as evidence.
-- A completion note reports aggregate coverage instead of the paired LCOV record.
+A 401 scenario passes locally on Linux and fails on a macOS laptop, or the reverse. A 401 scenario takes 5 s (a helper is blocking until the credential timeout). `git credential` shows up in a process listing during a run.
 
-**Phase to address:**
-Phase 108's first one-pair plan initializes the open-pair ledger. Every later pair plan
-enforces the same closure rule.
+**Phase to address:** RUN (env), SCENARIOS (credential `Given`).
 
 ---
 
-### Pitfall 2: Mistaking file-name correspondence for test ownership
+### Pitfall 2: `GITHUB_BASE_URL` is wired into the clone URL only, so auth, leftover recovery, and update stay bound to github.com
 
 **What goes wrong:**
-A mirrored file exists but does not import and exercise its source, or an architecture,
-integration, or legacy split suite owns behavior that belongs in the mirrored test.
-Type-only modules and barrels are skipped as “not executable.”
+The GitHub host and wire URL are hard-coded in **14 files**: `domain/{clone-key,source}.ts`, `orchestrators/auth-host.ts`, `orchestrators/marketplace/add.ts`, `platform/git.ts`, and nine `orchestrators/plugin/*` probes and flows. `orchestrators/marketplace/update.ts:398` also builds `` `https://github.com/${owner}/${repo}.git` `` inline, so a grep for `networkCloneUrl`/`GITHUB_HOST` misses it. If only `networkCloneUrl` honors the override:
+- `hostFromCloneUrl(_, "github")` and `add.ts:974` still return `"github.com"`. The `onAuth` host guard compares the bound host `github.com` with the URL host `127.0.0.1:<port>` and **cancels before the helper is queried** (UAT test 8). So a 401 on a GitHub source always fails as `{authentication required}`. A GitHub Enterprise user with a stored credential could never authenticate.
+- `originMatchesSource` (MA-12 leftover-clone recovery, `domain/clone-key.ts`) parses the recorded `origin`. Under the override that is `https://127.0.0.1:<port>/o/r.git`, which parses as kind `url`, not `github`. So `marketplace add` refuses its own leftover GitHub clone.
+- `refreshGitHubClone` fetches from the clone's recorded `origin`, not from a freshly built URL. `marketplace update` therefore "works" under the override even when update's own wiring is missing. A scenario passes for the wrong reason, and a user who changes or unsets the variable keeps fetching from the old base.
 
 **Why it happens:**
-The current suite grew around features and regressions, not one-module ownership. HEAD
-has 60 missing mirrored tests, four wrong-import mirrored tests, and 43 unexpected test
-paths under the structural gate.
+The happy-path clone scenario is the first one written, and it passes as soon as the wire URL changes. Every other GitHub-specific site is reached only by auth, recovery, or update scenarios.
 
 **How to avoid:**
-- Map `extensions/pi-claude-marketplace/<path>.ts` directly to
-  `tests/<path>.test.ts`.
-- Make that test import its paired source directly.
-- Give type-only modules compile-time positive and `@ts-expect-error` negative cases.
-- Give barrels binding-identity assertions for runtime exports and compiler checks for
-  type exports.
-- Move lasting public-behavior assertions into the owner before retiring a legacy
-  split suite. Do not merely delete duplicates.
+- Introduce one seam that returns `{ base URL, host }` for GitHub sources (default `https://github.com`, host `github.com`). Route all 14 sites and the inline literal through it. Then add a grep gate, or a `tests/architecture` source walk, that fails on a new `"github.com"` literal outside the seam and `auth-registry.ts`.
+- Keep the source **identity** as `owner/repo`. Never store the override URL in `state.json` and never compare identities with it. Make `originMatchesSource` accept an origin under the configured base as the same GitHub repo.
+- Bind auth to the override's `host:port`. `findProviderForHost("127.0.0.1:<port>")` returns `undefined`, so the bundle is `stored-credential` and Device Flow never runs. That is the correct and safe outcome (Pitfall 3).
+- Write scenarios that only a complete wiring passes: a GitHub source behind a 401 with a stored credential (it must authenticate), leftover-clone recovery for a GitHub source, and `update` after `add`. Each asserts the stand-in's request log.
 
 **Warning signs:**
-- A mirrored test imports only a barrel, helper, or neighboring production module.
-- A missing pair is excused by an integration or architecture test.
-- A type-only module receives a meaningless runtime constant to create coverage.
+A GitHub 401 scenario shows exactly one unauthenticated request and no authenticated retry. `rg 'github\.com' extensions/` returns sites the change did not touch.
 
-**Phase to address:**
-Start in Phase 108 and repeat in every pair plan. Barrels and type-only modules still
-receive normal one-pair plans.
+**Phase to address:** OVERRIDE (seam, unit tests), SCENARIOS (the three proofs above).
 
 ---
 
-### Pitfall 3: Optimizing for 100% LCOV instead of discriminating behavior
+### Pitfall 3: Device Flow fires against the real github.com and hangs the step
 
 **What goes wrong:**
-Cases execute every line but still pass when the public result, exact bytes,
-collaborator arguments, or prohibited calls change. Coverage becomes the design goal
-instead of the final completeness check.
+If the override leaves the bound host as `github.com` and the host guard is ever loosened (for example, to "fix" the auth cancel in Pitfall 2), `findProviderForHost("github.com")` returns `GITHUB_PROVIDER`. Its `deviceCodeUrl` and `tokenUrl` are literal `https://github.com/login/...`, and `initiateDeviceFlow` calls the global `fetch`. In RPC mode `ctx.mode` is `"rpc"`, not `"print"`, so `DeviceFlowUnavailableError` is not thrown. The extension emits a `device-flow-prompt` payload and polls github.com for up to the code's lifetime. `PI_OFFLINE=1` and `--offline` affect only Pi's own model and package fetches (`pi-coding-agent/dist/main.js:452`), not the extension's `fetch` or isomorphic-git. The scenario reaches the public network and blocks until the 30 s step timeout. Then the `Before()` hook replaces Pi, and the run gets 30 s slower.
 
 **Why it happens:**
-LCOV is mechanical, while assertion quality requires judgment. Current HEAD also shows
-that coverage success is not guideline success: 156 test modules have no
-`// arrange` marker, and 16 import the process-wide Node mock tracker.
+Device Flow is gated by host, not by environment. Overriding the clone base without the host makes `github.com` look like the target of a request that goes elsewhere.
 
 **How to avoid:**
-- Write cases from exported public promises first, then use direct coverage to find
-  missing paths.
-- Assert whole values, typed error fields, exact output bytes, and resulting public
-  state.
-- Use `strong-mock` with exact parameters and explicit verification when an
-  interaction is the promise.
-- Use public behavior rather than exporting private constants or matching private
-  regular expressions.
-- Remove dead code; never add coverage ignores or blanket exclusions.
+- Key Device Flow on the host actually contacted, which is the override's host (Pitfall 2). Under the override, Device Flow runs only when the override's host is `github.com` itself. Normalize `https://github.com`, `https://github.com/`, `https://www.github.com`, and `:443` the way `domain/source.ts` already does, and treat them as "unset".
+- Treat Device Flow as out of scope for the suite, and say so in the feature description. It needs the GitHub OAuth endpoints, which no stand-in replaces.
+- Never use `github.com` or `gitlab.com` URLs as **url** sources in a scenario that reaches the network. `gitlab.com` has its own Device Flow and is not covered by the override. A parse-level refusal scenario may name them only when parsing fails before any I/O.
 
 **Warning signs:**
-- Assertions check only existence, length, one property, or a call count on a stub.
-- Expected values come from the production formatter or the subject's output.
-- A new export appears in the same commit only so the test can reach a branch.
-- Coverage reaches 100% before the test titles identify the exported behavior.
+A `device-flow-prompt` payload appears (`runCommand` then fails on "exactly one payload"). A scenario sits at about 30 s. An `extension_error` mentions `fetch failed`.
 
-**Phase to address:**
-Every one-pair plan. Phase 108 should establish the review checklist on the first
-domain/platform pairs.
+**Phase to address:** OVERRIDE, SCENARIOS.
 
 ---
 
-### Pitfall 4: Rewriting the contract to match the current implementation or stale test
+### Pitfall 4: The `GITHUB_BASE_URL` name is already in use, so "unset means unchanged" is false for real users
 
 **What goes wrong:**
-A failing legacy assertion is updated to whatever HEAD emits, or production behavior is
-changed to satisfy an obsolete test. Stable notification bytes, error types, resolver
-narrowing, persistence formats, network boundaries, and lifecycle corrections drift.
+D-MF-01 justifies the divergence by saying it "changes nothing for a user who never sets it". The Terraform GitHub provider reads `GITHUB_BASE_URL` as its **API** endpoint. GitHub Enterprise users export values such as `https://ghe.example.com/api/v3/` in their shells and CI. The Elixir `git_store` library also reads it, with default `https://api.github.com`. A Pi user with that export would have every GitHub source cloned from `https://ghe.example.com/api/v3//owner/repo.git`, or from `https://api.github.com/owner/repo.git`. The clones fail, and nothing in the output points at an environment variable they set for another tool. Claude Code 2.1.296 has no such override, so the user's upstream experience never prepared them for it.
 
 **Why it happens:**
-This branch contains both retained product corrections and historical expectations.
-The two focused failures demonstrate different triage classes:
-
-- `marketplace/add.ts` uses a Unix-domain-socket fixture that fails with `EPERM` in the
-  current environment.
-- `plugin/update.ts` has three assertions built on the pre-git-source assumption that
-  a GitHub-flavored source is structurally unavailable.
+The name was chosen for readability, without checking the ambient namespace.
 
 **How to avoid:**
-- Classify each mismatch as product defect, stale test, or uncontrolled environment
-  before editing.
-- Use `BEHAVIOR-CONTRACTS.yaml`, `PUBLIC-SURFACE.yaml`,
-  `PERSISTENCE-CONTRACTS.yaml`, and named project decisions as authority.
-- Preserve the eight named corrections: update skill preloads, update staging
-  warnings, hook exhaustiveness/diagnostics, reconcile failure isolation and complete
-  arm application, and the production-reachable device-flow HTTP port.
-- Compare exact bytes where bytes are the contract. Keep error classification typed.
-- Run the wider relevant suite after the focused pair.
+- Raise it with the user before OVERRIDE is planned. Per the project's upstream-parity constraint, a divergence beyond the recorded decision goes back to the user as a question. The likely fix is a project-prefixed name, such as `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`, recorded as an amendment to D-MF-01.
+- Whatever the name, validate the value once, at read time, with the same rules the source parser applies. Require `https://` (the parser rejects `http://`, and the GitHub arm builds its wire URL from `owner/repo` without re-parsing, so an `http://` override would otherwise reach isomorphic-git in cleartext). Reject userinfo (`https://user:token@host`), because the URL lands in rows and cause chains. Reject a query and a fragment. Strip one trailing slash, and keep a path prefix (`https://host/git` becomes `https://host/git/owner/repo.git`).
+- An invalid value fails the command with a typed error that names the variable. It never falls back silently to github.com.
 
 **Warning signs:**
-- An expected string changes with no cited public-contract decision.
-- A test is deleted because another suite “probably covers it.”
-- A refactor changes state schema, path placement, notification grammar, or network
-  access while claiming to be test-only.
+A request path with `//` or `/api/v3/` in the stand-in log. The error rows show a URL the user never typed.
 
-**Phase to address:**
-The one-pair plan that owns the affected production module. High-risk orchestrator,
-notification, resolver, and persistence pairs need explicit contract inventories in
-their plan evidence.
+**Phase to address:** OVERRIDE (decision amendment, validation, unit tests for each refused form).
 
 ---
 
-### Pitfall 5: Keeping hidden process and machine state in “unit” cases
+### Pitfall 5: The stand-in's port and CA are pinned into Pi's environment at start, but the code treats the server as a per-scenario fake
 
 **What goes wrong:**
-Focused tests fail by machine, order, or concurrency. They read developer credentials,
-touch a live network, share a temporary directory, mutate `HOME` or cwd without
-case-owned restoration, use real timers, or depend on unsupported local socket
-behavior.
+Node reads `NODE_EXTRA_CA_CERTS` once at process start. `GITHUB_BASE_URL` carries the port. Pi is started once per worker, so the server's port and CA must exist before `PiProcess.start` and must outlive every scenario in the worker. Three ways this breaks:
+1. **Hook order.** Cucumber runs `BeforeAll`/`Before` hooks in load order, and `features/support/**/*.ts` loads alphabetically. A `support/git-server.ts` registers its hooks before `support/pi-process.ts`. That works by accident until a file is renamed. Its `Before()` would also reset the request log before `pi-process.ts` replaces a busy Pi, so the killed Pi's late request lands in the next scenario's log.
+2. **Replacement.** `Before()` restarts a busy Pi with `PiProcess.start(run.sandbox)`. If the extra env is not part of the run record, the replacement Pi has no CA and no override. Every later GitHub scenario in that worker then goes to the real github.com, or fails TLS with a self-signed error.
+3. **The cucumber rule.** `world-and-stand-ins.md` allows exactly one piece of module-level state: the slow process under test. A second module-level server is a review BLOCKER ("module-level state outside the slow-process exception").
 
 **Why it happens:**
-The existing suite predates the new isolation rules. A repository scan found 74 test
-modules with `process.chdir()` or direct environment assignment. Large helper graphs
-also make ownership and cleanup hard to see.
+The skill's model is "a fake per scenario", and here a fake's identity (port and CA) is baked into the long-lived process.
 
 **How to avoid:**
-- Give every filesystem case its own `mkdtemp` directory and register cleanup before
-  acting.
-- Inject clocks, process launchers, HTTP ports, Git operations, and credential
-  operations through narrow production contracts.
-- Restore unavoidable environment/global changes with the current `TestContext` and
-  do not run such cases concurrently.
-- Use temporary repositories or loopback-only boundaries owned by the case. Never
-  fall back to developer state or the public network.
-- Drive scheduling with `t.mock.timers`, not sleeps or retries.
+- Make the listener and CA part of the existing `PiRun` record in `support/pi-process.ts`: `{ root, sandbox, marketplacesRoot, gitServer, env, pi }`. One `BeforeAll` starts the server, then Pi with `env`. One `Before()` replaces Pi if busy (with the same `env`), **then** waits for the server's in-flight CGI children to drain, **then** resets the served repos, arming, and request log, **then** empties the sandbox. Asserting the reset should cover the server too: no repos, no arming, an empty log.
+- The per-scenario state (repos, arming, log) belongs to the world. Steps reach it through the world, and releases go through `this.onRelease()`.
+- Record the extension of the slow-process exception in `.agents/skills/cucumber/rules/world-and-stand-ins.md` in the same phase: "a stand-in whose address or trust the slow process fixes at start lives in the same run record". Otherwise every review will flag it.
+- Never fix the problem with `NODE_TLS_REJECT_UNAUTHORIZED=0` or a plain-HTTP stand-in. The first turns off TLS checks for all of Pi and prints a warning on stderr. The second is refused by the parser anyway.
 
 **Warning signs:**
-- A focused file fails while the same case passes in a larger run.
-- A test writes to the repository, home directory, or a fixed `/tmp` path.
-- Cleanup is registered after the action that can throw.
-- A failure is `EPERM`, credential-dependent, DNS-dependent, or timer-flaky.
+GitHub scenarios fail only after an earlier scenario in the same worker timed out. A request appears in the log of a scenario that made none. Pi's stderr shows `Warning: Ignoring extra certs from ...` (the CA file is missing or was written after start).
 
-**Phase to address:**
-Every filesystem, process, network, credential, or timing pair, beginning with the
-domain/platform pairs in Phase 108.
+**Phase to address:** RUN, STAND-IN.
 
 ---
 
-### Pitfall 6: Widening the production API for test access
+### Pitfall 6: Scenarios that a wrong implementation still passes
 
 **What goes wrong:**
-Private constants, regular expressions, maps, reset hooks, and state readers become
-exports. Tests couple to implementation and static analysis treats the accidental API
-as intentional.
+This is the skill's first review question, and marketplace commands invite it in five places:
+- **Network proof is missing.** `marketplace add owner/repo` is "added" whether the clone came from the stand-in, the real github.com (override not applied), or a leftover clone. Only the stand-in's request log tells them apart. In the same way, `list`, `info`, and `remove` must make **zero** requests (NFR-5), and nothing checks that unless a `Then` asserts an empty log.
+- **Normalizing too much.** The result carries a random port and absolute temp paths: `marketplace-info.source.url`, `source.absPath` (unredacted by design, NFR-9), the row subject of a failed URL add, and `connect ECONNREFUSED 127.0.0.1:<port>` in cause chains. A projection that replaces any `127.0.0.1:\d+` or any `/tmp/...` with a placeholder also hides a request to the wrong port, or a path into the wrong scope.
+- **Dropping fields.** `details.lastUpdatedAt` is a timestamp. Adding it to `UNSTATED_FIELDS` in `command.steps.ts` (next to `origin`) makes it disappear from every comparison, so a regression that stops stamping it, or stamps it on a failed update, passes.
+- **Payload count is loose.** A bare `marketplace update` emits one payload per marketplace, in sorted order (`orchestrators/marketplace/update.ts:261-287`). It can also emit an extra `mcp-config-notices` payload. A driver that accepts "at least one" or "any order" lets a skipped marketplace through.
+- **Kind is loose.** A driver that validates against the whole `NOTIFICATION_PAYLOAD_SCHEMA` union passes a `usage-error` where a `marketplace-info` was expected.
 
 **Why it happens:**
-Direct coverage makes private branches uncomfortable. The abandoned attempt also
-identified candidate exports, which can be mistaken for required public surface.
+Run-specific values force some normalization, and the easiest normalizer is a regex. Comparing whole results against tables pushes writers to drop the awkward fields.
 
 **How to avoid:**
-- Test private rules through the export that consumes them.
-- Make real side-effecting dependencies explicit through a function parameter,
-  factory dependency object, or narrow port.
-- Follow the locked v1.19 decisions: keep version internals, hook tool-name internals,
-  hook event metadata, and the fetch-backed device-flow adapter private; remove
-  production-dead exports; construct credential operations from the narrow process
-  boundary.
-- Treat the dirty checkpoint as unverified evidence. Do not apply it.
-- Add no test reset or test mode.
+- Substitute **exact** run tokens only: the server's exact origin string, the exact sandbox and marketplaces roots. Replace them in both directions (in the command a step sends and in the result it projects) with named, visible placeholders. Document the placeholders once in each feature description (for example, "`<git server>` stands for the loopback HTTPS stand-in"). A value that contains a different port stays raw and fails the comparison.
+- Compare `lastUpdatedAt` by property, not by dropping it: present and inside the window between the `When` starting and returning, or absent. Spell the expectation as a cell value such as `set by this update`.
+- The driver takes the expected payload kind (and, for bare `update`, the expected count), validates against that kind's schema, and asserts the exact sequence of kinds.
+- Give every network scenario a `Then the git server received these requests:` table (method, path, query, and whether it carried credentials, never the credential value). Give every `list`/`info`/`remove` scenario on a git source `Then the git server received no requests`.
 
 **Warning signs:**
-- An export has no production caller.
-- A test uses bracket access, `as any`, or a reset hook.
-- A Fallow suppression says only that a test imports the symbol.
+A projection helper containing `replace(/\d+/` or `/tmp`. A growing `UNSTATED_FIELDS`. A GitHub scenario with no request-log `Then`.
 
-**Phase to address:**
-The one-pair plan for the owning module. The relevant domain/platform decisions should
-be exercised early in Phase 108.
+**Phase to address:** DRIVER (tokens, kinds, counts), SCENARIOS (request-log Thens), GATE (review against the skill's first question).
 
 ---
 
-### Pitfall 7: Moving shared fakes and contracts in one cross-pair sweep
+### Pitfall 7: Host git configuration leaks into the stand-in and the fixtures
 
 **What goes wrong:**
-A generic `tests/helpers` cleanup changes many corresponding tests and adapters in one
-commit. Contract behavior is lost, or a fake passes tests while diverging from the real
-adapter.
+The cucumber worker runs with the developer's real `HOME` and environment; only Pi is sandboxed. So `git init`, `git commit`, and `git http-backend` spawned from `features/lib/` read the real `~/.gitconfig` and `/etc/gitconfig`:
+- `commit.gpgsign=true` makes fixture commits hang on pinentry or fail.
+- `init.defaultBranch` makes HEAD `master` on one machine and `main` on another. Scenarios that show a ref, or that check out the default branch, then differ between laptop and CI.
+- `/etc/gitconfig` here sets `filter.lfs.required=true`, and `transfer.hideRefs`, `uploadpack.*`, `core.hooksPath`, `safe.directory`, and `url.<base>.insteadOf` all change what `upload-pack` serves or what a commit does.
+- Inherited `GIT_DIR`, `GIT_WORK_TREE`, or `GIT_INDEX_FILE` (set when anything runs under a git hook) make fixture commands operate **on this repository**.
+- Commit SHAs change on every run unless author and committer dates are pinned.
 
 **Why it happens:**
-The handoff preserves GitOps, CredentialOps, and DeviceFlowHttp behavior but explicitly
-reconsiders the generic helper layout, global participation inventory, separate fake
-tests, and child-process probes. Thirty-three current tests import a generic helper
-path.
+The spike ran on one machine with one config, and the stand-in reuses the worker's environment by default (`spawn` without `env`).
 
 **How to avoid:**
-- Preserve each adapter contract's missing-value, aliasing, overwrite, ordering,
-  deletion, and validation behavior.
-- Keep the contract near its concern and give every case a fresh adapter instance.
-- Prove each shared contract against the real adapter and fake, then run a deliberately
-  broken fake as a negative control.
-- Move or replace support only inside the one pair that owns the current change. Avoid
-  a repository-wide helper migration commit.
-- After any shared support change, run the all-pairs direct-coverage check as impact
-  detection, not as completion credit for untouched pairs.
+Use one function in `features/lib/` that builds the git environment from scratch for **both** fixture commands and the CGI. Include: `PATH`, `HOME=<empty dir under the run root>`, `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=/dev/null`, fixed `GIT_AUTHOR_NAME/EMAIL/DATE` and `GIT_COMMITTER_*`, and nothing else from `process.env`. Pass `-c init.defaultBranch=main` (or `git init -b main`) and `-c commit.gpgsign=false`. For the CGI, add only `GIT_PROJECT_ROOT`, `GIT_HTTP_EXPORT_ALL=1`, and the CGI variables from the request.
 
 **Warning signs:**
-- One plan lists several production modules because they share a fake.
-- The fake reuses mutable return objects.
-- A contract case reads developer Git credentials or a live identity provider.
-- A generic helper computes the expected result for the subject.
+A fixture `Given` passes locally and times out in CI, or the reverse. A ref column reads `master` on one machine. `git status` in the repository shows unexpected changes after a run.
 
-**Phase to address:**
-The corresponding Git, credential, and device-flow pair plans, starting in Phase 108;
-downstream pairs consume only the contract already established.
+**Phase to address:** STAND-IN.
 
 ---
 
-### Pitfall 8: Replaying the abandoned module graph or patch
+### Pitfall 8: CGI wrapper edge cases crash the worker or hang the scenario
 
 **What goes wrong:**
-Old symbol moves, test moves, retired Phase 106/107 artifacts, or
-`DIRTY-CHECKPOINT.patch` become the new design. Historical migration comments and
-workstream-specific tests return with them.
-
-**Why it happens:**
-The preservation kit is detailed: 674 production and 172 test symbol-move candidates
-make it look executable. Thirty-one production move candidates and six test move
-candidates are explicitly low confidence.
+About 25 lines served the spike's happy path. The failure paths are where it breaks:
+- **No timeout anywhere.** `platform/git.ts` sets no request timeout, and `simple-get` times out only when `opts.timeout` is set. If "drop the connection" is built as "accept and never answer", the command waits until the 30 s step timeout, then Pi is replaced. Each such scenario costs 30 s and leaves a busy Pi.
+- **EPIPE kills the worker.** When the client or a drop arm closes the socket while `git http-backend` is still writing (or the wrapper is still writing to its stdin), an unhandled `'error'` on `child.stdin`/`child.stdout`/`res` throws. In a cucumber worker that ends every remaining scenario of that worker.
+- **Header parsing.** `http-backend` prints `Status: 404 Not Found` only on errors. On success there is no `Status` line and the status is 200. Headers end at the first blank line (`\r\n\r\n`; also accept `\n\n`). That boundary can fall across two stdout chunks. The body is binary pack data and must never be decoded as text.
+- **Request body.** isomorphic-git 1.42.3 buffers the upload-pack request so that it can send `Content-Length` (`index.cjs:10325`), and it never gzips request bodies. Pass `CONTENT_LENGTH` and `CONTENT_TYPE` through. If a request does arrive with `Content-Encoding: gzip`, pass it as `HTTP_CONTENT_ENCODING`; `http-backend` inflates it itself. Never decompress it in the wrapper.
+- **Missing `QUERY_STRING`.** Without `service=git-upload-pack`, `http-backend` falls back to the dumb protocol and isomorphic-git fails with a confusing error.
+- **Orphans.** A CGI child whose request was aborted keeps running unless it is killed on `req` `'close'`.
+- **Wrong interface.** `server.listen(0)` with no host binds every interface. The skill requires loopback only.
 
 **How to avoid:**
-- Use the handoff only as discovery evidence.
-- Use `TRANSFORMATIONS.yaml` only to find declarations or prior intent.
-- Reconsider module and test ownership from HEAD and current callers.
-- Do not run the preservation-kit checker; it validates the original oracle head.
-- Do not apply the dirty patch or restore dropped exemption, ownership-registry,
-  sharded-LCOV, adapter-scanner, Fallow-coordinate, or preservation-kit mechanisms.
-- Keep case titles and comments about lasting behavior. Remove plan, phase, migration,
-  and workstream narration when rewriting a pair.
+- Implement "drop" as an immediate `req.socket.destroy()`. Never offer a "hang" arm. If a stall is ever needed, it needs a client timeout first, and that is a production change.
+- Attach `'error'` handlers to every stream. On `req` `'close'`, kill the child and settle the request's log entry.
+- Parse with a small state machine: buffer until the blank line, split headers, take `Status`, then pipe the rest as raw bytes. Cover it with direct unit tests, because `features/lib/` code is otherwise exercised only end to end.
+- Listen on `127.0.0.1` explicitly, use the literal `127.0.0.1` in URLs (`localhost` may resolve to `::1` first on some systems), and put `IP:127.0.0.1` in the certificate's subjectAltName. Node does not fall back to the CN for an IP host.
+- Make the 401 arm answer with `WWW-Authenticate: Basic realm="..."`. Record whether each request carried `Authorization`, never its value.
 
 **Warning signs:**
-- A plan cites an old phase summary as its design authority.
-- A path is recreated only because it appears in a transformation record.
-- New code comments describe the refactor history rather than a current constraint.
+`Error: write EPIPE` in cucumber output followed by many failed scenarios from one worker. A scenario that takes about 30 s. `git-http-backend` processes left after a run.
 
-**Phase to address:**
-Every phase from 108 onward. The rule belongs in each one-pair plan template, not in a
-separate executable migration plan.
+**Phase to address:** STAND-IN.
 
 ---
 
-### Pitfall 9: A production module split silently violates the one-pair boundary
+### Pitfall 9: Asserting runtime-, platform-, and version-specific error text
 
 **What goes wrong:**
-Extracting a coherent concern creates a new production-test pair while also changing
-the original caller pair. A supposedly atomic plan now owns two pairs, or lands unused
-production code that Fallow rejects.
-
-**Why it happens:**
-Several current modules are very large: `shared/notify.ts` is 4,135 lines,
-`plugin/update.ts` 3,240, `plugin/install.ts` 2,442, and `domain/resolver.ts` 1,744.
-The guidelines recommend coherent extraction when tests become complicated, but the
-milestone also mandates one pair per plan and commit.
+Whole-result comparison forces the `cause chain` column into failure tables. The cause text for network failures comes from Node, OpenSSL, and isomorphic-git, and it drifts:
+- Node 26 (the local `node`) appends the path to fs errno messages; Node 24 (CI) and 22 do not. This is memory `node-errno-message-drift-local-vs-ci`, PR #250. The suite runs under whatever `node` runs `npx`, and Pi runs under the same `process.execPath`, so local and CI produce different text.
+- TLS wording changed between OpenSSL versions (`self signed certificate` vs `self-signed certificate`), and Node 24 and 26 bundle different OpenSSL versions.
+- `connect ECONNREFUSED 127.0.0.1:<port>`, `socket hang up`, and `read ECONNRESET` depend on timing and carry the random port.
+- The host has OpenSSL 4.0.3; ubuntu-latest has 3.0.x. CLI flags used to generate the certificate (`-nodes` vs `-noenc`, `-addext`) differ between them, and from LibreSSL on macOS (LOW confidence on the macOS details).
 
 **How to avoid:**
-- Trace production callers before deciding whether the existing module can become
-  testable through a pair-local dependency refactor.
-- Do not create an unused extracted module, a test-only facade, or a cross-pair move.
-- If a legal one-pair landing cannot keep every intermediate gate green, stop that pair
-  and record a roadmap decision before implementation. Do not smuggle the split into a
-  “test cleanup” commit.
-- Keep the chosen responsibility in one source owner and one mirrored test owner.
+- Use reasons (`authentication required`, `source missing`, ...) as the asserted behavior. Where a cause chain must appear, pin only messages the extension or isomorphic-git composes (`HTTP Error: 401 Unauthorized`, `NO_STORED_CREDENTIAL_CAUSE`). For runtime text, read the wording back from the runtime in the step (trigger the same failing call, as five unit suites already do), or substitute the exact port token (Pitfall 6).
+- Do not write scenarios that depend on TLS failure text. The CA is trusted by design; a "bad certificate" scenario adds runtime-specific text and protects nothing in the extension.
+- Generate the certificate with flags that both OpenSSL 3.0 and 4.x accept (`req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -noenc -days 1 -subj /CN=127.0.0.1 -addext subjectAltName=IP:127.0.0.1`). Check the flags against `openssl version` on ubuntu-latest in the STAND-IN phase. Do not commit a key and certificate instead: the filesystem-mode TruffleHog hook flags private keys.
+- Before pushing, run the suite once with `/usr/bin/node` (22) or a Node 24 binary.
 
 **Warning signs:**
-- A plan's files list contains two production `.ts` modules and two mirrored tests.
-- A new module has no production caller at commit time.
-- A formatting or import rewrite changes neighboring pairs.
+The behavioral CI job fails on a cause-chain cell while the local run passes. A cell contains `ECONN`, `socket`, or a port number.
 
-**Phase to address:**
-At planning time for the affected pair in Phase 108 or later. No separate non-pair
-executable plan is proposed.
+**Phase to address:** DRIVER (read-back helpers), SCENARIOS, STAND-IN (openssl flags).
 
 ---
 
-### Pitfall 10: Structural gates exist but are outside the completion path
+### Pitfall 10: Refused-form scenarios that would reach the public network if the parser regressed
 
 **What goes wrong:**
-`npm run check` passes while mirrored ownership or direct pair coverage regresses. Or a
-full-tree gate is wired too early, stays red for the entire migration, and becomes
-normal background noise.
-
-**Why it happens:**
-HEAD has `test:corresponding`, `test:coverage:direct`, and passing negative-control
-scripts, but `check` currently runs neither. The full correspondence gate currently
-fails with 107 violations, so naive immediate wiring would also break incremental
-delivery.
+Parse-level scenarios for `http://`, `ssh://`, `git@host:`, `/tree/` URLs, and bad shorthand usually use realistic hosts, such as `http://example.com/repo.git` or `git@github.com:o/r.git`. If a regression lets one of them through the parser, the scenario sends a real DNS lookup and connection before it fails. It may also fail for the wrong reason (`source missing`), which a loose `Then` accepts.
 
 **How to avoid:**
-- Keep focused pair checks mandatory in every pair plan.
-- Keep structural checks fail-closed for missing, ambiguous, wrong-import, missing-LCOV,
-  and incorrectly-classified type-only inputs.
-- Prove every changed gate with a planted negative control and a clean-tree control.
-- Maintain an explicit 204-pair open ledger during migration; do not weaken the gate
-  with baseline counts or exemptions.
-- Make full-tree enforcement part of the final pair's completion path once the tree is
-  clean, while preserving the project-wide `npm run check` contract.
+- Point refused forms at the stand-in: `http://127.0.0.1:<port>/...`, `ssh://127.0.0.1:<port>/...`. A regression then shows up as a request in the log, or as a TLS client error on the HTTPS listener. Record `'tlsClientError'` and raw connections as attempts, and give these scenarios a `Then the git server received no requests`.
+- Assert the exact `usage-error`/`failed` row, including the parser's message (`D-76-01` wording from `domain/source.ts:91`). The message comes from this extension, so it is stable.
 
-**Warning signs:**
-- CI is green after deleting a mirrored test.
-- A gate says “no changed pairs” after a source or test move.
-- A baseline count or allowlist makes a missing pair pass.
-- A permanently failing gate is documented as “expected.”
+**Phase to address:** SCENARIOS.
 
-**Phase to address:**
-Phase 108 validates the focused fail-closed path in its first pair plan. The final
-one-pair plan closes full-tree enforcement after all 204 pairs have evidence.
+## Moderate Pitfalls
+
+### Pitfall 11: Sandbox reset misses state outside the three sandbox directories
+
+**What goes wrong:**
+The `Before()` hook empties `home`, `agent`, and `project`. Marketplace clones (`<scopeRoot>/pi-claude-marketplace/...`) and `plugin-clones/` live inside those directories, so they are reset. The new pieces are not: served bare repos, the request log, and arming. Neither are the marketplace sources under `marketplacesRoot`, which today rely on each scenario's `onRelease`. Other leftovers carry state too: a timed-out scenario's in-flight `git http-backend`, and an armed 5xx left by a failed scenario that never reached its release. Because the run order is random, the leak shows up as a different flaky scenario on each run.
+
+**How to avoid:**
+The reset asserts emptiness of everything a scenario can create: no skills, no marketplaces (today), no served repos, an empty request log, no arming, and no CGI children. Keep `order: random`. Use a fresh repo name per scenario only if a scenario cannot be made independent otherwise; the reset should make that unnecessary.
+
+**Phase to address:** RUN.
+
+### Pitfall 12: In-process caches carry one scenario's manifest into the next command
+
+**What goes wrong:**
+`domain/manifest-cache.ts` keys entries by `(mtimeMs, size)` and documents that "a same-size rewrite within the filesystem's mtime resolution can collide". The existing fixture rewrites `"version":"1.0.0"` to `"1.1.0"`, which has the same size. Pi loads extensions with `moduleCache: false`, so `new_session` builds a fresh cache. Within one scenario, though, `add` followed by a rewrite and `update` uses one cache instance. On a filesystem with coarse timestamps (some CI overlay setups), `update` can read the stale manifest.
+
+**How to avoid:**
+Path-source update scenarios should change the manifest's size as well (for example `1.0.0` to `1.10.0`), or start a session between the rewrite and the `When`. Git-source scenarios are unaffected, because they reread from a fresh fetch.
+
+**Phase to address:** SCENARIOS.
+
+### Pitfall 13: Step text spelled to the rules, but the rules' gates are not wired
+
+**What goes wrong:**
+- `npm run test:cucumber` fails on undefined and ambiguous steps but **passes with unused ones**. `npx cucumber-js --dry-run --format usage` lists `UNUSED`, but nothing in `npm run check` or CI runs it. An abandoned step survives every gate.
+- Ambiguity creeps in with generic parameters. `the marketplace {string} is added to the {word} scope` (path source) next to a new `the {word} marketplace {string} is added ...` can match the same text, or tempt a writer to fold the source kind into `{word}`, where `the github marketplace` and `the git marketplace` read alike.
+- The rules require lower-case step text after the keyword, no `And`/`But`, every `Given` before the first `When`, and `Background:` with `Given` only. No linter checks any of them; only review does.
+- `features/**` is under `npm run lint`, and fallow's `health` (cognitive complexity 15) and `dupes` (threshold 3) also see it. A CGI parser or a projection helper written as one function trips the complexity gate. Parallel table projections in several step modules trip dupes.
+
+**How to avoid:**
+Add a script (for example `test:cucumber:usage`) that runs the dry-run usage report and fails on `UNUSED`, and chain it into `check:static` or the behavioral CI job. A small source walk for `^\s*(And|But) ` and upper-case step text in `features/**/*.feature` is cheap and worth having. Name source kinds in fixed phrases ("a local directory", "a git repository served over https", "the github repository") rather than `{word}`.
+
+**Phase to address:** GATE (first phase that adds a step), SCENARIOS.
+
+### Pitfall 14: The driver's `assertQuiet` and single-payload rule do not fit marketplace commands
+
+**What goes wrong:**
+`runCommand` asserts exactly one `cascade` payload, no dialogs, and no extension errors. Marketplace commands emit `marketplace-info`, `marketplace-info-cascade`, `marketplace-not-added`, and `usage-error`. A bare `update` emits one payload per marketplace. `remove` and `update` may add a cascade onto installed plugins, and possibly `mcp-config-notices`. Loosening `runCommand` in place weakens the existing plugin scenarios.
+
+**How to avoid:**
+Keep `runCommand` strict. Add `runCommandExpecting(pi, command, kinds: readonly Kind[])`, which validates each payload against its own kind's schema and returns them in order, with the generic `When the user runs {string}` steps passing the expected kinds through a typed `Then` (the `Then` names what it reads: `the result is the marketplace info:`). Keep `assertQuiet` everywhere.
+
+**Phase to address:** DRIVER.
+
+### Pitfall 15: `npm run check` and the behavioral CI job get slower than they look
+
+**What goes wrong:**
+Today the suite runs 13 scenarios in 4.8 s wall time on 28 cores (measured 2026-10-15). `npm run check` already takes about 73 s and runs cucumber serially between integration and direct coverage. ubuntu-latest has 4 vCPUs. With `parallel: 8`, eight Pi processes, eight servers, and per-request `git http-backend` spawns oversubscribe it. The `behavioral` job has a 10-minute timeout, and a few 30 s step timeouts (Pitfall 8) or Pi replacements multiply quickly.
+
+**How to avoid:**
+Budget each git scenario at under 1 s locally. Keep `drop` immediate. Build each fixture repo once per scenario, with one commit (a pack, not many loose objects; `/tmp` is a 1M-inode tmpfs, memory `tmp-inode-exhaustion-enospc`). Measure the job's duration in CI at the end of STAND-IN and again at the end of SCENARIOS. Consider `parallel: 4` on CI if it is faster there. Note that the pre-commit `npm-check` hook runs `check:commit`, which does **not** run cucumber. A features-only commit is green at commit time and can still fail `npm run check`.
+
+**Phase to address:** GATE, STAND-IN.
+
+## Minor Pitfalls
+
+### Pitfall 16: `lastUpdatedAt`, SHAs, and refs differ per run
+
+Fixture commits without pinned dates produce new SHAs on every run, and `lastUpdatedAt` is wall-clock time. Pin the dates (Pitfall 7) and compare timestamps by window (Pitfall 6).
+
+### Pitfall 17: The run root can land in a place the sandbox check refuses
+
+`_rpc.ts::resolveSandbox` refuses sandbox locations inside the repository or outside `realpath(tmpdir())`. The served repos and CA file have no such check. Keep them under the same `mkdtemp` run root, so `AfterAll` removes everything in one `rm`. A crashed worker leaves `pi-cm-features-*` behind; find and clean those when `/tmp` inodes run low.
+
+### Pitfall 18: Credential-carrying redirects in stand-in arming
+
+`platform/git.ts` follows redirects itself and drops credentials across origin (scheme, host, port), as fixed in any-git-host G-01-4. If the stand-in grows a "redirect" arm, keep every target on loopback (another `127.0.0.1` port). A redirect to a public host would leave the machine.
 
 ## Technical Debt Patterns
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|---|---|---|---|
-| Credit the 59 audit passes | Shrinks roadmap | Leaves guideline violations and weak tests certified | Never |
-| Keep behavior in legacy split suites | Avoids moving assertions | Mirrored owner remains incomplete and direct coverage can drift | Only until the owning pair plan transfers it |
-| Export a private helper | Easy branch access | Accidental public API and brittle tests | Never |
-| Add coverage/Fallow ignores | Makes a gate green | Hides dead code or uncovered behavior | Only for a real runtime API static analysis cannot observe, with a narrow documented reason |
-| Use generic helpers for expected values | Less repeated setup | Subject and oracle can share the same bug | Never |
-| Apply the dirty checkpoint or old patch mechanism | Fast apparent progress | Replays unverified code and obsolete layout | Never |
-| Bulk-format neighboring tests | Cleaner tree | Breaks one-pair review and commit ownership | Never in a pair commit |
-| Keep historical phase commentary | Preserves archaeology | Obscures current public behavior and becomes stale | Never in rewritten unit cases |
+|----------|-------------------|----------------|-----------------|
+| Regex normalization of ports and temp paths in the projection | One helper replaces every run-specific value | Hides wrong-port and wrong-scope regressions (Pitfall 6) | Never; substitute exact run tokens |
+| Adding `lastUpdatedAt` to `UNSTATED_FIELDS` | Tables stay static | A dropped or wrong timestamp passes | Never; compare by window |
+| Spreading `process.env` into the CGI or Pi env | Fewer variables to list | Host git config and credentials leak (Pitfalls 1, 7) | Never |
+| `NODE_TLS_REJECT_UNAUTHORIZED=0` instead of a CA | No openssl dependency | Turns off TLS checks for all of Pi, warns on stderr, and can hide a real TLS regression | Never |
+| Overriding only `networkCloneUrl` | The happy-path scenario passes on day one | Auth, recovery, and update stay on github.com (Pitfall 2) | Never |
+| A separate module-level server outside `PiRun` | Matches the "one module per stand-in" layout | Breaks the slow-process rule, hook order, and replacement env (Pitfall 5) | Never; extend `PiRun` and amend the rule |
+| Committing a fixed test certificate | Avoids openssl in CI | TruffleHog flags the key, and the certificate expires | Never |
 
 ## Integration Gotchas
 
 | Integration | Common Mistake | Correct Approach |
-|---|---|---|
-| Node test runner | Import process-wide `mock` or share globals | Use the current case's `t.mock`; restore globals with `t.after()` |
-| Node coverage | Accept aggregate coverage or a missing LCOV record | Select one pair and require one complete source record; recognize genuine type-only modules explicitly |
-| `strong-mock` | Use broad matchers or omit verification | Use exact parameters, complete expectations, and explicit `verify()` |
-| Filesystem | Share fixtures or write into repo/home | One private temporary directory per case with registered cleanup |
-| Git/credentials/HTTP | Reach developer state or live services | Temporary repos, command-scoped credential config, replaced fetch, and narrow injected ports |
-| Fallow | Add exports/ignores to placate analysis | Remove dead code or document the one genuine runtime-only API narrowly |
-| Persistence | Assert decoded fragments only | Preserve schemas, migrations, containment, and exact stored bytes through public operations |
-| Notifications | Update snapshots to current output | Resolve against closed grammar and public contract, then assert exact bytes and severity |
+|-------------|----------------|------------------|
+| `git http-backend` | Missing `GIT_HTTP_EXPORT_ALL`, `QUERY_STRING`, or `GIT_PROJECT_ROOT`; inheriting the worker env | Build the CGI env from scratch; pass `CONTENT_LENGTH`/`CONTENT_TYPE`/`HTTP_CONTENT_ENCODING` through |
+| `git credential` (spawned by the extension) | Relying on sandboxed `HOME` alone | `GIT_CONFIG_NOSYSTEM=1` plus `GIT_CONFIG_GLOBAL` in the Pi env; a per-scenario `.gitconfig` with `credential.helper=store` |
+| `NODE_EXTRA_CA_CERTS` | Writing the CA after Pi starts; forgetting it on Pi replacement | Generate before `PiProcess.start`; keep the env on `PiRun` |
+| Device Flow (`domain/github-auth.ts`) | Leaving the bound host `github.com` under the override | Bind to the override's `host:port`; no provider means no Device Flow |
+| isomorphic-git over a stalled socket | Arming a "hang" | Destroy the socket; there is no client timeout |
+| Cucumber hooks | Two support modules with order-dependent `Before()` hooks | One `Before()` in `support/pi-process.ts` sequences replace, drain, reset |
+| `localhost` | Using the name in URLs and the certificate | Literal `127.0.0.1` and an `IP:` SAN |
 
 ## Performance Traps
 
 | Trap | Symptoms | Prevention | When It Breaks |
-|---|---|---|---|
-| Run all 204 coverage subprocesses after every edit | Slow feedback encourages skipped checks | Focused pair during work; all-pairs after shared support and at final gate | Immediately at this repository size |
-| Keep giant source/test modules | 4K–7K-line files, opaque file-level failures, costly review | Pair-local simplification; split only when a legal one-pair landing exists | Already present |
-| Use real timers or network retry | Slow, flaky pair tests | Inject clocks/transports; fake timers; local boundaries | A single adverse environment |
-| Rebuild expected state through production helpers | Fast test writing | False positives and coupled failures | First shared bug |
-| Change shared support casually | Many pairs rerun or drift | Treat it as impact-bearing and run all-pairs detection | Any widely imported helper |
+|------|----------|------------|----------------|
+| Stall-type failure arms | About 30 s per scenario, Pi replaced | Immediate `socket.destroy()` | First scenario that uses it |
+| Oversubscribed CI runner | Behavioral job near its 10-minute timeout | Measure; consider `parallel: 4` on CI | About 60+ git scenarios on 4 vCPUs |
+| Loose-object fixtures | `/tmp` inode exhaustion, ENOSPC on `mkdtemp` | One commit per repo; clean the run root | Repeated local runs with crashed workers |
+| Helper timeout on 401 | 5 s per auth challenge | Isolate git config so `fill` misses fast | Any machine with a slow system helper |
 
 ## Security Mistakes
 
 | Mistake | Risk | Prevention |
-|---|---|---|
-| Tests read the developer credential helper | Credential exposure or mutation | Command-scoped temp Git config and a case-owned credential store |
-| Tests use live plugin/marketplace URLs | Data exfiltration, nondeterminism, NFR-5 drift | Fake transport or temporary local repository |
-| Filesystem cases write outside a temp root | User or repository damage | Case-private `mkdtemp`, containment assertions, cleanup |
-| Expected output contains absolute temp/home paths | Leaks paths and weakens redaction contract | Assert stable redacted bytes |
-| A test bypasses `pluginRoot` narrowing | Containment assumptions become untypeable only after damage | Preserve `installable: true | false`; unavailable arm has no `pluginRoot` |
+|---------|------|------------|
+| Reaching the system credential helper from a scenario | Reads, or with `reject` erases, a developer's real credential | Pitfall 1 isolation |
+| Accepting `http://` or userinfo in the override | Cleartext credentials; a token echoed into rows and cause chains | Validate the override at read time (Pitfall 4) |
+| Binding the stand-in to all interfaces | Exposes the test git server to the LAN during runs | `listen(0, "127.0.0.1")` |
+| Logging `Authorization` values in the request log | Test credentials in CI logs; a habit that copies to real canaries | Record presence only |
+| Loosening the `onAuth` host guard to make GitHub 401 scenarios pass | Reopens the cross-host credential leak fixed in any-git-host | Fix the bound host instead (Pitfall 2) |
 
 ## UX Pitfalls
 
 | Pitfall | User Impact | Better Approach |
-|---|---|---|
-| Test cleanup changes notification grammar | Scripts and users see unexplained byte drift | Preserve closed vocabulary, severity, indentation, and reload hints |
-| A failing path is reclassified casually | Users get the wrong remedy | Assert typed cause and authoritative reason token |
-| Public behavior disappears with a legacy suite | Regression ships despite “better tests” | Transfer the assertion into the mirrored owner before deletion |
-| Commit mixes several pairs | Reviewers cannot tell which behavior belongs where | Exactly one named source-test pair per plan and commit |
+|---------|-------------|-----------------|
+| A stray `GITHUB_BASE_URL` (Terraform) silently redirects clones | Every GitHub marketplace fails with a confusing URL | Project-prefixed name, or validation that names the variable (Pitfall 4) |
+| An invalid override falls back to github.com | The user thinks the override works and is cloning from public GitHub | Fail with a typed error that names the variable |
+| The override changes after `add` | `update` keeps fetching from the old base (it uses the clone's recorded origin) | Document this, or re-point `origin` when the base changes; decide in OVERRIDE |
 
-## “Looks Done But Isn't” Checklist
+## "Looks Done But Isn't" Checklist
 
-- [ ] **Pair accounting:** All 204 started open; only new one-pair evidence closes a row.
-- [ ] **Correspondence:** The mirrored test exists and directly imports its source.
-- [ ] **Types and barrels:** Type-only and re-export-only modules have meaningful compiler/binding tests.
-- [ ] **Behavior:** Cases discriminate exported promises with independent expected values.
-- [ ] **Coverage:** Focused LCOV is 100% functions, lines, and branches for the paired source.
-- [ ] **Isolation:** Every case owns mutable state, temporary files, globals, timers, and transports.
-- [ ] **Interactions:** Promised calls use strict exact mocks and explicit verification.
-- [ ] **API discipline:** No production export or reset hook exists only for tests.
-- [ ] **Contract replay:** Relevant behavior, public-surface, persistence, adapter, and named-correction evidence is retained.
-- [ ] **Mechanism cleanup:** No abandoned patch, exemption registry, sharded runner, ownership registry, or preservation checker returned.
-- [ ] **Commit boundary:** The implementation commit owns exactly one source-test pair.
-- [ ] **Gates:** Focused test, direct coverage, negative controls when applicable, and `npm run check` pass.
+- [ ] **Override:** every one of the 14 files plus `marketplace/update.ts:398` goes through one seam. Verify with `rg 'github\.com' extensions/`.
+- [ ] **Override:** a GitHub 401 with a stored credential authenticates. Verify that the request log shows an unauthenticated then an authenticated request.
+- [ ] **Hermeticity:** a scenario run with `credential.helper=!echo LEAK` in a throwaway `/etc/gitconfig` (or a temp `GIT_CONFIG_SYSTEM`) never sees it. This is a negative control run once by hand, not committed (the repo's "a gate's run over the real tree is its only committed proof" rule).
+- [ ] **NFR-5:** every `list`/`info`/`remove` scenario on a git source asserts an empty request log.
+- [ ] **Reset:** the `Before()` assertion covers repos, log, arming, and CGI children, not only skills and marketplaces.
+- [ ] **Replacement:** a scenario that times out mid-clone leaves the next scenario in that worker green (force one by hand once).
+- [ ] **Unused steps:** the dry-run usage report shows no `UNUSED`, and a script enforces it.
+- [ ] **Node 24:** the suite passes under Node 24, not only the local Node 26.
 
 ## Recovery Strategies
 
 | Pitfall | Recovery Cost | Recovery Steps |
-|---|---|---|
-| Audit pass was credited | LOW | Reopen the row and run the complete one-pair proof |
-| Behavior changed to satisfy a stale test | HIGH | Restore the authoritative contract, add a discriminating regression case, rerun dependent suites |
-| Test widened production API | MEDIUM | Internalize/remove the export and inject the real dependency through a narrow production port |
-| Shared helper sweep mixed pairs | HIGH | Stop; separate the changes into one-pair commits without rewriting history, then rerun impacted pairs |
-| Non-hermetic focused failure | MEDIUM | Replace machine state with a case-owned temp/local/injected boundary |
-| Gate false-pass | HIGH | Plant the missed violation, repair the gate, prove red then green, re-audit affected rows |
-| Old mechanism was resurrected | MEDIUM | Remove it and replace only its requirement through the current guideline |
+|---------|---------------|----------------|
+| Real credential erased by `reject` | HIGH (user data) | Re-store it with `git credential approve`; then add the env isolation before any further run |
+| Override wired partially | MEDIUM | Introduce the seam, route the remaining sites, add the grep gate |
+| Stand-in crashes a worker (EPIPE) | LOW | Add the stream error handlers; rerun |
+| Flaky reset leak | MEDIUM | Run the suite with `--order random:<seed>` from the failing CI log to reproduce; extend the reset assertion |
 
 ## Pitfall-to-Phase Mapping
 
 | Pitfall | Prevention Phase | Verification |
-|---|---|---|
-| 1 False completion credit | Phase 108 and every later phase | Ledger begins with 204 open; closure cites new pair evidence |
-| 2 Ownership/mapping ambiguity | Every one-pair plan | Mirrored path, direct source import, no alternate owner |
-| 3 Coverage theater | Every one-pair plan | Guideline review plus mutation-sensitive public assertions and direct LCOV |
-| 4 Contract drift | Owning pair plan | Relevant replay contracts and wider regression suite pass |
-| 5 Hidden external state | Owning filesystem/process/network pair, starting Phase 108 | Isolated/reordered focused runs pass offline |
-| 6 Test-only exports | Owning domain/platform pair, starting Phase 108 | Production caller trace; no test-only public symbol |
-| 7 Shared adapter support | Git, credential, and device-flow pair plans | Real + fake contract and broken-fake negative control |
-| 8 Abandoned design replay | Every phase from 108 | Plan cites HEAD/current callers; dropped mechanisms absent |
-| 9 Multi-pair extraction | Planning of the affected pair | One production source and one mirrored test own the commit |
-| 10 Gate integration gap | First Phase-108 pair and final pair | Focused fail-closed controls early; full-tree gate clean at close |
+|---------|------------------|--------------|
+| 1 Credential helper leak | RUN | Negative control with a planted system helper; scenarios pass on a clean sandbox |
+| 2 Partial override wiring | OVERRIDE | `rg` shows one seam; GitHub 401, recovery, and update scenarios |
+| 3 Device Flow to github.com | OVERRIDE | Unit test: an override host gets a `stored-credential` bundle |
+| 4 Name collision and validation | OVERRIDE (user decision first) | Unit tests for `http://`, userinfo, trailing slash, path prefix, API-style value |
+| 5 Server lifetime vs Pi env | RUN, STAND-IN | One `PiRun`; amended cucumber rule; forced-timeout check |
+| 6 Wrong implementation passes | DRIVER, SCENARIOS | Review question 1 on every feature; request-log Thens |
+| 7 Host git config in fixtures/CGI | STAND-IN | Run with a hostile `~/.gitconfig` (gpgsign, defaultBranch=master) once by hand |
+| 8 CGI edge cases | STAND-IN | Direct unit tests of the header parser; drop-arm scenario under 1 s |
+| 9 Runtime-specific text | DRIVER, SCENARIOS | Suite passes under Node 24 and Node 26 |
+| 10 Refused forms reaching the network | SCENARIOS | Empty request log in each refusal scenario |
+| 11 Reset gaps | RUN | Extended reset assertion; random order |
+| 12 Manifest cache collision | SCENARIOS | Version rewrites change the size |
+| 13 Unused or ambiguous steps | GATE | Usage script in the gate |
+| 14 Driver payload kinds | DRIVER | Plugin scenarios stay green with strict `runCommand` |
+| 15 Check duration | GATE | CI job time recorded at two checkpoints |
 
 ## Sources
 
-- **Current project authority (HIGH):** `.planning/PROJECT.md`, including the v1.19
-  204-pair scope, D-UTR-01..06, and product constraints.
-- **Testing authority (HIGH):**
-  `docs/guidelines/typescript-unit-testing-guidelines.md` and
-  `.claude/rules/typescript-unit-testing.md`.
-- **Preserved handoff (HIGH as evidence, not completion):** `START-HERE.md`,
-  `DECISIONS.md`, `REPLAY-PLAN.yaml`, `COMPLETENESS-REPORT.md`, behavior/public/
-  persistence/adapter contract files, and their explicit replay/reconsider/drop
-  dispositions.
-- **Repository at HEAD (HIGH):** `package.json`, `tsconfig.json`,
-  `.fallowrc.json`, `eslint.config.js`, current production/tests, corresponding-test
-  and direct-coverage scripts, and their negative controls.
-- **Pair audit (HIGH for triage only):**
-  `/tmp/pi-cm-pair-audit.CJWiph/results.tsv` and per-pair logs: 204 rows = 59
-  `PASS`, 83 `COVERAGE_FAIL`, 60 `MISSING`, 2 `TEST_FAIL`.
+- In-tree source, read 2026-10-15: `tests/e2e/_rpc.ts` (`childEnvironment`, `resolveSandbox`), `features/**`, `extensions/pi-claude-marketplace/{orchestrators/auth-host.ts, domain/auth-registry.ts, domain/source.ts, domain/clone-key.ts, domain/manifest-cache.ts, orchestrators/marketplace/add.ts, orchestrators/marketplace/update.ts, platform/git.ts, platform/git-credential.ts, shared/redact-absolute-paths.ts, shared/notification-wire.ts}`. HIGH.
+- `node_modules/isomorphic-git` 1.42.3 (`index.cjs:10325`, buffered upload-pack body with Content-Length, no request gzip) and `node_modules/simple-get/index.js:74` (timeout only when set). HIGH.
+- `node_modules/@earendil-works/pi-coding-agent/dist/main.js:452` (`PI_OFFLINE` scope) and `core/extensions/loader.js:473` (`moduleCache: false`). HIGH.
+- `.planning/milestones/ws-git-hosts-2026-10-01/milestones/any-git-host-phases/01-private-repos-on-any-git-host/01-UAT.md` (credential helper via `GIT_CONFIG_*`, host guard, the port-redirect leak G-01-4, the Device Flow debug wording for non-registry hosts) and `02-.../02-UAT.md` (verbatim-only endpoint canary with `NODE_EXTRA_CA_CERTS`). HIGH.
+- Claude Code 2.1.296 binary grep: GitHub clone URL literals `https://github.com/${repo}.git`; no `GITHUB_BASE_URL`. HIGH.
+- Project memory: `ci-race-test-flake-cluster`, `tmp-inode-exhaustion-enospc`, `node-errno-message-drift-local-vs-ci`, `subagent-tests-must-use-hermetic-home`, `green-runs-that-checked-nothing`, `dont-test-what-a-gate-already-guards`, `live-canary-scratch-engine-route`. HIGH (project-recorded).
+- `GITHUB_BASE_URL` in other tools: [Terraform GitHub provider docs (mirror)](https://docs.w3cub.com/terraform/providers/github/index), [GHE commit setting it to `/api/v3/`](https://github.e.it.census.gov/CSVD/ghe-runners/commit/aaf9b61ea5acac4176a4167ffc35593bfac0f0b0), [Elixir git_store config](https://git-store.hexdocs.pm/1.0.0/git_store/github_config.html), [Codespaces default env vars (`GITHUB_SERVER_URL`/`GITHUB_API_URL`)](https://docs.github.com/en/codespaces/developing-in-a-codespace/default-environment-variables-for-your-codespace). MEDIUM.
+- Local host facts: `/etc/gitconfig` present (git-lfs filters, `filter.lfs.required=true`), git 2.55.0, OpenSSL 4.0.3, `/usr/libexec/git-core/git-http-backend`; current suite 13 scenarios in 4.8 s wall. HIGH for this machine only.
 
 ---
-*Pitfalls research for: v1.19 Unit Test Refactor*
-*Researched: 2026-08-28*
+*Pitfalls research for: marketplace behavioral tests (marketplace-features)*
+*Researched: 2026-10-15*

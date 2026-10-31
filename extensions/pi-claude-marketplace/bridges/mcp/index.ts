@@ -12,10 +12,21 @@
 export {
   abortPreparedMcp,
   commitPreparedMcp,
-  finalizeMcpReplacement,
   prepareStageMcpServers,
   replacePreparedMcp,
   rollbackMcpReplacement,
 } from "./stage.ts";
+export {
+  checkMcpAdapterConfig,
+  projectDisableStubNames,
+  readLegacyMcpOwners,
+  removeLegacyMcpEntries,
+  removeProjectDisableStubs,
+} from "./legacy.ts";
 export { unstageMcpServers } from "./unstage.ts";
-export type { McpReplacement, PreparedMcpStaging } from "./types.ts";
+export type {
+  LegacyMcpOwner,
+  McpReplacement,
+  PreparedMcpStaging,
+  ProjectDisableStubOwner,
+} from "./types.ts";

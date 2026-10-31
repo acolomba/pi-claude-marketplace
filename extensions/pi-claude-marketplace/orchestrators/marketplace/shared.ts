@@ -19,15 +19,13 @@
 //     Throws MarketplaceNotFoundError or MarketplaceAmbiguousScopeError
 //     (both exported by shared/errors.ts).
 //
-//   - classifyAutoupdateFlip (MAU-1..4): single helper used by
-//     autoupdate.ts. Idempotent -- already-matching marketplaces land
-//     in `unchanged[]`.
-//
 // Per D-02 ANTI-PATTERN: this file MUST NOT import from `transaction/`
 // (no phase-ledger runner). The cascade is the wrong shape for ledger
 // semantics (MR-3 requires continuation across plugin failures; the
 // ledger runner halts on first throw). Code review enforces; ESLint
 // does not.
+
+import path from "node:path";
 
 import { unstagePluginAgents } from "../../bridges/agents/index.ts";
 import { unstagePluginCommands } from "../../bridges/commands/index.ts";
@@ -35,27 +33,50 @@ import { removeHookConfig } from "../../bridges/hooks/index.ts";
 import { unstageMcpServers } from "../../bridges/mcp/index.ts";
 import { unstagePluginSkills } from "../../bridges/skills/index.ts";
 import { unstagePluginWorkflows } from "../../bridges/workflows/index.ts";
+import { generatedMcpServerKey } from "../../domain/name.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import * as defaultGit from "../../platform/git.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
+import { McpUnstagePartialError, type McpWrittenFile } from "../../shared/errors-bridges.ts";
 import {
+  CrossOriginChallengeError,
   errorMessage,
   InvalidMarketplaceManifestError,
   isErrnoException,
+  MarketplaceInBaseLayerOnlyError,
+  MarketplaceInLocalLayerOnlyError,
   MarketplaceNotFoundError,
   PluginShapeError,
+  StoredCredentialRejectedError,
 } from "../../shared/errors.ts";
+import { classifyGitFailure } from "../../shared/git-failure-classifiers.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
+import { type MarketplaceRows, type Single } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
+import { NO_STORED_CREDENTIAL_CAUSE, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
 
 import type { UnstageAgentFailure } from "../../bridges/agents/types.ts";
 import type { UnstageWorkflowFailure } from "../../bridges/workflows/types.ts";
+import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
+import type { UrlSource } from "../../domain/source.ts";
+import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { BuildAuthCallbacksOpts } from "../../platform/git-auth-callbacks.ts";
+import type {
+  AuthAttemptResult,
+  BuildAuthCallbacksOpts,
+} from "../../platform/git-auth-callbacks.ts";
+import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { ListRemotesResult } from "../../platform/git.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
+import type {
+  MarketplaceNotAddedMessage,
+  McpConfigNotice,
+  PluginFailedMessage,
+} from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -150,7 +171,13 @@ export interface GitOps {
     auth?: GitAuthBundle;
   }): Promise<void>;
   /** D-14 step 1: refresh remote refs (no merge, no working-tree changes). */
-  fetch(opts: { dir: string; remote?: string; ref?: string; auth?: GitAuthBundle }): Promise<void>;
+  fetch(opts: {
+    dir: string;
+    remote?: string;
+    ref?: string;
+    tags?: boolean;
+    auth?: GitAuthBundle;
+  }): Promise<void>;
   /** D-14 step 2 (symbolic HEAD): force-set local branch ref to remote SHA. */
   forceUpdateRef(opts: { dir: string; ref: string; value: string }): Promise<void>;
   /** D-14 step 3: move HEAD to ref/SHA. */
@@ -204,6 +231,12 @@ export const DEFAULT_GIT_OPS: GitOps = {
   resolveRemoteRef: defaultGit.resolveRemoteRef,
   listRemotes: defaultGit.listRemotes,
 };
+
+/**
+ * D-PL8-24: the git abort scope, re-exported here so `index.ts` hands it to the
+ * background pass without naming `platform/git.ts`.
+ */
+export { runWithGitAbortSignal } from "../../platform/git.ts";
 
 /**
  * Recognize isomorphic-git's `NotFoundError` without importing the library
@@ -307,6 +340,89 @@ export async function refreshGitHubClone(
 }
 
 /**
+ * MURL-03 url-source refresh via the on-disk `origin` remote (same D-14
+ * sequence as github; refreshGitHubClone fetches by remote name, so the
+ * original clone URL is irrelevant). GAUTH-03: the host extracted from
+ * source.url carries its own auth bundle, so the user's git credential helper
+ * is consulted on every host; a registry host adds that provider's Device Flow
+ * on a helper miss (PROV-03). Shared by `marketplace update` and the PUP-2
+ * sync of `plugin update`, whose run-scoped `authMemo` caps the Device Flow at
+ * once per host (D-79-02). `authMemo` is optional: `marketplace update` passes
+ * none.
+ *
+ * D-1-02 / GAUTH-04: an auth failure on a host whose only auth path is a
+ * stored credential carries exactly one extra cause line telling the user WHY
+ * authentication cannot proceed. Attached as the chain TAIL, which keeps the
+ * code-bearing transport error at cause-depth 1 where `transportReason`'s
+ * one-level unwrap classifies it as `authentication required`. GAUTH-05: a
+ * `device-flow` bundle is excluded -- there the story is a declined or expired
+ * Device Flow, and the bare closed-set token is the whole truth. A challenge
+ * after a cross-origin redirect keeps its own cause text, because a credential
+ * stored for `host` cannot answer it (Q-02). So does a stored credential the
+ * host refused, because the helper produced it.
+ */
+export async function refreshUrlClone(args: {
+  readonly cloneDir: string;
+  readonly source: UrlSource;
+  readonly gitOps: GitOps;
+  readonly ctx: NotificationContext;
+  readonly run: NotificationRun;
+  readonly credentialOps: CredentialOps;
+  readonly deviceFlowHttp?: DeviceFlowHttp;
+  readonly authMemo?: Map<string, AuthAttemptResult>;
+  readonly onFetchSucceeded?: () => void;
+}): Promise<void> {
+  const {
+    cloneDir,
+    source,
+    gitOps,
+    ctx,
+    run,
+    credentialOps,
+    deviceFlowHttp,
+    authMemo,
+    onFetchSucceeded,
+  } = args;
+  const host = hostFromCloneUrl(source.url, "url");
+  const auth = buildAuthForHost({
+    host,
+    credentialOps,
+    ctx,
+    run,
+    ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
+    ...(authMemo !== undefined && { authMemo }),
+  });
+
+  try {
+    await refreshGitHubClone(cloneDir, source.ref, gitOps, onFetchSucceeded, auth);
+  } catch (err) {
+    if (lacksStoredCredential(err, auth) && err.cause === undefined) {
+      err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(host));
+    }
+
+    throw err;
+  }
+}
+
+/**
+ * GAUTH-04: an auth failure that a stored credential could answer, so the
+ * failure gains the `NO_STORED_CREDENTIAL_CAUSE` line. Only a
+ * `stored-credential` bundle qualifies. A challenge after a cross-origin
+ * redirect does not, because a credential stored for the bundle's host is
+ * never sent there (Q-02). A refused credential does not either, because the
+ * helper produced it and the host was sent it. Each caller places the line.
+ */
+export function lacksStoredCredential(err: unknown, auth: GitAuthBundle): err is Error {
+  return (
+    err instanceof Error &&
+    auth.kind === "stored-credential" &&
+    !(err instanceof CrossOriginChallengeError) &&
+    !(err instanceof StoredCredentialRejectedError) &&
+    classifyGitFailure(err, { notFound: "network error" })?.reason === "authentication required"
+  );
+}
+
+/**
  * D-02, D-03: result of one plugin's cascade through the 6 bridges.
  * Discriminated implicitly by `ok` -- on success `cause` is absent;
  * on failure `cause` carries the FIRST throw (D-03 fail-fast). Names
@@ -333,6 +449,88 @@ export interface UnstageOutcome {
   };
   /** Set on failure: the FIRST throw, wrapped to Error if needed (D-03 fail-fast). */
   readonly cause?: Error;
+  /**
+   * AFILE-04: the MCP slot's config notices, carried for the caller to show
+   * after its rows instead of being dropped with the bridge's hygiene
+   * warnings. Set only when non-empty, on success and on failure: a later
+   * slot can fail after the MCP slot rewrote the file.
+   */
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
+  /**
+   * NFR-3: each MCP config file the MCP slot rewrote and the exact bytes it
+   * wrote, so a prune rollback can recognize its own rewrite. Set only when
+   * non-empty, on success and on failure, like `mcpConfigNotices`.
+   */
+  readonly writtenMcpFiles?: readonly McpWrittenFile[];
+}
+
+/**
+ * AFILE-04: spreads `mcpConfigNotices` onto an outcome only when there is at
+ * least one notice, so an empty list never appears on the outcome.
+ */
+export function mcpConfigNoticesMember(notices: readonly McpConfigNotice[]): {
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
+} {
+  return notices.length === 0 ? {} : { mcpConfigNotices: notices };
+}
+
+/**
+ * AVAR-04 / ANAME-07: appends an unstage's MCP config notices to a command's
+ * notices, in place. It first drops the `variables-missing`,
+ * `credentials-blanked` and `tool-rules-unenforced` notices of the servers the
+ * unstage removed, because they describe entries that the scope's
+ * mcp-adapter.json no longer holds. `droppedServers` holds
+ * declared names, as `UnstageOutcome.dropped.mcpServers` does. File notices
+ * stay, because the files were still rewritten.
+ */
+export function foldUnstageNotices(
+  notices: McpConfigNotice[],
+  unstaged: {
+    readonly scope: Scope;
+    readonly plugin: string;
+    readonly droppedServers: readonly string[];
+    readonly notices: readonly McpConfigNotice[];
+  },
+): void {
+  const removed = new Set(
+    unstaged.droppedServers.map((name) => generatedMcpServerKey(unstaged.plugin, name)),
+  );
+  const standing = notices.filter(
+    (notice) =>
+      !(
+        (notice.kind === "variables-missing" ||
+          notice.kind === "credentials-blanked" ||
+          notice.kind === "tool-rules-unenforced") &&
+        notice.scope === unstaged.scope &&
+        removed.has(notice.server)
+      ),
+  );
+  notices.splice(0, notices.length, ...standing, ...unstaged.notices);
+}
+
+/** NFR-3: spreads `writtenMcpFiles` onto an outcome only when a file was rewritten. */
+function writtenMcpFilesMember(files: readonly McpWrittenFile[]): {
+  readonly writtenMcpFiles?: readonly McpWrittenFile[];
+} {
+  return files.length === 0 ? {} : { writtenMcpFiles: files };
+}
+
+/**
+ * TR-03 / ANAME-01: the record's declared server names whose entry the MCP
+ * unstage removed, in record order. An entry sits under
+ * `generatedMcpServerKey(plugin, name)`, or under the declared name itself
+ * when it was written under that name (the legacy mcp.json, or an adapter
+ * entry staged under its declared name).
+ */
+function droppedMcpServers(
+  plugin: string,
+  declaredNames: readonly string[],
+  removedNames: readonly string[],
+): string[] {
+  const removed = new Set(removedNames);
+  return declaredNames.filter(
+    (name) => removed.has(generatedMcpServerKey(plugin, name)) || removed.has(name),
+  );
 }
 
 /**
@@ -366,6 +564,8 @@ export async function cascadeUnstagePlugin(
     mcpServers: [] as string[],
     workflows: [] as string[],
   };
+  let mcpConfigNotices: readonly McpConfigNotice[] = [];
+  let writtenMcpFiles: readonly McpWrittenFile[] = [];
 
   try {
     const skillsResult = await unstagePluginSkills({
@@ -415,7 +615,13 @@ export async function cascadeUnstagePlugin(
       marketplaceName: marketplace,
       pluginName: plugin,
     });
-    dropped.mcpServers = [...mcpResult.removedNames];
+    dropped.mcpServers = droppedMcpServers(
+      plugin,
+      installedPlugin.resources.mcpServers,
+      mcpResult.removedNames,
+    );
+    mcpConfigNotices = mcpResult.notices;
+    writtenMcpFiles = mcpResult.written;
 
     // WLIF-03: 6th cascade slot, after mcp so no existing ordering shifts. The
     // names come from the RECORD, never from a re-derivation off the plugin
@@ -442,99 +648,46 @@ export async function cascadeUnstagePlugin(
 
     return Object.freeze({
       ok: true,
-      dropped: Object.freeze({
-        skills: Object.freeze([...dropped.skills]),
-        commands: Object.freeze([...dropped.commands]),
-        agents: Object.freeze([...dropped.agents]),
-        hooks: Object.freeze([...dropped.hooks]),
-        mcpServers: Object.freeze([...dropped.mcpServers]),
-        workflows: Object.freeze([...dropped.workflows]),
-      }),
+      dropped: freezeDropped(dropped),
+      ...mcpConfigNoticesMember(mcpConfigNotices),
+      ...writtenMcpFilesMember(writtenMcpFiles),
     });
   } catch (err) {
+    // AFILE-04: an MCP unstage that rewrote the adapter file before its legacy
+    // write failed still reports the comments it dropped there, the servers no
+    // file still holds (TR-03), and the bytes it wrote (NFR-3). The write
+    // failure is the plugin's cause.
+    let failure: unknown = err;
+    if (err instanceof McpUnstagePartialError) {
+      dropped.mcpServers = droppedMcpServers(
+        plugin,
+        installedPlugin.resources.mcpServers,
+        err.removedNames,
+      );
+      mcpConfigNotices = err.notices;
+      writtenMcpFiles = err.written;
+      failure = err.cause;
+    }
+
     return Object.freeze({
       ok: false,
-      dropped: Object.freeze({
-        skills: Object.freeze([...dropped.skills]),
-        commands: Object.freeze([...dropped.commands]),
-        agents: Object.freeze([...dropped.agents]),
-        hooks: Object.freeze([...dropped.hooks]),
-        mcpServers: Object.freeze([...dropped.mcpServers]),
-        workflows: Object.freeze([...dropped.workflows]),
-      }),
-      cause: err instanceof Error ? err : new Error(String(err)),
+      dropped: freezeDropped(dropped),
+      cause: failure instanceof Error ? failure : new Error(String(failure)),
+      ...mcpConfigNoticesMember(mcpConfigNotices),
+      ...writtenMcpFilesMember(writtenMcpFiles),
     });
   }
 }
 
-/** MAU-1..4: idempotent autoupdate-flip outcome. */
-export interface AutoupdateFlipResult {
-  /** Marketplace names whose flag actually changed in this call. */
-  readonly changed: readonly string[];
-  /** Marketplace names whose flag already matched the requested value. */
-  readonly unchanged: readonly string[];
-}
-
-/**
- * MAU-1..4: idempotent autoupdate-flip classification.
- * - When `name` is undefined, classify every marketplace in this scope's
- *   state (MAU-2 bare form).
- * - When `name` is given but missing, throw MarketplaceNotFoundError
- *   with an empty scope list -- the caller fills the scope detail.
- * - MAU-3: already-matching marketplaces report as "unchanged"; the
- *   caller composes the user-visible "Already enabled/disabled: ..."
- *   line.
- * - MAU-4: missing/undefined `record.autoupdate` is read as `false`
- *   via the `=== true` comparison.
- *
- * WR-05: CLASSIFY ONLY -- the legacy state-side
- * `autoupdate` field is READ (a state record pre-dating the D-13 scrub may
- * still carry it) but NEVER written. SPLIT-01 moved the truth into the
- * per-marketplace config entry; the config write-back is the real flip.
- * Writing the carved-out field back into state.json would re-introduce a
- * schema-stripped legacy field that the D-13 scrub removes again on the
- * next load -- pointless state churn the architecture gate at
- * tests/architecture/no-split-01-cast-reads.test.ts now forbids (the
- * assignment-form sibling pattern). The caller reclassifies this state-side
- * result against the CONFIG truth (`reclassifyByConfigTruth`) before any
- * write.
- */
-export function classifyAutoupdateFlip(
-  state: ExtensionState,
-  name: string | undefined,
-  enable: boolean,
-): AutoupdateFlipResult {
-  const changed: string[] = [];
-  const unchanged: string[] = [];
-
-  // D-04: undefined === false. Read through `Record<string, unknown>` cast
-  // (legacy field; not on MARKETPLACE_RECORD_SCHEMA since SPLIT-01).
-  if (name !== undefined) {
-    const record = state.marketplaces[name];
-    if (record === undefined) {
-      throw new MarketplaceNotFoundError(name, []);
-    }
-
-    const legacy = record as { readonly autoupdate?: unknown };
-    if ((legacy.autoupdate === true) === enable) {
-      unchanged.push(name);
-    } else {
-      changed.push(name);
-    }
-
-    return { changed, unchanged };
-  }
-
-  for (const [mp, record] of Object.entries(state.marketplaces)) {
-    const legacy = record as { readonly autoupdate?: unknown };
-    if ((legacy.autoupdate === true) === enable) {
-      unchanged.push(mp);
-    } else {
-      changed.push(mp);
-    }
-  }
-
-  return { changed, unchanged };
+function freezeDropped(dropped: UnstageOutcome["dropped"]): UnstageOutcome["dropped"] {
+  return Object.freeze({
+    skills: Object.freeze([...dropped.skills]),
+    commands: Object.freeze([...dropped.commands]),
+    agents: Object.freeze([...dropped.agents]),
+    hooks: Object.freeze([...dropped.hooks]),
+    mcpServers: Object.freeze([...dropped.mcpServers]),
+    workflows: Object.freeze([...dropped.workflows]),
+  });
 }
 
 /**
@@ -558,11 +711,11 @@ async function resolveScopeFromState(
     loadState(projectLocations.extensionRoot),
   ]);
 
-  if (mpName in projectState.marketplaces) {
+  if (ownValue(projectState.marketplaces, mpName) !== undefined) {
     return { scope: "project", locations: projectLocations };
   }
 
-  if (mpName in userState.marketplaces) {
+  if (ownValue(userState.marketplaces, mpName) !== undefined) {
     return { scope: "user", locations: userLocations };
   }
 
@@ -591,11 +744,12 @@ async function resolveScopeFromState(
  * arise later inside the caller's refresh path and keep their `(failed)`
  * cascade.
  *
- * Takes the structural subset of the caller opts ({ ctx, pi, name, scope? })
+ * Takes the structural subset of the caller opts ({ ctx, run, name, scope? })
  * so both UpdateMarketplaceOptions and RemoveMarketplaceOptions satisfy it.
+ * D-05: both not-added emissions render from the command run's snapshot.
  */
 export async function resolveScopeOrNotifyNotAdded(
-  opts: { ctx: NotificationContext; pi: ToolInventory; name: string; scope?: Scope },
+  opts: { ctx: NotificationContext; run: NotificationRun; name: string; scope?: Scope },
   userLocations: ScopedLocations,
   projectLocations: ScopedLocations,
 ): Promise<{ scope: Scope; locations: ScopedLocations } | undefined> {
@@ -605,7 +759,7 @@ export async function resolveScopeOrNotifyNotAdded(
       return await resolveScopeFromState(opts.name, userLocations, projectLocations);
     } catch (err) {
       if (err instanceof MarketplaceNotFoundError) {
-        notify(opts.ctx, opts.pi, { kind: "marketplace-not-added", name: opts.name });
+        notify(opts.ctx, opts.run, { kind: "marketplace-not-added", name: opts.name });
         return undefined;
       }
 
@@ -618,14 +772,14 @@ export async function resolveScopeOrNotifyNotAdded(
   // MarketplaceNotFoundError(name, [scope]) raw past the orchestrator).
   const locations = opts.scope === "user" ? userLocations : projectLocations;
   const preState = await loadState(locations.extensionRoot);
-  if (preState.marketplaces[opts.name] === undefined) {
+  if (ownValue(preState.marketplaces, opts.name) === undefined) {
     const otherLocations = opts.scope === "user" ? projectLocations : userLocations;
     const elsewhere = await marketplaceRecordedIn(
       otherLocations.scope,
       () => otherLocations,
       opts.name,
     );
-    notify(opts.ctx, opts.pi, {
+    notify(opts.ctx, opts.run, {
       kind: "marketplace-not-added",
       name: opts.name,
       scope: opts.scope,
@@ -711,24 +865,33 @@ export function narrowCascadeFailure(cause: Error): ContentReason {
     return "not in manifest";
   }
 
-  if (isErrnoException(cause)) {
-    switch (cause.code) {
-      case "EACCES":
-      case "EPERM":
-        return "permission denied";
-      case "ENOENT":
-      case "ENOTDIR":
-        return "source missing";
-      case "EBADF":
-      case "EIO":
-      case "EISDIR":
-        return "unreadable";
-      default:
-        break;
-    }
-  }
+  const errnoReason = isErrnoException(cause) ? fsErrnoReason(cause.code) : undefined;
+  return errnoReason ?? "not in manifest";
+}
 
-  return "not in manifest";
+/**
+ * D-PL5-18: the one filesystem errno mapping `narrowCascadeFailure` and
+ * `marketplace add` share, so `list`, `info`, and `add` read a code alike.
+ * Undefined for a code it does not name.
+ */
+export function fsErrnoReason(
+  code: string | undefined,
+): "permission denied" | "source missing" | "unreadable" | undefined {
+  switch (code) {
+    case "EACCES":
+    case "EPERM":
+      return "permission denied";
+    case "ENOENT":
+    case "ENOTDIR":
+      return "source missing";
+    case "EBADF":
+    case "EIO":
+    case "EISDIR":
+      return "unreadable";
+    case undefined:
+    default:
+      return undefined;
+  }
 }
 
 /**
@@ -774,6 +937,20 @@ export async function marketplaceInOtherScope(opts: {
   return await marketplaceRecordedIn(other, () => locationsFor(other, opts.cwd), opts.marketplace);
 }
 
+/** Build the shared marketplace-absence message without reading state. */
+export function marketplaceNotAddedMessage(opts: {
+  readonly name: string;
+  readonly scope: Scope | undefined;
+  readonly presentInOtherScope?: true;
+}): MarketplaceNotAddedMessage {
+  return {
+    kind: "marketplace-not-added",
+    name: opts.name,
+    ...(opts.scope !== undefined && { scope: opts.scope }),
+    ...(opts.presentInOtherScope === true && { presentInOtherScope: true }),
+  };
+}
+
 /**
  * CMP-4 / SCOPE-01: is `name` recorded in the state file of `scope`?
  *
@@ -798,7 +975,7 @@ async function marketplaceRecordedIn(
 ): Promise<boolean> {
   try {
     const state = await loadState(resolveLocations().extensionRoot);
-    return state.marketplaces[name] !== undefined;
+    return ownValue(state.marketplaces, name) !== undefined;
   } catch (err) {
     hookDebugLog(
       `cross-scope probe for "${name}" in ${scope} scope failed: ${errorMessage(err)}`,
@@ -831,4 +1008,120 @@ export async function crossScopeFlag(opts: {
     scope: opts.scope,
   });
   return elsewhere ? { presentInOtherScope: true } : {};
+}
+
+/**
+ * WR-02 / D-01 / D-02: the manifest file of a recorded marketplace. Every
+ * marketplace is a directory on disk: the managed clone of a github or url
+ * source, or the user's own directory of a path source. The add records the
+ * absolute path of the manifest inside that directory: the conventional
+ * `.claude-plugin/marketplace.json` for a clone or a directory source, and the
+ * exact file for a file source. Every reader locates the manifest here. The
+ * typed source and the add-time directory only say where the marketplace came
+ * from.
+ */
+export function recordedManifestPath(record: ExtensionState["marketplaces"][string]): string {
+  return record.manifestPath;
+}
+
+/**
+ * The rows of a marketplace-level failure that has a cause: a `(failed)`
+ * marketplace header with one failed child of the same name. A marketplace
+ * header carries no cause (SNM-10), so the child carries the reason and the
+ * cause line. The child stands for the marketplace, so its JSON id is the
+ * marketplace name alone (D-PL5-12).
+ */
+export function marketplaceFailureRows(
+  name: string,
+  scope: Scope,
+  reason: ContentReason,
+  cause: Error,
+): Single<MarketplaceRows<PluginFailedMessage>> {
+  return [
+    {
+      name,
+      scope,
+      status: "failed",
+      severity: "error",
+      plugins: [
+        {
+          status: "failed",
+          name,
+          reasons: [reason],
+          cause,
+          marketplaceSubject: true,
+          severity: "error",
+          needsReload: false,
+        },
+      ],
+    },
+  ];
+}
+
+/**
+ * Where a marketplace a named command targets is declared, as seen from the
+ * command's target layer:
+ *
+ * - `declared`: the target layer declares it; `other` says whether the other
+ *   layer declares it too, or could not be read.
+ * - `refused`: only the other layer declares it; `refusal` is the cause line.
+ * - `undeclared`: neither layer declares it (a recorded marketplace).
+ * - `other-unreadable`: the target layer does not declare it and the other
+ *   file is invalid; `otherBasename` names that file without its path.
+ */
+export type MarketplaceLayerVerdict =
+  | { readonly kind: "declared"; readonly other: "declares" | "silent" | "unreadable" }
+  | {
+      readonly kind: "refused";
+      readonly reason: "marketplace in local layer only" | "marketplace in base layer only";
+      readonly refusal: MarketplaceInLocalLayerOnlyError | MarketplaceInBaseLayerOnlyError;
+    }
+  | { readonly kind: "undeclared" }
+  | { readonly kind: "other-unreadable"; readonly otherBasename: string };
+
+/**
+ * LAYER-02 / D-MF-03: a named command changes only its target layer, and fails
+ * when that layer does not declare the marketplace while the other one does.
+ *
+ * Pure: the caller loads both files inside its lock and handles a CFG-03
+ * invalid target first. Membership is an own-key read, so a `__proto__` or
+ * `constructor` name is declared only by an own entry. An unreadable other
+ * file is never read as declaring nothing, as with
+ * `localOnlyMarketplaceRefusal`: it may declare the marketplace.
+ */
+export function marketplaceLayerVerdict(args: {
+  readonly target: ScopeConfig;
+  readonly other: ConfigLoadResult;
+  readonly targetIsLocal: boolean;
+  readonly marketplace: string;
+}): MarketplaceLayerVerdict {
+  const inTarget = ownValue(args.target.marketplaces, args.marketplace) !== undefined;
+  if (args.other.status === "invalid") {
+    return inTarget
+      ? { kind: "declared", other: "unreadable" }
+      : { kind: "other-unreadable", otherBasename: path.basename(args.other.filePath) };
+  }
+
+  const inOther =
+    args.other.status === "valid" &&
+    ownValue(args.other.config.marketplaces, args.marketplace) !== undefined;
+  if (inTarget) {
+    return { kind: "declared", other: inOther ? "declares" : "silent" };
+  }
+
+  if (!inOther) {
+    return { kind: "undeclared" };
+  }
+
+  return args.targetIsLocal
+    ? {
+        kind: "refused",
+        reason: "marketplace in base layer only",
+        refusal: new MarketplaceInBaseLayerOnlyError(args.marketplace),
+      }
+    : {
+        kind: "refused",
+        reason: "marketplace in local layer only",
+        refusal: new MarketplaceInLocalLayerOnlyError(args.marketplace),
+      };
 }

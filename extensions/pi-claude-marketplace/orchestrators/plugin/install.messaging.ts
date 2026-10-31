@@ -1,16 +1,12 @@
-import { causeChainTrailer, errorMessage, PluginShapeError } from "../../shared/errors.ts";
-import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import {
-  ICON_INSTALLED,
-  ICON_UNINSTALLABLE,
-  installedLikeRow,
-  partiallyInstalledRow,
-  pluginRow,
-  renderPartiallyAvailableRow,
-  renderUnavailableRow,
-  renderVersion,
-  ICON_DISABLED,
-} from "../../shared/notification-grammar.ts";
+  causeChainTrailer,
+  CleanupLeakError,
+  errorMessage,
+  InstallMarketplaceAddError,
+  PluginShapeError,
+  StateLockHeldError,
+} from "../../shared/errors.ts";
+import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import {
   type ContentReason,
   type PluginDisabledMessage,
@@ -22,26 +18,17 @@ import {
   type StatusToken,
 } from "../../shared/notification-types.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
-import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
+import {
+  MANIFEST_ESCAPE_NOTE,
+  narrowUnsupportedKinds,
+  SOURCE_DIR_MISSING_NOTE,
+} from "../../shared/probe-classifiers.ts";
+import { redactCauseChain, redactedRollbackPartials } from "../../shared/redact-absolute-paths.ts";
 
-import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
+import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
 import type { InstallPluginOutcome } from "../types.ts";
-
-/**
- * install.messaging.ts -- the command-local notification vocabulary for
- * `/claude:plugin install` (MOD-01). It co-locates install's private status
- * set, the message shapes those statuses carry, install's command-private
- * reasons, and a render map total over install's OWN statuses (D-10) whose
- * arm bodies are lifted VERBATIM from the central `renderPluginRow` switch so
- * the dispatched output is byte-identical.
- *
- * The shared presentation vocabulary (`ICON_*`, `joinTokens`,
- * `renderScopeBracket`, `renderVersion`, `composeReasons`, `pluginRow`) stays
- * central in `shared/notification-grammar.ts` (D-notification-refactor-01-11); this module CALLS
- * it, never duplicates it.
- */
 
 /**
  * install's private status set. A single-target install emits exactly one of
@@ -89,8 +76,8 @@ export interface EntityErrorRow {
 /**
  * install's row message union -- the subset of the central plugin message
  * shapes whose status install actually emits. `dependencies` stays REQUIRED on
- * the `installed` arm so the soft-dep marker injection in `composeReasons`
- * fires for exactly that arm (D-06 / TYPE-04 gating).
+ * the `installed` arm so `resolveRows` can compose its soft-dep markers
+ * (D-06 / TYPE-04 / D-12).
  */
 export type InstallMsg =
   | PluginInstalledMessage
@@ -100,52 +87,18 @@ export type InstallMsg =
   | PluginPartiallyAvailableMessage
   | PluginDisabledMessage;
 
-/**
- * Render map total over install's OWN statuses (D-10): omitting an arm is a
- * TS2741 compile error at the `satisfies` site below. Each arm reproduces the
- * verbatim bytes of the matching `renderPluginRow` switch arm.
- */
-const INSTALL_RENDER: { [K in InstallStatus]: RenderFn<Extract<InstallMsg, { status: K }>> } = {
-  installed: (p, probe, mpScope) =>
-    installedLikeRow(
-      ICON_INSTALLED,
-      p,
-      mpScope,
-      renderVersion(p.version),
-      "(installed)",
-      p.reasons,
-      probe,
-    ),
-  // FSTAT-07 / D-66-04: a partial install that re-resolves `partially-available` reports
-  // (partially-installed) with the dropped-component detail. WR-03: the shared
-  // `partiallyInstalledRow` threads `dependencies` so the soft-dep markers fire on a
-  // degraded install exactly as on a clean `(installed)` row.
-  "partially-installed": (p, probe, mpScope) => partiallyInstalledRow(p, mpScope, probe),
-  unavailable: (p, probe, mpScope) => renderUnavailableRow(p, probe, mpScope),
-  // XSURF-01: the partially-available install-failure arm. Byte-identical to the
-  // `unavailable` arm but with the `⊖` glyph + `(partially-available)` token; the
-  // `--partial` hint trailer is composed centrally by the renderer, not here.
-  "partially-available": (p, probe, mpScope) => renderPartiallyAvailableRow(p, probe, mpScope),
-  failed: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(failed)", probe),
-  // DFEN-04 / OUT-04: the install-disabled arm. Lifted verbatim from the
-  // `disable` verb's own arm so an install that landed disabled and an install
-  // followed by a disable render byte-identically. ENBL-15 / D-100-06: both
-  // soft-dep flags stay hard-coded false, so the row cannot emit a
-  // `{requires pi-subagents}` / `{requires pi-mcp}` marker whatever inventory
-  // the record retained (ENBL-18). The enable-hint trailer is composed
-  // centrally by the renderer, not here.
-  disabled: (p, probe, mpScope) => pluginRow(ICON_DISABLED, p, mpScope, "(disabled)", probe),
-};
-
-/**
- * D-04 / D-05: install's `CommandContext`. `Messaging.label` is the human
- * operation name; `render` is the total render map. The `as const satisfies`
- * pin enforces that install cannot be wired without supplying both.
- */
+/** The command label and complete per-status reason policy. */
 export const INSTALL_CONTEXT = {
   Messaging: { label: "Plugin install" },
-  render: INSTALL_RENDER,
-} as const satisfies CommandContext<InstallStatus, InstallMsg>;
+  rowPolicies: {
+    installed: { markers: true, contentReasons: true },
+    "partially-installed": { markers: true, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
+    unavailable: { markers: false, contentReasons: true },
+    "partially-available": { markers: false, contentReasons: true },
+    disabled: { markers: false, contentReasons: true },
+  },
+} as const satisfies CommandContext<InstallStatus>;
 
 /**
  * SEV-02 / D-69-03 / D-70-02 / XSURF-01: build the install-failure row,
@@ -198,31 +151,28 @@ function composeNotInstallableMessage(
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
- * D-76-08 / D-79-03: classify a git-source clone auth challenge into
- * the EXISTING closed-set `authentication required` REASON -- no new token. A
- * credential the server rejects (a still-401 after a fresh credential, D-79-02)
- * throws the isomorphic-git `HttpError` with a 401/403 status. When no
- * credential can be produced at all -- an empty helper on a host the provider
- * registry does not claim (GAUTH-03), or an unsuccessful device flow (denied /
- * expired / poll network error) -- `platform/git-auth-callbacks.ts::onAuth`
- * returns `{ cancel: true }`, which isomorphic-git throws as `UserCanceledError`
- * instead. The seam append-leak-rethrows either
- * up to the install catch; both shapes narrow through the shared
- * `classifyGitTransportFailure` ladder. Install keeps ONLY its auth
- * classification: a network-class transport failure stays undefined here so it
- * rides the generic-runtime cause-chain fallthrough.
- *
- * D-79-03 (amended): the install row is the BARE `(failed) {authentication
- * required}` -- no `NO_STORED_CREDENTIAL_CAUSE` cause line (the plugin failure
- * grammar has no cause-chain trailer slot that renders on the SUBJECT row; that
- * cause line lives ONLY on the update path's synthetic failed-plugin child
- * row). Returns undefined for a non-auth throw so the caller
- * keeps its generic-runtime cause-chain fallthrough.
+ * FLR-01 / D-02: the reasons of the runtime-throw row. A held state lock reads
+ * `lock held`, as uninstall's row does; a git host that refused the clone reads
+ * its git-host reason; any other throw has none.
  */
-function classifyGitAuthFailure(err: unknown): "authentication required" | undefined {
-  return classifyGitTransportFailure(err) === "authentication required"
-    ? "authentication required"
-    : undefined;
+function runtimeFailureReasons(
+  err: unknown,
+  gitReason: ContentReason | undefined,
+): readonly ContentReason[] {
+  if (err instanceof StateLockHeldError) {
+    return ["lock held"];
+  }
+
+  return gitReason !== undefined ? [gitReason] : [];
+}
+
+/**
+ * The runtime row keeps its cause chain, except the bare auth row (amended
+ * D-79-03). A cleanup leak keeps it even then, because the cause carries the
+ * manual-cleanup hint (MA-9, INR-02).
+ */
+function keepsRuntimeCause(err: unknown, gitReason: ContentReason | undefined): boolean {
+  return gitReason !== "authentication required" || err instanceof CleanupLeakError;
 }
 
 export function composeInstallFailureMessage(args: {
@@ -235,7 +185,7 @@ export function composeInstallFailureMessage(args: {
   entityErrorRow: EntityErrorRow | undefined;
 }): InstallMsg {
   const { err, plugin, scope, version, rolledBackPartial, rollbackPartials, entityErrorRow } = args;
-  const cause = err instanceof Error ? err : undefined;
+  const cause = installDisplayCause(err);
   const isPathContainment = err instanceof PathContainmentError;
 
   // Branch 1: PI-14 PathContainmentError. Bare failed row with cause
@@ -268,10 +218,7 @@ export function composeInstallFailureMessage(args: {
       // D-03/D-06: a failed install -> error, no reload (nothing landed).
       severity: "error",
       needsReload: false,
-      rollbackPartial: rollbackPartials.map((p) => ({
-        phase: p.phase,
-        ...(p.cause !== undefined && { cause: p.cause }),
-      })),
+      rollbackPartial: redactedRollbackPartials(rollbackPartials),
     };
     return failed;
   }
@@ -300,21 +247,24 @@ export function composeInstallFailureMessage(args: {
     return failed;
   }
 
-  // Branch 4: runtime throw. A git-source clone auth challenge maps to
-  // the bare `(failed) {authentication required}` row (amended D-79-03: the
-  // closed-set REASON carries the classification and NO cause line renders on
-  // the install subject row -- the stored-credential cause line lives only on
-  // the update path's child row), so `cause` is omitted for it. Every other runtime
-  // throw keeps an empty reasons array and rides the cause-chain trailer (the
-  // renderer suppresses the `{}` brace per D-15-01).
-  const authReason = classifyGitAuthFailure(err);
+  // Branch 4: runtime throw. A git host that refused the clone maps to the
+  // reason `marketplace add` reports for the same answer (ADD-09, INS-06):
+  // `source missing`, `network unreachable`, `network error`, or
+  // `authentication required`. The auth row is bare (amended D-79-03: the
+  // stored-credential cause line lives only on the update path's child row);
+  // every other row keeps its cause chain, as fetch's failed row does. A held
+  // state lock reads `lock held` and keeps its StateLockHeldError cause chain
+  // (FLR-01 / D-02). A throw the ladder leaves unclassified keeps an empty
+  // reasons array and rides the cause-chain trailer (the renderer suppresses
+  // the `{}` brace per D-15-01).
+  const gitReason = classifyGitHostFailure(err);
   const failed: PluginFailedMessage = {
     status: "failed",
     name: plugin,
-    reasons: authReason !== undefined ? ([authReason] as const) : ([] as const),
+    reasons: runtimeFailureReasons(err, gitReason),
     ...(version !== undefined && version !== "" && { version }),
     scope,
-    ...(authReason === undefined && cause !== undefined && { cause }),
+    ...(keepsRuntimeCause(err, gitReason) && cause !== undefined && { cause }),
     // D-03/D-06: a failed install -> error, no reload (nothing landed).
     severity: "error",
     needsReload: false,
@@ -385,9 +335,27 @@ export function composePromotedRow(args: {
  * solely to preserve the orchestrated-mode string contract.
  */
 export function formatOrchestratedCause(err: unknown): string {
-  const head = errorMessage(err);
-  const trailer = causeChainTrailer(err);
+  const displayError = installDisplayCause(err) ?? err;
+  const head = errorMessage(displayError);
+  const trailer = causeChainTrailer(displayError);
   return trailer === "" ? head : `${head}\n\n${trailer}`;
+}
+
+/** Redacts install diagnostics while retaining lock paths needed for recovery. */
+function installDisplayCause(err: unknown): Error | undefined {
+  if (!(err instanceof Error)) {
+    return undefined;
+  }
+
+  if (err instanceof StateLockHeldError) {
+    return err;
+  }
+
+  const redacted = redactCauseChain(err);
+  return errorMessage(redacted) !== errorMessage(err) ||
+    causeChainTrailer(redacted) !== causeChainTrailer(err)
+    ? redacted
+    : err;
 }
 
 /**
@@ -411,6 +379,19 @@ export function classifyEntityShapeError(
   err: unknown,
   ctx: { plugin: string; marketplace: string; scope: Scope },
 ): EntityErrorRow | undefined {
+  // WR-04 / LAYER-07: the add a project install ran failed; the row carries
+  // the reason `marketplace add` reports for the same failure.
+  if (err instanceof InstallMarketplaceAddError) {
+    return {
+      kind: "entity-error",
+      name: ctx.plugin,
+      marketplace: ctx.marketplace,
+      scope: ctx.scope,
+      status: "failed",
+      reasons: [err.reason],
+    };
+  }
+
   // Dispatch on `instanceof PluginShapeError` + `.shape.kind` rather than
   // substring-matching `.message`. The throw sites carry their structural
   // classification verbatim, so the catch site does not need to reparse text.
@@ -528,7 +509,7 @@ function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
  * `unsupported hooks` token for the same on-disk condition (SURF-01). Mirrors
  * the probe-side prefix set verbatim -- if a prefix is added or renamed on one
  * side, the other side MUST follow in lockstep (pinned by
- * tests/architecture/cross-surface-reason-parity.test.ts).
+ * test/architecture/cross-surface-reason-parity.test.ts).
  */
 function isHooksResolverNote(reason: string): boolean {
   return (
@@ -598,13 +579,27 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
       : ["unsupported source"];
   }
 
-  // MCPR-03 / D-02: mirror the shared `classifyResolverNote` arm so a broken
-  // `mcpServers` string reference renders `{malformed mcp}` here too. Placed
-  // BEFORE the `Unexpected token` arm so a JSON-parse-error reference maps to
-  // `malformed mcp` rather than `{unparseable}`, and before the
-  // `includes("source")` catch-all.
-  if (reason.startsWith("malformed mcp reference")) {
+  // MCPR-03 / D-02 / ANAME-07: mirror the shared `classifyResolverNote` arms
+  // so a broken `mcpServers` string reference and a server config Claude's
+  // schema rejects render `{malformed mcp}` here too. Placed BEFORE the
+  // `Unexpected token` arm so a JSON-parse-error reference maps to `malformed
+  // mcp` rather than `{unparseable}`, and before the `includes("source")`
+  // catch-all, because the server name in a `malformed mcp server ` note is
+  // author-controlled.
+  if (reason.startsWith("malformed mcp reference") || reason.startsWith("malformed mcp server ")) {
     return ["malformed mcp"];
+  }
+
+  // SRC-01: a missing plugin directory, mirroring `classifyResolverNote`.
+  // Placed before the `includes("source")` catch-all, which it also matches.
+  if (reason.startsWith(SOURCE_DIR_MISSING_NOTE)) {
+    return ["source missing"];
+  }
+
+  // D-PL2-24: a manifest link that leaves its boundary, mirroring
+  // `classifyResolverNote`.
+  if (reason.startsWith(MANIFEST_ESCAPE_NOTE)) {
+    return ["unreadable manifest"];
   }
 
   if (reason.includes("source")) {
@@ -632,7 +627,10 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
  *      set as `list`/`info` (CR-01 / D-64-02 / D-90-05); on the structural
  *      `unavailable` arm it stays on the source axis as `unsupported source`,
  *      mirroring `narrowResolverNotes`'s catch-all (SURF-01 / WR-01 / D-64-07)
- *   2. "source" substring -> `unsupported source`
+ *   2. the `source dir does not exist` note -> `source missing` (SRC-01);
+ *      the `plugin manifest resolves outside the` note -> `unreadable
+ *      manifest` (D-PL2-24); any other "source" substring -> `unsupported
+ *      source`
  *   3. errno-like substrings (EACCES / EPERM / ENOENT / SyntaxError)
  *   4. permissive fallback: `unsupported source`
  * Steps 3-4 are defensive for notes already serialised by deeper helpers;
@@ -655,7 +653,7 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
  * such a note ONLY on the partially-available arm; the structural arm keeps it on
  * the source axis (`unsupported source`), agreeing with `narrowResolverNotes`.
  */
-function narrowResolverReasons(
+export function narrowResolverReasons(
   reasons: readonly string[],
   unsupportedKinds: readonly string[] = [],
   partialable = false,
@@ -678,12 +676,23 @@ function narrowResolverReasons(
   return [...new Set(out)];
 }
 
-export function classifyInstallFailure(err: unknown, formattedCause: string): InstallPluginOutcome {
+export function classifyInstallFailure(
+  err: unknown,
+  formattedCause: string,
+  rollbackPartials: readonly RollbackPartial[] = [],
+): InstallPluginOutcome {
   // All failure variants collapse to `{ status: "failed"; error; cause }`.
   // `error` is the dispatch surface (narrow on `instanceof PluginShapeError`
   // to recover `.shape.kind`); `cause` is the formatted user-visible text.
   // `ConcurrentInstallError` is preserved as a distinct typed branch (PI-15);
   // non-Error inputs are wrapped so the contract guarantees `error instanceof Error`.
+  // REC-06: the rollback partials ride along, so an orchestrated caller can
+  // name them as the standalone row does.
   const wrapped = err instanceof Error ? err : new Error(formattedCause);
-  return { status: "failed", error: wrapped, cause: formattedCause };
+  return {
+    status: "failed",
+    error: wrapped,
+    cause: formattedCause,
+    ...(rollbackPartials.length > 0 && { rollbackPartials }),
+  };
 }

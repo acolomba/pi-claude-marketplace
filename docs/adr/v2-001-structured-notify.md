@@ -11,7 +11,7 @@ V1 ships a stringly-typed user-output surface: `notifySuccess/Warning/Error(ctx,
 1. **Severity wrapper** (`notifySuccess` vs `notifyWarning` vs `notifyError`)
 2. **Message body** (icon glyph + status token + scope bracket + grammar slots + reasons)
 
-These two choices are coupled by `docs/messaging-style-guide.md` -- e.g. a SUCCESS-class status token like `(installed)` MUST flow through `notifySuccess`, never `notifyWarning`. The coupling is enforced by **34 custom ESLint rules** under `tests/lint-rules/` (MSG-SR-1..7 severity routing, MSG-IC-1..3 icon discipline, MSG-GR-1..5 grammar, MSG-PL-1..6 plugin-row conventions, MSG-CC-1 cause-chain, MSG-MR-1..2 manual-recovery, MSG-RP-1 rollback-partial, MSG-RH-1 reload-hint, MSG-SD-1..3 soft-dep, MSG-NC-1..2 entity-error/usage, MSG-ER-1 empty-token, MSG-LC-1..2 console discipline) plus the 4-way registry parity test plus the byte-equality catalog UAT runner. The presentation layer (`presentation/compact-line.ts:247`) already carries a discriminated `RowSpec` union with 9 variants -- but it produces `string` and hands it to the caller, who then picks the wrapper.
+These two choices are coupled by `docs/messaging-style-guide.md` -- e.g. a SUCCESS-class status token like `(installed)` MUST flow through `notifySuccess`, never `notifyWarning`. The coupling is enforced by **34 custom ESLint rules** under `test/lint-rules/` (MSG-SR-1..7 severity routing, MSG-IC-1..3 icon discipline, MSG-GR-1..5 grammar, MSG-PL-1..6 plugin-row conventions, MSG-CC-1 cause-chain, MSG-MR-1..2 manual-recovery, MSG-RP-1 rollback-partial, MSG-RH-1 reload-hint, MSG-SD-1..3 soft-dep, MSG-NC-1..2 entity-error/usage, MSG-ER-1 empty-token, MSG-LC-1..2 console discipline) plus the 4-way registry parity test plus the byte-equality catalog UAT runner. The presentation layer (`presentation/compact-line.ts:247`) already carries a discriminated `RowSpec` union with 9 variants -- but it produces `string` and hands it to the caller, who then picks the wrapper.
 
 This works but accrues cost: every new notify surface needs a new lint glob; the typed `PluginShapeError` refactor (quick task 260525-aub) had to thread typed dispatch separately from message routing; the recent code review surfaced two known MSG-GR-3 drift sites outside the lint glob (`shared/types.ts:20`, `edge/completions/provider.ts:70`); and the lint rules themselves require RuleTester suites -- the linter has become a parallel codebase. The 34 custom rules + 34 RuleTester suites exist _because_ the API is unstructured; they would not exist if grammar were enforced by types.
 
@@ -69,7 +69,7 @@ Severity is **computed** from contents inside `notify()` (SNM-14, refined by UXG
 
 The reload-hint trailer is **computed** at render time (SNM-15): the trailer is emitted iff any plugin carries one of `installed | updated | reinstalled | uninstalled` OR any marketplace carries a `status` set. The call site never asks for it.
 
-The dependency probe is **computed** at render time (SNM-16): each `dependencies: ["agents"]` triggers a per-row probe for the `pi-subagents` companion extension and emits `{requires pi-subagents}` when absent; `dependencies: ["mcp"]` triggers the analogous probe for `pi-mcp-adapter` and emits `{requires pi-mcp}` when absent. The 3 structurally-absorbed v1.3 Reasons (`rollback partial`, `requires pi-subagents`, `requires pi-mcp`) no longer appear in any typed `reasons` field of the new model.
+The dependency probe is **computed** at render time (SNM-16): each `dependencies: ["agents"]` triggers a per-row probe for the `pi-subagents` companion extension and emits `{requires pi-subagents}` when absent; `dependencies: ["mcp"]` triggers the analogous probe for `pi-mcp-adapter` and emits `{requires pi-mcp-adapter}` when absent. The 3 structurally-absorbed v1.3 Reasons (`rollback partial`, `requires pi-subagents`, `requires pi-mcp-adapter`) no longer appear in any typed `reasons` field of the new model.
 
 Tests exercise `notify()` via a mock `ctx` and assert on the exact string passed to `ctx.ui.notify` (matches V1's existing notification-recording test pattern).
 
@@ -133,7 +133,7 @@ No test or lint needed for any of: severity routing, icon glyph, status-token li
 
 ### Custom ESLint plugin deleted entirely
 
-`tests/lint-rules/` (~4096 lines: 34 MSG-\* rules + 34 RuleTester suites + registry + helpers) is removed. `tests/architecture/msg-rule-registry.test.ts` (the 4-way parity test) is also removed -- no plugin to parity-check. `eslint.config.js` swaps the MSG-plugin wiring for stock rules:
+`test/lint-rules/` (~4096 lines: 34 MSG-\* rules + 34 RuleTester suites + registry + helpers) is removed. `test/architecture/msg-rule-registry.test.ts` (the 4-way parity test) is also removed -- no plugin to parity-check. `eslint.config.js` swaps the MSG-plugin wiring for stock rules:
 
 ```js
 // eslint.config.js (post-Phase-21)
@@ -148,7 +148,7 @@ The deletion lands in Phase 21 after the call-site migration waves (Phases 18-20
 
 ### Coverage moves to per-variant unit tests + catalog UAT
 
-Each `PluginStatus` and `MarketplaceStatus` value gets a small unit test that calls `notify()` with a mock `ctx` and asserts on the exact string passed to `ctx.ui.notify` (SNM-30). The catalog UAT runner (`tests/architecture/catalog-uat/catalog-contract.test.ts`) keeps its byte-equality role unchanged but is now fed by structured `NotificationMessage` fixtures (SNM-31) flowing through `notify()` via mock ctx -- not pre-assembled strings. `docs/output-catalog.md` is rewritten in Phase 17 to reflect the always-marketplace-header spec (SNM-20). `docs/messaging-style-guide.md` v2.0 describes the structured type model as the binding contract (SNM-19).
+Each `PluginStatus` and `MarketplaceStatus` value gets a small unit test that calls `notify()` with a mock `ctx` and asserts on the exact string passed to `ctx.ui.notify` (SNM-30). The catalog UAT runner (`test/architecture/catalog-uat/catalog-contract.test.ts`) keeps its byte-equality role unchanged but is now fed by structured `NotificationMessage` fixtures (SNM-31) flowing through `notify()` via mock ctx -- not pre-assembled strings. `docs/output-catalog.md` is rewritten in Phase 17 to reflect the always-marketplace-header spec (SNM-20). `docs/messaging-style-guide.md` v2.0 describes the structured type model as the binding contract (SNM-19).
 
 ### Other consequences
 
@@ -163,9 +163,9 @@ Each `PluginStatus` and `MarketplaceStatus` value gets a small unit test that ca
 
 - Migrating ~33 call sites total (~20 orchestrator `notifySuccess` / `notifyWarning` / `notifyError` sites + ~13 edge `notifyUsageError` sites) -- mechanical but touches every orchestrator family.
 - ~120 LoC of types now owned by `shared/notification-types.ts` (added to the legacy hub by Phase 15).
-- ~80 LoC of compile-check arch test in `tests/architecture/notify-types.test.ts` (added by Phase 15).
+- ~80 LoC of compile-check arch test in `test/architecture/notify-types.test.ts` (added by Phase 15).
 - The Phase 16 `notify()` renderer body (the switch + helpers).
-- One-time deletion of `tests/lint-rules/` + `tests/architecture/msg-rule-registry.test.ts` + `eslint.config.js` MSG-plugin wiring lands in Phase 21.
+- One-time deletion of `test/lint-rules/` + `test/architecture/msg-rule-registry.test.ts` + `eslint.config.js` MSG-plugin wiring lands in Phase 21.
 
 ### Net code delta
 
@@ -189,11 +189,11 @@ Each `PluginStatus` and `MarketplaceStatus` value gets a small unit test that ca
 
 Phased rollout across v1.4 (Phases 15-21). Each phase preserves byte-equality of user-visible output against the catalog UAT until the catalog spec itself is rewritten in Phase 17.
 
-- **Phase 15** (this ADR): land the type model in the legacy notification hub (10-variant `PluginNotificationMessage` discriminated union + closed-set tuples + supporting interfaces) and the compile-check arch test at `tests/architecture/notify-types.test.ts`. No call sites change; V1 wrappers (`notifySuccess` / `notifyWarning` / `notifyError` / `notifyUsageError`) stay intact alongside the new types. `npm run check` GREEN. SNM-21 closes here. The final type owner is `shared/notification-types.ts`.
+- **Phase 15** (this ADR): land the type model in the legacy notification hub (10-variant `PluginNotificationMessage` discriminated union + closed-set tuples + supporting interfaces) and the compile-check arch test at `test/architecture/notify-types.test.ts`. No call sites change; V1 wrappers (`notifySuccess` / `notifyWarning` / `notifyError` / `notifyUsageError`) stay intact alongside the new types. `npm run check` GREEN. SNM-21 closes here. The final type owner is `shared/notification-types.ts`.
 - **Phase 16:** introduce `notify(ctx, NotificationMessage)` and `notifyUsageError(ctx, UsageErrorMessage)` in the legacy notification hub alongside the V1 severity-named wrappers (V1 NOT yet deleted). The internal switch with `assertNever` is the sole grammar site (SNM-17). Per-status unit tests (SNM-30) exercise every variant via a mock `ctx`. Catalog UAT stays GREEN against the V1 callsites unchanged. The final grammar and entrypoint owners are `shared/notification-grammar.ts` and `shared/notification-dispatch.ts`.
-- **Phase 17:** rewrite `docs/messaging-style-guide.md` to v2.0 (SNM-19) and `docs/output-catalog.md` to the always-marketplace-header spec (SNM-20). Migrate `tests/architecture/catalog-uat/catalog-contract.test.ts` to feed structured `NotificationMessage` fixtures through `notify()` via mock ctx (SNM-31). Byte-equality assertion remains the user-contract gate.
+- **Phase 17:** rewrite `docs/messaging-style-guide.md` to v2.0 (SNM-19) and `docs/output-catalog.md` to the always-marketplace-header spec (SNM-20). Migrate `test/architecture/catalog-uat/catalog-contract.test.ts` to feed structured `NotificationMessage` fixtures through `notify()` via mock ctx (SNM-31). Byte-equality assertion remains the user-contract gate.
 - **Phases 18-20:** migrate call sites by family -- Phase 18 marketplace orchestrators, Phase 19 plugin orchestrators, Phase 20 edge handlers + `notifyUsageError` (SNM-23). Each phase narrows the MSG-\* `files:` globs in `eslint.config.js` to the still-unmigrated family. Catalog UAT byte-equality is GREEN for the family at the end of each migration phase.
-- **Phase 21:** delete the V1 severity-named wrappers (`notifySuccess` / `notifyWarning` / `notifyError`) and the V1 three-argument `notifyUsageError(ctx, msg, usage)` signature from the legacy notification hub (SNM-22); delete `tests/lint-rules/` (SNM-24) and `tests/architecture/msg-rule-registry.test.ts` (SNM-25); rewrite or delete `tests/architecture/grammar-frontmatter.test.ts` (SNM-26); swap `eslint.config.js` to stock `no-restricted-syntax` + `no-console` with the `persistence/migrate.ts` per-file override (SNM-27); review `tests/architecture/no-legacy-markers.test.ts` for v2 vocabulary (SNM-28); resolve `shared/grammar/` retain-or-delete (SNM-29). `npm run check` GREEN against the new minimal surface (SNM-32).
+- **Phase 21:** delete the V1 severity-named wrappers (`notifySuccess` / `notifyWarning` / `notifyError`) and the V1 three-argument `notifyUsageError(ctx, msg, usage)` signature from the legacy notification hub (SNM-22); delete `test/lint-rules/` (SNM-24) and `test/architecture/msg-rule-registry.test.ts` (SNM-25); rewrite or delete `test/architecture/grammar-frontmatter.test.ts` (SNM-26); swap `eslint.config.js` to stock `no-restricted-syntax` + `no-console` with the `persistence/migrate.ts` per-file override (SNM-27); review `test/architecture/no-legacy-markers.test.ts` for v2 vocabulary (SNM-28); resolve `shared/grammar/` retain-or-delete (SNM-29). `npm run check` GREEN against the new minimal surface (SNM-32).
 
 If the phase numbers shift between this ADR's acceptance and the final teardown, the canonical traceability is `.planning/REQUIREMENTS.md`'s phase-mapping table (Phase column per SNM-\* row); this ADR's phase numbers are informative, not binding.
 

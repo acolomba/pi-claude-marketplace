@@ -70,18 +70,19 @@ export function narrowProbeError(
  * helpers below. The helpers accept two separate input axes.
  * `narrowResolverNotes` maps resolver notes to hooks, LSP, source, and
  * malformed-MCP reasons. `narrowUnsupportedKinds` maps typed kinds to hooks,
- * LSP, and generic component reasons. `kindToReason` owns the typed-kind
+ * LSP, MCP, and generic component reasons. `kindToReason` owns the typed-kind
  * mappings.
  */
 export type UnsupportedReason =
-  "unsupported hooks" | "lsp" | "unsupported source" | "unsupported component";
+  "unsupported hooks" | "lsp" | "unsupported source" | "unsupported component" | "unsupported mcp";
 
 /**
- * MCPR-03 / D-02: the return-type envelope for `narrowResolverNotes`. It widens
- * `UnsupportedReason` with the failure-class `malformed mcp` token. The
- * sibling typed-kind helpers never emit `malformed mcp`.
+ * MCPR-03 / D-02 / SRC-01: the return-type envelope for `narrowResolverNotes`.
+ * It widens `UnsupportedReason` with the failure-class `malformed mcp` and
+ * `source missing` tokens. The sibling typed-kind helpers never emit either.
  */
-export type ResolverNoteReason = UnsupportedReason | "malformed mcp";
+export type ResolverNoteReason =
+  UnsupportedReason | "malformed mcp" | "source missing" | "unreadable manifest";
 
 /**
  * Narrow resolver `notes` strings to closed-set REASONS members.
@@ -119,12 +120,30 @@ export function narrowResolverNotes(notes: readonly string[]): readonly Resolver
 }
 
 /**
+ * SRC-01: the prefix of `domain/plugin-resolver.ts`'s note for a plugin
+ * directory that does not exist. Install's resolver-reason classifier matches
+ * the same prefix, so both surfaces read `source missing`.
+ */
+export const SOURCE_DIR_MISSING_NOTE = "source dir does not exist";
+
+/**
+ * D-PL2-24: the prefix of `domain/plugin-resolver.ts`'s note for a plugin
+ * manifest whose link resolves outside its boundary. The note ends with the
+ * boundary's name. Both reason classifiers read it as `unreadable manifest`,
+ * the reason a refused own manifest already answers (REC-05).
+ */
+export const MANIFEST_ESCAPE_NOTE = "plugin manifest resolves outside the";
+
+/**
  * Classify a single resolver note into exactly one closed-set bucket. The arm
- * order is significant -- the `malformed mcp reference` arm matches its FULL
- * prefix BEFORE the permissive catch-all (MCPR-03 / D-02): a bare
- * `malformed mcp` match would also match the inline `malformed mcpServers` note
- * and silently reroute it away from `unsupported source`. Any note matching no
- * specific arm falls through to the permissive `unsupported source` bucket.
+ * order is significant -- the `malformed mcp reference` and `malformed mcp
+ * server ` arms match their FULL prefixes BEFORE the permissive catch-all
+ * (MCPR-03 / D-02 / ANAME-07): a bare `malformed mcp` match would also match
+ * the inline `malformed mcpServers` note and silently reroute it away from
+ * `unsupported source`. The `source dir does not exist` prefix arm (SRC-01)
+ * also runs before the `lspServers` substring arm, because the note embeds the
+ * plugin path. Any note matching no specific arm falls through to the
+ * permissive `unsupported source` bucket.
  */
 function classifyResolverNote(note: string): ResolverNoteReason {
   const isHooksNote =
@@ -136,14 +155,26 @@ function classifyResolverNote(note: string): ResolverNoteReason {
     return "unsupported hooks";
   }
 
-  // WR-01: the specific `malformed mcp reference` prefix arm MUST run before
-  // the broad `lspServers` substring arm. A broken reference embeds the
-  // author-controlled raw path verbatim, so a note like
+  // WR-01: the specific `malformed mcp reference` and `malformed mcp server `
+  // prefix arms MUST run before the broad `lspServers` substring arm. A broken
+  // reference embeds the author-controlled raw path verbatim, and a malformed
+  // server note embeds the author-controlled server name, so a note like
   // `malformed mcp reference: file not found: "config/lspServers/x.mcp.json"`
   // contains the `lspServers` substring and would otherwise misclassify as
-  // `{lsp}` instead of `{malformed mcp}`.
-  if (note.startsWith("malformed mcp reference")) {
+  // `{lsp}` instead of `{malformed mcp}`. The trailing space keeps the inline
+  // `malformed mcpServers` note in its own bucket (ANAME-07).
+  if (note.startsWith("malformed mcp reference") || note.startsWith("malformed mcp server ")) {
     return "malformed mcp";
+  }
+
+  // SRC-01: the resolver's note for a plugin directory that is not on disk. It
+  // embeds the plugin path, so it too must run before the `lspServers` arm.
+  if (note.startsWith(SOURCE_DIR_MISSING_NOTE)) {
+    return "source missing";
+  }
+
+  if (note.startsWith(MANIFEST_ESCAPE_NOTE)) {
+    return "unreadable manifest";
   }
 
   if (note.includes("lspServers")) {
@@ -163,9 +194,10 @@ function classifyResolverNote(note: string): ResolverNoteReason {
  * byte-identical per-kind markers across every surface (SURF-01 cross-surface
  * parity), by construction rather than by three drift-prone copies.
  *
- * Mapping (HOOK-04 / D-58-02 / D-71-04 / D-90-05): `lspServers` renders as
- * `lsp`. A typed `hooks` kind renders the aggregate `unsupported hooks` marker.
- * Every other typed kind renders `unsupported component` (D-90-05). This marker names the
+ * Mapping (HOOK-04 / D-58-02 / D-71-04 / D-90-05 / ANAME-07): `lspServers`
+ * renders as `lsp`. A typed `hooks` kind renders the aggregate `unsupported
+ * hooks` marker, and a typed `mcpServers` kind the aggregate `unsupported mcp`
+ * marker. Every other typed kind renders `unsupported component` (D-90-05). This marker names the
  * component axis, unlike the source-axis `unsupported source` marker.
  * First-wins dedup matches `narrowResolverNotes` semantics (WR-01), so a
  * multi-kind list never emits a duplicate token.
@@ -194,12 +226,14 @@ export function narrowUnsupportedKinds(
 
 // TD-3: `kind` is deliberately typed `string`, NOT the closed `UnsupportedKind`
 // union. The resolver's `unsupported` array is `Type.Array(Type.String())` and
-// legitimately carries `hooks` (a SUPPORTED kind flagged as dropped) alongside
-// the `UnsupportedKind` literals, so no closed union spans the real input.
-// D-90-05 / WINV-03: two kinds have dedicated mappings: `lspServers` ->
-// `lsp` and `hooks` -> `unsupported hooks`. A kind outside these carve-outs
-// collapses to `unsupported component`. This result names the component axis
-// instead of borrowing the source-axis token.
+// legitimately carries `hooks` and `mcpServers` (SUPPORTED kinds flagged as
+// dropped) alongside the `UnsupportedKind` literals, so no closed union spans
+// the real input.
+// D-90-05 / WINV-03 / ANAME-07: three kinds have dedicated mappings:
+// `lspServers` -> `lsp`, `hooks` -> `unsupported hooks` and `mcpServers` ->
+// `unsupported mcp`. A kind outside these carve-outs collapses to
+// `unsupported component`. This result names the component axis instead of
+// borrowing the source-axis token.
 function kindToReason(kind: string): UnsupportedReason {
   if (kind === "lspServers") {
     return "lsp";
@@ -207,6 +241,10 @@ function kindToReason(kind: string): UnsupportedReason {
 
   if (kind === "hooks") {
     return "unsupported hooks";
+  }
+
+  if (kind === "mcpServers") {
+    return "unsupported mcp";
   }
 
   return "unsupported component";

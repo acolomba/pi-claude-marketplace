@@ -6,13 +6,21 @@ import {
   resolveStrict,
 } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
-import { shaVersion } from "../../domain/version.ts";
+import { listedDirectoryPin, versionNamesCommit, withoutTagCommit } from "../../domain/version.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { errorMessage, PluginShapeError } from "../../shared/errors.ts";
-import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
-import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import {
+  CleanupLeakError,
+  errorMessage,
+  PluginShapeError,
+  rethrowInvalidGitHubBaseUrl,
+  StateLockHeldError,
+} from "../../shared/errors.ts";
+import { classifyGitFailure } from "../../shared/git-failure-classifiers.ts";
+import { ownValue } from "../../shared/own-key.ts";
+import { narrowResolverNotes, narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
+import {
+  withExistingScopeLock,
   withLockedStateTransaction,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
@@ -28,21 +36,35 @@ import {
   materializeMarketplaceTagClone,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
+  materializePluginCommitCopy,
+  materializeUnpinnedSource,
   networkCloneUrl,
   resolveGitSubdirRoot,
   resolvePluginPin,
 } from "./clone-cache.ts";
-import { resolvePluginVersion } from "./shared.ts";
-import { admitResolvedVersion, evaluateUpdateConstraint } from "./update-constraint-gate.ts";
+import { admitResolvedVersion, evaluateCatalogConstraint } from "./constraint-fold.ts";
+import { DEFAULT_PACKAGE_INSTALL_OPS, removeInstalledPackages } from "./package-install.ts";
+import {
+  isRecordedCandidate,
+  isSameRevision,
+  resolvePluginVersion,
+  resolveTagPinnedPluginVersion,
+} from "./shared.ts";
+import { evaluateUpdateConstraint } from "./update-constraint-gate.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
-import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver-types.ts";
+import type {
+  GitPluginRootResult,
+  MaterializablePlugin,
+  ResolveContext,
+} from "../../domain/resolver-types.ts";
 import type { GitBackedSource, PathSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { RemoteTag } from "../../platform/git.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
@@ -54,10 +76,11 @@ import type {
   UpdateConstraintDisclosure,
 } from "../types.ts";
 import type {
-  UpdateConstraintOptions,
+  ConstraintRequester,
   UpdateConstraintVerdict,
   UpdateTagPin,
-} from "./update-constraint-gate.ts";
+} from "./constraint-fold.ts";
+import type { UpdateConstraintOptions } from "./update-constraint-gate.ts";
 
 /** Target selected by the three public plugin-update invocation forms. */
 export type UpdatePluginsTarget =
@@ -70,12 +93,13 @@ export interface UpdateCloneCacheSeam {
   readonly resolvePluginPin: typeof resolvePluginPin;
   readonly materializePluginClone: typeof materializePluginClone;
   readonly materializeOrRefreshPluginMirror: typeof materializeOrRefreshPluginMirror;
+  readonly materializePluginCommitCopy: typeof materializePluginCommitCopy;
 }
 
 /** Direct update request validated and classified by the update flow. */
 export interface UpdatePluginsOptions {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly run: NotificationRun;
   readonly scope?: Scope;
   readonly cwd: string;
   readonly target: UpdatePluginsTarget;
@@ -99,6 +123,12 @@ export interface PreparedPluginUpdate {
   readonly toVersion: string;
   readonly resolvedSha?: string;
   /**
+   * GV-01: the semver of the release tag the dependents' combined range
+   * selected, recorded beside a `toVersion` that carries the tag's commit and
+   * read by dependency ranges; absent when no tag pins the candidate.
+   */
+  readonly resolvedVersion?: string;
+  /**
    * D-10-17a: the constraint gate's disclosure, carried from the verdict this
    * preflight already evaluated. REQUIRED-BUT-NULLABLE (never `constraint?:`),
    * so `exactOptionalPropertyTypes` makes an omitting construction site a
@@ -112,22 +142,71 @@ export interface PreparedPluginUpdate {
   readonly constraint: UpdateConstraintDisclosure | undefined;
 }
 
+/**
+ * D-18-04 / D-18-15 / D-23: the four per-verb knobs of the shared
+ * materialization path. They are the only behavioral difference between
+ * `update`, `reinstall` and `apply`'s catalog convergence inside it.
+ */
+export interface MaterializationPolicy {
+  /**
+   * `true` refreshes an unpinned git source's mirror before it reads the
+   * mirror's HEAD. `false` reads a present mirror's HEAD with no network and
+   * clones only a missing mirror (NFR-5 cache miss).
+   */
+  readonly refreshSource: boolean;
+  /**
+   * `true` returns `unchanged` for a candidate at the revision the record
+   * holds. `false` re-materializes it, which is how `reinstall` restores
+   * deleted artifacts (REI-01 / REI-02).
+   */
+  readonly skipSameRevision: boolean;
+  /**
+   * `true` lets the swap's agents commit replace this plugin's own previous
+   * agent files whose bytes a user changed, the RINST-01 repair overwrite.
+   * `false` keeps `update`'s refusal.
+   */
+  readonly overwrite: boolean;
+  /**
+   * D-23: `true` lets a dependent's range pick the highest release tag that
+   * satisfies it. `false` judges the range against the candidate the catalog
+   * names, with no tag listing, so `apply` takes what `pending` previewed.
+   */
+  readonly searchReleaseTags: boolean;
+}
+
+/**
+ * D-18-04 / D-23: `update` refreshes the source, skips the recorded revision,
+ * never overwrites, and lets a range pick a release tag. A dependency move
+ * runs under it too (UPD-DEP-D1).
+ */
+export const UPDATE_MATERIALIZATION: MaterializationPolicy = {
+  refreshSource: true,
+  skipSameRevision: true,
+  overwrite: false,
+  searchReleaseTags: true,
+};
+
 /** Inputs required to classify and prepare one installed plugin update. */
 export interface PreparePluginUpdateOptions {
   readonly plugin: string;
   readonly marketplace: string;
   readonly scope: Scope;
   readonly locations: ScopedLocations;
+  /** D-18-04: the calling verb's knobs; required so no caller inherits update's by omission. */
+  readonly policy: MaterializationPolicy;
   /** State I/O for the disabled-pin refresh; production callers omit it. */
   readonly stateTransaction?: LockedStateTransactionDeps;
   readonly partial?: boolean;
-  readonly ctx?: NotificationContext;
+  readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
+  /** Exact clone-cache keys created by the current dependency-planning attempt. */
+  readonly cloneCandidates?: Set<string>;
   /**
    * D-10-02 / D-10-19: the constraint gate is composed through this field,
-   * defaulted to the real `evaluateUpdateConstraint`. The field name is not
-   * one the network-free ESLint block in `eslint.config.js` bans, and
-   * production omits it.
+   * defaulted by `policy.searchReleaseTags` to the real
+   * `evaluateUpdateConstraint` or the tag-free `evaluateCatalogConstraint`
+   * (D-23). The field name is not one the network-free ESLint block in
+   * `eslint.config.js` bans, and production omits it.
    */
   readonly constraintGate?: typeof evaluateUpdateConstraint;
   /**
@@ -147,29 +226,61 @@ export interface PreparePluginUpdateOptions {
   readonly constraintTagMemo?: Map<string, readonly RemoteTag[]>;
   readonly constraintMarketplaceTagMemo?: Map<string, readonly ReleaseTagCandidate[]>;
   readonly cleanupClones: (locations: ScopedLocations) => Promise<unknown>;
+  /**
+   * UPR-03: receives the installed version once the preflight found the
+   * record, so a failure thrown before any candidate can show the version it
+   * left in place, as a returned preflight failure does.
+   */
+  readonly onRecord?: (fromVersion: string) => void;
+  /**
+   * UPD-DEP-D1: the plugins that need this one moved, and the ranges each asks
+   * for. The constraint gate folds them in place of their records' declarations.
+   */
+  readonly requesters?: readonly ConstraintRequester[];
+  /**
+   * UPD-DEP-D1: the version a dependency plan chose for this move. A candidate
+   * at any other version fails the preflight, so a move lands exactly what the
+   * plan judged.
+   */
+  readonly expectVersion?: string;
+  /**
+   * UPD-DEP-D1 / WR-1: the versions a dependency plan ruled out for this
+   * move. The constraint gate folds them out of the range, so the move takes
+   * the highest version left.
+   */
+  readonly excludedVersions?: readonly string[] | undefined;
+  /**
+   * UPD-DEP-D1: decide the candidate and write nothing, so a caller can judge
+   * every dependency move before it makes the first one. A disabled record's
+   * pin refresh is the one write the preflight makes, and it is skipped.
+   */
+  readonly judgeOnly?: true;
 }
 
 type PluginStateRecord = PreparedPluginUpdate["record"];
 
 /**
- * NFR-7: a `(failed)` row the preflight itself can reach. The four fields only a
- * staged replacement can know are pinned `never`, so a preflight failure cannot
- * claim a version transition it never attempted, nor a `phaseFailures` aggregate
- * that only phase-3a produces -- the shape `update-flow.ts` narrows on to tell a
- * phase-3a aggregate (already notified, `RECOVERY_PLUGIN_REINSTALL_PREFIX` hint
- * composed from `phaseFailures`) apart from every other failure. Threading any
- * of the four onto a preflight row therefore requires widening this type
- * deliberately, and that widening is what forces the phase-3a narrowing to be
- * revisited alongside it.
+ * NFR-7: a `(failed)` row the preflight itself can reach. It may name the
+ * installed version (UPR-03: a failure before any candidate shows the version
+ * it left in place) and the error behind it (SRC-01: a source the update could
+ * not read or fetch). The four fields only a staged replacement can know stay
+ * pinned `never`, so a preflight failure cannot claim a version transition it
+ * never attempted, nor a `phaseFailures` aggregate that only phase-3a produces
+ * -- the shape `update-flow.ts` narrows on to tell a phase-3a aggregate
+ * (already notified, `RECOVERY_PLUGIN_REINSTALL_PREFIX` hint composed from
+ * `phaseFailures`) apart from every other failure. Threading any of the four
+ * onto a preflight row therefore requires widening this type deliberately, and
+ * that widening is what forces the phase-3a narrowing to be revisited
+ * alongside it.
  */
 export interface PreflightFailedOutcome extends Omit<
   PluginUpdateFailedOutcome,
-  "cause" | "fromVersion" | "phaseFailures" | "reasons" | "toVersion"
+  "fromCommit" | "phaseFailures" | "reasons" | "toCommit" | "toVersion"
 > {
   readonly reasons: readonly ContentReason[];
-  readonly cause?: never;
-  readonly fromVersion?: never;
+  readonly fromCommit?: never;
   readonly phaseFailures?: never;
+  readonly toCommit?: never;
   readonly toVersion?: never;
 }
 
@@ -199,51 +310,51 @@ interface UpdateCloneProbe {
  * `buildStoredCredentialAuth`'s bundle: the Device Flow renders a user code
  * through the context and the cascade has none (D-3-04). Every other caller
  * gets `buildCloneAuth`'s bundle.
+ *
+ * `refreshSource` is the policy knob the unpinned arm passes to the mirror
+ * (D-18-04). The pinned arm never fetches a present clone, so it ignores it.
  */
 function makeUpdateCloneProbe(
   seam: UpdateCloneCacheSeam,
   locations: ScopedLocations,
   auth: {
-    readonly ctx?: NotificationContext;
+    readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
     readonly credentialOps: CredentialOps;
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;
   },
+  refreshSource: boolean,
+  cloneCandidates: Set<string> | undefined,
 ): UpdateCloneProbe {
   let captured: string | undefined;
+  const onCloneCreated = (key: string): void => {
+    cloneCandidates?.add(key);
+  };
 
   function cloneAuth(cloneUrl: string, kind: GitBackedSource["kind"]): GitAuthBundle {
-    return auth.ctx === undefined
+    return auth.notification === undefined
       ? buildStoredCredentialAuth(hostFromCloneUrl(cloneUrl, kind), auth.credentialOps)
-      : buildCloneAuth(cloneUrl, kind, { ...auth, ctx: auth.ctx });
+      : buildCloneAuth(cloneUrl, kind, { ...auth, ...auth.notification });
   }
 
   async function probeUnpinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
-    const cloneUrl = canonicalCloneUrl(gitSource);
-    const authBundle = cloneAuth(cloneUrl, gitSource.kind);
-    const materialized = await seam.materializeOrRefreshPluginMirror({
-      locations,
-      cloneUrl,
-      networkUrl: networkCloneUrl(gitSource),
-      ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
-      auth: authBundle,
-    });
-    if (gitSource.kind === "git-subdir") {
-      const subdir = await resolveGitSubdirRoot(materialized.pluginRoot, gitSource.path);
-      if (subdir.kind !== "materialized") {
-        return subdir;
-      }
-
-      captured = materialized.resolvedSha;
-      return { ...subdir, resolvedSha: materialized.resolvedSha };
+    // GIT-01 / GIT-04 / GIT-03: the shared unpinned step, under the scope's
+    // state lock so no `fetch` refreshes the mirror while its commit is read
+    // and copied. The preflight runs before the swap takes the lock.
+    const result = await withExistingScopeLock(locations, () =>
+      materializeUnpinnedSource(seam, {
+        locations,
+        source: gitSource,
+        auth: cloneAuth(canonicalCloneUrl(gitSource), gitSource.kind),
+        refresh: refreshSource,
+        onCloneCreated,
+      }),
+    );
+    if (result.kind === "materialized") {
+      captured = result.resolvedSha;
     }
 
-    captured = materialized.resolvedSha;
-    return {
-      kind: "materialized",
-      pluginRoot: materialized.pluginRoot,
-      resolvedSha: materialized.resolvedSha,
-    };
+    return result;
   }
 
   async function probePinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
@@ -258,7 +369,8 @@ function makeUpdateCloneProbe(
       networkUrl: networkCloneUrl(gitSource),
       pin: pin.pin,
       ...(pin.ref !== undefined && { ref: pin.ref }),
-      auth: authBundle,
+      resolveAuth: () => authBundle,
+      onCloneCreated,
     });
     if (gitSource.kind === "git-subdir") {
       const subdir = await resolveGitSubdirRoot(cloneRoot, gitSource.path);
@@ -281,30 +393,36 @@ function makeUpdateCloneProbe(
 }
 
 /**
- * A tag-pinned update records the version the TAG names, for both source
- * kinds -- never a value derived from the resolved sha, and never the
- * marketplace-entry / manifest fallback `resolvePluginVersion` reads. This is
- * the ONLY way `deriveUpdateToVersion` can tell "pinned to a release tag"
- * apart from "refreshed to the branch head" or "resolved a `path` source's
- * current copy": a resolved sha is present either way, so the pin's own
- * version has to travel alongside it rather than being re-derived from it.
+ * GV-01: a tag-pinned update records the version Claude Code records at the
+ * tag, for both source kinds: the declared version with the tag's commit
+ * appended, else the commit's own version. The pin itself is what tells
+ * "pinned to a release tag" apart from "refreshed to the branch head" or
+ * "resolved a `path` source's current copy": a resolved sha is present either
+ * way, so the pin travels alongside it rather than being re-derived from it.
  */
 async function deriveUpdateToVersion(
   entry: PluginEntry,
   installable: MaterializablePlugin,
+  marketplace: Pick<ResolveContext, "marketplaceName" | "marketplaceRoot">,
   resolvedSha: string | undefined,
-  pinnedVersion: string | undefined,
+  pin: UpdateTagPin | undefined,
 ): Promise<string> {
-  if (pinnedVersion !== undefined) {
-    return pinnedVersion;
+  if (pin !== undefined) {
+    return resolveTagPinnedPluginVersion(entry, installable, marketplace.marketplaceName, pin.oid);
   }
 
+  return resolvePluginVersion(
+    entry,
+    installable,
+    marketplace,
+    isGitSourceEntry(entry) ? resolvedSha : undefined,
+  );
+}
+
+/** Whether `entry` installs from a git source (url / git-subdir / github). */
+function isGitSourceEntry(entry: PluginEntry): boolean {
   const kind = parsePluginSource(entry.source).kind;
-  if ((kind === "url" || kind === "git-subdir" || kind === "github") && resolvedSha !== undefined) {
-    return shaVersion(resolvedSha);
-  }
-
-  return resolvePluginVersion(entry, installable);
+  return kind === "url" || kind === "git-subdir" || kind === "github";
 }
 
 function isPartialableUpdateShapeError(error: unknown): error is PartialableUpdateShapeError {
@@ -315,9 +433,12 @@ function isPartialableUpdateShapeError(error: unknown): error is PartialableUpda
   );
 }
 
-/** What `resolveUpdateCandidate` reaches: a candidate (or skip verdict), plus a `path`-pin's own resolved sha. */
+/**
+ * What `resolveUpdateCandidate` reaches: a candidate (or a skip or failure
+ * verdict), plus a `path`-pin's own resolved sha.
+ */
 interface UpdateCandidateResolution {
-  readonly candidate: MaterializablePlugin | PluginUpdateSkippedOutcome;
+  readonly candidate: MaterializablePlugin | PluginUpdateSkippedOutcome | PreflightFailedOutcome;
   /**
    * The commit a `path`-source pin materialized, when one did. The git arm's
    * own resolved sha is unaffected -- it stays `clone.resolvedSha()`'s own
@@ -337,23 +458,28 @@ async function resolveUpdateCandidate(
     readonly locations: ScopedLocations;
     readonly pin?: UpdateTagPin;
     readonly pathPinProbe?: typeof materializeMarketplaceTagClone;
+    readonly cloneCandidates?: Set<string>;
   },
 ): Promise<UpdateCandidateResolution> {
   let pathResolvedSha: string | undefined;
+  let remoteUrl: string | undefined;
   try {
     const resolved = await resolveStrict(entry, {
       marketplaceRoot: marketplace.marketplaceRoot,
       marketplaceName: marketplace.name,
-      resolveGitPluginRoot: (gitSource) =>
+      marketplaceSource: marketplace.source,
+      resolveGitPluginRoot: (gitSource) => {
+        remoteUrl = networkCloneUrl(gitSource);
         // D-10-17: overriding `sha` is what routes the EXISTING probe down
         // its already-pinned arm, exactly as an explicitly pinned entry
         // source already does -- no second materialization path exists for
         // a constrained update. `clone.resolvedSha()` (read by the caller
         // after this call returns) already captures whatever this probe
         // resolves to, pinned or not, so nothing here needs to intercept it.
-        resolveGitPluginRoot(
+        return resolveGitPluginRoot(
           options.pin === undefined ? gitSource : { ...gitSource, sha: options.pin.oid },
-        ),
+        );
+      },
       // D-07-06 / D-10-17: added ONLY when a pin is present, so an
       // unconstrained update's resolver context has exactly the keys it has
       // today (success criterion 3) -- neither field is set at all.
@@ -363,14 +489,19 @@ async function resolveUpdateCandidate(
           pathSource: PathSource,
           tagPin: string,
         ): Promise<GitPluginRootResult> => {
-          const result = await (options.pathPinProbe ?? materializeMarketplaceTagClone)({
-            locations: options.locations,
-            marketplaceRoot: marketplace.marketplaceRoot,
-            marketplaceSource: marketplace.source,
-            marketplaceName: marketplace.name,
-            pathSource,
-            tagOid: tagPin,
-          });
+          // GLK-04 / D-PL7-06: the copy reads the marketplace `.git` that
+          // `marketplace update` refreshes under this same scope lock.
+          const result = await withExistingScopeLock(options.locations, () =>
+            (options.pathPinProbe ?? materializeMarketplaceTagClone)({
+              locations: options.locations,
+              marketplaceRoot: marketplace.marketplaceRoot,
+              marketplaceSource: marketplace.source,
+              marketplaceName: marketplace.name,
+              pathSource,
+              tagOid: tagPin,
+              onCloneCreated: (key) => options.cloneCandidates?.add(key),
+            }),
+          );
           if (result.kind === "materialized") {
             pathResolvedSha = result.resolvedSha;
           }
@@ -387,48 +518,73 @@ async function resolveUpdateCandidate(
 
     return { candidate: resolved, pathResolvedSha };
   } catch (error: unknown) {
-    const networkReason = classifyGitTransportFailure(error);
-    if (networkReason !== undefined) {
-      return {
-        candidate: skippedCandidate(options, [errorMessage(error)], [networkReason]),
-        pathResolvedSha: undefined,
-      };
+    // GHB-03: an invalid GitHub base override fails the whole command; it never
+    // becomes a skipped row.
+    rethrowInvalidGitHubBaseUrl(error);
+    // GIT-03: `probeUnpinned` takes the state lock; a held lock is the
+    // command's own `lock held` failure, never a candidate verdict.
+    if (error instanceof StateLockHeldError) {
+      throw error;
     }
 
-    if (isPartialableUpdateShapeError(error)) {
-      return {
-        candidate: {
-          ...skippedCandidate(
-            options,
-            [errorMessage(error)],
-            narrowUnsupportedKinds(error.shape.unsupportedKinds),
-          ),
-          partialUpgradable: true,
-        },
-        pathResolvedSha: undefined,
-      };
-    }
-
-    if (error instanceof PluginShapeError && error.shape.kind === "no-longer-installable") {
-      return {
-        candidate: skippedCandidate(options, [errorMessage(error)], ["no longer installable"]),
-        pathResolvedSha: undefined,
-      };
-    }
-
-    // Anything else is genuinely unexpected -- not a classified git-transport
-    // failure and not the resolver's typed `no-longer-installable` shape.
-    // "no longer installable" stays the user-facing verdict (the candidate
-    // could not be resolved either way), but it is not necessarily the real
-    // cause, so log the actual error for diagnosis.
-    hookDebugLog(
-      `resolveUpdateCandidate: unclassified error for "${options.plugin}": ${errorMessage(error)}`,
-    );
     return {
-      candidate: skippedCandidate(options, [errorMessage(error)], ["no longer installable"]),
+      candidate: candidateFailure(error, { ...options, remoteUrl }),
       pathResolvedSha: undefined,
     };
   }
+}
+
+/**
+ * The verdict for a candidate the resolver could not produce. Only reached
+ * after the GHB-03 and GIT-03 rethrows, which fail the whole command.
+ *
+ * SRC-01: a source the update could not read or fetch fails, as Claude Code's
+ * update does. A clone the git host refused reads install's reason for the
+ * same answer, and a throw no ladder classifies keeps its cause and no reason
+ * -- the source has not stopped being installable. Only the resolver's own
+ * refusal skips.
+ *
+ * `remoteUrl` is the URL of the plugin's git source, unset for a `path`
+ * source. When the host answered with an HTTP status, the cause leads with
+ * `{status} on {url}`, the status and the URL the clone fetched, as
+ * `marketplace update` frames a refused refresh (D-PL7-03, D-PL7-14).
+ */
+function candidateFailure(
+  error: unknown,
+  options: {
+    readonly plugin: string;
+    readonly fromVersion: string;
+    readonly remoteUrl: string | undefined;
+  },
+): PluginUpdateSkippedOutcome | PreflightFailedOutcome {
+  const notes = [errorMessage(error)];
+  const cause = error instanceof Error ? error : new Error(errorMessage(error));
+  const classified = classifyGitFailure(error, { notFound: "source missing" }, options.remoteUrl);
+  if (classified !== undefined) {
+    const { reason, frame } = classified;
+    // The bare auth row keeps no cause, unless a cleanup leaked: its cause
+    // carries the manual-cleanup hint (MA-9, INR-02). An auth row has no frame.
+    const keepsCause = reason !== "authentication required" || error instanceof CleanupLeakError;
+    const rowCause = frame === undefined ? cause : new Error(frame, { cause });
+    return failedCandidate(options, notes, [reason], keepsCause ? rowCause : undefined);
+  }
+
+  if (isPartialableUpdateShapeError(error)) {
+    return {
+      ...skippedCandidate(options, notes, narrowUnsupportedKinds(error.shape.unsupportedKinds)),
+      partialUpgradable: true,
+    };
+  }
+
+  if (error instanceof PluginShapeError && error.shape.kind === "no-longer-installable") {
+    // The reason carries a missing directory; the note embeds the absolute
+    // path, so no cause rides along.
+    return narrowResolverNotes(error.shape.reasons).includes("source missing")
+      ? failedCandidate(options, notes, ["source missing"])
+      : skippedCandidate(options, notes, ["no longer installable"]);
+  }
+
+  return failedCandidate(options, notes, [], cause);
 }
 
 function skippedCandidate(
@@ -442,6 +598,26 @@ function skippedCandidate(
     fromVersion: options.fromVersion,
     notes: [...notes],
     reasons: [...reasons],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  };
+}
+
+/** UPR-03: a candidate failure names the installed version it left in place. */
+function failedCandidate(
+  options: { readonly plugin: string; readonly fromVersion: string },
+  notes: readonly string[],
+  reasons: readonly ContentReason[],
+  cause?: Error,
+): PreflightFailedOutcome {
+  return {
+    partition: "failed",
+    name: options.plugin,
+    fromVersion: options.fromVersion,
+    notes: [...notes],
+    reasons: [...reasons],
+    ...(cause !== undefined && { cause }),
     declaresAgents: false,
     declaresMcp: false,
     declaresWorkflows: false,
@@ -469,9 +645,9 @@ interface StaticPreflightRowBase {
  * candidate.
  *
  * `fromVersion` is reachable on the `skipped` partition only. A `failed` row is
- * one the plugin is absent from the manifest for, so there is no install record
- * to read a version from; pinning the field `never` there keeps a version arrow
- * off a row for a plugin that was never installed.
+ * one for a plugin with no install record (UPR-04), so there is no record to
+ * read a version from; pinning the field `never` there keeps a version arrow
+ * off a row for a plugin that is not installed.
  */
 type StaticPreflightRowOptions =
   | (StaticPreflightRowBase & { readonly partition: "failed"; readonly fromVersion?: never })
@@ -504,29 +680,31 @@ function staticPreflightRow(
   };
 }
 
-function triageUpdateMembership(
+async function triageUpdateMembership(
   plugin: string,
-  record: PluginStateRecord | undefined,
-  lookup: ReturnType<typeof lookupDeclaredPlugin>,
-): UpdatePreflightOutcome | { readonly record: PluginStateRecord; readonly entry: PluginEntry } {
+  marketplace: ExtensionState["marketplaces"][string],
+): Promise<
+  UpdatePreflightOutcome | { readonly record: PluginStateRecord; readonly entry: PluginEntry }
+> {
+  const record = ownValue(marketplace.plugins, plugin);
   if (record === undefined) {
-    return lookup.kind === "absent"
-      ? // Not installed AND absent from the manifest. No `fromVersion` -- there
-        // is no install record to read a version from.
-        staticPreflightRow({
-          partition: "failed",
-          plugin,
-          notes: ["not in manifest"],
-          reason: "not in manifest",
-        })
-      : staticPreflightRow({
-          partition: "skipped",
-          plugin,
-          notes: ["not installed"],
-          reason: "not installed",
-        });
+    // UPR-04: the record is checked before the manifest is read, as Claude
+    // Code does, so a plugin with no install record fails as not installed
+    // whether the manifest lists it, omits it, or cannot be read -- the row
+    // `uninstall` renders. No `fromVersion`: there is no record to read a
+    // version from.
+    return staticPreflightRow({
+      partition: "failed",
+      plugin,
+      notes: ["not installed"],
+      reason: "not installed",
+    });
   }
 
+  const lookup = lookupDeclaredPlugin(
+    await loadMarketplaceManifest(marketplace.manifestPath),
+    plugin,
+  );
   if (lookup.kind === "absent") {
     return staticPreflightRow({
       partition: "skipped",
@@ -548,12 +726,14 @@ function disabledPinProjection(
   version: string,
   resolvedSource: string,
   resolvedSha: string | undefined,
+  resolvedVersion: string | undefined,
   compatibility: PluginStateRecord["compatibility"],
 ): string {
   return JSON.stringify([
     version,
     resolvedSource,
     resolvedSha ?? null,
+    resolvedVersion ?? null,
     compatibility.installable,
     [...compatibility.notes],
     [...compatibility.supported],
@@ -580,6 +760,7 @@ function nextDisabledPin(preflight: PreparedPluginUpdate): {
       preflight.toVersion,
       preflight.installable.pluginRoot,
       preflight.resolvedSha,
+      preflight.resolvedVersion,
       compatibility,
     ),
   };
@@ -591,6 +772,7 @@ function disabledRefreshWouldWrite(preflight: PreparedPluginUpdate): boolean {
     preflight.record.version,
     preflight.record.resolvedSource,
     preflight.record.resolvedSha,
+    preflight.record.resolvedVersion,
     preflight.record.compatibility,
   );
   return next.projection !== current;
@@ -603,7 +785,10 @@ async function refreshDisabledRecord(
   return withLockedStateTransaction(
     options.locations,
     async (transaction) => {
-      const record = transaction.state.marketplaces[options.marketplace]?.plugins[options.plugin];
+      const record = ownValue(
+        ownValue(transaction.state.marketplaces, options.marketplace)?.plugins,
+        options.plugin,
+      );
       if (record === undefined) {
         return false;
       }
@@ -613,10 +798,24 @@ async function refreshDisabledRecord(
         record.version,
         record.resolvedSource,
         record.resolvedSha,
+        record.resolvedVersion,
         record.compatibility,
       );
       if (next.projection === current) {
         return false;
+      }
+
+      // A disabled update saves its new pin without running the package step.
+      // Invalidate our old packages under the lock so enable reads the new lockfile.
+      if (
+        record.resolvedSource === preflight.installable.pluginRoot &&
+        (record.version !== preflight.toVersion || record.resolvedSha !== preflight.resolvedSha)
+      ) {
+        await removeInstalledPackages(
+          DEFAULT_PACKAGE_INSTALL_OPS,
+          options.locations,
+          record.resolvedSource,
+        );
       }
 
       record.version = preflight.toVersion;
@@ -628,6 +827,12 @@ async function refreshDisabledRecord(
         delete record.resolvedSha;
       } else {
         record.resolvedSha = preflight.resolvedSha;
+      }
+
+      if (preflight.resolvedVersion === undefined) {
+        delete record.resolvedVersion;
+      } else {
+        record.resolvedVersion = preflight.resolvedVersion;
       }
 
       record.compatibility = next.compatibility;
@@ -660,12 +865,18 @@ async function refreshDisabledPluginUpdate(
     } catch (err) {
       // Clone cleanup is hygienic and retries on a later lifecycle operation.
       hookDebugLog(
-        `refreshDisabledPluginUpdate: clone cleanup failed for ${options.plugin}: ${errorMessage(err)}`,
+        `refreshDisabledPluginUpdate: clone cleanup failed for ${options.plugin}: ` +
+          errorMessage(err),
       );
     }
   }
 
-  if (preflight.toVersion === preflight.fromVersion) {
+  if (
+    isSameRevision(preflight.record, preflight.toVersion, preflight.resolvedSha, {
+      resolvedVersion: preflight.resolvedVersion,
+      searched: options.policy.searchReleaseTags,
+    })
+  ) {
     return {
       partition: "unchanged",
       name: options.plugin,
@@ -691,7 +902,7 @@ async function refreshDisabledPluginUpdate(
 
 /** What candidate resolution reaches once a pin (if any) has been threaded through it. */
 interface PinnedUpdateCandidateResolution {
-  readonly candidate: MaterializablePlugin | PluginUpdateSkippedOutcome;
+  readonly candidate: MaterializablePlugin | PluginUpdateSkippedOutcome | PreflightFailedOutcome;
   readonly resolvedSha: string | undefined;
   readonly pin: UpdateTagPin | undefined;
 }
@@ -712,6 +923,7 @@ async function resolvePinnedUpdateCandidate(
     readonly fromVersion: string;
     readonly partial: boolean;
     readonly locations: ScopedLocations;
+    readonly cloneCandidates?: Set<string>;
   },
   pathPinProbe: typeof materializeMarketplaceTagClone | undefined,
 ): Promise<PinnedUpdateCandidateResolution> {
@@ -745,19 +957,67 @@ async function resolvePinnedUpdateCandidate(
  */
 function postFetchGuard(
   verdict: UpdateConstraintVerdict,
-  toVersion: string,
+  candidate: { readonly toVersion: string; readonly resolvedSha: string | undefined },
   base: { readonly plugin: string; readonly fromVersion: string },
-): PluginUpdateSkippedOutcome | undefined {
+  expectVersion: string | undefined,
+): PluginUpdateSkippedOutcome | PreflightFailedOutcome | undefined {
+  const { toVersion, resolvedSha } = candidate;
+  // UPD-DEP-D1: a dependency plan judged this move at `expectVersion`; any
+  // other candidate is a version the plan never judged, so the move fails.
+  if (expectVersion !== undefined && toVersion !== expectVersion) {
+    const mismatch = `version ${toVersion} is not version ${expectVersion}`;
+    const note = `${mismatch}, which the dependency plan chose`;
+    return failedCandidate(base, [note], [], new Error(note));
+  }
+
   if (verdict.kind !== "admits" || verdict.pin !== undefined) {
     return undefined;
   }
 
-  const stageTwo = admitResolvedVersion(verdict, toVersion);
+  // GV-01: the range reads the declared version, never the commit a pinned
+  // `anthropic-plugin-directory` plugin's recorded version carries.
+  const stageTwo = admitResolvedVersion(verdict, withoutTagCommit(toVersion, resolvedSha));
   if (stageTwo.kind === "admitted") {
     return undefined;
   }
 
   return skippedCandidate(base, [stageTwo.cause], ["dependents constrain"]);
+}
+
+/**
+ * GV-01: Claude Code's update counts a plugin directory plugin up to date when
+ * the commit its catalog lists is the one the record holds, with no fetch and
+ * before its post-fetch range check (`updatePluginOp`), so a dependent's range
+ * its version falls outside does not hold it. Its row names no range.
+ * `reinstall` re-materializes the recorded revision, so it reads no shortcut.
+ * GV-02: a record from before GV-01 lacks the pin in its version, and still
+ * moves once to the pinned form.
+ */
+function unchangedDirectoryPin(
+  options: PreparePluginUpdateOptions,
+  triaged: { readonly record: PluginStateRecord; readonly entry: PluginEntry },
+): PluginUpdateUnchangedOutcome | undefined {
+  const { record } = triaged;
+  const pin = listedDirectoryPin(parsePluginSource(triaged.entry.source), options.marketplace);
+  if (
+    !options.policy.skipSameRevision ||
+    pin === undefined ||
+    pin !== record.resolvedSha ||
+    !versionNamesCommit(record.version, pin)
+  ) {
+    return undefined;
+  }
+
+  return {
+    partition: "unchanged",
+    name: options.plugin,
+    fromVersion: record.version,
+    toVersion: record.version,
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+  };
 }
 
 /**
@@ -767,13 +1027,13 @@ function postFetchGuard(
  * on this file.
  */
 function buildUpdateAuth(options: PreparePluginUpdateOptions): {
-  readonly ctx?: NotificationContext;
+  readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
   readonly credentialOps: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
 } {
   return {
-    ...(options.ctx !== undefined && { ctx: options.ctx }),
+    ...(options.notification !== undefined && { notification: options.notification }),
     credentialOps: options.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
     ...(options.deviceFlowHttp !== undefined && { deviceFlowHttp: options.deviceFlowHttp }),
     ...(options.authMemo !== undefined && { authMemo: options.authMemo }),
@@ -802,10 +1062,12 @@ function constraintFromVerdict(
  */
 function constraintGateOptions(
   options: PreparePluginUpdateOptions,
-  base: Omit<UpdateConstraintOptions, "marketplaceTagMemo" | "seam" | "tagMemo">,
+  base: Omit<UpdateConstraintOptions, "marketplaceTagMemo" | "requesters" | "seam" | "tagMemo">,
 ): UpdateConstraintOptions {
   return {
     ...base,
+    ...(options.requesters !== undefined && { requesters: options.requesters }),
+    excludedVersions: options.excludedVersions,
     ...(options.constraintTagMemo !== undefined && { tagMemo: options.constraintTagMemo }),
     ...(options.constraintMarketplaceTagMemo !== undefined && {
       marketplaceTagMemo: options.constraintMarketplaceTagMemo,
@@ -813,12 +1075,27 @@ function constraintGateOptions(
   };
 }
 
+/**
+ * D-23: the gate a caller injected, else the one its policy selects. Kept out
+ * of `preparePluginUpdate`'s own body for the same cognitive-complexity reason
+ * as `resolvePinnedUpdateCandidate` above.
+ */
+function selectConstraintGate(
+  options: PreparePluginUpdateOptions,
+): typeof evaluateUpdateConstraint {
+  if (options.constraintGate !== undefined) {
+    return options.constraintGate;
+  }
+
+  return options.policy.searchReleaseTags ? evaluateUpdateConstraint : evaluateCatalogConstraint;
+}
+
 /** Resolves, validates, and classifies one plugin before any staged replacement. */
 export async function preparePluginUpdate(
   options: PreparePluginUpdateOptions,
 ): Promise<PreparedPluginUpdate | UpdatePreflightOutcome> {
   const state = await loadState(options.locations.extensionRoot);
-  const marketplace = state.marketplaces[options.marketplace];
+  const marketplace = ownValue(state.marketplaces, options.marketplace);
   if (marketplace === undefined) {
     return staticPreflightRow({
       partition: "skipped",
@@ -828,16 +1105,12 @@ export async function preparePluginUpdate(
     });
   }
 
-  const manifest = await loadMarketplaceManifest(marketplace.manifestPath);
-  const triaged = triageUpdateMembership(
-    options.plugin,
-    marketplace.plugins[options.plugin],
-    lookupDeclaredPlugin(manifest, options.plugin),
-  );
+  const triaged = await triageUpdateMembership(options.plugin, marketplace);
   if ("partition" in triaged) {
     return triaged;
   }
 
+  options.onRecord?.(triaged.record.version);
   // AUTH-09: ONE credential composition in this function, shared by the
   // constraint gate and the clone probe below.
   const auth = buildUpdateAuth(options);
@@ -847,7 +1120,7 @@ export async function preparePluginUpdate(
   // verdict must never reach the clone probe). Every other constraint branch
   // stays inside the leaf -- `preparePluginUpdate` is already close to
   // ESLint's cognitive-complexity cap.
-  const constraintGate = options.constraintGate ?? evaluateUpdateConstraint;
+  const constraintGate = selectConstraintGate(options);
   const verdict = await constraintGate(
     constraintGateOptions(options, {
       plugin: options.plugin,
@@ -867,14 +1140,22 @@ export async function preparePluginUpdate(
     );
   }
 
+  const listedAtRecord = unchangedDirectoryPin(options, triaged);
+  if (listedAtRecord !== undefined) {
+    return listedAtRecord;
+  }
+
   const clone = makeUpdateCloneProbe(
     options.cloneCacheSeam ?? {
       resolvePluginPin,
       materializePluginClone,
       materializeOrRefreshPluginMirror,
+      materializePluginCommitCopy,
     },
     options.locations,
     auth,
+    options.policy.refreshSource,
+    options.cloneCandidates,
   );
   const { candidate, resolvedSha, pin } = await resolvePinnedUpdateCandidate(
     triaged.entry,
@@ -886,6 +1167,9 @@ export async function preparePluginUpdate(
       fromVersion: triaged.record.version,
       partial: options.partial === true || widensPartialGate(triaged.record),
       locations: options.locations,
+      ...(options.cloneCandidates !== undefined && {
+        cloneCandidates: options.cloneCandidates,
+      }),
     },
     options.pathPinProbe,
   );
@@ -896,19 +1180,32 @@ export async function preparePluginUpdate(
   const toVersion = await deriveUpdateToVersion(
     triaged.entry,
     candidate,
+    { marketplaceName: options.marketplace, marketplaceRoot: marketplace.marketplaceRoot },
     resolvedSha,
-    pin?.version,
+    pin,
   );
 
-  const stageTwoHold = postFetchGuard(verdict, toVersion, {
-    plugin: options.plugin,
-    fromVersion: triaged.record.version,
-  });
+  const stageTwoHold = postFetchGuard(
+    verdict,
+    { toVersion, resolvedSha },
+    { plugin: options.plugin, fromVersion: triaged.record.version },
+    options.expectVersion,
+  );
   if (stageTwoHold !== undefined) {
     return stageTwoHold;
   }
 
-  if (toVersion === triaged.record.version && !isRecordedButDisabled(triaged.record)) {
+  if (
+    options.policy.skipSameRevision &&
+    !isRecordedButDisabled(triaged.record) &&
+    isRecordedCandidate(triaged.record, {
+      toVersion,
+      resolvedSha,
+      pluginRoot: candidate.pluginRoot,
+      resolvedVersion: pin?.version,
+      searchedReleaseTags: options.policy.searchReleaseTags,
+    })
+  ) {
     return {
       partition: "unchanged",
       name: options.plugin,
@@ -935,10 +1232,37 @@ export async function preparePluginUpdate(
     // back to the verdict this preflight already evaluated.
     constraint: constraintFromVerdict(verdict),
     ...(resolvedSha !== undefined && { resolvedSha }),
+    ...(pin !== undefined && { resolvedVersion: pin.version }),
   };
-  return isRecordedButDisabled(triaged.record)
-    ? refreshDisabledPluginUpdate(options, prepared, constraintFromVerdict(verdict))
+  return isRecordedButDisabled(triaged.record) && options.judgeOnly !== true
+    ? finishDisabledPreflight(options, prepared, constraintFromVerdict(verdict))
     : prepared;
+}
+
+/**
+ * D-05 / D-18-05: the disabled-record pin refresh is update's alone. A policy
+ * that re-materializes the recorded revision (reinstall's) reaches a disabled
+ * record only when it was disabled after the verb read it, and skips it as
+ * `already disabled` without writing the record.
+ */
+async function finishDisabledPreflight(
+  options: PreparePluginUpdateOptions,
+  prepared: PreparedPluginUpdate,
+  constraint: UpdateConstraintDisclosure | undefined,
+): Promise<PluginUpdateSkippedOutcome | PluginUpdateUnchangedOutcome> {
+  if (!options.policy.skipSameRevision) {
+    return {
+      partition: "skipped",
+      name: options.plugin,
+      notes: [],
+      reasons: ["already disabled"],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    };
+  }
+
+  return refreshDisabledPluginUpdate(options, prepared, constraint);
 }
 
 /**

@@ -1,0 +1,3312 @@
+import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import { chmod, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { createRequire, syncBuiltinESMExports } from "node:module";
+import path from "node:path";
+import test from "node:test";
+
+import * as git from "isomorphic-git";
+
+import { canonicalCloneUrl } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
+import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import {
+  installedPluginOutcome,
+  ledgerDegradationSignals,
+  previewInstall,
+  runInstallLedger,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import {
+  loadState,
+  saveState,
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import {
+  AgentTargetOccupiedError,
+  McpConfigFileError,
+  McpServerKeyCollisionError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
+import {
+  CrossPluginConflictError,
+  DirectoryPinUnsatisfiedError,
+  InstallMarketplaceAddError,
+  InvalidMarketplaceManifestError,
+  ManualRecoveryError,
+  PluginShapeError,
+  ReservedMarketplaceNameError,
+  StaleSourceCloneError,
+  UnsupportedSourceError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { runPhases } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
+import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
+
+import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
+import type {
+  InstallFailureCapture,
+  InstallLedgerOptions,
+  InstallLedgerSummary,
+  InstallLedgerTransaction,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
+import type { PackageInstallOps } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts";
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { Phase } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
+import type { TestContext } from "node:test";
+
+function notificationContext(): NotificationContext {
+  return { mode: "tui", ui: { notify: () => undefined } };
+}
+
+/**
+ * The plugin component sources a case needs on disk. A bridge whose kind is
+ * absent here prepares a `noop`, and a `noop` commit returns before its
+ * cleanup runs -- so a case that drives a bridge's commit path at all must
+ * seed at least one component of that kind.
+ */
+interface SeededComponents {
+  readonly skills?: readonly string[];
+  readonly commands?: readonly string[];
+  readonly agents?: readonly string[];
+  /** Workflow scripts, each declaring its own `meta.name` as the file stem. */
+  readonly workflows?: readonly string[];
+  /**
+   * Sources whose frontmatter block closes but whose inner YAML does not
+   * parse. The bridge synthesizes a degraded artifact and records the parse
+   * error rather than failing the install.
+   */
+  readonly malformedSkills?: readonly string[];
+  readonly malformedCommands?: readonly string[];
+}
+
+async function writeComponents(pluginRoot: string, components: SeededComponents): Promise<void> {
+  for (const skill of components.skills ?? []) {
+    const skillDir = path.join(pluginRoot, "skills", skill);
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(path.join(skillDir, "SKILL.md"), `---\nname: ${skill}\n---\n\nBody.\n`);
+  }
+
+  for (const command of components.commands ?? []) {
+    await mkdir(path.join(pluginRoot, "commands"), { recursive: true });
+    await writeFile(path.join(pluginRoot, "commands", `${command}.md`), `# ${command}\nBody.\n`);
+  }
+
+  for (const agent of components.agents ?? []) {
+    await mkdir(path.join(pluginRoot, "agents"), { recursive: true });
+    await writeFile(
+      path.join(pluginRoot, "agents", `${agent}.md`),
+      `---\nname: ${agent}\ndescription: ${agent} agent\ntools: Read,Grep\n---\n\nBody.\n`,
+    );
+  }
+
+  for (const workflow of components.workflows ?? []) {
+    await mkdir(path.join(pluginRoot, "workflows"), { recursive: true });
+    await writeFile(
+      path.join(pluginRoot, "workflows", `${workflow}.js`),
+      `export const meta = { name: "${workflow}", description: "${workflow} workflow" };\n`,
+    );
+  }
+
+  // `name: [unterminated` closes its `---` block but is not parseable YAML.
+  for (const skill of components.malformedSkills ?? []) {
+    const skillDir = path.join(pluginRoot, "skills", skill);
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(path.join(skillDir, "SKILL.md"), `---\nname: [unterminated\n---\n\nBody.\n`);
+  }
+
+  for (const command of components.malformedCommands ?? []) {
+    await mkdir(path.join(pluginRoot, "commands"), { recursive: true });
+    await writeFile(
+      path.join(pluginRoot, "commands", `${command}.md`),
+      `---\nname: [unterminated\n---\n\nBody.\n`,
+    );
+  }
+}
+
+interface SeedOptions {
+  readonly preinstalled?: boolean;
+  readonly components?: SeededComponents;
+  /** Extra members merged into the plugin's own `.claude-plugin/plugin.json`. */
+  readonly pluginJson?: Record<string, unknown>;
+  /** Written to `<pluginRoot>/hooks/hooks.json`, which is what populates `hooksConfigPath`. */
+  readonly hooksJson?: object;
+  /** Written to `<pluginRoot>/.mcp.json`, which is what gives the mcp phase work to do. */
+  readonly mcpServers?: Record<string, unknown>;
+  /**
+   * CMP-3: park the marketplace record in USER-scope state on disk and hand the
+   * caller an EMPTY project state, so the project-target install has to fall
+   * back to the user-scope source and adopt a clone of it.
+   */
+  readonly marketplaceScope?: "user" | "project";
+  /**
+   * A git-backed `source` for the manifest entry. The plugin tree then lives at
+   * `<cwd>/repo-fixture` -- where a clone would put it -- rather than under the
+   * marketplace root, so the only way to reach it is the resolver's
+   * `resolveGitPluginRoot` callback.
+   */
+  readonly gitSource?: unknown;
+  /** The marketplace's own name; defaults to `marketplace`. */
+  readonly marketplaceName?: string;
+  /** The plugin's name in its entry and its `plugin.json`; defaults to `empty`. */
+  readonly pluginName?: string;
+  /** The marketplace record's stored source; defaults to `./marketplace`. */
+  readonly marketplaceSource?: ExtensionState["marketplaces"][string]["source"];
+}
+
+async function seedPlugin(
+  cwd: string,
+  options: SeedOptions = {},
+): Promise<{ readonly pluginRoot: string; readonly state: ExtensionState }> {
+  const marketplaceName = options.marketplaceName ?? "marketplace";
+  const pluginName = options.pluginName ?? "empty";
+  const marketplaceRoot = path.join(cwd, "marketplace");
+  const pluginRoot =
+    options.gitSource === undefined
+      ? path.join(marketplaceRoot, "plugins", "empty")
+      : path.join(cwd, "repo-fixture");
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: pluginName, version: "0.0.1", ...options.pluginJson }),
+  );
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: marketplaceName,
+      plugins: [{ name: pluginName, source: options.gitSource ?? "./plugins/empty" }],
+    }),
+  );
+  await writeComponents(pluginRoot, options.components ?? {});
+  if (options.hooksJson !== undefined) {
+    await mkdir(path.join(pluginRoot, "hooks"), { recursive: true });
+    await writeFile(
+      path.join(pluginRoot, "hooks", "hooks.json"),
+      JSON.stringify(options.hooksJson),
+    );
+  }
+
+  if (options.mcpServers !== undefined) {
+    await writeFile(
+      path.join(pluginRoot, ".mcp.json"),
+      JSON.stringify({ mcpServers: options.mcpServers }),
+    );
+  }
+
+  const state: ExtensionState = {
+    schemaVersion: 2,
+    marketplaces: {
+      [marketplaceName]: {
+        name: marketplaceName,
+        scope: options.marketplaceScope ?? "project",
+        source: options.marketplaceSource ?? pathSource("./marketplace"),
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot,
+        plugins:
+          options.preinstalled === true
+            ? {
+                empty: {
+                  version: "recorded",
+                  resolvedSource: pluginRoot,
+                  compatibility: {
+                    installable: true,
+                    notes: [],
+                    supported: [],
+                    unsupported: [],
+                  },
+                  resources: {
+                    skills: [],
+                    prompts: [],
+                    agents: [],
+                    hooks: [],
+                    mcpServers: [],
+                    workflows: [],
+                  },
+                  enabled: false,
+                  provenance: "explicit",
+                  installedAt: "2026-01-01T00:00:00.000Z",
+                  updatedAt: "2026-01-01T00:00:00.000Z",
+                },
+              }
+            : {},
+      },
+    },
+  };
+  const scope = options.marketplaceScope ?? "project";
+  const locations = locationsFor(scope, cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await saveState(locations.extensionRoot, { ...state, marketplaces: { ...state.marketplaces } });
+  if (scope === "user") {
+    return { pluginRoot, state: { marketplaces: {}, schemaVersion: 2 } };
+  }
+
+  return { pluginRoot, state: await loadState(locations.extensionRoot) };
+}
+
+test("returns the marketplace-absent discriminant without mutating state", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-absent-");
+  const locations = locationsFor("project", environment.cwd);
+  const state: ExtensionState = { marketplaces: {}, schemaVersion: 2 };
+
+  // act
+  const ledgerOutcome = await runInstallLedger(state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "missing",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.deepStrictEqual(ledgerOutcome, { kind: "marketplace-absent" });
+  assert.deepStrictEqual(state, { marketplaces: {}, schemaVersion: 2 });
+});
+
+test("projects the complete empty-plugin summary and preserves a caller pin", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-summary-");
+  const seeded = await seedPlugin(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    pinVersionOverride: "pinned-by-caller",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.deepStrictEqual(ledgerOutcome, {
+    kind: "installed",
+    summary: {
+      agentForeignFailures: [],
+      bridgeWarnings: [],
+      cwd: environment.cwd,
+      discoveryWarnings: [],
+      frontmatterDegradations: [],
+      locations,
+      marketplace: "marketplace",
+      mcpConfigNotices: [],
+      plugin: "empty",
+      pluginDataDir: path.join(locations.dataRoot, "marketplace", "empty"),
+      resolved: {
+        componentPaths: { agents: [], commands: [], skills: [], workflows: [] },
+        defaultEnabled: true,
+        installable: true,
+        mcpServers: {},
+        name: "empty",
+        notes: [],
+        pluginRoot: seeded.pluginRoot,
+        state: "installable",
+        supported: [],
+        unsupported: [],
+      },
+      stagedAgentNames: [],
+      stagedCommandNames: [],
+      stagedMcpServerNames: [],
+      stagedSkillNames: [],
+      // WLIF-05: a plugin declaring no workflows projects an EMPTY array, not
+      // an absent key. `deepStrictEqual` over the whole summary is what makes
+      // that distinction assertable -- a per-key assertion passes for an
+      // omitted member too, and an omitted member is a materialization
+      // reporting nothing about an axis rather than reporting nothing on it.
+      stagedWorkflowNames: [],
+      version: "pinned-by-caller",
+    },
+  });
+  assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty?.version, "pinned-by-caller");
+
+  assert.equal(ledgerOutcome.kind, "installed");
+  assert.deepStrictEqual(ledgerDegradationSignals(ledgerOutcome.summary), {});
+  assert.deepStrictEqual(installedPluginOutcome(ledgerOutcome.summary, [], false), {
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    resourcesChanged: false,
+    status: "installed",
+    version: "pinned-by-caller",
+  });
+
+  const richSummary = {
+    ...ledgerOutcome.summary,
+    frontmatterDegradations: [
+      { generatedName: "broken", kind: "skill" as const, parseError: "bad yaml" },
+      { generatedName: "also-broken", kind: "skill" as const, parseError: "bad yaml" },
+      { generatedName: "broken-command", kind: "command" as const, parseError: "bad yaml" },
+    ],
+    resolved: {
+      ...ledgerOutcome.summary.resolved,
+      orphanRewake: true,
+      state: "partially-available" as const,
+      unsupported: ["hooks"],
+    },
+    stagedAgentNames: ["agent"],
+    stagedCommandNames: ["command"],
+    stagedMcpServerNames: ["server"],
+    stagedSkillNames: ["skill"],
+    stagedWorkflowNames: ["workflow"],
+  };
+  assert.deepStrictEqual(ledgerDegradationSignals(richSummary), {
+    degradedKinds: ["skill", "command"],
+    orphanRewake: true,
+  });
+  assert.deepStrictEqual(installedPluginOutcome(richSummary, ["warning"], true), {
+    declaresAgents: true,
+    declaresMcp: true,
+    declaresWorkflows: true,
+    degradedKinds: ["skill", "command"],
+    landedDisabled: true,
+    orphanRewake: true,
+    postCommitWarnings: ["warning"],
+    resourcesChanged: false,
+    status: "installed",
+    unsupported: ["hooks"],
+    version: "pinned-by-caller",
+  });
+});
+
+test("captures the resolved version when a concurrent record aborts state commit", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-plugin-race-");
+  const seeded = await seedPlugin(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+  const marketplace = seeded.state.marketplaces.marketplace;
+  assert.ok(marketplace !== undefined);
+  const racedRecord: ExtensionState["marketplaces"][string]["plugins"][string] = {
+    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    enabled: true,
+    provenance: "explicit",
+    installedAt: "2026-01-01T00:00:00.000Z",
+    resolvedSource: "/raced/plugin",
+    resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [], workflows: [] },
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    version: "raced",
+  };
+  let pluginReads = 0;
+  marketplace.plugins = new Proxy(marketplace.plugins, {
+    getOwnPropertyDescriptor(target, property): PropertyDescriptor | undefined {
+      if (property === "empty") {
+        pluginReads += 1;
+        // Own-key reads (D-08-07), in order: the early-sanity check, the
+        // workflows phase's previous-names lookup, then the state commit. The
+        // raced record must appear at the LAST of the three so the failure is
+        // driven from `statePhase` -- the only phase that can fail after the
+        // workflows phase, which is the last bridge slot.
+        return pluginReads >= 3
+          ? { configurable: true, enumerable: true, value: racedRecord, writable: true }
+          : undefined;
+      }
+
+      return Reflect.getOwnPropertyDescriptor(target, property);
+    },
+    get(target, property, receiver): unknown {
+      return property === "empty" && pluginReads >= 3
+        ? racedRecord
+        : (Reflect.get(target, property, receiver) as unknown);
+    },
+  });
+  const capture = { rollbackPartials: [], version: undefined };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+      env: {},
+    },
+    capture,
+  );
+
+  // assert
+  await assert.rejects(operation, {
+    message: 'Plugin "empty" was installed concurrently in marketplace "marketplace".',
+    name: "ConcurrentInstallError",
+  });
+  assert.equal(pluginReads, 3);
+  assert.deepStrictEqual(capture, { rollbackPartials: [], version: "0.0.1" });
+});
+
+test("unwinds when the marketplace disappears before state commit", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-marketplace-race-");
+  const seeded = await seedPlugin(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+  const marketplace = seeded.state.marketplaces.marketplace;
+  assert.ok(marketplace !== undefined);
+  let marketplaceReads = 0;
+  seeded.state.marketplaces = new Proxy(seeded.state.marketplaces, {
+    get(target, property, receiver): unknown {
+      if (property === "marketplace") {
+        marketplaceReads += 1;
+        // The workflows phase's previous-names lookup adds one read ahead of
+        // the state commit's, so the marketplace must survive one read
+        // longer than it did with five phases.
+        return marketplaceReads >= 4 ? undefined : marketplace;
+      }
+
+      return Reflect.get(target, property, receiver) as unknown;
+    },
+  });
+  const capture = { rollbackPartials: [], version: undefined };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+      env: {},
+    },
+    capture,
+  );
+
+  // assert
+  await assert.rejects(operation, {
+    message: 'Marketplace "marketplace" disappeared from state during install of "empty".',
+    name: "Error",
+  });
+  assert.equal(marketplaceReads, 4);
+  assert.deepStrictEqual(capture, { rollbackPartials: [], version: "0.0.1" });
+});
+
+test("preserves installedAt while replacing an existing disabled record", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-existing-");
+  const seeded = await seedPlugin(environment.cwd, { preinstalled: true });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    allowExistingRecord: true,
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.equal(ledgerOutcome.kind, "installed");
+  assert.deepStrictEqual(seeded.state.marketplaces.marketplace?.plugins.empty, {
+    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    enabled: true,
+    provenance: "explicit",
+    installedAt: "2026-01-01T00:00:00.000Z",
+    resolvedSource: seeded.pluginRoot,
+    resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [], workflows: [] },
+    updatedAt: seeded.state.marketplaces.marketplace?.plugins.empty?.updatedAt,
+    version: "0.0.1",
+  });
+  assert.notEqual(
+    seeded.state.marketplaces.marketplace?.plugins.empty?.updatedAt,
+    "2026-01-01T00:00:00.000Z",
+  );
+});
+
+test("LOAD-02: re-materializing a held-down record drops the dependency marker", async (t) => {
+  // arrange -- a record a previous load-time pass disabled and stamped.
+  const environment = await createHermeticEnvironment(t, "install-outcome-lift-");
+  const seeded = await seedPlugin(environment.cwd, { preinstalled: true });
+  const locations = locationsFor("project", environment.cwd);
+  const seededRecord = seeded.state.marketplaces.marketplace?.plugins.empty;
+  assert.notEqual(seededRecord, undefined);
+  Object.assign(seededRecord ?? {}, { dependencyDisabled: true });
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    allowExistingRecord: true,
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert -- a key-presence check, because the contract is that the state
+  // phase never NAMES the field, not that it writes a falsy one.
+  assert.equal(ledgerOutcome.kind, "installed");
+  const record = seeded.state.marketplaces.marketplace?.plugins.empty;
+  assert.equal(record?.enabled, true);
+  assert.equal(Object.hasOwn(record ?? {}, "dependencyDisabled"), false);
+});
+
+/**
+ * The three `commitPrepared*` leak arms, one case per bridge.
+ *
+ * `commitPrepared{Skills,Commands,Agents}` answers a leak string only when its
+ * final `cleanupStaging` fails, and the ledger pushes that string onto
+ * `bridgeWarnings`. RCOV-02 / D-08-12: `InstallLedgerOptions.removalOps` is
+ * required and this module constructs nothing, so the arm is reachable from
+ * here by handing the ledger a collaborator that faults ONE bridge's staging
+ * cleanup and leaves the other two alone.
+ *
+ * A cleanup leak is a WARNING, not a failure -- the staged bytes are already
+ * renamed into place when it fires -- so each case pins that the install still
+ * landed and that the faulted bridge's own staged name survived.
+ *
+ * The bridge under test must have at least one component source: a bridge with
+ * nothing to stage prepares a `noop`, and a `noop` commit returns before its
+ * cleanup runs at all.
+ */
+interface FaultedCleanup {
+  readonly summary: InstallLedgerSummary;
+  /**
+   * The staging root the faulted cleanup was actually given. It is
+   * `<stagingDir>/<randomUUID()>`, minted inside the prepare call, so the case
+   * reads the target the port received rather than predicting it. Exactly one
+   * removal under that directory must have been attempted, or the expected
+   * message could be built from some other bridge's call.
+   *
+   * This is a stated trade against
+   * the typescript-unit-tests skill's "build expected values
+   * independently": the cases interpolate this value into their expected
+   * message, so the assertion cannot fail on a wrong path WITHIN the right
+   * staging parent. The parent is the part the case can pin and does -- the
+   * filter below accepts only a target under the bridge's own staging dir, and
+   * only one such target -- while the UUID segment is minted by production and
+   * is not predictable from outside it.
+   */
+  readonly stagingRoot: string;
+}
+
+async function installWithFaultedStagingCleanup(
+  t: TestContext,
+  options: {
+    readonly prefix: string;
+    readonly components: SeededComponents;
+    readonly stagingDir: (locations: ScopedLocations) => string;
+  },
+): Promise<FaultedCleanup> {
+  const environment = await createHermeticEnvironment(t, options.prefix);
+  const seeded = await seedPlugin(environment.cwd, { components: options.components });
+  const locations = locationsFor("project", environment.cwd);
+  const stagingDir = options.stagingDir(locations);
+  const removal = createRemovalOpsFake({
+    boundary: "memory",
+    rmParentErrors: [
+      [stagingDir, Object.assign(new Error("staging cleanup denied"), { code: "EACCES" })],
+    ],
+  });
+
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: removal.removalOps,
+    env: {},
+  });
+
+  assert.ok(ledgerOutcome.kind === "installed");
+  const attempted = removal.calls.rm
+    .map((call) => call.target)
+    .filter((target) => target.startsWith(`${stagingDir}${path.sep}`));
+  assert.equal(attempted.length, 1);
+  return { summary: ledgerOutcome.summary, stagingRoot: attempted[0] ?? "" };
+}
+
+test("surfaces the skills staging cleanup leak and still lands the install", async (t) => {
+  // arrange + act
+  const installed = await installWithFaultedStagingCleanup(t, {
+    prefix: "install-outcome-skills-leak-",
+    components: { skills: ["alpha"] },
+    stagingDir: (locations) => locations.skillsStagingDir,
+  });
+
+  // assert
+  assert.deepStrictEqual(installed.summary.bridgeWarnings, [
+    {
+      kind: "hygiene",
+      message: `failed to clean up skills staging directory at ${installed.stagingRoot}: staging cleanup denied`,
+    },
+  ]);
+  assert.deepStrictEqual(installed.summary.stagedSkillNames, ["empty-alpha"]);
+});
+
+test("surfaces the commands staging cleanup leak and still lands the install", async (t) => {
+  // arrange + act
+  const installed = await installWithFaultedStagingCleanup(t, {
+    prefix: "install-outcome-commands-leak-",
+    components: { commands: ["beta"] },
+    stagingDir: (locations) => locations.commandsStagingDir,
+  });
+
+  // assert
+  assert.deepStrictEqual(installed.summary.bridgeWarnings, [
+    {
+      kind: "hygiene",
+      message: `failed to clean up commands staging directory at ${installed.stagingRoot}: staging cleanup denied`,
+    },
+  ]);
+  assert.deepStrictEqual(installed.summary.stagedCommandNames, ["empty:beta"]);
+});
+
+// The workflows bridge binds its own removal ops rather than taking the
+// ledger's, so its staging-cleanup fault is planted on the module the bridge
+// reads (`node:fs/promises`) instead of on the injected fake. The `require`
+// handle is the same object the bridge's default import resolves to, and the
+// sync call republishes the patched binding to its named-import readers.
+const filesystemPromises = createRequire(import.meta.url)(
+  "node:fs/promises",
+) as typeof import("node:fs/promises");
+
+test("surfaces the workflows staging cleanup leak and still lands the install", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-workflows-leak-");
+  const seeded = await seedPlugin(environment.cwd, { components: { workflows: ["delta"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+  let leakedRoot: string | undefined;
+  t.mock.method(filesystemPromises, "rm", async (...args: Parameters<typeof originalRm>) => {
+    const target = String(args[0]);
+    if (target.startsWith(`${locations.workflowsStagingDir}${path.sep}`)) {
+      leakedRoot = target;
+      throw Object.assign(new Error("staging cleanup denied"), { code: "EACCES" });
+    }
+
+    return originalRm(...args);
+  });
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.ok(leakedRoot !== undefined);
+  assert.deepStrictEqual(ledgerOutcome.summary.bridgeWarnings, [
+    {
+      kind: "hygiene",
+      message: `failed to clean up workflows staging directory at ${leakedRoot}: staging cleanup denied`,
+    },
+  ]);
+  assert.deepStrictEqual(ledgerOutcome.summary.stagedWorkflowNames, ["empty:delta"]);
+});
+
+test("a failed workflows removal during rollback surfaces as its own partial rather than a clean unwind", async (t) => {
+  // arrange -- the state commit is what fails, AFTER the workflows phase
+  // placed its envelope, so the ledger's reverse walk reaches the workflows
+  // undo with a real envelope to unlink; that unlink is the planted fault.
+  const environment = await createHermeticEnvironment(t, "install-outcome-workflows-undo-");
+  const seeded = await seedPlugin(environment.cwd, { components: { workflows: ["delta"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const marketplace = seeded.state.marketplaces.marketplace;
+  assert.ok(marketplace !== undefined);
+  const racedRecord: ExtensionState["marketplaces"][string]["plugins"][string] = {
+    provenance: "explicit",
+    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    enabled: true,
+    installedAt: "2026-01-01T00:00:00.000Z",
+    resolvedSource: "/raced/plugin",
+    resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [], workflows: [] },
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    version: "raced",
+  };
+  let pluginReads = 0;
+  marketplace.plugins = new Proxy(marketplace.plugins, {
+    getOwnPropertyDescriptor(target, property): PropertyDescriptor | undefined {
+      if (property === "empty") {
+        pluginReads += 1;
+        return pluginReads >= 3
+          ? { configurable: true, enumerable: true, value: racedRecord, writable: true }
+          : undefined;
+      }
+
+      return Reflect.getOwnPropertyDescriptor(target, property);
+    },
+    get(target, property, receiver): unknown {
+      return property === "empty" && pluginReads >= 3
+        ? racedRecord
+        : (Reflect.get(target, property, receiver) as unknown);
+    },
+  });
+  const stuckPath = path.join(locations.workflowsSavedDir, "empty:delta.json");
+  const originalUnlink = filesystemPromises.unlink.bind(filesystemPromises);
+  t.mock.method(
+    filesystemPromises,
+    "unlink",
+    async (...args: Parameters<typeof originalUnlink>) => {
+      if (String(args[0]) === stuckPath) {
+        throw Object.assign(new Error("EPERM: operation not permitted"), { code: "EPERM" });
+      }
+
+      return originalUnlink(...args);
+    },
+  );
+  syncBuiltinESMExports();
+  t.after(() => {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+      env: {},
+    },
+    capture,
+  );
+
+  // assert -- the rollback partial wraps the state-commit race; the workflows
+  // undo's own failure rides along as the partial, naming the envelope it
+  // could not unlink, and the envelope is still on disk.
+  await assert.rejects(
+    operation,
+    (error: unknown) =>
+      error instanceof Error &&
+      error.cause instanceof Error &&
+      error.cause.name === "ConcurrentInstallError",
+  );
+  assert.deepStrictEqual(await readdir(locations.workflowsSavedDir), ["empty:delta.json"]);
+  const partial = capture.rollbackPartials[0];
+  assert.strictEqual(partial?.phase, "workflows");
+  assert.strictEqual(partial.cause?.name, "WorkflowsUnstageFailureError");
+  assert.match(partial.cause.message, /^empty:delta: /);
+});
+
+/**
+ * A transaction whose skills phase runs `afterSkills` once its own `do`
+ * resolves and whose commands phase then fails, so the ledger's reverse walk
+ * reaches the skills undo over committed skill directories.
+ */
+function commandsFailAfterSkills(afterSkills: () => Promise<void>): InstallLedgerTransaction {
+  return {
+    runPhases: <C>(phases: readonly Phase<C>[], ctx: C) =>
+      runPhases(
+        phases.map((phase): Phase<C> => {
+          if (phase.name === "skills") {
+            return {
+              ...phase,
+              do: async (c) => {
+                await phase.do(c);
+                await afterSkills();
+              },
+            };
+          }
+
+          return phase.name === "commands"
+            ? { ...phase, do: () => Promise.reject(new Error("commands phase failed")) }
+            : phase;
+        }),
+        ctx,
+      ),
+  };
+}
+
+function skillsLedgerOptions(cwd: string): InstallLedgerOptions {
+  return {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  };
+}
+
+test("D-PL6-20: a skills undo that cannot remove a skill names its directory as the leak", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-skills-undo-leak-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["alpha", "beta"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const stuckDir = path.join(locations.skillsTargetDir, "empty-beta");
+  const removalDenied = "EACCES: permission denied, rm 'empty-beta'";
+  let undoing = false;
+  const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+  t.mock.method(filesystemPromises, "rm", async (...args: Parameters<typeof originalRm>) => {
+    if (undoing && String(args[0]) === stuckDir) {
+      throw Object.assign(new Error(removalDenied), { code: "EACCES" });
+    }
+
+    return originalRm(...args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  const transaction = commandsFailAfterSkills(() => {
+    undoing = true;
+    return Promise.resolve();
+  });
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    skillsLedgerOptions(environment.cwd),
+    capture,
+    transaction,
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.strictEqual(error.message, "commands phase failed");
+    return true;
+  });
+  assert.deepStrictEqual(capture.rollbackPartials, [
+    {
+      phase: "skills",
+      msg: removalDenied,
+      cause: new ManualRecoveryError(removalDenied, [stuckDir]),
+    },
+  ]);
+  assert.deepStrictEqual(await readdir(locations.skillsTargetDir), ["empty-beta"]);
+});
+
+test("D-PL6-20: a skills undo keeps the removal failure's own cause under the leak list", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-skills-undo-cause-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["alpha", "beta"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const stuckDir = path.join(locations.skillsTargetDir, "empty-beta");
+  const removalDenied = "EACCES: permission denied, rm 'empty-beta'";
+  const rootCause = new Error("root cause");
+  let undoing = false;
+  const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+  t.mock.method(filesystemPromises, "rm", async (...args: Parameters<typeof originalRm>) => {
+    if (undoing && String(args[0]) === stuckDir) {
+      throw Object.assign(new Error(removalDenied, { cause: rootCause }), { code: "EACCES" });
+    }
+
+    return originalRm(...args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  const transaction = commandsFailAfterSkills(() => {
+    undoing = true;
+    return Promise.resolve();
+  });
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    skillsLedgerOptions(environment.cwd),
+    capture,
+    transaction,
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.strictEqual(error.message, "commands phase failed");
+    return true;
+  });
+  const partial = capture.rollbackPartials[0]?.cause;
+  assert.ok(partial instanceof ManualRecoveryError);
+  assert.deepStrictEqual(partial.leaks, [stuckDir]);
+  assert.strictEqual(partial.cause, rootCause);
+});
+
+test("D-PL6-20: a skills undo that fails but leaves no directory passes the failure through", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-skills-undo-clean-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["alpha"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const stagedDir = path.join(locations.skillsTargetDir, "empty-alpha");
+  const removalDenied = "EIO: i/o error, rm 'empty-alpha'";
+  let undoing = false;
+  const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+  t.mock.method(filesystemPromises, "rm", async (...args: Parameters<typeof originalRm>) => {
+    await originalRm(...args);
+
+    if (undoing && String(args[0]) === stagedDir) {
+      throw Object.assign(new Error(removalDenied), { code: "EIO" });
+    }
+  });
+  syncBuiltinESMExports();
+  t.after(() => {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  const transaction = commandsFailAfterSkills(() => {
+    undoing = true;
+    return Promise.resolve();
+  });
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    skillsLedgerOptions(environment.cwd),
+    capture,
+    transaction,
+  );
+
+  // assert
+  await assert.rejects(operation, /commands phase failed/);
+  assert.strictEqual(capture.rollbackPartials.length, 1);
+  const cause = capture.rollbackPartials[0]?.cause;
+  assert.ok(cause instanceof Error);
+  assert.ok(!(cause instanceof ManualRecoveryError));
+  assert.strictEqual(cause.message, removalDenied);
+});
+
+test("D-PL6-20: a skills undo keeps the unstage failure when probing the leftovers fails", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-skills-undo-probe-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["alpha"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const stagedDir = path.join(locations.skillsTargetDir, "empty-alpha");
+  const removalDenied = "EIO: i/o error, rm 'empty-alpha'";
+  let undoing = false;
+  let removalFailed = false;
+  const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+  const originalLstat = filesystemPromises.lstat.bind(filesystemPromises);
+  t.mock.method(filesystemPromises, "rm", async (...args: Parameters<typeof originalRm>) => {
+    if (undoing && String(args[0]) === stagedDir) {
+      removalFailed = true;
+      throw Object.assign(new Error(removalDenied), { code: "EIO" });
+    }
+
+    return originalRm(...args);
+  });
+  t.mock.method(filesystemPromises, "lstat", async (...args: Parameters<typeof originalLstat>) => {
+    if (removalFailed && String(args[0]) === stagedDir) {
+      throw Object.assign(new Error("EACCES: permission denied, lstat"), { code: "EACCES" });
+    }
+
+    return originalLstat(...args);
+  });
+  syncBuiltinESMExports();
+  t.after(() => {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  const transaction = commandsFailAfterSkills(() => {
+    undoing = true;
+    return Promise.resolve();
+  });
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    skillsLedgerOptions(environment.cwd),
+    capture,
+    transaction,
+  );
+
+  // assert
+  await assert.rejects(operation, /commands phase failed/);
+  assert.strictEqual(capture.rollbackPartials[0]?.msg, removalDenied);
+});
+
+test("PI-14: a skills undo that meets a symlink rethrows the containment refusal unwrapped", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-skills-undo-symlink-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["alpha"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const stagedDir = path.join(locations.skillsTargetDir, "empty-alpha");
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  const transaction = commandsFailAfterSkills(async () => {
+    await rm(stagedDir, { recursive: true });
+    await symlink("/nonexistent-decoy", stagedDir);
+  });
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    skillsLedgerOptions(environment.cwd),
+    capture,
+    transaction,
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof PathContainmentError);
+    return true;
+  });
+  assert.deepStrictEqual(capture.rollbackPartials, []);
+});
+
+test("surfaces the agents staging cleanup leak and still lands the install", async (t) => {
+  // arrange + act
+  const installed = await installWithFaultedStagingCleanup(t, {
+    prefix: "install-outcome-agents-leak-",
+    components: { agents: ["gamma"] },
+    stagingDir: (locations) => locations.agentsStagingDir,
+  });
+
+  // assert
+  assert.deepStrictEqual(installed.summary.bridgeWarnings, [
+    {
+      kind: "hygiene",
+      message: `failed to clean up agents staging directory at ${installed.stagingRoot}: staging cleanup denied`,
+    },
+  ]);
+  assert.deepStrictEqual(installed.summary.stagedAgentNames, ["pi-claude-marketplace-empty-gamma"]);
+});
+
+/**
+ * The preflight's three refusals and its two adoption arms. All five run
+ * BEFORE the ledger, so each is observed as the ledger's own throw or as the
+ * state mutation it made on the way through, not as a notification row --
+ * `install-flow.ts` owns the rendering and keeps its own cases for it.
+ */
+test("throws already-installed when a target-scope record exists and the caller did not opt in", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-already-");
+  const seeded = await seedPlugin(environment.cwd, { preinstalled: true });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const operation = runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof PluginShapeError);
+    assert.deepStrictEqual(error.shape, {
+      kind: "already-installed",
+      marketplace: "marketplace",
+      plugin: "empty",
+    });
+    assert.equal(
+      error.message,
+      'Plugin "empty" is already installed in marketplace "marketplace".',
+    );
+    return true;
+  });
+  // The refusal is a precondition, not a rollback: the recorded row is the one
+  // the fixture seeded, untouched.
+  assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty?.version, "recorded");
+});
+
+test("throws not-in-manifest for a plugin the cached manifest does not carry", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-not-in-manifest-");
+  const seeded = await seedPlugin(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const operation = runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "ghost",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof PluginShapeError);
+    assert.deepStrictEqual(error.shape, {
+      kind: "not-in-manifest",
+      marketplace: "marketplace",
+      plugin: "ghost",
+    });
+    assert.equal(error.message, 'Plugin "ghost" not found in marketplace "marketplace".');
+    return true;
+  });
+  assert.deepStrictEqual(seeded.state.marketplaces.marketplace?.plugins, {});
+});
+
+/** The add seam's `record`, as a case stubs it. */
+type RecordMarketplace = NonNullable<InstallLedgerOptions["marketplaceAdd"]>["record"];
+
+/**
+ * A `marketplaceAdd` seam around a stubbed `record`. Its `settle` belongs to
+ * the lock owner after a save, so the ledger body must never call it.
+ */
+function marketplaceAddSeam(
+  record: RecordMarketplace,
+): NonNullable<InstallLedgerOptions["marketplaceAdd"]> {
+  return { record, settle: () => Promise.reject(new Error("the ledger body never settles")) };
+}
+
+/** The ledger options of a project-target install of `empty@marketplace`. */
+function projectInstallOptions(cwd: string): InstallLedgerOptions {
+  return {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  };
+}
+
+test("D-PL5-28: installing from a marketplace recorded under a reserved name from a path source fails and writes nothing", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-reserved-name-");
+  const seeded = await seedPlugin(environment.cwd, { marketplaceName: "claude-plugins-official" });
+  const locations = locationsFor("project", environment.cwd);
+  const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+
+  // act
+  const operation = runInstallLedger(seeded.state, locations, {
+    ...projectInstallOptions(environment.cwd),
+    marketplace: "claude-plugins-official",
+  });
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof ReservedMarketplaceNameError);
+    assert.equal(
+      error.message,
+      "Marketplace \"claude-plugins-official\" is registered from an untrusted source: The name 'claude-plugins-official' is reserved for official Anthropic marketplaces and can only be used with GitHub sources from the 'anthropics' organization. To fix it, remove the marketplace and re-add it from the official source.",
+    );
+    return true;
+  });
+  assert.deepStrictEqual(seeded.state.marketplaces["claude-plugins-official"]?.plugins, {});
+  assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+});
+
+test("D-PL5-32: installing a relative entry of a hosted marketplace fails as not installable and writes nothing", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-hosted-relative-");
+  const catalogUrl = "https://h.example/acme/tools/marketplace.json";
+  const seeded = await seedPlugin(environment.cwd, {
+    marketplaceSource: { kind: "hosted", raw: catalogUrl, url: catalogUrl },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    projectInstallOptions(environment.cwd),
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof PluginShapeError);
+    assert.deepStrictEqual(error.shape, {
+      kind: "not-installable",
+      plugin: "empty",
+      reasons: [
+        "its marketplace entry path does not stay inside the marketplace directory (an absolute, climbing, network-shaped, backslash-containing or link-traversing entry, an entry of a fetched marketplace that resolves or opens outside its tree \u2014 or a relative entry in a url-catalog marketplace, which has no local directory)",
+      ],
+      partialable: false,
+      unsupportedKinds: [],
+    });
+    return true;
+  });
+  assert.deepStrictEqual(seeded.state.marketplaces.marketplace?.plugins, {});
+  assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+});
+
+test("CMP-3 / LAYER-07: a project install adds the user-scope marketplace to the project and installs from the project record", async (t) => {
+  // arrange: the user record's tree carries version 0.0.1, and the project
+  // record the add writes points at a second tree carrying 0.0.2.
+  const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-");
+  const seeded = await seedPlugin(environment.cwd, { marketplaceScope: "user" });
+  const projectTree = await seedPlugin(path.join(environment.cwd, "project-tree"), {
+    pluginJson: { version: "0.0.2" },
+  });
+  const projectRecord = projectTree.state.marketplaces.marketplace;
+  assert.ok(projectRecord !== undefined, "the fixture records the marketplace it seeds");
+  const userLocations = locationsFor("user", environment.cwd);
+  const userStateBefore = await loadState(userLocations.extensionRoot);
+  const locations = locationsFor("project", environment.cwd);
+  const cloneDir = path.join(locations.extensionRoot, "sources", "marketplace");
+  const recordCalls: Array<Parameters<RecordMarketplace>[0]> = [];
+  const addedMarketplaces: NonNullable<InstallLedgerOptions["addedMarketplaces"]> = [];
+  const options = projectInstallOptions(environment.cwd);
+  const credentials = createCredentialOpsFake({ boundary: "memory" });
+  const authMemo = new Map<string, AuthAttemptResult>();
+  const deviceFlow = createDeviceFlowFake({
+    boundary: "memory",
+    network: "disabled",
+    deviceCode: {
+      device_code: "MOCK_DEVICE_CODE",
+      expires_in: 900,
+      interval: 0,
+      user_code: "ABCD-1234",
+      verification_uri: "https://github.com/login/device",
+    },
+  });
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ...options,
+    credentialOps: credentials.credentialOps,
+    deviceFlowHttp: deviceFlow.http,
+    authMemo,
+    addedMarketplaces,
+    marketplaceAdd: marketplaceAddSeam((args) => {
+      recordCalls.push(args);
+      args.state.marketplaces.marketplace = { ...projectRecord, plugins: {} };
+      return Promise.resolve({ name: "marketplace", cloneDir });
+    }),
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.version, "0.0.2");
+  assert.equal(ledgerOutcome.summary.resolved.pluginRoot, projectTree.pluginRoot);
+  assert.deepStrictEqual(recordCalls, [
+    {
+      state: seeded.state,
+      locations,
+      source: { kind: "path", raw: "./marketplace", logical: "./marketplace" },
+      cwd: environment.cwd,
+      ctx: options.ctx,
+      run: options.run,
+      removalOps: options.removalOps,
+      credentialOps: credentials.credentialOps,
+      deviceFlowHttp: deviceFlow.http,
+      authMemo,
+    },
+  ]);
+  assert.deepStrictEqual(addedMarketplaces, [
+    { marketplace: "marketplace", rawSource: "./marketplace", cloneDir },
+  ]);
+  assert.equal(
+    seeded.state.marketplaces.marketplace?.marketplaceRoot,
+    projectRecord.marketplaceRoot,
+  );
+  assert.deepStrictEqual(Object.keys(seeded.state.marketplaces.marketplace?.plugins ?? {}), [
+    "empty",
+  ]);
+  assert.deepStrictEqual(await loadState(userLocations.extensionRoot), userStateBefore);
+});
+
+test("CMP-3 / LAYER-07: an add that records another marketplace name fails before any phase and keeps the clone listed", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-name-");
+  const seeded = await seedPlugin(environment.cwd, { marketplaceScope: "user" });
+  const locations = locationsFor("project", environment.cwd);
+  const cloneDir = path.join(locations.extensionRoot, "sources", "renamed");
+  const addedMarketplaces: NonNullable<InstallLedgerOptions["addedMarketplaces"]> = [];
+  const transaction = { runPhases: t.mock.fn(runPhases) };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ...projectInstallOptions(environment.cwd),
+      addedMarketplaces,
+      marketplaceAdd: marketplaceAddSeam((args) => {
+        args.state.marketplaces.renamed = {
+          name: "renamed",
+          scope: "project",
+          source: pathSource("./marketplace"),
+          addedFromCwd: environment.cwd,
+          manifestPath: path.join(cloneDir, ".claude-plugin", "marketplace.json"),
+          marketplaceRoot: cloneDir,
+          plugins: {},
+        };
+        return Promise.resolve({ name: "renamed", cloneDir });
+      }),
+    },
+    undefined,
+    transaction,
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof InvalidMarketplaceManifestError);
+    assert.equal(
+      error.message,
+      'Marketplace source "./marketplace" declares the marketplace "renamed", not "marketplace".',
+    );
+    return true;
+  });
+  assert.deepStrictEqual(addedMarketplaces, [
+    { marketplace: "renamed", rawSource: "./marketplace", cloneDir },
+  ]);
+  assert.deepStrictEqual(Object.keys(seeded.state.marketplaces), ["renamed"]);
+  assert.equal(transaction.runPhases.mock.callCount(), 0);
+});
+
+test("CMP-3 / LAYER-07: an add that throws propagates its error and writes no project record", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-throw-");
+  const seeded = await seedPlugin(environment.cwd, { marketplaceScope: "user" });
+  const locations = locationsFor("project", environment.cwd);
+  const addedMarketplaces: NonNullable<InstallLedgerOptions["addedMarketplaces"]> = [];
+  const transaction = { runPhases: t.mock.fn(runPhases) };
+  const addError = new Error("clone failed");
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ...projectInstallOptions(environment.cwd),
+      addedMarketplaces,
+      marketplaceAdd: marketplaceAddSeam(() => Promise.reject(addError)),
+    },
+    undefined,
+    transaction,
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => error === addError);
+  assert.deepStrictEqual(seeded.state, { marketplaces: {}, schemaVersion: 2 });
+  assert.deepStrictEqual(addedMarketplaces, []);
+  assert.equal(transaction.runPhases.mock.callCount(), 0);
+});
+
+test("CMP-3 / WR-04: an add failure the add classifies carries its reason and a path-free cause", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-stale-");
+  const seeded = await seedPlugin(environment.cwd, { marketplaceScope: "user" });
+  const locations = locationsFor("project", environment.cwd);
+  const cloneDir = path.join(locations.extensionRoot, "sources", "marketplace");
+
+  // act
+  const operation = runInstallLedger(seeded.state, locations, {
+    ...projectInstallOptions(environment.cwd),
+    marketplaceAdd: marketplaceAddSeam(() =>
+      Promise.reject(new StaleSourceCloneError(cloneDir, "marketplace")),
+    ),
+  });
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof InstallMarketplaceAddError);
+    assert.deepStrictEqual(
+      { reason: error.reason, message: error.message },
+      { reason: "stale clone", message: "stale source clone at marketplace" },
+    );
+    return true;
+  });
+  assert.deepStrictEqual(seeded.state, { marketplaces: {}, schemaVersion: 2 });
+});
+
+test("CMP-3 / D-79-03: an add that meets an authentication challenge keeps its own error", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-auth-");
+  const seeded = await seedPlugin(environment.cwd, { marketplaceScope: "user" });
+  const locations = locationsFor("project", environment.cwd);
+  const challenge = Object.assign(new Error("HTTP Error: 401"), {
+    code: "HttpError",
+    data: { statusCode: 401 },
+  });
+
+  // act
+  const operation = runInstallLedger(seeded.state, locations, {
+    ...projectInstallOptions(environment.cwd),
+    marketplaceAdd: marketplaceAddSeam(() => Promise.reject(challenge)),
+  });
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => error === challenge);
+});
+
+test("CMP-3 / LAYER-07: a user record whose source the add refuses fails as an unsupported source", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-unsupported-");
+  const seeded = await seedPlugin(environment.cwd, {
+    marketplaceScope: "user",
+    marketplaceSource: { kind: "unknown", raw: "not a source", reason: "unclassified" },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const operation = runInstallLedger(seeded.state, locations, {
+    ...projectInstallOptions(environment.cwd),
+    marketplaceAdd: marketplaceAddSeam(() =>
+      Promise.reject(new Error("a refused source is never recorded")),
+    ),
+  });
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof UnsupportedSourceError);
+    assert.equal(
+      error.message,
+      'Cannot add marketplace from "not a source": non-relative string source not a source cannot be classified',
+    );
+    return true;
+  });
+  assert.deepStrictEqual(seeded.state, { marketplaces: {}, schemaVersion: 2 });
+});
+
+test("CMP-3 / LAYER-07: a plugin the user record's manifest does not list fails before the add", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-unlisted-");
+  const seeded = await seedPlugin(environment.cwd, { marketplaceScope: "user" });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const operation = runInstallLedger(seeded.state, locations, {
+    ...projectInstallOptions(environment.cwd),
+    plugin: "ghost",
+    marketplaceAdd: marketplaceAddSeam(() =>
+      Promise.reject(new Error("an unlisted plugin adds no marketplace")),
+    ),
+  });
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof PluginShapeError);
+    assert.deepStrictEqual(error.shape, {
+      kind: "not-in-manifest",
+      plugin: "ghost",
+      marketplace: "marketplace",
+    });
+    return true;
+  });
+  assert.deepStrictEqual(seeded.state, { marketplaces: {}, schemaVersion: 2 });
+});
+
+test("CMP-3 / LAYER-07: an install with no list of added marketplaces still installs through the add", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-nolist-");
+  const seeded = await seedPlugin(environment.cwd, { marketplaceScope: "user" });
+  const userRecord = (await loadState(locationsFor("user", environment.cwd).extensionRoot))
+    .marketplaces.marketplace;
+  assert.ok(userRecord !== undefined, "the fixture records the marketplace it seeds");
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ...projectInstallOptions(environment.cwd),
+    marketplaceAdd: marketplaceAddSeam((args) => {
+      args.state.marketplaces.marketplace = { ...userRecord, scope: "project" };
+      return Promise.resolve({ name: "marketplace" });
+    }),
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.version, "0.0.1");
+  assert.deepStrictEqual(Object.keys(seeded.state.marketplaces.marketplace?.plugins ?? {}), [
+    "empty",
+  ]);
+});
+
+test("flags binaries as unsupported when the marketplace is an official one", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-official-");
+  const seeded = await seedPlugin(environment.cwd, {
+    marketplaceName: "claude-plugins-official",
+    marketplaceSource: {
+      kind: "github",
+      raw: "anthropics/claude-plugins-official",
+      owner: "anthropics",
+      repo: "claude-plugins-official",
+    },
+    pluginJson: { binaries: { tool: "https://example.com/tool" } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "claude-plugins-official",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+    partial: true,
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.resolved.state, "partially-available");
+  assert.deepStrictEqual(
+    ledgerOutcome.summary.resolved.state === "partially-available"
+      ? ledgerOutcome.summary.resolved.unsupported
+      : undefined,
+    ["binaries"],
+  );
+});
+
+test("--partial admits the partially-available arm the default gate refuses", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-partial-");
+  const seeded = await seedPlugin(environment.cwd, {
+    // D-64-06: declaring experimental kinds drives `resolveStrict` to the
+    // `partially-available` arm without any structural defect.
+    pluginJson: { experimental: { themes: "./themes", monitors: "./monitors.json" } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  const options = {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project" as const,
+    removalOps: createRemovalOps(),
+    env: {},
+  };
+
+  // act
+  const blocked = runInstallLedger(seeded.state, locations, options);
+
+  // assert
+  await assert.rejects(blocked, (error: unknown) => {
+    assert.ok(error instanceof PluginShapeError);
+    assert.equal(error.shape.kind, "not-installable");
+    return true;
+  });
+
+  // act: the same fixture with the widened gate
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ...options,
+    partial: true,
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.resolved.state, "partially-available");
+  // INV-1 / D-66-01: a partial install persists the REAL compatibility, so a
+  // later backfill can promote the record when the supported set grows.
+  assert.equal(
+    seeded.state.marketplaces.marketplace?.plugins.empty?.compatibility.installable,
+    false,
+  );
+});
+
+test("collects the per-source frontmatter degrade records from the skills and commands bridges", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-degraded-");
+  const seeded = await seedPlugin(environment.cwd, {
+    components: { malformedSkills: ["bad-skill"], malformedCommands: ["bad-command"] },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  // SKILL-01 / CMD-01 / WARN-01: a malformed source is a DEGRADE, not a
+  // failure, and the ledger tags each record with the bridge that produced it
+  // so the row can name the kinds it degraded.
+  assert.deepStrictEqual(
+    ledgerOutcome.summary.frontmatterDegradations.map((record) => record.kind),
+    ["skill", "command"],
+  );
+  assert.deepStrictEqual(ledgerOutcome.summary.stagedSkillNames, ["empty-bad-skill"]);
+  assert.deepStrictEqual(ledgerOutcome.summary.stagedCommandNames, ["empty:bad-command"]);
+});
+
+test("AS-7: a retired foreign agent target is preserved while a distinct agent installs", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-agent-foreign-");
+  const seeded = await seedPlugin(environment.cwd, { components: { agents: ["new-gamma"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const generatedName = "pi-claude-marketplace-empty-gamma";
+  await mkdir(locations.agentsDir, { recursive: true });
+  // No ownership marker in the body, so the bridge refuses to overwrite it.
+  await writeFile(
+    path.join(locations.agentsDir, `${generatedName}.md`),
+    "---\nname: foreign\n---\n\nNo marker.\n",
+  );
+  await writeFile(
+    locations.agentsIndexPath,
+    JSON.stringify({
+      schemaVersion: 1,
+      agents: [
+        {
+          plugin: "empty",
+          marketplace: "marketplace",
+          sourceAgent: "gamma",
+          generatedName,
+          sourcePath: path.join(seeded.pluginRoot, "agents", "gamma.md"),
+          targetPath: path.join(locations.agentsDir, `${generatedName}.md`),
+          sourceHash: "seeded",
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [],
+        },
+      ],
+    }),
+  );
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.agentForeignFailures, [
+    {
+      generatedName,
+      reason: `target ${path.join(locations.agentsDir, `${generatedName}.md`)} is missing the generated marker`,
+    },
+  ]);
+  assert.deepStrictEqual(ledgerOutcome.summary.stagedAgentNames, [
+    "pi-claude-marketplace-empty-new-gamma",
+  ]);
+  assert.strictEqual(
+    await readFile(path.join(locations.agentsDir, `${generatedName}.md`), "utf8"),
+    "---\nname: foreign\n---\n\nNo marker.\n",
+  );
+  // AS-7: the install SUCCEEDED. A preserved foreign row is the user's problem
+  // to resolve by hand, not a reason to unwind the plugin around it.
+  assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty?.enabled, true);
+});
+
+const SESSION_START_HOOKS = {
+  hooks: { SessionStart: [{ hooks: [{ type: "command", command: "echo hi" }] }] },
+};
+
+test("writes the hooks config and records the plugin's hooks slug on the state row", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-hooks-");
+  const seeded = await seedPlugin(environment.cwd, { hooksJson: SESSION_START_HOOKS });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  // LIFE-01: the phase re-reads and re-parses the plugin's own hooks.json and
+  // writes the supported subset through the bridge's per-plugin slot.
+  const written: unknown = JSON.parse(
+    await readFile(path.join(locations.hooksDir, "empty", "hooks.json"), "utf8"),
+  );
+  assert.deepStrictEqual(written, SESSION_START_HOOKS.hooks);
+  // D-100-01 / HOOK-02 / D-57-01: the record describes the hooks the install
+  // materialized and carries the plugin id as its hooks-container slug, so a
+  // later `info` need not read the config back off disk.
+  const record = seeded.state.marketplaces.marketplace?.plugins.empty;
+  assert.deepStrictEqual(record?.resources.hooks, ["empty"]);
+  assert.deepStrictEqual(
+    record?.hookEntries?.map((entry) => entry.event),
+    ["SessionStart"],
+  );
+});
+
+test("an mcp phase that cannot even prepare unwinds the hooks config the phase before it wrote", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-unwind-");
+  const seeded = await seedPlugin(environment.cwd, {
+    components: { skills: ["alpha"] },
+    hooksJson: SESSION_START_HOOKS,
+    mcpServers: { server1: { command: "node", args: ["s.js"] } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  // Occupying `<scopeRoot>/mcp-adapter.json` with a DIRECTORY fails the mcp phase
+  // before it prepares anything, which is what makes the hooks phase's undo --
+  // a real removal, not a staging discard -- run.
+  await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
+  const capture = { rollbackPartials: [], version: undefined };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+      env: {},
+    },
+    capture,
+  );
+
+  // assert
+  await assert.rejects(operation);
+  const survives = async (candidate: string): Promise<boolean> =>
+    stat(candidate).then(
+      () => true,
+      () => false,
+    );
+  assert.equal(await survives(path.join(locations.hooksDir, "empty", "hooks.json")), false);
+  assert.equal(await survives(path.join(locations.skillsTargetDir, "empty-alpha")), false);
+  assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
+  // Every undo ran to completion; nothing was left half-unwound.
+  assert.deepStrictEqual(capture.rollbackPartials, []);
+});
+
+test("a hooks.json that turns malformed after resolution unwinds the ledger", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-hooks-reparse-");
+  const seeded = await seedPlugin(environment.cwd, {
+    components: { skills: ["alpha"] },
+    hooksJson: SESSION_START_HOOKS,
+  });
+  const locations = locationsFor("project", environment.cwd);
+  const hooksJsonPath = path.join(seeded.pluginRoot, "hooks", "hooks.json");
+  const realRemovalOps = createRemovalOps();
+  // The resolver validated hooks.json at install entry. The skills phase's
+  // staging cleanup runs between that validation and the hooks phase's
+  // re-read, so a plugin tree rewritten in that window is what the guard
+  // exists for.
+  const removalOps = {
+    ...realRemovalOps,
+    rm: async (target: string, options: { recursive?: boolean; force?: boolean }) => {
+      await writeFile(hooksJsonPath, "{");
+      await realRemovalOps.rm(target, options);
+    },
+  };
+  const capture = { rollbackPartials: [], version: undefined };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps,
+      env: {},
+    },
+    capture,
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /^hooks\.json re-parse failed: /);
+    return true;
+  });
+  const survives = async (candidate: string): Promise<boolean> =>
+    stat(candidate).then(
+      () => true,
+      () => false,
+    );
+  assert.equal(await survives(path.join(locations.hooksDir, "empty", "hooks.json")), false);
+  assert.equal(await survives(path.join(locations.skillsTargetDir, "empty-alpha")), false);
+  assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
+  assert.deepStrictEqual(capture.rollbackPartials, []);
+});
+
+/**
+ * A bridge whose prepare throws never reaches its `c.<kind>Prep` assignment,
+ * so the undo the ledger still invokes for the FAILING phase has nothing to
+ * discard and returns immediately. A symlink occupying the generated target
+ * name is what makes prepare refuse: `assertPathInside` walks the segment
+ * below the target root and rejects it (PS-1), which is the same refusal a
+ * hostile tree would produce.
+ */
+async function assertFailingPhaseUndoIsInert(
+  t: TestContext,
+  options: {
+    readonly prefix: string;
+    readonly components: SeededComponents;
+    readonly targetDir: (locations: ScopedLocations) => string;
+    readonly generatedName: string;
+  },
+): Promise<void> {
+  // arrange
+  const environment = await createHermeticEnvironment(t, options.prefix);
+  const seeded = await seedPlugin(environment.cwd, { components: options.components });
+  const locations = locationsFor("project", environment.cwd);
+  const targetDir = options.targetDir(locations);
+  await mkdir(targetDir, { recursive: true });
+  await symlink("/nonexistent-decoy", path.join(targetDir, options.generatedName));
+  const capture = { rollbackPartials: [], version: undefined };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+      env: {},
+    },
+    capture,
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof PathContainmentError);
+    return true;
+  });
+  // PI-14: the failing phase's own undo found nothing staged, so it added no
+  // rollback partial -- and the containment refusal reaches the caller
+  // verbatim rather than wrapped in one.
+  assert.deepStrictEqual(capture.rollbackPartials, []);
+  assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
+}
+
+test("a skills prepare that refuses leaves the skills phase with nothing to undo", async (t) => {
+  await assertFailingPhaseUndoIsInert(t, {
+    prefix: "install-outcome-skills-refuse-",
+    components: { skills: ["alpha"] },
+    targetDir: (locations) => locations.skillsTargetDir,
+    generatedName: "empty-alpha",
+  });
+});
+
+test("a commands prepare that refuses leaves the commands phase with nothing to undo", async (t) => {
+  await assertFailingPhaseUndoIsInert(t, {
+    prefix: "install-outcome-commands-refuse-",
+    components: { skills: ["alpha"], commands: ["beta"] },
+    targetDir: (locations) => locations.promptsTargetDir,
+    generatedName: "empty:beta.md",
+  });
+});
+
+test("an agents prepare that refuses leaves the agents phase with nothing to undo", async (t) => {
+  await assertFailingPhaseUndoIsInert(t, {
+    prefix: "install-outcome-agents-refuse-",
+    components: { skills: ["alpha"], agents: ["gamma"] },
+    targetDir: (locations) => locations.agentsDir,
+    generatedName: "pi-claude-marketplace-empty-gamma.md",
+  });
+});
+
+test("a workflows prepare that refuses leaves the workflows phase with nothing to undo", async (t) => {
+  await assertFailingPhaseUndoIsInert(t, {
+    prefix: "install-outcome-workflows-refuse-",
+    components: { skills: ["alpha"], workflows: ["delta"] },
+    targetDir: (locations) => locations.workflowsSavedDir,
+    generatedName: "empty:delta.json",
+  });
+});
+
+test("stages the declared mcp servers and records their generated names", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: { server1: { command: "node", args: ["s.js"] } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.stagedMcpServerNames, ["server1"]);
+  assert.deepStrictEqual(ledgerOutcome.summary.mcpConfigNotices, []);
+  assert.deepStrictEqual(
+    seeded.state.marketplaces.marketplace?.plugins.empty?.resources.mcpServers,
+    ["server1"],
+  );
+});
+
+async function writeAgent(pluginRoot: string, name: string, tools: string): Promise<void> {
+  await mkdir(path.join(pluginRoot, "agents"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, "agents", `${name}.md`),
+    `---\nname: ${name}\ndescription: ${name} agent\ntools: ${tools}\n---\n\nBody.\n`,
+  );
+}
+
+async function generatedAgentToolLines(
+  locations: ScopedLocations,
+  name: string,
+): Promise<string[]> {
+  const content = await readFile(
+    path.join(locations.agentsDir, `pi-claude-marketplace-empty-${name}.md`),
+    "utf8",
+  );
+  return content.split("\n").filter((line) => line.startsWith("tools:"));
+}
+
+test("ANAME-02: an agent's Claude-form MCP tool name installs as a pi-subagents mcp: entry", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-agent-mcp-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: { db: { command: "node", args: ["s.js"] } },
+  });
+  await writeAgent(seeded.pluginRoot, "bot", "Read, mcp__plugin_empty_db__query");
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(await generatedAgentToolLines(locations, "bot"), [
+    "tools: read,mcp:plugin_empty_db_/query",
+  ]);
+});
+
+test("ANAME-02: a server left out by a partial install is not granted to the plugin's agents", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-agent-mcp-partial-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: {
+      db: { command: "node", args: ["s.js"] },
+      live: { type: "ws", url: "wss://example.test/live" },
+    },
+  });
+  await writeAgent(
+    seeded.pluginRoot,
+    "bot",
+    "mcp__plugin_empty_db__query, mcp__plugin_empty_live__stream",
+  );
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+    partial: true,
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.stagedMcpServerNames, ["db"]);
+  assert.deepStrictEqual(await generatedAgentToolLines(locations, "bot"), [
+    "tools: mcp:plugin_empty_db_/query",
+  ]);
+  assert.deepStrictEqual(ledgerOutcome.summary.bridgeWarnings, [
+    {
+      kind: "hygiene",
+      message:
+        "[bot] tools include MCP tools, which pi-subagents runs only in background launches -- launch this agent with `async: true`; a foreground launch fails, and so does a launch before pi-mcp-adapter has cached the server's tools",
+    },
+    { kind: "hygiene", message: "[bot] dropped tools: mcp__plugin_empty_live__stream" },
+  ]);
+});
+
+test("D-PL1-03: an agents duplicate joins the discovery warnings and a conversion note the hygiene warnings", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-tagged-warnings-");
+  const seeded = await seedPlugin(environment.cwd);
+  const agentsDir = path.join(seeded.pluginRoot, "agents");
+  await mkdir(agentsDir, { recursive: true });
+  await writeFile(
+    path.join(agentsDir, "first.md"),
+    "---\nname: helper\ndescription: First.\ntools: Read, WebFetch\n---\n\nFirst.\n",
+  );
+  await writeFile(
+    path.join(agentsDir, "second.md"),
+    "---\nname: helper\ndescription: Second.\n---\n\nSecond.\n",
+  );
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.discoveryWarnings, [
+    {
+      kind: "discovery",
+      message: `agent source "helper" at "${path.join(agentsDir, "second.md")}" duplicates generated name "pi-claude-marketplace-empty-helper" already produced by agent source "helper" at "${path.join(agentsDir, "first.md")}"; keeping first discovered source.`,
+    },
+  ]);
+  assert.deepStrictEqual(ledgerOutcome.summary.bridgeWarnings, [
+    { kind: "hygiene", message: "[helper] dropped tools: WebFetch" },
+  ]);
+});
+
+test("D-PL1-13: an mcp phase failure captures the warnings the agents phase collected", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-failure-warnings-");
+  const seeded = await seedPlugin(environment.cwd);
+  const agentsDir = path.join(seeded.pluginRoot, "agents");
+  await mkdir(agentsDir, { recursive: true });
+  await writeFile(
+    path.join(agentsDir, "first.md"),
+    "---\nname: helper\ndescription: First.\ntools: Read, WebFetch\n---\n\nFirst.\n",
+  );
+  await writeFile(
+    path.join(agentsDir, "second.md"),
+    "---\nname: helper\ndescription: Second.\n---\n\nSecond.\n",
+  );
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+      env: {},
+    },
+    capture,
+  );
+
+  // assert
+  await assert.rejects(operation);
+  assert.deepStrictEqual(capture, {
+    rollbackPartials: [],
+    version: "0.0.1",
+    stagingWarnings: [
+      {
+        kind: "discovery",
+        message: `agent source "helper" at "${path.join(agentsDir, "second.md")}" duplicates generated name "pi-claude-marketplace-empty-helper" already produced by agent source "helper" at "${path.join(agentsDir, "first.md")}"; keeping first discovered source.`,
+      },
+      { kind: "hygiene", message: "[helper] dropped tools: WebFetch" },
+    ],
+  });
+});
+
+test("D-PL1-13: an mcp phase failure with no collected warnings captures none", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-failure-no-warnings-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["alpha"] } });
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+      env: {},
+    },
+    capture,
+  );
+
+  // assert
+  await assert.rejects(operation);
+  assert.deepStrictEqual(capture, { rollbackPartials: [], version: "0.0.1" });
+});
+
+test("AFILE-04: staging over a commented mcp-adapter.json reports the comments-dropped notice", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-comments-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: { server1: { command: "node", args: ["s.js"] } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, '// mine\n{"mcpServers":{}}\n');
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.mcpConfigNotices, [
+    { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+  ]);
+});
+
+/** AFILE-04: a commented adapter file whose exact bytes a failed install must restore. */
+const COMMENTED_ADAPTER_BYTES =
+  '\uFEFF{\n  // mine\n  "mcpServers": { "mine": { "command": "my-server" } },\n}\n';
+
+test("AFILE-04: a later-phase failure restores the commented mcp-adapter.json byte for byte", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-restore-");
+  const seeded = await seedPlugin(environment.cwd, {
+    components: { workflows: ["delta"] },
+    mcpServers: { server1: { command: "node", args: ["s.js"] } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, COMMENTED_ADAPTER_BYTES);
+  const storedBytes = await readFile(locations.mcpAdapterJsonPath);
+  await mkdir(locations.workflowsSavedDir, { recursive: true });
+  await symlink("/nonexistent-decoy", path.join(locations.workflowsSavedDir, "empty:delta.json"));
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+      env: {},
+    },
+    capture,
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof PathContainmentError);
+    return true;
+  });
+  assert.deepStrictEqual(await readFile(locations.mcpAdapterJsonPath), storedBytes);
+  assert.deepStrictEqual(capture.rollbackPartials, []);
+  assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
+});
+
+/** AMIG-02: a commented legacy mcp.json holding the plugin's marked entry and a foreign one. */
+const COMMENTED_LEGACY_MCP_BYTES = `{
+  // released build
+  "mcpServers": {
+    "server1": { "command": "old", "_piClaudeMarketplace": { "plugin": "empty", "marketplace": "marketplace" } },
+    "other": { "command": "y" }
+  }
+}
+`;
+
+test("AMIG-02: a plugin with a commented legacy entry installs, and its MCP notices end with the mcp.json comments-dropped notice", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-legacy-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: { server1: { command: "node", args: ["s.js"] } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, '// mine\n{"mcpServers":{}}\n');
+  await writeFile(locations.mcpJsonPath, COMMENTED_LEGACY_MCP_BYTES);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.mcpConfigNotices, [
+    { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+    { kind: "comments-dropped", scope: "project", file: "mcp.json" },
+  ]);
+  assert.strictEqual(
+    await readFile(locations.mcpJsonPath, "utf8"),
+    '{\n  "mcpServers": {\n    "other": {\n      "command": "y"\n    }\n  }\n}\n',
+  );
+});
+
+test("AMIG-02: a later-phase failure restores mcp.json and mcp-adapter.json byte for byte", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-legacy-restore-");
+  const seeded = await seedPlugin(environment.cwd, {
+    components: { workflows: ["delta"] },
+    mcpServers: { server1: { command: "node", args: ["s.js"] } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, COMMENTED_ADAPTER_BYTES);
+  await writeFile(locations.mcpJsonPath, COMMENTED_LEGACY_MCP_BYTES);
+  await mkdir(locations.workflowsSavedDir, { recursive: true });
+  await symlink("/nonexistent-decoy", path.join(locations.workflowsSavedDir, "empty:delta.json"));
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+      env: {},
+    },
+    capture,
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof PathContainmentError);
+    return true;
+  });
+  assert.strictEqual(await readFile(locations.mcpJsonPath, "utf8"), COMMENTED_LEGACY_MCP_BYTES);
+  assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), COMMENTED_ADAPTER_BYTES);
+  assert.deepStrictEqual(capture.rollbackPartials, []);
+});
+
+test("AFILE-04 / NFR-3: an mcp restore that cannot write is reported as the mcp rollback partial", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-restore-fails-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: { server1: { command: "node", args: ["s.js"] } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  const adapterDir = path.dirname(locations.mcpAdapterJsonPath);
+  await mkdir(adapterDir, { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, COMMENTED_ADAPTER_BYTES);
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+  // After the mcp phase commits, the adapter file's directory turns read-only
+  // and the next phase throws, so the mcp undo cannot write the old bytes.
+  const transaction = {
+    runPhases: <C>(phases: readonly Phase<C>[], ctx: C) =>
+      runPhases(
+        phases.map((phase): Phase<C> => {
+          if (phase.name === "mcp") {
+            return {
+              ...phase,
+              do: async (c) => {
+                await phase.do(c);
+                await chmod(adapterDir, 0o555);
+              },
+            };
+          }
+
+          return phase.name === "workflows"
+            ? {
+                ...phase,
+                do: () => Promise.reject(new Error("workflows phase failed")),
+              }
+            : phase;
+        }),
+        ctx,
+      ),
+  };
+
+  // act
+  try {
+    await assert.rejects(
+      runInstallLedger(
+        seeded.state,
+        locations,
+        {
+          ctx: notificationContext(),
+          run: runWithNothingLoaded(),
+          cwd: environment.cwd,
+          marketplace: "marketplace",
+          plugin: "empty",
+          scope: "project",
+          removalOps: createRemovalOps(),
+          env: {},
+        },
+        capture,
+        transaction,
+      ),
+    );
+  } finally {
+    await chmod(adapterDir, 0o755);
+  }
+
+  // assert
+  assert.deepStrictEqual(
+    capture.rollbackPartials.map((partial) => partial.phase),
+    ["mcp"],
+  );
+  const expectedPrefix = `failed to restore mcp-adapter.json at ${locations.mcpAdapterJsonPath}: EACCES: `;
+  assert.strictEqual(
+    capture.rollbackPartials[0]?.msg.slice(0, expectedPrefix.length),
+    expectedPrefix,
+  );
+});
+
+test("AFILE-02: a plugin with no MCP servers installs over an unparseable mcp-adapter.json and reports it", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-left-unchanged-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["alpha"] } });
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, "{");
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.mcpConfigNotices, [
+    { kind: "left-unchanged", scope: "project", file: "mcp-adapter.json" },
+  ]);
+  assert.deepStrictEqual(ledgerOutcome.summary.bridgeWarnings, []);
+  assert.equal(await readFile(locations.mcpAdapterJsonPath, "utf8"), "{");
+});
+
+test("AFILE-02: a plugin with MCP servers refuses an unparseable mcp-adapter.json and keeps its bytes", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-refuses-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: { server1: { command: "node", args: ["s.js"] } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, "{");
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+
+  // act & assert
+  await assert.rejects(
+    runInstallLedger(
+      seeded.state,
+      locations,
+      {
+        ctx: notificationContext(),
+        run: runWithNothingLoaded(),
+        cwd: environment.cwd,
+        marketplace: "marketplace",
+        plugin: "empty",
+        scope: "project",
+        removalOps: createRemovalOps(),
+        env: {},
+      },
+      capture,
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof McpConfigFileError);
+      assert.equal(error.filePath, locations.mcpAdapterJsonPath);
+      assert.equal(error.defect, "invalid-jsonc");
+      return true;
+    },
+  );
+
+  // assert
+  assert.equal(await readFile(locations.mcpAdapterJsonPath, "utf8"), "{");
+  assert.deepStrictEqual(capture.rollbackPartials, []);
+});
+
+test("ANAME-03: an install whose two servers share one key refuses before any write", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-same-key-");
+  const seeded = await seedPlugin(environment.cwd, {
+    mcpServers: {
+      "a.b": { command: "node", args: ["a.js"] },
+      a_b: { command: "node", args: ["b.js"] },
+    },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act & assert
+  await assert.rejects(
+    runInstallLedger(seeded.state, locations, {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+      env: {},
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof McpServerKeyCollisionError);
+      assert.deepStrictEqual(
+        { pluginName: error.pluginName, servers: error.servers, keys: error.keys },
+        {
+          pluginName: "empty",
+          servers: ["a.b", "a_b"],
+          keys: ["plugin_empty_a_b_", "plugin_empty_a_b_"],
+        },
+      );
+      return true;
+    },
+  );
+
+  // assert
+  await assert.rejects(stat(locations.mcpAdapterJsonPath), { code: "ENOENT" });
+  assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
+});
+
+/** A full 40-hex commit id, so the `sha-<12hex>` derivation has real bytes to cut. */
+const RESOLVED_SHA = "0123456789abcdef0123456789abcdef01234567";
+
+test("PURL-09 / VER-01 / D-77-02: a git-source install takes its root from the clone probe and its declared version", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-git-");
+  const seeded = await seedPlugin(environment.cwd, {
+    gitSource: { source: "url", url: "https://example.com/org/repo", sha: RESOLVED_SHA },
+    components: { skills: ["alpha"] },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  const probed: unknown[] = [];
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+    // The ledger injects THIS policy into the resolver, which stays
+    // network-free: the resolver hands the parsed git source back and the
+    // callback answers with the clone-anchored plugin root plus the sha it
+    // captured on the way past.
+    cloneProbe: async (options) => {
+      probed.push(options.source);
+      return Promise.resolve({
+        result: { kind: "materialized", pluginRoot: seeded.pluginRoot, resolvedSha: RESOLVED_SHA },
+        resolvedSha: RESOLVED_SHA,
+      });
+    },
+  });
+
+  // assert
+  assert.deepStrictEqual(probed, [
+    {
+      kind: "url",
+      raw: "https://example.com/org/repo",
+      sha: RESOLVED_SHA,
+      url: "https://example.com/org/repo",
+    },
+  ]);
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.resolved.pluginRoot, seeded.pluginRoot);
+  // VER-01: the declared version wins over the commit, and D-77-02 persists
+  // the full 40-hex sha beside it.
+  assert.equal(ledgerOutcome.summary.version, "0.0.1");
+  const record = seeded.state.marketplaces.marketplace?.plugins.empty;
+  assert.equal(record?.version, "0.0.1");
+  assert.equal(record?.resolvedSha, RESOLVED_SHA);
+});
+
+test("GV-01: a git-source install that declares no version records its 12-hex commit", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-git-unversioned-");
+  const seeded = await seedPlugin(environment.cwd, {
+    gitSource: { source: "url", url: "https://example.com/org/repo", sha: RESOLVED_SHA },
+    components: { skills: ["alpha"] },
+    pluginJson: { version: undefined },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+    cloneProbe: () =>
+      Promise.resolve({
+        result: { kind: "materialized", pluginRoot: seeded.pluginRoot, resolvedSha: RESOLVED_SHA },
+        resolvedSha: RESOLVED_SHA,
+      }),
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.version, "0123456789ab");
+  assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty?.resolvedSha, RESOLVED_SHA);
+});
+
+test("RESV-03: a source pin override materializes the pinned commit, not the entry's own ref", async (t) => {
+  // arrange: the entry names a ref-less source, so only the override can put a
+  // sha on what the probe is handed.
+  const environment = await createHermeticEnvironment(t, "install-outcome-pin-");
+  const seeded = await seedPlugin(environment.cwd, {
+    gitSource: { source: "url", url: "https://example.com/org/repo" },
+    components: { skills: ["alpha"] },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  const probed: unknown[] = [];
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+    sourcePinOverride: RESOLVED_SHA,
+    cloneProbe: async (options) => {
+      probed.push(options.source);
+      return Promise.resolve({
+        result: { kind: "materialized", pluginRoot: seeded.pluginRoot, resolvedSha: RESOLVED_SHA },
+        resolvedSha: RESOLVED_SHA,
+      });
+    },
+  });
+
+  // assert: the override rides the source's `sha`, which is what routes the
+  // probe down its already-pinned arm rather than adding a second one.
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.version, "0.0.1");
+  assert.deepStrictEqual(probed, [
+    {
+      kind: "url",
+      raw: "https://example.com/org/repo",
+      sha: RESOLVED_SHA,
+      url: "https://example.com/org/repo",
+    },
+  ]);
+});
+
+test("the callback reaches the real clone probe through the ledger's own cache, credential, and memo seams", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-git-seam-");
+  const seeded = await seedPlugin(environment.cwd, {
+    gitSource: { source: "url", url: "https://example.com/org/repo", sha: RESOLVED_SHA },
+    components: { skills: ["alpha"] },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  const cloned: Array<{ readonly cloneUrl: string; readonly pin: string }> = [];
+  // No `cloneProbe` override here: the callback falls through to the REAL
+  // probe, which is kept network-free by the cache seam below. That seam, the
+  // credential collaborator, and the per-host memo are the three optional
+  // members the callback forwards only when the caller supplied them.
+  const authMemo = new Map<string, AuthAttemptResult>();
+  const deviceFlow = createDeviceFlowFake({
+    boundary: "memory",
+    network: "disabled",
+    deviceCode: {
+      device_code: "MOCK_DEVICE_CODE",
+      expires_in: 900,
+      interval: 0,
+      user_code: "ABCD-1234",
+      verification_uri: "https://github.com/login/device",
+    },
+  });
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+    authMemo,
+    deviceFlowHttp: deviceFlow.http,
+    cloneCacheSeam: {
+      resolvePluginPin: (args) =>
+        Promise.resolve({ cloneUrl: canonicalCloneUrl(args.source), pin: RESOLVED_SHA }),
+      materializePluginClone: (args) => {
+        cloned.push({ cloneUrl: args.cloneUrl, pin: args.pin });
+        return Promise.resolve(seeded.pluginRoot);
+      },
+      materializeOrRefreshPluginMirror: () =>
+        Promise.reject(new Error("a sha-pinned source must not reach the mirror path")),
+      materializePluginCommitCopy: () =>
+        Promise.reject(new Error("a sha-pinned source must not reach the commit copy")),
+    },
+  });
+
+  // assert
+  // PURL-04: a sha-pinned source resolves its pin and clones it once; the
+  // unpinned mirror path is never taken.
+  assert.deepStrictEqual(cloned, [{ cloneUrl: "https://example.com/org/repo", pin: RESOLVED_SHA }]);
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.resolved.pluginRoot, seeded.pluginRoot);
+  assert.equal(ledgerOutcome.summary.version, "0.0.1");
+  // A path source needs no credential, so the device flow is threaded but
+  // never consulted.
+  assert.deepStrictEqual(deviceFlow.calls.requestCode, []);
+});
+
+test("TAGS-01/03 (D-07-06/07) / GV-01: a pinned path-source install records the tag's commit, its semver and its oid", async (t) => {
+  // arrange: the entry names a default path source (no gitSource), the shape
+  // a marketplace-relative dependency declares. The cascade would set both
+  // overrides together from ONE member.pin -- this drives the ledger the same
+  // way, directly.
+  const environment = await createHermeticEnvironment(t, "install-outcome-path-pin-");
+  const seeded = await seedPlugin(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+  const marketplaceRoot = seeded.state.marketplaces.marketplace?.marketplaceRoot;
+  assert.ok(marketplaceRoot !== undefined, "the fixture records the marketplace it seeds");
+  const probed: unknown[] = [];
+  const cloneCandidates = new Set<string>();
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+    sourcePinOverride: RESOLVED_SHA,
+    resolvedVersion: "2.1.0",
+    cloneCandidates,
+    pathPinProbe: ({ onCloneCreated, ...options }) => {
+      onCloneCreated?.("path-clone");
+      probed.push(options);
+      return Promise.resolve({
+        kind: "materialized",
+        pluginRoot: seeded.pluginRoot,
+        resolvedSha: RESOLVED_SHA,
+      });
+    },
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.resolved.pluginRoot, seeded.pluginRoot);
+  // GV-01: the declared version with the tag's commit, as Claude Code records
+  // it, and RESV-05's tag semver apart, which the ranges read.
+  assert.equal(ledgerOutcome.summary.version, "0.0.1-0123456789ab");
+  const record = seeded.state.marketplaces.marketplace?.plugins.empty;
+  assert.deepStrictEqual(
+    [record?.version, record?.resolvedVersion, record?.resolvedSha],
+    ["0.0.1-0123456789ab", "2.1.0", RESOLVED_SHA],
+  );
+  assert.deepStrictEqual(probed, [
+    {
+      locations,
+      marketplaceRoot,
+      marketplaceSource: pathSource("./marketplace"),
+      marketplaceName: "marketplace",
+      pathSource: { kind: "path", raw: "./plugins/empty", logical: "./plugins/empty" },
+      tagOid: RESOLVED_SHA,
+    },
+  ]);
+  assert.deepStrictEqual(cloneCandidates, new Set(["path-clone"]));
+});
+
+test("an unpinned path-source install threads neither pathPluginPin nor resolvePathPluginRoot", async (t) => {
+  // arrange: no `sourcePinOverride`, so the unpinned path is byte-identical to
+  // today -- the ordinary marketplaceRoot-anchored resolution runs, and a
+  // `pathPinProbe` that would otherwise reveal itself must never be reached.
+  const environment = await createHermeticEnvironment(t, "install-outcome-path-unpinned-");
+  const seeded = await seedPlugin(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+    pathPinProbe: () =>
+      Promise.reject(new Error("an unpinned path install must never probe a tag")),
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.resolved.pluginRoot, seeded.pluginRoot);
+});
+
+test("D-07-06: with no pathPinProbe override, a pinned path-source install falls through to the real materializeMarketplaceTagClone", async (t) => {
+  // arrange: a real git repository standing in for the marketplace clone, so
+  // the DEFAULT `opts.pathPinProbe ?? materializeMarketplaceTagClone` right
+  // side is what runs, not a test double.
+  const environment = await createHermeticEnvironment(t, "install-outcome-path-pin-real-");
+  const seeded = await seedPlugin(environment.cwd);
+  const marketplaceRoot = seeded.state.marketplaces.marketplace?.marketplaceRoot;
+  assert.ok(marketplaceRoot !== undefined, "the fixture records the marketplace it seeds");
+  await git.init({ fs, dir: marketplaceRoot, defaultBranch: "main" });
+  await git.add({ fs, dir: marketplaceRoot, filepath: "." });
+  await git.commit({
+    fs,
+    dir: marketplaceRoot,
+    message: "release 1.0.0",
+    author: { name: "test", email: "test@example.com" },
+  });
+  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
+  await git.tag({ fs, dir: marketplaceRoot, ref: "empty--v1.0.0", object: tagOid });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+    sourcePinOverride: tagOid,
+    pinVersionOverride: "1.0.0",
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.version, "1.0.0");
+  const record = seeded.state.marketplaces.marketplace?.plugins.empty;
+  assert.equal(record?.resolvedSha, tagOid);
+  assert.ok(
+    record?.resolvedSource.includes(`${path.sep}plugin-clones${path.sep}`),
+    `resolvedSource does not sit inside plugin-clones/: ${record?.resolvedSource}`,
+  );
+});
+
+test("D-07-06: a pinned path-source install whose callback does not materialize fails the install gate, never stamping resolvedSha", async (t) => {
+  // arrange: the `resolvePathPluginRoot` callback's non-materialized arms
+  // (escapes / missing-subdir / not-cached) must reach the SAME install gate
+  // a git source's callback already does -- resolveStrict reports
+  // unavailable, and requireInstallable refuses it before any state write.
+  const environment = await createHermeticEnvironment(t, "install-outcome-path-pin-missing-");
+  const seeded = await seedPlugin(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const blocked = runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+    sourcePinOverride: RESOLVED_SHA,
+    pinVersionOverride: "2.1.0",
+    pathPinProbe: () =>
+      Promise.resolve({ kind: "missing-subdir", detail: "tag tree has no ./plugins/empty" }),
+  });
+
+  // assert
+  await assert.rejects(blocked, (error: unknown) => {
+    assert.ok(error instanceof PluginShapeError);
+    assert.equal(error.shape.kind, "not-installable");
+    return true;
+  });
+  assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
+});
+
+test("UPD-DEP-D1: previewInstall admits an installable plugin and writes nothing", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-preview-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["tool"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const stateBefore = structuredClone(seeded.state);
+  const bytesBefore = await readFile(locations.stateJsonPath, "utf8");
+
+  // act
+  const commit = await previewInstall(
+    seeded.state,
+    locations,
+    projectInstallOptions(environment.cwd),
+  );
+
+  // assert
+  assert.strictEqual(commit, undefined);
+  assert.deepStrictEqual(seeded.state, stateBefore);
+  assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), bytesBefore);
+  await assert.rejects(readdir(locations.skillsTargetDir), { code: "ENOENT" });
+});
+
+test("GV-01: a plugin directory copy whose declared version satisfies its range previews clean", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-directory-ok-");
+  const seeded = await seedPlugin(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+
+  // act & assert
+  await assert.doesNotReject(
+    previewInstall(seeded.state, locations, {
+      ...projectInstallOptions(environment.cwd),
+      directoryPin: { range: ">=0.0.1 <0.0.2-0", declared: "^0.0.1", requiredBy: [] },
+    }),
+  );
+});
+
+for (const { label, pluginJson, requiredBy, message } of [
+  {
+    label: "a declared version outside its range",
+    pluginJson: {},
+    requiredBy: ["app@marketplace", "tool@marketplace"],
+    message:
+      '"empty" from the Anthropic Directory is pinned to its listed commit (version 0.0.1), which does not satisfy ^1.0.0 required by "app", "tool".',
+  },
+  {
+    label: "no declared version",
+    pluginJson: { version: undefined },
+    requiredBy: [],
+    message:
+      '"empty" from the Anthropic Directory is pinned to its listed commit (no version), which does not satisfy ^1.0.0.',
+  },
+  {
+    label: "a 120-character version and requirer",
+    pluginJson: { version: `0.0.1-${"z".repeat(114)}` },
+    requiredBy: [`${"r".repeat(120)}@marketplace`],
+    message: `"empty" from the Anthropic Directory is pinned to its listed commit (version 0.0.1-${"z".repeat(114)}), which does not satisfy ^1.0.0 required by "${"r".repeat(120)}".`,
+  },
+  {
+    label: "a version and a requirer past 120 characters",
+    pluginJson: { version: `0.0.1-${"z".repeat(124)}` },
+    requiredBy: [`${"r".repeat(130)}@marketplace`],
+    message: `"empty" from the Anthropic Directory is pinned to its listed commit (version 0.0.1-${"z".repeat(114)}…), which does not satisfy ^1.0.0 required by "${"r".repeat(120)}…".`,
+  },
+]) {
+  test(`GV-01: a plugin directory copy with ${label} refuses the install as Claude Code does`, async (t) => {
+    // arrange
+    const environment = await createHermeticEnvironment(t, "install-outcome-directory-refused-");
+    const seeded = await seedPlugin(environment.cwd, { pluginJson });
+    const locations = locationsFor("project", environment.cwd);
+
+    // act & assert
+    await assert.rejects(
+      previewInstall(seeded.state, locations, {
+        ...projectInstallOptions(environment.cwd),
+        directoryPin: { range: ">=1.0.0 <2.0.0-0", declared: "^1.0.0", requiredBy },
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof DirectoryPinUnsatisfiedError);
+        assert.strictEqual(error.message, message);
+        return true;
+      },
+    );
+  });
+}
+
+test("GV-01 / D-PL3-09: a plugin directory refusal cuts a plugin name past 120 characters at 120", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-directory-long-name-");
+  const pluginName = "p".repeat(130);
+  const seeded = await seedPlugin(environment.cwd, { pluginName });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act & assert
+  await assert.rejects(
+    previewInstall(seeded.state, locations, {
+      ...projectInstallOptions(environment.cwd),
+      plugin: pluginName,
+      directoryPin: { range: ">=1.0.0 <2.0.0-0", declared: "^1.0.0", requiredBy: [] },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof DirectoryPinUnsatisfiedError);
+      assert.strictEqual(
+        error.message,
+        `"${"p".repeat(120)}…" from the Anthropic Directory is pinned to its listed commit (version 0.0.1), which does not satisfy ^1.0.0.`,
+      );
+      return true;
+    },
+  );
+});
+
+test("UPD-DEP-D1: previewInstall throws what the gate throws for a plugin pi supports only in part", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-preview-partial-");
+  const seeded = await seedPlugin(environment.cwd, {
+    pluginJson: { experimental: { themes: "./themes" } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act & assert
+  await assert.rejects(
+    previewInstall(seeded.state, locations, projectInstallOptions(environment.cwd)),
+    (error: unknown) => {
+      assert.ok(error instanceof PluginShapeError);
+      assert.equal(error.shape.kind, "not-installable");
+      return true;
+    },
+  );
+});
+
+test("UPD-DEP-D1: previewInstall reads a marketplace only the user scope records without adding it", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-preview-user-");
+  const seeded = await seedPlugin(environment.cwd, {
+    marketplaceScope: "user",
+    pluginJson: { experimental: { themes: "./themes" } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act & assert
+  await assert.rejects(
+    previewInstall(seeded.state, locations, projectInstallOptions(environment.cwd)),
+    PluginShapeError,
+  );
+  assert.deepStrictEqual(seeded.state, { marketplaces: {}, schemaVersion: 2 });
+});
+
+test("UPD-DEP-D1: previewInstall leaves a marketplace neither scope records to the ledger", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-preview-absent-");
+  const locations = locationsFor("project", environment.cwd);
+  const state: ExtensionState = { marketplaces: {}, schemaVersion: 2 };
+
+  // act
+  const commit = await previewInstall(state, locations, projectInstallOptions(environment.cwd));
+
+  // assert
+  assert.strictEqual(commit, undefined);
+  assert.deepStrictEqual(state, { marketplaces: {}, schemaVersion: 2 });
+});
+
+test("D-PL4-01: previewInstall answers the commit a git source's preflight resolved", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-preview-git-");
+  const seeded = await seedPlugin(environment.cwd, {
+    gitSource: { source: "url", url: "https://example.com/org/repo" },
+    components: { skills: ["alpha"] },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  const cloneCandidates = new Set<string>();
+
+  // act
+  const commit = await previewInstall(seeded.state, locations, {
+    ...projectInstallOptions(environment.cwd),
+    cloneCandidates,
+    cloneProbe: (options) => {
+      assert.strictEqual(options.cloneCandidates, cloneCandidates);
+      return Promise.resolve({
+        result: { kind: "materialized", pluginRoot: seeded.pluginRoot, resolvedSha: RESOLVED_SHA },
+        resolvedSha: RESOLVED_SHA,
+      });
+    },
+  });
+
+  // assert
+  assert.strictEqual(commit, RESOLVED_SHA);
+});
+
+test("D-PL4-04: previewInstall refuses an agent target a user's file holds and writes nothing", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-preview-agent-");
+  const seeded = await seedPlugin(environment.cwd, { components: { agents: ["gamma"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const target = path.join(locations.agentsDir, "pi-claude-marketplace-empty-gamma.md");
+  await mkdir(locations.agentsDir, { recursive: true });
+  await writeFile(target, "User's own agent.\n");
+  const stateBefore = structuredClone(seeded.state);
+
+  // act & assert
+  await assert.rejects(
+    previewInstall(seeded.state, locations, projectInstallOptions(environment.cwd)),
+    (error: unknown) => {
+      assert.ok(error instanceof AgentTargetOccupiedError);
+      assert.strictEqual(error.targetPath, target);
+      return true;
+    },
+  );
+  assert.strictEqual(await readFile(target, "utf8"), "User's own agent.\n");
+  await assert.rejects(readFile(locations.agentsIndexPath), { code: "ENOENT" });
+  assert.deepStrictEqual(seeded.state, stateBefore);
+});
+
+test("UPD-DEP-D1: previewInstall throws the PI-6 conflict with a name another plugin owns", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-preview-conflict-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["tool"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const installedState = structuredClone(seeded.state);
+  await runInstallLedger(installedState, locations, projectInstallOptions(environment.cwd));
+  const marketplace = installedState.marketplaces.marketplace;
+  const record = marketplace?.plugins.empty;
+  assert.ok(marketplace !== undefined && record !== undefined);
+  marketplace.plugins = { other: record };
+
+  // act & assert
+  await assert.rejects(
+    previewInstall(installedState, locations, projectInstallOptions(environment.cwd)),
+    CrossPluginConflictError,
+  );
+});
+
+test("D-PL9-05: runs the packages phase after the workflows phase and before the state phase", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-phase-order-");
+  const seeded = await seedPlugin(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+  const phaseNames: string[] = [];
+  const transaction = {
+    runPhases: <C>(phases: readonly Phase<C>[], ctx: C) => {
+      phaseNames.push(...phases.map((phase) => phase.name));
+      return runPhases(phases, ctx);
+    },
+  };
+
+  // act
+  const ledgerOutcome = await runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+      env: {},
+    },
+    undefined,
+    transaction,
+  );
+
+  // assert
+  assert.strictEqual(ledgerOutcome.kind, "installed");
+  assert.deepStrictEqual(phaseNames, [
+    "skills",
+    "commands",
+    "agents",
+    "hooks",
+    "mcp",
+    "workflows",
+    "packages",
+    "state",
+  ]);
+});
+
+test("D-PL9-03: installs a plugin outside the extension root and notes the package install its folder needs", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-outside-packages-");
+  const seeded = await seedPlugin(environment.cwd);
+  await writeFile(
+    path.join(seeded.pluginRoot, "package.json"),
+    JSON.stringify({ name: "empty", dependencies: { "pkd-dep": "1.0.0" } }),
+  );
+  await writeFile(path.join(seeded.pluginRoot, "package-lock.json"), '{"lockfileVersion":3}');
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(
+    seeded.state,
+    locations,
+    projectInstallOptions(environment.cwd),
+  );
+
+  // assert
+  assert.strictEqual(ledgerOutcome.kind, "installed");
+  assert.deepStrictEqual(
+    ledgerOutcome.summary.discoveryWarnings.map((w) => w.message),
+    [
+      `Skipped installing this plugin's dependencies: its folder in the marketplace "marketplace" is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder.`,
+    ],
+  );
+  assert.strictEqual(seeded.state.marketplaces.marketplace?.plugins.empty?.version, "0.0.1");
+  assert.deepStrictEqual((await readdir(seeded.pluginRoot)).sort(), [
+    ".claude-plugin",
+    "package-lock.json",
+    "package.json",
+  ]);
+});
+
+test("D-PL9-05: a state phase failure removes the node_modules the packages phase created in a contained plugin", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-packages-undo-");
+  const locations = locationsFor("project", environment.cwd);
+  const seeded = await seedPlugin(path.join(locations.extensionRoot, "sources", "fixture"));
+  await writeFile(
+    path.join(seeded.pluginRoot, "package.json"),
+    JSON.stringify({ name: "empty", dependencies: { "pkd-dep": "1.0.0" } }),
+  );
+  await writeFile(
+    path.join(seeded.pluginRoot, "package-lock.json"),
+    JSON.stringify({
+      lockfileVersion: 3,
+      packages: {
+        "": { dependencies: { "pkd-dep": "1.0.0" } },
+        "node_modules/pkd-dep": {
+          version: "1.0.0",
+          resolved: "https://registry.npmjs.org/pkd-dep/-/pkd-dep-1.0.0.tgz",
+          integrity: "sha512-AAAA",
+        },
+      },
+    }),
+  );
+  const installedBeforeState: string[][] = [];
+  const packageInstallOps: PackageInstallOps = {
+    runPackageManager: async (request) => {
+      await mkdir(path.join(request.cwd, "node_modules", "pkd-dep"), { recursive: true });
+      return { code: 0, stdout: "", stderr: "", timedOut: false };
+    },
+    runRegistryQuery: () => assert.fail("a lockfile without http links queries no registry"),
+    newWorkDirName: () => "work-1",
+  };
+  const transaction = {
+    packageInstallOps,
+    runPhases: <C>(phases: readonly Phase<C>[], ctx: C) =>
+      runPhases(
+        phases.map((phase): Phase<C> =>
+          phase.name === "state"
+            ? {
+                ...phase,
+                do: async () => {
+                  installedBeforeState.push(
+                    (await readdir(path.join(seeded.pluginRoot, "node_modules"))).sort(),
+                  );
+                  throw new Error("state phase failed");
+                },
+              }
+            : phase,
+        ),
+        ctx,
+      ),
+  };
+
+  // act
+  await assert.rejects(
+    runInstallLedger(
+      seeded.state,
+      locations,
+      projectInstallOptions(environment.cwd),
+      undefined,
+      transaction,
+    ),
+    /state phase failed/,
+  );
+
+  // assert
+  assert.deepStrictEqual(installedBeforeState, [[".pi-claude-marketplace", "pkd-dep"]]);
+  assert.deepStrictEqual((await readdir(seeded.pluginRoot)).sort(), [
+    ".claude-plugin",
+    "package-lock.json",
+    "package.json",
+  ]);
+});

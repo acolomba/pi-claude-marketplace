@@ -1,6 +1,10 @@
 # orchestrators/reconcile/
 
-Reconcile family: the declarative-config bridge. Each `applyReconcile` (load-time) and `pendingReconcile` (read-only `/claude:plugin pending`, D-53-01) invocation diffs the merged user-authored config (`claude-plugins.json` + `claude-plugins.local.json`) against the recorded extension state (`state.json`) and either renders the read-only pending diff (pending) or drives the mutating orchestrators back to convergence (apply).
+Reconcile family: the declarative-config bridge. It diffs the merged user-authored config (`claude-plugins.json` + `claude-plugins.local.json`) against the recorded extension state (`state.json`), and it compares each installed plugin with its marketplace's catalog. Three entry points use that diff:
+
+- `pendingReconcile` (`/claude:plugin pending`, D-53-01) lists the changes and writes nothing.
+- The load (`createLoadReconcile`, session start and `/reload`) prints the same list and changes no installation state (APL-03 / D-02).
+- `applyReconcile` (`/claude:plugin apply`, APL-01) drives the mutating orchestrators to the desired state, then converges installed plugins on the catalog (APL-02).
 
 The family follows the same shape as `orchestrators/import/` and `orchestrators/marketplace/`: typed result records, a pure planner, a pure notify projection, and a wrapping orchestrator that does the I/O.
 
@@ -13,18 +17,22 @@ orchestrators/reconcile/
 ├── apply-outcomes.ts        # PerEntryOutcome union consumed by the apply cascade
 ├── plan.ts                  # planReconcile(merged, state, scope, verdict) -- the pure planner
 ├── dependency-verdict.ts    # buildScopeSatisfactionVerdict -- the offline LOAD-01 verdict the planner takes
+├── convergence.ts           # planConvergenceCascade -- the offline catalog-move planner that pending, the load and apply share
 ├── notify.ts                # pure plan-to-rows + outcomes-to-message projections
 ├── reconcile.messaging.ts   # PENDING_CONTEXT + RECONCILE_APPLIED_CONTEXT row render maps
-├── pending.ts               # /claude:plugin pending orchestrator (read-only)
-├── backfill.ts              # load-time backfill pass (BFILL-01..03) + runScopeIsolated
-└── apply.ts                 # load-time apply orchestrator (drives the mutators)
+├── read-pass.ts             # the shared locked, write-free read pass + runScopeIsolated
+├── mcp-migration.ts         # the AMIG-01 move of MCP entries out of the legacy mcp.json
+├── delisted-plugins.ts      # the unreadable-declarer, refused-marketplace, and {not in manifest} warnings
+├── pending.ts               # /claude:plugin pending orchestrator (read-only) + composePendingReport
+├── load.ts                  # the read-only load: MIG-01, the MCP move, the pending block, warnings, routing
+└── apply.ts                 # /claude:plugin apply orchestrator (plan, then convergence)
 ```
 
 ## Purity discipline
 
-`plan.ts` exports `planReconcile(MergedConfig, ExtensionState, Scope, ScopeSatisfactionVerdict) -> ReconcilePlan`. It is a pure bidirectional 9-bucket diff: no `node:fs`, no `platform/git`, no `notify`, no `saveState` / `saveConfig` / `atomicWriteJson` / `withStateGuard` / `withLockedStateTransaction`. The architecture grep-gate at `tests/architecture/reconcile-planner-purity.test.ts` enforces this structurally; the gate operates on the comment-stripped source so the header docstring may legally mention forbidden symbols without self-invalidation.
+`plan.ts` exports `planReconcile(MergedConfig, ExtensionState, Scope, ScopeSatisfactionVerdict) -> ReconcilePlan`. It is a pure bidirectional 9-bucket diff: no `node:fs`, no `platform/git`, no `notify`, no `saveState` / `saveConfig` / `atomicWriteJson` / `withStateGuard` / `withLockedStateTransaction`. The architecture grep-gate at `test/architecture/reconcile-planner-purity.test.ts` enforces this structurally; the gate operates on the comment-stripped source so the header docstring may legally mention forbidden symbols without self-invalidation.
 
-`notify.ts` exports two pure projections: `buildReconcilePendingNotification(plans, forceInstallKeys) -> { marketplaces }` for the pending surface, whose rows are typed `MarketplaceRows<PendingMsg>`, and `buildReconcileAppliedCascade(outcomes) -> ReconcileAppliedCascadeMessage` for the apply surface. Neither projection calls `ctx.ui.notify`; `pending.ts` and `apply.ts` own the single sanctioned `notify()` call per invocation (IL-2).
+`notify.ts` exports two pure projections: `buildReconcilePendingNotification(plans, forceInstallKeys, recordedVersions, convergence, afterInstalls, refusedCopies) -> { marketplaces }` for the pending surface (and the load's block), whose rows are typed `MarketplaceRows<PendingMsg>`, and `buildReconcileAppliedCascade(outcomes) -> ReconcileAppliedCascadeMessage` for the apply surface. Neither projection calls `ctx.ui.notify`; `pending.ts` and `apply.ts` own the single sanctioned `notify()` call per invocation (IL-2).
 
 ## The 9-bucket model
 
@@ -60,10 +68,10 @@ The planner and the apply path coordinate via one structural sentinel, plus two 
 
 `apply.ts::applyReconcile` runs project-then-user (per MSG-GR-3) per scope:
 
-1. **Read pass** under `withLockedStateTransaction` with NO `tx.save()` (WR-05 write-free):
+1. **Read pass** (`read-pass.ts::readPassForScope`, shared with the load) under `withLockedStateTransaction` with NO `tx.save()` (WR-05 write-free):
 
    - Pristine-scope gate (no `state.json` AND no `claude-plugins.{,local.}json`) skips before taking the lock -- no mkdir, no lock file, no generated config.
-   - `migrateFirstRunConfig` fires first (MIG-01 first-load: generate `claude-plugins.json` from existing `state.json`; idempotent).
+   - `migrateFirstRunConfig` fires first (MIG-01 first-load: generate `claude-plugins.json` from existing `state.json`, leaving out whatever `claude-plugins.local.json` declares (FIX-02); an unreadable `claude-plugins.local.json` makes it write nothing; idempotent).
    - `loadMergedScopeConfig` produces the merged view + the per-file `ConfigLoadResult`s.
    - CFG-03 invalid-config arms surface as structured `(failed) {invalid manifest}` rows with the file BASENAME (paths redacted per T-55-02-01) -- the planner is SKIPPED for that scope (invalid input is never coerced to an empty desired-state diff).
    - Otherwise the pure `planReconcile` runs.
@@ -72,24 +80,36 @@ The planner and the apply path coordinate via one structural sentinel, plus two 
 
    ```text
    uninstall plugins -> remove marketplaces -> add marketplaces
-                     -> install plugins -> install missing dependencies (reload only, MISS-01)
-                     -> [D-09-07 re-plan when something landed]
+                     -> install plugins
+                     -> [D-09-07 re-plan when a config install landed]
                      -> enable plugins -> disable plugins
                      -> dependency-disable plugins (LOAD-01)
                      -> source-mismatch rows (report-only, always round-1)
+                     -> converge on the catalog (APL-02)
+                     -> install missing dependencies (MISS-01)
+                     -> the enables that waited on them
+                     -> judge the scope
    ```
 
-   `applyDependencyInstalls` (D-09-06) runs the SAME install cascade `installPlugin` runs, rooted at each missing dependency instead of a user-typed plugin, and only when `opts.reason === "reload"` (D-09-13) -- a startup reconcile plans the bucket but installs nothing. When it materialized or found already-present at least one key, `refreshTogglePlan` (D-09-07) re-runs the read pass for this scope and substitutes ONLY `pluginsToEnable`, `pluginsToDisable` and `pluginsToDependencyDisable` from the fresh plan before the toggle steps run -- the uninstall / remove / add / install buckets and the source-mismatch rows always come from round 1, so a round-1 failure is never retried and double-reported. This is what lets a dependent the install just satisfied stay up (or come back up) in the SAME reload.
+   When the install step materialized a plugin, `refreshTogglePlan` (D-09-07) re-runs the read pass for this scope and substitutes ONLY its toggle buckets, its missing-dependency bucket and the enables that wait from the fresh plan before the toggle steps run -- the uninstall / remove / add / install buckets and the source-mismatch rows always come from round 1, so a round-1 failure is never retried and double-reported. The read pass counts every install it plans as landed (D-PL2-02), so the toggle steps hold down no dependent that only waits on one, and it carries the enables that wait on one apart (`enablesAfterInstalls`, D-PL2-16).
+
+   `applyDependencyInstalls` (D-09-06) runs the SAME install cascade `installPlugin` runs, rooted at each missing dependency instead of a user-typed plugin, on every apply (D-02 supersedes D-09-13). It runs after the catalog moves (D-PL2-01), so a dependency a moved version needs, or one that needs a version a move lands, installs in the same apply. Once a move ran, its bucket comes from `read-pass.ts::readPlainPlanForScope`, the read pass without the move settlement. The enables that waited on it then run, each right after its own catalog move. The move and the enable report one row each (D-PL2-18), and a move whose install failed or was refused reports `(skipped) {dependency failed}`. The judgement over the final state disables any dependent an install failed to satisfy, after that install's `(failed)` row (D-PL2-11).
 
    The dependency-disable step runs after both toggle steps, so a record the config already disabled answers it idempotently and keeps its marker off (D-06-02). Its own marker write is wrapped in `runScopeIsolated`, so a transient lock or permission failure becomes one `state.json` row instead of discarding the cascade for both scopes.
 
+   The converge step (`convergeScope`) reads the scope's state again, as the earlier steps left it, and runs `convergence.ts::planConvergenceCascade` over it. Each planned move runs through the update runner's converge entry (`convergePlugin`, D-26), not through reinstall. A move whose supported component set only grew re-materializes the recorded revision (D-10, D-25). A move that a dependent's range blocks, or that needs `--partial` consent, is not run. It gets the row `pending` lists for it (D-12). A failed move reports `(failed)`, and the next move still runs (D-13). A git target may clone on a cache miss (D-11).
+
    Each driven orchestrator is invoked with `notifications: { mode: "orchestrated" }` and wrapped in a try/catch ladder that translates typed marketplace/plugin throws (`StateLockHeldError`, `PluginShapeError`, the file-shape probe classifiers) into closed-set `Reason` tokens BEFORE they reach the projection (T-55-02-02: raw `error.message` never reaches the rendered output).
 
-3. **Single notify emission per invocation** (IL-2 / RECON-04). Empty-and- clean reconciles are SILENT (NFR-2). Post-commit hygiene warnings (data-dir mkdir deferred, completion-cache refresh deferred, etc.) surface through a sanctioned second `notifyDiagnostic` call (the only exception to RECON-04's single-emit rule), mirroring the import cascade's `pushDiagnostic` channel.
+3. **Single notify emission per invocation** (IL-2 / RECON-04). An empty-and-clean `apply` reports `Apply: nothing to change.` through the `reconcile-pending-empty` advisory and writes nothing (APL-01 / D-08); an empty-and-clean load stays SILENT (D-05). Post-commit hygiene warnings (data-dir mkdir deferred, completion-cache refresh deferred, etc.) surface through a sanctioned second `notifyDiagnostic` call (the only exception to RECON-04's single-emit rule), mirroring the import cascade's `pushDiagnostic` channel.
+
+## Load path
+
+`load.ts::createLoadReconcile` builds the load's reconcile step (session start and `/reload`). It changes no installation state (APL-03 / D-02). Per scope, project first, it runs `read-pass.ts::openScopePass` (the read pass with MIG-01 and the legacy state migration, then the AMIG-01 MCP move), and then `closeScopePass` (the unreadable-declarer warning, the `{invalid manifest}` warning for each enabled plugin of a marketplace Claude Code refuses (D-PL5-28), the `{not in manifest}` warnings, and the hook routing rebuild). After both scopes, it builds `pending`'s report with `pending.ts::composePendingReport` over every scope whose read pass did not throw. On a mismatch it prints that block, which ends with the apply trailer and never with the `/reload` hint (D-05, D-06). On a match it prints nothing (RECON-05).
 
 ## Pending path
 
-`pending.ts::pendingReconcile` is the read-only mirror: NEVER writes (no `tx.save()`, no `saveConfig`), NEVER touches the network (BLOCK F in `eslint.config.js` lints the reconcile `pending.ts`, `plan.ts`, and `notify.ts` for git surface). It runs `loadMergedScopeConfig` per scope, surfaces CFG-03 and state-load throws as structured `(failed)` basename rows, and otherwise calls `planReconcile` against a synthetic post-migration merged view (`mergedViewForPlanning`) so a pre-migration window (base config absent, populated state) is not misrendered as a mass-uninstall plan. Each invocation dispatches once: `notify()` with the dedicated `ReconcilePendingEmptyMessage` for the empty-steady-state path, otherwise `notifyWithContext` with `PENDING_CONTEXT` over the projection's rows merged with the `(failed)` rows and sorted by `compareByNameThenScope`.
+`pending.ts::pendingReconcile` is the read-only mirror: NEVER writes (no `tx.save()`, no `saveConfig`), NEVER touches the network (BLOCK F in `eslint.config.js` lints the reconcile `pending.ts`, `plan.ts`, and `notify.ts` for git surface). It runs `loadMergedScopeConfig` per scope, surfaces CFG-03 and state-load throws as structured `(failed)` basename rows, and otherwise calls `planReconcile` against a synthetic post-migration merged view (`mergedViewForPlanning`) so a pre-migration window (base config absent, populated state) is not misrendered as a mass-uninstall plan. `composePendingReport` builds the report, and the load uses the same function. Per readable scope, it computes the LOAD-01 satisfaction verdict (`dependency-verdict.ts::buildScopeSatisfactionVerdict`) and hands it to the planner, so `pending` lists the dependency disables, lifts and installs that `apply` makes. When the plan installs a missing dependency, `pending` assumes that the install succeeds and re-plans the toggles, as `apply` does (D-09-07). It then runs `convergence.ts::planConvergenceCascade` over the final plan and lists the catalog moves, the held moves and the declined moves after the plan's rows. The moves `apply` defers until after its missing-dependency install (`movesAfterInstalls`) are listed after that install, in the order `stepsAfterInstalls` gives (D-PL2-02). A waiting record's move and its enable list as two rows, in that order (D-PL2-18). A record whose installed copy cannot be used lists the REC-05 row `apply` reports for it, after the plan's rows (D-PL2-25). Each invocation dispatches once: `notify()` with the dedicated `ReconcilePendingEmptyMessage` for the empty-steady-state path, otherwise `notifyPendingReport`, which calls `notifyWithContext` with `PENDING_CONTEXT` over the projection's rows merged with the `(failed)` rows and sorted by `compareByNameThenScope`.
 
 ## Analog modules
 

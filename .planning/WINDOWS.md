@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 23
-waived_count: 27
-fixed_count: 37
-total_count: 87
-last_updated: 2026-09-26T03:28:56.741Z
+open_count: 13
+waived_count: 52
+fixed_count: 46
+total_count: 111
+last_updated: 2026-10-27T05:29:00.773Z
 ---
 
 # Broken Windows Ledger
@@ -46,33 +46,33 @@ last_updated: 2026-09-26T03:28:56.741Z
 | 29 | 117 | deviation | .planning/codebase/CONVENTIONS.md | 151 | CONVENTIONS.md:151 claims barrels exist per bridge kind 'plus the aggregate bridges/index.ts'. Measured in 117-12: extensions/pi-claude-marketplace/bridges/ holds agents/, commands/, hooks/, mcp/, skills/ and README.md — there is no bridges/index.ts. The five per-kind barrels do exist. Documentation drift in a planning document, outside the source tree and outside this phase's scope (D-117-13 opened no production licence and this plan edits no source); recorded, not fixed. | fixed |  | 2026-09-03T22:29:00.933Z | 2026-09-12T16:13:20.671Z |
 | 30 | 117 | unrun-verify | scripts/test-coverage-direct.mjs |  | WR-05 (review iteration 2): the two direct-coverage sweeps have no automated control. Both stop at the first accepted D-116-01a shortfall, so a red run does not distinguish a genuine new gap from a known one, and test:coverage:direct:negative runs in every CI job while the gate it controls runs nowhere. The reviewer's remedy (teach the script an accepted-shortfall list) is barred in terms by D-117-20: 'not by a ledger-keyed verdict (which would be D-116-01a's banned pragma wearing a different hat)'. Built and measured during the fix pass, then reverted unshipped: with the list the changed-pairs sweep runs 204 pairs at exit 0 (197 passed, 7 accepted shortfalls each named with its ledger entry), and both self-expiry refusals work (a listed module that becomes complete, and an entry naming a module no longer in the tree). All seven readings are identical on Node v22.22.2 and v26.8.1. Mitigated in documentation only: CONTRIBUTING.md now names the seven modules and their exact readings, so a contributor can tell an expected stop from a regression without opening a planning artifact. Needs an operator decision to close: either revisit D-117-20 or accept that the gate has no CI control. RESOLVED 2026-09-04 by operator decision: D-117-20 stands (no ledger-keyed gate verdict); SC-4's literal wording accepted as superseded via an overrides entry on 117-VERIFICATION.md. The reproducibility half was fixed outright by npm run test:coverage:direct:report (commit 1495488b), which regenerates all 204 rows from the gate's own enumeration and blocks nothing. | fixed |  | 2026-09-04T01:03:42.619Z |  |
 | 31 | 106 | deviation | tests/architecture/compat-01-no-expansion.test.ts |  | The workflows reason required the inherited compatibility lock to append the new closed-set member. | fixed |  | 2026-08-29T19:13:44.624Z | 2026-08-29T19:13:48.337Z |
-| 32 | 06 | deviation | scripts/check-unused-type-members.contracts.json |  | Live gate closes with 138 unread members, each recorded in 06-LIVE-TRIAGE.md with evidence and one of six bounded owner repair plans (06-09..06-14); 06-08 activation is blocked on them | open |  | 2026-09-15T18:22:05.279Z |  |
-| 33 | 06 | deviation | extensions/pi-claude-marketplace/bridges/hooks/stage.ts | 227 | WriteHookConfigResult.written left unread on purpose: nine deepStrictEqual sites read the whole result, so the row is an analyzer lineage under-credit through a factory-returned closure, not a dead member | open |  | 2026-09-15T22:02:05.511Z |  |
-| 34 | 06 | deviation | extensions/pi-claude-marketplace/edge/handlers/tools.ts | 140 | PluginRow.marketplace and .scope stay unread: an external-output arrival chain breaks at a destructured binding, which the flow walk records no transfer into | open |  | 2026-09-16T22:12:40.622Z |  |
+| 32 | 06 | deviation | scripts/check-unused-type-members.contracts.json |  | Live gate closes with 138 unread members, each recorded in 06-LIVE-TRIAGE.md with evidence and one of six bounded owner repair plans (06-09..06-14); 06-08 activation is blocked on them | waived | [json-output] Moot: records a scope deviation against the unused-type-member live gate (lint:type-members), which #236 (d7213bc2, 2026-10-05) deleted; nothing remains to fix. The shipped work was audited at the test-backlog close. | 2026-09-15T18:22:05.279Z | 2026-10-10T20:21:01.363Z |
+| 33 | 06 | deviation | extensions/pi-claude-marketplace/bridges/hooks/stage.ts | 227 | WriteHookConfigResult.written left unread on purpose: nine deepStrictEqual sites read the whole result, so the row is an analyzer lineage under-credit through a factory-returned closure, not a dead member | waived | [json-output] Moot: records a scope deviation against the unused-type-member live gate (lint:type-members), which #236 (d7213bc2, 2026-10-05) deleted; nothing remains to fix. The shipped work was audited at the test-backlog close. | 2026-09-15T22:02:05.511Z | 2026-10-10T20:21:01.732Z |
+| 34 | 06 | deviation | extensions/pi-claude-marketplace/edge/handlers/tools.ts | 140 | PluginRow.marketplace and .scope stay unread: an external-output arrival chain breaks at a destructured binding, which the flow walk records no transfer into | waived | [json-output] Moot: records a scope deviation against the unused-type-member live gate (lint:type-members), which #236 (d7213bc2, 2026-10-05) deleted; nothing remains to fix. The shipped work was audited at the test-backlog close. | 2026-09-16T22:12:40.622Z | 2026-10-10T20:21:02.086Z |
 | 35 | 06 | deviation | extensions/pi-claude-marketplace/orchestrators/edge-deps.ts | 92 | LocationsResolverLike.loadStateForScope.marketplaces stays unread: aliasing edge/completions/data.ts::LocationsResolver onto it leaves MarketplaceStateRecord with no consumer inside the extension and fallow dead-code exits 1; the clean fix moves three test imports | fixed |  | 2026-09-17T04:14:48.891Z | 2026-09-17T06:03:02.798Z |
 | 36 | 06 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/info.messaging.ts | 68 | PLUGIN_INFO_RENDER.status stays unread by a recorded decision the gate carries as a per-row exception: A type-selection contract was drafted for this filter, submitted to the real contract engine against this tree, and refused: "filter ...:68:37 selects over a type that does not discriminate on status". PluginInfoCascadeMsg is PluginSkippedMessage, a single variant, so the selected-over type is not a union and discriminates nothing. The draft was withdrawn rather than reshaped. The filter itself was NOT dropped: every sibling render map in the family carries the same Extract<Msg, { status: K }> shape with an accepted entry, and dropping it here hands each arm the whole union the moment info gains a second cascade status -- a widening the as const satisfies pin cannot catch. | waived | Accepted by a recorded decision and enforced as one: the gate carries this exact member coordinate in scripts/check-unused-type-members.exceptions.json with its measured mechanism, prints it on every run, and refuses the run outright if the entry ever stops matching a reported finding. It is not a silent allowance and it cannot be widened into one. | 2026-09-17T06:03:12.118Z | 2026-09-17T06:03:21.334Z |
 | 37 | 06 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts | 129 | enableRowDependencies.signals.partition stays unread by a recorded decision the gate carries as a per-row exception: A partition?: never refusal marker. LedgerDegradationSignals declares no partition and the Pick<...> left operand declares none either, so there is no slot to narrow and every restatement ADDS a key; the type-refinement prover refuses it by construction rather than by coordinate, so no contract entry can reach it. Its documented job (WR-01) is to refuse PluginUpdateUpdatedOutcome, which declares the same two optional facts and would otherwise match structurally and silently return an empty dependency list for every update. Weakening the refusal to clear this row reintroduces exactly that bug. | waived | Accepted by a recorded decision and enforced as one: the gate carries this exact member coordinate in scripts/check-unused-type-members.exceptions.json with its measured mechanism, prints it on every run, and refuses the run outright if the entry ever stops matching a reported finding. It is not a silent allowance and it cannot be widened into one. | 2026-09-17T06:03:12.782Z | 2026-09-17T06:03:21.649Z |
 | 38 | 06 | deviation | extensions/pi-claude-marketplace/orchestrators/types.ts | 155 | UpdatePhaseFailure.msg stays unread by a recorded decision the gate carries as a per-row exception: The reader survey agrees the slot has no reader today -- the only syntax naming this declaration is the write at update-swap.ts:929, and the f.msg reads at :921 and :929 land on Phase3Failure.msg through UpdatePhase3Failure, a different declaration. The removal is still refused: phaseFailures is populated by exactly one path, the phase-3 rollback aggregation, and its own header states the contract, to surface failures structurally so the cascade renderer can build the rollback-partial parent plus indented children. A slot a rollback path populates is behaviour even with no reader today, and deleting it forces a future consumer to re-parse the per-phase text back out of notes prose. | waived | Accepted by a recorded decision and enforced as one: the gate carries this exact member coordinate in scripts/check-unused-type-members.exceptions.json with its measured mechanism, prints it on every run, and refuses the run outright if the entry ever stops matching a reported finding. It is not a silent allowance and it cannot be widened into one. | 2026-09-17T06:03:13.396Z | 2026-09-17T06:03:21.958Z |
 | 39 | 06 | deviation | extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts | 41 | AuthAttemptResult.authAttempted stays unread by a recorded decision the gate carries as a per-row exception: D-32-05 put authAttempted: true on BOTH arms deliberately, as a reference-only future-proofing marker, and the declaration own comment states the implementation never branches on it: onAuthFailure(url, cred) is called with only the credential and never receives this value. The analyzer is not involved -- there is no read to find. Its structural twin DeviceFlowResult.authAttempted in domain/github-auth.ts is test-only-observed with 36 witnesses; this platform copy exists only because platform/README.md forbids a platform to domain import, so it carries no witness of its own and the orchestrators rely on structural typing to pass initiateDeviceFlow across. Clearing this row means revisiting D-32-05, not repairing source. | waived | Accepted by a recorded decision and enforced as one: the gate carries this exact member coordinate in scripts/check-unused-type-members.exceptions.json with its measured mechanism, prints it on every run, and refuses the run outright if the entry ever stops matching a reported finding. It is not a silent allowance and it cannot be widened into one. | 2026-09-17T06:03:14.040Z | 2026-09-17T06:03:22.325Z |
 | 40 | 06 | deviation | extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts | 42 | AuthAttemptResult.authAttempted stays unread by a recorded decision the gate carries as a per-row exception: D-32-05 put authAttempted: true on BOTH arms deliberately, as a reference-only future-proofing marker, and the declaration own comment states the implementation never branches on it: onAuthFailure(url, cred) is called with only the credential and never receives this value. The analyzer is not involved -- there is no read to find. Its structural twin DeviceFlowResult.authAttempted in domain/github-auth.ts is test-only-observed with 36 witnesses; this platform copy exists only because platform/README.md forbids a platform to domain import, so it carries no witness of its own and the orchestrators rely on structural typing to pass initiateDeviceFlow across. Clearing this row means revisiting D-32-05, not repairing source. | waived | Accepted by a recorded decision and enforced as one: the gate carries this exact member coordinate in scripts/check-unused-type-members.exceptions.json with its measured mechanism, prints it on every run, and refuses the run outright if the entry ever stops matching a reported finding. It is not a silent allowance and it cannot be widened into one. | 2026-09-17T06:03:14.703Z | 2026-09-17T06:03:22.673Z |
-| 41 | 07 | deviation | scripts/coverage-producer.convert.mjs |  | Producer adapter split into coverage-producer.convert.mjs (library) and coverage-producer.mjs (CLI) so fallow's unused-export gate has a static consumer; plan named one file | open |  | 2026-09-17T19:10:51.585Z |  |
-| 42 | 07 | deviation | .gitignore |  | Added !vendor/coverage/*.tgz so the delivered producer archive is tracked despite the repository-wide *.tgz ignore; .gitignore was not in the plan's file list | open |  | 2026-09-17T19:10:59.969Z |  |
-| 43 | 07 | deviation | package.json |  | coverage:producer:build script alias added with the delivery tool (Task 2) instead of Task 3 because fallow reports an unreferenced script as an unused file | open |  | 2026-09-17T19:11:00.326Z |  |
-| 44 | 07 | deviation | scripts/coverage-producer.convert.mjs |  | convertScripts now unwraps the merger's FileCoverage instances into plain records (their maps sat under data, hidden by JSON.stringify); the file was not in the plan's file list | open |  | 2026-09-17T20:09:28.277Z |  |
-| 45 | 07 | deviation | tests/scripts/coverage-source-map-fixtures.ts |  | Mapping fixtures (endpoints, declarations, crlf) live in a sibling support module mirroring coverage-producer-fixtures.ts instead of the test file; the module was not in the plan's file list | open |  | 2026-09-17T20:09:28.640Z |  |
-| 46 | 07 | deviation | scripts/coverage-source-map.mjs |  | The AST walker primitives (fresh parse, child-node walk, newline-only line model, declared-function spans) moved from coverage-source-map.mjs and coverage-correspondence.mjs into scripts/coverage-syntax.mjs so fallow's duplicate gate passes; neither coverage-source-map.mjs nor the new module was in the plan's file list | open |  | 2026-09-18T13:01:14.775Z |  |
-| 47 | 07 | deviation | tests/scripts/coverage-run-support.ts |  | Capture-and-convert, map publishing and installed-Fallow helpers shared by the correspondence, schema and validation controls live in a support module that was not in the plan's file list | open |  | 2026-09-18T13:01:15.144Z |  |
-| 48 | 07 | deviation | tests/scripts/coverage-correspondence-fixtures.ts |  | The twins fixture (two same-name callbacks with equal hits and statement ratio) lives in a sibling fixture module mirroring coverage-producer-fixtures.ts; the module was not in the plan's file list | open |  | 2026-09-18T13:01:15.464Z |  |
-| 49 | 07 | deviation | scripts/coverage-capture.mjs |  | The capture records an executed text for every production source no test loaded (inventory snapshot stripped under the same runtime) so consumers find every production source in the run; the file was not in the plan's list | open |  | 2026-09-18T14:53:44.164Z |  |
-| 50 | 07 | deviation | scripts/coverage-source-map.mjs |  | recordedModule serves unloaded production records from the inventory snapshot store and reports whether the run loaded the module; the file was not in the plan's list | open |  | 2026-09-18T14:53:44.869Z |  |
-| 51 | 07 | deviation | scripts/coverage-validate.mjs |  | coverage:validate verifies an accepted bundle (producer identity, full re-validation, receipt equality) and refuses execution counters on an unloaded source; the file postdates the plan and was not in its list | open |  | 2026-09-18T14:53:45.504Z |  |
-| 52 | 07 | deviation | scripts/coverage-producer.convert.mjs |  | The adapter exports createCoverageMerger and returns merged files in path order so snapshot order cannot change the map bytes; the file was not in the plan's list | open |  | 2026-09-18T14:53:46.246Z |  |
-| 53 | 07 | deviation | tests/scripts/coverage-projection.ts |  | The projection helpers the producer corpus and the unit-bundle controls share live in a support module that was not in the plan's file list | open |  | 2026-09-18T14:53:46.812Z |  |
-| 54 | 07 | deviation | tests/scripts/coverage-unit-fixtures.ts |  | The four-source production population fixture lives in a sibling fixture module mirroring coverage-producer-fixtures.ts; the module was not in the plan's file list | open |  | 2026-09-18T14:53:47.434Z |  |
-| 55 | 07 | deviation | tests/scripts/coverage-source-map.test.ts |  | The strip proof admits the two- and three-byte blanks (U+00A0, U+2002) strip mode writes for removed characters, found by the full-population conversion; the control was added to a test file outside the plan's list | open |  | 2026-09-18T15:10:44.507Z |  |
-| 56 | 07 | deviation | tests/scripts/check-coverage-risk-fixtures.ts |  | The production CRAP policy corpus (classify, grade, below, twins, unicode fixtures with anchors, complexities and statement counts written from the source text) lives in a sibling fixture module mirroring coverage-producer-fixtures.ts; the module was not in the plan's file list | open |  | 2026-09-18T16:56:44.890Z |  |
-| 57 | 07 | deviation | scripts/coverage-acceptance.mjs |  | 07-07 Task 1 touched five files outside the plan's list (Rule 2, T-07-07-01): scripts/coverage-acceptance.mjs (new), scripts/coverage-unit.mjs, scripts/coverage-validate.mjs, scripts/coverage-capture.manifest.mjs and tests/scripts/check-coverage-risk-fixtures.ts, so the accepted-bundle readback recomputes the recorded population and denominators and refuses copied counts (summary-mismatch) | open |  | 2026-09-18T18:18:32.642Z |  |
-| 58 | 07 | deviation | tests/architecture/pre-commit-hooks.ts |  | 07-08 Task 1 touched five files outside the plan's list: scripts/coverage-capture.mjs (--plain mode the plan names as its example), tests/architecture/pre-commit-hooks.ts (new; the hook reader moved out of unused-type-member-gate.test.ts so both gates share one parser), tests/architecture/unused-type-member-gate.test.ts, tests/architecture/unit-suite-glob-completeness.test.ts and tests/scripts/coverage-capture.test.ts (both scraped the unit glob out of package.json and now read the one authoritative selection); no production source changed | open |  | 2026-09-18T20:55:54.554Z |  |
+| 41 | 07 | deviation | scripts/coverage-producer.convert.mjs |  | Producer adapter split into coverage-producer.convert.mjs (library) and coverage-producer.mjs (CLI) so fallow's unused-export gate has a static consumer; plan named one file | waived | [json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close. | 2026-09-17T19:10:51.585Z | 2026-10-10T20:21:02.521Z |
+| 42 | 07 | deviation | .gitignore |  | Added !vendor/coverage/*.tgz so the delivered producer archive is tracked despite the repository-wide *.tgz ignore; .gitignore was not in the plan's file list | waived | [json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close. | 2026-09-17T19:10:59.969Z | 2026-10-10T20:21:02.868Z |
+| 43 | 07 | deviation | package.json |  | coverage:producer:build script alias added with the delivery tool (Task 2) instead of Task 3 because fallow reports an unreferenced script as an unused file | waived | [json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close. | 2026-09-17T19:11:00.326Z | 2026-10-10T20:21:03.256Z |
+| 44 | 07 | deviation | scripts/coverage-producer.convert.mjs |  | convertScripts now unwraps the merger's FileCoverage instances into plain records (their maps sat under data, hidden by JSON.stringify); the file was not in the plan's file list | waived | [json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close. | 2026-09-17T20:09:28.277Z | 2026-10-10T20:21:03.576Z |
+| 45 | 07 | deviation | tests/scripts/coverage-source-map-fixtures.ts |  | Mapping fixtures (endpoints, declarations, crlf) live in a sibling support module mirroring coverage-producer-fixtures.ts instead of the test file; the module was not in the plan's file list | waived | [json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close. | 2026-09-17T20:09:28.640Z | 2026-10-10T20:21:03.925Z |
+| 46 | 07 | deviation | scripts/coverage-source-map.mjs |  | The AST walker primitives (fresh parse, child-node walk, newline-only line model, declared-function spans) moved from coverage-source-map.mjs and coverage-correspondence.mjs into scripts/coverage-syntax.mjs so fallow's duplicate gate passes; neither coverage-source-map.mjs nor the new module was in the plan's file list | waived | [json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close. | 2026-09-18T13:01:14.775Z | 2026-10-10T20:21:04.268Z |
+| 47 | 07 | deviation | tests/scripts/coverage-run-support.ts |  | Capture-and-convert, map publishing and installed-Fallow helpers shared by the correspondence, schema and validation controls live in a support module that was not in the plan's file list | waived | [json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close. | 2026-09-18T13:01:15.144Z | 2026-10-10T20:21:04.622Z |
+| 48 | 07 | deviation | tests/scripts/coverage-correspondence-fixtures.ts |  | The twins fixture (two same-name callbacks with equal hits and statement ratio) lives in a sibling fixture module mirroring coverage-producer-fixtures.ts; the module was not in the plan's file list | waived | [json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close. | 2026-09-18T13:01:15.464Z | 2026-10-10T20:21:04.970Z |
+| 49 | 07 | deviation | scripts/coverage-capture.mjs |  | The capture records an executed text for every production source no test loaded (inventory snapshot stripped under the same runtime) so consumers find every production source in the run; the file was not in the plan's list | waived | [json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close. | 2026-09-18T14:53:44.164Z | 2026-10-10T20:21:05.345Z |
+| 50 | 07 | deviation | scripts/coverage-source-map.mjs |  | recordedModule serves unloaded production records from the inventory snapshot store and reports whether the run loaded the module; the file was not in the plan's list | waived | [json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close. | 2026-09-18T14:53:44.869Z | 2026-10-10T20:21:05.675Z |
+| 51 | 07 | deviation | scripts/coverage-validate.mjs |  | coverage:validate verifies an accepted bundle (producer identity, full re-validation, receipt equality) and refuses execution counters on an unloaded source; the file postdates the plan and was not in its list | waived | [json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close. | 2026-09-18T14:53:45.504Z | 2026-10-10T20:21:06.050Z |
+| 52 | 07 | deviation | scripts/coverage-producer.convert.mjs |  | The adapter exports createCoverageMerger and returns merged files in path order so snapshot order cannot change the map bytes; the file was not in the plan's list | waived | [json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close. | 2026-09-18T14:53:46.246Z | 2026-10-10T20:21:06.403Z |
+| 53 | 07 | deviation | tests/scripts/coverage-projection.ts |  | The projection helpers the producer corpus and the unit-bundle controls share live in a support module that was not in the plan's file list | waived | [json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close. | 2026-09-18T14:53:46.812Z | 2026-10-10T20:21:06.756Z |
+| 54 | 07 | deviation | tests/scripts/coverage-unit-fixtures.ts |  | The four-source production population fixture lives in a sibling fixture module mirroring coverage-producer-fixtures.ts; the module was not in the plan's file list | waived | [json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close. | 2026-09-18T14:53:47.434Z | 2026-10-10T20:21:07.109Z |
+| 55 | 07 | deviation | tests/scripts/coverage-source-map.test.ts |  | The strip proof admits the two- and three-byte blanks (U+00A0, U+2002) strip mode writes for removed characters, found by the full-population conversion; the control was added to a test file outside the plan's list | waived | [json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close. | 2026-09-18T15:10:44.507Z | 2026-10-10T20:21:07.463Z |
+| 56 | 07 | deviation | tests/scripts/check-coverage-risk-fixtures.ts |  | The production CRAP policy corpus (classify, grade, below, twins, unicode fixtures with anchors, complexities and statement counts written from the source text) lives in a sibling fixture module mirroring coverage-producer-fixtures.ts; the module was not in the plan's file list | waived | [json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close. | 2026-09-18T16:56:44.890Z | 2026-10-10T20:21:07.813Z |
+| 57 | 07 | deviation | scripts/coverage-acceptance.mjs |  | 07-07 Task 1 touched five files outside the plan's list (Rule 2, T-07-07-01): scripts/coverage-acceptance.mjs (new), scripts/coverage-unit.mjs, scripts/coverage-validate.mjs, scripts/coverage-capture.manifest.mjs and tests/scripts/check-coverage-risk-fixtures.ts, so the accepted-bundle readback recomputes the recorded population and denominators and refuses copied counts (summary-mismatch) | waived | [json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close. | 2026-09-18T18:18:32.642Z | 2026-10-10T20:21:08.173Z |
+| 58 | 07 | deviation | tests/architecture/pre-commit-hooks.ts |  | 07-08 Task 1 touched five files outside the plan's list: scripts/coverage-capture.mjs (--plain mode the plan names as its example), tests/architecture/pre-commit-hooks.ts (new; the hook reader moved out of unused-type-member-gate.test.ts so both gates share one parser), tests/architecture/unused-type-member-gate.test.ts, tests/architecture/unit-suite-glob-completeness.test.ts and tests/scripts/coverage-capture.test.ts (both scraped the unit glob out of package.json and now read the one authoritative selection); no production source changed | waived | [json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close. | 2026-09-18T20:55:54.554Z | 2026-10-10T20:21:08.517Z |
 | 59 | 114 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts | 125 | [workflows-replay] enable and update rows raise severity to warning for an absent host workflow engine but render no {requires pi-dynamic-workflows} marker: enableRowDependencies and update-row.ts::outcomeDependencies do not yet push "workflows" | fixed |  | 2026-09-08T05:17:30.752Z | 2026-09-08T06:07:43.302Z |
 | 60 | 114 | deviation | README.md |  | [workflows-replay] both README taglines still list five component kinds and omit workflows; the Features and Prerequisites lists were updated but the tagline was out of the plan's scope | fixed |  | 2026-09-08T07:41:37.490Z | 2026-09-08T08:05:26.612Z |
 | 61 | 114 | unmet-truth | docs/workflows-compatibility.md | 23 | [workflows-replay] the compatibility doc cites 15 exact line ranges inside @quintinshaw/pi-dynamic-workflows 3.10.1, a package this repo does not vendor, so no gate can detect that an engine upgrade has moved them; the doc now states the pin explicitly and this entry names it as the subject WPIN-01's machine-checkable re-read has to cover | waived | Carried by BACKLOG.md WPIN-01 (the deferred requirement, moved there at archive): nothing cheaper than vendoring can detect a moved line range, and vendoring is out of scope. | 2026-09-08T08:05:03.125Z | 2026-09-21T15:05:10.463Z |
@@ -98,10 +98,34 @@ last_updated: 2026-09-26T03:28:56.741Z
 | 81 | 113 | unmet-truth | tests/architecture |  | [workflows-replay] one of the three promised-but-unbuilt regression gates is still unbuilt: the abort-path call-site enumeration. Entry #49 recorded three, and two were built on 2026-09-10 - tests/architecture/workflows-update-placed-names.test.ts for the onPlaced source, and tests/architecture/no-write-in-workflows-staging-scan.test.ts for the read-only scan, each planted and observed red before being trusted. The third has no gate. T-111-03 (111-01-PLAN.md:206) claims a source assertion keeps a bare path join out of the workflows bridge, and separately the removed grep threshold on abortPreparedWorkflows guarded that no unwind path omits the workflows arm. Both properties hold at HEAD by direct read, and update.test.ts#WLIF-02 would catch the single-function regression - what neither catches is a SECOND function-level entry point into the abort flow that skips the workflows arm on a different failure branch. The operator chose the two gates and not a third; recorded so the absence stays visible rather than dissolving into a closed entry. | waived | Accepted residual, decided at 116: two gates chosen (update.test.ts#WLIF-02 and the removed grep threshold's replacement), not a third. What stays ungated is a SECOND function-level entry point skipping the workflows arm on a different failure branch. Listed so the absence stays visible. | 2026-09-10T14:59:05.576Z | 2026-09-21T15:05:10.770Z |
 | 82 | 116 | unmet-truth | extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts | 404 | [workflows-replay] one cause reaches the cascade under two different reason tokens depending on which layer catches it. A held state lock during a backfill re-materialize is reported to the user as 'unreadable', not 'lock held'. reinstallPlugin catches StateLockHeldError and routes it through handleSinglePluginFailure -> reasonsFromTypedError, which knows only PluginShapeError, ManualRecoveryError and errno codes, so it falls through narrowReason's last-resort return at reinstall.messaging.ts:404 to 'unreadable'. maybeBackfillPlugin's failed arm then prefers outcome.reasons[0] over classifyOrchestratorThrow, which DOES map StateLockHeldError to 'lock held' at apply-outcomes.ts:380. So applyBackfillForScopeIsolated's own WR-02 wrapper says 'lock held' while the re-materialize path says 'unreadable' for the same cause, both from the same closed ContentReason set. narrowReason's own comment for the already-disabled arm states the principle this breaks: falling through to unreadable makes the row claim the cascade could not read the plugin, which is false - nothing was unreadable, another operation held the lock, and the operator loses the one word that would tell them to retry. Found while building the ENBL-08 lock-collision twin; the test pins 'unreadable' as OBSERVED not endorsed, with the mechanism in its assert block, so it reddens loudly if someone fixes this. | fixed |  | 2026-09-10T15:14:27.879Z | 2026-09-21T15:04:50.412Z |
 | 83 | 117 | deviation | extensions/pi-claude-marketplace/domain/name.ts | 163 | [workflows-live-uat] a bridged plugin agent is unaddressable as a workflow agentType, so every workflow agent() call that names one silently degrades. generatedAgentName builds "pi-claude-marketplace-<plugin>-<agent>"; the host engine keys its registry on the frontmatter name (agent-registry.ts:117-133 at 3.13.0) and upstream Claude Code namespaces plugin agents as "<plugin>:<agent>". Measured 2026-09-22 driving code-modernization:modernize-harden-scan against a scoped legacy/demo slice: the engine logged [INFO] unknown agentType "code-modernization:security-auditor"; using default tools/model five times, once per finder, and completed. The bound tool allowlist (read,find,grep,bash), model and systemPromptMode: replace are all dropped with no warning to the user. The sibling generator in the same file, generatedWorkflowName at name.ts:171+, already uses the colon form, so the divergence is internal as well as upstream. | fixed |  | 2026-09-22T12:10:09.555Z | 2026-09-22T13:20:31.198Z |
-| 84 | 117 | unrun-verify | tests/live-uat/README.md |  | [workflows-live-uat] the bridge-to-engine path is proven end to end but workflow OUTPUT quality is not, and the blocker is the sandbox rather than the bridge. Measured 2026-09-22, engine 3.13.0, pi 0.85.1, tmp/pi-uat sandbox: code-modernization:modernize-harden-scan ran to status completed in 16.5s with all five Find-phase agents done, the staged envelope loaded from the user saved store, the Claude-authored script parsed unmodified, log()/dedup/refutation stages ran and the script return value came back as JSON. It returned zero findings because every subagent declined to call any tool -- each emitted "structured_output recovered from prose extraction (the model never called the tool)" and then asserted in prose that no filesystem was available, which is false: agent.ts:818 defaults to createCodingTools(cwd) when the invocation passes none. A one-agent negative control that only asked for one file name field failed identically with SCHEMA_NONCOMPLIANCE at 217 output tokens, so the cause is not code-modernization, the six envelopes or this bridge. Sandbox has only openai-codex authed; gpt-5.5 and gpt-5.6-terra both failed this way and gpt-5.3-codex-spark hung past 200s without writing a run record, so the openai-codex-responses API path cannot be isolated from the engine subagent layer here. Closing this needs a second provider (an Anthropic key in tmp/pi-uat/agent) and one re-run; until then the Verify phase and the adversarial second pass are unobserved. | open |  | 2026-09-22T12:10:21.345Z |  |
-| 85 | 1 | unrun-verify | tests/orchestrators/marketplace/update.test.ts |  | 20 unit cases in the plugin and edge surfaces remain RED by design until plan 01-03 realigns them; whole-suite npm run test:coverage:unit exits 1 | open |  | 2026-09-26T03:28:56.741Z |  |
+| 84 | 117 | unrun-verify | tests/live-uat/README.md |  | [workflows-live-uat] the bridge-to-engine path is proven end to end but workflow OUTPUT quality is not, and the blocker is the sandbox rather than the bridge. Measured 2026-09-22, engine 3.13.0, pi 0.85.1, tmp/pi-uat sandbox: code-modernization:modernize-harden-scan ran to status completed in 16.5s with all five Find-phase agents done, the staged envelope loaded from the user saved store, the Claude-authored script parsed unmodified, log()/dedup/refutation stages ran and the script return value came back as JSON. It returned zero findings because every subagent declined to call any tool -- each emitted "structured_output recovered from prose extraction (the model never called the tool)" and then asserted in prose that no filesystem was available, which is false: agent.ts:818 defaults to createCodingTools(cwd) when the invocation passes none. A one-agent negative control that only asked for one file name field failed identically with SCHEMA_NONCOMPLIANCE at 217 output tokens, so the cause is not code-modernization, the six envelopes or this bridge. Sandbox has only openai-codex authed; gpt-5.5 and gpt-5.6-terra both failed this way and gpt-5.3-codex-spark hung past 200s without writing a run record, so the openai-codex-responses API path cannot be isolated from the engine subagent layer here. Closing this needs a second provider (an Anthropic key in tmp/pi-uat/agent) and one re-run; until then the Verify phase and the adversarial second pass are unobserved. | waived | [json-output] Carried to BACKLOG.md WOUT-01: workflow output quality is unobserved because engine subagents declined every tool call under the sandbox's only authed provider; settle it with an Anthropic key in tmp/pi-uat/agent and one canary re-run. | 2026-09-22T12:10:21.345Z | 2026-10-10T20:21:08.882Z |
+| 85 | 1 | unrun-verify | tests/orchestrators/marketplace/update.test.ts |  | 20 unit cases in the plugin and edge surfaces remain RED by design until plan 01-03 realigns them; whole-suite npm run test:coverage:unit exits 1 | fixed |  | 2026-09-26T03:28:56.741Z | 2026-10-10T20:21:09.247Z |
 | 86 | 01 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/info.ts |  | buildRemoteNotInstalledRow spreads a dependencies field the componentsResolved:false row shape does not carry, so the D-01-32 cold-git fallback renders nothing | fixed |  | 2026-09-13T19:27:02.848Z | 2026-09-17T16:14:30.946Z |
 | 87 | 09 | deviation | tests/orchestrators/plugin/install-flow.test.ts | 11732 | ESLint @typescript-eslint/require-await on marketplaceTagProbe (introduced by 09-03's 71dcea21); plan 09-04 defers the fix per Task 3's own instruction not to fix earlier-plan defects | fixed |  | 2026-09-22T07:47:54.363Z | 2026-09-22T08:03:16.136Z |
+| 88 | 04 | stub | extensions/pi-claude-marketplace/bridges/mcp/substitute.ts |  | [mcp-4] VariableReport.blanked is always empty until the credential deny-list arm lands (plan 04-03) | fixed |  | 2026-10-07T16:56:58.753Z | 2026-10-07T17:39:33.278Z |
+| 89 | 04 | stub | extensions/pi-claude-marketplace/bridges/mcp/stage.ts |  | [mcp-4] prepareStageMcpServers ignores stampServers variableReports until the missing-variable notice lands (plan 04-02) | fixed |  | 2026-10-07T16:56:59.121Z | 2026-10-07T17:11:49.465Z |
+| 90 | 08 | deviation | extensions/pi-claude-marketplace/domain/dependency-closure.ts | 490 | [mcp-4] install __proto__@<mp> is refused by the closure root-key token rule as (failed) {invalid manifest} with the cause 'declares an unusable dependency (root: ...)', not the resolver's (unavailable) {unsupported source}; the same cause text reaches any root name outside the dependency token alphabet (e.g. _x@mp) | waived | [mcp-4] Carried by BACKLOG.md ROOTKEY-01 (f47a2c9e): the refusal is correct and no record or file changes; only the cause text misleads, and choosing the right verdict for an invalid root name needs an upstream check first. Not fixed in the debt phase. | 2026-10-10T06:58:57.793Z | 2026-10-10T07:14:44.742Z |
+| 91 | 04 | deviation | extensions/pi-claude-marketplace/shared/notification-dispatch.ts |  | [json-output] composeContextBlocks kept in dispatch: renderMpHeader and composePluginLines have no other production reader; ~110 test sites import them | waived | [json-output] Accepted design: composeContextBlocks stays in shared/notification-dispatch.ts as the one production reader of renderMpHeader and composePluginLines; removing it fails the fallow dead-code gate, 15 test files hold 138 references to the two exports, and the catalog gate pins the output bytes either way. Reversible: a later change can still move the composer. | 2026-10-03T15:02:22.034Z | 2026-10-10T20:21:09.615Z |
+| 92 | 07 | skipped-test | tests/integration/skill-path-resolution.test.ts | 124 | [json-output] Existing optional pi-subagents resolver integration case skips because its module is unavailable; no new test skip was introduced. Evidence: TEST-07-06-01 in phase deferred-items.md. | fixed |  | 2026-10-10T04:04:37.773Z | 2026-10-10T20:21:09.962Z |
+| 93 | 2 | deviation | README.es.md |  | [marketplace-features] README.es.md drifted from README.md before this phase: it lacks the GitLab marketplace paragraph and its note under Mercado, and its --local paragraph says something different | open |  | 2026-10-16T01:44:57.366Z |  |
+| 94 | 03.1 | deviation | tests/orchestrators/plugin/install-flow.test.ts |  | [marketplace-features] FIX-02 D-04 truth 'reload after a local plugin install writes a base file with the shared marketplace and no plugin key' is unreachable: install adopts the marketplace into claude-plugins.local.json (CR-02), so the reload writes no base file; the DFEN-06 case pins ENOENT and rule 2 is proven by unit and convergence cases instead | open |  | 2026-10-16T16:20:58.926Z |  |
+| 95 | 03.1 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts |  | [marketplace-features] notifyInvalidConfigWriteBack JSDoc says the S5 warning follows the success row; measured, the S5 row is emitted first (update-flow S5 local-file case) | fixed |  | 2026-10-16T17:04:18.661Z | 2026-10-16T17:48:34.896Z |
+| 96 | 03.2 | todo | extensions/pi-claude-marketplace/shared/notification-json.ts | 410 | [marketplace-features] A cascade row for a cross-marketplace dependency renders id lib@tools@upstream on the JSON wire (wireRow appends the block name to a row name that already carries @marketplace); found by the cross-scope install scenario, which pins the current value | fixed |  | 2026-10-17T04:13:17.267Z | 2026-10-17T06:00:11.386Z |
+| 97 | 03.2 | todo | README.md | 305 | [marketplace-features] The command reference line 'Remove a marketplace and all plugins installed from it.' (and its README.es.md twin) predates the layer partition: a remove from one config file uninstalls only that file's plugins, and a dependency another plugin needs stays | fixed |  | 2026-10-17T04:38:40.511Z | 2026-10-17T06:03:01.499Z |
+| 98 | 03.2 | todo | extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts |  | [marketplace-features] A marketplace-level refusal row (marketplaceFailureRows: remove, autoupdate, add under the GitHub base override) carries a synthetic failed child named after the marketplace, so its JSON wire id reads <mp>@<mp> (tools@tools), as if a plugin named tools existed; the scenarios pin that value. Fixing it needs a wire decision (mark the child as a marketplace subject, or give it no plugin id), so the review fix left it open | waived | [marketplace-features] The failed git marketplace add child row now has the bare source as its JSON id (D-19). The other marketplace-level failure rows from marketplaceFailureRows (remove, update, autoupdate, info) keep <mp>@<mp> by the user's scope for D-19; BACKLOG ROWID-01 carries them. | 2026-10-17T06:00:17.471Z | 2026-10-21T04:17:09.380Z |
+| 99 | 03.3 | deviation | extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts |  | [marketplace-features] LAYER-06: in the MIG-01 pre-migration window (no claude-plugins.json, a populated state.json, and a local layer), pending checks the layer files on disk while the load checks them after the first-run migration writes the shared layer from state, so a local plugin whose marketplace only the migrated shared layer would declare is an error on load but not in pending | fixed |  | 2026-10-17T19:17:47.670Z | 2026-10-17T20:49:33.381Z |
+| 100 | 09 | deviation | docs/output-catalog.md | 2563 | [marketplace-features] The add-authentication-required catalog state (docs/output-catalog.md and tests/architecture/catalog-uat/fixtures/marketplace-add.ts:222) shows the 401 reason on a synthetic child row with a cause, but a real url marketplace add answered 401 renders a bare failed row with reasons [authentication required] and no cause; features/marketplace/url-source.feature pins the measured shape. The catalog is unchanged. | open |  | 2026-10-21T03:59:49.683Z |  |
+| 101 | 10 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts | 184 | [marketplace-features] The github marketplace sync of plugin update (orchestrators/plugin/update-flow.ts) under PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL still fails a 401 without the git credential approve line, while its url arm has it (UPD-12 fixed this only in marketplace update). | open |  | 2026-10-21T14:53:20.602Z |  |
+| 102 | 10 | lint-warning | features/marketplace/add.feature | 208 | [marketplace-features] cucumber review: features/marketplace/add.feature:208 the duplicate-name Outline, a behavior the git kinds share, has no @github Examples block, so the github kind's duplicate-name refusal is never run | open |  | 2026-10-21T15:20:46.310Z |  |
+| 103 | 10 | lint-warning | features/marketplace/add.feature | 287 | [marketplace-features] cucumber review: features/marketplace/add.feature:287 the invalid-manifest Outline has no @github Examples block, so a github marketplace whose manifest is malformed or schema-invalid is never added in a scenario | open |  | 2026-10-21T15:20:46.677Z |  |
+| 104 | 10 | lint-warning | features/marketplace/autoupdate.feature | 556 | [marketplace-features] cucumber review: features/marketplace/autoupdate.feature:556 the already-autoupdate skip states the local config but not the base config, unlike its siblings, so a skip that rewrote the base autoupdate value is not compared | open |  | 2026-10-21T15:20:46.996Z |  |
+| 105 | 10 | lint-warning | features/marketplace/list.feature | 3 | [marketplace-features] cucumber review: features/marketplace/list.feature:3 the feature description does not say that the scenarios use local marketplaces in place of published ones (features.md: the description names what the scenarios stand in for) | open |  | 2026-10-21T15:20:47.362Z |  |
+| 106 | 10 | lint-warning | features/marketplace/url-source-update.feature | 7 | [marketplace-features] cucumber review: features/marketplace/url-source-update.feature:7 the failed url update Outline does not state that the config still declares the marketplace, as update.feature states for the local kinds | open |  | 2026-10-21T15:20:47.728Z |  |
+| 107 | 10 | lint-warning | features/marketplace/url-source-update.feature | 31 | [marketplace-features] cucumber review: features/marketplace/url-source-update.feature:31 the bare update past a dropped connection does not state that the config still declares both marketplaces | open |  | 2026-10-21T15:20:48.101Z |  |
+| 108 | 10 | lint-warning | features/plugin/disable.feature | 3 | [marketplace-features] cucumber review: features/plugin/disable.feature:3 the description says disabling keeps the plugin installed, but both scenarios are refusals; no scenario of the file disables a plugin and shows what it keeps | open |  | 2026-10-21T15:24:37.024Z |  |
+| 109 | 10 | lint-warning | features/plugin/enable.feature | 3 | [marketplace-features] cucumber review: features/plugin/enable.feature:3 the description says enabling materializes the plugin again, but both scenarios are refusals; no scenario of the file enables a plugin and shows it materialized | open |  | 2026-10-21T15:24:37.353Z |  |
+| 110 | 1 | deviation | features/step_definitions/config.steps.ts |  | [lifecycle-coverage] No committed seed fails when the marketplaces config writer leaves a run token in a source: pending never reads the source of a marketplace it would add (DIFF-01, NFR-5). Close it in Phase 11 with a reconcile seed whose new session adds a marketplace declared only by this writer. | fixed |  | 2026-10-23T04:22:25.048Z | 2026-10-23T04:36:21.369Z |
+| 111 | 07 | deviation | test/edge/register.test.ts | 1851 | [plugin-lifecycle] registered prune cases pin one lockfile.lock call; the locked clone cleanup makes it two, so test:modules fails | open |  | 2026-10-27T05:29:00.773Z |  |
 
 ````json
 [
@@ -111,9 +135,9 @@ last_updated: 2026-09-26T03:28:56.741Z
     "phase": "86",
     "file": "extensions/pi-claude-marketplace/bridges/skills/stage.ts",
     "line": null,
-    "description": "SKILL-01 backstop: after /reload a degraded skill's /skill:<name> resolves and the model never auto-invokes it (disable-model-invocation) \u2014 needs a live Pi session, not exercised in unit tests",
+    "description": "SKILL-01 backstop: after /reload a degraded skill's /skill:<name> resolves and the model never auto-invokes it (disable-model-invocation) — needs a live Pi session, not exercised in unit tests",
     "status": "waived",
-    "reason": "SKILL-01 backstop needs a live Pi session \u2014 after `/reload`, a degraded skill's `/skill:<name>` resolves and the model never auto-invokes it. Not exercisable in unit tests, so it is outside this milestone's boundary.",
+    "reason": "SKILL-01 backstop needs a live Pi session — after `/reload`, a degraded skill's `/skill:<name>` resolves and the model never auto-invokes it. Not exercisable in unit tests, so it is outside this milestone's boundary.",
     "recorded_at": "2026-07-26T13:18:03.001Z",
     "resolved_at": "2026-09-12T16:13:08.655Z"
   },
@@ -221,7 +245,7 @@ last_updated: 2026-09-26T03:28:56.741Z
     "line": null,
     "description": "applyPlan's documented remove-before-add ordering is not discriminated by any input: swapping the two leaves the owner suite green, because the planner makes the removal and add buckets disjoint by name. The add-before-install and project-before-user orderings ARE discriminated and are pinned.",
     "status": "waived",
-    "reason": "`applyPlan`'s documented remove-before-add ordering is not discriminated by any input \u2014 the planner makes the buckets disjoint by name. The add-before-install and project-before-user orderings ARE discriminated and pinned.",
+    "reason": "`applyPlan`'s documented remove-before-add ordering is not discriminated by any input — the planner makes the buckets disjoint by name. The add-before-install and project-before-user orderings ARE discriminated and pinned.",
     "recorded_at": "2026-09-02T04:33:39.577Z",
     "resolved_at": "2026-09-12T16:13:11.296Z"
   },
@@ -447,7 +471,7 @@ last_updated: 2026-09-26T03:28:56.741Z
     "phase": "117",
     "file": ".planning/codebase/CONVENTIONS.md",
     "line": 151,
-    "description": "CONVENTIONS.md:151 claims barrels exist per bridge kind 'plus the aggregate bridges/index.ts'. Measured in 117-12: extensions/pi-claude-marketplace/bridges/ holds agents/, commands/, hooks/, mcp/, skills/ and README.md \u2014 there is no bridges/index.ts. The five per-kind barrels do exist. Documentation drift in a planning document, outside the source tree and outside this phase's scope (D-117-13 opened no production licence and this plan edits no source); recorded, not fixed.",
+    "description": "CONVENTIONS.md:151 claims barrels exist per bridge kind 'plus the aggregate bridges/index.ts'. Measured in 117-12: extensions/pi-claude-marketplace/bridges/ holds agents/, commands/, hooks/, mcp/, skills/ and README.md — there is no bridges/index.ts. The five per-kind barrels do exist. Documentation drift in a planning document, outside the source tree and outside this phase's scope (D-117-13 opened no production licence and this plan edits no source); recorded, not fixed.",
     "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-03T22:29:00.933Z",
@@ -484,10 +508,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "scripts/check-unused-type-members.contracts.json",
     "line": null,
     "description": "Live gate closes with 138 unread members, each recorded in 06-LIVE-TRIAGE.md with evidence and one of six bounded owner repair plans (06-09..06-14); 06-08 activation is blocked on them",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Moot: records a scope deviation against the unused-type-member live gate (lint:type-members), which #236 (d7213bc2, 2026-10-05) deleted; nothing remains to fix. The shipped work was audited at the test-backlog close.",
     "recorded_at": "2026-09-15T18:22:05.279Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:01.363Z",
     "milestone": null
   },
   {
@@ -497,10 +521,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "extensions/pi-claude-marketplace/bridges/hooks/stage.ts",
     "line": 227,
     "description": "WriteHookConfigResult.written left unread on purpose: nine deepStrictEqual sites read the whole result, so the row is an analyzer lineage under-credit through a factory-returned closure, not a dead member",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Moot: records a scope deviation against the unused-type-member live gate (lint:type-members), which #236 (d7213bc2, 2026-10-05) deleted; nothing remains to fix. The shipped work was audited at the test-backlog close.",
     "recorded_at": "2026-09-15T22:02:05.511Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:01.732Z",
     "milestone": null
   },
   {
@@ -510,10 +534,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "extensions/pi-claude-marketplace/edge/handlers/tools.ts",
     "line": 140,
     "description": "PluginRow.marketplace and .scope stay unread: an external-output arrival chain breaks at a destructured binding, which the flow walk records no transfer into",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Moot: records a scope deviation against the unused-type-member live gate (lint:type-members), which #236 (d7213bc2, 2026-10-05) deleted; nothing remains to fix. The shipped work was audited at the test-backlog close.",
     "recorded_at": "2026-09-16T22:12:40.622Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:02.086Z",
     "milestone": null
   },
   {
@@ -601,10 +625,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "scripts/coverage-producer.convert.mjs",
     "line": null,
     "description": "Producer adapter split into coverage-producer.convert.mjs (library) and coverage-producer.mjs (CLI) so fallow's unused-export gate has a static consumer; plan named one file",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close.",
     "recorded_at": "2026-09-17T19:10:51.585Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:02.521Z",
     "milestone": null
   },
   {
@@ -614,10 +638,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": ".gitignore",
     "line": null,
     "description": "Added !vendor/coverage/*.tgz so the delivered producer archive is tracked despite the repository-wide *.tgz ignore; .gitignore was not in the plan's file list",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close.",
     "recorded_at": "2026-09-17T19:10:59.969Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:02.868Z",
     "milestone": null
   },
   {
@@ -627,10 +651,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "package.json",
     "line": null,
     "description": "coverage:producer:build script alias added with the delivery tool (Task 2) instead of Task 3 because fallow reports an unreferenced script as an unused file",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close.",
     "recorded_at": "2026-09-17T19:11:00.326Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:03.256Z",
     "milestone": null
   },
   {
@@ -640,10 +664,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "scripts/coverage-producer.convert.mjs",
     "line": null,
     "description": "convertScripts now unwraps the merger's FileCoverage instances into plain records (their maps sat under data, hidden by JSON.stringify); the file was not in the plan's file list",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close.",
     "recorded_at": "2026-09-17T20:09:28.277Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:03.576Z",
     "milestone": null
   },
   {
@@ -653,10 +677,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "tests/scripts/coverage-source-map-fixtures.ts",
     "line": null,
     "description": "Mapping fixtures (endpoints, declarations, crlf) live in a sibling support module mirroring coverage-producer-fixtures.ts instead of the test file; the module was not in the plan's file list",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close.",
     "recorded_at": "2026-09-17T20:09:28.640Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:03.925Z",
     "milestone": null
   },
   {
@@ -666,10 +690,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "scripts/coverage-source-map.mjs",
     "line": null,
     "description": "The AST walker primitives (fresh parse, child-node walk, newline-only line model, declared-function spans) moved from coverage-source-map.mjs and coverage-correspondence.mjs into scripts/coverage-syntax.mjs so fallow's duplicate gate passes; neither coverage-source-map.mjs nor the new module was in the plan's file list",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close.",
     "recorded_at": "2026-09-18T13:01:14.775Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:04.268Z",
     "milestone": null
   },
   {
@@ -679,10 +703,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "tests/scripts/coverage-run-support.ts",
     "line": null,
     "description": "Capture-and-convert, map publishing and installed-Fallow helpers shared by the correspondence, schema and validation controls live in a support module that was not in the plan's file list",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close.",
     "recorded_at": "2026-09-18T13:01:15.144Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:04.622Z",
     "milestone": null
   },
   {
@@ -692,10 +716,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "tests/scripts/coverage-correspondence-fixtures.ts",
     "line": null,
     "description": "The twins fixture (two same-name callbacks with equal hits and statement ratio) lives in a sibling fixture module mirroring coverage-producer-fixtures.ts; the module was not in the plan's file list",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close.",
     "recorded_at": "2026-09-18T13:01:15.464Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:04.970Z",
     "milestone": null
   },
   {
@@ -705,10 +729,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "scripts/coverage-capture.mjs",
     "line": null,
     "description": "The capture records an executed text for every production source no test loaded (inventory snapshot stripped under the same runtime) so consumers find every production source in the run; the file was not in the plan's list",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close.",
     "recorded_at": "2026-09-18T14:53:44.164Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:05.345Z",
     "milestone": null
   },
   {
@@ -718,10 +742,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "scripts/coverage-source-map.mjs",
     "line": null,
     "description": "recordedModule serves unloaded production records from the inventory snapshot store and reports whether the run loaded the module; the file was not in the plan's list",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close.",
     "recorded_at": "2026-09-18T14:53:44.869Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:05.675Z",
     "milestone": null
   },
   {
@@ -731,10 +755,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "scripts/coverage-validate.mjs",
     "line": null,
     "description": "coverage:validate verifies an accepted bundle (producer identity, full re-validation, receipt equality) and refuses execution counters on an unloaded source; the file postdates the plan and was not in its list",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close.",
     "recorded_at": "2026-09-18T14:53:45.504Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:06.050Z",
     "milestone": null
   },
   {
@@ -744,10 +768,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "scripts/coverage-producer.convert.mjs",
     "line": null,
     "description": "The adapter exports createCoverageMerger and returns merged files in path order so snapshot order cannot change the map bytes; the file was not in the plan's list",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close.",
     "recorded_at": "2026-09-18T14:53:46.246Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:06.403Z",
     "milestone": null
   },
   {
@@ -757,10 +781,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "tests/scripts/coverage-projection.ts",
     "line": null,
     "description": "The projection helpers the producer corpus and the unit-bundle controls share live in a support module that was not in the plan's file list",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close.",
     "recorded_at": "2026-09-18T14:53:46.812Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:06.756Z",
     "milestone": null
   },
   {
@@ -770,10 +794,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "tests/scripts/coverage-unit-fixtures.ts",
     "line": null,
     "description": "The four-source production population fixture lives in a sibling fixture module mirroring coverage-producer-fixtures.ts; the module was not in the plan's file list",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close.",
     "recorded_at": "2026-09-18T14:53:47.434Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:07.109Z",
     "milestone": null
   },
   {
@@ -783,10 +807,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "tests/scripts/coverage-source-map.test.ts",
     "line": null,
     "description": "The strip proof admits the two- and three-byte blanks (U+00A0, U+2002) strip mode writes for removed characters, found by the full-population conversion; the control was added to a test file outside the plan's list",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close.",
     "recorded_at": "2026-09-18T15:10:44.507Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:07.463Z",
     "milestone": null
   },
   {
@@ -796,10 +820,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "tests/scripts/check-coverage-risk-fixtures.ts",
     "line": null,
     "description": "The production CRAP policy corpus (classify, grade, below, twins, unicode fixtures with anchors, complexities and statement counts written from the source text) lives in a sibling fixture module mirroring coverage-producer-fixtures.ts; the module was not in the plan's file list",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close.",
     "recorded_at": "2026-09-18T16:56:44.890Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:07.813Z",
     "milestone": null
   },
   {
@@ -809,10 +833,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "scripts/coverage-acceptance.mjs",
     "line": null,
     "description": "07-07 Task 1 touched five files outside the plan's list (Rule 2, T-07-07-01): scripts/coverage-acceptance.mjs (new), scripts/coverage-unit.mjs, scripts/coverage-validate.mjs, scripts/coverage-capture.manifest.mjs and tests/scripts/check-coverage-risk-fixtures.ts, so the accepted-bundle readback recomputes the recorded population and denominators and refuses copied counts (summary-mismatch)",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close.",
     "recorded_at": "2026-09-18T18:18:32.642Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:08.173Z",
     "milestone": null
   },
   {
@@ -822,10 +846,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "tests/architecture/pre-commit-hooks.ts",
     "line": null,
     "description": "07-08 Task 1 touched five files outside the plan's list: scripts/coverage-capture.mjs (--plain mode the plan names as its example), tests/architecture/pre-commit-hooks.ts (new; the hook reader moved out of unused-type-member-gate.test.ts so both gates share one parser), tests/architecture/unused-type-member-gate.test.ts, tests/architecture/unit-suite-glob-completeness.test.ts and tests/scripts/coverage-capture.test.ts (both scraped the unit glob out of package.json and now read the one authoritative selection); no production source changed",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Moot: records a scope deviation against the coverage-producer pipeline, which test-backlog removed in 0affe79e (2026-09-20) before it merged as #202 (feb04658); none of its files reached main, so nothing remains to fix. The shipped work was audited at the test-backlog close.",
     "recorded_at": "2026-09-18T20:55:54.554Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:08.517Z",
     "milestone": null
   },
   {
@@ -1002,7 +1026,7 @@ last_updated: 2026-09-26T03:28:56.741Z
     "phase": "117",
     "file": "tests/live-uat/stop-canary.mjs",
     "line": null,
-    "description": "[workflows-replay] stop-canary.mjs:193 and manifest-absence-canary.mjs:142 guard PI_CODING_AGENT_DIR with agentDir.includes(path.join(\"tmp\",\"pi-uat\")) \u2014 a substring test on the un-normalized value, not containment. A path such as $(pwd)/tmp/pi-uat/../../../somewhere carries the substring, survives existsSync, and is then created and used as agent state outside the sandbox. workflow-agent-failure-canary.mjs was fixed in place (resolve both sides, require a path separator after the root); the two siblings share the pattern and were left alone as out of phase scope.",
+    "description": "[workflows-replay] stop-canary.mjs:193 and manifest-absence-canary.mjs:142 guard PI_CODING_AGENT_DIR with agentDir.includes(path.join(\"tmp\",\"pi-uat\")) — a substring test on the un-normalized value, not containment. A path such as $(pwd)/tmp/pi-uat/../../../somewhere carries the substring, survives existsSync, and is then created and used as agent state outside the sandbox. workflow-agent-failure-canary.mjs was fixed in place (resolve both sides, require a path separator after the root); the two siblings share the pattern and were left alone as out of phase scope.",
     "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-09T20:11:19.722Z",
@@ -1136,10 +1160,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "tests/live-uat/README.md",
     "line": null,
     "description": "[workflows-live-uat] the bridge-to-engine path is proven end to end but workflow OUTPUT quality is not, and the blocker is the sandbox rather than the bridge. Measured 2026-09-22, engine 3.13.0, pi 0.85.1, tmp/pi-uat sandbox: code-modernization:modernize-harden-scan ran to status completed in 16.5s with all five Find-phase agents done, the staged envelope loaded from the user saved store, the Claude-authored script parsed unmodified, log()/dedup/refutation stages ran and the script return value came back as JSON. It returned zero findings because every subagent declined to call any tool -- each emitted \"structured_output recovered from prose extraction (the model never called the tool)\" and then asserted in prose that no filesystem was available, which is false: agent.ts:818 defaults to createCodingTools(cwd) when the invocation passes none. A one-agent negative control that only asked for one file name field failed identically with SCHEMA_NONCOMPLIANCE at 217 output tokens, so the cause is not code-modernization, the six envelopes or this bridge. Sandbox has only openai-codex authed; gpt-5.5 and gpt-5.6-terra both failed this way and gpt-5.3-codex-spark hung past 200s without writing a run record, so the openai-codex-responses API path cannot be isolated from the engine subagent layer here. Closing this needs a second provider (an Anthropic key in tmp/pi-uat/agent) and one re-run; until then the Verify phase and the adversarial second pass are unobserved.",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[json-output] Carried to BACKLOG.md WOUT-01: workflow output quality is unobserved because engine subagents declined every tool call under the sandbox's only authed provider; settle it with an Anthropic key in tmp/pi-uat/agent and one canary re-run.",
     "recorded_at": "2026-09-22T12:10:21.345Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:08.882Z",
     "milestone": null
   },
   {
@@ -1149,10 +1173,10 @@ last_updated: 2026-09-26T03:28:56.741Z
     "file": "tests/orchestrators/marketplace/update.test.ts",
     "line": null,
     "description": "20 unit cases in the plugin and edge surfaces remain RED by design until plan 01-03 realigns them; whole-suite npm run test:coverage:unit exits 1",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-26T03:28:56.741Z",
-    "resolved_at": null,
+    "resolved_at": "2026-10-10T20:21:09.247Z",
     "milestone": null
   },
   {
@@ -1179,6 +1203,318 @@ last_updated: 2026-09-26T03:28:56.741Z
     "recorded_at": "2026-09-22T07:47:54.363Z",
     "resolved_at": "2026-09-22T08:03:16.136Z",
     "milestone": "v1.20"
+  },
+  {
+    "id": 88,
+    "kind": "stub",
+    "phase": "04",
+    "file": "extensions/pi-claude-marketplace/bridges/mcp/substitute.ts",
+    "line": null,
+    "description": "[mcp-4] VariableReport.blanked is always empty until the credential deny-list arm lands (plan 04-03)",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-07T16:56:58.753Z",
+    "resolved_at": "2026-10-07T17:39:33.278Z",
+    "milestone": null
+  },
+  {
+    "id": 89,
+    "kind": "stub",
+    "phase": "04",
+    "file": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts",
+    "line": null,
+    "description": "[mcp-4] prepareStageMcpServers ignores stampServers variableReports until the missing-variable notice lands (plan 04-02)",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-07T16:56:59.121Z",
+    "resolved_at": "2026-10-07T17:11:49.465Z",
+    "milestone": null
+  },
+  {
+    "id": 90,
+    "kind": "deviation",
+    "phase": "08",
+    "file": "extensions/pi-claude-marketplace/domain/dependency-closure.ts",
+    "line": 490,
+    "description": "[mcp-4] install __proto__@<mp> is refused by the closure root-key token rule as (failed) {invalid manifest} with the cause 'declares an unusable dependency (root: ...)', not the resolver's (unavailable) {unsupported source}; the same cause text reaches any root name outside the dependency token alphabet (e.g. _x@mp)",
+    "status": "waived",
+    "reason": "[mcp-4] Carried by BACKLOG.md ROOTKEY-01 (f47a2c9e): the refusal is correct and no record or file changes; only the cause text misleads, and choosing the right verdict for an invalid root name needs an upstream check first. Not fixed in the debt phase.",
+    "recorded_at": "2026-10-10T06:58:57.793Z",
+    "resolved_at": "2026-10-10T07:14:44.742Z",
+    "milestone": null
+  },
+  {
+    "id": 91,
+    "kind": "deviation",
+    "phase": "04",
+    "file": "extensions/pi-claude-marketplace/shared/notification-dispatch.ts",
+    "line": null,
+    "description": "[json-output] composeContextBlocks kept in dispatch: renderMpHeader and composePluginLines have no other production reader; ~110 test sites import them",
+    "status": "waived",
+    "reason": "[json-output] Accepted design: composeContextBlocks stays in shared/notification-dispatch.ts as the one production reader of renderMpHeader and composePluginLines; removing it fails the fallow dead-code gate, 15 test files hold 138 references to the two exports, and the catalog gate pins the output bytes either way. Reversible: a later change can still move the composer.",
+    "recorded_at": "2026-10-03T15:02:22.034Z",
+    "resolved_at": "2026-10-10T20:21:09.615Z",
+    "milestone": null
+  },
+  {
+    "id": 92,
+    "kind": "skipped-test",
+    "phase": "07",
+    "file": "tests/integration/skill-path-resolution.test.ts",
+    "line": 124,
+    "description": "[json-output] Existing optional pi-subagents resolver integration case skips because its module is unavailable; no new test skip was introduced. Evidence: TEST-07-06-01 in phase deferred-items.md.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-10T04:04:37.773Z",
+    "resolved_at": "2026-10-10T20:21:09.962Z",
+    "milestone": null
+  },
+  {
+    "id": 93,
+    "kind": "deviation",
+    "phase": "2",
+    "file": "README.es.md",
+    "line": null,
+    "description": "[marketplace-features] README.es.md drifted from README.md before this phase: it lacks the GitLab marketplace paragraph and its note under Mercado, and its --local paragraph says something different",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-16T01:44:57.366Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 94,
+    "kind": "deviation",
+    "phase": "03.1",
+    "file": "tests/orchestrators/plugin/install-flow.test.ts",
+    "line": null,
+    "description": "[marketplace-features] FIX-02 D-04 truth 'reload after a local plugin install writes a base file with the shared marketplace and no plugin key' is unreachable: install adopts the marketplace into claude-plugins.local.json (CR-02), so the reload writes no base file; the DFEN-06 case pins ENOENT and rule 2 is proven by unit and convergence cases instead",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-16T16:20:58.926Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 95,
+    "kind": "deviation",
+    "phase": "03.1",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts",
+    "line": null,
+    "description": "[marketplace-features] notifyInvalidConfigWriteBack JSDoc says the S5 warning follows the success row; measured, the S5 row is emitted first (update-flow S5 local-file case)",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-16T17:04:18.661Z",
+    "resolved_at": "2026-10-16T17:48:34.896Z",
+    "milestone": null
+  },
+  {
+    "id": 96,
+    "kind": "todo",
+    "phase": "03.2",
+    "file": "extensions/pi-claude-marketplace/shared/notification-json.ts",
+    "line": 410,
+    "description": "[marketplace-features] A cascade row for a cross-marketplace dependency renders id lib@tools@upstream on the JSON wire (wireRow appends the block name to a row name that already carries @marketplace); found by the cross-scope install scenario, which pins the current value",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-17T04:13:17.267Z",
+    "resolved_at": "2026-10-17T06:00:11.386Z",
+    "milestone": null
+  },
+  {
+    "id": 97,
+    "kind": "todo",
+    "phase": "03.2",
+    "file": "README.md",
+    "line": 305,
+    "description": "[marketplace-features] The command reference line 'Remove a marketplace and all plugins installed from it.' (and its README.es.md twin) predates the layer partition: a remove from one config file uninstalls only that file's plugins, and a dependency another plugin needs stays",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-17T04:38:40.511Z",
+    "resolved_at": "2026-10-17T06:03:01.499Z",
+    "milestone": null
+  },
+  {
+    "id": 98,
+    "kind": "todo",
+    "phase": "03.2",
+    "file": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts",
+    "line": null,
+    "description": "[marketplace-features] A marketplace-level refusal row (marketplaceFailureRows: remove, autoupdate, add under the GitHub base override) carries a synthetic failed child named after the marketplace, so its JSON wire id reads <mp>@<mp> (tools@tools), as if a plugin named tools existed; the scenarios pin that value. Fixing it needs a wire decision (mark the child as a marketplace subject, or give it no plugin id), so the review fix left it open",
+    "status": "waived",
+    "reason": "[marketplace-features] The failed git marketplace add child row now has the bare source as its JSON id (D-19). The other marketplace-level failure rows from marketplaceFailureRows (remove, update, autoupdate, info) keep <mp>@<mp> by the user's scope for D-19; BACKLOG ROWID-01 carries them.",
+    "recorded_at": "2026-10-17T06:00:17.471Z",
+    "resolved_at": "2026-10-21T04:17:09.380Z",
+    "milestone": null
+  },
+  {
+    "id": 99,
+    "kind": "deviation",
+    "phase": "03.3",
+    "file": "extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts",
+    "line": null,
+    "description": "[marketplace-features] LAYER-06: in the MIG-01 pre-migration window (no claude-plugins.json, a populated state.json, and a local layer), pending checks the layer files on disk while the load checks them after the first-run migration writes the shared layer from state, so a local plugin whose marketplace only the migrated shared layer would declare is an error on load but not in pending",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-17T19:17:47.670Z",
+    "resolved_at": "2026-10-17T20:49:33.381Z",
+    "milestone": null
+  },
+  {
+    "id": 100,
+    "kind": "deviation",
+    "phase": "09",
+    "file": "docs/output-catalog.md",
+    "line": 2563,
+    "description": "[marketplace-features] The add-authentication-required catalog state (docs/output-catalog.md and tests/architecture/catalog-uat/fixtures/marketplace-add.ts:222) shows the 401 reason on a synthetic child row with a cause, but a real url marketplace add answered 401 renders a bare failed row with reasons [authentication required] and no cause; features/marketplace/url-source.feature pins the measured shape. The catalog is unchanged.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T03:59:49.683Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 101,
+    "kind": "deviation",
+    "phase": "10",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts",
+    "line": 184,
+    "description": "[marketplace-features] The github marketplace sync of plugin update (orchestrators/plugin/update-flow.ts) under PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL still fails a 401 without the git credential approve line, while its url arm has it (UPD-12 fixed this only in marketplace update).",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T14:53:20.602Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 102,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/marketplace/add.feature",
+    "line": 208,
+    "description": "[marketplace-features] cucumber review: features/marketplace/add.feature:208 the duplicate-name Outline, a behavior the git kinds share, has no @github Examples block, so the github kind's duplicate-name refusal is never run",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:20:46.310Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 103,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/marketplace/add.feature",
+    "line": 287,
+    "description": "[marketplace-features] cucumber review: features/marketplace/add.feature:287 the invalid-manifest Outline has no @github Examples block, so a github marketplace whose manifest is malformed or schema-invalid is never added in a scenario",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:20:46.677Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 104,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/marketplace/autoupdate.feature",
+    "line": 556,
+    "description": "[marketplace-features] cucumber review: features/marketplace/autoupdate.feature:556 the already-autoupdate skip states the local config but not the base config, unlike its siblings, so a skip that rewrote the base autoupdate value is not compared",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:20:46.996Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 105,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/marketplace/list.feature",
+    "line": 3,
+    "description": "[marketplace-features] cucumber review: features/marketplace/list.feature:3 the feature description does not say that the scenarios use local marketplaces in place of published ones (features.md: the description names what the scenarios stand in for)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:20:47.362Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 106,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/marketplace/url-source-update.feature",
+    "line": 7,
+    "description": "[marketplace-features] cucumber review: features/marketplace/url-source-update.feature:7 the failed url update Outline does not state that the config still declares the marketplace, as update.feature states for the local kinds",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:20:47.728Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 107,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/marketplace/url-source-update.feature",
+    "line": 31,
+    "description": "[marketplace-features] cucumber review: features/marketplace/url-source-update.feature:31 the bare update past a dropped connection does not state that the config still declares both marketplaces",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:20:48.101Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 108,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/plugin/disable.feature",
+    "line": 3,
+    "description": "[marketplace-features] cucumber review: features/plugin/disable.feature:3 the description says disabling keeps the plugin installed, but both scenarios are refusals; no scenario of the file disables a plugin and shows what it keeps",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:24:37.024Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 109,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/plugin/enable.feature",
+    "line": 3,
+    "description": "[marketplace-features] cucumber review: features/plugin/enable.feature:3 the description says enabling materializes the plugin again, but both scenarios are refusals; no scenario of the file enables a plugin and shows it materialized",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:24:37.353Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 110,
+    "kind": "deviation",
+    "phase": "1",
+    "file": "features/step_definitions/config.steps.ts",
+    "line": null,
+    "description": "[lifecycle-coverage] No committed seed fails when the marketplaces config writer leaves a run token in a source: pending never reads the source of a marketplace it would add (DIFF-01, NFR-5). Close it in Phase 11 with a reconcile seed whose new session adds a marketplace declared only by this writer.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-23T04:22:25.048Z",
+    "resolved_at": "2026-10-23T04:36:21.369Z",
+    "milestone": null
+  },
+  {
+    "id": 111,
+    "kind": "deviation",
+    "phase": "07",
+    "file": "test/edge/register.test.ts",
+    "line": 1851,
+    "description": "[plugin-lifecycle] registered prune cases pin one lockfile.lock call; the locked clone cleanup makes it two, so test:modules fails",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-27T05:29:00.773Z",
+    "resolved_at": null,
+    "milestone": null
   }
 ]
 ````

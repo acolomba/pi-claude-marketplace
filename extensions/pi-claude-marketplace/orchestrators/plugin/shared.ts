@@ -16,40 +16,68 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
+import {
+  copyManifestBoundary,
+  locateManifestCandidate,
+  sourceManifestBoundary,
+} from "../../domain/manifest-containment.ts";
 import { MANIFEST_CANDIDATES } from "../../domain/manifest-path.ts";
-import { computeHashVersion } from "../../domain/version.ts";
+import { parsePluginSource } from "../../domain/source.ts";
+import {
+  computeHashVersion,
+  declaredVersionWithPin,
+  isSameVersion,
+  shaVersion,
+  tagShaVersion,
+  withTagCommit,
+} from "../../domain/version.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import {
   writeBatchedConfigEntries,
   writePluginConfigEntry,
 } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
+import { isRecordedButDisabled, loadState, rangeVersionOf } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   CrossPluginConflictError,
+  DependencyDeclarationsUnreadableError,
   errorMessage,
   isErrnoException,
+  LayerConfigUnreadableError,
+  MarketplaceInLocalLayerOnlyError,
   MarketplaceNotFoundError,
+  MarketplaceSourceUndeclarableError,
+  PluginInBaseLayerOnlyError,
+  PluginInLocalLayerOnlyError,
 } from "../../shared/errors.ts";
-import { notify, notifyDiagnostic } from "../../shared/notification-dispatch.ts";
+import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
-import { type PluginSkippedMessage } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
-import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
-import { crossScopeFlag, marketplaceInOtherScope } from "../marketplace/shared.ts";
+import { ownValue, setOwn } from "../../shared/own-key.ts";
+import {
+  crossScopeFlag,
+  marketplaceInOtherScope,
+  type UnstageOutcome,
+} from "../marketplace/shared.ts";
 
+import { readRecordDeclarations } from "./dependency-index.ts";
+import { garbageCollectWorkflowsStaging } from "./workflows-staging-gc.ts";
+
+import type { MarketplaceStateRecord } from "./dependency-index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
-import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
+import type { ManifestBoundary } from "../../domain/manifest-containment.ts";
+import type { MaterializablePlugin, ResolveContext } from "../../domain/resolver-types.ts";
 import type {
   ConfigLoadResult,
   PluginConfigEntry,
   ScopeConfig,
 } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -107,7 +135,7 @@ export interface LedgerDegradationSignals {
   /**
    * SEV-01 / D-98-02: the ledger staged at least one MCP server, so the row
    * DECLARES the `pi-mcp-adapter` companion. The MCP counterpart of
-   * `stagedAgents`, driving the `{requires pi-mcp}` marker and the same raise.
+   * `stagedAgents`, driving the `{requires pi-mcp-adapter}` marker and the same raise.
    */
   readonly stagedMcpServers?: boolean;
   /**
@@ -117,6 +145,30 @@ export interface LedgerDegradationSignals {
    * COUNT verdict only -- the staged workflow names never reach a rendered row.
    */
   readonly stagedWorkflows?: boolean;
+}
+
+/**
+ * Lift the ledger's degradation signals off an orchestrated enable outcome,
+ * for reconcile's enable row and import's (IMP-10). Each field is omitted when
+ * empty (`exactOptionalPropertyTypes`), so a clean enable yields `{}` and its
+ * projected row gains no markers (NREG-01). The `partition?: never` refusal
+ * keeps the update and reinstall partitions out, as on `enableRowDependencies`.
+ *
+ * SEV-01 / D-98-02: the staged-count verdicts ride here too -- they drive the
+ * projected row's dependency list, mirroring the install arm's
+ * `dependenciesFromInstall` derivation.
+ */
+export function degradationFromEnable(
+  result: LedgerDegradationSignals & { readonly partition?: never },
+): LedgerDegradationSignals {
+  return {
+    ...(result.unsupported !== undefined && { unsupported: result.unsupported }),
+    ...(result.orphanRewake === true && { orphanRewake: true }),
+    ...(result.degradedKinds !== undefined && { degradedKinds: result.degradedKinds }),
+    ...(result.stagedAgents === true && { stagedAgents: true }),
+    ...(result.stagedMcpServers === true && { stagedMcpServers: true }),
+    ...(result.stagedWorkflows === true && { stagedWorkflows: true }),
+  };
 }
 
 /**
@@ -246,7 +298,7 @@ export class MarketplaceNotAddedSignal extends Error {
   /**
    * SCOPE-01: set when the miss is really "nothing is installed at the scope
    * you named" -- see `missIsNotInstalled`. The handler then renders the
-   * PLUGIN row `(skipped|failed) {not installed}` instead of the marketplace
+   * PLUGIN row `(failed) {not installed}` instead of the marketplace
    * row, because the container's registration scope is not what the operator
    * asked about. Carries the plugin so the row has a subject; both fields are
    * set together or not at all.
@@ -277,6 +329,55 @@ function otherScope(scope: Scope): Scope {
   return scope === "project" ? "user" : "project";
 }
 
+/** D-08-07: whether `state` records `plugin` under `marketplace`, by own keys only. */
+function hasPluginRecord(state: ExtensionState, marketplace: string, plugin: string): boolean {
+  return ownValue(ownValue(state.marketplaces, marketplace)?.plugins, plugin) !== undefined;
+}
+
+/** Both scopes' locations and state, loaded in parallel for the unqualified target forms. */
+async function loadBothScopes(cwd: string): Promise<{
+  readonly projectLocations: ScopedLocations;
+  readonly userLocations: ScopedLocations;
+  readonly projectState: ExtensionState;
+  readonly userState: ExtensionState;
+}> {
+  const projectLocations = locationsFor("project", cwd);
+  const userLocations = locationsFor("user", cwd);
+  const [projectState, userState] = await Promise.all([
+    loadState(projectLocations.extensionRoot),
+    loadState(userLocations.extensionRoot),
+  ]);
+  return { projectLocations, userLocations, projectState, userState };
+}
+
+/**
+ * SCOPE-01: the explicit-scope arm of the lifecycle target resolvers. A
+ * container in the requested scope resolves there. Otherwise the OTHER scope
+ * is consulted, so a target present only there is reported rather than
+ * collapsed into a silent miss: `presentInOther` gives `other-scope`, and
+ * anything else means the marketplace is not added in the requested scope.
+ */
+async function resolveExplicitScope(
+  cwd: string,
+  marketplace: string,
+  requestedScope: Scope,
+  presentInOther: (otherState: ExtensionState) => boolean,
+): Promise<CrossScopePluginResolution> {
+  const requestedLocations = locationsFor(requestedScope, cwd);
+  const requestedState = await loadState(requestedLocations.extensionRoot);
+  if (ownValue(requestedState.marketplaces, marketplace) !== undefined) {
+    return { kind: "resolved", scope: requestedScope, locations: requestedLocations };
+  }
+
+  const otherScopeName = otherScope(requestedScope);
+  const otherState = await loadState(locationsFor(otherScopeName, cwd).extensionRoot);
+  if (presentInOther(otherState)) {
+    return { kind: "other-scope", presentIn: otherScopeName, requestedScope };
+  }
+
+  return { kind: "marketplace-absent", requestedScope };
+}
+
 /**
  * SCOPE-01: resolve a (marketplace, plugin) lifecycle target across scopes.
  * Mirrors the `loadState`/`locationsFor` read pattern from
@@ -291,46 +392,25 @@ export async function resolveCrossScopePluginTarget(opts: {
   readonly explicitScope?: Scope;
 }): Promise<CrossScopePluginResolution> {
   if (opts.explicitScope !== undefined) {
-    const requestedScope = opts.explicitScope;
-    const requestedLocations = locationsFor(requestedScope, opts.cwd);
-    const requestedState = await loadState(requestedLocations.extensionRoot);
-
-    // Container present in the requested scope: resolve there. The plugin
-    // row may still be absent -- the caller's `installed === undefined`
-    // branch handles that silent converge.
-    if (requestedState.marketplaces[opts.marketplace] !== undefined) {
-      return { kind: "resolved", scope: requestedScope, locations: requestedLocations };
-    }
-
-    // Container absent in the requested scope: consult the OTHER scope so a
-    // target present only there is reported (SCOPE-01) rather than collapsed
-    // into a silent/not-in-manifest miss.
-    const otherScopeName = otherScope(requestedScope);
-    const otherLocations = locationsFor(otherScopeName, opts.cwd);
-    const otherState = await loadState(otherLocations.extensionRoot);
-    if (otherState.marketplaces[opts.marketplace]?.plugins[opts.plugin] !== undefined) {
-      return { kind: "other-scope", presentIn: otherScopeName, requestedScope };
-    }
-
-    // Absent in the requested scope, and either absent or merely container-
-    // present-without-the-plugin in the other scope: the marketplace the
-    // operator asked for (in the requested scope) is not added there.
-    return { kind: "marketplace-absent", requestedScope };
+    // The plugin row may be absent from a resolved container -- the caller's
+    // `installed === undefined` branch handles that silent converge. A
+    // container that holds no such row in the other scope reads as not added
+    // in the requested scope.
+    return resolveExplicitScope(opts.cwd, opts.marketplace, opts.explicitScope, (otherState) =>
+      hasPluginRecord(otherState, opts.marketplace, opts.plugin),
+    );
   }
 
   // Unqualified form: prefer project, then user (CMP-5 ordering preserved).
-  const projectLocations = locationsFor("project", opts.cwd);
-  const userLocations = locationsFor("user", opts.cwd);
-  const [projectState, userState] = await Promise.all([
-    loadState(projectLocations.extensionRoot),
-    loadState(userLocations.extensionRoot),
-  ]);
+  const { projectLocations, userLocations, projectState, userState } = await loadBothScopes(
+    opts.cwd,
+  );
 
-  if (projectState.marketplaces[opts.marketplace]?.plugins[opts.plugin] !== undefined) {
+  if (hasPluginRecord(projectState, opts.marketplace, opts.plugin)) {
     return { kind: "resolved", scope: "project", locations: projectLocations };
   }
 
-  if (userState.marketplaces[opts.marketplace]?.plugins[opts.plugin] !== undefined) {
+  if (hasPluginRecord(userState, opts.marketplace, opts.plugin)) {
     return { kind: "resolved", scope: "user", locations: userLocations };
   }
 
@@ -338,11 +418,11 @@ export async function resolveCrossScopePluginTarget(opts: {
   // somewhere" (resolved against that container's scope so the caller's
   // silent-converge path applies) from "container absent in both"
   // (marketplace-absent, no requestedScope bracket for the bare form).
-  if (projectState.marketplaces[opts.marketplace] !== undefined) {
+  if (ownValue(projectState.marketplaces, opts.marketplace) !== undefined) {
     return { kind: "resolved", scope: "project", locations: projectLocations };
   }
 
-  if (userState.marketplaces[opts.marketplace] !== undefined) {
+  if (ownValue(userState.marketplaces, opts.marketplace) !== undefined) {
     return { kind: "resolved", scope: "user", locations: userLocations };
   }
 
@@ -436,7 +516,7 @@ export async function resolveInstallMarketplaceSource(opts: {
   readonly marketplace: string;
   readonly targetState: ExtensionState;
 }): Promise<ResolvedInstallMarketplaceSource | undefined> {
-  const targetRecord = opts.targetState.marketplaces[opts.marketplace];
+  const targetRecord = ownValue(opts.targetState.marketplaces, opts.marketplace);
   if (targetRecord !== undefined) {
     return { sourceScope: opts.targetScope, sourceRecord: targetRecord };
   }
@@ -447,7 +527,7 @@ export async function resolveInstallMarketplaceSource(opts: {
 
   const userLocations = locationsFor("user", opts.cwd);
   const userState = await loadState(userLocations.extensionRoot);
-  const userRecord = userState.marketplaces[opts.marketplace];
+  const userRecord = ownValue(userState.marketplaces, opts.marketplace);
   return userRecord === undefined ? undefined : { sourceScope: "user", sourceRecord: userRecord };
 }
 
@@ -489,394 +569,521 @@ export async function collectInstallReachableMarketplaces(opts: {
 }
 
 /**
- * Materialize the target-scope marketplace container needed by the current
- * state shape when CMP-3 falls back to a user-scope marketplace. The copied
- * record preserves source/manifest paths but starts with no target-scope
- * plugin installs; the install itself appends the first plugin record.
+ * How a layer would declare a marketplace beside a plugin key: `declared` when
+ * a passed layer already declares it, `source` with the string to declare it
+ * with, or `unknown` when no source is known.
  */
-export function cloneMarketplaceRecordForTargetScope(
-  sourceRecord: ExtensionState["marketplaces"][string],
-  targetScope: Scope,
-): ExtensionState["marketplaces"][string] {
-  return {
-    ...sourceRecord,
-    scope: targetScope,
-    plugins: {},
-  };
-}
+type MarketplaceDeclaration =
+  | { readonly kind: "declared" }
+  | { readonly kind: "source"; readonly source: string }
+  | { readonly kind: "unknown" };
 
 /**
- * CR-02: synthesize the marketplace `source` for a plugin
- * write-back into a config that does NOT yet declare the marketplace.
+ * CR-02: the marketplace `source` for a plugin write-back into a config that
+ * does NOT yet declare the marketplace.
  *
  * When a project-scope install resolves the marketplace via the CMP-3
- * user-scope fallback, the clone-adoption path records the marketplace in
- * PROJECT state -- but only `marketplace add` writes marketplace config
- * entries, and it ran at USER scope. Writing the plugin key alone would
- * leave a dangling declaration: the reconcile planner turns it into a
+ * user-scope fallback, the install adds the marketplace to PROJECT state
+ * through the `marketplace add` body (LAYER-07 / D-MF-04), which writes no
+ * config entry: the install owns the write-back. Writing the plugin key alone
+ * would leave a dangling declaration: the reconcile planner turns it into a
  * perpetual `<marketplace not declared>` failed row AND plans the
  * recorded-but-undeclared clone for removal (a destructive, non-converging
  * plan -- invariant 5 violation). The caller must therefore declare the
  * marketplace in the SAME batched patch, synthesizing `source` from the
- * adopted record's verbatim `source.raw` (the `samePlannedSource`
+ * added record's verbatim `source.raw` (the `samePlannedSource`
  * contract).
  *
- * UAT-05: the membership gate runs against EVERY physical config of the
- * scope (base AND local -- i.e. the CFG-02 merged view), not just the
- * targeted file. Gating on the target alone made a `--local` install
- * re-declare a base-declared marketplace into `claude-plugins.local.json`
- * as a bare `{source}` entry; the CFG-02 wholesale entry-level override
- * then shadowed the base entry and silently flipped merged `autoupdate`.
- * Callers pass BOTH files' configs, read fresh inside the lock (WB-01
- * discipline); the merged view is used for the membership test ONLY --
- * never serialized back.
+ * The caller passes the layers whose declaration counts, read fresh inside the
+ * lock (WB-01 discipline) and never serialized back:
+ * - the target layer alone for the plugin's own marketplace. A layer that
+ *   declares a plugin also declares its marketplace (LAYER-06 / D-MF-03), so a
+ *   later `marketplace remove` from the other layer keeps the plugin;
+ * - both layers for a marketplace the install added for a dependency. No layer
+ *   declares a dependency plugin (D-04-02), so a scope that declares the
+ *   marketplace in either layer already wants it.
  *
- * Returns `undefined` when ANY physical config of the scope already
- * declares the marketplace (nothing to synthesize -- entry-stable) OR when
- * no string `source.raw` exists on the state record (hand-edited/legacy
- * state; writing a source-less entry would trip `saveConfig`'s
- * required-`source` invariant throw).
- *
- * S4 (PR #51, CONTEXT.md S4): the `undefined` return is OVERLOADED across
- * two semantically distinct arms -- the BENIGN already-declared arm AND the
- * DANGEROUS no-string-raw arm. Callers compose
- * `...(adoptedSource !== undefined && { marketplaces: { ... } })` and write
- * the plugin key REGARDLESS, so the dangerous arm silently writes a
- * dangling plugin declaration the reconcile planner converts into a
- * destructive `<marketplace not declared>` + recorded-clone removal plan
- * (the exact invariant-5 violation the function doc warns about). The
- * dangerous arm is rare in practice (hand-edited legacy state) and the
- * write-back fall-through is deliberate for now -- a future PR should
- * widen the return to a discriminated result so callers can route the
- * `unsynthesizable` arm to a (failed) row instead of sealing the fate.
+ * A state record without a string `source.raw` (a forward-compatible source
+ * kind, NFR-12) falls back to the source `fallback` declares, the other layer
+ * for the plugin's own marketplace. The merged view reads that same string, so
+ * the planner sees the same source. With neither, the answer is `unknown`.
  */
-function synthesizeUndeclaredMarketplaceSource(
+function undeclaredMarketplaceSource(
   scopeConfigs: readonly ScopeConfig[],
   state: ExtensionState,
   marketplace: string,
-): string | undefined {
-  if (scopeConfigs.some((c) => c.marketplaces?.[marketplace] !== undefined)) {
-    return undefined;
+  fallback?: ScopeConfig,
+): MarketplaceDeclaration {
+  if (scopeConfigs.some((c) => ownValue(c.marketplaces, marketplace) !== undefined)) {
+    return { kind: "declared" };
   }
 
-  const raw = (state.marketplaces[marketplace]?.source as { raw?: unknown } | undefined)?.raw;
-  return typeof raw === "string" ? raw : undefined;
+  const record = ownValue(state.marketplaces, marketplace);
+  const raw = (record?.source as { raw?: unknown } | undefined)?.raw;
+  const source =
+    typeof raw === "string" ? raw : ownValue(fallback?.marketplaces, marketplace)?.source;
+  return source === undefined ? { kind: "unknown" } : { kind: "source", source };
 }
 
 /**
- * WB-01 / UAT-05: pair the targeted physical config file with its sibling (the
- * scope's OTHER file) for a given locality. Target-path selection happens ONCE
- * at the orchestrator boundary so the write path never falls back to the
- * base file on ENOENT; the sibling path exists ONLY for the UAT-05
- * merged-view membership test (read fresh inside the lock, never written).
- *
- * NOT exported: `selectDeclaringConfigWriteTarget` is the orchestrator-facing
- * selector, and this one answers a strictly narrower question -- which files a
- * locality names, with no say in what that locality should be. A caller who
- * reached for it would be aiming the write with the flag alone, which is the
- * defect D-103-13 removed from three call sites. The compiler keeps the module's
- * public surface down to the one selector that answers the whole question.
+ * WB-01: a scope's two config paths, the target first. `--local` targets the
+ * local config and no flag the base config. The flag alone picks the target,
+ * so the write path never falls back to the base config on ENOENT:
+ * `loadConfig`'s `absent` arm yields an empty shape that `saveConfig` writes
+ * back to the target, creating it fresh.
  */
-function selectConfigWriteTarget(
+function targetLayerPaths(
   locations: ScopedLocations,
   local: boolean | undefined,
-): { readonly targetConfigPath: string; readonly siblingConfigPath: string } {
+): { readonly targetConfigPath: string; readonly otherConfigPath: string } {
   if (local === true) {
     return {
-      targetConfigPath: locations.configLocalJsonPath,
-      siblingConfigPath: locations.configJsonPath,
+      targetConfigPath: locations.localConfigJsonPath,
+      otherConfigPath: locations.baseConfigJsonPath,
     };
   }
 
   return {
-    targetConfigPath: locations.configJsonPath,
-    siblingConfigPath: locations.configLocalJsonPath,
+    targetConfigPath: locations.baseConfigJsonPath,
+    otherConfigPath: locations.localConfigJsonPath,
   };
 }
 
 /**
- * D-103-13 write-target selection outcome. Discriminated rather than a bare
- * record because ONE of the two answers is "there is no answer": when the file
- * that DETERMINES the destination cannot be read, no destination may be
- * guessed, and a caller must be unable to ignore that (NFR-7 precedent).
- *
- * The `selected` arm carries both physical files' parses, so the caller reads
- * each file ONCE per operation. `sibling` is `undefined` when the sibling could
- * not be read -- and `undefined` is NOT "declares nothing": a consumer that
- * would conclude ABSENCE from it must refuse to act instead. That distinction
- * is the whole point of the field's nullability; collapsing it back into an
- * empty config is what let an unreadable file be read as an empty one.
+ * What `loadTargetLayers` returns: both layers' parses with the target layer
+ * marked, or the first config that cannot be read. Discriminated, because a
+ * scope whose layer cannot be read has no answer, and a caller must be unable
+ * to ignore that (NFR-7 precedent).
  */
-export type DeclaringConfigWriteTarget =
+export type TargetLayers =
   | { readonly kind: "unreadable"; readonly filePath: string }
   | {
-      readonly kind: "selected";
+      readonly kind: "loaded";
       readonly targetConfigPath: string;
       readonly targetIsLocal: boolean;
-      /** The TARGET file's parse; an absent file yields the empty shape. */
+      /** The target layer's parse; an absent file yields the empty shape. */
       readonly current: ScopeConfig;
-      /** The OTHER file's parse, or `undefined` when it could not be read. */
-      readonly sibling: ScopeConfig | undefined;
+      /** The other layer's parse; an absent file yields the empty shape. */
+      readonly other: ScopeConfig;
     };
 
-/** A readable file's config (`absent` counts as readable), else `undefined`. */
-function readableConfig(result: ConfigLoadResult): ScopeConfig | undefined {
-  if (result.status === "invalid") {
-    return undefined;
-  }
-
-  return result.status === "valid" ? result.config : { schemaVersion: 1 };
-}
-
 /**
- * D-103-13: select the physical config file a verb that AUTHORS an enablement
- * declaration must write to, and hand back both files' parses.
+ * LAYER-04 / D-MF-03: load both layers of a scope and mark the one that
+ * `--local` targets, the base layer without the flag, whatever layer already
+ * declares the plugin. The caller reads the other layer from `other` to
+ * refuse a plugin only that layer declares.
  *
- * The rule: an explicit `--local` targets the local file; absent the flag,
- * target the file the plugin's declaration already lives in; absent both a flag
- * and a declaration, target the base file.
+ * CFG-03: an invalid target layer returns `unreadable` naming it, and then an
+ * invalid other layer returns `unreadable` naming that file. The other layer
+ * may declare the plugin or its marketplace, so an unreadable one stops the
+ * command instead of reading as a layer that declares nothing. `loadConfig`
+ * never throws: an EACCES, a truncated mid-save file, and a schema violation
+ * all arrive as `invalid`. `absent` is a real answer and reads as empty. This
+ * never throws and never creates a file.
  *
- * `--local` says which file to WRITE. It does not say which file a declaration
- * already lives IN, and those are different questions -- a caller who typed no
- * flag has answered neither, and answering the second one with the first is
- * what makes the write a no-op. CFG-02: a `claude-plugins.local.json` entry
- * replaces the same-keyed base entry WHOLESALE, so a write into the base file
- * under a local declaration changes no merged value. The verb reports success,
- * the merged view the reconcile planner reads is unmoved, and the next pass
- * plans the opposite of the command the user just ran.
+ * `targetIsLocal` reports which parse is the local one, so callers that read
+ * across both layers (`install-declared-enabled.ts` reads the local `enabled`
+ * first, then the base one) do not compare paths.
  *
- * The local file is inspected for KEY MEMBERSHIP only -- the key's PRESENCE
- * decides the file, never its `enabled` value. A local entry shadows the base
- * entry's `enabled` too, so a bare `{}` is still the effective declaration;
- * reading the value here would re-open a precedence question the caller has
- * already settled.
- *
- * CFG-03: an UNREADABLE local file returns the `unreadable` arm instead of a
- * target. `loadConfig` never throws, so an EACCES, a truncated mid-save file
- * and a schema violation all arrive as `invalid` -- and none of them answer the
- * membership question. Reading `invalid` as "not declared locally" would aim
- * the write at the base file on exactly the configuration where the local file
- * shadows it, which is the no-op write this selector exists to prevent. This
- * does NOT mirror the D-18 merge fallback: that fallback coerces an invalid
- * file's CONTRIBUTION while preserving the invalid SIGNAL for the caller
- * (`config-merge.ts::loadMergedScopeConfig`), and it computes a read rather
- * than choosing a write target. `absent` is a real answer ("not declared
- * there") and still yields the base target; this never throws and never
- * creates a file.
- *
- * This is the WRITE-side counterpart of the READ-side rule
- * `install-declared-enabled.ts` states -- the local file wins by IDENTITY,
- * not by precedence. `targetIsLocal` reports the selection's locality so
- * callers reading across both files do not re-derive it by comparing paths.
- *
- * WB-01 / UAT-05: both reads are decision-input only and neither is serialized
- * back. Callers hold the scope's state lock, which excludes other extension
- * processes; it does NOT exclude a user editing these files, which are
- * hand-authored by design, so a concurrent edit between this read and the write
- * is possible. The write itself is atomic, so the worst case is a target chosen
- * from a config one edit old, not a torn file.
+ * WB-01: both reads happen inside the caller's lock, and neither parse is
+ * serialized back. The lock excludes other extension processes; it does not
+ * exclude a user editing these hand-authored files, so the worst case is a
+ * decision made from a config one edit old. The write itself is atomic.
  */
-export async function selectDeclaringConfigWriteTarget(opts: {
+export async function loadTargetLayers(opts: {
   readonly locations: ScopedLocations;
   readonly local: boolean | undefined;
-  readonly key: string;
-}): Promise<DeclaringConfigWriteTarget> {
-  const [baseCfg, localCfg] = await Promise.all([
-    loadConfig(opts.locations.configJsonPath),
-    loadConfig(opts.locations.configLocalJsonPath),
+}): Promise<TargetLayers> {
+  const { targetConfigPath, otherConfigPath } = targetLayerPaths(opts.locations, opts.local);
+  const [targetCfg, otherCfg] = await Promise.all([
+    loadConfig(targetConfigPath),
+    loadConfig(otherConfigPath),
   ]);
-
-  if (localFileLeavesTargetUnknowable(opts.local, localCfg)) {
-    return { kind: "unreadable", filePath: localCfg.filePath };
-  }
-
-  const targetIsLocal = resolveTargetIsLocal(opts.local, localCfg, opts.key);
-  // Delegate the file pairing to the flag-only selector so `--local`'s pairing
-  // -- and its ENOENT fresh-create contract -- keeps exactly one definition,
-  // then key the two parses off those PATHS rather than off `targetIsLocal` a
-  // second time, so a parse can never be paired with the other file's path.
-  const { targetConfigPath, siblingConfigPath } = selectConfigWriteTarget(
-    opts.locations,
-    targetIsLocal,
-  );
-  const parseFor = (p: string): ConfigLoadResult =>
-    p === opts.locations.configLocalJsonPath ? localCfg : baseCfg;
-  const targetCfg = parseFor(targetConfigPath);
   if (targetCfg.status === "invalid") {
     return { kind: "unreadable", filePath: targetCfg.filePath };
   }
 
+  if (otherCfg.status === "invalid") {
+    return { kind: "unreadable", filePath: otherCfg.filePath };
+  }
+
   return {
-    kind: "selected",
+    kind: "loaded",
     targetConfigPath,
-    targetIsLocal,
+    targetIsLocal: opts.local === true,
     current: configOrEmpty(targetCfg),
-    sibling: readableConfig(parseFor(siblingConfigPath)),
+    other: configOrEmpty(otherCfg),
   };
 }
 
-/**
- * A typed flag names the destination outright, so no file has to be read to
- * find it and an unreadable local file cannot make the answer unknowable.
- * Absent the flag the local file IS the determinant, and an unreadable one
- * leaves the destination unknown -- abort rather than guess the shadowed file.
- */
-function localFileLeavesTargetUnknowable(
-  local: boolean | undefined,
-  localCfg: ConfigLoadResult,
-): localCfg is InvalidConfigLoad {
-  return local !== true && localCfg.status === "invalid";
-}
-
-/**
- * CFG-02 / D-01: the local file answers the key when the caller typed
- * `--local`, or when it declares the key itself -- a local entry REPLACES the
- * same-keyed base entry wholesale, so its mere presence decides the target.
- */
-function resolveTargetIsLocal(
-  local: boolean | undefined,
-  localCfg: ConfigLoadResult,
-  key: string,
-): boolean {
-  if (local === true) {
-    return true;
-  }
-
-  return localCfg.status === "valid" && localCfg.config.plugins?.[key] !== undefined;
-}
-
-type InvalidConfigLoad = Extract<ConfigLoadResult, { status: "invalid" }>;
-
-function configOrEmpty(result: ConfigLoadResult): ScopeConfig {
+/** A readable layer's parse; an absent layer reads as one that declares nothing. */
+export function configOrEmpty(result: ConfigLoadResult): ScopeConfig {
   return result.status === "valid" ? result.config : { schemaVersion: 1 };
 }
 
 /**
- * UAT-05 seam over `synthesizeUndeclaredMarketplaceSource`: runs the
- * merged-view membership gate against BOTH physical files of the scope. Both
- * parses come from `selectDeclaringConfigWriteTarget` (read fresh inside the
- * caller's lock -- WB-01 discipline); neither is serialized back.
+ * FIX-03 / D-MF-02: a declaration in the base layer may not name a marketplace
+ * that only the local config declares, because a teammate who reads the base
+ * config cannot resolve it. Returns the refusal when the write targets the
+ * base config, the base config does not declare `marketplace`, and the local
+ * config does.
  *
- * An UNREADABLE sibling (`sibling === undefined`) SKIPS the adoption write. It
- * is not read as "declares nothing": the file may well declare the marketplace,
- * and synthesizing a bare `{source}` entry into the other file would shadow
- * that declaration wholesale under CFG-02 -- silently dropping the user's
- * `autoupdate: false` once the file is repaired, a network-touching setting
- * flipped with no command and no prompt. Refusing to adopt is the conservative
- * half: the plugin entry itself is still targeted correctly, and a marketplace
- * that really is undeclared stays visible as the reconcile planner's
- * `<marketplace not declared>` row rather than being papered over from a file
- * nobody could read.
+ * It reads only the target scope's own two configs. A marketplace neither
+ * config declares (one a project install adds from the user scope, CMP-3) and
+ * one both configs declare (a declaration in the base layer with a personal
+ * override) are never refused.
  */
-function synthesizeAdoptedMarketplaceSource(opts: {
-  readonly current: ScopeConfig;
-  readonly sibling: ScopeConfig | undefined;
-  readonly state: ExtensionState;
-  readonly marketplace: string;
-}): string | undefined {
-  if (opts.sibling === undefined) {
+export function localOnlyMarketplaceRefusal(
+  selection: Pick<Extract<TargetLayers, { kind: "loaded" }>, "targetIsLocal" | "current" | "other">,
+  marketplace: string,
+): MarketplaceInLocalLayerOnlyError | undefined {
+  if (
+    selection.targetIsLocal ||
+    ownValue(selection.current.marketplaces, marketplace) !== undefined ||
+    ownValue(selection.other.marketplaces, marketplace) === undefined
+  ) {
     return undefined;
   }
 
-  return synthesizeUndeclaredMarketplaceSource(
-    [opts.current, opts.sibling],
-    opts.state,
-    opts.marketplace,
+  return new MarketplaceInLocalLayerOnlyError(marketplace);
+}
+
+/**
+ * LAYER-06 / D-MF-03: a command that declares a plugin in a layer also
+ * declares the plugin's marketplace there. Returns the refusal when the target
+ * layer does not declare the marketplace and no source is known to declare it
+ * with: the scope's record holds no string source and the other layer does not
+ * declare it. A marketplace the scope does not record yet is never refused,
+ * because the install that adds it records its source.
+ */
+export function undeclarableMarketplaceRefusal(
+  selection: Pick<Extract<TargetLayers, { kind: "loaded" }>, "targetIsLocal" | "current" | "other">,
+  state: ExtensionState,
+  marketplace: string,
+): MarketplaceSourceUndeclarableError | undefined {
+  if (
+    ownValue(state.marketplaces, marketplace) === undefined ||
+    undeclaredMarketplaceSource([selection.current], state, marketplace, selection.other).kind !==
+      "unknown"
+  ) {
+    return undefined;
+  }
+
+  return new MarketplaceSourceUndeclarableError(
+    marketplace,
+    selection.targetIsLocal ? "local" : "base",
   );
 }
 
 /**
- * CMP-3 / UAT-05: write a plugin declaration and, when the scope's MERGED
- * config view does not already declare the owning marketplace, adopt the
- * marketplace in the SAME batched patch. A bare plugin key would otherwise be a
- * dangling declaration the planner converts into a marketplace removal plus a
- * perpetual failed row.
+ * Where a plugin a named command targets is declared, as seen from the
+ * command's target layer:
  *
- * The membership gate considers BOTH physical files (base union local), so a
- * `--local` write never re-declares a base-declared marketplace -- the bare
- * `{source}` entry would shadow the base entry wholesale (CFG-02) and silently
- * flip merged `autoupdate`. An UNREADABLE sibling skips the adoption write
- * rather than counting as a file that declares nothing.
+ * - `target-only`: only the target layer declares it.
+ * - `both`: both layers declare it.
+ * - `other-only`: only the other layer declares it; `refusal` is the cause line.
+ * - `neither`: no layer declares it (a dependency, or a hand-removed entry).
+ */
+export type PluginLayerVerdict =
+  | { readonly kind: "target-only" }
+  | { readonly kind: "both" }
+  | {
+      readonly kind: "other-only";
+      readonly reason: "plugin in local layer only" | "plugin in base layer only";
+      readonly refusal: PluginInLocalLayerOnlyError | PluginInBaseLayerOnlyError;
+    }
+  | { readonly kind: "neither" };
+
+/**
+ * LAYER-04 / D-MF-03: a named plugin command acts on its target layer, and
+ * fails when that layer does not declare the plugin while the other one does.
  *
- * S4 (PR #51): `adoptedSource === undefined` collapses two arms -- benign
- * (already declared, no synthesis needed) and dangerous (no string `source.raw`
- * on the state record, so synthesis is impossible). The write proceeds with the
- * plugin key alone in BOTH arms, so the dangerous arm writes a dangling
- * declaration. Acknowledged trade-off pending a widen of the helper's return.
+ * Pure: the caller loads both layers inside its lock and handles an invalid
+ * file first (CFG-03), so both arguments are readable parses. Membership is an
+ * own-key read, so a key the layer holds only through its prototype declares
+ * nothing.
+ */
+export function pluginLayerVerdict(args: {
+  readonly target: ScopeConfig;
+  readonly other: ScopeConfig;
+  readonly targetIsLocal: boolean;
+  readonly marketplace: string;
+  readonly plugin: string;
+}): PluginLayerVerdict {
+  const key = `${args.plugin}@${args.marketplace}`;
+  const inTarget = ownValue(args.target.plugins, key) !== undefined;
+  const inOther = ownValue(args.other.plugins, key) !== undefined;
+  if (inTarget) {
+    return { kind: inOther ? "both" : "target-only" };
+  }
+
+  if (!inOther) {
+    return { kind: "neither" };
+  }
+
+  return args.targetIsLocal
+    ? {
+        kind: "other-only",
+        reason: "plugin in base layer only",
+        refusal: new PluginInBaseLayerOnlyError(args.plugin, args.marketplace),
+      }
+    : {
+        kind: "other-only",
+        reason: "plugin in local layer only",
+        refusal: new PluginInLocalLayerOnlyError(args.plugin, args.marketplace),
+      };
+}
+
+/**
+ * LAYER-04 / D-MF-03: the refusal a named update or reinstall meets when the
+ * plugin is declared only in the other layer. `--local` targets the local layer
+ * and no flag targets the base layer. A plugin that no layer declares, such
+ * as a dependency, is not refused.
+ *
+ * CFG-03: an unreadable layer config returns `LayerConfigUnreadableError`, an
+ * invalid manifest naming only its basename, because the plugin may be
+ * declared there.
+ *
+ * NFR-5: it reads only the scope's two layer configs, so a caller can run it
+ * before any credential, clone, or tag listing.
+ */
+export async function namedPluginLayerRefusal(opts: {
+  readonly locations: ScopedLocations;
+  readonly local: boolean;
+  readonly marketplace: string;
+  readonly plugin: string;
+}): Promise<Error | undefined> {
+  const selection = await loadTargetLayers(opts);
+  if (selection.kind === "unreadable") {
+    return unreadableLayerError(selection.filePath);
+  }
+
+  const verdict = pluginLayerVerdict({
+    target: selection.current,
+    other: selection.other,
+    targetIsLocal: selection.targetIsLocal,
+    marketplace: opts.marketplace,
+    plugin: opts.plugin,
+  });
+  return verdict.kind === "other-only" ? verdict.refusal : undefined;
+}
+
+/** CFG-03: an unreadable layer config, named by its basename only. */
+function unreadableLayerError(filePath: string): LayerConfigUnreadableError {
+  return new LayerConfigUnreadableError(path.basename(filePath));
+}
+
+/**
+ * LAYER-04 / D-MF-03: a nameless update or reinstall with `--local` covers
+ * the plugins the local layer declares and the dependencies those plugins
+ * need. Keeps, in order, the targets whose `<plugin>@<marketplace>` key is
+ * covered in their scope. Each scope's layers and state are read once.
+ *
+ * CFG-03: an unreadable layer throws `LayerConfigUnreadableError` naming it,
+ * the local layer first, instead of reading as a layer that declares nothing.
+ * D-05-07: a covered plugin whose dependencies cannot be read throws
+ * `DependencyDeclarationsUnreadableError` naming it.
+ */
+export async function keepLocalLayerTargets<
+  T extends { readonly plugin: string; readonly marketplace: string; readonly scope: Scope },
+>(targets: readonly T[], cwd: string): Promise<readonly T[]> {
+  const scopes = [...new Set(targets.map((target) => target.scope))];
+  const covered = new Set(
+    (await Promise.all(scopes.map((scope) => localLayerCoverage(scope, cwd)))).flat(),
+  );
+  return targets.filter((target) =>
+    covered.has(`${target.scope}:${target.plugin}@${target.marketplace}`),
+  );
+}
+
+/**
+ * The scope-qualified keys a `--local` form covers in one scope: every key the
+ * local layer declares, then each dependency those plugins need, walked
+ * through installed plugins that no layer declares. A plugin the base layer
+ * declares ends the walk, so a dependency that only base-layer plugins need
+ * is not covered. This is the walk the LAYER-08 uninstall rule makes, read in
+ * the other direction.
+ *
+ * D-05-06 / D-05-07: declarations are read offline and fail closed, as the
+ * uninstall reads them. A plugin whose declarations cannot be read stops the
+ * walk, because the dependencies it would add are unknown.
+ */
+async function localLayerCoverage(scope: Scope, cwd: string): Promise<readonly string[]> {
+  const locations = locationsFor(scope, cwd);
+  const layers = await loadTargetLayers({ locations, local: true });
+  if (layers.kind === "unreadable") {
+    throw unreadableLayerError(layers.filePath);
+  }
+
+  const state = await loadState(locations.extensionRoot);
+  const records = recordsByKey(state);
+  const covered = new Set(Object.keys(layers.current.plugins ?? {}));
+  const pending = [...covered];
+  for (let key = pending.pop(); key !== undefined; key = pending.pop()) {
+    const record = records.get(key);
+    if (record === undefined) {
+      continue;
+    }
+
+    // eslint-disable-next-line no-await-in-loop -- each read names the plugins the walk visits next
+    const read = await readRecordDeclarations(
+      { state, locations },
+      record.marketplace,
+      record.plugin,
+    );
+    if (!read.ok) {
+      throw new DependencyDeclarationsUnreadableError(read.declarer, read.cause.message);
+    }
+
+    for (const dependency of read.declared) {
+      const dependencyKey = `${dependency.name}@${dependency.marketplace}`;
+      if (
+        !covered.has(dependencyKey) &&
+        ownValue(layers.other.plugins, dependencyKey) === undefined
+      ) {
+        covered.add(dependencyKey);
+        pending.push(dependencyKey);
+      }
+    }
+  }
+
+  return [...covered].map((key) => `${scope}:${key}`);
+}
+
+/** An installed plugin: its marketplace record and its name. */
+interface InstalledPluginRef {
+  readonly marketplace: MarketplaceStateRecord;
+  readonly plugin: string;
+}
+
+/** Each installed plugin by its `<plugin>@<marketplace>` key. */
+function recordsByKey(state: ExtensionState): ReadonlyMap<string, InstalledPluginRef> {
+  const records = new Map<string, InstalledPluginRef>();
+  for (const marketplace of Object.values(state.marketplaces)) {
+    for (const plugin of Object.keys(marketplace.plugins)) {
+      records.set(`${plugin}@${marketplace.name}`, { marketplace, plugin });
+    }
+  }
+
+  return records;
+}
+
+/**
+ * CMP-3 / LAYER-06: write a plugin declaration and, when the target layer does
+ * not already declare the owning marketplace, declare the marketplace in the
+ * SAME batched patch. A layer that declares a plugin also declares its
+ * marketplace (D-MF-03), so `install --local` under a marketplace only the
+ * base layer declares leaves a self-consistent local layer, and a later
+ * `marketplace remove` from the base layer keeps the plugin. The source is
+ * the state record's `source.raw`, the value `samePlannedSource` matches, or
+ * the other layer's declared source when the record holds no string one.
+ *
+ * When no source is known, the write throws `MarketplaceSourceUndeclarableError`
+ * before it writes anything, because the plugin key alone would leave the layer
+ * declaring a plugin without its marketplace. The commands refuse that case
+ * earlier through `undeclarableMarketplaceRefusal`, before they change state.
  *
  * `pluginPatch` is the caller's own field set: `enable`/`disable` writes an
  * explicit `enabled`, while `install` writes `enabled: false` only when the
  * install actually landed disabled and otherwise writes an empty patch. The
  * requesting plugin's key is the only plugin key this write declares (D-04-02:
- * the desired-state config names only plugins the user asked for by name).
+ * the desired-state config names only the plugins the user asked for by name).
+ *
+ * LAYER-07 / D-MF-04: `addedMarketplaces` names the further marketplaces the
+ * caller's install added to the scope, such as a dependency's. Each one is
+ * declared in the same patch unless either layer already declares it, so the
+ * desired state names every marketplace the scope now owns.
+ *
+ * `targetIsLocal` alone names the target layer: the config path written and
+ * the layer a refusal names both come from it, so the two cannot disagree.
  */
 export async function writeAdoptingConfigEntries(opts: {
   readonly current: ScopeConfig;
-  readonly sibling: ScopeConfig | undefined;
+  readonly other: ScopeConfig;
   readonly state: ExtensionState;
   readonly marketplace: string;
   readonly plugin: string;
-  readonly targetConfigPath: string;
-  readonly scopeRoot: string;
+  readonly locations: ScopedLocations;
+  readonly targetIsLocal: boolean;
   readonly pluginPatch: Partial<PluginConfigEntry>;
+  readonly addedMarketplaces?: readonly string[];
 }): Promise<void> {
-  const adoptedSource = synthesizeAdoptedMarketplaceSource({
-    current: opts.current,
-    sibling: opts.sibling,
-    state: opts.state,
-    marketplace: opts.marketplace,
-  });
+  const own = undeclaredMarketplaceSource([opts.current], opts.state, opts.marketplace, opts.other);
+  if (own.kind === "unknown") {
+    throw new MarketplaceSourceUndeclarableError(
+      opts.marketplace,
+      opts.targetIsLocal ? "local" : "base",
+    );
+  }
 
-  await writeBatchedConfigEntries(opts.current, opts.targetConfigPath, opts.scopeRoot, {
-    ...(adoptedSource !== undefined && {
-      marketplaces: { [opts.marketplace]: { source: adoptedSource } },
-    }),
+  const added = (opts.addedMarketplaces ?? []).flatMap((marketplace) => {
+    const declaration = undeclaredMarketplaceSource(
+      [opts.current, opts.other],
+      opts.state,
+      marketplace,
+    );
+    return declaration.kind === "source"
+      ? [[marketplace, { source: declaration.source }] as const]
+      : [];
+  });
+  const adopted =
+    own.kind === "source" ? [[opts.marketplace, { source: own.source }] as const, ...added] : added;
+
+  const { targetConfigPath } = targetLayerPaths(opts.locations, opts.targetIsLocal);
+  await writeBatchedConfigEntries(opts.current, targetConfigPath, opts.locations.scopeRoot, {
+    marketplaces: Object.fromEntries(adopted),
     plugins: { [`${opts.plugin}@${opts.marketplace}`]: opts.pluginPatch },
   });
 }
 
 /**
- * CR-06: overwrite an EXISTING `enabled: false` config entry for a cascade
- * member re-enabled through its state record -- the divergence `disable
- * <dep>` creates and D-04-07 already corrects for the root. The entry to
- * overwrite is the one that EXISTS, so each member's file is selected by
- * DECLARATION ALONE (`local: undefined`), never by the flag the caller typed
- * for the root: with `--local` the root's own write targets the local file,
- * but a member's `enabled: false` entry written by a flagless `disable`
- * lives in the base file, and selecting by the root's flag would miss it.
- * A member the config does not mention at all stays untouched (D-04-02: the
- * config names only what the user asked for by name).
+ * CR-06: overwrite an existing `enabled: false` entry of a cascade member
+ * re-enabled through its state record, the divergence `disable <dep>` creates
+ * and D-04-07 already corrects for the root. Members are not named by the
+ * user, so no layer rule applies to them: each layer of the scope that holds
+ * `enabled: false` for the member gets `enabled: true`, through the atomic
+ * config writer. A layer that is absent, invalid, or holds no such entry is
+ * not rewritten (WR-02). A member the config does not mention at all stays
+ * untouched (D-04-02: the config names only what the user asked for by name).
  *
  * Shared by the enable cascade's EDEP-01 arm and the install cascade's
  * EDEP-03 re-enable arm.
  */
 export async function overwriteDisabledMemberEntries(args: {
   readonly locations: ScopedLocations;
-  readonly state: ExtensionState;
   readonly keys: readonly string[];
-  readonly select: typeof selectDeclaringConfigWriteTarget;
-  readonly write: typeof writeAdoptingConfigEntries;
 }): Promise<void> {
-  for (const key of args.keys) {
-    // eslint-disable-next-line no-await-in-loop -- per-key read-modify-write of its config file
-    const selection = await args.select({ locations: args.locations, local: undefined, key });
-    if (selection.kind !== "selected" || selection.current.plugins?.[key]?.enabled !== false) {
-      continue;
+  const layers = [args.locations.baseConfigJsonPath, args.locations.localConfigJsonPath];
+  for (const configPath of layers) {
+    for (const key of args.keys) {
+      // eslint-disable-next-line no-await-in-loop -- per-key read-modify-write of one layer config
+      await overwriteDisabledEntry(configPath, args.locations.scopeRoot, key);
     }
-
-    const at = key.indexOf("@");
-    // eslint-disable-next-line no-await-in-loop -- per-key read-modify-write of its config file
-    await args.write({
-      current: selection.current,
-      sibling: selection.sibling,
-      state: args.state,
-      marketplace: key.slice(at + 1),
-      plugin: key.slice(0, at),
-      targetConfigPath: selection.targetConfigPath,
-      scopeRoot: args.locations.scopeRoot,
-      pluginPatch: { enabled: true },
-    });
   }
+}
+
+/** CR-06: one layer's `enabled: false` entry for `key` becomes `enabled: true`. */
+async function overwriteDisabledEntry(
+  configPath: string,
+  scopeRoot: string,
+  key: string,
+): Promise<void> {
+  const loaded = await loadConfig(configPath);
+  if (loaded.status !== "valid" || ownValue(loaded.config.plugins, key)?.enabled !== false) {
+    return;
+  }
+
+  const at = key.indexOf("@");
+  await writePluginConfigEntry(
+    loaded.config,
+    configPath,
+    scopeRoot,
+    key.slice(0, at),
+    key.slice(at + 1),
+    {
+      enabled: true,
+    },
+  );
 }
 
 /** CMP-5: unqualified single-plugin lifecycle operations prefer project only when both scopes match. */
@@ -895,13 +1102,13 @@ export async function resolveInstalledPluginTarget(opts: {
 
   const projectLocations = locationsFor("project", opts.cwd);
   const projectState = await loadState(projectLocations.extensionRoot);
-  if (projectState.marketplaces[opts.marketplace]?.plugins[opts.plugin] !== undefined) {
+  if (hasPluginRecord(projectState, opts.marketplace, opts.plugin)) {
     return { scope: "project", locations: projectLocations };
   }
 
   const userLocations = locationsFor("user", opts.cwd);
   const userState = await loadState(userLocations.extensionRoot);
-  if (userState.marketplaces[opts.marketplace]?.plugins[opts.plugin] !== undefined) {
+  if (hasPluginRecord(userState, opts.marketplace, opts.plugin)) {
     return { scope: "user", locations: userLocations };
   }
 
@@ -951,37 +1158,21 @@ export async function resolveInstalledMarketplaceTarget(opts: {
   readonly explicitScope?: Scope;
 }): Promise<ScopedMarketplaceResolution> {
   if (opts.explicitScope !== undefined) {
-    const requestedScope = opts.explicitScope;
-    const requestedLocations = locationsFor(requestedScope, opts.cwd);
-    const requestedState = await loadState(requestedLocations.extensionRoot);
-
-    // Container present in the requested scope: resolve there (the plugin set
-    // may be empty -- the caller still reads it as the update target).
-    if (requestedState.marketplaces[opts.marketplace] !== undefined) {
-      return { kind: "resolved", scope: requestedScope, locations: requestedLocations };
-    }
-
-    // Container absent in the requested scope: consult the OTHER scope so a
-    // marketplace present only there is reported (SCOPE-01) rather than
-    // collapsed into a raw not-found throw.
-    const otherScopeName = otherScope(requestedScope);
-    const otherLocations = locationsFor(otherScopeName, opts.cwd);
-    const otherState = await loadState(otherLocations.extensionRoot);
-    if (otherState.marketplaces[opts.marketplace] !== undefined) {
-      return { kind: "other-scope", presentIn: otherScopeName, requestedScope };
-    }
-
-    return { kind: "marketplace-absent", requestedScope };
+    // A resolved container's plugin set may be empty -- the caller still reads
+    // it as the update target.
+    return resolveExplicitScope(
+      opts.cwd,
+      opts.marketplace,
+      opts.explicitScope,
+      (otherState) => ownValue(otherState.marketplaces, opts.marketplace) !== undefined,
+    );
   }
 
-  const projectLocations = locationsFor("project", opts.cwd);
-  const userLocations = locationsFor("user", opts.cwd);
-  const [projectState, userState] = await Promise.all([
-    loadState(projectLocations.extensionRoot),
-    loadState(userLocations.extensionRoot),
-  ]);
-  const projectRecord = projectState.marketplaces[opts.marketplace];
-  const userRecord = userState.marketplaces[opts.marketplace];
+  const { projectLocations, userLocations, projectState, userState } = await loadBothScopes(
+    opts.cwd,
+  );
+  const projectRecord = ownValue(projectState.marketplaces, opts.marketplace);
+  const userRecord = ownValue(userState.marketplaces, opts.marketplace);
 
   if (projectRecord !== undefined && Object.keys(projectRecord.plugins).length > 0) {
     return { kind: "resolved", scope: "project", locations: projectLocations };
@@ -1022,38 +1213,72 @@ async function manifestCandidateExists(manifestPath: string): Promise<boolean> {
 }
 
 /**
- * Tier 1 of {@link resolvePluginVersion}: the `version` the plugin's own
+ * The first tier of {@link resolveDeclaredPluginVersion}: the `version` the plugin's own
  * manifest declares, or `undefined` when it declares none usable.
  *
  * MANF-01: the walk is the shared `MANIFEST_CANDIDATES` ordering, so this
  * reader and the resolver read the same file. D-01-07: a candidate that
  * EXISTS ends the walk -- if it cannot be read, cannot be parsed, or carries
- * no usable `version`, the answer falls to tier 2, never to a sibling
+ * no usable `version`, the answer falls to the marketplace entry, never to a sibling
  * candidate. Never throws (D-23-02 / D-23-03).
+ *
+ * D-PL2-24 / D-PL2-17: each candidate is located inside `boundary`. A link
+ * whose target leaves it, or that cannot be resolved, is a present but
+ * unusable manifest and answers `undefined`; a dangling link is no manifest.
+ * On the install, update and reinstall paths the resolver has refused such a
+ * plugin before this read.
  */
-async function readDeclaredPluginVersion(pluginRoot: string): Promise<string | undefined> {
+export async function readDeclaredPluginVersion(
+  boundary: ManifestBoundary,
+): Promise<string | undefined> {
   for (const candidate of MANIFEST_CANDIDATES) {
-    const manifestPath = path.join(pluginRoot, candidate);
-
     // eslint-disable-next-line no-await-in-loop -- D-01-07: the first existing manifest candidate wins
-    if (!(await manifestCandidateExists(manifestPath))) {
-      continue;
+    const read = await readVersionCandidate(boundary, path.join(boundary.pluginRoot, candidate));
+    if (read !== undefined) {
+      return read.version;
     }
-
-    let parsed: unknown;
-    try {
-      // eslint-disable-next-line no-await-in-loop -- D-01-07: only the first existing candidate is read
-      parsed = JSON.parse(await readFile(manifestPath, "utf8"));
-    } catch (err) {
-      // Present and unusable: tier 2 / tier 3 cover it.
-      hookDebugLog(`resolvePluginVersion: plugin.json read/parse failed: ${errorMessage(err)}`);
-      return undefined;
-    }
-
-    return usableDeclaredVersion(parsed);
   }
 
   return undefined;
+}
+
+/** One candidate's declared version, or `undefined` when the candidate is absent. */
+async function readVersionCandidate(
+  boundary: ManifestBoundary,
+  candidatePath: string,
+): Promise<{ readonly version: string | undefined } | undefined> {
+  const location = await locateManifestCandidate(boundary, candidatePath);
+  switch (location.kind) {
+    case "absent":
+      return undefined;
+    case "escapes":
+    case "unresolvable":
+      hookDebugLog(
+        `resolvePluginVersion: plugin manifest not confirmed inside the ${boundary.label}`,
+      );
+      return { version: undefined };
+    case "open":
+      return readVersionAt(location.path);
+  }
+}
+
+async function readVersionAt(
+  manifestPath: string,
+): Promise<{ readonly version: string | undefined } | undefined> {
+  if (!(await manifestCandidateExists(manifestPath))) {
+    return undefined;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readFile(manifestPath, "utf8"));
+  } catch (err) {
+    // Present and unusable: the entry, the commit, or the hash covers it.
+    hookDebugLog(`resolvePluginVersion: plugin.json read/parse failed: ${errorMessage(err)}`);
+    return { version: undefined };
+  }
+
+  return { version: usableDeclaredVersion(parsed) };
 }
 
 /** The `version` a parsed manifest declares when it is a non-empty string. */
@@ -1068,38 +1293,157 @@ function usableDeclaredVersion(parsed: unknown): string | undefined {
 }
 
 /**
- * PI-7 / PUP-3 / SNM-34 version precedence (3 tiers, highest first):
- *   1. The plugin's own manifest `version`, read at the first
- *      `MANIFEST_CANDIDATES` location present under `pluginRoot` (MANF-01;
- *      D-23-01: "If also set in the marketplace entry, `plugin.json` wins.").
- *   2. The marketplace `entry.version`.
- *   3. The PI-7 `computeHashVersion` content hash, as a last resort.
- *
- * Each declared `version` is accepted iff it is a non-empty string (the same
- * gate used for `entry.version`; D-23-03 -- no SemVer enforcement). The
- * plugin.json read is re-done here independently (D-23-02): the NFR-7
- * discriminated `ResolvedPluginInstallable` union is NOT widened with a
- * `manifest` field. Any read/parse failure (absence, malformed JSON, missing
- * or non-string `.version`) silently falls through to the next tier and never
- * throws.
+ * VER-01 / D-23-01: the version a plugin declares, or undefined when it
+ * declares none: the plugin's own manifest `version`, read at the first
+ * `MANIFEST_CANDIDATES` location present under `pluginRoot` (MANF-01;
+ * "If also set in the marketplace entry, `plugin.json` wins."), then the
+ * marketplace `entry.version`. Each is accepted iff it is a non-empty string
+ * (D-23-03 -- no SemVer enforcement). A read or parse failure falls through to
+ * the entry and never throws. `boundary` bounds the manifest read (D-PL2-24).
  */
-export async function resolvePluginVersion(
+export async function resolveDeclaredPluginVersion(
   entry: PluginEntry,
-  installable: MaterializablePlugin,
-): Promise<string> {
-  // Tier 1: the plugin's own manifest `version`.
-  const declaredVersion = await readDeclaredPluginVersion(installable.pluginRoot);
+  boundary: ManifestBoundary,
+): Promise<string | undefined> {
+  const declaredVersion = await readDeclaredPluginVersion(boundary);
   if (declaredVersion !== undefined) {
     return declaredVersion;
   }
 
-  // Tier 2: the marketplace entry version.
-  if (typeof entry.version === "string" && entry.version.length > 0) {
-    return entry.version;
+  return typeof entry.version === "string" && entry.version.length > 0 ? entry.version : undefined;
+}
+
+/**
+ * PI-7 / PUP-3 / SNM-34 / VER-01 version precedence, highest first:
+ *   1. The declared version (`resolveDeclaredPluginVersion`: plugin.json,
+ *      then the marketplace entry), with the commit pin a plugin of the
+ *      `anthropic-plugin-directory` marketplace carries (GV-01).
+ *   2. The commit of `resolvedSha`, the commit a git source installs, as
+ *      `shaVersion` spells it (D-16-08, GV-01). Claude Code orders a git
+ *      plugin's version the same way: manifest, catalog entry, then the
+ *      commit.
+ *   3. The PI-7 `computeHashVersion` content hash, as a last resort.
+ *
+ * The plugin.json read is re-done here independently (D-23-02): the NFR-7
+ * discriminated `ResolvedPluginInstallable` union is NOT widened with a
+ * `manifest` field. D-PL2-17: it is bounded as the resolver bounded it, by
+ * `sourceManifestBoundary` with no pin.
+ */
+export async function resolvePluginVersion(
+  entry: PluginEntry,
+  installable: MaterializablePlugin,
+  marketplace: Pick<ResolveContext, "marketplaceName" | "marketplaceRoot">,
+  resolvedSha?: string,
+): Promise<string> {
+  const source = parsePluginSource(entry.source);
+  const declared = await resolveDeclaredPluginVersion(
+    entry,
+    sourceManifestBoundary(
+      entry.source,
+      installable.pluginRoot,
+      marketplace.marketplaceRoot,
+      undefined,
+    ),
+  );
+  if (declared !== undefined) {
+    return declaredVersionWithPin(declared, source, marketplace.marketplaceName);
   }
 
-  // Tier 3: PI-7 content hash (last resort, unchanged).
+  if (resolvedSha !== undefined) {
+    return shaVersion(resolvedSha, source);
+  }
+
   return computeHashVersion(installable.pluginRoot);
+}
+
+/**
+ * GV-01: the version Claude Code records for a plugin installed at the release
+ * tag a dependency's version range selected. A declared version (with GV-01's
+ * directory pin) gets the tag commit's first 12 characters appended; with none
+ * declared, the version is the tag commit's, as `tagShaVersion` spells it.
+ * A tag's tree is a copy, bounded by its plugin directory (D-PL2-17).
+ */
+export async function resolveTagPinnedPluginVersion(
+  entry: PluginEntry,
+  installable: MaterializablePlugin,
+  marketplaceName: string,
+  tagCommit: string,
+): Promise<string> {
+  const source = parsePluginSource(entry.source);
+  const declared = await resolveDeclaredPluginVersion(
+    entry,
+    copyManifestBoundary(installable.pluginRoot),
+  );
+  return declared === undefined
+    ? tagShaVersion(tagCommit, source)
+    : withTagCommit(declaredVersionWithPin(declared, source, marketplaceName), tagCommit);
+}
+
+/**
+ * D-16-09: whether an update candidate is the revision the record holds. A
+ * source that moved to a new commit is a new revision even when its declared
+ * version did not change, because the stored sha is the revision; a switch
+ * between a git and a `path` source adds or drops the sha, so it is a new
+ * revision too. Only when neither side has a sha does the version alone
+ * decide.
+ *
+ * `tags.resolvedVersion` is the semver of the release tag a range selected.
+ * `tags.searched` says that the candidate comes from a verb that lets a
+ * dependent's range pick a release tag (D-23), so a candidate with no
+ * `resolvedVersion` is one no tag applies to.
+ *
+ * This is the disabled branch's rule (D-99-05a). The enabled branch also
+ * compares the plugin root, through `isRecordedCandidate`.
+ */
+export function isSameRevision(
+  record: PluginInstallRecord,
+  toVersion: string,
+  resolvedSha: string | undefined,
+  tags: { readonly resolvedVersion?: string | undefined; readonly searched?: boolean } = {},
+): boolean {
+  if (resolvedSha !== record.resolvedSha) {
+    return false;
+  }
+
+  // GV-01 / GV-02: at a release tag a range selected, the revision is the tag:
+  // Claude Code's check reads the record's tag version and commit. A record
+  // written before GV-01 holds the tag's semver as its version.
+  if (tags.resolvedVersion !== undefined) {
+    return rangeVersionOf(record) === tags.resolvedVersion;
+  }
+
+  // GV-01: with no tag, Claude Code's update compares the recorded string, so
+  // a record at a tag's commit moves to the version without that commit. A
+  // check that never read the tags (D-23) cannot tell, and reads it as the
+  // same version.
+  return isSameVersion(
+    record.version,
+    toVersion,
+    tags.searched === true ? undefined : record.resolvedSha,
+  );
+}
+
+/**
+ * D-18-11: whether an enabled record already holds the candidate. A record made
+ * before per-commit copies names the mutable mirror as its root, so the copy at
+ * the same commit is a new revision and the swap re-anchors the record onto it.
+ */
+export function isRecordedCandidate(
+  record: PluginInstallRecord,
+  candidate: {
+    readonly toVersion: string;
+    readonly resolvedSha: string | undefined;
+    readonly pluginRoot: string;
+    readonly resolvedVersion?: string | undefined;
+    readonly searchedReleaseTags?: boolean;
+  },
+): boolean {
+  return (
+    isSameRevision(record, candidate.toVersion, candidate.resolvedSha, {
+      resolvedVersion: candidate.resolvedVersion,
+      searched: candidate.searchedReleaseTags === true,
+    }) && candidate.pluginRoot === record.resolvedSource
+  );
 }
 
 function compareNames(a: string, b: string): number {
@@ -1259,7 +1603,7 @@ export function removePluginRecord(
     schemaVersion: state.schemaVersion,
     marketplaces: { ...state.marketplaces },
   };
-  const mp = cloned.marketplaces[marketplace];
+  const mp = ownValue(cloned.marketplaces, marketplace);
   if (mp === undefined) {
     return cloned;
   }
@@ -1267,120 +1611,49 @@ export function removePluginRecord(
   const newPlugins = { ...mp.plugins };
   // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- newPlugins is a Record<string,...> local to this helper.
   delete newPlugins[plugin];
-  cloned.marketplaces[marketplace] = { ...mp, plugins: newPlugins };
+  setOwn(cloned.marketplaces, marketplace, { ...mp, plugins: newPlugins });
   return cloned;
 }
 
+type RecordResources = PluginInstallRecord["resources"];
+
 /**
- * WB-01 / A7: deep-equal short-circuited plugin write-back shared by the
- * update and reinstall post-success paths. Loads the target config (base or
- * local per `--local`), compares the prospective patched entry against the
- * existing entry, and writes back ONLY when they differ. RECON-05
- * fixed-point: a byte-stable update / reinstall leaves the config file's
- * mtime + bytes untouched.
- *
- * S5: an `invalid` config returns `{ invalidConfig: true }` so the caller
- * surfaces the abort via a warning row -- the state mutation already
- * committed (finalize ran), so the byte form is the success payload (the
- * plugin DID update / reinstall on disk) plus the invalid-manifest warning.
- * Sibling CFG-03 aborts (at preflight) render `(skipped) {invalid manifest}`;
- * here the mutation already landed so a skip would lie -- the warning row
- * says "wrote state, could not write config".
- *
- * D-04: update / reinstall preserves the consume-time `enabled` default and
- * any forward-compat keys; the patch carries no per-operation mutation. The
- * patched shape is therefore `{...existing, ...{}}` -- byte-identical to the
- * existing entry. So the gate is simply: if the key is ALREADY PRESENT,
- * writing back would produce a byte-identical file -- SKIP to preserve
- * RECON-05 mtime stability. If the key is ABSENT, writing back ADDS the key
- * so the user-authored config gains the implicit declaration.
+ * D-PL5-15: the record field each axis of a cascade's dropped names lives in.
+ * The `satisfies` clause is the exhaustiveness gate: an axis added to
+ * `UnstageOutcome["dropped"]` fails the typecheck here until it is mapped.
+ * TR-03 renames only `commands`, to `prompts`. D-63-04 and WLIF-03: hooks and
+ * workflows are subtracted like the rest, so a partial cascade leaves no row
+ * naming a hook or a workflow envelope it already deleted.
  */
-export async function maybeWritePluginConfigBack(opts: {
-  readonly locations: ScopedLocations;
-  readonly marketplace: string;
-  readonly plugin: string;
-  readonly local: boolean;
-}): Promise<{ readonly invalidConfig: boolean }> {
-  const targetConfigPath = opts.local
-    ? opts.locations.configLocalJsonPath
-    : opts.locations.configJsonPath;
-  const cfg = await loadConfig(targetConfigPath);
-  if (cfg.status === "invalid") {
-    return { invalidConfig: true };
-  }
-
-  const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
-  const key = `${opts.plugin}@${opts.marketplace}`;
-  const existingEntry = current.plugins?.[key];
-  if (existingEntry !== undefined) {
-    return { invalidConfig: false };
-  }
-
-  await writePluginConfigEntry(
-    current,
-    targetConfigPath,
-    opts.locations.scopeRoot,
-    opts.plugin,
-    opts.marketplace,
-    {},
-  );
-  return { invalidConfig: false };
-}
+const DROPPED_AXIS_FIELDS = {
+  skills: "skills",
+  commands: "prompts",
+  agents: "agents",
+  hooks: "hooks",
+  mcpServers: "mcpServers",
+  workflows: "workflows",
+} as const satisfies Record<keyof UnstageOutcome["dropped"], keyof RecordResources>;
 
 /**
  * I3 / TR-03: subtract a non-AG-5 partial-cascade's dropped artifacts from
  * the state record in place so the persisted row reflects only artifacts
- * still on disk (NFR-3 fail-clean, no ghost record). Shared by the
- * `uninstall` partial-cascade arm and the `disable` partial-cascade arm.
- *
- * The asymmetric `dropped.commands -> resources.prompts` mapping is per
- * TR-03 (cascade primitive naming): the other three axes are name-identical.
+ * still on disk (NFR-3 fail-clean, no ghost record). Shared by every
+ * partial-cascade arm: uninstall, disable, the install cascades, and
+ * `marketplace remove`.
  */
 export function applyPartialCascadeFold(
-  installed: {
-    resources: {
-      skills: string[];
-      prompts: string[];
-      agents: string[];
-      mcpServers: string[];
-      hooks: string[];
-      workflows: string[];
-    };
-  },
-  dropped: {
-    readonly skills: readonly string[];
-    readonly commands: readonly string[];
-    readonly agents: readonly string[];
-    readonly hooks: readonly string[];
-    readonly mcpServers: readonly string[];
-    readonly workflows: readonly string[];
-  },
+  installed: { resources: PluginInstallRecord["resources"] },
+  dropped: UnstageOutcome["dropped"],
 ): void {
-  installed.resources.skills = installed.resources.skills.filter(
-    (n) => !dropped.skills.includes(n),
-  );
-  installed.resources.prompts = installed.resources.prompts.filter(
-    (n) => !dropped.commands.includes(n),
-  );
-  installed.resources.agents = installed.resources.agents.filter(
-    (n) => !dropped.agents.includes(n),
-  );
-  installed.resources.mcpServers = installed.resources.mcpServers.filter(
-    (n) => !dropped.mcpServers.includes(n),
-  );
-  // D-63-04: the cascade primitive (cascadeUnstagePlugin) surfaces
-  // dropped.hooks alongside the other four axes; the partial-cascade fold
-  // must subtract them so a disable / uninstall partial-cascade failure
-  // does not leave a stale hooks entry in the in-memory record.
-  installed.resources.hooks = installed.resources.hooks.filter((n) => !dropped.hooks.includes(n));
-  // WLIF-03: name-identical, unlike the commands-to-prompts mapping. The
-  // parameter shapes are structural, so nothing here is compile-forced -- a
-  // caller passing a wider bundle satisfies a narrower parameter and this
-  // subtraction can go missing in silence. The behavioral case in the owner
-  // test is what holds it in place.
-  installed.resources.workflows = installed.resources.workflows.filter(
-    (n) => !dropped.workflows.includes(n),
-  );
+  // Object.keys widens to string[]; the table's keys are exactly the dropped
+  // axes, which the `satisfies` clause above holds.
+  const axes = Object.keys(DROPPED_AXIS_FIELDS) as Array<keyof typeof DROPPED_AXIS_FIELDS>;
+  for (const axis of axes) {
+    const field = DROPPED_AXIS_FIELDS[axis];
+    installed.resources[field] = installed.resources[field].filter(
+      (name) => !dropped[axis].includes(name),
+    );
+  }
 }
 
 /**
@@ -1407,7 +1680,7 @@ export function applyPartialCascadeFold(
  */
 export function emitMarketplaceNotAdded(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly run: NotificationRun;
   readonly marketplace: string;
   readonly requestedScope: Scope | undefined;
   readonly orchestrated: boolean;
@@ -1417,7 +1690,7 @@ export function emitMarketplaceNotAdded(args: {
   readonly error: Error;
   readonly cause: string;
 } {
-  const { ctx, pi, marketplace, requestedScope, orchestrated } = args;
+  const { ctx, run, marketplace, requestedScope, orchestrated } = args;
   const scopeList: readonly Scope[] =
     requestedScope === undefined ? ["project", "user"] : [requestedScope];
   const err = new MarketplaceNotFoundError(marketplace, scopeList);
@@ -1429,7 +1702,7 @@ export function emitMarketplaceNotAdded(args: {
   } as const;
 
   if (!orchestrated) {
-    notify(ctx, pi, {
+    notify(ctx, run, {
       kind: "marketplace-not-added",
       name: marketplace,
       ...(requestedScope !== undefined && { scope: requestedScope }),
@@ -1447,46 +1720,38 @@ export function emitMarketplaceNotAdded(args: {
  * Two arms, and which one fires is a property of the SIGNAL, not of the verb:
  *   - `notInstalledAt` + `plugin` set: the container sits one scope over, so
  *     nothing is installed at the scope the operator named. The PLUGIN is the
- *     subject, on the same `(skipped)` row an in-scope marketplace with no
- *     record yields -- but the brace names the container's actual scope beside
- *     `not installed` (SCOPE-01, via `absentTargetReasons`), because the two
- *     misses take different remedies and a shared byte form states neither.
+ *     subject, on the same `(failed)` row an in-scope marketplace with no
+ *     record yields, as uninstall's cross-scope row is (UPR-04) -- but the
+ *     brace names the container's actual scope beside `not installed`
+ *     (SCOPE-01, via `absentTargetReasons`), because the two misses take
+ *     different remedies and a shared byte form states neither.
  *   - otherwise: the marketplace row itself, `{marketplace not added}`
  *     (structural, no new REASONS member per D-47-B). `requestedScope` (when
  *     present) renders the `[scope]` bracket; the bare both-scopes-miss form
  *     carries no bracket and, per `crossScopeFlag`, is owed no sibling probe.
  *
- * The only per-verb variable is the `CommandContext`, so it is the only
- * parameter: `notifyWithContext` reads `Messaging.label` and dispatches the row
- * body through `render.skipped`, both of which stay the caller's own. Narrowing
- * the parameter to `CommandContext<"skipped", PluginSkippedMessage>` -- rather
- * than making this function generic over the caller's full `Status`/`Msg` pair
- * -- is what lets the row literal below stay a checked `PluginSkippedMessage`
- * instead of an unchecked widening; a verb whose render map omits a `skipped`
- * arm is a compile error at ITS call site.
+ * The caller supplies its command label and failed-row policy. Requiring
+ * `CommandContext<"failed">` keeps missing policies a compile error while the
+ * row literal remains checked against the shared producer contract.
  *
- * SEV-04 / D-01: the row is stamped `error`. Its reasons always lead with
+ * SEV-04: the row is a failure stamped `error`: its reasons always lead with
  * `not installed` -- an absent target, i.e. the requested operation was NOT
- * carried out -- so both verbs' own skip-severity rules
- * (`update.ts::cascadeSkipSeverity`, `reinstall.ts`'s in-scope skipped arm)
- * collapse to the same constant here. Neither rule can be CALLED from this
- * module: both live in files that import this one, so reaching back for them
- * would close a module cycle.
+ * carried out.
  */
 export async function emitMarketplaceNotAddedSignal(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly run: NotificationRun;
   readonly cwd: string;
-  readonly context: CommandContext<"skipped", PluginSkippedMessage>;
+  readonly context: CommandContext<"failed">;
   readonly cardinality: "single" | "plural";
   readonly err: MarketplaceNotAddedSignal;
 }): Promise<void> {
-  const { ctx, pi, cwd, context, cardinality, err } = args;
+  const { ctx, run, cwd, context, cardinality, err } = args;
 
   if (err.notInstalledAt !== undefined && err.plugin !== undefined) {
     notifyWithContext(
       ctx,
-      pi,
+      run,
       context,
       [
         {
@@ -1494,7 +1759,7 @@ export async function emitMarketplaceNotAddedSignal(args: {
           scope: err.notInstalledAt,
           plugins: [
             {
-              status: "skipped",
+              status: "failed",
               name: err.plugin,
               reasons: absentTargetReasons(err.notInstalledAt),
               severity: "error",
@@ -1509,7 +1774,7 @@ export async function emitMarketplaceNotAddedSignal(args: {
     return;
   }
 
-  notify(ctx, pi, {
+  notify(ctx, run, {
     kind: "marketplace-not-added",
     name: err.marketplace,
     ...(err.requestedScope !== undefined && { scope: err.requestedScope }),
@@ -1519,87 +1784,6 @@ export async function emitMarketplaceNotAddedSignal(args: {
       scope: err.requestedScope,
     })),
   });
-}
-
-/**
- * D-141-03 / D-141-05: split one staging pass's four bridge warning arrays
- * into the DISCOVERY half and the HYGIENE half.
- *
- * Every warning the skills and commands bridges emit describes the SOURCE the
- * plugin author shipped against the artifact set that actually installed --
- * a first-wins skip, an unreadable subdirectory or file, a path that produces
- * no valid name, a skipped subdirectory, or (commands only) one file reached
- * by two declared entries and therefore installed under two names. The last
- * of those reports a surplus rather than a shortfall, so the shared property
- * is not "a skip": it is that the user's own resource count gives no baseline
- * to notice ANY of them. That is why the whole half reaches standalone mode.
- *
- * The agents bridge aggregates index corruptions, per-agent conversion notes
- * and D-07 skips onto ONE array that cannot be split at the call site, so the
- * whole array joins the hygiene channel; mcp rides beside it.
- *
- * Kept here, taking plain string arrays rather than bridge result types, so
- * update and reinstall classify through one function instead of two copies
- * that drift (and so `sonarjs/no-identical-functions` and `fallow dupes` have
- * nothing to find).
- *
- * `install-outcome.ts` does NOT call this. Its ledger phases push each bridge's
- * warnings onto the right array inline, one push per phase, because each
- * phase already holds exactly one bridge's result. It shares the RENDERER
- * below, not this classifier -- so two of the three verbs share the
- * classification and all three share the rendering. A change to the split
- * therefore has to be applied at install's four phase sites by hand.
- */
-export function splitStagingWarnings(warnings: {
-  readonly skills: readonly string[];
-  readonly commands: readonly string[];
-  readonly agents: readonly string[];
-  readonly mcp: readonly string[];
-}): { readonly discovery: readonly string[]; readonly bridge: readonly string[] } {
-  return {
-    discovery: Object.freeze([...warnings.skills, ...warnings.commands]),
-    bridge: Object.freeze([...warnings.agents, ...warnings.mcp]),
-  };
-}
-
-/**
- * D-141-03 / D-141-05: render the discovery half to a standalone user, after
- * the verb's own row.
- *
- * The seam is `notifyDiagnostic`, the same sanctioned second-notify channel
- * the reconcile pass uses; the verb's row itself stays exactly one
- * `MarketplaceNotificationMessage` (IL-2).
- *
- * NFR-9: a discovery warning embeds the absolute component directory it
- * walked, so it goes through `redactAbsolutePaths` before it reaches the
- * user, exactly as the reconcile composer does.
- *
- * WGATE-01: the header counts the lines and states nothing about what became
- * of the components they name. It cannot: two of the families routed into this
- * array report a component that WAS materialized -- a workflow script the host
- * engine will refuse to load, and one that installs under a name it does not
- * declare -- so a header claiming a disposal would contradict the lines
- * directly beneath it. "Note" is the word the read-only `info` surface already
- * prints for the same facts, so the two surfaces name them the same way.
- */
-export function surfaceDiscoveryWarnings(
-  ctx: NotificationContext,
-  args: {
-    readonly plugin: string;
-    readonly verb: "installed" | "updated" | "reinstalled";
-    readonly warnings: readonly string[];
-  },
-): void {
-  if (args.warnings.length === 0) {
-    return;
-  }
-
-  const lines = args.warnings.map((w) => redactAbsolutePaths(w));
-  const header =
-    lines.length === 1
-      ? `Plugin "${args.plugin}" ${args.verb}; 1 declared component has a note.`
-      : `Plugin "${args.plugin}" ${args.verb}; ${lines.length.toString()} declared components have notes.`;
-  notifyDiagnostic(ctx, header, lines);
 }
 
 /**
@@ -1634,4 +1818,27 @@ export function retiresWorkflowCommand(
 ): boolean {
   const placed = new Set(placedNames);
   return previousNames.some((name) => !placed.has(name));
+}
+
+/**
+ * WLIF-01: sweep abandoned workflow staging trees on behalf of `verb` and
+ * debug-log what the sweep could not remove. Never throws and never reaches
+ * the user (D-19-01): hygienic cleanup never becomes the primary user-facing
+ * path.
+ */
+export async function sweepWorkflowsStaging(
+  locations: Pick<ScopedLocations, "workflowsStagingDir" | "workflowsHomeDir">,
+  verb: string,
+  pluginRef: string,
+): Promise<void> {
+  try {
+    const leaks = await garbageCollectWorkflowsStaging(locations);
+    if (leaks.length > 0) {
+      hookDebugLog(
+        `${verb}: workflows staging GC left ${leaks.length.toString()} tree(s) for ${pluginRef}: ${leaks.join("; ")}`,
+      );
+    }
+  } catch (err) {
+    hookDebugLog(`${verb}: workflows staging GC failed for ${pluginRef}: ${errorMessage(err)}`);
+  }
 }

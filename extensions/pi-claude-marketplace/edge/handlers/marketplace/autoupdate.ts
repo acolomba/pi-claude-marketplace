@@ -1,35 +1,30 @@
 // edge/handlers/marketplace/autoupdate.ts
 //
-// Dual-form thin-shim handler factory for
-// `/claude:plugin marketplace autoupdate [<name>] [--scope user|project]`
-// and
-// `/claude:plugin marketplace noautoupdate [<name>] [--scope user|project]`.
+// Dual-form thin-shim handler factory for `marketplace autoupdate` and
+// `marketplace noautoupdate`; each usage line comes from
+// `marketplaceUsage(...)`.
 //
 // D-01 ships a SINGLE `setMarketplaceAutoupdate` orchestrator
 // parameterized by `enable: boolean`. The edge layer maps the two slash
 // subcommands onto this single factory via `makeAutoupdateHandler(true)` and
 // `makeAutoupdateHandler(false)`.
+//
+// D-05: the orchestrator renders from the router's notification run, which
+// the handler forwards.
 
 import { setMarketplaceAutoupdate } from "../../../orchestrators/marketplace/autoupdate.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
+import { marketplaceUsage } from "../../router.ts";
 import { extractLocalFlag } from "../shared.ts";
 
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
-function usageFor(enable: boolean): string {
-  return enable
-    ? "Usage: /claude:plugin marketplace autoupdate [<name>] [--scope user|project] [--local]"
-    : "Usage: /claude:plugin marketplace noautoupdate [<name>] [--scope user|project] [--local]";
-}
-
-export function makeAutoupdateHandler(
-  pi: ExtensionAPI,
-  enable: boolean,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  const usage = usageFor(enable);
-  return async (args, ctx): Promise<void> => {
-    const localFlag = extractLocalFlag(args, ctx, usage);
+export function makeAutoupdateHandler(enable: boolean): SubcommandHandler {
+  const usage = marketplaceUsage(enable ? "autoupdate" : "noautoupdate");
+  // fallow-ignore-next-line code-duplication -- reviewed: autoupdate and enable/disable share the same --local argument prologue on purpose, so each handler reads top to bottom
+  return async (args, ctx, run): Promise<void> => {
+    const localFlag = extractLocalFlag(args, { ctx, run, usage });
     if (localFlag === undefined) {
       return;
     }
@@ -37,11 +32,11 @@ export function makeAutoupdateHandler(
     const parsed = parseCommandArgs(
       localFlag.residualArgs,
       {
-        positional: [{ name: "name", required: false }] as const,
+        positional: [{ name: "name", label: "Marketplace name", required: false }] as const,
         usage,
       },
       (message) => {
-        notifyUsageError(ctx, { message, usage });
+        notifyUsageError(ctx, run, { message, usage });
       },
     );
     if (parsed === undefined) {
@@ -50,7 +45,7 @@ export function makeAutoupdateHandler(
 
     await setMarketplaceAutoupdate({
       ctx,
-      pi,
+      run,
       cwd: ctx.cwd,
       enable,
       ...(parsed.name !== undefined && { name: parsed.name }),

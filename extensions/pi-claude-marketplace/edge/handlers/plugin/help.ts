@@ -5,26 +5,39 @@
 // an invalid subcommand to read the documentation.
 
 import { notifyUsageError, notifyUsageInfo } from "../../../shared/notification-dispatch.ts";
+import { tokenizeArgs } from "../../args.ts";
 import { MARKETPLACE_USAGE, TOP_LEVEL_USAGE } from "../../router.ts";
 
-import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import { rejectUnknownFlag } from "./shared.ts";
+
+import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE = "Usage: /claude:plugin help [marketplace]";
 
-export function makeHelpHandler(): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return (args, ctx): Promise<void> => {
-    const topic = args.trim();
-    if (topic === "" || topic === "help") {
-      notifyUsageInfo(ctx, TOP_LEVEL_USAGE);
+export function makeHelpHandler(): SubcommandHandler {
+  return (args, ctx, run): Promise<void> => {
+    const tokens = tokenizeArgs(args).map((token) => token.value);
+    if (rejectUnknownFlag(tokens, { ctx, run, usage: USAGE })) {
       return Promise.resolve();
     }
 
-    if (topic === "marketplace") {
-      notifyUsageInfo(ctx, MARKETPLACE_USAGE);
+    if (tokens.length > 1) {
+      notifyUsageError(ctx, run, { message: "Too many arguments.", usage: USAGE });
       return Promise.resolve();
     }
 
-    notifyUsageError(ctx, {
+    const [topic] = tokens;
+    if (topic === undefined || topic === "help") {
+      notifyUsageInfo(ctx, run, TOP_LEVEL_USAGE);
+      return Promise.resolve();
+    }
+
+    if (topic === "marketplace" || topic === "market") {
+      notifyUsageInfo(ctx, run, MARKETPLACE_USAGE);
+      return Promise.resolve();
+    }
+
+    notifyUsageError(ctx, run, {
       message: `Unknown help topic: "${topic}".`,
       usage: USAGE,
     });

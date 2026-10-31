@@ -253,6 +253,7 @@ function emitInner(inner: string, out: string[], depth: number): void {
   const innerPieces = splitOnCompoundSeparators(inner);
   for (const p of innerPieces) {
     out.push(p);
+    // fallow-ignore-next-line code-duplication -- reviewed: Bash and PowerShell parse command substitution differently, so each scanner keeps its own recursion and the two can drift apart
     pushRecursed(p, out, depth + 1);
   }
 }

@@ -2,6 +2,187 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: plugin-lifecycle -- Marketplace and Plugin Lifecycle Backlog
+
+**Completed:** 2026-10-29 on `features/plugin-lifecycle-p11` (PR #290, not yet merged, no npm release)
+**Phases:** 11 | **Plans:** 80 | **Tasks:** 121 | **Requirements:** 64/64 | **Audit:** `tech_debt`, no blockers (integration 12/12, flows 10/10)
+
+### What Was Built
+
+- Closed the marketplace and plugin lifecycle backlog across warning transport, pending/apply ordering, dependency cascades and resolver pins, marketplace/import parity, git failures and locking, background autoupdate, and package dependency installation.
+- Added or tightened lifecycle behavior proofs, ending with 1,151 Cucumber scenarios, 11,854 steps, 16 hooks, and 309 direct-coverage records on the exact executable tree.
+- Split the install flow into directly covered planning, ledger, cascade-context, result, and dependency-ledger owners while preserving the public composition root.
+
+### What Worked
+
+- **Concurrent phase and verification sessions with file ownership.** Disjoint phase artifacts combined cleanly, and the final stale-report refresh ran in separate sessions without shared-file conflicts.
+- **One exact-tree repository gate reused by all verifiers.** This kept the evidence identical while avoiding eight redundant full-suite runs.
+- **Artifact-first closeout.** The open-artifact audit exposed a real cold-cache git-root dependency gap; the repair added both an owner test and a public Cucumber scenario before the milestone was archived.
+
+### What Was Inefficient
+
+- **Later integration work made eight phase reports stale.** The milestone needed a final concurrent verifier sweep even though the implementation was already green.
+- **GSD's named-milestone audit prefix did not match completion's lookup.** The generated `vplugin-lifecycle-MILESTONE-AUDIT.md` had to be renamed before the dry run would archive it.
+- **The completion tool generated one accomplishment per plan.** The closeout record needed a hand-written delivery summary and a collapsed raw list.
+
+### Patterns Established
+
+- **Preview a cold git root before the filesystem-only dependency walk.** Reuse the pinned preview through a cache-only clone probe so dependency discovery does not cause a second network clone.
+- **Treat the final manager state as a dynamic gate.** Every phase must return `passed` on the exact closeout tree; a historical passed frontmatter value is not enough.
+- **Dry-run milestone archival before `--confirm`.** The move list catches generated-filename mismatches while every source artifact is still in place.
+
+### Key Lessons
+
+1. A marketplace entry that omits dependencies does not prove the root has none; a cold git root's own manifest must be materialized before closure planning.
+2. Shared exact-tree evidence is safe to reuse only while HEAD and build inputs remain unchanged; verifier sessions should fail closed on worktree or HEAD drift.
+3. Named milestones need both audit and completion workflows tested against the same artifact naming convention.
+
+### Cost Observations
+
+- Model mix: Codex orchestrator with specialized verifier and integration-checker sessions; exact per-model percentages were not recorded.
+- Timeline: 2026-10-26 -> 2026-10-29.
+- Notable: 80 plans and 121 tasks converged into one final gate; eight stale verification reports were refreshed in three concurrent batches.
+
+---
+
+## Milestone: lifecycle-coverage -- Plugin Lifecycle Behavioral Tests
+
+**Completed:** 2026-10-25 on `claude/plugin-lifecycle-coverage-b1d431` (not yet pushed, no npm release)
+**Phases:** 30 | **Plans:** 76 | **Requirements:** 104/104 | **Audit:** `tech_debt`, no blockers (integration 8/8, flows 8/8); override close (24 phase digests stale from post-verification doc edits)
+
+### What Was Built
+- Cucumber scenarios for every `/claude:plugin` plugin lifecycle verb (825 scenarios in the suite), with plugins served from git repositories on the loopback git host as `github`, `url`, or `git-subdir` sources.
+- Parity fixes the scenarios surfaced: one version rule, one update/reinstall runner with per-commit git copies, aligned failure reasons and rows, and a delisted plugin read from its installed copy.
+- A read-only load with the new `/claude:plugin apply` (APL-D1/D2), and the `autoapply` setting and command (AAP-D1/D2).
+
+### What Worked
+- **Phases 2-15 in parallel after a shared-steps phase 1.** A file ownership table let a dozen phase sessions run at once without step collisions.
+- **Second-round decision batching.** Review findings across phases were collected in one notes file and answered by the user in two rounds, which became phases 20-27 instead of piecemeal interrupts.
+- **Upstream binary grep for every parity question** (Claude Code 2.1.309): it settled the delisted-plugin walk, the `apply` split and the `autoapply` command shape with cited evidence.
+
+### What Was Inefficient
+- **Phase 29 changed scope mid-flight.** "Load converges on the catalog" became "read-only load plus `apply`" after planning; a review revert reopened CR-01 and left the two-apply case for the user to accept.
+- **The `autoapply` command shape took two redirects** (on/off vs a verb pair vs the upstream `/effort` + `/fast` shape) because the first prompt carried a wrong premise about `marketplace autoupdate`.
+
+### Patterns Established
+- **Load previews, `apply` mutates.** Every load-time change goes through one shared read pass and convergence planner, so `pending`, the load and `apply` cannot disagree.
+- **A fail-closed set for config writes:** a write refuses while any of the four config files is invalid, so a later repair cannot trigger a mass uninstall.
+
+### Key Lessons
+1. **Check a premise against the code before passing it on.** The `autoupdate` on/off claim cost a round trip.
+2. **A revert in a review-fix loop reopens earlier findings.** Re-run the disposition ledger after any revert and put the reopened finding to the user at once.
+
+### Cost Observations
+- Model mix: opus throughout (planning, execution, review, fixing, verification)
+- Timeline: 2026-10-22 -> 2026-10-25, ~470 commits on the branch
+- Notable: up to a dozen phase sessions ran in parallel worktrees; each merge was gated by a combined `npm run check` (~3-4 min).
+
+---
+
+## Milestone: marketplace-features -- Marketplace Behavioral Tests (PR #271)
+
+**Completed:** 2026-10-21 on `features/cucumber-behavioral-tests` (not yet merged, no npm release)
+**Phases:** 14 (1-10, with 3.1-3.4 inserted) | **Plans:** 82 | **Tasks:** 183 | **Requirements:** 97/97 | **Audit:** `tech_debt`, no blockers (integration 9/9, flows 5/6); override close (one deferred todo)
+
+### What Was Built
+- A cucumber suite of 433 scenarios drives every `/claude:plugin marketplace` verb through a real headless Pi, with stand-ins for directory, file, https git URL, and GitHub sources, and no tag excluded.
+- A loopback HTTPS git host around `git http-backend`, armed per repository for 401, 404, 5xx, and dropped connections, and a GitHub base override (D-MF-01) that points GitHub sources at it.
+- Product fixes the scenarios surfaced: the `--local` migration leak, base/local layer partition, per-scope marketplace records for project installs, C-10, the `#ref` shorthand, and clearer git authentication causes.
+
+### What Worked
+- **Outlines written once with `@url`/`@github` blocks that waited for their kind phase.** The verb phases wrote every row; phases 9 and 10 only had to remove the tag exclusion, and 38 of 39 github rows passed on first run.
+- **Scenarios as a defect finder.** Four inserted phases (3.1-3.4) and five test-first product fixes came straight from scenarios that pinned upstream-parity behavior.
+- **Red proofs recorded as JSON evidence** (`*-RED.json`) before every product fix and for the LAYER-07 rows, so a fix is shown failing on the old code, not just passing on the new.
+
+### What Was Inefficient
+- **Verification went stale across the milestone.** Phases 1-7 and 9 read `stale` at close because later phases touched shared fixtures and orchestrators; all 12 needed a re-verify pass before the lifecycle could run.
+- **The review fix loop renumbered findings across re-reviews.** The scripted disposition ledger kept only the last two, so phase 10's ledger was rendered by hand, and its built-in commit bypassed the hooks (`ca1ec217`).
+
+### Patterns Established
+- **One `<source kind>` parameter and kind-neutral steps**, with tagged `Examples:` blocks per kind and a scratch tags config (relative path) for triage.
+- **Hermetic everything:** Pi, the git host, and fixture git run with `GIT_CONFIG_NOSYSTEM=1`, a sandbox global config, and no inherited `GIT_*`; a hostile-config control changes no result.
+
+### Key Lessons
+1. **Re-verify early when shared fixtures move.** A cheap verifier pass per touched phase at each phase close would avoid a 12-phase re-verification at milestone close.
+2. **Upstream-parity questions surface in review, not only in discuss.** SHORTREF-01 (the `@` split) was found by a reviewer in phase 10; check the upstream binary's parse rules when a phase touches source parsing.
+
+### Cost Observations
+- Model mix: opus research, planning, execution, review and fixing; sonnet verifiers, plan checker and integration checker
+- Timeline: 2026-10-15 -> 2026-10-21, ~662 commits on the branch
+- Notable: Phase 10 ran 7 sequential plans with an `npm run check` gate after each (~75 s), 3 review-fix iterations plus one targeted pass, and 12 parallel re-verifications in batches of 4.
+
+---
+
+## Milestone: json-output -- Mode-Keyed Presentation Strategies
+
+**Completed:** 2026-10-11 on `features/json` (not yet merged, no npm release)
+**Phases:** 9 (1-9) | **Plans:** 50 | **Tasks:** 72 | **Requirements:** 36/36 | **Audit:** `tech_debt`, no blockers (15/15 seams, 8/8 flows); override close (phases 1-7 digests stale by 08 D-12)
+
+### What Was Built
+- One presentation model, computed upstream of rendering, feeds two strategies chosen by `ctx.mode`: text for `tui`/`print` (bytes unchanged) and a versioned JSON wire schema for `json`/`rpc`, delivered as `claude-plugin` session entries.
+- Every command, load-time, and hook output carries its origin, a canonical command identity, an invocation ID, and an explicit outcome, even when the command throws.
+- Credentials are redacted at every serialization site, including the text the two LLM tools return to the model (Phase 9).
+
+### What Worked
+- **A byte corpus captured before the first renderer change.** Every later phase re-diffed 2,600-3,149 recorded `notify` calls, so a refactor of every output path kept the text byte form unchanged, and each approved exception was ledgered.
+- **Tech-debt phases inserted at the end instead of carried forward.** Phases 8 and 9 closed the ledger (0 open) and the last undecided audit item before the close, so the re-audit had no action list.
+
+### What Was Inefficient
+- **Verification digests went stale as later phases built on earlier ones.** Phases 1-7 all read `stale` at close, for drift in shared notification modules, which forced an override close (08 D-12).
+- **Locked decisions written from memory of tooling that had changed.** Phase 9 research found three: `isError` is ignored by Pi 0.87.1, `status: closed` is not a closed status for `audit-open`, and the corpus tool had been deleted. Each needed an orchestrator resolution before planning.
+
+### Patterns Established
+- **Mode-selected transport through one chokepoint.** `ctx.ui.notify` for text, `pi.appendEntry` for JSON, chosen once per run.
+- **Redact at the return boundary of every surface that leaves the process**, through the one `redactCredentials` leaf, rather than in producers.
+
+### Key Lessons
+1. **Probe the live tool or runtime before locking a decision that names it.** All three Phase 9 conflicts came from decisions about tool behavior that a one-minute probe would have caught.
+2. **A transport's error flag is part of its contract.** Pi's `execute` contract says "throw on failure", and a returned `isError` is silently dropped. That is left as an open user choice (D-03).
+
+### Cost Observations
+- Model mix: opus planning, execution and review; sonnet verifiers, plan checker and integration checker
+- Timeline: 2026-09-28 -> 2026-10-11, ~400 commits on the branch
+- Notable: Phase 9 (1 plan, 3 tasks) ran research -> plan -> execute -> secure -> validate -> review -> verify in one autonomous pass; the executor's one `npm run check` (~91 s) covered the regression gate.
+
+---
+
+## Milestone: mcp-4 -- MCP 4
+
+**Completed:** 2026-10-10; merged 2026-10-10 (PR #250, squash `94160614`); released as npm 0.20.0
+**Phases:** 8 (1-8) | **Plans:** 73 | **Tasks:** 176 | **Requirements:** 41/41 | **Audit:** passed (8/8 phases, 12/12 integration seams, 6/6 flows, Nyquist compliant on all 8, `threats_open: 0`) -- first `tech_debt`; Phase 8 cleared it
+
+### What Was Built
+- Pi 1.0 became the floor, with pi-subagents 0.74.0 and pi-mcp-adapter 5.2.0; only the adapter itself satisfies the MCP soft dependency, never Pi's built-in MCP.
+- Plugin MCP servers are written to the adapter's own `mcp-adapter.json` under Claude Code's tool names, load through tool search, and keep the user's per-server choices across update, reinstall, disable and uninstall.
+- Variables expand by Claude Code's rules with no environment value written to disk; a `/reload` moves old `mcp.json` entries into the new file; `info` shows each server's live state.
+
+### What Worked
+- **Sequential executors in one worktree, each commit checked by the hook.** Plans ran one after another in the milestone worktree, and every build-input commit ran `check:commit`. There were no per-plan worktrees to merge back, and a broken commit failed at the commit, not at the phase gate.
+- **Scoped re-verification instead of a full rerun.** When Phase 8 edited files that Phases 1-7 cover, each phase was re-verified only against the diff from its own baseline. That took one pass per phase and still found a real hygiene gap in Phase 2 (a decision ID put back into a comment).
+- **Measuring against the real adapter.** Conformance suites run the escape, the entry shape and the status contract through pi-mcp-adapter's own `dist/` code, with drift guards. An operator-run canary on a real Pi 1.0 proved the whole path, including the one-reload cost of the rename.
+
+### What Was Inefficient
+- **The first audit read `tech_debt`, and clearing it took a whole phase.** Open review findings in every phase, a fallow audit verdict of `warn`, two open BACKLOG items and stale records added up to 21 plans in Phase 8. Most of that could have been closed inside the phase that made it.
+- **Review-fix loops added rounds.** Phases 2, 4 and 5 each needed a second review-fix iteration, and Phase 3 left its findings in a disposition file that lagged the operator's UAT decisions until Phase 8.
+- **A later phase staled the earlier VERIFICATION reports.** Phase 8 edited files that Phases 1-7 had verified, so the close needed seven scoped re-verifications before the re-audit could pass.
+
+### Patterns Established
+- **A remedy must clear its own cause.** A notice that tells the user to run `reinstall` must name a command that fixes the problem it reports (D-08-05, NFR-3).
+- **State maps are read and written by own key only.** `ownValue` and `setOwn` replace `in` checks and bracket writes, so `constructor` and `__proto__` behave like any other plugin or marketplace name (D-08-07).
+- **Translate through a closed table pinned to an upstream version.** The Claude Code 2.1.291 field table drops every key it does not name, and a feature the adapter cannot honor makes the plugin partially available instead of installing something that silently differs.
+
+### Key Lessons
+1. **Close review findings in the phase that raised them.** A finding left `open` or `deferred` comes back at the audit as debt, with less context and a larger fix.
+2. **Run the fallow audit before each phase gate, not only before the PR.** Clone groups added early were cheap to fix then and cost several plans in Phase 8.
+3. **Expect a later phase to stale an earlier verification.** Plan the scoped re-verification into the close instead of treating it as a surprise.
+
+### Cost Observations
+- Model mix: not measured for this milestone
+- Timeline: 2026-10-01 -> 2026-10-10, ~385 first-parent commits on the branch
+- Notable: Phase 8 alone was 21 of the 73 plans.
+
+---
+
 ## Milestone: any-git-host -- Any Git Host
 
 **Completed:** 2026-09-30 on `features/git-hosts` (workstream `git-hosts`; merged to main in PR #221 as `a0d3aef1`, no npm release yet)
@@ -912,6 +1093,10 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | workflows-detection | 1 | Unsupported declaration as opaque presence; shared strict/loose collector; exact no-materialization boundary |
 | v1.19 | 10 | One mirrored owner test per production module, coverage measured in isolation; land-the-control-first sequencing; plants over green runs as the standard of proof |
 | v1.20 | 12 | Dependency provenance in records, upstream parity research, and a final clean-tree gate |
+| mcp-4 | 8 | Conformance against the real adapter's code; sequential executors in one worktree; a debt phase after a `tech_debt` audit; scoped re-verification at close |
+| json-output | 9 | Byte corpus captured before the first renderer change; one presentation model behind mode-selected text and JSON strategies; end-of-milestone tech-debt phases instead of carried items |
+| lifecycle-coverage | 30 | Command-complete Cucumber coverage against real headless Pi; many parallel sessions with explicit file ownership; read-only load plus explicit apply |
+| plugin-lifecycle | 11 | Parallel backlog closure followed by shared test/cleanup sweeps; one exact-tree gate reused by concurrent verifiers; dry-run archive validation |
 
 ### Cumulative Quality
 
@@ -926,6 +1111,10 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | workflows-detection | 3649 + 21 int assertions | Fixed unsupported convention, reason parity, rollback/retry, and exact resource/discovery boundaries |
 | v1.19 | 5144 + 31 int | 204/204 mirrored pairs at zero correspondence violations; per-pair direct coverage measured in isolation; gate scripts finally wired into `npm run check`; green on two Node majors |
 | v1.20 | 7760 + 63 int | Full `npm run check` green in a clean checkout; 100% aggregate production coverage; one deferred live credential UAT subcase |
+| mcp-4 | not recorded | Full `npm run check` green with both peer roots (pi-mcp-adapter 5.2.0, pi-subagents 0.74.0); fallow audit `pass` with 0 introduced groups; all review ledgers `open: 0` |
+| json-output | 10,228 (corpus run) | 3,149-record text corpus and output catalog byte-identical apart from ledgered exceptions; wire schema validated against all 260 catalog examples; real headless Pi at 0.87.1 and the 0.86.1 floor |
+| lifecycle-coverage | 825 scenarios | Every plugin lifecycle verb driven through a real headless Pi; path, GitHub, URL, and git-subdir source coverage |
+| plugin-lifecycle | 1,151 scenarios / 11,854 steps | 16 hooks and 309 direct-coverage records; all 64 requirements and 11 phase verifications current on the closeout tree |
 
 ### Top Lessons (Verified Across Milestones)
 

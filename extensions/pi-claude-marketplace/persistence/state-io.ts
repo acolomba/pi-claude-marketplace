@@ -30,12 +30,18 @@ import Type from "typebox";
 import { Compile } from "typebox/compile";
 
 import { githubSource, parsePluginSource, pathSource } from "../domain/source.ts";
+import { withoutTagCommit } from "../domain/version.ts";
 import { atomicWriteJson } from "../shared/atomic-json.ts";
 import { errorMessage } from "../shared/errors.ts";
 
 import { migrateLegacyMarketplaceRecords, persistMigratedState } from "./migrate.ts";
 
-import type { GitHubSource, UrlSource } from "../domain/source.ts";
+import type {
+  GitHubSource,
+  HostedManifestSource,
+  ParsedSource,
+  UrlSource,
+} from "../domain/source.ts";
 
 /**
  * D-100-01 / D-100-02 / ENBL-11: one persisted hook entry -- the event name
@@ -97,6 +103,12 @@ const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
   // path/github-name installs omit it. Reinstall uses THIS full sha as its
   // re-clone checkout pin; clone GC presence-checks it to derive live keys.
   resolvedSha: Type.Optional(Type.String()),
+  // GV-01: the semver of the release tag a dependency's version range selected,
+  // which Claude Code records as `resolvedVersion` beside a `version` that
+  // carries the tag's commit. OPTIONAL and additive -- NO schemaVersion bump
+  // (the resolvedSha precedent). Absent when no range selected a tag, and on a
+  // record written before GV-01, whose `version` is the tag's semver itself.
+  resolvedVersion: Type.Optional(Type.String()),
   // D-100-01 / ENBL-10: the supported hook entries the install materialized.
   // OPTIONAL and additive -- NO schemaVersion bump (the resolvedSha
   // precedent), so a legacy record without it loads unchanged and absence
@@ -160,66 +172,6 @@ const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
 export type PluginInstallRecord = Type.Static<typeof PLUGIN_INSTALL_RECORD_SCHEMA>;
 
 /**
- * Deep-copy a stored plugin record, for callers that need a before-snapshot to
- * compare against or to restore from (reinstall's replace step is the one
- * today).
- *
- * It lives beside the type rather than in the orchestrator that wanted it,
- * because the hazard is a field drift: the copy ENUMERATES fields instead of
- * spreading, so a key added to `PLUGIN_INSTALL_RECORD_SCHEMA` and not added
- * here is dropped from every snapshot with no compile error and no observable
- * failure until a later reader wants it. Keeping the two adjacent is what puts
- * the omission in front of whoever extends the schema.
- *
- * Enumeration is deliberate and must stay: a spread would alias the nested
- * `compatibility` and `resources` arrays, and the whole point of a snapshot is
- * that a later in-place mutation of the live record cannot reach it.
- */
-export function clonePluginRecord(record: PluginInstallRecord): PluginInstallRecord {
-  return {
-    version: record.version,
-    resolvedSource: record.resolvedSource,
-    // PURL-07 / D-78-02: preserve the recorded resolvedSha across the snapshot so
-    // reinstall's recorded-sha probe (and the carry-forward rewrite) see the pin.
-    ...(record.resolvedSha !== undefined && { resolvedSha: record.resolvedSha }),
-    // D-100-01 / ENBL-10: preserve the recorded hook description across the
-    // snapshot. This function enumerates fields rather than spreading, so an
-    // omission here silently drops the key from the old-record snapshot. Deep
-    // copy, matching the resources arrays below.
-    ...(record.hookEntries !== undefined && {
-      hookEntries: record.hookEntries.map((entry) => ({ ...entry })),
-    }),
-    // LOAD-02 / D-06-01: preserve the consequence-disable marker across the
-    // snapshot. This function enumerates fields rather than spreading, so
-    // dropping it here would let a failed reinstall restore a record that
-    // reads as a user's own disable.
-    ...(record.dependencyDisabled !== undefined && {
-      dependencyDisabled: record.dependencyDisabled,
-    }),
-    compatibility: {
-      installable: record.compatibility.installable,
-      notes: [...record.compatibility.notes],
-      supported: [...record.compatibility.supported],
-      unsupported: [...record.compatibility.unsupported],
-    },
-    resources: {
-      skills: [...record.resources.skills],
-      prompts: [...record.resources.prompts],
-      agents: [...record.resources.agents],
-      mcpServers: [...record.resources.mcpServers],
-      // HOOK-02 / D-57-01: clone the additive required hooks inventory verbatim.
-      hooks: [...record.resources.hooks],
-      // WLIF-01: clone the workflow envelope inventory verbatim.
-      workflows: [...record.resources.workflows],
-    },
-    enabled: record.enabled,
-    provenance: record.provenance,
-    installedAt: record.installedAt,
-    updatedAt: record.updatedAt,
-  };
-}
-
-/**
  * ENBL-02 / ENBL-18 / D-100-10: the disable transform's guarantee, expressed
  * in the type system.
  *
@@ -268,7 +220,7 @@ export function toDisabledRecord<R extends PluginInstallRecord["resources"]>(
  * {@link toDisabledRecord} writes. Every surface that asks "is this record
  * currently disabled" consumes this one definition; a module that re-derives
  * the rule locally is a drift twin the gate in
- * `tests/architecture/disabled-state-classification.test.ts` rejects. That
+ * `test/architecture/disabled-state-classification.test.ts` rejects. That
  * gate WALKS the whole extension source tree rather than an allowlist of
  * known sites, so the claim holds for a copy landing anywhere -- this module
  * is the single exemption, because reading the boolean here IS the
@@ -295,6 +247,35 @@ export function isRecordedButDisabled(record: { readonly enabled: boolean }): bo
 }
 
 /**
+ * GV-01: the version a dependency's version range reads for a record -- the
+ * tag's semver when a range selected one, as Claude Code reads
+ * `resolvedVersion` first, else the recorded version without the commit a
+ * pinned `anthropic-plugin-directory` plugin carries, as Claude Code reads
+ * the plugin's declared version.
+ */
+export function rangeVersionOf(record: {
+  readonly version: string;
+  readonly resolvedVersion?: string;
+  readonly resolvedSha?: string;
+}): string {
+  return record.resolvedVersion ?? withoutTagCommit(record.version, record.resolvedSha);
+}
+
+/**
+ * GV-01: a record as a move to a catalog `version` leaves it. No release tag
+ * selected that version, so the record keeps no tag version for a range to
+ * read.
+ */
+export function atCatalogVersion(
+  record: PluginInstallRecord,
+  version: string,
+): PluginInstallRecord {
+  const moved = { ...record, version };
+  delete moved.resolvedVersion;
+  return moved;
+}
+
+/**
  * ST-2: per-marketplace record. `source` is `Type.Unknown()` so the schema
  * accepts whatever shape ST-6 funnel produced (PathSource | GitHubSource);
  * cross-shape validation lives in domain/source.ts. The schema's job is
@@ -312,6 +293,8 @@ const MARKETPLACE_RECORD_SCHEMA = Type.Object({
   manifestPath: Type.String(),
   marketplaceRoot: Type.String(),
   lastUpdatedAt: Type.Optional(Type.String()),
+  // Comparison metadata from the last successful add or refresh, never a source.
+  lastSuccessfulManifest: Type.Optional(Type.String()),
   // SPLIT-01 / D-12: `autoupdate` field REMOVED from MARKETPLACE_RECORD_SCHEMA.
   // It lives in CONFIG_SCHEMA (per-marketplace config entry) now. Legacy
   // state.json that still has the field loads cleanly via typebox's lenient
@@ -329,11 +312,10 @@ const MARKETPLACE_RECORD_SCHEMA = Type.Object({
 const STATE_SCHEMA = Type.Object({
   schemaVersion: Type.Union([Type.Literal(1), Type.Literal(2), Type.Literal(3)]),
   // BFILL-02 / D-68-01: the last extension version that reconciled this state.
-  // OPTIONAL and additive -- NO schemaVersion bump. An absent stamp means
-  // scan-once (treated as version-changed) so an old doc without it loads
-  // unchanged and the next save writes it. It gates the load-time backfill
-  // scan, which only fires when this differs from EXTENSION_VERSION (the sole
-  // thing that can move the supported-kind boundary).
+  // OPTIONAL and additive -- NO schemaVersion bump, so an old doc without it
+  // loads unchanged. D-13: it no longer gates anything and nothing writes it;
+  // it stays readable, with no migration, so a file that carries it loads and
+  // saves byte-stable.
   lastReconciledExtensionVersion: Type.Optional(Type.String()),
   marketplaces: Type.Record(Type.String(), MARKETPLACE_RECORD_SCHEMA),
 });
@@ -365,30 +347,57 @@ function firstValidationErrorDetail(first: {
 /**
  * MURL-01/MURL-05: revalidate a stored url source through the SAME parser
  * funnel (ST-6) so the .git-canonical url + optional #ref are recomputed.
- * Any other parse, a github shorthand included, is a corrupt record.
+ * Any other parse is a corrupt record.
+ *
+ * The raw text goes through the url object form, which reads only URL
+ * schemes. D-PL5-04 reads a string URL whose path ends in `.json` as a
+ * hosted catalog, and a url record written before that rule must keep
+ * loading as the git source it names.
  */
 function revalidateStoredUrlSource(mpName: string, raw: string): UrlSource | GitHubSource {
-  const parsedSrc = parsePluginSource(raw);
+  const parsedSrc = parsePluginSource({ kind: "url", url: raw });
   // D-76-02: an https github.com url parses as `github`, and the record migrates to that kind.
-  if (parsedSrc.kind === "url" || (parsedSrc.kind === "github" && raw.startsWith("https://"))) {
+  if (parsedSrc.kind === "url" || parsedSrc.kind === "github") {
     return parsedSrc;
   }
 
   throw new Error(`state.json marketplace "${mpName}" has an invalid url source: ${raw}`);
 }
 
+/**
+ * D-PL5-05 / ST-6: revalidate a stored hosted source through the SAME parser
+ * funnel, so its fragment-free url is recomputed. Any other parse is a
+ * corrupt record.
+ */
+function revalidateStoredHostedSource(mpName: string, raw: string): HostedManifestSource {
+  const parsedSrc = parsePluginSource(raw);
+  if (parsedSrc.kind === "hosted") {
+    return parsedSrc;
+  }
+
+  throw new Error(`state.json marketplace "${mpName}" has an invalid hosted source: ${raw}`);
+}
+
+/**
+ * A legacy string source. It predates the hosted kind, so a URL to a `.json`
+ * file in one is the git source it was when it was recorded.
+ */
+function revalidateStoredStringSource(mpName: string, src: string): ParsedSource {
+  const parsedSrc = parsePluginSource(src);
+  if (parsedSrc.kind === "unknown") {
+    throw new Error(
+      `state.json marketplace "${mpName}" has unclassifiable source: ${parsedSrc.reason}`,
+    );
+  }
+
+  return parsedSrc.kind === "hosted" ? revalidateStoredUrlSource(mpName, src) : parsedSrc;
+}
+
 function normalizeStoredSource(mpName: string, mp: Record<string, unknown>): void {
   const src = mp.source;
 
   if (typeof src === "string") {
-    const parsedSrc = parsePluginSource(src);
-    if (parsedSrc.kind === "unknown") {
-      throw new Error(
-        `state.json marketplace "${mpName}" has unclassifiable source: ${parsedSrc.reason}`,
-      );
-    }
-
-    mp.source = parsedSrc;
+    mp.source = revalidateStoredStringSource(mpName, src);
     return;
   }
 
@@ -403,6 +412,8 @@ function normalizeStoredSource(mpName: string, mp: Record<string, unknown>): voi
     mp.source = githubSource(obj.raw);
   } else if (obj.kind === "url" && typeof obj.raw === "string") {
     mp.source = revalidateStoredUrlSource(mpName, obj.raw);
+  } else if (obj.kind === "hosted" && typeof obj.raw === "string") {
+    mp.source = revalidateStoredHostedSource(mpName, obj.raw);
   } else if (obj.kind !== "unknown") {
     throw new Error(
       `state.json marketplace "${mpName}" has malformed source object (missing kind/raw)`,
@@ -476,11 +487,11 @@ export async function loadState(
   // `path.dirname(extensionRoot)` is `<scopeRoot>` and the config sits as a
   // sibling at `<scopeRoot>/claude-plugins.json` -- this matches the
   // `locationsFor` construction in `persistence/locations.ts` byte-for-byte
-  // (pinned by a drift-guard test in tests/persistence/state-io.test.ts).
+  // (pinned by a drift-guard test in test/persistence/state-io.test.ts).
   // We do NOT import `locationsFor` here because the external
   // `loadState` keeps the extension-root path contract for orchestrator callers.
-  const configJsonPath = path.join(path.dirname(extensionRoot), "claude-plugins.json");
-  const scrubAutoupdate = existsSync(configJsonPath);
+  const baseConfigJsonPath = path.join(path.dirname(extensionRoot), "claude-plugins.json");
+  const scrubAutoupdate = existsSync(baseConfigJsonPath);
   const { marketplaces, mutated } = migrateLegacyMarketplaceRecords(
     parsed,
     extensionRoot,
@@ -496,11 +507,11 @@ export async function loadState(
     normalizeStoredSource(mpName, mp);
   }
 
-  // BFILL-02 / D-68-01: thread the optional stamp from the parsed root onto
-  // the rebuilt object. The normalization rebuilds { schemaVersion,
-  // marketplaces } and would otherwise SILENTLY DROP this top-level field,
-  // leaving the backfill gate permanently open. Only a string is carried
-  // through; a non-string or absent stamp is ignored (absent = scan-once).
+  // BFILL-02 / D-68-01 / D-13: thread the optional stamp from the parsed root
+  // onto the rebuilt object. The normalization rebuilds { schemaVersion,
+  // marketplaces } and would otherwise SILENTLY DROP this top-level field, so a
+  // file that carries it would lose it on the next save. Only a string is
+  // carried through; a non-string or absent stamp is ignored.
   const reconciliationStamp = parsedRecord?.lastReconciledExtensionVersion;
   const normalized: unknown =
     typeof reconciliationStamp === "string"

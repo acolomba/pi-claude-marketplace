@@ -3,9 +3,12 @@
 // PUP-1..9 + AS-3 (3-phase) + AS-7 (orphan agent index entries) + WR-04 +
 // NFR-2 + NFR-3.
 //
-// Two exported entrypoints (D-09 corollary):
-//  1. updateSinglePlugin: PluginUpdateFn -- cascade-safe; NEVER throws
-//  2. updatePlugins(opts) -- direct entrypoint; PUP-1 three forms
+// Three entrypoints, bound by `createPluginUpdateOperations` (D-09 corollary):
+//  1. beginPluginUpdateRun(): PluginUpdateFn -- the autoupdate cascade;
+//     cascade-safe, throws only an invalid GitHub base override (GHB-03)
+//  2. convergePlugin: PluginConvergeFn -- `apply`'s catalog move (D-26),
+//     under the same cascade-safe contract
+//  3. updatePlugins(opts) -- direct entrypoint; PUP-1 three forms
 //
 // Both share the per-plugin 3-phase swap implementation (D-03 HAND-ROLLED,
 // NOT runPhases -- the heterogeneous-undo flow D-02 precedent):
@@ -29,25 +32,23 @@
 //  PluginUpdatePhase3Error with RECOVERY_PLUGIN_REINSTALL_PREFIX hint.
 //  Else: success outcome carries WR-04 stagedAgentNames/stagedMcpServerNames.
 //
-// D-141-03 / D-141-05: the four bridges' staging warnings are READ (they were
-// not, so every one of them was dark on this path) and split by install's
-// rule through `./shared.ts::splitStagingWarnings`. The skills and commands
-// DISCOVERY half always rides the `updated` outcome's `notes`; the agents and
-// mcp HYGIENE half joins it in cascade mode only. The direct path renders the
-// discovery half through `surfaceDiscoveryWarnings` AFTER the cascade, since
+// D-141-03 / D-PL1-10: the five bridges' tagged staging warnings ride the
+// `updated` outcome's `stagingWarnings`, both halves, in bridge order. The
+// direct path takes the discovery half through `partitionStagingWarnings`, the
+// classifier install uses (D-PL1-03), and renders it AFTER the cascade, since
 // the runner that produces a warning finishes long before the row it
 // qualifies exists.
 //
 // PUP-9 routing:
 //  updateSinglePlugin -- cascade path -- catches into partition='failed'
 //  updatePlugins -- direct path -- surfaces phase-2-or-earlier throws via
-//  a single notify(ctx, pi, NotificationMessage) per
+//  a single notify(ctx, run, NotificationMessage) per
 //  orchestration arm (cause threaded structurally on a
 //  PluginFailedMessage; renderer composes the 4-space
 //  cause-chain trailer).
 //
 // Success and failure notifications are a single
-//  notify(opts.ctx, opts.pi, { marketplaces: [{..., plugins: [...] }] })
+//  notify(opts.ctx, opts.run, { marketplaces: [{..., plugins: [...] }] })
 // call per orchestration arm. notify() owns severity, the reload-hint
 // trailer, and the cause-chain. The post-success completion-cache-refresh
 // warning inside dropPluginCompletionCache is NOT surfaced: the underlying
@@ -59,55 +60,98 @@
 // resolveScopeFromState). MUST NOT import from
 // orchestrators/marketplace/{add,remove,list,update,autoupdate}.ts.
 
+import { networkCloneUrl } from "../../domain/clone-key.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
+import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
+import { AgentTargetOccupiedError, BridgeStagingError } from "../../shared/errors-bridges.ts";
 import {
   CleanupContextError,
   cleanupFailuresFromError,
   composeErrorWithCauseChain,
+  DependencyDeclarationsUnreadableError,
   InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
+  MarketplaceUpdateError,
+  PluginInBaseLayerOnlyError,
+  PluginInLocalLayerOnlyError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
+  rethrowInvalidGitHubBaseUrl,
+  StateLockCompromisedError,
+  StateLockHeldError,
 } from "../../shared/errors.ts";
-import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { classifyGitFailure } from "../../shared/git-failure-classifiers.ts";
+import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import { notifyUpdateNoOpWithContext, notifyWithContext } from "../../shared/notify-context.ts";
-import { DEFAULT_GIT_OPS, refreshGitHubClone, type GitOps } from "../marketplace/shared.ts";
+import { ownValue } from "../../shared/own-key.ts";
+import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
+import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
+import { DEFAULT_CREDENTIAL_OPS, buildGitHubAuth } from "../auth-host.ts";
+import { DEFAULT_GIT_OPS, refreshGitHubClone, refreshUrlClone } from "../marketplace/shared.ts";
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 
-import { garbageCollectPluginClones } from "./clone-gc.ts";
+import { collectPluginClonesLocked } from "./clone-gc.ts";
+import {
+  materializeLatestVersion,
+  recordCandidate,
+  reportedStagingWarnings,
+} from "./materialize-latest.ts";
 import {
   emitMarketplaceNotAddedSignal,
+  keepLocalLayerTargets,
   MarketplaceNotAddedSignal,
+  namedPluginLayerRefusal,
   resolveInstalledMarketplaceTarget,
   resolveInstalledPluginTarget,
-  surfaceDiscoveryWarnings,
 } from "./shared.ts";
+import {
+  surfaceCascadeStagingDiagnostics,
+  surfaceStagingDiagnostics,
+} from "./staging-diagnostics.ts";
 import { composeUpdateCascade } from "./update-cascade.ts";
-import { isUpdatePreflightOutcome, preparePluginUpdate } from "./update-preflight.ts";
-import { swapPluginUpdate } from "./update-swap.ts";
+import { UPDATE_MATERIALIZATION } from "./update-preflight.ts";
+import { revisionVersionSlot } from "./update-row.ts";
 import { UPDATE_CONTEXT } from "./update.messaging.ts";
 
 import type { UpdateCascadeOutcome, UpdateHooksRouting } from "./update-cascade.ts";
-import type { UpdatePluginsOptions, UpdatePluginsTarget } from "./update-preflight.ts";
 import type {
+  MaterializationPolicy,
+  UpdatePluginsOptions,
+  UpdatePluginsTarget,
+} from "./update-preflight.ts";
+import type {
+  CascadeThreePhaseArgs,
   DirectThreePhaseArgs,
   ThreePhaseArgs,
+  ThreePhaseArgsBase,
   UpdatePhase3Failure,
+  UpdateDependencyResolver,
   UpdatePhase3FailedOutcome,
   UpdateRunOutcome,
 } from "./update-swap.ts";
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
-import type { ParsedSource } from "../../domain/source.ts";
+import type { GitHubSource, ParsedSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { RemoteTag } from "../../platform/git.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
-import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
+import type { AuthAttemptResult } from "../auth-host.ts";
+import type {
+  PluginConvergeFn,
+  PluginConvergeTarget,
+  PluginUpdateFn,
+  PluginUpdateOutcome,
+} from "../types.ts";
+import type { CandidateReport } from "./materialize-latest.ts";
+import type { StagingDiagnostic } from "./staging-diagnostics.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 
 /** Runs one prepared update target for the update flow. */
 type UpdatePluginRunner = (args: ThreePhaseArgs) => Promise<UpdateRunOutcome>;
@@ -115,20 +159,74 @@ type UpdatePluginRunner = (args: ThreePhaseArgs) => Promise<UpdateRunOutcome>;
 /** Folds flow outcomes through the extracted cascade owner. */
 type UpdateCascadeComposer = (
   ctx: NotificationContext,
-  pi: ToolInventory,
+  run: NotificationRun,
   outcomes: readonly UpdateCascadeOutcome[],
   cardinality: "single" | "plural",
   abortedByFailure?: boolean,
 ) => void;
+
+/**
+ * UPD-11 / D-PL7-02: the 404 rule of a marketplace refresh. A plugin update
+ * refreshes its marketplace as `marketplace update` does, so a 404 or 410
+ * from the host is `network error`, not `source missing`.
+ */
+const MARKETPLACE_REFRESH_RULE: Parameters<typeof classifyGitFailure>[1] = {
+  notFound: "network error",
+};
+
+/**
+ * GLK-01 / D-PL7-03 / D-PL7-14: runs one marketplace refresh. When the git
+ * host answered with an HTTP status, the failure is rethrown as a
+ * `MarketplaceUpdateError` whose message is the status on the URL the fetch
+ * sent, as `marketplace update` frames it, so that frame leads the cause
+ * line. Every other failure is rethrown unchanged.
+ *
+ * GLK-04: the refresh writes the marketplace `.git`, so it runs under the
+ * scope lock that `marketplace update` and the update preflight's tag copy
+ * take on that `.git`. The direct update syncs a marketplace only after the
+ * previous target's run has released every lock it took, so this one does
+ * not nest. A held lock throws StateLockHeldError, which reads `lock held`.
+ */
+async function refreshFramed(
+  locations: ScopedLocations,
+  source: GitHubSource | UrlSource,
+  refresh: () => Promise<void>,
+): Promise<void> {
+  try {
+    await withExistingScopeLock(locations, () => refresh());
+  } catch (err) {
+    const frame = classifyGitFailure(err, MARKETPLACE_REFRESH_RULE, networkCloneUrl(source))?.frame;
+    if (frame === undefined) {
+      throw err;
+    }
+
+    throw new MarketplaceUpdateError(frame, { cause: err });
+  }
+}
+
 /**
  * PUP-2 syncCloneOnce memoization -- one refresh per (scope, marketplace)
  * pair. Path-source marketplaces are noops (NFR-5: no network for path
- * sources); GitHub-source marketplaces refresh via gitOps.fetch +
- * forceUpdateRef + checkout (the D-14 sequence). Throws on git-side failures.
+ * sources); GitHub- and url-source marketplaces refresh via gitOps.fetch +
+ * forceUpdateRef + checkout (the D-14 sequence), as `marketplace update`
+ * does. Throws on git-side failures; a git host's HTTP answer is framed as
+ * `marketplace update` frames it (`refreshFramed`).
+ *
+ * AUTH-02: the fetch carries the same host-keyed auth bundle as `marketplace
+ * update` (github.com or the GitHub override host for GitHub sources, the
+ * clone URL's host for url sources), plus the run's `authMemo`, so a private
+ * marketplace reaches the credential helper and, on a miss, the Device Flow.
+ * The GitHub bundle is built inside the github arm, so a path-only run never
+ * reads PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL (GHB-02). `updatePluginsWith`
+ * allocates the `authMemo` when the caller supplies none and passes it here
+ * (D-79-02), so that flow runs at most once per host across the marketplace
+ * syncs and the plugin clones.
  */
 function makeSyncCloneOnce(
-  gitOps: GitOps,
+  opts: UpdatePluginsOptions,
 ): (scope: Scope, mpName: string, locations: ScopedLocations) => Promise<void> {
+  const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
+  const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
   const synced = new Set<string>();
   return async (scope, mpName, locations) => {
     const key = `${scope}/${mpName}`;
@@ -139,7 +237,7 @@ function makeSyncCloneOnce(
     synced.add(key);
 
     const state = await loadState(locations.extensionRoot);
-    const mp = state.marketplaces[mpName];
+    const mp = ownValue(state.marketplaces, mpName);
     if (mp === undefined) {
       throw new MarketplaceNotFoundError(mpName, [scope]);
     }
@@ -147,11 +245,42 @@ function makeSyncCloneOnce(
     const source = mp.source as ParsedSource;
     if (source.kind === "github") {
       const cloneDir = await locations.sourceCloneDir(mpName);
-      await refreshGitHubClone(cloneDir, source.ref, gitOps);
+      const auth = buildGitHubAuth({
+        credentialOps,
+        ctx: opts.ctx,
+        run: opts.run,
+        ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+        ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+      });
+      await refreshFramed(locations, source, () =>
+        refreshGitHubClone(cloneDir, source.ref, gitOps, undefined, auth),
+      );
+    } else if (source.kind === "url") {
+      const cloneDir = await locations.sourceCloneDir(mpName);
+      await refreshFramed(locations, source, () =>
+        refreshUrlClone({
+          cloneDir,
+          source,
+          gitOps,
+          ctx: opts.ctx,
+          run: opts.run,
+          credentialOps,
+          ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+          ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+        }),
+      );
     }
     // path-source: NFR-5 noop. The manifest is re-read per-plugin.
+    // hosted catalog: nothing to sync here; `marketplace update` and autoupdate
+    // refresh it, not `plugin update`.
   };
 }
+
+/** The collaborators `createPluginUpdateOperations` binds into every target's arguments. */
+type UpdateBindings = Pick<ThreePhaseArgsBase, "hooksRouting" | "completionCache" | "env">;
+
+/** The command's notification context, which a dependency install reports through. */
+export type UpdateNotification = Parameters<UpdateDependencyResolver>[2];
 
 /**
  * Build the per-target `runThreePhaseUpdate` argument bag for the DIRECT
@@ -163,10 +292,10 @@ function buildDirectThreePhaseArgs(
   opts: UpdatePluginsOptions,
   target: ResolvedTarget,
   cardinality: "single" | "plural",
-  hooksRouting: UpdateHooksRouting,
-  completionCache: CompletionCache,
+  bindings: UpdateBindings,
   constraintTagMemo: Map<string, readonly RemoteTag[]>,
   constraintMarketplaceTagMemo: Map<string, readonly ReleaseTagCandidate[]>,
+  report: CandidateReport,
 ): DirectThreePhaseArgs {
   return {
     plugin: target.plugin,
@@ -174,14 +303,13 @@ function buildDirectThreePhaseArgs(
     scope: target.scope,
     cwd: opts.cwd,
     locations: target.locations,
-    hooksRouting,
-    completionCache,
+    ...bindings,
     cascade: false,
     ctx: opts.ctx,
-    // `pi` threads the phase-3a aggregate direct-path notify inside
+    // `run` threads the phase-3a aggregate direct-path notify inside
     // runThreePhaseUpdate. Cascade mode leaves it undefined -- the cascade
     // orchestrator owns its own notify call.
-    pi: opts.pi,
+    run: opts.run,
     cardinality,
     // AG-7 opt-in: `--map-model`. The cascade entrypoint never sets it, so
     // cascade re-installs always omit `model:`.
@@ -190,7 +318,7 @@ function buildDirectThreePhaseArgs(
     // The cascade entrypoint never sets it, so cascade re-installs keep the
     // `requireInstallable` block.
     partial: opts.partial ?? false,
-    // WB-01: `--local` selects the direct-path write-back target.
+    // LAYER-04: `--local` selects the layer a named update acts on.
     ...(opts.local === true && { local: true }),
     // PURL-06: the test-only clone-cache seam for the git-source candidate
     // probe. Undefined in production, which selects the real imports.
@@ -206,11 +334,12 @@ function buildDirectThreePhaseArgs(
     // would be listed once per target instead of once per run.
     constraintTagMemo,
     constraintMarketplaceTagMemo,
-    cleanupClones: garbageCollectPluginClones,
+    cleanupClones: collectPluginClonesLocked,
+    ...recordCandidate(report),
     notifyPhaseFailure: (error, failures) => {
       notifyDirectFailure({
         ctx: opts.ctx,
-        pi: opts.pi,
+        run: opts.run,
         cardinality,
         marketplace: target.marketplace,
         scope: target.scope,
@@ -218,6 +347,7 @@ function buildDirectThreePhaseArgs(
         err: error,
         reasonOverride: "rollback partial",
         rollbackPartial: failures,
+        report,
       });
     },
   };
@@ -239,12 +369,11 @@ function buildDirectThreePhaseArgs(
  */
 async function updatePluginsWith(
   opts: UpdatePluginsOptions,
-  hooksRouting: UpdateHooksRouting,
-  completionCache: CompletionCache,
+  bindings: UpdateBindings,
   runPluginUpdate: UpdatePluginRunner,
   composeCascade: UpdateCascadeComposer,
 ): Promise<void> {
-  const { ctx, pi } = opts;
+  const { ctx, run } = opts;
   // OUT-04 / D-04: cardinality belongs to the parsed invocation, including
   // enumeration failures that return before any result rows exist.
   const cardinality: "single" | "plural" = opts.target.kind === "plugin" ? "single" : "plural";
@@ -258,11 +387,18 @@ async function updatePluginsWith(
   }
 
   if (targets.length === 0) {
-    notifyUpdateNoOpWithContext(ctx, pi, UPDATE_CONTEXT, [], cardinality);
+    notifyUpdateNoOpWithContext(ctx, run, UPDATE_CONTEXT, [], cardinality);
     return;
   }
 
-  const syncCloneOnce = makeSyncCloneOnce(opts.gitOps ?? DEFAULT_GIT_OPS);
+  // D-79-02: ONE authMemo for the whole run, shared by the marketplace syncs
+  // and every target's clone and probe auth, so a Device Flow host prompts at
+  // most once. A caller-supplied memo wins.
+  const runOpts: UpdatePluginsOptions = {
+    ...opts,
+    authMemo: opts.authMemo ?? new Map<string, AuthAttemptResult>(),
+  };
+  const syncCloneOnce = makeSyncCloneOnce(runOpts);
   // D-10-18: one memo pair for this WHOLE bulk run, never exposed on
   // `UpdatePluginsOptions` -- it is a run-internal bound, not a caller knob,
   // and a caller-supplied memo would outlive the run and serve a stale
@@ -284,16 +420,19 @@ async function updatePluginsWith(
       // eslint-disable-next-line no-await-in-loop -- syncs each marketplace once; a sync failure aborts the batch
       await syncCloneOnce(t.scope, t.marketplace, t.locations);
     } catch (err) {
+      // GHB-03: an invalid GitHub base override fails the whole command.
+      rethrowInvalidGitHubBaseUrl(err);
       // Pre-3-phase error (D-14 step failure or marketplace-missing): surface
       // via a single notify with a synthetic PluginFailedMessage carrying
       // the typed cause (Option B). Abort the whole
       // batch -- a syncClone failure means we cannot read the refreshed
       // manifest for ANY plugin in that marketplace and the rest of the
-      // batch is suspect. The renderer composes the 4-space cause-chain
-      // trailer.
+      // batch is suspect. `abortUpdateBatch` still reports the targets that
+      // already committed (CR-01). The renderer composes the 4-space
+      // cause-chain trailer.
       notifyDirectFailure({
         ctx,
-        pi,
+        run,
         cardinality,
         marketplace: t.marketplace,
         scope: t.scope,
@@ -302,25 +441,30 @@ async function updatePluginsWith(
         // failed-row identity (Option B) so the cause-chain trailer renders.
         pluginName: t.marketplace,
         err,
+        unknownGitFailure: true,
       });
+      abortUpdateBatch(ctx, run, outcomes, cardinality, composeCascade, []);
       return;
     }
 
     let outcome: UpdateRunOutcome;
+    const report: CandidateReport = {};
     try {
       // eslint-disable-next-line no-await-in-loop -- each update locks the scope (retries: 0)
       outcome = await runPluginUpdate(
         buildDirectThreePhaseArgs(
-          opts,
+          runOpts,
           t,
           cardinality,
-          hooksRouting,
-          completionCache,
+          bindings,
           constraintTagMemo,
           constraintMarketplaceTagMemo,
+          report,
         ),
       );
     } catch (err) {
+      // GHB-03: an invalid GitHub base override fails the whole command.
+      rethrowInvalidGitHubBaseUrl(err);
       // PUP-9 direct path: phase-2-or-earlier throws (including PI-14
       // PathContainmentError, ST-9 stale-version, prep-phase errors) surface
       // via a single notify with a synthetic PluginFailedMessage
@@ -330,13 +474,17 @@ async function updatePluginsWith(
       // state and continuing risks compounding the failure.
       notifyDirectFailure({
         ctx,
-        pi,
+        run,
         cardinality,
         marketplace: t.marketplace,
         scope: t.scope,
         pluginName: t.plugin,
         err,
+        report,
       });
+      abortUpdateBatch(ctx, run, outcomes, cardinality, composeCascade, [
+        updateFailedDiagnostic(t.plugin, t.scope, report),
+      ]);
       return;
     }
 
@@ -360,51 +508,133 @@ async function updatePluginsWith(
     // throw and are handled by the `catch` block above, never reaching
     // this branch.
     if (isPhase3aAggregateFailure(outcome)) {
-      // WR-01: the failing plugin already fired its own `notifyDirectFailure`
-      // and is NOT pushed into `outcomes`. Flag the cascade as aborted-by-failure
-      // so the never-silent no-op headline is suppressed: if every accumulated
-      // outcome was `unchanged`, the bulk-suppressed cascade is empty and the
-      // headline would otherwise emit a contradictory `nothing to update` line
-      // directly after the failure notification.
-      renderUpdateCascadeIfAny(ctx, pi, outcomes, cardinality, composeCascade, true);
+      abortUpdateBatch(
+        ctx,
+        run,
+        outcomes,
+        cardinality,
+        composeCascade,
+        [updateFailedDiagnostic(t.plugin, t.scope, outcome)],
+        outcome,
+      );
       return;
     }
 
     outcomes.push({ target: t, outcome });
   }
 
-  composeCascade(ctx, pi, outcomes, cardinality);
-  surfaceUpdateDiscoveryWarnings(ctx, outcomes);
+  composeCascade(ctx, run, outcomes, cardinality);
+  surfaceUpdateDiscoveryWarnings(ctx, run, outcomes);
+  surfaceUpdateMcpConfigNotices(ctx, run, outcomes);
 }
 
 /**
  * D-141-03 / D-141-05: render each updated plugin's discovery warnings after
  * the cascade the rows live in -- the user reads the row, then the detail
- * that qualifies it.
+ * that qualifies it. The header names the target's scope (D-PL1-05).
  *
- * `cascade` is false on this path, so `collectUpdateWarnings` put the
- * discovery half on `notes` and nothing else; the hygiene half never reaches
- * here. That is the same property install's standalone arm relies on.
+ * `stagingWarnings` carries both halves (D-PL1-10). The direct update shows
+ * only the root's discovery half (D-141-03, D-19-01). D-PL10-12 is the
+ * dependency exception: a dependency diagnostic shows both halves because
+ * the dependency move is part of the direct update's cascade.
  *
- * Deliberately NOT called from the `renderUpdateCascadeIfAny` early-abort
- * path: an aborted batch has a failure to explain, and a skipped-component
- * note is noise against it.
+ * D-PL1-14: a `failed` outcome the batch kept renders with `update failed`.
+ *
+ * D-PL1-07: the diagnostics follow the rows. `composeUpdateCascade` orders its
+ * marketplace blocks by `compareByNameThenScope` and keeps outcome order inside
+ * a block, so a stable sort on the same key gives the row order.
+ *
+ * Deliberately NOT called from `abortUpdateBatch`: the targets that succeeded
+ * before an abort render no diagnostic, and only the failed target's renders
+ * there (D-PL1-22).
  */
 function surfaceUpdateDiscoveryWarnings(
   ctx: NotificationContext,
-  outcomes: readonly { readonly outcome: PluginUpdateOutcome }[],
+  run: NotificationRun,
+  outcomes: readonly UpdateCascadeOutcome[],
 ): void {
-  for (const { outcome } of outcomes) {
-    if (outcome.partition !== "updated" || outcome.notes === undefined) {
-      continue;
-    }
-
-    surfaceDiscoveryWarnings(ctx, {
-      plugin: outcome.name,
-      verb: "updated",
-      warnings: outcome.notes,
-    });
+  const inRowOrder = [...outcomes].sort((left, right) =>
+    compareByNameThenScope(
+      { name: left.target.marketplace, scope: left.target.scope },
+      { name: right.target.marketplace, scope: right.target.scope },
+    ),
+  );
+  for (const update of inRowOrder) {
+    const { outcome } = update;
+    const dependencyDiagnostics =
+      outcome.partition === "updated" || outcome.partition === "failed"
+        ? (outcome.dependencyStagingDiagnostics ?? [])
+        : [];
+    surfaceCascadeStagingDiagnostics(ctx, run, dependencyDiagnostics);
+    surfaceStagingDiagnostics(ctx, run, updateStagingDiagnostic(update));
   }
+}
+
+/**
+ * D-PL1-07 / D-PL1-14: the staging diagnostic of an updated or failed
+ * outcome; none for any other partition.
+ */
+function updateStagingDiagnostic({ target, outcome }: UpdateCascadeOutcome): StagingDiagnostic[] {
+  switch (outcome.partition) {
+    case "updated":
+      return [
+        {
+          plugin: outcome.name,
+          scope: target.scope,
+          verb: "updated",
+          warnings: outcome.stagingWarnings ?? [],
+        },
+      ];
+    case "failed":
+      return [updateFailedDiagnostic(outcome.name, target.scope, outcome)];
+    case "skipped":
+    case "unchanged":
+      return [];
+  }
+}
+
+/**
+ * D-PL1-14: the `update failed` diagnostic of one target, from the warnings
+ * its failed outcome or its report holder carries.
+ */
+function updateFailedDiagnostic(
+  plugin: string,
+  scope: Scope,
+  carrier: { readonly stagingWarnings?: readonly StagingWarning[] },
+): StagingDiagnostic {
+  return {
+    plugin,
+    scope,
+    verb: "update failed",
+    warnings: carrier.stagingWarnings ?? [],
+  };
+}
+
+/**
+ * AFILE-04: show the MCP config file notices of every updated plugin, in
+ * outcome order, after the rows they qualify. On a phase-3a abort the failing
+ * plugin's own notices follow, because its MCP commit may have rewritten the
+ * file before a later bridge or the finalize failed.
+ *
+ * Unlike `surfaceUpdateDiscoveryWarnings`, this also runs on every abort path,
+ * because the rewrite has already happened to the user's file.
+ *
+ * D-PL1-23: a `failed` outcome the batch kept carries the notices of the
+ * dependencies its settle installed before it refused (WRN-06). A phase-3a
+ * failure never joins `outcomes`, so its notices render once, from `failed`.
+ */
+function surfaceUpdateMcpConfigNotices(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  outcomes: readonly { readonly outcome: PluginUpdateOutcome }[],
+  failed?: UpdatePhase3FailedOutcome,
+): void {
+  const notices = outcomes.flatMap(({ outcome }) =>
+    outcome.partition === "updated" || outcome.partition === "failed"
+      ? (outcome.mcpConfigNotices ?? [])
+      : [],
+  );
+  notifyMcpConfigNotices(ctx, run, [...notices, ...(failed?.mcpConfigNotices ?? [])]);
 }
 
 /**
@@ -431,12 +661,12 @@ async function handleEnumerateFailure(
   err: unknown,
   cardinality: "single" | "plural",
 ): Promise<void> {
-  const { ctx, pi, cwd, target, scope: explicitScope } = opts;
+  const { ctx, run, cwd, target, scope: explicitScope } = opts;
 
   if (err instanceof MarketplaceNotAddedSignal) {
     await emitMarketplaceNotAddedSignal({
       ctx,
-      pi,
+      run,
       cwd,
       context: UPDATE_CONTEXT,
       cardinality,
@@ -451,7 +681,7 @@ async function handleEnumerateFailure(
   if (target.kind === "all") {
     notifyBareFormEnumerateFailure({
       ctx,
-      pi,
+      run,
       scope: explicitScope,
       err: err as Error,
       cardinality,
@@ -471,7 +701,7 @@ async function handleEnumerateFailure(
   // distinguishable from the surrounding mp header.
   notifyDirectFailure({
     ctx,
-    pi,
+    run,
     cardinality,
     marketplace: target.marketplace,
     // No state.json was read yet, so explicit scope is the best fact available;
@@ -495,40 +725,56 @@ function isPhase3aAggregateFailure(
 }
 
 /**
- * CR-01 helper: emit the cascade notification ONLY when at least one
- * outcome accumulated. Empty accumulators skip the call so we do not
- * emit an empty-marketplaces sentinel after a phase-3a abort.
+ * CR-01 / AFILE-04: close a batch that stopped on a failure its own
+ * `notifyDirectFailure` already reported. Earlier targets committed to disk
+ * through their own `withStateGuard` closures and may have rewritten
+ * mcp-adapter.json, so their cascade and MCP notices still render.
+ *
+ * WR-01: the cascade is flagged aborted-by-failure so the never-silent no-op
+ * headline is suppressed. If every accumulated outcome was `unchanged`, the
+ * bulk-suppressed cascade is empty and the headline would otherwise emit a
+ * contradictory `nothing to update` line right after the failure. An empty
+ * accumulator skips the cascade so no empty-marketplaces sentinel follows the
+ * failure.
+ *
+ * `failed` is the phase-3a aggregate outcome, when the abort came from one.
+ * Its MCP notices follow the cascade, because its MCP commit may have
+ * rewritten the file before a later bridge failed.
+ *
+ * D-PL1-14 / D-PL1-22: `failedDiagnostics` holds the failed target's staging
+ * diagnostic, which renders after the cascade and before the MCP notices; the
+ * targets that succeeded before the abort render none. D-PL10-12 keeps the
+ * failed outcome's dependency diagnostics ahead of that root diagnostic.
  */
-function renderUpdateCascadeIfAny(
+function abortUpdateBatch(
   ctx: NotificationContext,
-  pi: ToolInventory,
+  run: NotificationRun,
   outcomes: readonly UpdateCascadeOutcome[],
   cardinality: "single" | "plural",
   composeCascade: UpdateCascadeComposer,
-  // WR-01: the phase-3a abort path sets this so the never-silent no-op headline
-  // is suppressed when the accumulated outcomes contain no realized transition.
-  abortedByFailure = false,
+  failedDiagnostics: readonly StagingDiagnostic[],
+  failed?: UpdatePhase3FailedOutcome,
 ): void {
   if (outcomes.length > 0) {
-    composeCascade(ctx, pi, outcomes, cardinality, abortedByFailure);
+    composeCascade(ctx, run, outcomes, cardinality, true);
   }
+
+  surfaceCascadeStagingDiagnostics(ctx, run, failed?.dependencyStagingDiagnostics ?? []);
+  surfaceStagingDiagnostics(ctx, run, failedDiagnostics);
+  surfaceUpdateMcpConfigNotices(ctx, run, outcomes, failed);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// updateSinglePlugin -- PluginUpdateFn impl (cascade-safe; NEVER throws)
+// The cascade entries -- PluginUpdateFn and PluginConvergeFn (cascade-safe)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * D-09 corollary: the `PluginUpdateFn` impl (D-05). The marketplace
- * autoupdate cascade wires this in.
- *
- * Cascade-safe contract: this function NEVER throws. All errors (including
- * PathContainmentError, ST-9 stale-version, prep failures, phase-3a aggregate
- * failures) are captured into `partition='failed'` outcomes. PUP-9.
+ * autoupdate cascade wires this in. Its cascade-safe contract is
+ * `runCascadeTarget`'s.
  */
 async function updateSinglePluginWith(
-  hooksRouting: UpdateHooksRouting,
-  completionCache: CompletionCache,
+  bindings: UpdateBindings,
   runPluginUpdate: UpdatePluginRunner,
   plugin: string,
   marketplace: string,
@@ -543,94 +789,261 @@ async function updateSinglePluginWith(
   // already operates in the user's session cwd. Future wiring may add a
   // dependency-injection seam if needed.
   const cwd = process.cwd();
-  const locations = locationsFor(scope, cwd);
+  return runCascadeTarget(runPluginUpdate, {
+    plugin,
+    marketplace,
+    scope,
+    cwd,
+    locations: locationsFor(scope, cwd),
+    ...bindings,
+    cascade: true,
+    // SEV-03 / D-69-01: the autoupdate cascade TAKES the partial path
+    // automatically. A partially-upgradable candidate (re-resolves `partially-available`)
+    // degrades in place -- supported components materialize, unsupported kinds
+    // skip -- and renders `(partially-installed) {dropped kinds}` instead of
+    // declining with `(skipped) {no longer installable}`. `requirePartialInstallable`
+    // still BLOCKS an `unavailable`/structural candidate (FORCE-05), so the
+    // automatic partial path can never materialize a structurally-broken plugin.
+    // The manual `update` path (`updatePlugins` -> `runThreePhaseUpdate`
+    // directly) is unaffected; it sets `partial` from the user's `--partial` flag.
+    partial: true,
+    // D-10-18: the SAME pair for every plugin of ONE autoupdate run, so a
+    // cascade over many plugins of one marketplace lists it once -- see
+    // `beginPluginUpdateRun` below for why the pair is allocated per run
+    // and not beside the binding.
+    constraintTagMemo: constraintMemos.tagMemo,
+    constraintMarketplaceTagMemo: constraintMemos.marketplaceTagMemo,
+    cleanupClones: collectPluginClonesLocked,
+  });
+}
 
+/**
+ * D-26: the `PluginConvergeFn` impl `apply` drives for one catalog move. The
+ * cascade mode builds stored credentials only and starts no Device Flow
+ * (D-3-04), and the converge policy lists no tag (D-23), so no tag memo is
+ * allocated. The scope's locations come from the target's own `cwd`.
+ */
+function convergePluginWith(
+  bindings: UpdateBindings,
+  runPluginConverge: UpdatePluginRunner,
+  target: PluginConvergeTarget,
+): Promise<PluginUpdateOutcome> {
+  return runCascadeTarget(runPluginConverge, {
+    plugin: target.plugin,
+    marketplace: target.marketplace,
+    scope: target.scope,
+    cwd: target.cwd,
+    locations: locationsFor(target.scope, target.cwd),
+    ...bindings,
+    cascade: true,
+    // D-26 / WCONV-01: only a record already installed partial admits a
+    // partial candidate; a clean record's consent guard declines it.
+    partial: target.partial,
+    cleanupClones: target.cleanupClones ?? collectPluginClonesLocked,
+  });
+}
+
+/**
+ * The per-target catch both cascade entries share. Cascade-safe contract:
+ * errors (including PathContainmentError, ST-9 stale-version, prep failures,
+ * phase-3a aggregate failures) are captured into `partition='failed'`
+ * outcomes. PUP-9. The one error it rethrows is an invalid GitHub base
+ * override, which fails the command that runs the cascade (GHB-03).
+ */
+async function runCascadeTarget(
+  runner: UpdatePluginRunner,
+  args: Omit<CascadeThreePhaseArgs, "onCandidate" | "onRecord" | "onStagingWarnings">,
+): Promise<PluginUpdateOutcome> {
+  const report: CandidateReport = {};
   try {
-    return await runPluginUpdate({
-      plugin,
-      marketplace,
-      scope,
-      cwd,
-      locations,
-      hooksRouting,
-      completionCache,
-      cascade: true,
-      // SEV-03 / D-69-01: the autoupdate cascade TAKES the partial path
-      // automatically. A partially-upgradable candidate (re-resolves `partially-available`)
-      // degrades in place -- supported components materialize, unsupported kinds
-      // skip -- and renders `(partially-installed) {dropped kinds}` instead of
-      // declining with `(skipped) {no longer installable}`. `requirePartialInstallable`
-      // still BLOCKS an `unavailable`/structural candidate (FORCE-05), so the
-      // automatic partial path can never materialize a structurally-broken plugin.
-      // The manual `update` path (`updatePlugins` -> `runThreePhaseUpdate`
-      // directly) is unaffected; it sets `partial` from the user's `--partial` flag.
-      partial: true,
-      // D-10-18: the SAME pair for every plugin of ONE autoupdate run, so a
-      // cascade over many plugins of one marketplace lists it once -- see
-      // `beginPluginUpdateRun` below for why the pair is allocated per run
-      // and not beside the binding.
-      constraintTagMemo: constraintMemos.tagMemo,
-      constraintMarketplaceTagMemo: constraintMemos.marketplaceTagMemo,
-      cleanupClones: garbageCollectPluginClones,
-    });
+    return await runner({ ...args, ...recordCandidate(report) });
   } catch (err) {
-    // Cascade-safe: capture throws into a partition='failed' outcome so the
-    // marketplace cascade can continue aggregating outcomes across plugins
-    // without aborting the whole batch. `notes` is consumed outside the
-    // notify path so the MSG-CC-1 trailer is composed inline here.
-    //
-    // Pre-narrow to a closed-set `Reason` so the cascade consumer reads the
-    // typed producer value directly instead of reparsing its display note.
-    const cleanupFailures = cleanupFailuresFromError(err);
-    const base: PluginUpdateOutcome = {
-      partition: "failed",
-      name: plugin,
-      notes: [composeErrorWithCauseChain(err)],
-      ...(cleanupFailures.length > 0 && {
-        cause: err as Error,
-        cleanupFailures,
-      }),
-      // CMC-13: required booleans on every
-      // PluginUpdateOutcome partition. `(failed)` rows do NOT render
-      // the soft-dep marker (MSG-SD-3), so the value is `false`.
-      declaresAgents: false,
-      declaresMcp: false,
-      declaresWorkflows: false,
+    // GHB-03: an invalid GitHub base override fails the command that runs
+    // the cascade.
+    rethrowInvalidGitHubBaseUrl(err);
+    // D-PL1-14: the warnings of the handles the swap prepared before it threw.
+    return {
+      ...cascadeFailureOutcome(args.plugin, report, err),
+      ...reportedStagingWarnings(report),
     };
-    return { ...base, reasons: reasonsFromTypedError(err) };
   }
 }
 
 /**
- * Map an exported-workflow error to a closed-set `Reason[]` for cascade-failure
- * outcomes. Typed concurrency facts and errno codes win; the permissive
- * fallback is `not in manifest`.
+ * Capture a cascade target's throw into a partition='failed' outcome so the
+ * cascade can continue aggregating outcomes across plugins without aborting
+ * the whole batch. `notes` is consumed outside the notify path so the MSG-CC-1
+ * trailer is composed inline here.
+ *
+ * GLK-02 / D-PL7-04: the reason comes from the ladder the direct path uses
+ * (`classifyUpdateFailure`), so the cascade row names the reason the direct
+ * row names. D-PL7-12: a reason from the git, errno, or fallback arm carries
+ * the error as the row's cause, as the direct row does.
  */
-function reasonsFromTypedError(err: unknown): readonly ContentReason[] {
+function cascadeFailureOutcome(
+  plugin: string,
+  report: CandidateReport,
+  err: unknown,
+): PluginUpdateOutcome {
+  const cleanupFailures = cleanupFailuresFromError(err);
+  const failure = classifyUpdateFailure(err);
+  const rawCause = err instanceof Error ? err : undefined;
+  const cause =
+    !failure.typed && failure.reason === "network error" ? redactCauseChain(rawCause) : rawCause;
+  const base: PluginUpdateOutcome = {
+    partition: "failed",
+    name: plugin,
+    // UPR-03: the move a throw after the candidate attempted; nothing
+    // before one.
+    ...report.move,
+    notes: [composeErrorWithCauseChain(err)],
+    ...(!failure.typed && cause !== undefined && { cause }),
+    ...(cleanupFailures.length > 0 && {
+      cause: err as Error,
+      cleanupFailures,
+    }),
+    // FLR-02: a held or lost state lock renders its cause chain, as on the
+    // direct path; D-18-17: so does an unreadable dependency walk, whose
+    // message names the record it could not read.
+    ...((err instanceof StateLockHeldError ||
+      err instanceof StateLockCompromisedError ||
+      err instanceof DependencyDeclarationsUnreadableError) && { cause: err }),
+    // CMC-13: required booleans on every
+    // PluginUpdateOutcome partition. `(failed)` rows do NOT render
+    // the soft-dep marker (MSG-SD-3), so the value is `false`.
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  };
   const primary = err instanceof CleanupContextError ? err.primary : err;
+  return {
+    ...base,
+    reasons: primary instanceof AgentTargetOccupiedError ? [] : [failure.reason],
+  };
+}
+
+/**
+ * GLK-02 / D-PL7-04: the one failure ladder of `update`, shared by the direct
+ * path and the cascade paths (autoupdate and apply's converge). A cleanup
+ * leak is narrowed to its primary error. A typed error names its own reason
+ * (`typedUpdateFailReason`); any other error goes through
+ * `untypedUpdateFailReason`. `typed` tells the cascade that the reason came
+ * from a typed error, whose row carries a cause only where
+ * `cascadeFailureOutcome` names one.
+ */
+function classifyUpdateFailure(
+  err: unknown,
+  unknownGitFailure = false,
+): {
+  readonly reason: ContentReason;
+  readonly typed: boolean;
+} {
+  const primary = err instanceof CleanupContextError ? err.primary : err;
+  const typedReason = typedUpdateFailReason(primary);
+  return typedReason === undefined
+    ? { reason: untypedUpdateFailReason(primary, unknownGitFailure), typed: false }
+    : { reason: typedReason, typed: true };
+}
+
+/**
+ * D-PL7-02: a plugin clone access reads a repository the record names, so a
+ * host 404 or 410 means the source is gone.
+ */
+const PLUGIN_CLONE_RULE: Parameters<typeof classifyGitFailure>[1] = {
+  notFound: "source missing",
+};
+
+/**
+ * The reason of a failure no typed error names: the git host's answer under
+ * the plugin-clone rule first, then the errno (D-13: a bridge's staging
+ * error reads its filesystem cause), then `unreadable manifest`.
+ */
+function untypedUpdateFailReason(primary: unknown, unknownGitFailure: boolean): ContentReason {
+  return (
+    classifyGitFailure(primary, {
+      ...PLUGIN_CLONE_RULE,
+      ...(unknownGitFailure && { unknown: "network error" as const }),
+    })?.reason ?? errnoFailReason(failureErrno(primary))
+  );
+}
+
+/**
+ * D-13: the errno behind a failure. A bridge that could not stage a file
+ * names the file in its own message and carries the filesystem error as its
+ * cause, so a source the runner cannot read reads `permission denied`.
+ */
+function failureErrno(error: unknown): string | undefined {
+  const carrier = error instanceof BridgeStagingError ? error.cause : error;
+  return (carrier as NodeJS.ErrnoException | undefined)?.code;
+}
+
+function errnoFailReason(code: string | undefined): ContentReason {
+  switch (code) {
+    case "EACCES":
+    case "EPERM":
+      return "permission denied";
+    case "ENOENT":
+    case "ENOTDIR":
+      return "source missing";
+    // A local file the update could not read or write, such as a directory in
+    // place of mcp-adapter.json: naming the marketplace manifest would blame
+    // the wrong file (the marketplace/shared.ts errno precedent).
+    case "EISDIR":
+    case "EIO":
+    case "EBADF":
+      return "unreadable";
+    case undefined:
+    default:
+      return "unreadable manifest";
+  }
+}
+
+/**
+ * The reason a typed failure names, or `undefined` for an error no typed
+ * identity matches. FLR-01: a held state lock is `"lock held"`, as the other
+ * plugin commands report it. A lock lost while the update held it reads the
+ * same, as `fetch` reports it.
+ */
+function typedUpdateFailReason(primary: unknown): ContentReason | undefined {
+  if (primary instanceof StateLockHeldError || primary instanceof StateLockCompromisedError) {
+    return "lock held";
+  }
+
+  if (primary instanceof MarketplaceNotFoundError) {
+    return "not found";
+  }
+
+  // GLK-01: a framed marketplace refresh reads the host's answer under the
+  // marketplace-refresh rule.
+  if (primary instanceof MarketplaceUpdateError) {
+    return classifyGitFailure(primary.cause, MARKETPLACE_REFRESH_RULE)?.reason;
+  }
+
+  if (primary instanceof PluginUpdatePhase3Error) {
+    return "rollback partial";
+  }
+
   if (primary instanceof PluginUpdateConcurrencyError) {
-    return [
-      primary.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled",
-    ] as const;
+    return primary.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled";
   }
 
-  // errno-bearing FS errors map to the matching
-  // closed Reason instead of falling through to the consumer's
-  // legacy notes-substring parse (which would land on the permissive
-  // `not in manifest` default for both narrowSkipReasons and
-  // narrowFailReasons).
-  if (primary instanceof Error) {
-    const code = (primary as NodeJS.ErrnoException).code;
-    if (code === "EACCES" || code === "EPERM") {
-      return ["permission denied"] as const;
-    }
-
-    if (code === "ENOENT" || code === "ENOTDIR") {
-      return ["source missing"] as const;
-    }
+  if (primary instanceof InvalidMarketplaceManifestError) {
+    return "invalid manifest";
   }
 
-  return ["not in manifest"] as const;
+  if (primary instanceof PluginInLocalLayerOnlyError) {
+    return "plugin in local layer only";
+  }
+
+  if (primary instanceof PluginInBaseLayerOnlyError) {
+    return "plugin in base layer only";
+  }
+
+  if (primary instanceof DependencyDeclarationsUnreadableError) {
+    return "unreadable";
+  }
+
+  return undefined;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -643,19 +1056,20 @@ function reasonsFromTypedError(err: unknown): readonly ContentReason[] {
 
 interface NotifyDirectFailureArgs {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly run: NotificationRun;
   readonly cardinality: "single" | "plural";
   readonly marketplace: string;
   readonly scope: Scope;
   readonly pluginName: string;
   readonly err: unknown;
+  /** The throw came directly from the marketplace git refresh boundary. */
+  readonly unknownGitFailure?: boolean;
   /**
    * Optional override that pins the closed-set Reason on the synthetic
    * PluginFailedMessage. Used by the phase-3 aggregate path where the
    * `"rollback partial"` reason is the catalog form (510-522). Omitted
    * for direct-path enumerate / syncClone / phase-2 failures, which
-   * route through `narrowDirectFailReason` for a best-fit Reason from
-   * the typed error.
+   * take their Reason from the shared `classifyUpdateFailure` ladder.
    */
   readonly reasonOverride?: ContentReason;
   /**
@@ -664,12 +1078,22 @@ interface NotifyDirectFailureArgs {
    * identity for the renderer's cause-chain walker.
    */
   readonly rollbackPartial?: readonly UpdatePhase3Failure[];
+  /**
+   * UPR-03: the target's candidate report. A failure after the candidate
+   * shows the move it attempted, and one after the preflight found the record
+   * shows the installed version; the marketplace-sync, enumeration, and
+   * layer-refusal failures carry none and show no version.
+   */
+  readonly report?: CandidateReport;
 }
 
 function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
-  const { ctx, pi, marketplace, scope, pluginName, err } = args;
-  const cause = err instanceof Error ? err : new Error(String(err));
-  const reasons: readonly ContentReason[] = [args.reasonOverride ?? narrowDirectFailReason(cause)];
+  const { ctx, run, marketplace, scope, pluginName, err } = args;
+  const rawCause = err instanceof Error ? err : new Error(String(err));
+  const failure = classifyUpdateFailure(rawCause, args.unknownGitFailure === true);
+  const cause =
+    !failure.typed && failure.reason === "network error" ? redactCauseChain(rawCause) : rawCause;
+  const reasons = directFailReasons(args.reasonOverride, rawCause, args.unknownGitFailure === true);
   // WR-05: row-level `scope` is OMITTED -- it always matched the
   // marketplace block's `scope` at every callsite below, and
   // `renderScopeBracket` (shared/notification-grammar.ts) suppresses the
@@ -680,6 +1104,7 @@ function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
   const failedRow: PluginFailedMessage = {
     status: "failed",
     name: pluginName,
+    ...revisionVersionSlot(args.report?.move ?? {}),
     reasons,
     cause,
     // D-03/D-06: a direct update failure -> error, no reload.
@@ -695,7 +1120,7 @@ function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
   };
   notifyWithContext(
     ctx,
-    pi,
+    run,
     UPDATE_CONTEXT,
     [
       {
@@ -717,49 +1142,32 @@ function rollbackPartialCauseSlot(p: UpdatePhase3Failure): { readonly cause: Err
 }
 
 /**
- * Narrow a direct-path failure's typed error to a closed-set `Reason` for
- * the synthetic `PluginFailedMessage`. Order: typed identities first,
- * errno / stable transport fields second, honest generic fallback last.
- * The fallback `"unreadable manifest"` mirrors the marketplace/update.ts
- * narrowFailReason precedent for unknown error shapes.
+ * D-PL4-09: an occupied agent target has no closed-set reason, so its row
+ * carries none, as the install row for the same refusal does, and its cause
+ * names the file. Every other failure narrows to one reason.
  */
-function narrowDirectFailReason(err: Error): ContentReason {
-  // Phase-3 aggregate failures are surfaced via reasonOverride; here we
-  // handle the enumerate / syncClone / phase-2 paths only.
-  const primary = err instanceof CleanupContextError ? err.primary : err;
-
-  if (primary instanceof MarketplaceNotFoundError) {
-    return "not found";
+function directFailReasons(
+  reasonOverride: ContentReason | undefined,
+  cause: Error,
+  unknownGitFailure: boolean,
+): readonly ContentReason[] {
+  if (reasonOverride !== undefined) {
+    return [reasonOverride];
   }
 
-  if (primary instanceof PluginUpdatePhase3Error) {
-    return "rollback partial";
-  }
-
-  if (primary instanceof PluginUpdateConcurrencyError) {
-    return primary.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled";
-  }
-
-  if (primary instanceof InvalidMarketplaceManifestError) {
-    return "invalid manifest";
-  }
-
-  const transportReason = classifyGitTransportFailure(primary);
-  if (transportReason !== undefined) {
-    return transportReason;
-  }
-
-  const code = (primary as NodeJS.ErrnoException).code;
-  if (code === "EACCES" || code === "EPERM") {
-    return "permission denied";
-  }
-
-  if (code === "ENOENT" || code === "ENOTDIR") {
-    return "source missing";
-  }
-
-  return "unreadable manifest";
+  const primary = cause instanceof CleanupContextError ? cause.primary : cause;
+  return primary instanceof AgentTargetOccupiedError
+    ? []
+    : [classifyUpdateFailure(cause, unknownGitFailure).reason];
 }
+
+/**
+ * WR-05: synthetic placeholder for the bare-form enumerate-failure path.
+ * Held as a module-level constant so a future change has a single edit
+ * point. Mirrors the `"(reinstall)"` precedent in
+ * `orchestrators/plugin/reinstall-flow.ts`.
+ */
+const SYNTHETIC_UPDATE_PLACEHOLDER_NAME = "(update)";
 
 /**
  * WR-05: bare-form (`target.kind === "all"`) enumerate-failure emission.
@@ -780,13 +1188,13 @@ function narrowDirectFailReason(err: Error): ContentReason {
  */
 function notifyBareFormEnumerateFailure(args: {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly run: NotificationRun;
   readonly scope: Scope | undefined;
   readonly err: Error;
   readonly cardinality: "single" | "plural";
 }): void {
-  const { ctx, pi, scope, err } = args;
-  const reasons: readonly ContentReason[] = [narrowDirectFailReason(err)];
+  const { ctx, run, scope, err } = args;
+  const reasons: readonly ContentReason[] = [classifyUpdateFailure(err).reason];
   // WR-05: row-level `scope` is OMITTED -- the marketplace block carries
   // the same scope, and `renderScopeBracket` suppresses the per-row
   // bracket in that case. Matches the omit convention used by
@@ -802,7 +1210,7 @@ function notifyBareFormEnumerateFailure(args: {
   };
   notifyWithContext(
     ctx,
-    pi,
+    run,
     UPDATE_CONTEXT,
     [
       {
@@ -815,14 +1223,6 @@ function notifyBareFormEnumerateFailure(args: {
     args.cardinality,
   );
 }
-
-/**
- * WR-05: synthetic placeholder for the bare-form enumerate-failure path.
- * Held as a module-level constant so a future change has a single edit
- * point. Mirrors the `"(reinstall)"` precedent in
- * `orchestrators/plugin/reinstall-flow.ts`.
- */
-const SYNTHETIC_UPDATE_PLACEHOLDER_NAME = "(update)";
 
 // The renderer (shared/notification-grammar.ts) owns version-arrow composition
 // via the PluginUpdatedMessage's required from/to fields.
@@ -838,7 +1238,21 @@ interface ResolvedTarget {
   readonly locations: ScopedLocations;
 }
 
+/**
+ * LAYER-04 / D-MF-03: a nameless update with `--local` covers the plugins the
+ * local layer declares and the dependencies those plugins need; without the
+ * flag it covers every installed plugin of the scope.
+ */
 async function enumerateTargets(opts: UpdatePluginsOptions): Promise<readonly ResolvedTarget[]> {
+  const targets = await enumerateScopeTargets(opts);
+  return opts.local === true && opts.target.kind !== "plugin"
+    ? keepLocalLayerTargets(targets, opts.cwd)
+    : targets;
+}
+
+async function enumerateScopeTargets(
+  opts: UpdatePluginsOptions,
+): Promise<readonly ResolvedTarget[]> {
   const { cwd, target } = opts;
   const explicitScope = opts.scope;
 
@@ -877,14 +1291,14 @@ async function enumerateMarketplaceTarget(
   // (`<plugin>@<mp>` and `@<mp>`). For the plugin form, first try the
   // installed-plugin target; a miss falls back to the marketplace-existence
   // resolver so a present-marketplace/absent-plugin row still reaches the
-  // downstream `(skipped) {not installed}` preflight. A
+  // downstream `(failed) {not installed}` preflight (UPR-04). A
   // marketplace-absent / other-scope outcome raises `MarketplaceNotAddedSignal`
   // -- caught at the `updatePlugins` entrypoint and re-attributed to the
   // standalone `{marketplace not added}` variant, so the miss is never
   // misattributed to `{not found}` (M10/M11).
   const resolved = await resolveUpdateMarketplaceScope(cwd, mpName, target, explicitScope);
   const state = await loadState(resolved.locations.extensionRoot);
-  const mp = state.marketplaces[mpName];
+  const mp = ownValue(state.marketplaces, mpName);
   if (mp === undefined) {
     // `resolveUpdateMarketplaceScope` can hand back the REQUESTED scope without
     // a container there, so this arm carries the ordinary explicit-scope miss
@@ -937,8 +1351,8 @@ async function enumerateMarketplaceTarget(
  *  - PLUGIN form: prefer the installed-plugin target (CMP-5). When the plugin
  *    row is absent, fall back to the marketplace-existence resolver so a
  *    present-marketplace/absent-plugin target resolves against the container's
- *    scope (the downstream `preflightUpdate` emits `(skipped) {not installed}`
- *    ); a marketplace-absent / other-scope outcome signals
+ *    scope (the downstream `preflightUpdate` emits `(failed) {not installed}`,
+ *    UPR-04); a marketplace-absent / other-scope outcome signals
  *    `{marketplace not added}` carrying the REQUESTED scope (SCOPE-01).
  *  - MARKETPLACE form: consume the discriminated `resolveInstalledMarketplaceTarget`
  *    result directly; `marketplace-absent`/`other-scope` signal `{marketplace not added}`
@@ -1003,56 +1417,138 @@ export interface PluginUpdateOperations {
    * what bounds the D-10-18 tag memos to the run (see
    * `createPluginUpdateOperations`).
    */
-  readonly beginPluginUpdateRun: () => PluginUpdateFn;
+  readonly beginPluginUpdateRun: (notification?: UpdateNotification) => PluginUpdateFn;
+  /** D-26: materializes one catalog move for `apply` under the converge policy. */
+  readonly convergePlugin: PluginConvergeFn;
 }
 
 /**
- * NFR-7: `UpdatePreflightOutcome` is a strict subset of `UpdateRunOutcome`, so a
- * preflight verdict returns straight through with no cast. That assignability is
- * the guard: a preflight row that gained a `cause`, `toVersion` or
- * `phaseFailures` would fail to compile here, because neither failed arm of
- * `UpdateRunOutcome` admits one, and `isPhase3aAggregateFailure` narrows on
- * exactly that gap.
+ * D-26 / D-11 / D-23: `apply`'s catalog move reads a present mirror's HEAD
+ * offline (only a cache miss clones), skips the recorded revision, keeps a
+ * user-edited agent file, and takes the catalog version with no tag search, so
+ * it applies exactly what `pending` previewed.
  */
+const CONVERGE_MATERIALIZATION: MaterializationPolicy = {
+  refreshSource: false,
+  skipSameRevision: true,
+  overwrite: false,
+  searchReleaseTags: false,
+};
+
+/** Refuses a named update the other layer owns, then runs the shared materialization leaf. */
 async function runPluginUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutcome> {
-  const preflight = await preparePluginUpdate(args);
-  if (isUpdatePreflightOutcome(preflight)) {
-    return preflight;
+  await refuseOtherLayerUpdate(args);
+  return materializeLatestVersion(args, UPDATE_MATERIALIZATION);
+}
+
+/**
+ * D-10 / D-25: a growth-only move re-materializes the recorded revision. Only
+ * `skipSameRevision` differs from the catalog move; `overwrite` stays off, so a
+ * user-edited agent file is still kept (D-26).
+ */
+const REMATERIALIZE_MATERIALIZATION: MaterializationPolicy = {
+  ...CONVERGE_MATERIALIZATION,
+  skipSameRevision: false,
+};
+
+/** D-26: one catalog move through the shared materialization leaf. */
+function runPluginConverge(args: ThreePhaseArgs): Promise<UpdateRunOutcome> {
+  return materializeLatestVersion(args, CONVERGE_MATERIALIZATION);
+}
+
+/** D-10 / D-25: one growth-only move through the shared materialization leaf. */
+function runPluginRematerialize(args: ThreePhaseArgs): Promise<UpdateRunOutcome> {
+  return materializeLatestVersion(args, REMATERIALIZE_MATERIALIZATION);
+}
+
+/**
+ * LAYER-04 / D-MF-03: a named update acts on its target layer, so it is
+ * refused when only the other layer declares the plugin, and when a layer
+ * file cannot be read (CFG-03). The `single` cardinality is the
+ * `<plugin>@<marketplace>` invocation form (OUT-04); the `@<marketplace>` and
+ * bare forms and the autoupdate cascade name no plugin.
+ *
+ * NFR-5: the check reads only the two layer configs, and it runs before the
+ * preflight. So a refused update builds no credentials, lists no tags, and
+ * clones nothing. An up-to-date plugin is refused too, because knowing that a
+ * git-source plugin is up to date needs the network.
+ */
+async function refuseOtherLayerUpdate(args: ThreePhaseArgs): Promise<void> {
+  if (args.cascade || args.cardinality !== "single") {
+    return;
   }
 
-  return swapPluginUpdate(args, preflight);
+  const refusal = await namedPluginLayerRefusal({
+    locations: args.locations,
+    local: args.local === true,
+    marketplace: args.marketplace,
+    plugin: args.plugin,
+  });
+  if (refusal !== undefined) {
+    throw refusal;
+  }
 }
 
 /**
  * Binds update enumeration, preflight, swap, cascade, and lifecycle routing once.
  * `stateTransaction` replaces the state I/O of every locked save the update
  * makes; production callers omit it.
+ *
+ * D-08-06: `env` is the environment the update stages MCP servers with. It
+ * defaults to Pi's process environment here, at the entry point, the way
+ * `createGetPluginInfo` binds it.
  */
 export function createPluginUpdateOperations(
   hooksRouting: UpdateHooksRouting,
   completionCache: CompletionCache,
   stateTransaction?: LockedStateTransactionDeps,
+  env: ClaudeEnv = process.env,
+  resolveDependencies?: UpdateDependencyResolver,
 ): PluginUpdateOperations {
-  const run: typeof runPluginUpdate =
-    stateTransaction === undefined
-      ? runPluginUpdate
-      : (args) => runPluginUpdate({ ...args, stateTransaction });
+  const bindings: UpdateBindings = { hooksRouting, completionCache, env };
+  const withStateTransaction = (runner: UpdatePluginRunner): UpdatePluginRunner =>
+    stateTransaction === undefined ? runner : (args) => runner({ ...args, stateTransaction });
+  const run = withStateTransaction(runPluginUpdate);
+  const converge = withStateTransaction(runPluginConverge);
+  const rematerialize = withStateTransaction(runPluginRematerialize);
+  // UPD-DEP-D1: `update` and the autoupdate cascade settle the closure of the
+  // version they move to, in the notification context of the command that
+  // runs them. `apply`'s catalog moves do not: its plan installs, enables and
+  // moves the dependencies first, as `pending` previews them.
+  const settling = (notification: UpdateNotification | undefined): UpdatePluginRunner =>
+    resolveDependencies === undefined || notification === undefined
+      ? run
+      : (args) =>
+          run({
+            ...args,
+            settleDependencies: (moved, prepared) =>
+              resolveDependencies(moved, prepared, notification),
+          });
   const updatePlugins: UpdatePluginsFn = (options) =>
-    updatePluginsWith(options, hooksRouting, completionCache, run, composeUpdateCascade);
+    updatePluginsWith(
+      options,
+      bindings,
+      settling({ ctx: options.ctx, run: options.run }),
+      composeUpdateCascade,
+    );
   // D-10-18: ONE memo pair per autoupdate run. `beginPluginUpdateRun`
   // allocates the pair, so the pair's lifetime is the run's and a release tag
   // pushed between two runs is visible to the second. The pair spans every
   // plugin of one run, so a marketplace common to several of them is listed
   // once and the cascade's warm-cache expectation for path sources holds.
-  const beginPluginUpdateRun = (): PluginUpdateFn => {
+  const beginPluginUpdateRun = (notification?: UpdateNotification): PluginUpdateFn => {
     const constraintTagMemo = new Map<string, readonly RemoteTag[]>();
     const constraintMarketplaceTagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
+    const runner = settling(notification);
     return (plugin, marketplace, scope) =>
-      updateSinglePluginWith(hooksRouting, completionCache, run, plugin, marketplace, scope, {
+      updateSinglePluginWith(bindings, runner, plugin, marketplace, scope, {
         tagMemo: constraintTagMemo,
         marketplaceTagMemo: constraintMarketplaceTagMemo,
       });
   };
 
-  return { updatePlugins, beginPluginUpdateRun };
+  const convergePlugin: PluginConvergeFn = (target) =>
+    convergePluginWith(bindings, target.rematerialize ? rematerialize : converge, target);
+
+  return { updatePlugins, beginPluginUpdateRun, convergePlugin };
 }

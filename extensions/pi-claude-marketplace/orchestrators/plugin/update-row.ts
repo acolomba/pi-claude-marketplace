@@ -22,6 +22,8 @@ import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type PluginPartiallyInstalledMessage,
   type PluginUpdatedMessage,
+  type RevisionMoveFields,
+  type VersionCommits,
 } from "../../shared/notification-types.ts";
 import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
@@ -32,6 +34,8 @@ import type {
   PluginUpdateSkippedOutcome,
   PluginUpdateUnchangedOutcome,
   PluginUpdateUpdatedOutcome,
+  RevisionMove,
+  UpdateConstraintDisclosure,
 } from "../types.ts";
 
 /**
@@ -106,13 +110,21 @@ export interface UpdatedRowSeverity {
 
  * malformed kinds, then dropped kinds (`docs/output-catalog.md`,
  * `enable-orphan-rewake`), then the stale-command token. A clean update composes
- * no reasons and keeps the caller's severity, so its row is byte-identical to
- * before (NREG-01).
+ * no reasons and keeps the caller's severity (NREG-01).
  *
  * CMC-13 / MSG-SD-3: `dependencies` carries the declared kinds that drive the
- * renderer-time `{requires pi-subagents}` / `{requires pi-mcp}` /
- * `{requires pi-dynamic-workflows}` markers on BOTH forms (WR-03); the renderer
- * narrows on membership plus the notify-time probe.
+ * `{requires pi-subagents}` / `{requires pi-mcp-adapter}` /
+ * `{requires pi-dynamic-workflows}` markers on BOTH forms (WR-03); resolveRows
+ * composes them from that membership and the command run's snapshot under the
+ * context's marker policy (D-05, D-12).
+ *
+ * D-10-13 / D-10-17a: both forms carry the constraint gate's disclosure as
+ * their cause line when a dependent's range chose what landed, read through
+ * `constraintCauseFor` as the `unchanged` and held `skipped` rows read it, so a
+ * partial update discloses the range a partial reinstall does. Upstream
+ * discloses the range on its updated message too. The
+ * `{dependency current copy}` token keeps its first place and still moves no
+ * severity.
  *
  * D-03/D-06: a realized update transition always reloads Pi resources, and
  * `partially-installed` is a realized transition too.
@@ -144,15 +156,17 @@ export function updatedRowFromOutcome(
     outcome.declaresMcp,
     outcome.declaresWorkflows,
   );
+  const cause = constraintCauseFor(outcome);
   const dropped = outcome.partialDegrade;
   if (dropped !== undefined && dropped.kinds.length > 0) {
     return {
       status: "partially-installed",
       name: outcome.name,
       scope: rowScope,
-      version: outcome.toVersion,
+      ...revisionVersionSlot(outcome),
       dependencies,
       reasons: [...written, ...narrowUnsupportedKinds(dropped.kinds), ...stale],
+      ...(cause !== undefined && { cause }),
       severity: raised ? "warning" : baseSeverity.partiallyInstalled,
       needsReload: true,
     };
@@ -165,10 +179,12 @@ export function updatedRowFromOutcome(
     scope: rowScope,
     from: outcome.fromVersion,
     to: outcome.toVersion,
+    ...withCommits(revisionCommits(outcome)),
     dependencies,
     // Optional spread, not a required key: an unaffected row renders the legacy
     // brace-less bytes because the key is ABSENT, not `undefined` (NREG-01).
     ...(cleanFormReasons.length > 0 && { reasons: cleanFormReasons }),
+    ...(cause !== undefined && { cause }),
     // Two axes move the severity channel, for two different reasons. The
     // MALFORMED axis names a component the update wrote in degraded form; the
     // STALE-COMMAND axis names a shortfall in what the update achieved -- it was
@@ -178,6 +194,77 @@ export function updatedRowFromOutcome(
     severity: raised ? "warning" : baseSeverity.updated,
     needsReload: true,
   };
+}
+
+/**
+ * UPR-02: the commits a row names, or `undefined` when its arrow stays plain.
+ * A row names them only when the version did not move, both sides carry a
+ * commit, and the commits differ -- the one case where the version arrow alone
+ * reads as a no-op. Consequences:
+ *
+ *  - a path source records no commit, so its row never names one;
+ *  - a switch between a git and a path source, or a record written before
+ *    commits were recorded, has a commit on one side only and names none;
+ *  - equal commit versions come from one commit prefix, and different ones
+ *    already differ in the version, so a commit-version row never names a
+ *    second sha.
+ */
+export function revisionCommits(move: RevisionMove): VersionCommits | undefined {
+  const { fromVersion, toVersion, fromCommit, toCommit } = move;
+  if (
+    fromVersion !== toVersion ||
+    fromCommit === undefined ||
+    toCommit === undefined ||
+    fromCommit === toCommit
+  ) {
+    return undefined;
+  }
+
+  return { from: fromCommit, to: toCommit };
+}
+
+/**
+ * UPR-03: the version fields of a row that can show a move, from whatever
+ * revisions its producer knows. One rule for every such row:
+ *
+ *  - no version known: no version fields;
+ *  - one side known, or the same version without two different commits to
+ *    tell the sides apart (no commits, the same commit, or a commit on one
+ *    side only, D-07): that version alone;
+ *  - the revision moved: `version` (the to side) and `from`, plus `commits`
+ *    under the `revisionCommits` rule (UPR-02).
+ *
+ * An empty version counts as unknown, so it never produces a version or an
+ * arrow. Every key is absent rather than `undefined` (NREG-01).
+ */
+export function revisionVersionSlot(
+  known: Partial<RevisionMove>,
+): { readonly version?: string } & RevisionMoveFields {
+  const from = knownVersion(known.fromVersion);
+  const to = knownVersion(known.toVersion);
+  if (from === undefined || to === undefined) {
+    const single = to ?? from;
+    return single === undefined ? {} : { version: single };
+  }
+
+  const commits = revisionCommits({ ...known, fromVersion: from, toVersion: to });
+  if (from === to && commits === undefined) {
+    return { version: to };
+  }
+
+  return { version: to, from, ...withCommits(commits) };
+}
+
+function knownVersion(version: string | undefined): string | undefined {
+  return version === "" ? undefined : version;
+}
+
+// NREG-01: an arrow without commits keeps the key absent, not `undefined`.
+/** The `commits` field a row carries, absent when its arrow stays plain. */
+export function withCommits(commits: VersionCommits | undefined): {
+  readonly commits?: VersionCommits;
+} {
+  return commits === undefined ? {} : { commits };
 }
 
 /**
@@ -203,16 +290,16 @@ function outcomeDependencies(
 /**
  * UPDT-02 / D-10-11 / D-10-13: the constraint gate's cause line, read off
  * whichever partition carries it. The `skipped` arm carries the held-update
- * cause on `notes`; the `unchanged` arm carries the D-10-13 ceiling
- * disclosure on `constraint`. `undefined` for every other outcome, so its
- * row stays byte-frozen (no other producer sets either field under this
- * reason).
+ * cause on `notes`; the `unchanged` and `updated` arms carry the gate's
+ * disclosure on `constraint` (D-10-17a). `undefined` for every other outcome,
+ * so its row stays byte-frozen (no other producer sets either field under
+ * this reason).
  */
 export function constraintCauseFor(
-  outcome: PluginUpdateSkippedOutcome | PluginUpdateUnchangedOutcome,
+  outcome: PluginUpdateSkippedOutcome | PluginUpdateUnchangedOutcome | PluginUpdateUpdatedOutcome,
 ): Error | undefined {
-  if (outcome.partition === "unchanged") {
-    return outcome.constraint === undefined ? undefined : new Error(outcome.constraint.disclosure);
+  if (outcome.partition !== "skipped") {
+    return disclosureCause(outcome.constraint);
   }
 
   if (!outcome.reasons.includes("dependents constrain") || outcome.notes.length === 0) {
@@ -220,4 +307,15 @@ export function constraintCauseFor(
   }
 
   return new Error(outcome.notes.join(" "));
+}
+
+/**
+ * D-10-13 / D-10-17a: the constraint gate's disclosure as a cause line, or
+ * `undefined` for an unconstrained outcome. Update's rows and reinstall's
+ * `reinstalled` row both read it, so the two verbs cannot word it differently.
+ */
+export function disclosureCause(
+  constraint: UpdateConstraintDisclosure | undefined,
+): Error | undefined {
+  return constraint === undefined ? undefined : new Error(constraint.disclosure);
 }

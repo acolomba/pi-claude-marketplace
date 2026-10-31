@@ -8,7 +8,8 @@
 // to --scope and one optional positional. The shim:
 //   1. parses raw args via `parseArgs` to validate --scope and tokenize,
 //   2. scans `positional` to extract the three boolean flags, leaving
-//      whatever non-flag positionals remain (must be 0 or 1),
+//      whatever non-flag positionals remain (must be 0 or 1, and not empty
+//      or blank),
 //   3. delegates to `listPlugins` with the parsed bag.
 
 import { listPlugins } from "../../../orchestrators/plugin/list-flow.ts";
@@ -18,7 +19,7 @@ import { parseFlagNames } from "../../flag-catalog.ts";
 
 import { withParsedArgs } from "./shared.ts";
 
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE =
   "Usage: /claude:plugin list [<marketplace>] [--installed] [--available] [--unavailable] [--partial] [--remote] [--scope user|project]";
@@ -30,15 +31,12 @@ const USAGE =
 const BOOLEAN_FLAGS = parseFlagNames("list");
 
 /**
- * Factory: returns the async handler closed over `pi` (required by
- * `listPlugins` for per-row soft-dep marker probes per CMC-13 / MSG-SD-1..3 --
- * the orchestrator constructs a `SoftDepProbe` via `softDepStatus(pi)` and
- * forwards it to the renderer).
+ * Factory: returns the async handler, which forwards the router's command run
+ * to `listPlugins` (D-05). The run's soft-dependency snapshot feeds the per-row
+ * markers of CMC-13 / MSG-SD-1..3.
  */
-export function makeListHandler(
-  pi: ExtensionAPI,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return withParsedArgs(parseArgs, USAGE, async (parsed, ctx): Promise<void> => {
+export function makeListHandler(): SubcommandHandler {
+  return withParsedArgs(parseArgs, USAGE, async (parsed, ctx, run): Promise<void> => {
     // Data-driven scan: a token in BOOLEAN_FLAGS is a recognized filter flag;
     // any other `--` token is an unknown long flag; everything else is a
     // positional. Driving the recognized set from BOOLEAN_FLAGS keeps each new
@@ -51,7 +49,7 @@ export function makeListHandler(
         filterFlags.add(token);
       } else if (token.startsWith("--")) {
         // Unknown long flag -- surface USAGE.
-        notifyUsageError(ctx, { message: `Unknown option: "${token}".`, usage: USAGE });
+        notifyUsageError(ctx, run, { message: `Unknown flag: "${token}".`, usage: USAGE });
         return;
       } else {
         nonFlagPositionals.push(token);
@@ -59,13 +57,21 @@ export function makeListHandler(
     }
 
     if (nonFlagPositionals.length > 1) {
-      notifyUsageError(ctx, { message: "Too many arguments.", usage: USAGE });
+      notifyUsageError(ctx, run, { message: "Too many arguments.", usage: USAGE });
+      return;
+    }
+
+    if (nonFlagPositionals[0]?.trim() === "") {
+      notifyUsageError(ctx, run, {
+        message: "Marketplace name must not be empty.",
+        usage: USAGE,
+      });
       return;
     }
 
     await listPlugins({
       ctx,
-      pi,
+      run,
       cwd: ctx.cwd,
       ...(nonFlagPositionals[0] !== undefined && { marketplace: nonFlagPositionals[0] }),
       ...(parsed.scope !== undefined && { scope: parsed.scope }),

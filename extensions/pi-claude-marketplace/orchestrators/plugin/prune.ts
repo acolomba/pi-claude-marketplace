@@ -1,13 +1,11 @@
 // A standalone, same-scope orphan sweep. Actual removals share one locked
 // snapshot; preview selects from one nonpersisting read.
 
-import { rm } from "node:fs/promises";
-
 import { pruneOrphans } from "../../domain/dependency-orphans.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { errorMessage, StateLockHeldError } from "../../shared/errors.ts";
-import { notify } from "../../shared/notification-dispatch.ts";
+import { notify, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 
@@ -16,16 +14,17 @@ import { preparePruneRollback } from "./prune-rollback.ts";
 import { UNINSTALL_CONTEXT } from "./uninstall.messaging.ts";
 import { finalizePrunedMembers, sweepOrphans } from "./uninstall.ts";
 
-import type { PruneRestoreFailure } from "./prune-rollback.ts";
+import type { PruneRestoreFailure, PruneRestoreOps, PruneRollback } from "./prune-rollback.ts";
 import type { PrunedMember, UninstallHooksRouting, UninstallTransaction } from "./uninstall.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /** Inputs for an orphan sweep or read-only preview in exactly one scope. */
 export interface PrunePluginOptions {
   readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
+  readonly run: NotificationRun;
   readonly cwd: string;
   readonly scope?: Scope;
   readonly dryRun?: boolean;
@@ -70,7 +69,7 @@ function notifyUnreadable(
   const marketplace = declarer.slice(at + 1);
   notifyWithContext(
     options.ctx,
-    options.pi,
+    options.run,
     UNINSTALL_CONTEXT,
     [
       {
@@ -95,14 +94,19 @@ function notifyUnreadable(
 
 /** Reports a prune operation failure without attributing it to a declaration. */
 function notifyOperationFailure(options: PrunePluginOptions, scope: Scope, error: unknown): void {
-  const cause = redactCauseChain(error) ?? new Error(errorMessage(error));
+  // PRN-03: the held lock's path is the recovery hint, printed as every other
+  // command prints it; every other cause keeps its paths redacted.
+  const cause =
+    error instanceof StateLockHeldError
+      ? error
+      : (redactCauseChain(error) ?? new Error(errorMessage(error)));
   const rollbackError = findRollbackError(error);
   const rollbackPartial =
     rollbackError !== undefined
       ? rollbackError.failures.map((failure) => ({
           phase: failure.phase,
           // Every failure has an Error; the redactor returns undefined only for nullish input.
-          cause: redactCauseChain(failure.cause) as unknown as Error,
+          cause: redactCauseChain(failure.cause),
         }))
       : undefined;
   let reason: "rollback partial" | "lock held" | "unreadable" = "unreadable";
@@ -114,7 +118,7 @@ function notifyOperationFailure(options: PrunePluginOptions, scope: Scope, error
 
   notifyWithContext(
     options.ctx,
-    options.pi,
+    options.run,
     UNINSTALL_CONTEXT,
     [
       {
@@ -161,13 +165,13 @@ function notifyCommitted(
   cleanupFailures: readonly { readonly member: PrunedMember; readonly cause: unknown }[],
 ): void {
   if (members.length === 0) {
-    notify(options.ctx, options.pi, { kind: "prune-empty", scope });
+    notify(options.ctx, options.run, { kind: "prune-empty", scope });
     return;
   }
 
   notifyWithContext(
     options.ctx,
-    options.pi,
+    options.run,
     UNINSTALL_CONTEXT,
     members.map((member) => {
       const cleanupFailure = cleanupFailures.find((failure) => failure.member === member);
@@ -187,7 +191,7 @@ function notifyCommitted(
                       .map(errorMessage)
                       .join("; "),
                   ),
-                ) as unknown as Error,
+                ),
               }
             : member.row,
         ],
@@ -198,11 +202,30 @@ function notifyCommitted(
   );
 }
 
-/** Binds the standalone sweep to uninstall's guarded removal capabilities. */
+/**
+ * NFR-3: hands each member's MCP config writes to the rollback as the
+ * cascade returns, so a rollback can restore a file this prune rewrote.
+ */
+function recordingCascade(
+  cascade: UninstallTransaction["cascadeUnstagePlugin"],
+  backup: PruneRollback,
+): UninstallTransaction["cascadeUnstagePlugin"] {
+  return async (...args) => {
+    const outcome = await cascade(...args);
+    backup.recordMcpWrites(outcome.writtenMcpFiles ?? []);
+    return outcome;
+  };
+}
+
+/**
+ * Binds the standalone sweep to uninstall's guarded removal capabilities and to
+ * the backup operations its rollback snapshot uses.
+ */
 export function createPrunePlugin(
   transaction: UninstallTransaction,
   hooksRouting: UninstallHooksRouting,
   completionCache: CompletionCache,
+  restoreOps: PruneRestoreOps,
 ): (options: PrunePluginOptions) => Promise<void> {
   return async (options): Promise<void> => {
     const scope = options.scope ?? "user";
@@ -227,6 +250,7 @@ export function createPrunePlugin(
                 {
                   status: "will uninstall" as const,
                   name: candidate.plugin,
+                  version: candidate.record.version,
                   reasons: ["dependency pruned" as const],
                   severity: "info" as const,
                   needsReload: false,
@@ -235,9 +259,13 @@ export function createPrunePlugin(
             })),
         );
         if (marketplaces.length > 0) {
-          notify(options.ctx, options.pi, { kind: "cascade", marketplaces, cardinality: "single" });
+          notify(options.ctx, options.run, {
+            kind: "cascade",
+            marketplaces,
+            cardinality: "single",
+          });
         } else {
-          notify(options.ctx, options.pi, { kind: "prune-empty", scope });
+          notify(options.ctx, options.run, { kind: "prune-empty", scope });
         }
       } catch (error: unknown) {
         notifyOperationFailure(options, scope, error);
@@ -270,7 +298,7 @@ export function createPrunePlugin(
           );
           const backup =
             candidates.length > 0
-              ? await preparePruneRollback(locations, candidates, { removeBackup: rm })
+              ? await preparePruneRollback(locations, candidates, restoreOps)
               : undefined;
           let members: Awaited<ReturnType<typeof sweepOrphans>>;
           try {
@@ -279,7 +307,10 @@ export function createPrunePlugin(
               initiallyGone: new Set<string>(),
               locations,
               keepData: false,
-              cascade: transaction.cascadeUnstagePlugin,
+              cascade:
+                backup === undefined
+                  ? transaction.cascadeUnstagePlugin
+                  : recordingCascade(transaction.cascadeUnstagePlugin, backup),
               transaction,
             });
             if (members.length > 0) {
@@ -331,7 +362,7 @@ export function createPrunePlugin(
     });
     notifyCommitted(options, scope, outcome.members, cleanupFailures);
     if (postCommitFailure !== undefined) {
-      notify(options.ctx, options.pi, {
+      notify(options.ctx, options.run, {
         kind: "prune-committed-warning",
         scope,
         cause:
@@ -339,5 +370,16 @@ export function createPrunePlugin(
           new Error(errorMessage(postCommitFailure.cause)),
       });
     }
+
+    // AFILE-04: a committed sweep rewrote the MCP config files for good, so
+    // the comments it dropped follow the rows. A rolled-back sweep never
+    // reaches this point: its rollback restores each MCP file it rewrote
+    // (NFR-3), or its failure row names the file and the recovery backup
+    // keeps the original bytes.
+    notifyMcpConfigNotices(
+      options.ctx,
+      options.run,
+      outcome.members.flatMap((member) => member.mcpConfigNotices),
+    );
   };
 }

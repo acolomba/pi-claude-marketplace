@@ -31,7 +31,8 @@
     "auto_advance": false,
     "compact_content": false,
     "skip_discuss": false,
-    "test_gate_timeout": 2400
+    "test_gate_timeout": 2400,
+    "_auto_chain_active": false
   },
   "effort": {
     "agent_overrides": {
@@ -47,38 +48,20 @@
     }
   },
   "agent_skills": {
-    "gsd-discuss-phase": ["skills/claude-code-compat-research"],
-    "gsd-advisor-researcher": ["skills/claude-code-compat-research"],
-    "gsd-executor": [
-      "skills/typescript-comments",
-      "skills/typescript-unit-testing",
-      "skills/typescript-google-style-review",
-      "skills/local-verification"
+    "gsd-discuss-phase": [
+      ".agents/skills/claude-code-compat-research",
+      ".agents/skills/typescript-unit-tests",
+      ".agents/skills/cucumber"
     ],
-    "gsd-debugger": [
-      "skills/typescript-comments",
-      "skills/typescript-unit-testing",
-      "skills/typescript-google-style-review",
-      "skills/local-verification"
+    "gsd-advisor-researcher": [
+      ".agents/skills/claude-code-compat-research",
+      ".agents/skills/typescript-unit-tests",
+      ".agents/skills/cucumber"
     ],
-    "gsd-code-fixer": [
-      "skills/typescript-comments",
-      "skills/typescript-unit-testing",
-      "skills/typescript-google-style-review",
-      "skills/local-verification"
-    ],
-    "gsd-nyquist-auditor": [
-      "skills/typescript-comments",
-      "skills/typescript-unit-testing",
-      "skills/typescript-google-style-review"
-    ],
-    "gsd-code-reviewer": [
-      "skills/typescript-comments",
-      "skills/typescript-google-style-review",
-      "skills/typescript-unit-testing-review"
-    ],
-    "gsd-verifier": ["skills/typescript-unit-testing-review", "skills/local-verification"],
-    "gsd-planner": ["skills/local-verification"]
+    "gsd-assumptions-analyzer": [
+      ".agents/skills/typescript-unit-tests",
+      ".agents/skills/cucumber"
+    ]
   },
   "mode": "yolo",
   "claude_md_assembly": {

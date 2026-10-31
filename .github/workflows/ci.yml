@@ -13,11 +13,14 @@ on:
     # Build inputs. The npm-check hook in .pre-commit-config.yaml lists the same files.
     paths: &build_inputs
       - "extensions/**"
-      - "tests/**"
+      - "test/**"
+      - "features/**"
+      - "cucumber.json"
       - "rule-packs/**"
       - "scripts/**/*.mjs"
       - "demos/**/*.ts"
       - "docs/output-catalog.md"
+      - "docs/json-output.md"
       - ".github/workflows/**"
       - ".editorconfig"
       - ".fallowrc.json"
@@ -113,8 +116,33 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
+      # npm run test:integration first runs scripts/install-test-peers.mjs,
+      # which installs pi-mcp-adapter and pi-subagents at the floors that
+      # package.json declares. PIFL-03 keeps both out of the lockfile.
       - name: Run the integration tests
         run: npm run test:integration
+
+  behavioral:
+    name: behavioral tests (Node 24)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run the behavioral tests
+        run: npm run test:cucumber
 
   sonarcloud:
     needs: [direct-coverage]
@@ -148,6 +176,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci --ignore-scripts
+
+      - name: Install exact Pi peer-floor fixture
+        run: npm --prefix test/e2e/pi-peer-floor ci --ignore-scripts
 
       - name: Run pinned e2e tests
         run: npm run test:e2e
@@ -195,7 +226,7 @@ jobs:
 
   package:
     name: package manifest
-    needs: [static, integration, e2e-tests, direct-coverage]
+    needs: [static, integration, behavioral, e2e-tests, direct-coverage]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

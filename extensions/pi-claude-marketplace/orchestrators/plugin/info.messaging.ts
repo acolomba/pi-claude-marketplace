@@ -1,7 +1,6 @@
-import { pluginRow, ICON_UNINSTALLABLE } from "../../shared/notification-grammar.ts";
 import { type PluginSkippedMessage } from "../../shared/notification-types.ts";
 
-import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
+import type { CommandContext } from "../../shared/notify-context.ts";
 
 /**
  * info.messaging.ts -- the command-local notification vocabulary for
@@ -11,9 +10,9 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  *
  *  1. The STANDALONE `plugin-info` / `plugin-info-cascade` envelopes
  *     (`PluginInfoMessage`, carrying a `PluginInfoRow`) are a SIBLING concept to
- *     cascades -- a different multi-line component-listing surface rendered by
- *     the central `dispatchInfoMessage` path (`isInfoKind`). That standalone
- *     envelope routing STAYS central this phase; it is not a
+ *     cascades -- a different multi-line component-listing surface presented by
+ *     the central presentation step and formatted by its text formatter. That
+ *     standalone envelope routing STAYS central; it is not a
  *     `PluginNotificationMessage` cascade and cannot route through
  *     `notifyWithContext`. The `marketplace-not-added` standalone likewise stays
  *     central.
@@ -40,45 +39,13 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * (D-notification-refactor-01-11) and is CALLED here, never duplicated.
  */
 
-/**
- * info's cascade-dispatched status set: the D-96-04 fetch-skip note. The
- * standalone info-surface row statuses (`installed` / `available` /
- * `unavailable` / `disabled` / `failed`) live on the SIBLING `PluginInfoRow`
- * shape rendered by the central standalone path, NOT here.
- *
- * This set is COMMAND-LOCAL: widening it amends no closed set in
- * `shared/notification-types.ts` (`skipped` is already a central
- * `PluginStatus`). What it does amend is the
- * `as const satisfies CommandContext<...>` pin below, which makes a missing
- * render arm a compile error rather than a runtime gap.
- */
 type PluginInfoStatus = "skipped";
 
 /** info's cascade row message union (the fetch-skip note). */
 export type PluginInfoCascadeMsg = PluginSkippedMessage;
 
-/**
- * Render map total over info's cascade-dispatched statuses (D-10). The arm is
- * byte-identical to the list surface's because it DELEGATES to the exported
- * `pluginRow` composer rather than re-joining the tokens, so the fetch-skip
- * note cannot drift from the central renderer's `skipped` arm or from
- * `update`'s precedent.
- *
- * `PluginInfoCascadeMsg` has one variant, so the arm takes the whole union.
- * A second status needs each arm narrowed with
- * `Extract<PluginInfoCascadeMsg, { status: K }>`, as in the sibling render
- * maps. The `satisfies` pin below accepts an arm typed with the whole union.
- */
-const PLUGIN_INFO_RENDER: Record<PluginInfoStatus, RenderFn<PluginInfoCascadeMsg>> = {
-  skipped: (p, probe, mpScope) => pluginRow(ICON_UNINSTALLABLE, p, mpScope, "(skipped)", probe),
-};
-
-/**
- * D-04 / D-05: info's `CommandContext` for its cascade-dispatched rows. The
- * `as const satisfies` pin enforces that info supplies both `Messaging.label`
- * and a total render map.
- */
+/** The command label and complete per-status reason policy. */
 export const PLUGIN_INFO_CONTEXT = {
   Messaging: { label: "Plugin info" },
-  render: PLUGIN_INFO_RENDER,
-} as const satisfies CommandContext<PluginInfoStatus, PluginInfoCascadeMsg>;
+  rowPolicies: { skipped: { markers: false, contentReasons: true } },
+} as const satisfies CommandContext<PluginInfoStatus>;

@@ -101,8 +101,8 @@ function catalogVerbForPositionals(positionals: readonly string[]): CatalogVerb 
 
 /**
  * Verbs that accept no flag at all, not even the global `--scope`. `bootstrap`,
- * `browse` and `marketplace help` reject every argument; `help` reads what
- * follows as a topic name rather than parsing flags. Suggesting `--scope` for
+ * `browse` and `marketplace help` reject every argument; `help` takes one
+ * topic name and rejects every flag. Suggesting `--scope` for
  * any of them would offer a token its handler answers with a usage error.
  */
 const NO_FLAG_VERBS: ReadonlySet<CatalogVerb> = new Set([
@@ -169,6 +169,29 @@ function promoteExactSubcommandToken(parts: { tokens: string[]; current: string 
   }
 
   return parts;
+}
+
+/**
+ * D-PL5-11: the router reads a leading `market` as `marketplace`, so completion
+ * reads it that way too. The argument text keeps the head as typed, so the value
+ * for `market a` is `market add `.
+ */
+function readCompletionInput(prefix: string): {
+  tokens: string[];
+  current: string;
+  argumentTextPrefix: string;
+} {
+  const typed = promoteExactSubcommandToken(splitCompletionInput(prefix));
+  const [head, ...rest] = typed.tokens;
+  if (head !== "market") {
+    return { ...typed, argumentTextPrefix: typed.tokens.join(" ") };
+  }
+
+  const { tokens, current } = promoteExactSubcommandToken({
+    tokens: ["marketplace", ...rest],
+    current: typed.current,
+  });
+  return { tokens, current, argumentTextPrefix: ["market", ...tokens.slice(1)].join(" ") };
 }
 
 function marketplaceNameWanted(positionals: readonly string[]): boolean {
@@ -277,8 +300,7 @@ export async function getArgumentCompletions(
   resolver: LocationsResolver,
   completionCache: CompletionCache,
 ): Promise<AutocompleteItem[] | null> {
-  const { tokens, current } = promoteExactSubcommandToken(splitCompletionInput(prefix));
-  const argumentTextPrefix = tokens.join(" ");
+  const { tokens, current, argumentTextPrefix } = readCompletionInput(prefix);
   const headPrefix = argumentTextPrefix === "" ? "" : argumentTextPrefix + " ";
 
   // Branch 1 (TC-1): top-level subcommand keyword.
@@ -345,9 +367,26 @@ export async function getArgumentCompletions(
     );
   }
 
-  // No completion makes sense at this cursor position -- Pi-tui contract
-  // requires `null` here, NOT `[]` (the latter would suppress the file-
-  // completion fallback when irrelevant; null lets Pi-tui try other
-  // providers).
-  return null;
+  // Branch 6 (AAP-04): the value `autoapply` sets, else no completion.
+  return autoapplyValueCompletions(positionals, current, headPrefix);
+}
+
+/**
+ * AAP-04: `on` and `off` after `autoapply`. Anywhere else no completion makes
+ * sense -- Pi-tui contract requires `null` there, NOT `[]` (the latter would
+ * suppress the file-completion fallback when irrelevant; null lets Pi-tui try
+ * other providers).
+ */
+function autoapplyValueCompletions(
+  positionals: readonly string[],
+  current: string,
+  headPrefix: string,
+): AutocompleteItem[] | null {
+  if (positionals[0] !== "autoapply" || positionals.length !== 1) {
+    return null;
+  }
+
+  return ["on", "off"]
+    .filter((value) => value.startsWith(current))
+    .map((label) => ({ label, value: `${headPrefix}${label} ` }));
 }

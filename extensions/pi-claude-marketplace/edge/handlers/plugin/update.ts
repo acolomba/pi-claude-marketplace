@@ -15,11 +15,10 @@ import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { passThroughFlagNames } from "../../flag-catalog.ts";
 import { extractLocalFlag } from "../shared.ts";
 
-import { parseMapModelArgs, splitPluginMarketplaceRef } from "./shared.ts";
+import { parseMapModelArgs, parsePluginTarget } from "./shared.ts";
 
 import type { UpdatePluginsFn } from "../../../orchestrators/plugin/update-flow.ts";
-import type { UpdatePluginsTarget } from "../../../orchestrators/plugin/update-preflight.ts";
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE =
   "Usage: /claude:plugin update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--map-model] [--partial] [--local]";
@@ -29,19 +28,16 @@ const USAGE =
 // extractLocalFlag itself.
 const PASS_THROUGH_FLAGS = passThroughFlagNames("update");
 
-export function makeUpdateHandler(
-  pi: ExtensionAPI,
-  updatePlugins: UpdatePluginsFn,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  return async (args, ctx): Promise<void> => {
+export function makeUpdateHandler(updatePlugins: UpdatePluginsFn): SubcommandHandler {
+  return async (args, ctx, run): Promise<void> => {
     // Shared scanner; see edge/handlers/shared.ts. The catalog-derived
     // pass-through flags are downstream-consumed; pass through verbatim.
-    const localFlag = extractLocalFlag(args, ctx, USAGE, PASS_THROUGH_FLAGS);
+    const localFlag = extractLocalFlag(args, { ctx, run, usage: USAGE }, PASS_THROUGH_FLAGS);
     if (localFlag === undefined) {
       return;
     }
 
-    const flagged = parseMapModelArgs(localFlag.residualArgs, ctx, USAGE);
+    const flagged = parseMapModelArgs(localFlag.residualArgs, ctx, run, USAGE);
     if (flagged === undefined) {
       return;
     }
@@ -49,35 +45,18 @@ export function makeUpdateHandler(
     const { nonFlagPositionals, mapModel, partial } = flagged;
 
     if (nonFlagPositionals.length > 1) {
-      notifyUsageError(ctx, { message: "Too many arguments.", usage: USAGE });
+      notifyUsageError(ctx, run, { message: "Too many arguments.", usage: USAGE });
       return;
     }
 
-    let target: UpdatePluginsTarget;
-    const ref = nonFlagPositionals[0];
-    if (ref === undefined) {
-      target = { kind: "all" };
-    } else if (ref.startsWith("@") && ref.length > 1) {
-      target = { kind: "marketplace", marketplace: ref.slice(1) };
-    } else {
-      const split = splitPluginMarketplaceRef(ref);
-      if (split === undefined) {
-        notifyUsageError(ctx, {
-          message: `Invalid <plugin>@<marketplace> ref: "${ref}".`,
-          usage: USAGE,
-        });
-        return;
-      }
-
-      target = {
-        kind: "plugin",
-        ...split,
-      };
+    const target = parsePluginTarget(nonFlagPositionals[0], ctx, run, USAGE);
+    if (target === undefined) {
+      return;
     }
 
     await updatePlugins({
       ctx,
-      pi,
+      run,
       cwd: ctx.cwd,
       target,
       ...(flagged.scope !== undefined && { scope: flagged.scope }),

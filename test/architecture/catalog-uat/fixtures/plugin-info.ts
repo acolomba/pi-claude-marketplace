@@ -1,0 +1,866 @@
+import { piWithAllLoaded, piWithBothLoaded, piWithSubagentsLoaded } from "../mock-pi.ts";
+
+import type { FixtureMap } from "../fixture-types.ts";
+
+const COMMIT_COMMANDS_INSTALLED = {
+  status: "installed",
+  name: "commit-commands",
+  version: "1.2.0",
+  description: "Helpful git commit commands for everyday use.",
+  componentsResolved: true,
+  components: { agents: ["review-bot"], commands: ["c1", "c2"], skills: ["commit-summary"] },
+  requires: [{ companion: "pi-subagents", missing: false }],
+} as const;
+
+/** Catalog fixtures for the plugin info command surface. */
+export const PLUGIN_INFO_FIXTURES: FixtureMap = {
+  "/claude:plugin info <plugin>@<marketplace>": {
+    "installed-single-scope": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          ...COMMIT_COMMANDS_INSTALLED,
+        },
+      },
+    },
+
+    "installed-single-scope-with-dependencies": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          ...COMMIT_COMMANDS_INSTALLED,
+          dependencies: ["helper@utils-mp"],
+        },
+      },
+    },
+
+    "installed-single-scope-with-dependency-constraints": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          ...COMMIT_COMMANDS_INSTALLED,
+          // Pre-rendered and pre-sorted on the dependency NAME (D-01-04):
+          // `both`, `helper`, `pinned`. The renderer does not sort.
+          dependencies: [
+            "both@utils-mp (^2.0.0, sha def5678)",
+            "helper@utils-mp (^1.0.0)",
+            "pinned@utils-mp (sha abc1234)",
+          ],
+        },
+      },
+    },
+
+    // ADET-01: the `requires:` line names every companion the components need,
+    // sorted by name, and tags the one the probe reports not loaded. The info
+    // command stamps the entries; the renderer only formats them.
+    "installed-with-missing-companion": {
+      pi: piWithSubagentsLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "commit-commands",
+          version: "1.2.0",
+          description: "Helpful git commit commands for everyday use.",
+          componentsResolved: true,
+          components: {
+            agents: ["review-bot"],
+            mcp: [{ name: "plugin:commit-commands:github", status: "status unknown" }],
+          },
+          requires: [
+            { companion: "pi-mcp-adapter", missing: true },
+            { companion: "pi-subagents", missing: false },
+          ],
+        },
+      },
+    },
+
+    // ADET-01: all three companions in package-name order. The probe finds
+    // pi-subagents and pi-mcp-adapter but not the host workflow engine.
+    "installed-with-every-companion": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "commit-commands",
+          version: "1.2.0",
+          description: "Helpful git commit commands for everyday use.",
+          componentsResolved: true,
+          components: {
+            agents: ["review-bot"],
+            mcp: [{ name: "plugin:commit-commands:github", status: "connected" }],
+            workflows: ["commit-commands:changelog"],
+          },
+          requires: [
+            { companion: "pi-dynamic-workflows", missing: true },
+            { companion: "pi-mcp-adapter", missing: false },
+            { companion: "pi-subagents", missing: false },
+          ],
+        },
+      },
+    },
+
+    // WFLW-04: the `workflows:` line renders LAST among the per-kind lines.
+    // Both entries are admitted arms -- `commit-commands:changelog` names
+    // itself, `commit-commands:release` falls back to its file stem -- and the
+    // renderer emits them in the order the composer supplied.
+    "installed-with-workflows": {
+      pi: piWithAllLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "commit-commands",
+          version: "1.2.0",
+          description: "Helpful git commit commands for everyday use.",
+          componentsResolved: true,
+          components: {
+            agents: ["review-bot"],
+            commands: ["c1", "c2"],
+            skills: ["commit-summary"],
+            workflows: ["commit-commands:changelog", "commit-commands:release"],
+          },
+          requires: [
+            { companion: "pi-dynamic-workflows", missing: false },
+            { companion: "pi-subagents", missing: false },
+          ],
+        },
+      },
+    },
+
+    // WR-09: the preview-tense advisory channel. `notes` is free text and
+    // carries no closed-set reason, so the row's brace stays empty and its
+    // severity stays `info` -- the sentence is about one file, not about the
+    // read. The composer reduces the walked directory to its name before the
+    // string reaches the row, which is what makes these bytes pinnable.
+    "installed-with-workflow-preview-note": {
+      pi: piWithAllLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "commit-commands",
+          version: "1.2.0",
+          description: "Helpful git commit commands for everyday use.",
+          notes: [
+            'workflow script "roll.js" in "workflows" will be refused: roll.js calls ' +
+              "`Math.random`, which the workflow engine refuses as nondeterministic",
+          ],
+          componentsResolved: true,
+          components: {
+            skills: ["commit-summary"],
+            workflows: ["commit-commands:changelog"],
+          },
+          requires: [{ companion: "pi-dynamic-workflows", missing: false }],
+        },
+      },
+    },
+
+    // WGATE-01: the engine-gate advisory. A gated script is ADMITTED -- its
+    // envelope is written and its command registers -- so its generated name
+    // sits on the `workflows:` line and the note is the only place the coming
+    // refusal is stated. Free text again: no closed-set reason, an empty brace,
+    // and `info` severity, because the sentence is about one file.
+    "installed-with-workflow-gate-note": {
+      pi: piWithAllLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "commit-commands",
+          version: "1.2.0",
+          description: "Helpful git commit commands for everyday use.",
+          notes: [
+            'workflow script "greet.js" in "workflows" would be installed but the engine will ' +
+              "refuse to load it: the engine refuses at its check 9 -- `meta.description` must " +
+              "be a non-empty string, and `meta.model` (a string) and `meta.phases` (an array " +
+              "of objects each carrying a string `title`) must match those shapes wherever " +
+              "they are declared",
+          ],
+          componentsResolved: true,
+          components: {
+            skills: ["commit-summary"],
+            workflows: ["commit-commands:changelog", "commit-commands:greet"],
+          },
+          requires: [{ companion: "pi-dynamic-workflows", missing: false }],
+        },
+      },
+    },
+
+    "state-only-installed-single-scope": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "alpha",
+          version: "1.0.0",
+          reasons: ["not in manifest"],
+          componentsResolved: true,
+          components: {
+            skills: ["alpha-skill"],
+          },
+        },
+      },
+    },
+
+    // WFLW-04: the state-only arm's `workflows:` line. The names are the
+    // generated installed names the record holds, which is why they carry the
+    // `<plugin>:` prefix the manifest-backed arm's source names do not.
+    "state-only-installed-with-workflows": {
+      pi: piWithAllLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "alpha",
+          version: "1.0.0",
+          reasons: ["not in manifest"],
+          componentsResolved: true,
+          components: {
+            skills: ["alpha-skill"],
+            workflows: ["alpha:changelog", "alpha:release"],
+          },
+          requires: [{ companion: "pi-dynamic-workflows", missing: false }],
+        },
+      },
+    },
+
+    "state-only-partially-installed-single-scope": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "partially-installed",
+          name: "alpha",
+          version: "1.0.0",
+          reasons: ["not in manifest", "lsp"],
+          componentsResolved: true,
+          components: {
+            skills: ["alpha-skill"],
+          },
+        },
+      },
+    },
+
+    "state-only-installed-with-hooks": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "alpha",
+          version: "1.0.0",
+          reasons: ["not in manifest"],
+          componentsResolved: true,
+          components: {
+            hooks: [{ event: "Stop" }, { event: "PreToolUse", matcher: "Bash" }],
+            skills: ["alpha-skill"],
+          },
+        },
+      },
+    },
+
+    "state-only-installed-hooks-degraded": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "alpha",
+          version: "1.0.0",
+          reasons: ["not in manifest", "source missing"],
+          componentsResolved: true,
+          components: {
+            skills: ["alpha-skill"],
+          },
+        },
+      },
+    },
+
+    // ENBL-16 / ENBL-17: a recorded-but-disabled record the manifest no longer
+    // declares. `status: "disabled"` on a `PluginInfoRow` is what the reroute
+    // added: the row travels the shared block builder, so it carries the
+    // component inventory the disable preserved (ENBL-18) and the hook entries
+    // the record holds -- the materialized configuration is gone. `reasons`
+    // carries the absence token ALONE: a persisted unsupported kind would be
+    // suppressed on this row (ENBL-16 / D-100-07), so no fixture can show one.
+    "state-only-disabled-with-components": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "disabled",
+          name: "alpha",
+          version: "1.0.0",
+          reasons: ["not in manifest"],
+          componentsResolved: true,
+          components: {
+            hooks: [{ event: "SessionStart" }, { event: "PostToolUse", matcher: "Read" }],
+            skills: ["alpha-skill"],
+          },
+        },
+      },
+    },
+
+    // D-96-04: `--fetch` against a manifest-absent installation record. This is
+    // a CASCADE row, not a `PluginInfoRow`: the standalone info status set
+    // admits no `skipped`. The `severity: "warning"` on the row is what selects
+    // the `needs attention` summary and the second `notify` argument.
+    "state-only-fetch-skipped": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                name: "alpha",
+                version: "1.0.0",
+                reasons: ["not in manifest"],
+                severity: "warning",
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-96-04: `--fetch` against an all-disabled marketplace. Same cascade row
+    // shape as the state-only note above, with the reason token that names the
+    // OTHER cause of a skipped fetch -- a disabled record has no materialized
+    // artifacts to refresh (ENBL-02).
+    "disabled-fetch-skipped": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                name: "alpha",
+                version: "1.0.0",
+                reasons: ["already disabled"],
+                severity: "warning",
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-96-04 / MSG-GR-3: the two skip causes in ONE run. This is the byte
+    // shape `info-manifest-absent.test.ts`'s mixed-run test pins by index --
+    // plural summary, two marketplace headers, one reason token each, ordered
+    // project-first by SCOPE rather than grouped by the arm that produced the
+    // row. It composes the two states above; it is not a third cause.
+    "mixed-fetch-skipped": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "skipped",
+                name: "alpha",
+                version: "1.0.0",
+                reasons: ["already disabled"],
+                severity: "warning",
+              },
+            ],
+          },
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                name: "alpha",
+                version: "2.0.0",
+                reasons: ["not in manifest"],
+                severity: "warning",
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    "available-single-scope": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "available",
+          name: "chat-helper",
+          version: "0.5.0",
+          description: "Quick chat helper plugin; experimental.",
+          componentsResolved: true,
+          components: {
+            commands: ["chat"],
+            skills: ["chat-init"],
+          },
+        },
+      },
+    },
+
+    // OUT-03 / DFEN-04: the `available-single-scope` row above whose
+    // marketplace ENTRY declares `defaultEnabled: false`. The info surface
+    // states the fact through the reason brace the row already had, so the two
+    // renders differ by that brace alone -- no extra body line, description and
+    // component lines untouched. The claim is entry-derived, so nothing on disk
+    // is read to answer it. Severity `info`; no reload-hint (read-only surface).
+    "available-installs-disabled": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "available",
+          name: "chat-helper",
+          version: "0.5.0",
+          description: "Quick chat helper plugin; experimental.",
+          componentsResolved: true,
+          components: {
+            commands: ["chat"],
+            skills: ["chat-init"],
+          },
+          reasons: ["installs disabled"],
+        },
+      },
+    },
+
+    "unavailable-single-scope": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "unavailable",
+          name: "legacy-plugin",
+          version: "0.1.0",
+          description: "Old plugin that declares hooks; not installable in Pi.",
+          reasons: ["unsupported hooks"],
+          componentsResolved: false,
+        },
+      },
+    },
+
+    // ANAME-07: a left-out server is named with the feature that blocks it,
+    // beside the supported server, all sorted by name.
+    "partially-available-with-unsupported-mcp": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "partially-available",
+          name: "db-tools",
+          version: "1.0.0",
+          description: "Database tools for everyday queries.",
+          reasons: ["unsupported mcp"],
+          componentsResolved: true,
+          components: {
+            mcp: [
+              { name: "plugin:db-tools:db" },
+              { name: "plugin:db-tools:live", unsupportedFeature: "ws" },
+            ],
+          },
+          requires: [{ companion: "pi-mcp-adapter", missing: false }],
+        },
+      },
+    },
+
+    // AVAR-04 / AVAR-05: a written server names its unset and withheld
+    // variables in one pair of parentheses.
+    "installed-with-mcp-variables": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "analytics",
+          version: "1.0.0",
+          description: "Product analytics tools.",
+          componentsResolved: true,
+          components: {
+            mcp: [
+              {
+                name: "plugin:analytics:api",
+                unsetVariables: ["ANALYTICS_TOKEN"],
+                withheldVariables: ["ANTHROPIC_API_KEY"],
+                status: "needs authentication",
+              },
+            ],
+          },
+          requires: [{ companion: "pi-mcp-adapter", missing: false }],
+        },
+      },
+    },
+
+    // ASTAT-01: each written server shows the adapter's state; the left-out
+    // server keeps only its unsupported feature.
+    "partially-installed-with-mcp-status": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "partially-installed",
+          name: "ops-tools",
+          version: "1.0.0",
+          description: "Operations tools for everyday use.",
+          reasons: ["unsupported mcp"],
+          componentsResolved: true,
+          components: {
+            mcp: [
+              { name: "plugin:ops-tools:alerts", status: "cached, connects on first use" },
+              { name: "plugin:ops-tools:builds", status: "failed" },
+              { name: "plugin:ops-tools:live", unsupportedFeature: "ws" },
+              { name: "plugin:ops-tools:logs", status: "not connected" },
+              { name: "plugin:ops-tools:metrics", status: "disabled" },
+            ],
+          },
+          requires: [{ companion: "pi-mcp-adapter", missing: false }],
+        },
+      },
+    },
+
+    // ASTAT-01: a blocked project server reads `pending approval`.
+    "installed-with-mcp-pending-approval": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "project",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "deploy-tools",
+          version: "1.0.0",
+          description: "Deployment tools for this project.",
+          componentsResolved: true,
+          components: {
+            mcp: [{ name: "plugin:deploy-tools:deploys", status: "pending approval" }],
+          },
+          requires: [{ companion: "pi-mcp-adapter", missing: false }],
+        },
+      },
+    },
+
+    // ASTAT-02: a usable snapshot that does not list the server reads `not loaded`.
+    "installed-with-mcp-not-loaded": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "ticket-tools",
+          version: "1.0.0",
+          description: "Ticket tools for everyday use.",
+          componentsResolved: true,
+          components: {
+            mcp: [{ name: "plugin:ticket-tools:tickets", status: "not loaded" }],
+          },
+          requires: [{ companion: "pi-mcp-adapter", missing: false }],
+        },
+      },
+    },
+
+    "installed-both-scopes-fan-out": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info-cascade",
+        blocks: [
+          {
+            kind: "plugin-info",
+            marketplaceName: "mp",
+            marketplaceScope: "project",
+            marketplaceDetails: { autoupdate: true },
+            plugin: {
+              status: "installed",
+              name: "foo",
+              version: "1.0.0",
+              componentsResolved: true,
+              components: { skills: ["s1"] },
+            },
+          },
+          {
+            kind: "plugin-info",
+            marketplaceName: "mp",
+            marketplaceScope: "user",
+            marketplaceDetails: { autoupdate: false },
+            plugin: {
+              status: "installed",
+              name: "foo",
+              version: "2.0.0",
+              componentsResolved: true,
+              components: { agents: ["a1"] },
+              requires: [{ companion: "pi-subagents", missing: false }],
+            },
+          },
+        ],
+      },
+    },
+
+    // ASTAT-01: the adapter runs the project entry, so the user row's server is overridden.
+    "installed-both-scopes-mcp-overridden": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info-cascade",
+        blocks: [
+          {
+            kind: "plugin-info",
+            marketplaceName: "mp",
+            marketplaceScope: "project",
+            marketplaceDetails: { autoupdate: false },
+            plugin: {
+              status: "installed",
+              name: "ops-tools",
+              version: "1.0.0",
+              componentsResolved: true,
+              components: { mcp: [{ name: "plugin:ops-tools:alerts", status: "connected" }] },
+              requires: [{ companion: "pi-mcp-adapter", missing: false }],
+            },
+          },
+          {
+            kind: "plugin-info",
+            marketplaceName: "mp",
+            marketplaceScope: "user",
+            marketplaceDetails: { autoupdate: false },
+            plugin: {
+              status: "installed",
+              name: "ops-tools",
+              version: "1.0.0",
+              componentsResolved: true,
+              components: {
+                mcp: [{ name: "plugin:ops-tools:alerts", status: "overridden by project scope" }],
+              },
+              requires: [{ companion: "pi-mcp-adapter", missing: false }],
+            },
+          },
+        ],
+      },
+    },
+
+    // INFO-09: the same fan-out when NEITHER scope's manifest declares the
+    // plugin. Both blocks are `(installed) {not in manifest}` rather than
+    // `(failed)`, so they join one `info` cascade instead of being separated
+    // into two `error` notifications by the GRAM-04 failure split.
+    "state-only-installed-both-scopes-fan-out": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info-cascade",
+        blocks: [
+          {
+            kind: "plugin-info",
+            marketplaceName: "mp",
+            marketplaceScope: "project",
+            marketplaceDetails: { autoupdate: false },
+            plugin: {
+              status: "installed",
+              name: "alpha",
+              version: "1.0.0",
+              reasons: ["not in manifest"],
+              componentsResolved: true,
+              components: { skills: ["alpha-skill"] },
+            },
+          },
+          {
+            kind: "plugin-info",
+            marketplaceName: "mp",
+            marketplaceScope: "user",
+            marketplaceDetails: { autoupdate: false },
+            plugin: {
+              status: "installed",
+              name: "alpha",
+              version: "1.0.0",
+              reasons: ["not in manifest"],
+              componentsResolved: true,
+              components: { skills: ["alpha-skill"] },
+            },
+          },
+        ],
+      },
+    },
+
+    "components-not-resolved": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "remote-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "remote-plugin",
+          version: "1.0.0",
+          description: "Remote plugin sourced from an external npm package.",
+          componentsResolved: false,
+        },
+      },
+    },
+
+    // RSTA-01 / D-80-04: info-surface row for a not-installed git-source plugin
+    // whose clone/mirror is not materialized. The status glyph is `◌`
+    // (`pluginInfoStatusGlyph` remote arm) and the row reads `(remote)`. The
+    // `componentsResolved: false` arm keeps the `components: not resolved`
+    // marker (existing wording preserved) -- an unfetched source has no warm
+    // tree to resolve. Severity `info`.
+    "remote-single-scope": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "remote",
+          name: "git-helper",
+          version: "0.5.0",
+          description: "Git-source helper plugin; not yet fetched.",
+          componentsResolved: false,
+        },
+      },
+    },
+
+    "remote-single-scope-with-dependencies": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "remote",
+          name: "git-helper",
+          version: "0.5.0",
+          description: "Git-source helper plugin; not yet fetched.",
+          componentsResolved: false,
+          // Pre-rendered from the marketplace entry, the only offline source for a cold clone (D-01-32).
+          dependencies: ["helper@community-mp"],
+        },
+      },
+    },
+
+    "missing-plugin-not-in-manifest": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "failed",
+          name: "ghost-plugin",
+          reasons: ["not in manifest"],
+          // The renderer's standard-body path runs the components switch
+          // unconditionally; use `componentsResolved: true` with empty
+          // components so no `components: not resolved` marker appears
+          // (the failed row is its own structural signal; INFO-05's
+          // marker is reserved for installed/available external sources).
+          componentsResolved: true,
+          components: {},
+        },
+      },
+    },
+
+    "missing-marketplace-not-added-absent-from-both": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      // TYPE-01 variant. `name` carries the MARKETPLACE name (the user-facing
+      // failure is "the marketplace is not added"). `scope` OMITTED -> no
+      // bracket. Byte form unchanged (`⊘ ghost-mp (failed) {marketplace not added}`).
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+      },
+    },
+
+    "missing-marketplace-not-added-scope-mismatch": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      // TYPE-01 variant. `--scope user` requested explicitly -> renderer emits
+      // the `[user]` bracket. Byte form unchanged
+      // (`⊘ ghost-mp [user] (failed) {marketplace not added}`).
+      message: {
+        kind: "marketplace-not-added",
+        name: "ghost-mp",
+        scope: "user",
+      },
+    },
+  },
+};

@@ -3,48 +3,49 @@
 // One-keystroke onboarding for the Anthropic marketplace.
 // behavioral-composition-exception: bootstrapClaudePlugin
 //
-// Composes the two already-idempotent orchestrators
-// (`addMarketplace` + `setMarketplaceAutoupdate`) under hard-coded
-// user scope so a new Pi user can run `/claude:plugin bootstrap` and
-// land in a working state with the canonical Anthropic marketplace
-// configured and tracking upstream.
+// Runs the already-idempotent `addMarketplace` under hard-coded user scope
+// so a new Pi user can run `/claude:plugin bootstrap` and land in a working
+// state with the canonical Anthropic marketplace configured. Its official
+// name turns autoupdate on by default (D-PL8-07), so bootstrap writes no
+// autoupdate value, and a value the user set stays as it is.
 //
 // Notes / forbidden patterns (reviewer guard rails):
 //   - No direct `ctx.ui.notify` here. All user-visible signals come
-//     from the two composed orchestrators via shared/notification-dispatch.ts (IL-2).
+//     from the composed add via shared/notification-dispatch.ts (IL-2).
 //     MOD-01: bootstrap owns NO notification vocabulary of its own; the
-//     delegated `addMarketplace` / `setMarketplaceAutoupdate` emit through
-//     their own command contexts (ADD_CONTEXT / AUTOUPDATE_CONTEXT), so the
-//     bootstrap-emitted bytes are exactly those commands' bytes.
-//   - No `notifySuccess` wrapper added on top of the composed
-//     orchestrators -- the contract is one user-visible signal per
-//     state change; the composed orchestrators each emit exactly that.
+//     delegated `addMarketplace` emits through its own command context
+//     (ADD_CONTEXT), so the bootstrap-emitted bytes are exactly
+//     `marketplace add`'s bytes.
+//   - No `notifySuccess` wrapper added on top of the composed add -- the
+//     contract is one user-visible signal per state change, and the add
+//     emits exactly that.
 //   - No `gitOps` default applied here -- `addMarketplace` already
 //     applies `DEFAULT_GIT_OPS` when `opts.gitOps` is undefined.
 //   - No `scope` field on `BootstrapOptions` -- scope is hard-coded to
 //     `"user"`. The edge handler also rejects `--scope` explicitly.
-//   - No pre-check of `loadState` to skip steps; the underlying
-//     orchestrators are already idempotent under `withStateGuard`, and
+//   - No pre-check of `loadState` to skip the add; it is already
+//     idempotent under `withStateGuard`, and
 //     pre-checking would introduce a TOCTOU race with concurrent install
 //     locks plus duplicate logic.
-//   - Only `MarketplaceDuplicateNameError` is swallowed from
-//     `addMarketplace`. All other errors propagate so the surface
-//     matches existing orchestrator behavior.
-//   - ATTR-07: `addMarketplace` now routes precondition failures
-//     (incl. duplicate name) through `notify` as a `(failed) {<reason>}` row
-//     for the public `marketplace add` command. Bootstrap MUST keep the
-//     one-signal-per-state-change contract, so it passes
-//     `rethrowPreconditionErrors: true` to restore the throw-based contract
-//     it depends on -- catching + swallowing the typed duplicate-name error so
-//     no failed row leaks on an idempotent re-run.
+//   - MPA-01: a re-run gets `marketplace add`'s own
+//     `(skipped) {already added}` row, so nothing is swallowed. Every add
+//     precondition, a different source under the official name included, is
+//     rendered by `notifyAddFailure`, byte-identical to `marketplace add` for
+//     the same source (reason and cause). An error that is not an add
+//     precondition propagates. A throw of the missing-dependency step comes
+//     after the add committed, so it is not an add failure: it propagates as
+//     a `BootstrapStepError`.
+//   - ATTR-07: bootstrap passes `rethrowPreconditionErrors: true` so a failed
+//     add reaches the catch below, which renders it.
 
-import { MarketplaceDuplicateNameError } from "../../shared/errors.ts";
-import { addMarketplace } from "../marketplace/add.ts";
-import { setMarketplaceAutoupdate } from "../marketplace/autoupdate.ts";
+import { addMarketplace, notifyAddFailure } from "../marketplace/add.ts";
 
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { AddMarketplaceOptions } from "../marketplace/add.ts";
 import type { GitOps } from "../marketplace/shared.ts";
+import type { ScopeDependencyInstallFn } from "../types.ts";
 
 /**
  * Hard-coded GitHub shorthand for the canonical Anthropic marketplace.
@@ -57,82 +58,89 @@ const BOOTSTRAP_SOURCE = "anthropics/claude-plugins-official";
 /**
  * The manifest `name` field for `anthropics/claude-plugins-official`.
  * `addMarketplace` derives this value from the cloned marketplace
- * manifest and records it; `setMarketplaceAutoupdate` reads the same
- * key. The edge handler also names this marketplace on the failed row it
+ * manifest and records it. The edge handler names this marketplace on the failed row it
  * emits when bootstrap throws. Keeping it as a single shared constant
  * prevents drift.
  */
 export const BOOTSTRAP_MARKETPLACE_NAME = "claude-plugins-official";
 
+/**
+ * WR-02 / D-PL2-09: a step after the official marketplace's add committed
+ * threw. The add already reported `(added)`, so this is not a failed add: the handler lets `cause` reach the command, as
+ * `marketplace add` does for the same step.
+ */
+export class BootstrapStepError extends Error {
+  constructor(cause: unknown) {
+    super("a step after the bootstrap marketplace add failed", { cause });
+    this.name = "BootstrapStepError";
+  }
+}
+
 export interface BootstrapOptions {
   readonly ctx: ExtensionContext;
   /**
-   * Required by `addMarketplace` / `setMarketplaceAutoupdate` orchestrators.
-   * Bootstrap itself does not read `pi` directly.
+   * D-05 / D-07: the command's run, shared with the nested `addMarketplace`.
    */
-  readonly pi: ExtensionAPI;
+  readonly run: NotificationRun;
   readonly cwd: string;
   readonly completionCache: CompletionCache;
   /** D-12 injection seam. Always provided by the edge handler via EdgeDeps. */
   readonly gitOps: GitOps;
+  /**
+   * D-PL2-09: bootstrap runs the missing-dependency step through its add, in
+   * the user scope, and the add selects only the official marketplace's
+   * dependencies. Its rows render under the add's `(added)` row.
+   */
+  readonly installMissingDependencies: ScopeDependencyInstallFn;
 }
 
 /**
- * Add the canonical Anthropic marketplace to user scope and enable
- * autoupdate for it. Idempotent end-to-end:
- *   - first run on clean state: emits two notifications (add + enable).
- *   - re-run on fully bootstrapped state: emits ONE idempotent
- *     "Already enabled: ..." notification from the autoupdate step.
- *     The add step's `MarketplaceDuplicateNameError` is swallowed so
- *     no duplicate "already added" message is emitted.
- *   - re-run on half-bootstrapped state (marketplace present, autoupdate
- *     off): emits ONE "Enabled autoupdate: ..." notification.
+ * Add the canonical Anthropic marketplace to user scope. Its official name
+ * turns autoupdate on by default (D-PL8-07), and bootstrap leaves an
+ * autoupdate value in `claude-plugins.json` as the user set it. Idempotent
+ * end-to-end:
+ *   - first run on clean state: emits the add's `(added)` row.
+ *   - re-run: emits the add's `(skipped) {already added}` row (MPA-01).
  *
- * Inherited GitHub-source clone-before-name-check trade-off (WR-05 in
- * `orchestrators/marketplace/add.ts`): for github sources, the
- * `MarketplaceDuplicateNameError` is raised AFTER the clone fills a
- * staging dir, because the marketplace name lives inside the cloned
- * manifest. The bootstrap's idempotent re-run therefore performs one
- * clone-and-cleanup before swallowing the duplicate-name error. NFR-5
- * is unaffected because NFR-5 governs path-source / read-only commands
- * (`install`, `list`, `uninstall`, `marketplace remove`, path-source
- * `marketplace add`); the bootstrap inherits the same surface as the
- * underlying github-source `marketplace add`. Avoiding the clone would
- * require a pre-`loadState` lookup against user-scope state, which is
- * the explicit TOCTOU anti-pattern this orchestrator opts out of.
+ * An idempotent re-run is recognized before any clone: `addMarketplace`
+ * matches the typed source against the user scope's records inside its own
+ * state lock (WR-05 in `orchestrators/marketplace/add.ts`). When only the user's
+ * `claude-plugins.local.json` declares the marketplace, the add declares
+ * it in `claude-plugins.json` too and emits its `(added)` row, still
+ * without a clone (LAYER-01).
  */
 export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<void> {
-  try {
-    await addMarketplace({
-      ctx: opts.ctx,
-      pi: opts.pi,
-      scope: "user",
-      cwd: opts.cwd,
-      rawSource: BOOTSTRAP_SOURCE,
-      completionCache: opts.completionCache,
-      gitOps: opts.gitOps,
-      // ATTR-07: re-throw the typed precondition (incl. MarketplaceDuplicateName
-      // Error) instead of emitting a `(failed)` row, so the catch below can
-      // swallow the idempotent re-run and keep one-signal-per-state-change.
-      rethrowPreconditionErrors: true,
-    });
-  } catch (err) {
-    // The marketplace already exists in user scope -- idempotent path.
-    // The autoupdate step below covers the user-visible signal via its
-    // "Already enabled: ..." message. Do NOT emit any "already added"
-    // notification here to keep the single-signal-per-state-change
-    // contract from the composed orchestrators.
-    if (!(err instanceof MarketplaceDuplicateNameError)) {
-      throw err;
-    }
-  }
-
-  await setMarketplaceAutoupdate({
+  const add: { committed: boolean } = { committed: false };
+  const addOptions: AddMarketplaceOptions = {
     ctx: opts.ctx,
-    pi: opts.pi,
-    name: BOOTSTRAP_MARKETPLACE_NAME,
-    enable: true,
+    run: opts.run,
     scope: "user",
     cwd: opts.cwd,
-  });
+    rawSource: BOOTSTRAP_SOURCE,
+    completionCache: opts.completionCache,
+    gitOps: opts.gitOps,
+    installMissingDependencies: (request) => {
+      // The add runs the step only after its state commit.
+      add.committed = true;
+      return opts.installMissingDependencies(request);
+    },
+    // ATTR-07: re-throw the typed precondition instead of emitting a
+    // `(failed)` row, so the catch below renders it.
+    rethrowPreconditionErrors: true,
+  };
+  try {
+    await addMarketplace(addOptions);
+  } catch (err) {
+    if (!add.committed) {
+      // A failed add reports its reason and cause as `marketplace add` does
+      // for the same source.
+      notifyAddFailure(addOptions, err);
+      return;
+    }
+
+    // WR-02: the add committed and reported `(added)`, so a throw of its
+    // missing-dependency step is not an add failure. It reaches the handler
+    // wrapped, so the handler can tell it from a failed add.
+    throw new BootstrapStepError(err);
+  }
 }

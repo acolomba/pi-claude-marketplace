@@ -1,6 +1,6 @@
 // domain/dependency-orphans.ts
 //
-// Two questions over one declaration index:
+// Three questions over one declaration index:
 //
 // - The dependents question: given a `plugin@marketplace` key and an index of
 //   what every OTHER installed plugin in the scope declares, which of them
@@ -8,8 +8,11 @@
 // - The orphans question: after some keys are gone, which dependency-provenance
 //   records does NO remaining record declare, iterated to a fixpoint (D-05-01,
 //   D-05-02, PRUNE-01..03)?
+// - The needers question: which plugins that a config layer declares still
+//   need an undeclared plugin, directly or through other undeclared plugins,
+//   split by layer (LAYER-08)?
 //
-// Both live in `domain/` because they are pure: no I/O, no clock, no
+// All three live in `domain/` because they are pure: no I/O, no clock, no
 // filesystem and no network. The declaration index arrives as a PARAMETER, so
 // a caller decides where each plugin's declared `dependencies` come from (the
 // offline manifest read, D-05-06) and the tests here stay trivially testable
@@ -129,4 +132,78 @@ export function pruneOrphans(
       order.push(key);
     }
   }
+}
+
+/**
+ * The `pruneOrphans` order restricted to the dependency records `removed`
+ * reaches through `index`, following each holder's declared keys
+ * transitively. A remove from one config layer takes only the dependencies
+ * its removed plugins pulled in (LAYER-03); a pre-existing orphan no removed
+ * plugin reaches stays for `prune` to report. The order keeps dependents
+ * before dependencies, and none of the inputs is mutated.
+ */
+export function pruneOrphansReachableFrom(
+  records: readonly OrphanCandidate[],
+  index: DeclarationIndex,
+  removed: ReadonlySet<string>,
+): readonly string[] {
+  const reachable = new Set<string>();
+  const pending = [...removed];
+  for (let holder = pending.pop(); holder !== undefined; holder = pending.pop()) {
+    for (const key of index.get(holder) ?? []) {
+      if (!reachable.has(key)) {
+        reachable.add(key);
+        pending.push(key);
+      }
+    }
+  }
+
+  return pruneOrphans(
+    records.filter((record) => reachable.has(record.key)),
+    index,
+    removed,
+  );
+}
+
+/** Which config layers declare a plugin key, seen from the layer a command targets. */
+export type DeclaringLayers = "target" | "other" | "both" | "none";
+
+/**
+ * LAYER-08: the declared plugins that still need `target`, split by the layer
+ * that declares them. The walk follows holders backwards from `target`. A
+ * holder that a layer declares is a needer of that layer, and a holder both
+ * layers declare counts for the target layer. A holder no layer declares is
+ * itself a dependency, so the walk goes on to its own holders; it does not
+ * continue past a declared holder. A visited set ends cycles. Each list is in
+ * `localeCompare` order, and no input is mutated.
+ */
+export function declaredNeedersByLayer(
+  target: string,
+  index: DeclarationIndex,
+  layerOf: (key: string) => DeclaringLayers,
+): { readonly target: readonly string[]; readonly other: readonly string[] } {
+  const targetNeeders: string[] = [];
+  const otherNeeders: string[] = [];
+  const visited = new Set([target]);
+  const pending = [target];
+  for (let key = pending.pop(); key !== undefined; key = pending.pop()) {
+    for (const holder of findDependents(key, index)) {
+      if (visited.has(holder)) {
+        continue;
+      }
+
+      visited.add(holder);
+      const layer = layerOf(holder);
+      if (layer === "none") {
+        pending.push(holder);
+      } else {
+        (layer === "other" ? otherNeeders : targetNeeders).push(holder);
+      }
+    }
+  }
+
+  const byKey = (a: string, b: string): number => a.localeCompare(b);
+  targetNeeders.sort(byKey);
+  otherNeeders.sort(byKey);
+  return { target: targetNeeders, other: otherNeeders };
 }

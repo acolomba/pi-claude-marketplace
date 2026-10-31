@@ -1,0 +1,1338 @@
+import assert from "node:assert/strict";
+import { describe, test } from "node:test";
+
+import {
+  INSTALL_CONTEXT,
+  classifyEntityShapeError,
+  classifyInstallFailure,
+  composeInstallFailureMessage,
+  composePromotedRow,
+  formatOrchestratedCause,
+  PROMOTED_ROW_REASONS,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
+import {
+  appendLeakToError,
+  InstallMarketplaceAddError,
+  PluginShapeError,
+  StateLockHeldError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
+import { resolveRows } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
+import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
+
+import type {
+  EntityErrorRow,
+  InstallMsg,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
+import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
+import type { ContentReason } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+
+describe("INSTALL_CONTEXT", () => {
+  test("exposes the install label and all six row policy statuses", () => {
+    // arrange
+    const expectedPolicyStatuses = [
+      "disabled",
+      "failed",
+      "installed",
+      "partially-available",
+      "partially-installed",
+      "unavailable",
+    ];
+
+    // act
+    const contextShape = {
+      label: INSTALL_CONTEXT.Messaging.label,
+      policyStatuses: Object.keys(INSTALL_CONTEXT.rowPolicies).sort(),
+    };
+
+    // assert
+    assert.deepStrictEqual(contextShape, {
+      label: "Plugin install",
+      policyStatuses: expectedPolicyStatuses,
+    });
+  });
+
+  test("renders an installed row with its resolved reasons and markers", () => {
+    // arrange
+    const message = {
+      status: "installed",
+      name: "helper",
+      version: "1.2.3",
+      scope: "user",
+      reasons: ["orphan rewake", "requires pi-subagents", "requires pi-mcp-adapter"],
+      severity: "warning",
+      needsReload: true,
+    } satisfies ResolvedRow<InstallMsg>;
+
+    // act
+    const row = composePluginLines(message, "user")[0]!.slice(2);
+
+    // assert
+    assert.strictEqual(
+      row,
+      "● helper v1.2.3 (installed) {orphan rewake, requires pi-subagents, requires pi-mcp-adapter}",
+    );
+  });
+
+  test("renders a partially-installed row with a cross-scope bracket and resolved markers", () => {
+    // arrange
+    const message = {
+      status: "partially-installed",
+      name: "helper",
+      reasons: ["lsp", "requires pi-subagents"],
+      version: "2.0.0",
+      scope: "project",
+      severity: "warning",
+      needsReload: true,
+    } satisfies ResolvedRow<InstallMsg>;
+
+    // act
+    const row = composePluginLines(message, "user")[0]!.slice(2);
+
+    // assert
+    assert.strictEqual(
+      row,
+      "◉ helper [project] v2.0.0 (partially-installed) {lsp, requires pi-subagents}",
+    );
+  });
+
+  test("renders an unavailable row without a scope or partial hint trailer", () => {
+    // arrange
+    const message = {
+      status: "unavailable",
+      name: "helper",
+      reasons: ["unsupported source"],
+      severity: "error",
+    } satisfies ResolvedRow<InstallMsg>;
+
+    // act
+    const row = composePluginLines(message, "project")[0]!.slice(2);
+
+    // assert
+    assert.strictEqual(row, "⊘ helper (unavailable) {unsupported source}");
+  });
+
+  test("renders a partially-available row without a scope", () => {
+    // arrange
+    const message = {
+      status: "partially-available",
+      name: "helper",
+      reasons: ["unsupported hooks", "lsp"],
+      version: "3.1.0",
+      severity: "error",
+      hint: "partial-install",
+    } satisfies ResolvedRow<InstallMsg>;
+
+    // act
+    const row = composePluginLines(message, "project")[0]!.slice(2);
+
+    // assert
+    assert.strictEqual(row, "⊖ helper v3.1.0 (partially-available) {unsupported hooks, lsp}");
+  });
+
+  test("renders a failed row with a cross-scope bracket and exact reasons", () => {
+    // arrange
+    const message = {
+      status: "failed",
+      name: "helper",
+      reasons: ["permission denied"],
+      version: "1.0.0",
+      scope: "project",
+      severity: "error",
+      needsReload: false,
+    } satisfies ResolvedRow<InstallMsg>;
+
+    // act
+    const row = composePluginLines(message, "user")[0]!.slice(2);
+
+    // assert
+    assert.strictEqual(row, "⊘ helper [project] v1.0.0 (failed) {permission denied}");
+  });
+
+  test("renders a disabled row with its resolved reasons", () => {
+    // arrange
+    const message = {
+      status: "disabled",
+      name: "helper",
+      version: "4.0.0",
+      scope: "user",
+      reasons: ["installs disabled", "malformed skill"],
+      hint: "enable",
+      severity: "warning",
+      needsReload: false,
+    } satisfies ResolvedRow<InstallMsg>;
+
+    // act
+    const row = composePluginLines(message, "user")[0]!.slice(2);
+
+    // assert
+    assert.strictEqual(row, "◍ helper v4.0.0 (disabled) {installs disabled, malformed skill}");
+  });
+});
+
+describe("composeInstallFailureMessage", () => {
+  test("gives path containment precedence over rollback and entity failures", () => {
+    // arrange
+    const containment = new PathContainmentError("/safe", "/escape", "plugin source");
+    const rollbackCause = new Error("rollback failed");
+    const entityErrorRow = {
+      kind: "entity-error",
+      name: "ignored",
+      marketplace: "official",
+      scope: "project",
+      status: "unavailable",
+      reasons: ["unsupported source"],
+      partialable: true,
+    } satisfies EntityErrorRow;
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: containment,
+      plugin: "helper",
+      scope: "project",
+      version: "1.0.0",
+      rolledBackPartial: true,
+      rollbackPartials: [{ phase: "phase3a", msg: "ignored", cause: rollbackCause }],
+      entityErrorRow,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: [],
+      version: "1.0.0",
+      scope: "project",
+      cause: containment,
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("redacts rollback-partial child causes and preserves causal order", () => {
+    // arrange
+    const failure = new Error("install failed");
+    const rollbackCause = new Error("remove failed at /private/scope/skill.md", {
+      cause: new Error("unlink failed at /private/scope/state.json"),
+    });
+    const entityErrorRow = {
+      kind: "entity-error",
+      name: "ignored",
+      status: "failed",
+      reasons: ["already installed"],
+    } satisfies EntityErrorRow;
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "user",
+      version: "2.4.0",
+      rolledBackPartial: true,
+      rollbackPartials: [
+        { phase: "phase3a", msg: "remove failed", cause: rollbackCause },
+        { phase: "phase3b", msg: "orphan remains" },
+      ],
+      entityErrorRow,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: ["rollback partial"],
+      version: "2.4.0",
+      scope: "user",
+      cause: failure,
+      severity: "error",
+      needsReload: false,
+      rollbackPartial: [
+        {
+          phase: "phase3a",
+          cause: new Error("remove failed at skill.md", {
+            cause: new Error("unlink failed at state.json"),
+          }),
+        },
+        { phase: "phase3b" },
+      ],
+    });
+  });
+
+  test("composes a failed entity row with the runtime cause", () => {
+    // arrange
+    const failure = new Error("plugin missing");
+    const entityErrorRow = {
+      kind: "entity-error",
+      name: "helper",
+      marketplace: "official",
+      scope: "project",
+      status: "failed",
+      reasons: ["not in manifest"],
+    } satisfies EntityErrorRow;
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "project",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: ["not in manifest"],
+      scope: "project",
+      cause: failure,
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("includes a nonempty version on a failed entity row", () => {
+    // arrange
+    const entityErrorRow = {
+      kind: "entity-error",
+      name: "helper",
+      status: "failed",
+      reasons: ["already installed"],
+    } satisfies EntityErrorRow;
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: "already installed",
+      plugin: "helper",
+      scope: "user",
+      version: "7.0.0",
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: ["already installed"],
+      version: "7.0.0",
+      scope: "user",
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("composes structural unavailability without scope, cause, or hint", () => {
+    // arrange
+    const failure = new Error("source missing");
+    const entityErrorRow = {
+      kind: "entity-error",
+      name: "helper",
+      marketplace: "official",
+      scope: "project",
+      status: "unavailable",
+      reasons: ["unsupported source"],
+      partialable: false,
+    } satisfies EntityErrorRow;
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "project",
+      version: "2.0.0",
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "unavailable",
+      name: "helper",
+      reasons: ["unsupported source"],
+      version: "2.0.0",
+      severity: "error",
+    });
+  });
+
+  test("composes partial availability with the exact hint and empty-version omission", () => {
+    // arrange
+    const failure = new Error("unsupported components");
+    const entityErrorRow = {
+      kind: "entity-error",
+      name: "helper",
+      marketplace: "official",
+      scope: "project",
+      status: "unavailable",
+      reasons: ["unsupported hooks", "lsp"],
+      partialable: true,
+    } satisfies EntityErrorRow;
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "project",
+      version: "",
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "partially-available",
+      name: "helper",
+      reasons: ["unsupported hooks", "lsp"],
+      severity: "error",
+      partialHint: true,
+    });
+  });
+
+  test("includes a nonempty version on partial availability", () => {
+    // arrange
+    const entityErrorRow = {
+      kind: "entity-error",
+      name: "helper",
+      status: "unavailable",
+      reasons: ["unsupported component"],
+      partialable: true,
+    } satisfies EntityErrorRow;
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: new Error("unsupported component"),
+      plugin: "helper",
+      scope: "project",
+      version: "8.0.0",
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "partially-available",
+      name: "helper",
+      reasons: ["unsupported component"],
+      version: "8.0.0",
+      severity: "error",
+      partialHint: true,
+    });
+  });
+
+  test("classifies an HTTP authentication challenge without exposing its cause", () => {
+    // arrange
+    const failure = Object.assign(new Error("HTTP 401 for private clone"), {
+      code: "HttpError",
+      data: { statusCode: 401 },
+    });
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "user",
+      version: "1.2.3",
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: ["authentication required"],
+      version: "1.2.3",
+      scope: "user",
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("INR-02: keeps the cause of an authentication failure whose cleanup leaked", () => {
+    // arrange
+    const failure = appendLeakToError(
+      Object.assign(new Error("HTTP 401 for private clone"), {
+        code: "HttpError",
+        data: { statusCode: 401 },
+      }),
+      "plugin clone staging left behind",
+    );
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "user",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: ["authentication required"],
+      scope: "user",
+      cause: failure,
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("classifies a cancelled authentication flow without exposing its cause", () => {
+    // arrange
+    const failure = Object.assign(new Error("device flow cancelled"), {
+      name: "UserCanceledError",
+    });
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "project",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: ["authentication required"],
+      scope: "project",
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("INS-06: classifies a git host 404 as source missing and keeps its cause", () => {
+    // arrange
+    const failure = Object.assign(new Error("HTTP Error: 404 Not Found"), {
+      code: "HttpError",
+      data: { statusCode: 404 },
+    });
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "project",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: ["source missing"],
+      scope: "project",
+      cause: failure,
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("INS-06: classifies a git host server error as network error and keeps its cause", () => {
+    // arrange
+    const failure = Object.assign(new Error("HTTP Error: 503 Service Unavailable"), {
+      code: "HttpError",
+      data: { statusCode: 503 },
+    });
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "project",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: ["network error"],
+      scope: "project",
+      cause: failure,
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("INS-06: leaves a ref the clone on disk lacks unclassified and keeps its cause", () => {
+    // arrange
+    const failure = Object.assign(new Error("Could not find HEAD."), {
+      code: "NotFoundError",
+      name: "NotFoundError",
+    });
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "project",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: [],
+      scope: "project",
+      cause: failure,
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("INS-06: classifies a network errno failure as network unreachable and keeps its cause", () => {
+    // arrange
+    const failure = Object.assign(new Error("socket hang up"), { code: "ECONNRESET" });
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "project",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: ["network unreachable"],
+      scope: "project",
+      cause: failure,
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("keeps a generic Error as the failed-row cause", () => {
+    // arrange
+    const failure = new Error("state write failed");
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "project",
+      version: "5.0.0",
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: [],
+      version: "5.0.0",
+      scope: "project",
+      cause: failure,
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("omits a cause for a non-Error runtime throw", () => {
+    // arrange
+    const failure = "disk exploded";
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "project",
+      version: "6.0.0",
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: [],
+      version: "6.0.0",
+      scope: "project",
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("FLR-01: a held state lock fails the row as lock held and keeps its cause chain", () => {
+    // arrange
+    const failure = new StateLockHeldError("project", "/scope/.state-lock", {
+      cause: new Error("Lock file is already being held"),
+    });
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "project",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: ["lock held"],
+      scope: "project",
+      cause: failure,
+      severity: "error",
+      needsReload: false,
+    });
+  });
+});
+
+describe("composePromotedRow", () => {
+  test("D-04-07: composes an installed row carrying the promotion brace at info severity with no reload", () => {
+    // arrange
+    const promotion = {
+      plugin: "linter",
+      version: "3.0.0",
+      scope: "user",
+      needsReload: false,
+    } satisfies Parameters<typeof composePromotedRow>[0];
+
+    // act
+    const row = composePromotedRow(promotion);
+
+    // assert
+    assert.deepStrictEqual(row, {
+      status: "installed",
+      name: "linter",
+      version: "3.0.0",
+      scope: "user",
+      dependencies: [],
+      reasons: ["already installed", "dependency promoted"],
+      severity: "info",
+      needsReload: false,
+    });
+  });
+
+  test("D-04-07: stamps the reload hint the caller reports for a re-materialized record", () => {
+    // arrange
+    const promotion = {
+      plugin: "linter",
+      version: "3.0.0",
+      scope: "user",
+      needsReload: true,
+    } satisfies Parameters<typeof composePromotedRow>[0];
+
+    // act
+    const row = composePromotedRow(promotion);
+
+    // assert
+    assert.deepStrictEqual(row, {
+      status: "installed",
+      name: "linter",
+      version: "3.0.0",
+      scope: "user",
+      dependencies: [],
+      reasons: ["already installed", "dependency promoted"],
+      severity: "info",
+      needsReload: true,
+    });
+  });
+
+  test("D-04-07: carries the promotion brace both surfaces spell once", () => {
+    // arrange
+    const promotion = {
+      plugin: "linter",
+      version: "3.0.0",
+      scope: "user",
+      needsReload: false,
+    } satisfies Parameters<typeof composePromotedRow>[0];
+
+    // act
+    const row = composePromotedRow(promotion);
+
+    // assert: the very tuple import's promoted row reads, so the two surfaces
+    // cannot drift apart in token set or order.
+    assert.strictEqual(row.reasons, PROMOTED_ROW_REASONS);
+    assert.deepStrictEqual(PROMOTED_ROW_REASONS, ["already installed", "dependency promoted"]);
+  });
+
+  test("D-04-07: the promotion row renders through the installed arm with the brace in reason order", () => {
+    // arrange
+    const row = composePromotedRow({
+      plugin: "linter",
+      version: "3.0.0",
+      scope: "user",
+      needsReload: false,
+    });
+
+    // act
+    const [resolved] = resolveRows(
+      [{ name: "official", scope: "user", plugins: [row] }],
+      runWithNothingLoaded().softDeps,
+      INSTALL_CONTEXT.rowPolicies,
+    );
+    const rendered = composePluginLines(resolved!.plugins[0]!, "user")[0]!.slice(2);
+
+    // assert: no soft-dep marker joins the brace whatever the host lacks --
+    // the row declares no companion because nothing was materialized.
+    assert.strictEqual(
+      rendered,
+      "● linter v3.0.0 (installed) {already installed, dependency promoted}",
+    );
+  });
+});
+
+describe("formatOrchestratedCause", () => {
+  test("returns a null throw without a cause trailer", () => {
+    // arrange
+    const failure = null;
+
+    // act
+    const cause = formatOrchestratedCause(failure);
+
+    // assert
+    assert.strictEqual(cause, "null");
+  });
+
+  test("formats the complete nested cause chain after the head", () => {
+    // arrange
+    const inner = new Error("inner failure");
+    const middle = new Error("middle failure", { cause: inner });
+    const outer = new Error("outer failure", { cause: middle });
+
+    // act
+    const cause = formatOrchestratedCause(outer);
+
+    // assert
+    assert.strictEqual(
+      cause,
+      "outer failure\n\ncause: outer failure -> middle failure -> inner failure",
+    );
+  });
+
+  test("D-PL10-14: redacts absolute paths from the complete root cause chain", () => {
+    // arrange
+    const failure = new Error("root failed at /private/scope/plugin.json", {
+      cause: new Error("nested failed at /private/scope/state.json"),
+    });
+
+    // act
+    const cause = formatOrchestratedCause(failure);
+
+    // assert
+    assert.strictEqual(
+      cause,
+      "root failed at plugin.json\n\ncause: root failed at plugin.json -> nested failed at state.json",
+    );
+  });
+
+  test("D-PL10-14: preserves lock recovery paths in the root cause", () => {
+    // arrange
+    const failure = new StateLockHeldError("project", "/private/scope/state.lock");
+
+    // act
+    const cause = formatOrchestratedCause(failure);
+
+    // assert
+    assert.match(cause, /\/private\/scope\/state\.lock/);
+  });
+});
+
+test("D-PL10-14: redacts the standalone install root cause when constructing the row", () => {
+  // arrange
+  const failure = new Error("install failed at /private/scope/plugin.json", {
+    cause: new Error("read failed at /private/scope/state.json"),
+  });
+
+  // act
+  const message = composeInstallFailureMessage({
+    err: failure,
+    plugin: "helper",
+    scope: "project",
+    version: undefined,
+    rolledBackPartial: false,
+    rollbackPartials: [],
+    entityErrorRow: undefined,
+  });
+
+  // assert
+  assert.deepStrictEqual(message, {
+    status: "failed",
+    name: "helper",
+    reasons: [],
+    scope: "project",
+    cause: new Error("install failed at plugin.json", {
+      cause: new Error("read failed at state.json"),
+    }),
+    severity: "error",
+    needsReload: false,
+  });
+});
+
+describe("classifyEntityShapeError", () => {
+  test("returns exact absence for a generic runtime error", () => {
+    // arrange
+    const failure = new Error("runtime failed");
+
+    // act
+    const entityErrorRow = classifyEntityShapeError(failure, {
+      plugin: "helper",
+      marketplace: "official",
+      scope: "project",
+    });
+
+    // assert
+    assert.strictEqual(entityErrorRow, undefined);
+  });
+
+  test("classifies a failed marketplace add on the requested subject with the add's reason", () => {
+    // arrange
+    const failure = new InstallMarketplaceAddError("stale clone", "stale source clone at mp");
+
+    // act
+    const entityErrorRow = classifyEntityShapeError(failure, {
+      plugin: "helper",
+      marketplace: "official",
+      scope: "project",
+    });
+
+    // assert
+    assert.deepStrictEqual(entityErrorRow, {
+      kind: "entity-error",
+      name: "helper",
+      marketplace: "official",
+      scope: "project",
+      status: "failed",
+      reasons: ["stale clone"],
+    });
+  });
+
+  test("classifies an already-installed plugin on the requested subject", () => {
+    // arrange
+    const failure = new PluginShapeError({
+      kind: "already-installed",
+      plugin: "thrown-name",
+      marketplace: "thrown-marketplace",
+    });
+
+    // act
+    const entityErrorRow = classifyEntityShapeError(failure, {
+      plugin: "helper",
+      marketplace: "official",
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(entityErrorRow, {
+      kind: "entity-error",
+      name: "helper",
+      marketplace: "official",
+      scope: "user",
+      status: "failed",
+      reasons: ["already installed"],
+    });
+  });
+
+  test("classifies a plugin absent from the manifest on the requested subject", () => {
+    // arrange
+    const failure = new PluginShapeError({
+      kind: "not-in-manifest",
+      plugin: "thrown-name",
+      marketplace: "thrown-marketplace",
+    });
+
+    // act
+    const entityErrorRow = classifyEntityShapeError(failure, {
+      plugin: "helper",
+      marketplace: "official",
+      scope: "project",
+    });
+
+    // assert
+    assert.deepStrictEqual(entityErrorRow, {
+      kind: "entity-error",
+      name: "helper",
+      marketplace: "official",
+      scope: "project",
+      status: "failed",
+      reasons: ["not in manifest"],
+    });
+  });
+
+  test("classifies a partially installable plugin with ordered deduplicated reasons", () => {
+    // arrange
+    const failure = new PluginShapeError({
+      kind: "not-installable",
+      plugin: "thrown-name",
+      reasons: ["contains lspServers", "contains themes"],
+      partialable: true,
+      unsupportedKinds: ["hooks", "lspServers"],
+    });
+
+    // act
+    const entityErrorRow = classifyEntityShapeError(failure, {
+      plugin: "helper",
+      marketplace: "official",
+      scope: "project",
+    });
+
+    // assert
+    assert.deepStrictEqual(entityErrorRow, {
+      kind: "entity-error",
+      name: "helper",
+      marketplace: "official",
+      scope: "project",
+      status: "unavailable",
+      reasons: ["unsupported hooks", "lsp", "unsupported component"],
+      partialable: true,
+    });
+  });
+
+  test("classifies a no-longer-installable plugin as structural unavailability", () => {
+    // arrange
+    const failure = new PluginShapeError({
+      kind: "no-longer-installable",
+      plugin: "thrown-name",
+      reasons: ["source directory missing"],
+      partialable: false,
+      unsupportedKinds: [],
+    });
+
+    // act
+    const entityErrorRow = classifyEntityShapeError(failure, {
+      plugin: "helper",
+      marketplace: "official",
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(entityErrorRow, {
+      kind: "entity-error",
+      name: "helper",
+      marketplace: "official",
+      scope: "user",
+      status: "unavailable",
+      reasons: ["unsupported source"],
+      partialable: false,
+    });
+  });
+});
+
+/**
+ * Resolver-note narrowing is install-private. The public projection that
+ * carries its result is the `unavailable` row `classifyEntityShapeError`
+ * composes from a thrown `not-installable` shape, so every case below reads
+ * the narrowed reasons off that row rather than calling the narrowing helper.
+ */
+function installFailureReasons(
+  reasons: readonly string[],
+  unsupportedKinds: readonly string[] = [],
+  partialable = false,
+): readonly ContentReason[] {
+  const entityErrorRow = classifyEntityShapeError(
+    new PluginShapeError({
+      kind: "not-installable",
+      plugin: "thrown-name",
+      reasons,
+      partialable,
+      unsupportedKinds,
+    }),
+    { plugin: "helper", marketplace: "official", scope: "user" },
+  );
+  assert.ok(entityErrorRow, "a not-installable shape must classify to an entity error row");
+
+  return entityErrorRow.reasons;
+}
+
+describe("resolver reason narrowing through the install failure row", () => {
+  for (const { note, reason } of [
+    {
+      note: "hooks.json is not valid JSON: Unexpected token ]",
+      reason: "unsupported hooks",
+    },
+    {
+      note: "hooks.json failed schema validation: /hooks expected object",
+      reason: "unsupported hooks",
+    },
+    { note: "unsupported hooks: regex matcher", reason: "unsupported hooks" },
+    { note: "malformed hooks.json: missing hooks", reason: "unsupported hooks" },
+    { note: "EACCES: permission denied", reason: "permission denied" },
+    { note: "EPERM: operation not permitted", reason: "permission denied" },
+    { note: "ENOENT: no such file", reason: "source missing" },
+    { note: "ENOTDIR: path component is not a directory", reason: "source missing" },
+    { note: "SyntaxError while reading manifest", reason: "unparseable" },
+    { note: "Unexpected token } in JSON", reason: "unparseable" },
+  ] as const) {
+    test(`narrows ${note} to ${reason}`, () => {
+      // arrange
+      const reasons = [note];
+
+      // act
+      const narrowedReasons = installFailureReasons(reasons);
+
+      // assert
+      assert.deepStrictEqual(narrowedReasons, [reason]);
+    });
+  }
+
+  test("maps the lspServers manifest-field carve-out to lsp", () => {
+    // arrange
+    const reasons = ["contains lspServers"];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["lsp"]);
+  });
+
+  test("maps a partial non-carve-out component through the component axis", () => {
+    // arrange
+    const reasons = ["contains monitors"];
+    const unsupportedKinds = ["monitors"];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons, unsupportedKinds, true);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["unsupported component"]);
+  });
+
+  test("maps a structural non-carve-out component through the source axis", () => {
+    // arrange
+    const reasons = ["contains monitors"];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons, [], false);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["unsupported source"]);
+  });
+
+  test("gives malformed MCP precedence over an embedded parse-error phrase", () => {
+    // arrange
+    const reasons = ['malformed mcp reference: invalid JSON in "x.mcp.json": Unexpected token n'];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["malformed mcp"]);
+  });
+
+  test("ANAME-07: maps a malformed MCP server note to malformed mcp", () => {
+    // arrange
+    const reasons = ['malformed mcp server "db": /timeout: must be integer'];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["malformed mcp"]);
+  });
+
+  test("ANAME-07: gives malformed MCP precedence over a server named source", () => {
+    // arrange
+    const reasons = ['malformed mcp server "source": /url: must be string'];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["malformed mcp"]);
+  });
+
+  test("ANAME-07: maps a typed mcpServers kind to unsupported mcp", () => {
+    // arrange
+    const unsupportedKinds = ["mcpServers"];
+
+    // act
+    const narrowedReasons = installFailureReasons([], unsupportedKinds, true);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["unsupported mcp"]);
+  });
+
+  test("SRC-01: maps a missing source directory note to source missing", () => {
+    // arrange
+    const reasons = ["source dir does not exist: /mp/plugins/ghost"];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["source missing"]);
+  });
+
+  test("D-PL2-24: maps a manifest link outside its boundary to unreadable manifest", () => {
+    // arrange
+    const reasons = [
+      "plugin manifest resolves outside the plugin directory and its marketplace directory",
+    ];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["unreadable manifest"]);
+  });
+
+  test("maps a source note to unsupported source", () => {
+    // arrange
+    const reasons = ["unsupported source kind: npm"];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["unsupported source"]);
+  });
+
+  test("uses unsupported source for an empty note", () => {
+    // arrange
+    const reasons = [""];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["unsupported source"]);
+  });
+
+  test("uses unsupported source when every optional input is omitted", () => {
+    // arrange
+    const reasons: string[] = [];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["unsupported source"]);
+  });
+
+  test("uses unsupported source for a wholly unclassifiable note", () => {
+    // arrange
+    const reasons = ["unclassified resolver detail"];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["unsupported source"]);
+  });
+
+  test("preserves typed-kind precedence and first-seen deduplication", () => {
+    // arrange
+    const reasons = ["contains lspServers", "contains monitors", "contains lspServers"];
+    const unsupportedKinds = ["themes", "lspServers", "themes"];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons, unsupportedKinds, true);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["unsupported component", "lsp"]);
+  });
+});
+
+describe("classifyInstallFailure", () => {
+  test("preserves an Error instance in the collapsed failure outcome", () => {
+    // arrange
+    const failure = new PluginShapeError({
+      kind: "not-in-manifest",
+      plugin: "helper",
+      marketplace: "official",
+    });
+
+    // act
+    const outcome = classifyInstallFailure(failure, "formatted cause");
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      error: failure,
+      cause: "formatted cause",
+    });
+  });
+
+  test("REC-06: carries the rollback partials of the failed install", () => {
+    // arrange
+    const failure = new Error("failed to stage skill a-fmt: EACCES");
+    const partials = [{ phase: "skills" as const, msg: "EACCES removing a-fmt" }];
+
+    // act
+    const outcome = classifyInstallFailure(failure, "formatted cause", partials);
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      error: failure,
+      cause: "formatted cause",
+      rollbackPartials: partials,
+    });
+  });
+
+  test("wraps a non-Error input with the formatted cause", () => {
+    // arrange
+    const failure = { code: "opaque" };
+
+    // act
+    const outcome = classifyInstallFailure(failure, "formatted opaque failure");
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      error: new Error("formatted opaque failure"),
+      cause: "formatted opaque failure",
+    });
+  });
+});
+
+test("INSTALL_CONTEXT declares complete row policies", () => {
+  // arrange
+  const expectedPolicies = {
+    installed: { markers: true, contentReasons: true },
+    "partially-installed": { markers: true, contentReasons: true },
+    failed: { markers: false, contentReasons: true },
+    unavailable: { markers: false, contentReasons: true },
+    "partially-available": { markers: false, contentReasons: true },
+    disabled: { markers: false, contentReasons: true },
+  };
+
+  // act
+  const policies = INSTALL_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, expectedPolicies);
+});

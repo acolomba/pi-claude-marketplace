@@ -18,6 +18,7 @@
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 
 export interface RawAgentFrontmatter {
   readonly name?: string;
@@ -84,6 +85,12 @@ export interface StageAgentsInput {
    */
   readonly mapModel?: boolean;
   /**
+   * ANAME-02: the declared names of the MCP servers this install writes.
+   * `convertAgent` maps an agent's `mcp__` tool names that name one of these
+   * servers to pi-subagents `mcp:` entries.
+   */
+  readonly mcpServerNames?: readonly string[] | undefined;
+  /**
    * Install cwd (the project root for project-scope installs), substituted for
    * `${CLAUDE_PROJECT_DIR}` in agent bodies (SUB-02). Required so a
    * project-scope caller cannot silently omit it and ship the token literal.
@@ -118,12 +125,15 @@ export interface StageAgentsCommitResult {
    * sourcePath, targetPath} tuple, not just names.
    */
   readonly recorded: readonly StagedAgentRecord[];
-  /** Aggregated warnings (per-agent + per-row index corruptions). */
-  readonly warnings: readonly string[];
+  /**
+   * D-PL1-02: aggregated warnings. Index corruptions and per-agent conversion
+   * notes are `hygiene`; D-07 duplicate-name skips are `discovery`.
+   */
+  readonly warnings: readonly StagingWarning[];
   /**
    * W-08 / B-08: prepare-time AG-5 foreign content surfaces here, NOT via
    * throw, per D-06 corollary. Empty when no foreign content found. The
-   * orchestrator routes these to notifyWarning.
+   * orchestrator reports these as post-commit warnings.
    */
   readonly failed: readonly UnstageAgentFailure[];
 }
@@ -142,32 +152,15 @@ export interface PreparedAgentsStaged {
   readonly result: StageAgentsCommitResult;
   // Internals -- opaque to orchestrators (NOT re-exported from index.ts).
   /** Previous index entries safe to overwrite (foreign-content excluded). */
-  readonly _previousEntries: readonly AgentsIndexEntry[];
+  readonly previousEntries: readonly AgentsIndexEntry[];
   /** W-08: AG-5 foreign-content rows kept in index, NOT rm'd. */
-  readonly _foreignPreservedEntries: readonly AgentsIndexEntry[];
+  readonly foreignPreservedEntries: readonly AgentsIndexEntry[];
   /** Other (mp,plugin) rows preserved across the stage. */
-  readonly _otherEntries: readonly AgentsIndexEntry[];
+  readonly otherEntries: readonly AgentsIndexEntry[];
   /** New rows produced by this stage. */
-  readonly _newEntries: readonly AgentsIndexEntry[];
+  readonly newEntries: readonly AgentsIndexEntry[];
   /** Pre-staged file paths -- {from: stagingDir/<name>.md, to: agentsDir/<name>.md}. */
-  readonly _stagedFilePaths: readonly { readonly from: string; readonly to: string }[];
-}
-
-export interface ReplacePreparedAgentsOptions {
-  readonly force?: boolean;
-}
-
-/** Opaque reinstall replacement handle for staged agents. */
-export type AgentsReplacement = AgentsReplacementNoop | AgentsReplacementReplaced;
-
-export interface AgentsReplacementNoop {
-  readonly kind: "noop";
-  readonly prepared: Extract<PreparedAgentsStaging, { kind: "noop" }>;
-}
-
-export interface AgentsReplacementReplaced {
-  readonly kind: "replaced";
-  readonly prepared: PreparedAgentsStaged;
+  readonly stagedFilePaths: readonly { readonly from: string; readonly to: string }[];
 }
 
 export interface UnstageAgentsInput {

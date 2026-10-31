@@ -9,46 +9,45 @@ import { extractLocalFlag } from "../shared.ts";
 import { withParsedArgs } from "./shared.ts";
 
 import type { UninstallHooksRouting } from "../../../orchestrators/plugin/uninstall.ts";
-import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { CompletionCache } from "../../../shared/completion-cache.ts";
+import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE = "Usage: /claude:plugin prune [--scope user|project] [--dry-run]";
 const CONSUMED_FLAGS = { consumeLongFlags: passThroughFlagNames("prune") };
 
 /** Registers the no-target command against the standalone prune operation. */
 export function makePruneHandler(
-  pi: ExtensionAPI,
   hooksRouting: UninstallHooksRouting,
   completionCache: CompletionCache,
-): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
+): SubcommandHandler {
   const prune = createPruneOperation(hooksRouting, completionCache);
-  return async (args, ctx): Promise<void> => {
-    const scanned = extractLocalFlag(args, ctx, USAGE, CONSUMED_FLAGS);
+  return async (args, ctx, run): Promise<void> => {
+    const scanned = extractLocalFlag(args, { ctx, run, usage: USAGE }, CONSUMED_FLAGS);
     if (scanned === undefined) {
       return;
     }
 
     if (scanned.local) {
-      notifyUsageError(ctx, {
+      notifyUsageError(ctx, run, {
         message: `Unknown flag: "${SCOPE_TARGET_FLAG}".`,
         usage: USAGE,
       });
       return;
     }
 
-    await withParsedArgs(parseArgs, USAGE, async (parsed, parsedCtx): Promise<void> => {
+    await withParsedArgs(parseArgs, USAGE, async (parsed, parsedCtx, parsedRun): Promise<void> => {
       if (parsed.positional.length > 0) {
-        notifyUsageError(parsedCtx, { message: "Too many arguments.", usage: USAGE });
+        notifyUsageError(parsedCtx, parsedRun, { message: "Too many arguments.", usage: USAGE });
         return;
       }
 
       await prune({
         ctx: parsedCtx,
-        pi,
+        run: parsedRun,
         cwd: parsedCtx.cwd,
         ...(parsed.scope !== undefined && { scope: parsed.scope }),
         ...(scanned.consumedFlags.has(DRY_RUN_FLAG) && { dryRun: true }),
       });
-    })(scanned.residualArgs, ctx);
+    })(scanned.residualArgs, ctx, run);
   };
 }

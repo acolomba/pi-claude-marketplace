@@ -1,4 +1,4 @@
-exclude: ^(\.agents/|\.claude/|\.codex/|tests/domain/fixtures/hash-stability/)
+exclude: ^(\.agents/(?!skills/)|\.claude/(?!skills/)|\.codex/|\.pi/|test/domain/fixtures/hash-stability/)
 
 default_install_hook_types:
   - pre-commit
@@ -20,9 +20,9 @@ repos:
       - id: detect-private-key
       - id: check-added-large-files
         args: ["--maxkb=64"]
-        exclude: ^(package-lock\.json|\.planning/)
+        exclude: ^\.planning/|^(package-lock\.json|test/e2e/pi-peer-floor/package-lock\.json)$
       - id: check-json
-        exclude: ^tests/orchestrators/marketplace/_fixtures/invalid-manifest/
+        exclude: ^test/orchestrators/marketplace/_fixtures/invalid-manifest/
       - id: check-yaml
       - id: check-ast
       - id: sort-simple-yaml
@@ -81,13 +81,13 @@ repos:
           - mdformat-gfm
           - mdformat-gfm-alerts
           - mdformat-footnote
-        exclude: ^(tests/fixtures/|tests/bridges/_fixtures/|\.planning/)
+        exclude: ^(test/fixtures/|test/bridges/_fixtures/|\.planning/)
 
   - repo: https://github.com/DavidAnson/markdownlint-cli2
     rev: v0.20.0
     hooks:
       - id: markdownlint-cli2
-        exclude: ^(tests/fixtures/|tests/bridges/_fixtures/|\.planning/)
+        exclude: ^(test/fixtures/|test/bridges/_fixtures/|\.planning/)
 
   - repo: https://github.com/zizmorcore/zizmor-pre-commit
     rev: v1.30.1
@@ -103,10 +103,10 @@ repos:
         name: prettier
         entry: node_modules/.bin/prettier --write --cache --cache-strategy content
         language: system
-        files: '^((extensions|rule-packs|tests)/.*\.(js|json|ts)|scripts/.*\.mjs|demos/.*\.ts|\.fallowrc\.json|\.prettierrc\.json|eslint\.config\.js|package(-lock)?\.json|tsconfig\.json)$'
+        files: '^((extensions|features|rule-packs|test)/.*\.(js|json|ts)|cucumber\.json|scripts/.*\.mjs|demos/.*\.ts|\.fallowrc\.json|\.prettierrc\.json|eslint\.config\.js|package(-lock)?\.json|tsconfig\.json)$'
       - id: npm-check
         name: npm run check:commit
         entry: npm run check:commit
         language: system
         pass_filenames: false
-        files: '^(\.editorconfig|\.fallowrc\.json|\.gitattributes|\.gitignore|\.prettierignore|\.prettierrc\.json|eslint\.config\.js|package-lock\.json|package\.json|sonar-project\.properties|tsconfig\.json|(extensions|rule-packs|tests|\.github/workflows)/.*|scripts/.*\.mjs|demos/.*\.ts|docs/output-catalog\.md)$'
+        files: '^(\.editorconfig|\.fallowrc\.json|\.gitattributes|\.gitignore|\.prettierignore|\.prettierrc\.json|eslint\.config\.js|package-lock\.json|package\.json|sonar-project\.properties|tsconfig\.json|cucumber\.json|(extensions|features|rule-packs|test|\.github/workflows)/.*|scripts/.*\.mjs|demos/.*\.ts|docs/(output-catalog|json-output)\.md)$'

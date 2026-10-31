@@ -61,6 +61,16 @@ export interface NpmSource {
   readonly registry?: string;
 }
 
+/**
+ * D-PL5-04 / D-PL5-05: a marketplace published as one `marketplace.json` at an
+ * https URL. `url` is `raw` without its `#fragment`; the query string stays.
+ */
+export interface HostedManifestSource {
+  readonly kind: "hosted";
+  readonly raw: string;
+  readonly url: string;
+}
+
 export interface UnknownSource {
   readonly kind: "unknown";
   readonly raw: string;
@@ -68,7 +78,13 @@ export interface UnknownSource {
 }
 
 export type ParsedSource =
-  PathSource | GitHubSource | UrlSource | GitSubdirSource | NpmSource | UnknownSource;
+  | PathSource
+  | GitHubSource
+  | UrlSource
+  | GitSubdirSource
+  | NpmSource
+  | HostedManifestSource
+  | UnknownSource;
 
 /**
  * The git-clonable source kinds (url / git-subdir / github): the sources that
@@ -117,7 +133,7 @@ function optionalString(obj: Record<string, unknown>, key: string): string | und
 }
 
 /**
- * Clone-key / sha-version invariant (domain/clone-key.ts, domain/version.ts):
+ * Clone-key / commit-version invariant (domain/clone-key.ts, domain/version.ts):
  * a git source's `sha` must be the FULL 40-hex commit sha -- `pluginCloneKey`
  * and `shaVersion` slice its first 12 chars unchecked.
  */
@@ -129,8 +145,8 @@ const FULL_SHA_RE = /^[0-9a-f]{40}$/i;
  * sources from smuggling the fields through the spread). `ref` is freeform (any
  * branch/tag name); `sha` must satisfy FULL_SHA_RE or it is DROPPED so the
  * source degrades to unpinned rather than mis-keying the clone cache or
- * emitting a `sha-<12hex>` version that fails SHA_VERSION_RE. A valid sha is
- * lowercased for the same reason (SHA_VERSION_RE is lowercase-only).
+ * emitting a commit version (GV-01) that is not 12 hex characters. A valid sha
+ * is lowercased for the same reason: the renderer reads lowercase hex only.
  */
 function withOptionalSourceFields<T extends GitHubSource | UrlSource | GitSubdirSource>(
   source: T,
@@ -264,6 +280,22 @@ function npmObjectSource(obj: Record<string, unknown>): ParsedSource {
   };
 }
 
+/**
+ * D-PL5-05 / ST-6: a stored hosted source re-parses its `raw` through the
+ * string funnel, so a record whose `raw` is not a hosted URL is unknown.
+ */
+function hostedObjectSource(obj: Record<string, unknown>): ParsedSource {
+  const raw = optionalString(obj, "raw");
+  if (raw === undefined) {
+    return unknownObjectSource(obj, "hosted source is missing raw");
+  }
+
+  const parsed = parsePluginSource(raw);
+  return parsed.kind === "hosted"
+    ? parsed
+    : unknownObjectSource(obj, `hosted source raw ${raw} is not an https URL to a .json file`);
+}
+
 function parseKindObjectSource(raw: Record<string, unknown>, kind: string): ParsedSource {
   switch (kind) {
     case "path": {
@@ -288,6 +320,9 @@ function parseKindObjectSource(raw: Record<string, unknown>, kind: string): Pars
 
     case "npm":
       return npmObjectSource(raw);
+
+    case "hosted":
+      return hostedObjectSource(raw);
 
     case "unknown":
       return {
@@ -362,6 +397,48 @@ function parsePathSourceForm(raw: string): ParsedSource | undefined {
 }
 
 /**
+ * D-PL5-04 / D-PL5-05: an `https://` URL whose path, the text after the
+ * authority up to the first `?` or `#`, ends in `.json` names a hosted
+ * `marketplace.json`. The `.json` match ignores case, as Claude Code reads any
+ * such URL as a catalog (D-PL5-33). `url` drops the fragment, as Claude Code
+ * drops it, and keeps the query. Returns undefined for anything else, so the
+ * caller falls through to the URL arm.
+ *
+ * A catalog URL the WHATWG URL parser refuses, such as one with a space in
+ * its host or a port over 65535, is unknown: the download could not request
+ * it. So is one with an empty authority: the parser reads `https:///m.json`
+ * as the host `m.json` with the path `/`, which is not the catalog it names.
+ *
+ * D-76-02: a github.com URL is never a catalog; it stays on the github arm.
+ * Manifest url objects reach `parseUrlSourceForm` through `gatedUrlField` and
+ * never this arm, so a plugin entry's `{ source: "url" }` stays a git source.
+ */
+function parseHostedManifestForm(raw: string): HostedManifestSource | UnknownSource | undefined {
+  if (!raw.startsWith("https://") || gitHubUrlPath(raw) !== undefined) {
+    return undefined;
+  }
+
+  const afterScheme = raw.slice("https://".length);
+  const pathStart = afterScheme.search(/[/?#]/);
+  if (pathStart === -1 || afterScheme[pathStart] !== "/") {
+    return undefined;
+  }
+
+  const pathAndRest = afterScheme.slice(pathStart);
+  const pathEnd = pathAndRest.search(/[?#]/);
+  const urlPath = pathEnd === -1 ? pathAndRest : pathAndRest.slice(0, pathEnd);
+  if (!urlPath.toLowerCase().endsWith(".json")) {
+    return undefined;
+  }
+
+  if (pathStart === 0 || !URL.canParse(raw)) {
+    return { kind: "unknown", raw, reason: `${raw} is not a valid https URL` };
+  }
+
+  return { kind: "hosted", raw, url: splitUrlFragment(raw).path };
+}
+
+/**
  * URL forms. Returns undefined when `raw` carries no scheme, so the caller
  * falls through to the `owner/repo` shorthand arms.
  *
@@ -397,51 +474,63 @@ function parseUrlSourceForm(raw: string): GitHubSource | UrlSource | UnknownSour
 /**
  * The scheme-less `owner/repo` shorthands.
  *
- * D-76-04: `owner/repo@<ref>` folds into `github` plus a ref. The split is on
- * the LAST `@`, and the fold only happens when the left side is a valid
- * `owner/repo`. SP-5: a bare `owner/repo` is exactly one slash with both
- * halves non-empty. MM-4: anything else (`foo/bar/baz`, `foo`, the empty
- * string, whitespace) is unknown.
+ * D-PL5-13: `owner/repo@<ref>` and `owner/repo#<ref>` fold into `github` plus a
+ * ref. The split is on the FIRST `@` or `#`, as Claude Code's
+ * `^([^#@]+)(?:[#@](.+))?$` splits it, so `acme/tools@release@2026` names the
+ * ref `release@2026`. The fold only happens when the left side is a valid
+ * `owner/repo`. An empty `@` ref is unknown. An empty `#` ref reads as no ref,
+ * the way the URL form drops an empty fragment (D-MF-07, a recorded divergence:
+ * Claude Code refuses it).
+ *
+ * SP-5: a bare `owner/repo` is exactly one slash with both halves non-empty.
+ * MM-4: anything else (`foo/bar/baz`, `foo`, the empty string, whitespace) is
+ * unknown.
  */
 function parseShorthandSourceForm(raw: string): ParsedSource {
-  const atIdx = raw.lastIndexOf("@");
-  if (atIdx !== -1) {
-    const github = parseOwnerRepo(raw.slice(0, atIdx), raw);
-    const ref = raw.slice(atIdx + 1);
-    if (github.kind === "github" && ref.length > 0) {
-      return { ...github, ref };
-    }
-
-    return { kind: "unknown", raw, reason: nonRelativeReason(raw) };
+  const delimIdx = raw.search(/[@#]/);
+  if (delimIdx === -1) {
+    return parseOwnerRepo(raw, raw);
   }
 
-  const slashCount = (raw.match(/\//g) ?? []).length;
-  if (slashCount === 1) {
-    return parseOwnerRepo(raw, raw);
+  const github = parseOwnerRepo(raw.slice(0, delimIdx), raw);
+  const ref = raw.slice(delimIdx + 1);
+  if (github.kind === "github" && ref.length > 0) {
+    return { ...github, ref };
+  }
+
+  if (github.kind === "github" && raw[delimIdx] === "#") {
+    return github;
   }
 
   return { kind: "unknown", raw, reason: nonRelativeReason(raw) };
 }
 
+/** Parses a manifest or user-supplied source into its `ParsedSource` variant; never throws. */
 export function parsePluginSource(raw: unknown): ParsedSource {
   if (typeof raw !== "string") {
     if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
+      // A non-array object is a string-keyed record once its values are `unknown`.
       return parseObjectPluginSource(raw as Record<string, unknown>);
     }
 
     return { kind: "unknown", raw: String(raw), reason: "source must be a string or object" };
   }
 
-  // Arm order is load-bearing: paths, then URL schemes, then the scheme-less
-  // shorthands as the catch-all.
-  return parsePathSourceForm(raw) ?? parseUrlSourceForm(raw) ?? parseShorthandSourceForm(raw);
+  // Arm order is load-bearing: paths, then hosted catalogs, then URL schemes,
+  // then the scheme-less shorthands as the catch-all.
+  return (
+    parsePathSourceForm(raw) ??
+    parseHostedManifestForm(raw) ??
+    parseUrlSourceForm(raw) ??
+    parseShorthandSourceForm(raw)
+  );
 }
 
 /**
- * D-76-04: parse a bare `owner/repo` candidate into a `GitHubSource`, echoing
- * `raw` (which may carry an `@ref` suffix the caller strips) as the verbatim
- * input. Returns `unknown` when the candidate is not exactly one non-empty
- * slash-separated pair.
+ * D-PL5-13: parse a bare `owner/repo` candidate into a `GitHubSource`, echoing
+ * `raw` (which may carry an `@ref` or `#ref` suffix the caller strips) as the
+ * verbatim input. Returns `unknown` when the candidate is not exactly one
+ * non-empty slash-separated pair.
  */
 function parseOwnerRepo(candidate: string, raw: string): ParsedSource {
   const slashCount = (candidate.match(/\//g) ?? []).length;
@@ -517,7 +606,7 @@ export function stripSlashAndFragment(input: string): { base: string; ref: strin
  * directory (D-2-05).
  *
  * D-2-03: this string is what `pluginCloneKey` and `pluginMirrorKey` hash, so
- * its composition order is pinned by `tests/domain/source.test.ts`'s identity
+ * its composition order is pinned by `test/domain/source.test.ts`'s identity
  * table. `stripSlashAndFragment` composes the same two steps in the same order
  * for the wire form and differs only in keeping `.git`; the two share no
  * composition, so a correction to the wire form cannot move the cache identity.
@@ -611,6 +700,7 @@ function gitHubUrlPath(raw: string): string | undefined {
     host = host.slice("www.".length);
   }
 
+  // eslint-disable-next-line local/no-github-literal -- GHB-02: the parser recognizes github.com spellings; the override changes only where bytes go
   return host === "github.com" ? rest.slice(slashIdx + 1) : undefined;
 }
 
@@ -627,6 +717,7 @@ function parseGitHubUrl(raw: string, rest: string): GitHubSource | UnknownSource
     return {
       kind: "unknown",
       raw,
+      // eslint-disable-next-line local/no-github-literal -- GHB-02: a reason names the github.com form the user types
       reason: `${raw} is a browser URL; use https://github.com/${ownerRepo}#${ref} instead`,
     };
   }
@@ -641,6 +732,7 @@ function parseGitHubUrl(raw: string, rest: string): GitHubSource | UnknownSource
     return {
       kind: "unknown",
       raw,
+      // eslint-disable-next-line local/no-github-literal -- GHB-02: a reason names the github.com form the user types
       reason: `${raw} must be https://github.com/<owner>/<repo>[.git][#<ref>]`,
     };
   }
@@ -676,6 +768,9 @@ export function githubSource(raw: string): GitHubSource {
   return parsed;
 }
 
+/** The outcome of comparing a stored source record with a planned source. */
+export type SamePlannedSourceResult = "same" | "different" | "unknown-stored";
+
 /**
  * Compare a stored source record against a planned raw source string for
  * semantic equality.
@@ -694,18 +789,16 @@ export function githubSource(raw: string): GitHubSource {
  *     source-mismatch.
  *
  * The tri-state union (vs `boolean | "unknown-stored"`) closes a
- * truthy-coercion footgun: under the prior shape a bare
- * `if (samePlannedSource(...))` silently treated `"unknown-stored"` (a
- * corrupt record) as a source match. With the literal union the compiler
- * forces every caller to switch on the discriminant explicitly.
+ * truthy-coercion footgun: a bare `if (samePlannedSource(...))` would treat
+ * `"unknown-stored"` (a corrupt record) as a source match. With the literal
+ * union the compiler forces every caller to switch on the discriminant
+ * explicitly.
  *
  * Used by `orchestrators/import/execute.ts` (existing import path) and
  * `orchestrators/reconcile/plan.ts` (the pure planner foundation).
  * Lives in `domain/source.ts` so both callers import a leaf-pure helper
  * without pulling in either orchestrator's effectful transitive closure.
  */
-export type SamePlannedSourceResult = "same" | "different" | "unknown-stored";
-
 export function samePlannedSource(stored: unknown, plannedRaw: string): SamePlannedSourceResult {
   const planned = parsePluginSource(plannedRaw);
   const current = parsePluginSource(stored);
@@ -738,6 +831,9 @@ export function samePlannedSource(stored: unknown, plannedRaw: string): SamePlan
     case "git-subdir":
     case "npm":
       return sourceLogical(planned) === sourceLogical(current) ? "same" : "different";
+    // D-PL5-05: a hosted catalog is its fragment-free url.
+    case "hosted":
+      return current.kind === "hosted" && planned.url === current.url ? "same" : "different";
   }
 }
 
@@ -759,6 +855,7 @@ export function sourceLogical(source: ParsedSource): string {
 
     case "github": {
       const refSuffix = source.ref === undefined ? "" : `#${source.ref}`;
+      // eslint-disable-next-line local/no-github-literal -- GHB-04: list and info show GitHub sources in github.com terms
       return `https://github.com/${source.owner}/${source.repo}${refSuffix}`;
     }
 
@@ -776,6 +873,9 @@ export function sourceLogical(source: ParsedSource): string {
       const versionSuffix = source.version === undefined ? "" : `@${source.version}`;
       return `npm:${source.package}${versionSuffix}`;
     }
+
+    case "hosted":
+      return source.url;
 
     case "unknown":
       return source.raw;

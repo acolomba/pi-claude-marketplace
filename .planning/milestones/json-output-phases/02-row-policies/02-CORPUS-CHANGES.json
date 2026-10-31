@@ -1,0 +1,495 @@
+[
+  {
+    "line": 2487,
+    "file": "tests/shared/notification-dispatch.test.ts",
+    "before": {
+      "message": "Some operations need attention.\n\n● official [user] (skipped) {not found}\n  alpha (skipped)",
+      "severity": "warning",
+      "argc": 2
+    },
+    "after": {
+      "message": "Some operations need attention.\n\n● official [user] (skipped) {not found}\n  ⊘ alpha (skipped) {not installed}",
+      "severity": "warning",
+      "argc": 2
+    },
+    "multiplicity": 1,
+    "test": "a mixed actionable-skip cascade emits the plural attention summary",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2599,
+    "file": "tests/shared/notification-dispatch.test.ts",
+    "before": {
+      "message": "● official [user]\n  alpha (available)\n\nPlugin list: 1 success",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [user]\n  ○ alpha (available)\n\nPlugin list: 1 success",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "an unstamped cascade plugin defaults to info severity and a success tally",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2600,
+    "file": "tests/shared/notification-dispatch.test.ts",
+    "before": {
+      "message": "● official [user]\n  alpha (available)\n\nPlugin update: nothing to update",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [user]\n  ○ alpha (available)\n\nPlugin update: nothing to update",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "update no-op dispatch preserves empty and non-empty folds",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2601,
+    "file": "tests/shared/notification-dispatch.test.ts",
+    "before": {
+      "message": "● official [user]\n  alpha (installed)\n  beta (reinstalled)",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [user]\n  ● alpha (installed) {requires pi-subagents}\n  ● beta (reinstalled)",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "D-12: context dispatch composes each row's markers under the caller's marker policy",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2602,
+    "file": "tests/shared/notification-dispatch.test.ts",
+    "before": {
+      "message": "● official [user]\n  controlled installed alpha\n\nPlugin install: 1 success\n\n/reload to pick up changes",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [user]\n  ● alpha (installed)\n\nPlugin install: 1 success\n\n/reload to pick up changes",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "context dispatch preserves the success tally and reload trailer",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2603,
+    "file": "tests/shared/notification-dispatch.test.ts",
+    "before": {
+      "message": "● official [user]\n  first (installed)\n  second (available)\n\n/reload to pick up changes",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [user]\n  ● first (installed)\n  ○ second (available)\n\n/reload to pick up changes",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "context dispatch preserves ordered rows and stamped reload hint",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2633,
+    "file": "tests/shared/notification-summary.test.ts",
+    "before": {
+      "message": "A plugin operation has failed.\n\n● official [user]\n  alpha (failed)\n\nPlugin install: 1 failure\n\n/reload to pick up changes",
+      "severity": "error",
+      "argc": 2
+    },
+    "after": {
+      "message": "A plugin operation has failed.\n\n● official [user]\n  ⊘ alpha (failed) {not found}\n\nPlugin install: 1 failure\n\n/reload to pick up changes",
+      "severity": "error",
+      "argc": 2
+    },
+    "multiplicity": 1,
+    "test": "nonempty all-failure summary, tally, and reload hint retain their exact order",
+    "preserves": "Summary, body, tally and reload or no-op ordering; notification severity and argument count remain unchanged."
+  },
+  {
+    "line": 2634,
+    "file": "tests/shared/notification-summary.test.ts",
+    "before": {
+      "message": "A plugin operation has failed.\n\n● official [user]\n  alpha (failed)\n\nReconcile: 1 failure",
+      "severity": "error",
+      "argc": 2
+    },
+    "after": {
+      "message": "A plugin operation has failed.\n\n● official [user]\n  ⊘ alpha (failed) {not found}\n\nReconcile: 1 failure",
+      "severity": "error",
+      "argc": 2
+    },
+    "multiplicity": 1,
+    "test": "reconcile applied fold suppresses reload while preserving severity and tally",
+    "preserves": "Summary, body, tally and reload or no-op ordering; notification severity and argument count remain unchanged."
+  },
+  {
+    "line": 2640,
+    "file": "tests/shared/notification-summary.test.ts",
+    "before": {
+      "message": "● official [user]\n  alpha (partially-upgradable)\n\nPlugin update: nothing to update",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [user]\n  ● alpha (partially-upgradable) {lsp}\n\nPlugin update: nothing to update",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "update no-op fold preserves empty and non-empty bodies",
+    "preserves": "Summary, body, tally and reload or no-op ordering; notification severity and argument count remain unchanged."
+  },
+  {
+    "line": 2642,
+    "file": "tests/shared/notify-context.test.ts",
+    "before": {
+      "message": "A plugin operation has failed.\n\n● official [user]\n  orphan (failed) {internal: no render arm for \"disabled\"}\n  controlled available neighbor [user]",
+      "severity": "error",
+      "argc": 2
+    },
+    "after": {
+      "message": "A plugin operation has failed.\n\n● official [user]\n  orphan (failed) {internal: no render arm for \"disabled\"}\n  ○ neighbor (available)",
+      "severity": "error",
+      "argc": 2
+    },
+    "multiplicity": 1,
+    "test": "a missing render arm reports its named row before the adjacent present arm",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2644,
+    "file": "tests/shared/notify-context.test.ts",
+    "before": {
+      "message": "● official [project]\n  controlled available alpha [project]",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [project]\n  ○ alpha (available)",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "the update wrapper preserves the exact integer tally 0",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2645,
+    "file": "tests/shared/notify-context.test.ts",
+    "before": {
+      "message": "● official [project]\n  controlled available alpha [project]\n\nPlugin update: 1 updated",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [project]\n  ○ alpha (available)\n\nPlugin update: 1 updated",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "the update wrapper preserves the exact integer tally 1",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2646,
+    "file": "tests/shared/notify-context.test.ts",
+    "before": {
+      "message": "● official [project]\n  controlled available alpha [project]\n\nPlugin update: 37 updated",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [project]\n  ○ alpha (available)\n\nPlugin update: 37 updated",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "the update wrapper preserves the exact integer tally 37",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2647,
+    "file": "tests/shared/notify-context.test.ts",
+    "before": {
+      "message": "● official [user]\n  ? (failed) {internal: no render arm for \"unknown\"}\n  controlled available neighbor [user]",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [user]\n  ? (failed) {internal: no render arm for \"unknown\"}\n  ○ neighbor (available)",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "a frozen unnamed missing-arm row still precedes the adjacent present arm",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2648,
+    "file": "tests/shared/notify-context.test.ts",
+    "before": {
+      "message": "● official [user]\n  alpha {requires pi-subagents}",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [user]\n  ● alpha (installed) {requires pi-subagents}",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "D-12: notifyWithContext composes row markers under the context's marker policy",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2649,
+    "file": "tests/shared/notify-context.test.ts",
+    "before": {
+      "message": "● official [user]\n  alpha {requires pi-subagents}",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [user]\n  ● alpha (installed) {requires pi-subagents}",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "D-12: notifyUpdateWithContext composes row markers under the context's marker policy",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2650,
+    "file": "tests/shared/notify-context.test.ts",
+    "before": {
+      "message": "● official [user]\n  alpha {requires pi-subagents}\n\nPlugin inspect: 1 success",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [user]\n  ● alpha (installed) {requires pi-subagents}\n\nPlugin inspect: 1 success",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "D-12: notifyReconcileAppliedWithContext composes row markers under the context's marker policy",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2651,
+    "file": "tests/shared/notify-context.test.ts",
+    "before": {
+      "message": "● official [user]\n  alpha {requires pi-subagents}\n\nPlugin update: nothing to update",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [user]\n  ● alpha (installed) {requires pi-subagents}\n\nPlugin update: nothing to update",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "D-12: notifyUpdateNoOpWithContext composes row markers under the context's marker policy",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2652,
+    "file": "tests/shared/notify-context.test.ts",
+    "before": {
+      "message": "● official [user]\n  alpha {}",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [user]\n  ● alpha (installed)",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "D-12: notifyWithContext suppresses markers its context's policy maps off",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2653,
+    "file": "tests/shared/notify-context.test.ts",
+    "before": {
+      "message": "● official [user]\n  alpha {}",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [user]\n  ● alpha (installed)",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "D-12: notifyUpdateWithContext suppresses markers its context's policy maps off",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2654,
+    "file": "tests/shared/notify-context.test.ts",
+    "before": {
+      "message": "● official [user]\n  alpha {}\n\nPlugin inspect: 1 success",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [user]\n  ● alpha (installed)\n\nPlugin inspect: 1 success",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "D-12: notifyReconcileAppliedWithContext suppresses markers its context's policy maps off",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2655,
+    "file": "tests/shared/notify-context.test.ts",
+    "before": {
+      "message": "● official [user]\n  alpha {}\n\nPlugin update: nothing to update",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [user]\n  ● alpha (installed)\n\nPlugin update: nothing to update",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "D-12: notifyUpdateNoOpWithContext suppresses markers its context's policy maps off",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2656,
+    "file": "tests/shared/notify-context.test.ts",
+    "before": {
+      "message": "● official [user]\n  controlled available alpha [user]",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [user]\n  ○ alpha (available)",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "a single cascade dispatches its row without a plural tally",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2657,
+    "file": "tests/shared/notify-context.test.ts",
+    "before": {
+      "message": "● official [user]\n  controlled available alpha [user]\n  controlled available beta [user]\n\n● community [project]\n  controlled disabled gamma [project]\n\nPlugin inspect: 3 successes",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [user]\n  ○ alpha (available)\n  ○ beta (available)\n\n● community [project]\n  ◍ gamma (disabled)\n\nPlugin inspect: 3 successes",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "plural marketplaces dispatch equal-status rows separately in input order",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2658,
+    "file": "tests/shared/notify-context.test.ts",
+    "before": {
+      "message": "● official [user]\n  controlled available alpha [user]\n\nPlugin inspect: 1 success",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [user]\n  ○ alpha (available)\n\nPlugin inspect: 1 success",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "a one-row plural cascade retains its one-success tally",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2659,
+    "file": "tests/shared/notify-context.test.ts",
+    "before": {
+      "message": "● official [user]\n  controlled available alpha [user]\n\nPlugin reconcile: 1 success",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [user]\n  ○ alpha (available)\n\nPlugin reconcile: 1 success",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "the reconcile wrapper dispatches rows with its label and plural cardinality",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2660,
+    "file": "tests/shared/notify-context.test.ts",
+    "before": {
+      "message": "● official [user]\n  controlled available alpha [user]\n\nfirst advisory\nsecond advisory\n\nPlugin inspect: 1 success",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [user]\n  ○ alpha (available)\n\nfirst advisory\nsecond advisory\n\nPlugin inspect: 1 success",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "WR-06: folds caller-supplied advisory lines before the tally",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 2661,
+    "file": "tests/shared/notify-context.test.ts",
+    "before": {
+      "message": "● official [user]\n  controlled disabled alpha [user]\n\nPlugin update: nothing to update",
+      "severity": null,
+      "argc": 1
+    },
+    "after": {
+      "message": "● official [user]\n  ◍ alpha (disabled)\n\nPlugin update: nothing to update",
+      "severity": null,
+      "argc": 1
+    },
+    "multiplicity": 1,
+    "test": "the no-op update wrapper dispatches surviving rows before its headline",
+    "preserves": "Exact severity and notify arity, emission count, row order, policy reasons, defensive diagnostic, advisory, tally, and reload behavior for this case."
+  },
+  {
+    "line": 1907,
+    "file": "tests/orchestrators/plugin/shared.test.ts",
+    "before": {
+      "message": "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped)\n\nPlugin reinstall: 1 failure",
+      "severity": "error",
+      "argc": 2
+    },
+    "after": {
+      "message": "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed, marketplace in user scope}\n\nPlugin reinstall: 1 failure",
+      "severity": "error",
+      "argc": 2
+    },
+    "multiplicity": 1,
+    "test": "renders the plugin row when nothing of the container is installed at the named scope",
+    "preserves": "Exact severity and notify arity, emission count, row order, name and scope, tally, and the producer's not-installed and marketplace-scope reasons under a content-enabled policy (CR-01)."
+  }
+]

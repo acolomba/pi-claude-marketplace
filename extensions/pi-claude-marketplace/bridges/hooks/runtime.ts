@@ -5,7 +5,11 @@ import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { AssistantMessage } from "../../platform/pi-api.ts";
 
-const STOP_OVERRIDE_CAP = 8;
+/**
+ * STOP-07: the consecutive Stop re-entry cap. The re-entry that reaches it does
+ * not re-enter; settle passes this value to the override-cap warning.
+ */
+export const STOP_OVERRIDE_CAP = 8;
 
 /** One live async-rewake child owned by a hooks runtime. */
 export interface HooksRuntimeChildEntry {
