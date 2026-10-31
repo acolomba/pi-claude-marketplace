@@ -2,7 +2,7 @@
 gsd_state_version: "1.0"
 milestone: plugin-lifecycle
 status: plugin-lifecycle milestone complete
-stopped_at: Milestone plugin-lifecycle shipped; PR
+stopped_at: "Milestone plugin-lifecycle shipped; PR #290 merged, released as 0.21.0"
 last_updated: "2026-10-31T08:13:42.210Z"
 last_activity: 2026-10-30
 last_activity_desc: "Completed quick task 261030-ogp: bootstrap runs only marketplace add"
