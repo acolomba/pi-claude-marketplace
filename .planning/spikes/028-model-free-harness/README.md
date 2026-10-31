@@ -191,3 +191,14 @@ for the same session id and reason (SSDEDUP-01 in the backlog).
      `session_compact` could carry it, but D-58-06 records no analog.
   4. Pi `reload` has no upstream source value. Upstream behavior for a
      reload is unknown.
+
+### Decisions taken (2026-10-31)
+
+- `user-invocable: false`: keep today's behavior and record it as a
+  divergence licensed by the Pi capability gap (no per-skill way to hide a
+  slash command). Report the gap to Pi.
+- SessionStart `compact`: fire SessionStart with `source: "compact"` on Pi's
+  `session_compact` and admit `compact` matchers. Supersedes that part of
+  D-58-06.
+- SessionStart `fork`: not yet decided. Parity default applies.
+- Pi `new` as `clear`: open; the user asked why it matters.
