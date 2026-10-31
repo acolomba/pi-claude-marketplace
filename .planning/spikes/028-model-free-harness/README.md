@@ -137,14 +137,57 @@ need a real LLM.
 
 ## Side findings
 
-- **SessionStart fires twice on every RPC `new_session`.** A counter extension
-  shows Pi emits `session_start` twice per `new_session`, and the hooks bridge
-  maps each one to SessionStart. A fresh process fires it once. Claude Code
-  fires SessionStart once per session. This needs a decision: dedupe per
-  session id in the bridge, or report it upstream.
-- **A skill with `user-invocable: false` is still offered as
-  `/skill:kit-hidden`.** Nothing in the extension reads that field. Confirm
-  the upstream contract with `claude-code-compat-research` before calling it
-  a gap.
-- **SessionStart `source` is `new`** after `new_session`. Upstream uses
-  `startup`, `resume`, `clear`, `compact`. Check that this mapping is recorded.
+Upstream evidence below was gathered on 2026-10-31 from the Claude Code
+2.1.316 binary (`grep -a`) and from code.claude.com/docs/en/skills and
+/docs/en/hooks.
+
+### SessionStart fires twice on every RPC `new_session`
+
+Pi binds extensions twice on RPC session replacement
+([earendil-works/pi#10470](https://github.com/earendil-works/pi/issues/10470)).
+**Fixed on main** by #294: the hooks bridge drops a repeated `session_start`
+for the same session id and reason (SSDEDUP-01 in the backlog).
+
+### `user-invocable: false` skills are offered as slash commands
+
+- **Claude Code:** the skill is hidden from the `/` menu, and typing `/name`
+  does not run it. Claude can still invoke it, and its description stays in
+  context. Docs table: "You can invoke: No / Claude can invoke: Yes". The
+  2.1.316 binary reads the field (`e["user-invocable"]===void 0?!0:...`) and
+  describes a skill that is "not user-invocable" as one the session does not
+  list as a slash command. Confidence: high.
+- **Pi 1.x:** skill frontmatter has `disable-model-invocation` only. The
+  `enableSkillCommands` setting hides every skill command at once, and a typed
+  `/skill:name` still works. There is no per-skill way to hide a slash command.
+- **Extension today:** does not read the field. The spike's `kit-hidden` is
+  listed as `/skill:kit-hidden` and runs when typed. No recorded decision
+  covers it.
+- **Divergence license:** a Pi capability gap covers the menu listing. It
+  does not obviously cover running on `/skill:name`, because an extension
+  `input` handler can refuse that command. Needs a decision.
+
+### SessionStart `source` values
+
+- **Claude Code 2.1.316:** `source` is the closed enum `startup | resume |
+  clear | compact | fork` (binary: `source:U(["startup","resume","clear",
+  "compact","fork"])`, and the same list as the matcher values). Docs: `clear`
+  is `/clear`; `compact` is auto or manual compaction; `fork` is a session
+  forked from an existing one (`--fork-session`, `/fork`, `/branch`).
+  Confidence: high.
+- **Pi:** `SessionStartEvent.reason` is `startup | reload | new | resume |
+  fork`. Compaction does not emit `session_start`; it emits `session_compact`.
+- **Extension today (recorded):** D-60-04 passes Pi's `reason` through as
+  `source` unchanged, so hooks see `new` and `reload`, which upstream never
+  sends. D-58-06 admits only `startup` and `resume` as matchers and makes
+  `clear` and `compact` matchers unavailable (TOOL-02).
+- **Gaps:**
+  1. `fork` was added upstream after D-58-06. Pi has the same value with the
+     same meaning, but a `fork` matcher is refused. Neither license covers
+     this; it is drift.
+  2. Pi `new` (`/new`) does what Claude's `/clear` does: it ends the
+     conversation and starts a new session in the same process. D-58-06
+     records `clear` as having no Pi analog. That premise looks wrong.
+  3. Claude fires SessionStart with `compact` after compaction. Pi's
+     `session_compact` could carry it, but D-58-06 records no analog.
+  4. Pi `reload` has no upstream source value. Upstream behavior for a
+     reload is unknown.
