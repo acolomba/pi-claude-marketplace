@@ -104,6 +104,15 @@ completes. Does `@earendil-works/pi-coding-agent`'s extension UI surface
 (`setStatus`, `setWidget`, `ctx.ui.custom()` + `BorderedLoader`) is the
 idiomatic vehicle for a hand-rolled delay-then-show/auto-clear helper?
 
+### Component behavior without an LLM (spike 028)
+
+The cucumber suite covers marketplace and plugin operations. The next step
+is to check each component kind (skills, commands, agents, hooks, MCP
+servers, workflows) as Pi and its companions see it after an install, before
+an authenticated LLM is available in tests. Can a headless RPC Pi with the
+companions loaded show each kind working, and how much of the contract needs
+a model turn at all?
+
 ## Requirements
 
 ### GitLab plugin-marketplace parity
@@ -313,6 +322,15 @@ idiomatic vehicle for a hand-rolled delay-then-show/auto-clear helper?
   config, an `ignoreExports` allowlist for test seams), not runtime
   (Spike 017).
 
+### Component behavior without an LLM
+
+- Check a component through what Pi or its companion reports (RPC
+  `get_commands`, companion commands and tools, hook side effects, MCP server
+  traffic, workflow run results), never through the files the bridge wrote
+  (spike 028).
+- Workflow checks run against pi-dynamic-workflows 3.14.0 or later, the
+  first release that reads `PI_CODING_AGENT_DIR` (spike 028).
+
 ## Spikes
 
 | #    | Name                                | Type       | Validates                                                                                                                                                                                                                                                                    | Verdict             | Tags                                                                     |
@@ -347,3 +365,4 @@ idiomatic vehicle for a hand-rolled delay-then-show/auto-clear helper?
 | 025  | canonical-path-mechanics            | standard   | Given the decision to write @quintinshaw's canonical paths for both scopes, when the project-key derivation is reimplemented and the staging/rename path is exercised, then confirm key parity across edge cases and establish where the staging tree must live for NFR-1 atomicity | ✓ VALIDATED       | pi-extension, workflows, paths, nfr-1, nfr-10, prototype |
 | 026  | meta-name-extraction                | standard   | Given a Claude workflow script, when meta.name is extracted statically with acorn rather than by regex or filename, then confirm it survives comment/string decoys, reports its failure modes precisely, and matches upstream command naming on real plugin scripts | ✓ VALIDATED       | pi-extension, workflows, naming, parser, prototype |
 | 027  | workflow-engine-3-10-1-recheck      | standard   | Given the workflows-milestone claims measured against @quintinshaw/pi-dynamic-workflows 3.5.1, when the same probes are re-driven against 3.10.1, then determine which claims survive the six-minor engine drift and which need regrading | ✓ VALIDATED       | pi-extension, workflows, engine-drift, re-verification |
+| 028  | model-free-harness                  | standard   | Given kit@fixtures with every component kind installed in a headless RPC Pi with its companions, when each kind is checked through host surfaces and Pi's faux model, then every kind is verifiable without an authenticated LLM | ✓ VALIDATED       | cucumber, rpc, faux-model, components, companions |

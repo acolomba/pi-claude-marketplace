@@ -1,0 +1,5 @@
+[
+  { "tool": "bash", "args": { "command": "echo from-faux" } },
+  { "tool": "mcp__plugin_kit_stub__echo", "args": { "text": "ping" } },
+  { "text": "all done" }
+]

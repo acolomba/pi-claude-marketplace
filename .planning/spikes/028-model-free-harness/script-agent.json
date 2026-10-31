@@ -1,0 +1,4 @@
+[
+  { "tool": "subagent", "args": { "agent": "kit:reviewer", "task": "say hi", "async": false } },
+  { "text": "agents done" }
+]
