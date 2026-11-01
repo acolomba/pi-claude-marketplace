@@ -22,7 +22,11 @@ import {
   presentReconcileApplied,
   presentUpdateNoOp,
 } from "./notification-present.ts";
-import { mcpConfigNoticeSurfaces, resolveRawSurface } from "./notification-resolve.ts";
+import {
+  mcpConfigNoticeSurfaces,
+  resolveRawSurface,
+  terminalSafeHookNotice,
+} from "./notification-resolve.ts";
 import { COMMAND_DELIVERY, requireNotificationMode } from "./notification-run.ts";
 import { composeRetainedWorkflowsAdvisories } from "./notification-summary.ts";
 
@@ -476,9 +480,11 @@ export function notifyStopHookOverrideCap(
  * plugin's hook gave, built as the `hook-notice` hook kind. The hooks bridge
  * (`bridges/hooks/dispatch.ts`) composes `text`, such as `<Event>[:<Tool>]
  * says: <text>` for a `systemMessage`, and calls this once per notice, in
- * routing order. The text strategy renders it verbatim at `"info"` severity,
- * and the JSON strategy appends it as `text`; it never reaches the model. A
- * zero-length text emits nothing. The byte form is locked by
+ * routing order. The seam strips terminal escapes and control characters and
+ * bounds the length (`terminalSafeHookNotice`); the text strategy renders the
+ * result at `"info"` severity, and the JSON strategy appends it as `text`; it
+ * never reaches the model. A text that is empty, or that holds nothing but
+ * escapes, emits nothing. The byte form is locked by
  * `test/architecture/hooks-notice-notify.test.ts` against the `hook-notice`
  * block in `docs/output-catalog.md`.
  */
@@ -487,11 +493,12 @@ export function notifyHookNotice(
   run: NotificationRun,
   text: string,
 ): void {
-  if (text.length === 0) {
+  const notice = terminalSafeHookNotice(text);
+  if (notice.length === 0) {
     return;
   }
 
-  emitHookSurface(ctx, run, { kind: "hook-notice", text });
+  emitHookSurface(ctx, run, { kind: "hook-notice", text: notice });
 }
 
 /**

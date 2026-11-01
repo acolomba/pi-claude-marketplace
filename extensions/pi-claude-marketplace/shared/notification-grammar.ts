@@ -1388,7 +1388,8 @@ export function formatRawSurface(surface: ResolvedRawSurface): NotifyArguments |
     case "background-update":
       return [composeBackgroundUpdateText(surface.plugins), RAW_SURFACE_SEVERITY[surface.kind]];
     case "hook-notice":
-      // D-CF5-14: the hooks bridge composed the notice; it passes through verbatim.
+      // D-CF5-14: the hooks bridge composed the notice and the seam made it
+      // terminal-safe; it passes through as given.
       return surface.text.length === 0
         ? undefined
         : [surface.text, RAW_SURFACE_SEVERITY[surface.kind]];

@@ -1,3 +1,5 @@
+import { stripVTControlCharacters } from "node:util";
+
 import { softDepMarkers } from "./concerns/soft-dep.ts";
 import { hookDebugLog } from "./debug-log.ts";
 import { errorMessage, manualRecoveryLeaks, serializeCauseChain } from "./errors.ts";
@@ -661,6 +663,34 @@ export type ResolvedRawSurface =
   | Exclude<RawSurface, ReconcileAbortedSurface | McpMigrationSurface>
   | ResolvedReconcileAborted
   | ResolvedMcpMigration;
+
+// The longest hook notice shown, in characters (grapheme clusters, so a cut
+// never splits an emoji or a combined letter).
+const HOOK_NOTICE_MAX_CHARS = 2_000;
+
+const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+// A control character other than a line break or a tab.
+const NOTICE_CONTROL_CHARACTER = /(?![\n\t])\p{Cc}/gu;
+
+/**
+ * HOOK-05 / D-CF5-14: a hook notice as the terminal may show it. Plugin output
+ * can echo data a hook read (a tool input, the prompt, a file), so escape
+ * sequences go, every other control character but a line break or a tab
+ * becomes a space, as in the dependency-install notes, and a notice past the
+ * limit is cut and ends with `… (+N chars)`, naming what was dropped. Both
+ * strategies show the result.
+ */
+export function terminalSafeHookNotice(text: string): string {
+  const clean = stripVTControlCharacters(text).replaceAll(NOTICE_CONTROL_CHARACTER, " ");
+  const characters = Array.from(GRAPHEMES.segment(clean), ({ segment }) => segment);
+  if (characters.length <= HOOK_NOTICE_MAX_CHARS) {
+    return characters.join("");
+  }
+
+  const kept = characters.slice(0, HOOK_NOTICE_MAX_CHARS).join("");
+  return `${kept}… (+${characters.length - HOOK_NOTICE_MAX_CHARS} chars)`;
+}
 
 /**
  * D-13 / PMOD-04: the one place a raw surface's live value becomes text, and

@@ -581,9 +581,9 @@ One notice that a plugin's hook shows the user: a hook's `systemMessage` as `<Ev
 
 <!-- use: common-fields -->
 
-| Field path | Type   | Presence | Meaning                                                                     |
-| ---------- | ------ | -------- | --------------------------------------------------------------------------- |
-| `text`     | string | required | Notice text, kept verbatim. This is distinct from the envelope's `summary`. |
+| Field path | Type   | Presence | Meaning                                                                                                                                                                                              |
+| ---------- | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `text`     | string | required | Notice text without terminal escapes or control characters other than line breaks and tabs, at most 2,000 characters before a `… (+N chars)` marker. This is distinct from the envelope's `summary`. |
 
 <!-- /fields -->
 

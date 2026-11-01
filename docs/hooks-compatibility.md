@@ -292,6 +292,8 @@ The same notice kind carries two more notices (D-CF5-24):
 - A blocked prompt shows `UserPromptSubmit operation blocked by hook:` and the reason on the next line. The prompt does not reach the model. Upstream adds a third line, `Original prompt: <prompt>`. The bridge leaves it out.
 - A block on `SessionStart`, `SessionEnd`, or `PostCompact`, which cannot block, shows as `<label> hook error: <message>`. An exit 2 gives the message `[<command>]: <stderr>`.
 
+A notice can echo data that a hook read, such as a tool input or a file. So every notice loses its terminal escape sequences, every other control character except a line break or a tab becomes a space, and a notice longer than 2,000 characters is cut and ends with `… (+N chars)`.
+
 ## Environment variables
 
 [`docs/env-vars.md`](env-vars.md) is authoritative on any conflict about which environment variables ship; the table below is the hook-scoped view (D-CF5-16).

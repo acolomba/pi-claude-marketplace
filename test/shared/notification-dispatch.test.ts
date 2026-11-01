@@ -7095,7 +7095,7 @@ test("empty rewake does not read mode or sink", () => {
   capture.assertValid();
 });
 
-test("HOOK-05 / D-CF5-14: hook notice dispatch shows each text verbatim at info and skips an empty one", (t) => {
+test("HOOK-05 / D-CF5-14: hook notice dispatch shows each plain text as given at info and skips an empty one", (t) => {
   // arrange
   const ctx = createContext(t);
 
@@ -7147,6 +7147,66 @@ for (const mode of ["json", "rpc"]) {
     capture.assertValid();
   });
 }
+
+test("hook notice dispatch strips terminal escapes and control characters but keeps line breaks and tabs", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyHookNotice(
+    ctx,
+    runWithNothingLoaded(),
+    "Stop says: \u001b[31mred\u001b[0m\u001b]52;c;Y2xpcA==\u0007 a\rb\u0000c\u007fd\n\te",
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [["Stop says: red a b c d\n\te", "info"]],
+  );
+});
+
+test("hook notice dispatch shows nothing for a notice that holds only escapes", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyHookNotice(ctx, runWithNothingLoaded(), "\u001b[2J");
+
+  // assert
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls, []);
+});
+
+test("hook notice dispatch appends the stripped text in json", () => {
+  // arrange
+  const capture = createJsonCapture();
+  const ctx = {
+    mode: "json",
+    get ui() {
+      return capture.ui;
+    },
+  };
+  const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+  // act
+  notifyHookNotice(ctx, run, "PreToolUse:Bash says: \u001b]0;title\u0007checked");
+
+  // assert
+  assert.deepStrictEqual(capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+        kind: "hook-notice",
+        severity: "info",
+        needsReload: false,
+        text: "PreToolUse:Bash says: checked",
+      },
+    },
+  ]);
+  capture.assertValid();
+});
 
 test("an empty hook notice does not read mode or sink", () => {
   // arrange

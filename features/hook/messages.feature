@@ -30,6 +30,26 @@ Feature: Hook messages
       | call | role | text  |
       | 1    | user | hello |
 
+  Scenario: A hook's system message is shown without its terminal escape sequences
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event            | matcher | form   | output                                                                    |
+      | notice | UserPromptSubmit |         | script | {"systemMessage":"\u001b]0;title\u0007remember\u001b[31m the\u0000 tests"} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply |
+      | Done. |
+    When the user prompts "hello"
+    Then the hooks show the user these messages:
+      | severity | text                                       |
+      | info     | UserPromptSubmit says: remember the  tests |
+
   Scenario: A tool hook's system message names the event and the tool
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source
