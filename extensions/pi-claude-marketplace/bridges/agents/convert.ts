@@ -60,17 +60,18 @@ const LONG_CONTEXT_SUFFIX = "[1m]";
 
 /**
  * AG-7 user contract: Claude tool name -> Pi tool name. Tokens not present
- * here are dropped.
+ * here are dropped. A `Map`, so a token such as `constructor` cannot find an
+ * `Object.prototype` member.
  */
-const TOOL_MAP: Readonly<Record<string, string>> = Object.freeze({
-  Read: "read",
-  Bash: "bash",
-  Edit: "edit",
-  Write: "write",
-  Grep: "grep",
-  Glob: "find",
-  LS: "ls",
-});
+const TOOL_MAP: ReadonlyMap<string, string> = new Map([
+  ["Read", "read"],
+  ["Bash", "bash"],
+  ["Edit", "edit"],
+  ["Write", "write"],
+  ["Grep", "grep"],
+  ["Glob", "find"],
+  ["LS", "ls"],
+]);
 
 /**
  * ANAME-02: one MCP server this install writes. `key` is the server's
@@ -355,7 +356,7 @@ function mcpEntry(match: McpGrantMatch): string {
 
 /** A TOOL_MAP name, or the `mcp:` entry of a written server's MCP name. */
 function mapToolName(token: string, grants: readonly McpGrant[]): string | undefined {
-  const piName = TOOL_MAP[toolNameOf(token)];
+  const piName = TOOL_MAP.get(toolNameOf(token));
   if (piName !== undefined) {
     return piName;
   }
@@ -530,7 +531,7 @@ function omittedToolMapping(
       continue;
     }
 
-    const name = TOOL_MAP[toolNameOf(token)] ?? perToolMcpName(token, grants);
+    const name = TOOL_MAP.get(toolNameOf(token)) ?? perToolMcpName(token, grants);
     if (name === undefined) {
       unmapped.push(token);
     } else {

@@ -2204,6 +2204,61 @@ describe("D-CF4-08 tool lists", () => {
     assert.strictEqual(agent.fileContent, expectedFileContent);
   });
 
+  test("drops a tool named after an inherited object key", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: read",
+      inheritSkills: false,
+      async: false,
+      droppedTools: ["constructor", "toString", "hasOwnProperty"],
+      warnings: [],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", tools: "Read constructor toString hasOwnProperty" },
+      undefined,
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("does not exclude a disallowed tool named after an inherited object key", () => {
+    // arrange
+    const expectedFileContent = `---
+name: acme:bot
+description: d
+aliases: pi-claude-marketplace-acme-bot
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: true
+advertise: true
+async: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings:
+    - disallowedTools entries with no Pi tool mapping (constructor, toString) cannot narrow the default tool set -- ignored
+---
+
+Body content.
+`;
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", disallowedTools: "constructor toString" },
+      undefined,
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
   test("a space-separated MCP name of a written server maps to its mcp: entry", () => {
     // arrange
     const expectedFileContent = expectedMcpAgentFile({
