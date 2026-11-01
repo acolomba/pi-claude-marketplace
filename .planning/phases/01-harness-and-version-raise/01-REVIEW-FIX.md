@@ -1,130 +1,116 @@
 ---
 phase: 01-harness-and-version-raise
-fixed_at: 2026-11-01T06:50:39Z
+fixed_at: 2026-11-01T07:05:56Z
 review_path: .planning/phases/01-harness-and-version-raise/01-REVIEW.md
-iteration: 1
-findings_in_scope: 5
-fixed: 5
+iteration: 3
+findings_in_scope: 2
+fixed: 2
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 1: Code Review Fix Report
 
-**Fixed at:** 2026-11-01T06:50:39Z
-**Source review:** .planning/phases/01-harness-and-version-raise/01-REVIEW.md
-**Iteration:** 1
+**Fixed at:** 2026-11-01T07:05:56Z
+**Source review:** .planning/phases/01-harness-and-version-raise/01-REVIEW.md (iteration-2 review)
+**Iteration:** 3
 
 **Summary:**
-- Findings in scope: 5 (WR-01..WR-05; fix scope `critical_warning`, so IN-01..IN-04 were not attempted)
-- Fixed: 5
+- Findings in scope: 2. WR-01 is in scope under `critical_warning`. The orchestrator added IN-05, because D-CF1-01 requires backslash escapes to match exactly. IN-01..IN-04 were left alone, as the orchestrator directed.
+- Fixed: 2
 - Skipped: 0
 
 **Where verification ran:** in the main checkout `/home/user/pi-claude-marketplace`
 (branch `claude/quirky-planck-hhm592`), not in an isolated worktree. Each commit
-went through the normal pre-commit hook, which ran `npm run check:commit` and
-passed. The root-sandbox wrapper (`npm_config_script_shell=.../nondac-sh`,
-`NODE_OPTIONS=--max-old-space-size=6144`) was set for every npm script and commit.
+went through the normal pre-commit hook. The hook ran `npm run check:commit`
+(static checks, `test:unpaired`, and direct coverage for the staged
+`shell-words` pair), and it passed. Every npm script and commit ran with the
+root-sandbox wrapper (`npm_config_script_shell=.../nondac-sh`,
+`NODE_OPTIONS=--max-old-space-size=6144`). The full `npm run check` was not
+re-run.
 
 ## Fixed Issues
 
-### WR-01: `\$` after a quoted piece or expansion tokenizes differently from upstream
+### WR-01: `skipBareDollar` drops the `\$` after a glued assignment value
 
 **Files modified:** `extensions/pi-claude-marketplace/domain/shell-words.ts`, `test/domain/shell-words.test.ts`
-**Commit:** f9e7659
-**Status:** fixed: requires human verification (tokenizer logic)
-**Applied fix:** A new `skipBareDollar` runs after each word that `readCommandItem`
-reads. When the word's last piece is not unquoted text and is not a lone `$`, and
-the text continues with `\$` followed by a blank, a double quote, a newline, or
-the end of the text, the port skips that `\$`. tree-sitter-bash reads it there as
-a bare `$` token, and `Vst` drops that token. A quoted piece after it becomes a
-word of its own. Two context rules came from the oracle and differ from the
-reviewer's sketch. The skip also runs for a here-string target once the command
-has a name (`x <<< "a"\$ b` gives `["x","b"]`). It does not run for a redirect
-target before the command name (`> "a"\$ b` gives `["$","b"]`). After a lone `$`,
-the `\$` stays a word (`x $\$ b` gives `["x","$","b"]`).
+**Commit:** 3d8d144
+**Applied fix:** `readCommandItem` now calls `skipBareDollar` only when the
+command is already named or the word is not an assignment
+(`command.named || !ASSIGNMENT.test(word.raw)`). This is the reviewer's guard.
+The four oracle rows `x="a"\$ b c`, `x='a'\$ b`, `x=$X\$ b`, and `x=b"a"\$ b`
+were added to `UPSTREAM_ROWS`. I re-checked each one against the oracle
+(tree-sitter-bash 0.25.1, `scripts/ck2.mjs`).
 
-Oracle: the research harness `scripts/ck.mjs` / `ck2.mjs` (tree-sitter-bash 0.25.1)
-in the session scratchpad.
-- The reviewer's generator (`gen2.mjs`: quotes, backslashes, `$X`/`${X}`, words)
-  produced 7 random batches, 28,000 inputs in all. Before the fix, 124 inputs per
-  4,000 differed. After the fix, 0 differ.
-- A wider punctuation generator (redirects, `;`, `(`, `)`, keywords, `$(...)`,
-  newlines) produced 9 batches, 36,000 inputs. Old and new ports were compared with
-  upstream: 0 regressions, and about 25 inputs fixed per 4,000.
-- A 270-input context grid placed `\$` after each piece kind, before about 30
-  following characters. Only two error-recovery classes still differ, and both are
-  recorded as residual rows:
-  - `x "a"\$)b c`: a `)` inside a word. It is the general `)`-recovery residual,
-    since `x a)b c` differs the same way.
-  - `"a"\$(b) c`: `\$(` in command-name position, which tree-sitter turns into an
-    ERROR node.
+Oracle results. "HEAD" is the tree before this fix. "old" is the copy from
+before f9e7659.
 
-Test changes:
-- 12 oracle-checked rows joined `UPSTREAM_ROWS`, including the reviewer's five
-  inputs.
-- `x 'a'\$ y` moved from `RESIDUAL_ROWS` to `UPSTREAM_ROWS`.
-- The two error-recovery residuals above joined `RESIDUAL_ROWS`.
-- Direct coverage stays 100% (225/225 branches), and fallow health passes.
+| set | inputs | match after fix | match at HEAD | regressions vs HEAD | regressions vs old | fixed vs HEAD |
+|---|---|---|---|---|---|---|
+| reviewer grid (`rr2/grid.jsonl`) | 53,248 | 44,169 | 43,689 | 0 | 0 | 480 |
+| gen2 (`rr2/u.jsonl`) | 28,270 | 28,260 | 28,260 | 0 | 0 | 0 |
+| punctuation (`rr2/v.jsonl`) | 36,000 | 27,833 | 27,833 | 0 | 0 | 0 |
+| `up2`..`up5`, `fixer/rows` | 6,979 | unchanged | unchanged | 0 | 0 | 0 |
 
-### WR-02: Explicit `shell: bash` on Windows without Git Bash silently runs PowerShell
+### IN-05: A lone `$` followed by `\$<char>` differs from upstream
 
-**Files modified:** `extensions/pi-claude-marketplace/platform/prompt-shell.ts`, `test/platform/prompt-shell.test.ts`
-**Commit:** c1c71bc
-**Applied fix:** `selectPromptShell` now returns a discriminated
-`PromptShellChoice`:
-- `{ kind: "shell", shell }` when a shell can run.
-- `{ kind: "bash-missing" }` when the frontmatter declares `shell: bash` and Bash
-  is unavailable (Windows without Git Bash).
+**Files modified:** `extensions/pi-claude-marketplace/domain/shell-words.ts`, `test/domain/shell-words.test.ts`
+**Commit:** 1e0d0e9
+**Outcome: ported.** It stays within the ESLint and fallow complexity limits
+(`eslint --max-warnings 0` is clean, `fallow health` reports no `shell-words`
+finding, and `check:commit` passed). Direct coverage of `shell-words.ts` stays
+at 100% lines, branches, and functions.
 
-The order follows upstream `HRe`. The refusal is checked before the PowerShell
-flag, so `CLAUDE_CODE_USE_POWERSHELL_TOOL=1` does not rescue a declared
-`shell: bash`. A new `bashMissingMessage(invocation)` returns upstream's text. I
-found that text in `/opt/claude-code/bin/claude` 2.1.316, in `HRe`. `U0` is
-`` `Install ${$We}` `` and `$We` is `"Git for Windows (https://git-scm.com/downloads/win)"`:
+**Applied fix:** two rules, both measured against the oracle. The parse trees
+show that both come from tree-sitter-bash error recovery: it wraps the lone `$`
+in an ERROR node.
 
-> Skill /<name> requires bash (`shell: bash` in frontmatter) but Git Bash was not found. Install Git for Windows (https://git-scm.com/downloads/win), or change the skill's frontmatter to `shell: powershell`.
+1. In `readDollar`, if `\$` and a letter or decimal digit follow a lone `$`
+   (`/\\\$[\p{Alphabetic}\p{Nd}]/uy`), the three characters form one
+   expansion piece that keeps its backslash. Any later word text joins it, so
+   `x $\$5 y` gives `["x","$\\$5","y"]`. I checked the character class on all
+   94 printable ASCII characters and 26 non-ASCII ones (`é`, `ß`, `中`, `²`,
+   `½`, `①`, `Ⅳ`, `٣`, a combining accent, an emoji, `＿`, and others). `_`,
+   `²`, `½`, and `①` are excluded upstream, and the class excludes them too.
+2. In `addWord`, before the command is named, a word that is a lone `$`
+   followed by `\$` is dropped. The `\$` word then names the command, so
+   `$\$ b` gives `["$","b"]` and `$\$$X b` gives `["$$X","b"]`.
 
-Upstream says "Skill" for commands too. It passes `` `/${e}` `` as the name. It
-throws at the top of `HRe`, before it scans for `!` patterns, so a body with no
-`!` commands also fails. The doc comment records this so that the Phase 2 and
-Phase 3 wiring can match it. Tests cover the refusal with and without the
-PowerShell flag, and assert the exact message text. Direct coverage is 100%
-(86/86 branches). The module is not wired to any user path yet, so this change
-needs no cucumber scenario.
+New `UPSTREAM_ROWS`, each re-checked against the oracle: `x $\$5 y`,
+`x $\$a b`, `x $\$é y`, `x $\$_ y` (the excluded `_`), `$\$ b`, and `$\$$X b`.
 
-### WR-03: CI behavioral shards list directories, so a new feature directory silently drops out of CI
+Oracle results. "HEAD" here is 3d8d144, the tree after the WR-01 fix.
 
-**Files modified:** `test/architecture/behavioral-shard-coverage.test.ts` (new), `.github/workflows/ci.yml` (comment only), `.agents/skills/cucumber/rules/world-and-stand-ins.md`
-**Commit:** 752ba55
-**Applied fix:** A new architecture test runs in `test:unpaired`, so the commit
-hook and CI both run it. It reads the `behavioral` job's matrix `paths` from
-`ci.yml`, both the inline form and the folded `>-` form. It fails when a
-`features/**/*.feature` file is in no shard, or in two. To keep it from passing
-on nothing, it also asserts that the workflow names at least one shard and that
-`features/` holds at least one feature file. The shard shape from D-CF1-16 did
-not change. A manual negative control (a temporary `features/command/tmp.feature`,
-deleted afterward) made the test fail. The ci.yml comment and the cucumber skill's
-CI rule now name the gate.
+| set | inputs | match after fix | match at 3d8d144 | regressions vs 3d8d144 | fixed |
+|---|---|---|---|---|---|
+| reviewer grid | 53,248 | 45,208 | 44,169 | 0 | 1,039 |
+| gen2 | 28,270 | 28,260 | 28,260 | 0 | 0 |
+| punctuation | 36,000 | 27,859 | 27,833 | **1** | 26 net (27 fixed) |
+| character probe (`fixer3/chars.jsonl`) | 198 | 187 | 28 | 0 | 159 |
+| Unicode probe (`fixer3/uni.jsonl`) | 42 | 42 | 9 | 0 | 33 |
+| `up2`..`up5`, `fixer/rows` | 6,979 | unchanged | unchanged | 0 | 0 |
 
-### WR-04: The launch-environment profile-Pi step runs under the 30-second default timeout
+The one regression is `$\$ [=x=1 ;\'q'`. A later statement there holds an
+unclosed single quote, and that changes how tree-sitter-bash recovers the
+first command: it keeps the lone `$` as the command name. The smallest form I
+found is `$\$ b; c'`, which gives upstream `["$","$","b"]` and port `["$","b"]`.
+This is error recovery after an unclosed quote, which D-CF1-01 licenses. I
+recorded `$\$ b; c'` in `RESIDUAL_ROWS` with upstream's output.
 
-**Files modified:** `features/step_definitions/mcp-server/calls.steps.ts`
-**Commit:** ea45db2
-**Applied fix:** The step now passes `{ timeout: PROFILE_PI_START_TIMEOUT_MS }`,
-imported from `features/support/world.ts`. `npx cucumber-js features/mcp-server`
-passed: 3 scenarios.
+**Remaining lone-`$\$` differences (not ported):** a lone `$\$` followed by
+`'`, `(`, `)`, `` ` ``, `{`, or `}`. Examples: `x $\$'q y` gives upstream
+`["x"]`, and `x $\$}q y` gives upstream `["x","q","y"]`. Every one of these
+also leaves a quote or bracket unbalanced, so tree-sitter-bash recovers
+differently by context. They fall under the module header's best-effort
+error-recovery clause. 11 of the 198 character-probe inputs still differ, all of this kind.
 
-### WR-05: The untrusted start has a shorter timeout than the trusted start
-
-**Files modified:** `features/step_definitions/companion.steps.ts`
-**Commit:** 954f329
-**Applied fix:** `UNTRUSTED_START_TIMEOUT_MS = 2 * PROFILE_PI_START_TIMEOUT_MS`
-(180 s), and the comment now gives the reason. The two untrusted-project
-scenarios passed.
+**Behavioral test:** none added. `splitArguments` has no production caller
+yet. Its only importer is `domain/argument-substitution.ts`, which nothing
+imports. Both are in `.fallowrc.json`'s `dynamicallyLoaded` list (IN-02). So no
+`/claude:plugin` behavior changes.
 
 ---
 
-_Fixed: 2026-11-01T06:50:39Z_
+_Fixed: 2026-11-01T07:05:56Z_
 _Fixer: Claude (gsd-code-fixer)_
-_Iteration: 1_
+_Iteration: 3_
