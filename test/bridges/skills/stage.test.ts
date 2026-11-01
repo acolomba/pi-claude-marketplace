@@ -16,6 +16,7 @@ import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/s
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
 
+import type { StageSkillsCommitResult } from "../../../extensions/pi-claude-marketplace/bridges/skills/types.ts";
 import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
 // Builtin-module patching that remains in this file, and why. The removal port
@@ -107,6 +108,50 @@ async function stageSingleSkill(
     "utf8",
   );
   return { stagedBytes, pluginRoot, pluginDataDir };
+}
+
+/**
+ * Stages every skill directory of `sources` (directory name to `SKILL.md`
+ * text) of the plugin `acme` and returns the warnings of the staged result
+ * with the plugin's skills directory.
+ */
+async function stagedSkillWarnings(
+  t: TestContext,
+  sources: Readonly<Record<string, string>>,
+): Promise<{ warnings: StageSkillsCommitResult["warnings"]; skillsDirectory: string }> {
+  const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+    t,
+    "skills-stage-warnings-",
+  );
+  const skillsDirectory = path.join(pluginRoot, "skills");
+  for (const [directory, source] of Object.entries(sources)) {
+    await mkdir(path.join(skillsDirectory, directory), { recursive: true });
+    await writeFile(path.join(skillsDirectory, directory, "SKILL.md"), source);
+  }
+
+  const resolved = {
+    installable: true,
+    state: "installable",
+    name: "acme",
+    pluginRoot,
+    supported: ["skills"],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  } satisfies ResolvedPluginInstallable;
+  const prepared = await prepareStageSkills(createRemovalOps(), {
+    locations,
+    cwd: scopeRoot,
+    knownWorkflowNames: [],
+    pluginName: "acme",
+    pluginRoot,
+    pluginDataDir,
+    resolved,
+  });
+  assert.strictEqual(prepared.kind, "staged");
+  return { warnings: prepared.result.warnings, skillsDirectory };
 }
 
 describe("prepareStageSkills", () => {
@@ -1132,6 +1177,54 @@ describe("prepareStageSkills", () => {
         recordLine(["acme:review", "clash"], pluginRoot, pluginDataDir) +
         "---\n",
     );
+  });
+
+  test("D-CF2-08: follows the discovery warnings with each skill's dropped fields in skill order", async (t) => {
+    // arrange
+    const sources = {
+      "acme-tool": "---\nname: acme-tool\ndescription: Winning\nagent: helper\n---\n",
+      review: "---\nname: review\nmodel: opus\ndescription: Reviews\neffort: high\n---\n",
+      tool: "---\nname: tool\ndescription: Losing\nhooks: {}\n---\n",
+    };
+
+    // act
+    const { warnings, skillsDirectory } = await stagedSkillWarnings(t, sources);
+
+    // assert
+    assert.deepStrictEqual(warnings, [
+      {
+        kind: "discovery",
+        message:
+          'skill source "tool" in "' +
+          skillsDirectory +
+          '" elides to generated name "acme-tool", already produced by skill source ' +
+          '"acme-tool"; ignoring duplicate.',
+      },
+      { kind: "discovery", message: "[acme-tool] dropped fields: agent" },
+      { kind: "discovery", message: "[review] dropped fields: model, effort" },
+    ]);
+  });
+
+  test("D-CF2-08: reports the dropped fields of a skill whose frontmatter was repaired", async (t) => {
+    // act
+    const { warnings } = await stagedSkillWarnings(t, {
+      helper: "---\nname: helper\ndescription: Use this: when reviewing\nmodel: opus\n---\n",
+    });
+
+    // assert
+    assert.deepStrictEqual(warnings, [
+      { kind: "discovery", message: "[helper] dropped fields: model" },
+    ]);
+  });
+
+  test("D-CF2-08: reports nothing for a skill that sets none of the dropped fields", async (t) => {
+    // act
+    const { warnings } = await stagedSkillWarnings(t, {
+      plain: "---\nname: plain\ndescription: Plain\nallowed-tools: Read\n---\n",
+    });
+
+    // assert
+    assert.deepStrictEqual(warnings, []);
   });
 
   test("D-CF2-02: replaces an author's own record key with the stored record", async (t) => {

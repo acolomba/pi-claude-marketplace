@@ -22,9 +22,9 @@ Feature: Skill frontmatter
     Given the marketplace "fixtures" is added to the project scope
     When the user runs "/claude:plugin install demo@fixtures --scope project"
     Then the command reports these results:
-      | kind       | severity | needs reload | summary                             | header                                                              | lines                                  |
-      | cascade    | warning  | true         | A plugin operation needs attention. |                                                                     |                                        |
-      | diagnostic | warning  | false        |                                     | Plugin "demo" [project] installed; 1 declared component has a note. | [review] dropped fields: model, effort |
+      | kind       | severity | needs reload | header                                                              | lines                                  |
+      | cascade    | info     | true         |                                                                     |                                        |
+      | diagnostic | warning  | false        | Plugin "demo" [project] installed; 1 declared component has a note. | [review] dropped fields: model, effort |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |

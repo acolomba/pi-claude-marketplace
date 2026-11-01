@@ -20,6 +20,7 @@ import { cp, lstat, mkdir, readdir, readFile, rename, rm, stat, writeFile } from
 import path from "node:path";
 
 import { descriptionFallback } from "../../domain/description-fallback.ts";
+import { droppedInvocationFieldsWarning } from "../../domain/invocation-frontmatter.ts";
 import { assertSafeName } from "../../domain/name.ts";
 import { rewriteMarkdownReferences } from "../../domain/skill-tokens.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
@@ -268,6 +269,8 @@ interface StagedSkill {
   readonly stagedDir: string;
   readonly targetDir: string;
   readonly degraded: SkillDegradeRecord | undefined;
+  /** D-CF2-08: the dropped-fields line, `undefined` when there is none. */
+  readonly droppedFields: string | undefined;
 }
 
 /**
@@ -333,8 +336,13 @@ async function stageSkill(
   // `description`, so it skips both. SK-4 substitution runs on both arms.
   // D-CF2-02: the synthesized arm keeps no frontmatter `name`, so it claims
   // its identity alone.
+  // D-CF2-08 / D-CF1-05: the fields Pi cannot honor are read from the
+  // source frontmatter. A degraded skill reports none, because its SKILL-01
+  // record already names the parse failure.
   let frontmatterAliases: readonly string[] = [];
+  let droppedFields: string | undefined;
   if (parsed !== undefined) {
+    droppedFields = droppedInvocationFieldsWarning(skill.sourceName, parsed.frontmatter);
     content = rewriteFrontmatterName(content, skill.generatedName);
     content = augmentSkillDescription(content, parsed.frontmatter, parsed.body, skillVars);
     frontmatterAliases = frontmatterNameAliases(pluginName, parsed.frontmatter.name);
@@ -368,7 +376,7 @@ async function stageSkill(
   // it rides the caller's cleanup catch; never mask it as author degradation.
   parseFrontmatter(content);
 
-  return { stagedDir, targetDir, degraded: source.degraded };
+  return { stagedDir, targetDir, degraded: source.degraded, droppedFields };
 }
 
 /**
@@ -436,6 +444,7 @@ export async function prepareStageSkills(
   const stagedNames: string[] = [];
   const recorded: StagedSkillRecord[] = [];
   const degraded: SkillDegradeRecord[] = [];
+  const droppedFieldLines: string[] = [];
   const context: SkillStagingContext = {
     pluginName,
     pluginRoot,
@@ -465,6 +474,10 @@ export async function prepareStageSkills(
         degraded.push(staged.degraded);
       }
 
+      if (staged.droppedFields !== undefined) {
+        droppedFieldLines.push(staged.droppedFields);
+      }
+
       renamePairs.push({ from: staged.stagedDir, to: staged.targetDir });
       stagedNames.push(skill.generatedName);
       recorded.push({
@@ -488,7 +501,8 @@ export async function prepareStageSkills(
     result: {
       stagedNames: Object.freeze(stagedNames),
       recorded: Object.freeze(recorded),
-      warnings: Object.freeze(discoverWarnings.map(discoveryWarning)),
+      // D-CF2-08: a discovery warning, so a standalone install shows it.
+      warnings: Object.freeze([...discoverWarnings, ...droppedFieldLines].map(discoveryWarning)),
       degraded: Object.freeze(degraded),
     },
     _previousNames: Object.freeze(previousNames),
