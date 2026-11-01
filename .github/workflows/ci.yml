@@ -131,11 +131,10 @@ jobs:
   # test/architecture/behavioral-shard-coverage.test.ts fails when a feature
   # file is in no shard or in two, so a new directory cannot drop out of CI.
   #
-  # Measured 2026-11-01, ESTIMATED: the branch was not on origin, so no CI run
-  # was dispatched. Local runs on 4 cores with `--parallel 8`, twice each in
-  # random order: lifecycle 94 s and 102 s (1158 scenarios), components 35 s
-  # and 35 s (11 scenarios). Doubled for a 4-vCPU hosted runner, that is
-  # about 3.4 and 1.2 minutes, so both shards take the 15-minute floor.
+  # Measured 2026-11-01 on a hosted ubuntu-latest runner (workflow_dispatch
+  # run 41283935457): lifecycle job 3 min 21 s (cucumber step 2 min 11 s,
+  # 1158 scenarios), components job 1 min 34 s (cucumber step 52 s, 11
+  # scenarios). Both shards take the 15-minute floor.
   # Re-measure after each component merge, and raise a timeout that no
   # longer holds 1.5 times its shard's run.
   behavioral:
