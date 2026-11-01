@@ -630,11 +630,13 @@ function discoverMapContent(
 interface DiscoveryState {
   readonly byGenerated: Map<string, DiscoveredCommand>;
   /**
-   * Keyed on the absolute source file. Two componentPaths.commands entries
-   * that overlap -- "commands" and "commands/build", say -- reach the same
-   * file at two different depths, so it generates two DIFFERENT names and
-   * generated-name dedup cannot see it. Keep the first discovery silently;
-   * distinct files that generate the same name still produce a warning.
+   * Keyed on the absolute source file of each admitted command. Two
+   * componentPaths.commands entries that overlap -- "commands" and
+   * "commands/build", say -- reach the same file at two different depths, so
+   * it generates two DIFFERENT names and generated-name dedup cannot see it.
+   * Keep the first admitted discovery silently; distinct files that generate
+   * the same name still produce a warning. WR-02: a file whose command lost
+   * its generated name was never loaded, so it claims no entry here.
    */
   readonly byFile: Map<string, DiscoveredCommand>;
   readonly warnings: string[];
@@ -658,7 +660,6 @@ function repeatsLoadedFile(
 
   const fileWinner = state.byFile.get(command.commandFile);
   if (fileWinner === undefined) {
-    state.byFile.set(command.commandFile, command);
     return false;
   }
 
@@ -679,7 +680,7 @@ function repeatsLoadedFile(
  * Folds one found command into the first-wins sets. `where` is the declared
  * path the command came from, or the plugin root for a map entry. A
  * generated name found again warns, in the map's wording for a map key
- * (D-07).
+ * (D-07). Only an admitted command claims its source file.
  */
 function admitCommand(
   state: DiscoveryState,
@@ -695,6 +696,10 @@ function admitCommand(
   const winner = state.byGenerated.get(command.generatedName);
   if (winner === undefined) {
     state.byGenerated.set(command.generatedName, command);
+    if (command.kind === "file") {
+      state.byFile.set(command.commandFile, command);
+    }
+
     return;
   }
 

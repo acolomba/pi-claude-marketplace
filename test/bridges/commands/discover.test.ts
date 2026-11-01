@@ -1038,6 +1038,75 @@ test("D-CF3-03 gives a declared path's command precedence over a command map key
   });
 });
 
+test("WR-02 names a command map key after a folder file whose elided name lost to another file", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-map-lost-name-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const commandsDirectory = path.join(directory, "commands");
+  const winningPath = path.join(commandsDirectory, "acme-lint.md");
+  const losingPath = path.join(commandsDirectory, "lint.md");
+  await mkdir(commandsDirectory, { recursive: true });
+  await writeFile(winningPath, "winner\n");
+  await writeFile(losingPath, "lint\n");
+  const resolved = resolvedPlugin(
+    directory,
+    ["commands"],
+    [{ key: "check", source: "commands/lint.md", origin: "entry" }],
+  );
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      {
+        kind: "file",
+        sourceName: "acme-lint",
+        generatedName: "acme:lint",
+        commandFile: winningPath,
+      },
+      { kind: "file", sourceName: "check", generatedName: "acme:check", commandFile: losingPath },
+    ],
+    warnings: [
+      `command source "lint" in "${commandsDirectory}" elides to generated name "acme:lint", already produced by command source "acme-lint"; ignoring duplicate.`,
+    ],
+  });
+});
+
+test("WR-02 loads a file under an overlapping command root after its name at the first root lost", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-overlap-lost-name-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const commandsDirectory = path.join(directory, "commands");
+  const winningPath = path.join(commandsDirectory, "acme-build", "web.md");
+  const losingPath = path.join(commandsDirectory, "build", "web.md");
+  await mkdir(path.dirname(winningPath), { recursive: true });
+  await mkdir(path.dirname(losingPath), { recursive: true });
+  await writeFile(winningPath, "winner\n");
+  await writeFile(losingPath, "web\n");
+  const resolved = resolvedPlugin(directory, ["commands", "commands/build"]);
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      {
+        kind: "file",
+        sourceName: "acme-build/web",
+        generatedName: "acme:build:web",
+        commandFile: winningPath,
+      },
+      { kind: "file", sourceName: "web", generatedName: "acme:web", commandFile: losingPath },
+    ],
+    warnings: [
+      `command source "build/web" in "${commandsDirectory}" elides to generated name "acme:build:web", already produced by command source "acme-build/web"; ignoring duplicate.`,
+    ],
+  });
+});
+
 test("D-CF3-03 discovers a plugin manifest's inline command map entry with its overrides", async (t) => {
   // arrange
   const directory = await mkdtemp(path.join(tmpdir(), "command-discover-map-inline-"));

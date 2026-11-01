@@ -388,6 +388,59 @@ Feature: Slash command manifest forms
       | /demo:gamma | Runs gamma. |
       | /demo:other | Runs other. |
 
+  Scenario: A marketplace entry's command map key names a folder file whose own command name another file took
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {
+        "name": "fixtures",
+        "owner": { "name": "features" },
+        "plugins": [
+          {
+            "name": "demo",
+            "source": "./plugins/demo",
+            "version": "1.0.0",
+            "commands": { "check": { "source": "./commands/lint.md" } }
+          }
+        ]
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "demo-lint" with this command file:
+      """
+      ---
+      description: Lints.
+      ---
+
+      Lint.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "lint" with this command file:
+      """
+      ---
+      description: Checks.
+      ---
+
+      Check.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                              | lines                                       |
+      | cascade    | info     | true         |                                                                     |                                             |
+      | diagnostic | warning  | false        | Plugin "demo" [project] installed; 1 declared component has a note. | command source "lint" in "[redacted path] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    When the user starts a new pi session
+    When the user lists the slash commands pi offers
+    Then pi offers these slash commands from prompt templates:
+      | command     | description |
+      | /demo:check | Checks.     |
+      | /demo:lint  | Lints.      |
+
   Scenario Outline: A command map entry that names both or neither of source and content makes the plugin unavailable
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
