@@ -32,6 +32,7 @@ import {
   World,
 } from "@cucumber/cucumber";
 
+import { inLoadOrder, resolveCompanion } from "../lib/companions.ts";
 import { npmConfigText, NpmRegistry } from "../lib/npm-registry.ts";
 import { readSession } from "../lib/pi-commands.ts";
 import { PiProcess } from "../lib/pi-process.ts";
@@ -41,6 +42,7 @@ import { harnessDirectory } from "../lib/turn-records.ts";
 
 import { currentRun } from "./pi-process.ts";
 
+import type { CompanionName } from "../lib/companions.ts";
 import type { GitPluginRepository } from "../lib/git-plugin.ts";
 import type { GitHostTraffic, HttpsGitHost, RequestWindow } from "../lib/https-git-host/server.ts";
 import type { NpmRegistryRequest } from "../lib/npm-registry.ts";
@@ -69,10 +71,13 @@ export interface ScopeBytes {
 
 /**
  * What a scenario's profile Pi loads and trusts (D-CF1-15). It always loads
- * the real extension and the scripted model, then `extraExtensions` in order.
- * It trusts the sandbox project unless `trust` is `untrusted` (D-CF1-07).
+ * the real extension and the scripted model, then `companions` in the fixed
+ * order pi-subagents, pi-mcp-adapter, pi-dynamic-workflows (HAR-01), then
+ * `extraExtensions` in order. It trusts the sandbox project unless `trust` is
+ * `untrusted` (D-CF1-07).
  */
 export interface PiProfile {
+  readonly companions: readonly CompanionName[];
   readonly extraExtensions?: readonly string[];
   readonly trust?: "trusted" | "untrusted";
 }
@@ -502,7 +507,9 @@ export class ScenarioWorld extends World {
    * group. A scenario that needs a model must not change the run's shared Pi,
    * which every other scenario reuses, so it gets a Pi of its own in the
    * run's sandbox, with the run's git environment. The profile Pi loads the
-   * real extension, the scripted model, and then `profile.extraExtensions`.
+   * real extension, the scripted model, the companions the profile names,
+   * each from its `pi.extensions` entry in the optional peer cache, and then
+   * `profile.extraExtensions`.
    * Its `TMPDIR` and its harness directory lie inside the sandbox home, which
    * the next scenario's `Before()` empties (HAR-05). It trusts the sandbox
    * project through a `trust.json` entry, as Pi records a user's answer to
@@ -532,8 +539,15 @@ export class ScenarioWorld extends World {
       await this.trustSandboxProject();
     }
 
+    const companions = await Promise.all(
+      inLoadOrder(profile.companions).map((name) => resolveCompanion(name)),
+    );
     const pi = await PiProcess.start(sandbox, piEnvironment, {
-      extensions: [SCRIPTED_MODEL_EXTENSION, ...(profile.extraExtensions ?? [])],
+      extensions: [
+        SCRIPTED_MODEL_EXTENSION,
+        ...companions.map((companion) => companion.entry),
+        ...(profile.extraExtensions ?? []),
+      ],
       environment: { TMPDIR: temporary },
     });
     this.onRelease(() => pi.stop());

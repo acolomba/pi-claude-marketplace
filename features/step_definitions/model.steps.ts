@@ -26,7 +26,7 @@ import type { ScenarioWorld } from "../support/world.ts";
 // HAR-01: a profile Pi started with no companion loads none, so no command
 // comes from the optional peer cache.
 Given("pi runs with the scripted model", async function (this: ScenarioWorld) {
-  await this.usePiWithProfile({});
+  await this.usePiWithProfile({ companions: [] });
   const { response } = await this.pi.request({ type: "get_commands" });
   const commands = listedCommands(response);
   assert.notDeepStrictEqual(commands, [], JSON.stringify(response));
