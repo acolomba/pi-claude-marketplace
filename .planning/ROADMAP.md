@@ -233,14 +233,14 @@ tests (`test/bridges/<kind>/**`) and integration tests
 
 01-01 finishes before 01-03: the faux import needs `pi-ai` in `package.json`, and the companion profile needs the engine in the peer cache. Wave 3 works only because wave 2 put every shared registration in place. If 01-01 grows because adapter 7.x needs larger `bridges/mcp` work, split it into a wave-1 raise plus file-disjoint per-companion fix plans. Once Phase 1 merges, each seed feature file belongs to its kind's phase.
 
-**Plans:** 15 plans in 4 waves (the nine above, split and extended at planning: 01-15 carries the file-disjoint half of the version raise, 01-10/12/13 build the invocation cores, 01-11 the component-directory rule in wave 2, 01-14 the `:-` delegation)
+**Plans:** 4/15 plans executed in 4 waves (the nine above, split and extended at planning: 01-15 carries the file-disjoint half of the version raise, 01-10/12/13 build the invocation cores, 01-11 the component-directory rule in wave 2, 01-14 the `:-` delegation)
 
 Plans:
 **Wave 1**
-- [ ] 01-01-PLAN.md — Wave 1: raise the declared floors and keep MCP literals literal under pi-mcp-adapter 7.x (VER-01..05, D-CF1-14)
-- [ ] 01-02-PLAN.md — Wave 1: cucumber ownership rules and the D-CF1 decision records (HAR-08, DEC-01, DEC-02)
-- [ ] 01-10-PLAN.md — Wave 1: command invocation seed in index.ts, fallow registration of the cores, description fallback and dropped-field cores (D-CF1-01/02/04/05)
-- [ ] 01-15-PLAN.md — Wave 1: Pi 1.4.0 e2e floor fixture, Pi API types, and the version docs (VER-01, VER-03, VER-06)
+- [x] 01-01-PLAN.md — Wave 1: raise the declared floors and keep MCP literals literal under pi-mcp-adapter 7.x (VER-01..05, D-CF1-14)
+- [x] 01-02-PLAN.md — Wave 1: cucumber ownership rules and the D-CF1 decision records (HAR-08, DEC-01, DEC-02)
+- [x] 01-10-PLAN.md — Wave 1: command invocation seed in index.ts, fallow registration of the cores, description fallback and dropped-field cores (D-CF1-01/02/04/05)
+- [x] 01-15-PLAN.md — Wave 1: Pi 1.4.0 e2e floor fixture, Pi API types, and the version docs (VER-01, VER-03, VER-06)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 01-03-PLAN.md — Wave 2: tracer, profile Pi with the scripted model and companions, skill seed (HAR-01/02/03/05/07)
@@ -407,7 +407,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Harness and Version Raise | 0/TBD | Not started | - |
+| 1. Harness and Version Raise | 4/15 | In Progress | - |
 | 2. Skills | 0/TBD | Not started | - |
 | 3. Slash Commands | 0/TBD | Not started | - |
 | 4. Agents | 0/TBD | Not started | - |
