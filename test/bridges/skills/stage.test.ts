@@ -55,6 +55,47 @@ async function allocateCasePaths(
   };
 }
 
+/**
+ * Stages the one skill directory `directory` of the plugin `acme`, whose
+ * `SKILL.md` holds `source`, and returns the staged `SKILL.md` bytes.
+ */
+async function stageSingleSkill(
+  t: TestContext,
+  directory: string,
+  source: string,
+): Promise<string> {
+  const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+    t,
+    "skills-stage-single-",
+  );
+  const skillsDirectory = path.join(pluginRoot, "skills");
+  await mkdir(path.join(skillsDirectory, directory), { recursive: true });
+  await writeFile(path.join(skillsDirectory, directory, "SKILL.md"), source);
+  const resolved = {
+    installable: true,
+    state: "installable",
+    name: "acme",
+    pluginRoot,
+    supported: ["skills"],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [skillsDirectory], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  } satisfies ResolvedPluginInstallable;
+  const prepared = await prepareStageSkills(createRemovalOps(), {
+    locations,
+    cwd: scopeRoot,
+    knownWorkflowNames: [],
+    pluginName: "acme",
+    pluginRoot,
+    pluginDataDir,
+    resolved,
+  });
+  assert.strictEqual(prepared.kind, "staged");
+  return readFile(path.join(prepared.stagingRoot, `acme-${directory}`, "SKILL.md"), "utf8");
+}
+
 describe("prepareStageSkills", () => {
   test("returns a complete no-op without materializing bridge directories", async (t) => {
     // arrange
@@ -779,10 +820,9 @@ describe("prepareStageSkills", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const expectedEmpty =
-      '---\nname: acme-empty\nversion: 1\ndescription: "No description provided."\n---\n';
+    const expectedEmpty = '---\nname: acme-empty\nversion: 1\ndescription: "Plugin skill"\n---\n';
     const expectedProse =
-      '---\nname: acme-prose\nversion: 2\ndescription: "First prose line. Second prose line."\n' +
+      '---\nname: acme-prose\nversion: 2\ndescription: "Heading"\n' +
       "---\n\n# Heading\n\nFirst prose line.\nSecond prose line.\n\nLater.\n";
     const expectedFoldedDescription = description + " " + "b".repeat(535);
     const expectedFolded =
@@ -822,6 +862,75 @@ describe("prepareStageSkills", () => {
     assert.strictEqual(proseBytes, expectedProse);
     assert.strictEqual(foldedBytes, expectedFolded);
     assert.deepStrictEqual(prepared.result.degraded, []);
+  });
+
+  for (const { behavior, source, expectedBytes } of [
+    {
+      behavior: "the first line of the body, without the rest of its paragraph",
+      source:
+        "---\nname: brief\n---\n\nFirst line of the brief.\nSecond line of the same paragraph.\n",
+      expectedBytes:
+        '---\nname: acme-brief\ndescription: "First line of the brief."\n---\n\n' +
+        "First line of the brief.\nSecond line of the same paragraph.\n",
+    },
+    {
+      behavior: "the text of a leading heading without its marks",
+      source: "---\nname: brief\n---\n\n# Review a change\n\nRead the diff.\n",
+      expectedBytes:
+        '---\nname: acme-brief\ndescription: "Review a change"\n---\n\n' +
+        "# Review a change\n\nRead the diff.\n",
+    },
+    {
+      behavior: "Plugin skill for an empty body",
+      source: "---\nname: brief\n---\n",
+      expectedBytes: '---\nname: acme-brief\ndescription: "Plugin skill"\n---\n',
+    },
+  ]) {
+    test(`D-CF2-07: fills a missing description with ${behavior}`, async (t) => {
+      // act
+      const stagedBytes = await stageSingleSkill(t, "brief", source);
+
+      // assert
+      assert.strictEqual(stagedBytes, expectedBytes);
+    });
+  }
+
+  test("NREG-01: keeps a present description byte for byte", async (t) => {
+    // arrange
+    const expectedBytes =
+      "---\nname: acme-brief\ndescription:   Kept as written  \n---\n\nFirst line.\n";
+
+    // act
+    const stagedBytes = await stageSingleSkill(
+      t,
+      "brief",
+      "---\nname: brief\ndescription:   Kept as written  \n---\n\nFirst line.\n",
+    );
+
+    // assert
+    assert.strictEqual(stagedBytes, expectedBytes);
+  });
+
+  test("WTU-01: folds when_to_use onto the fallback and cuts the result at 1,536", async (t) => {
+    // arrange
+    const whenToUse = "w".repeat(1600);
+    const expectedDescription = "First line. " + "w".repeat(1536 - "First line.\n".length);
+    const expectedBytes =
+      "---\nname: acme-brief\nwhen_to_use: " +
+      whenToUse +
+      '\ndescription: "' +
+      expectedDescription +
+      '"\n---\n\nFirst line.\n';
+
+    // act
+    const stagedBytes = await stageSingleSkill(
+      t,
+      "brief",
+      "---\nname: brief\nwhen_to_use: " + whenToUse + "\n---\n\nFirst line.\n",
+    );
+
+    // assert
+    assert.strictEqual(stagedBytes, expectedBytes);
   });
 
   test("escapes substituted backslashes in an authored description", async (t) => {

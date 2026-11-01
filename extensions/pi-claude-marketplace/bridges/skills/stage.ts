@@ -19,6 +19,7 @@ import { randomUUID } from "node:crypto";
 import { cp, lstat, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { descriptionFallback } from "../../domain/description-fallback.ts";
 import { assertSafeName } from "../../domain/name.ts";
 import { rewriteMarkdownReferences } from "../../domain/skill-tokens.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
@@ -31,7 +32,6 @@ import { substituteClaudeVars } from "../../shared/vars.ts";
 
 import { discoverPluginSkills } from "./discover.ts";
 import {
-  firstBodyParagraph,
   foldWhenToUse,
   repairSingleLineScalars,
   setDescriptionScalar,
@@ -96,22 +96,13 @@ function repairUnparseableFrontmatter(
 }
 
 /**
- * SKILL-02 empty probe: a well-formed skill with neither a `description` nor any
- * prose body yields an empty first-paragraph candidate, and Pi drops a skill
- * whose `description` is empty (`skill: null`). Emit a short fixed non-empty
- * scalar so the skill still loads. Distinct from the unparseable-source
- * placeholder (D-86-02): the frontmatter parsed cleanly here; only the
- * description is absent.
- */
-const MISSING_DESCRIPTION_PLACEHOLDER = "No description provided.";
-
-/**
  * SKILL-02 / WTU-01 / WTU-02: augment the `description` on the well-formed
  * (gate-1 RETURN) arm. Reads the PARSED `description` / `when_to_use` values and
  * the parsed `body`:
- *   - SKILL-02 / D-86-06: an absent or empty `description` is filled from the
- *     first body paragraph (`firstBodyParagraph`); an empty candidate falls back
- *     to a fixed non-empty placeholder so Pi still loads the skill.
+ *   - D-CF2-07 / D-CF1-04: an absent or empty `description` is filled with
+ *     Claude Code's fallback for the body, labelled `Plugin skill`. The
+ *     fallback is never empty, so Pi, which drops a skill whose `description`
+ *     is empty, still loads the skill.
  *   - WTU-01 / A1: a non-empty `when_to_use` is folded in after a single `\n`.
  *   - WTU-02 / D-86-05 / A2: the combined text is hard-cut at 1,536 code units
  *     (never Pi's 1,024 warning threshold).
@@ -132,7 +123,8 @@ function augmentSkillDescription(
   const rawWhenToUse = frontmatter.when_to_use;
   const whenToUse = typeof rawWhenToUse === "string" ? rawWhenToUse : "";
 
-  const base = sourceDescription === "" ? firstBodyParagraph(body) : sourceDescription;
+  const base =
+    sourceDescription === "" ? descriptionFallback(body, "Plugin skill") : sourceDescription;
   const folded = foldWhenToUse(base, whenToUse === "" ? undefined : whenToUse);
   // SK-4 / AG-8: substitute the Claude path vars BEFORE the value is escaped into
   // the double-quoted scalar. The later whole-file `substituteClaudeVars` (below)
@@ -141,10 +133,7 @@ function augmentSkillDescription(
   // backstop; substituting first lets `emitSafeDoubleQuotedScalar` escape those
   // backslashes. The cap is applied pre-substitution (the WTU-02 listing budget
   // measures the authored text), matching the prior whole-file ordering.
-  const effective = substituteClaudeVars(
-    truncate1536(folded === "" ? MISSING_DESCRIPTION_PLACEHOLDER : folded),
-    vars,
-  );
+  const effective = substituteClaudeVars(truncate1536(folded), vars);
 
   // NREG-01: a present, in-cap `description` with no `when_to_use` and no path
   // var to expand is unchanged -- do NOT re-emit it as a double-quoted scalar
