@@ -163,3 +163,39 @@ session writes this file. Each subagent ends its report with a
 - **Why dubious:** Until then, project-scope hooks from repository-controlled
   state can run commands with no provenance check (pre-existing exposure).
 - **Recorded in:** the last plan's SUMMARY "Parent lines".
+
+### P5-DC-12: Phase 5 planning choices
+
+- **Phase / source:** gsd-planner (8 plans, 4 waves) and the pattern mapper.
+- **Severity:** Medium. **Status:** open.
+- **Choices:**
+  1. Four waves instead of the ROADMAP's three; both wave-3 plans depend on
+     every wave-2 plan, which serializes the waves.
+  2. `onFailure` lands in wave 1 (05-02), reading the field through the
+     handler index signature; 05-04 adds it to the schema in wave 2.
+  3. The notice kind is named `hook-notice`; error notices use `info`
+     severity; exit-2 block notices also show on SessionStart, SessionEnd,
+     and PostCompact (beyond D-CF5-24); the blocked-prompt notice leaves out
+     upstream's "Original prompt:" line.
+  4. `ask` stays a mutate `permissionDecision` with no new result arm; the
+     PreToolUse block reason uses upstream's text (D-CF5-11).
+  5. The prompt-context buffer sits beside the SessionStart buffer (different
+     lifetimes).
+  6. Deferred to BACKLOG parent lines: PostToolUse `continue:false`, a Stop
+     hook error notice, non-blocking error notices for exits other than 0 and
+     2, PreCompact exit-2 blocking, the `updatedToolOutput` shapes.
+  7. If the TUI driver is flaky, the TUI reload and quit scenarios fall back
+     to unit tests. Async-rewake substitution and the Stop/async `onFailure`
+     ignore are unit-tested only. The second-compaction scenario states only
+     the second run.
+  8. D-CF5-20's "info names it" is met through the unsupported reason only.
+  9. Threat T-05-28 (project-scope hooks without provenance, high) is
+     `transfer` to the merge (P5-DC-11), which `/gsd-secure-phase` may flag.
+     The guard insertion point is named as `tryHydrateOnePlugin`; a second
+     routing-cache writer (`readAndCachePluginHooksWith`) is named for the
+     parent.
+  10. `planSpawn` substitution takes the three path values, not the env
+      (pattern mapper; avoids unreachable `?? ""` branches).
+  11. Unverified assumptions: how plain stdout is trimmed, and the
+      `[command]` text in `onFailure` messages.
+- **Recorded in:** `05-0*-PLAN.md`, `05-PATTERNS.md`.
