@@ -393,18 +393,18 @@ Plans:
 - Wave 3: decision IDs, the re-measured `docs/mcp-compatibility.md` rows (FG-30), SUMMARY lines for the parent, and the phase gate.
 - Owns: `features/mcp-server/**`, `features/step_definitions/mcp-server/**`, `features/lib/mcp-server-files.ts`, `bridges/mcp/**` (including Phase 1's escape fix once merged), `platform/mcp-status.ts`, `domain/mcp-resolution.ts`, `domain/components/mcp.ts`, `docs/mcp-compatibility.md`, `test/bridges/mcp/**`, `test/integration/mcp-*`. MCP-07 uses Phase 1's agent fixture writer and stand-ins, never a Phase 4 file.
 
-**Plans:** 1/9 plans executed in 4 waves (the template's wave-2 "configuration variants and sources" plan splits into a configuration plan and a sources plan with disjoint files; FG-28's silent skip moves to wave 3 because it edits `domain/mcp-resolution.ts`, which the wave-2 sources plan owns, and it changes outcomes that non-owned tests pin; the docs re-measure runs in wave 3 beside it, so the decision records, the parent lines, and the phase gate are wave 4; wave 1 also moves the Phase 1 seed's steps out of `calls.steps.ts` and the allowed project-scope scenario into `project-scope.feature`)
+**Plans:** 6/9 plans executed in 4 waves (the template's wave-2 "configuration variants and sources" plan splits into a configuration plan and a sources plan with disjoint files; FG-28's silent skip moves to wave 3 because it edits `domain/mcp-resolution.ts`, which the wave-2 sources plan owns, and it changes outcomes that non-owned tests pin; the docs re-measure runs in wave 3 beside it, so the decision records, the parent lines, and the phase gate are wave 4; wave 1 also moves the Phase 1 seed's steps out of `calls.steps.ts` and the allowed project-scope scenario into `project-scope.feature`)
 
 Plans:
 **Wave 1**
 - [x] 06-01-PLAN.md — Wave 1 tracer: listing and Claude Code's tool names through the `mcp` proxy, the shared MCP steps, every fixture writer wave 2 needs, and the project-scope scenario move (MCP-01; D-CF6-05, D-CF6-06, D-CF6-07, D-CF6-09)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 06-02-PLAN.md — Wave 2: env values, `${VAR}` and `${VAR:-default}`, the plugin path variables, and a loopback remote server with headers (MCP-03; D-CF6-06)
-- [ ] 06-03-PLAN.md — Wave 2: merge `.mcp.json` and manifest servers in Claude Code's order, array sources, and the entry read only without a `plugin.json` (MCP-04; D-CF6-01)
-- [ ] 06-04-PLAN.md — Wave 2: a direct call to an activated tool and the pinned pi-subagents foreground gap (MCP-02, MCP-07; D-CF6-07, D-CF6-10)
-- [ ] 06-05-PLAN.md — Wave 2: companion-missing recovery and project-scope servers under the adapter's project trust (MCP-05, MCP-06; D-CF6-03, D-CF6-08, D-CF6-11)
-- [ ] 06-06-PLAN.md — Wave 2: disable, uninstall, enable, and update, with a user's override surviving each verb (MCP-08; D-CF6-09, D-CF6-11)
+- [x] 06-02-PLAN.md — Wave 2: env values, `${VAR}` and `${VAR:-default}`, the plugin path variables, and a loopback remote server with headers (MCP-03; D-CF6-06)
+- [x] 06-03-PLAN.md — Wave 2: merge `.mcp.json` and manifest servers in Claude Code's order, array sources, and the entry read only without a `plugin.json` (MCP-04; D-CF6-01)
+- [x] 06-04-PLAN.md — Wave 2: a direct call to an activated tool and the pinned pi-subagents foreground gap (MCP-02, MCP-07; D-CF6-07, D-CF6-10)
+- [x] 06-05-PLAN.md — Wave 2: companion-missing recovery and project-scope servers under the adapter's project trust (MCP-05, MCP-06; D-CF6-03, D-CF6-08, D-CF6-11)
+- [x] 06-06-PLAN.md — Wave 2: disable, uninstall, enable, and update, with a user's override surviving each verb (MCP-08; D-CF6-09, D-CF6-11)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 06-07-PLAN.md — Wave 3: skip a malformed server or a bad MCP file silently; inline and escaping cases stay fatal (MCP-04; D-CF6-02)
@@ -446,7 +446,7 @@ Plans:
 | 3. Slash Commands | 0/TBD | Not started | - |
 | 4. Agents | 0/TBD | Not started | - |
 | 5. Hooks | 0/TBD | Not started | - |
-| 6. MCP Servers | 1/9 | In Progress | - |
+| 6. MCP Servers | 6/9 | In Progress | - |
 | 7. Workflows | 0/TBD | Not started | - |
 
 ## Carried Forward

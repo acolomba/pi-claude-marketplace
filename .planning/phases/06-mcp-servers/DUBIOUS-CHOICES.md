@@ -159,3 +159,65 @@ tooling. Status stays `open` until the user reviews it.
   4. Array elements of `mcpServers` are not expanded as stub markers (a server takes its name from a member key).
   5. The MCP-07 agent fixture body text "Call the tools the task names." was chosen by the executor.
 - **Recorded in:** `06-01-SUMMARY.md`.
+
+### P6-DC-12: Plan 06-04 executor choices (tool calls and the agent gap)
+
+- **Phase / source:** Phase 6 executor for `06-04-PLAN.md` (`06-04-SUMMARY.md`).
+- **Severity:** Medium (item 1); the rest Low. **Status:** open.
+- **Items:**
+  1. The negative control pins the measured stub log (adapter 7.0.0 reconnects and lists tools a second time before answering "not found", sending no `tools/call`) and is retitled "A call to a tool the plugin's server does not list is never sent to the server", against the plan's must-have "its log holds only the startup listing".
+  2. "(D-CF6-10)" appears in two scenario titles and the feature description, relying on the layout rule that a divergence scenario names its ID.
+  3. The no-tools agent scenario keeps a stub server and compares its log, beyond the plan's list, to prove a plugin tool exists but is withheld.
+  4. The agent Givens check only the written file's `tools:` lines, not the whole text.
+  5. REQUIREMENTS.md was not updated by the executor (MCP-02/MCP-07 left to the orchestrator; MCP-07 is met only as a gap).
+- **Recorded in:** `06-04-SUMMARY.md`.
+
+### P6-DC-13: Plan 06-02 executor choices (server configuration)
+
+- **Phase / source:** Phase 6 executor for `06-02-PLAN.md` (`06-02-SUMMARY.md`).
+- **Severity:** Medium (items 2, 4); the rest Low. **Status:** open.
+- **Items:**
+  1. HTTP request Thens state the POSTs in arrival order and the other requests (the SDK's event-stream `GET`, which arrives within 1 ms of `tools/list`) in any order.
+  2. The HTTP listing wait ends at the first logged `tools/list`; a small gap remains before the adapter closes its client (no failure in 15 runs).
+  3. A header the request did not carry shows as `(none)`, not the plan's empty cell, so an unset-variable header (`x-team: ""`) is told apart from a dropped one.
+  4. The OAuth scenario cannot tell OAuth mode from non-OAuth mode: it pins that an `auth: "oauth"` entry connects, sends the header, and starts no sign-in; only the integration test pins the written field.
+  5. Server names `tag` and `root` instead of the plan's `stub`, because 06-01's `withStubServers` reads a lone server named `stub` as a stub marker (parent line).
+  6. The environment preload is passed in `args` as a `file://` URL.
+  7. The loopback stand-in's answers differ slightly from the frozen stub's (no protocol-version fallback, no `required` in the echo schema) to avoid a fallow clone.
+- **Recorded in:** `06-02-SUMMARY.md`.
+
+### P6-DC-14: Plan 06-06 executor choices (lifecycle)
+
+- **Phase / source:** Phase 6 executor for `06-06-PLAN.md` (`06-06-SUMMARY.md`).
+- **Severity:** Medium (item 1); the rest Low. **Status:** open.
+- **Items:**
+  1. The update scenario's replacement `.mcp.json` uses the wrapper-less root form (`{"stub": {...}}`) because 06-01's `withStubServers` reads a `mcpServers` member as a stub marker; the scenario now also depends on a root `.mcp.json` being read without its wrapper, not checked against Claude Code 2.1.316.
+  2. Kept the named `readFile` import, leaving the criterion `grep -c readFile <= 1` unmet as written (one call site).
+  3. The override-survives-update scenario changes only the version, not the server definition.
+  4. The no-update control compares the stub's whole log, which cannot tell the versions apart; only the model's answer does.
+- **Recorded in:** `06-06-SUMMARY.md`.
+
+### P6-DC-15: Plan 06-05 executor choices (companion missing, project trust)
+
+- **Phase / source:** Phase 6 executor for `06-05-PLAN.md` (`06-05-SUMMARY.md`).
+- **Severity:** Medium (item 1); the rest Low. **Status:** open.
+- **Items:**
+  1. A Phase 6 copy of the calls step, `the model receives these mcp calls:`, reads `{em dash}` as U+2014 so the adapter's blocked reasons can be compared whole despite the `fix-unicode-dashes` hook; two calls steps now differ only in that projection, and the token is not yet in the frozen cucumber skill (parent line).
+  2. A polling Given runs `info` every 50 ms (15 s) until pi-mcp-adapter has reported, so the command under test doubles as the wait; a status that never leaves `status unknown` fails in the Given.
+- **Recorded in:** `06-05-SUMMARY.md`.
+
+### P6-DC-16: Plan 06-03 executor choices (server sources merge)
+
+- **Phase / source:** Phase 6 executor for `06-03-PLAN.md` (`06-03-SUMMARY.md`).
+- **Severity:** Medium (items 1, 2, 9); the rest Low. **Status:** open.
+- **Items:**
+  1. An `mcpServers` array with one bad element is refused whole (one note, no element read); upstream refuses the whole manifest, so there is no partial behavior to copy.
+  2. A file's server map is read with `Object.hasOwn(document, "mcpServers")`, not upstream's `G.mcpServers || G`; they differ when `mcpServers` is falsy (`null`, `0`, `""`).
+  3. A non-object `.mcp.json` document (`5`, `null`) now gets the note `malformed mcpServers: must be object` instead of an incidental "Cannot use 'in' operator" note; both stay `{malformed mcp}`.
+  4. A `.mcpb`/`.dxt` source adds no note, so `info` shows only `{unsupported mcp}` without naming the bundle.
+  5. An absolute or escaping `.mcpb` path is a fatal `malformed mcp reference` (containment runs first), matching upstream's refusal of such paths.
+  6. The no-plugin.json step text names its kind (`... has no plugin.json, so its marketplace entry declares its mcp servers`), differing from the plan's wording.
+  7. The comment above the MCPR-01 backstop test in `test/domain/plugin-resolver.test.ts` was edited, just outside the plan's strict `git diff` bound.
+  8. `[1]` replaces `[]` in the two refused plugin-schema lists in `test/domain/components/plugin.test.ts`.
+  9. The four Task 3 scenarios (entry, bundle, reference rules) have no measured red run; their red is argued from the old code.
+- **Recorded in:** `06-03-SUMMARY.md`.
