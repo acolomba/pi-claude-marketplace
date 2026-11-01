@@ -779,3 +779,21 @@ Full entries: `.planning/phases/06-mcp-servers/DUBIOUS-CHOICES.md`, P6-DC-01..22
 6. **P6-DC-07 item 5:** a reference without `./` stays installable; upstream refuses the manifest.
 - Also unfiled: a drafted pi-subagents gap report (user's call). Parent lines pending: CHANGELOG, PRD MC-1..4, PROJECT D-CF6-01..11, four BACKLOG items, output-catalog and hooks-compatibility docs, the canary re-run on 7.0.0, cucumber skill notes, the migration message rewording.
 - Merge: ROADMAP and STATE conflicts in the tracking tables only; the parent kept the milestone view.
+
+### DC-33: Phase 4 (Agents), merged at ef558e9
+
+Full entries: `.planning/phases/04-agents/04-DUBIOUS-CHOICES.md`, P4-DC-01..12. The child session ran discuss, plan (6 plans, 4 waves), execute, validation (compliant), security (19 threats, 0 open), one review round (one warning, fixed) and verification (passed 5/5). Phase transitioned on its branch.
+
+**For the user to review first (all High, settled without the user):**
+1. **D-CF4-04, skill preload:** a preloaded skill's content goes into the agent's system prompt, because pi-subagents passes only a path. Upstream puts it in the child's first user message. Each preloaded skill grows the generated agent file.
+2. **D-CF4-05, foreground default:** every non-MCP bridged agent now emits `async: false`, as upstream runs agents in the foreground; `background: true` emits `async: true`. Users who relied on pi-subagents' async default see a change.
+3. **D-CF4-14, `advertise: true`:** every bridged agent now appears in the parent system prompt, which changes every parent prompt when pi-subagents is loaded.
+4. **D-CF4-09, untrusted projects:** pi-subagents refuses project-scope agents in an untrusted folder; Claude Code runs them. Kept as a Pi-gap divergence and pinned.
+5. **D-CF4-10, AGT-04:** no scenario runs a background agent: the detached child cannot load the scripted model, and parent and child calls race on one script. Recorded as a gap.
+
+**Also:**
+6. **P4-DC-02 (process):** the Claude Code 2.1.316 probes ran under `env -i` with a fresh HOME, but the binary still reads `/home/claude/.claude/remote/.oauth_token` and `.session_ingress_token`. All 52 captured requests went to the local stub, no auth header was saved, no credential was written. Future probes should run where that directory is absent or unreadable.
+7. Nested agents flatten with `-` and can collide with a flat name (first wins, warns); dotfiles and case-insensitive `.md` load as upstream; `--map-model` targets the 5.x IDs; the fallback description is upstream's text.
+8. The branch carries `72f9a02 docs(04): record code review disposition` with a phase number and no trailers (a GSD helper commit, already pushed); the final squash merge drops it.
+- Parent lines pending: CHANGELOG, READMEs, PROJECT D-CF4-01..14, BACKLOG, PRD and `docs/env-vars.md`, cucumber skill notes, the unfiled pi-subagents defect report and Pi gap notes, and Phase 6's stale "cannot narrow" MCP warning.
+- Merge: REQUIREMENTS and STATE conflicts in the tracking tables only.
