@@ -14,7 +14,11 @@ async function createPluginRoot(t: TestContext, prefix: string): Promise<string>
   return pluginRoot;
 }
 
-function resolvedPlugin(pluginRoot: string, skills: readonly string[]): ResolvedPluginInstallable {
+function resolvedPlugin(
+  pluginRoot: string,
+  skills: readonly string[],
+  commands: readonly string[] = [],
+): ResolvedPluginInstallable {
   return {
     installable: true,
     state: "installable",
@@ -23,7 +27,7 @@ function resolvedPlugin(pluginRoot: string, skills: readonly string[]): Resolved
     supported: ["skills"],
     unsupported: [],
     notes: [],
-    componentPaths: { skills: [...skills], commands: [], agents: [], workflows: [] },
+    componentPaths: { skills: [...skills], commands: [...commands], agents: [], workflows: [] },
     mcpServers: {},
     defaultEnabled: true,
   };
@@ -35,6 +39,11 @@ async function writeSkill(skillDirectory: string, name: string): Promise<void> {
     path.join(skillDirectory, "SKILL.md"),
     `---\nname: ${name}\ndescription: The ${name} skill.\n---\n\nThe ${name} body.\n`,
   );
+}
+
+async function writeCommand(commandFile: string): Promise<void> {
+  await mkdir(path.dirname(commandFile), { recursive: true });
+  await writeFile(commandFile, "---\ndescription: A command.\n---\n\nThe command body.\n");
 }
 
 test("returns no skills when the plugin declares no skill paths", async (t) => {
@@ -490,13 +499,178 @@ test("MANF-03 a trailing separator keys the same directory as one already seen",
 
   // assert
   assert.deepStrictEqual(discovery, {
+    discovered: [{ sourceName: "help", generatedName: "acme-help", skillDir: helpDirectory }],
+    warnings: [],
+  });
+});
+
+test("D-CF2-04: keeps the skills folder's copy over a declared path's copy", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-folder-first-");
+  const extraDirectory = path.join(pluginRoot, "extra");
+  const folderTwinDirectory = path.join(pluginRoot, "skills", "twin");
+  await writeSkill(path.join(extraDirectory, "twin"), "twin");
+  await writeSkill(folderTwinDirectory, "twin");
+  const resolved = resolvedPlugin(pluginRoot, ["extra", "skills"]);
+
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [{ sourceName: "twin", generatedName: "acme-twin", skillDir: folderTwinDirectory }],
+    warnings: [
+      `skill source "twin" in "${extraDirectory}" elides to generated name ` +
+        `"acme-twin", already produced by skill source "twin"; ignoring duplicate.`,
+    ],
+  });
+});
+
+test("D-CF2-04: declared skills inside the skills folder take the folder's order", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-folder-order-");
+  const alphaDirectory = path.join(pluginRoot, "skills", "alpha");
+  const bravoDirectory = path.join(pluginRoot, "skills", "bravo");
+  await writeSkill(alphaDirectory, "alpha");
+  await writeSkill(bravoDirectory, "bravo");
+  const resolved = resolvedPlugin(pluginRoot, [
+    path.join("skills", "bravo"),
+    path.join("skills", "alpha"),
+    "skills",
+  ]);
+
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
     discovered: [
-      {
-        sourceName: "help",
-        generatedName: "acme-help",
-        skillDir: helpDirectory + path.sep,
-      },
+      { sourceName: "alpha", generatedName: "acme-alpha", skillDir: alphaDirectory },
+      { sourceName: "bravo", generatedName: "acme-bravo", skillDir: bravoDirectory },
     ],
     warnings: [],
   });
 });
+
+test("D-CF2-04: entries other than the skills folder keep their declared order", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-declared-order-");
+  const folderDirectory = path.join(pluginRoot, "skills", "folder");
+  const zuluDirectory = path.join(pluginRoot, "zulu", "zulu-skill");
+  const alphaDirectory = path.join(pluginRoot, "alpha", "alpha-skill");
+  await writeSkill(folderDirectory, "folder");
+  await writeSkill(zuluDirectory, "zulu-skill");
+  await writeSkill(alphaDirectory, "alpha-skill");
+  const resolved = resolvedPlugin(pluginRoot, ["zulu", "skills", "alpha"]);
+
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      { sourceName: "folder", generatedName: "acme-folder", skillDir: folderDirectory },
+      { sourceName: "zulu-skill", generatedName: "acme-zulu-skill", skillDir: zuluDirectory },
+      { sourceName: "alpha-skill", generatedName: "acme-alpha-skill", skillDir: alphaDirectory },
+    ],
+    warnings: [],
+  });
+});
+
+test("D-CF2-03: skips a skill that a command of its plugin is named, with a warning", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-shadow-");
+  const reviewDirectory = path.join(pluginRoot, "skills", "review");
+  await writeSkill(path.join(pluginRoot, "skills", "clash"), "clash");
+  await writeSkill(reviewDirectory, "review");
+  await writeCommand(path.join(pluginRoot, "commands", "clash.md"));
+  const resolved = resolvedPlugin(pluginRoot, ["skills"], ["commands"]);
+
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "demo", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [{ sourceName: "review", generatedName: "demo-review", skillDir: reviewDirectory }],
+    warnings: [
+      'skill source "clash" has the same name "demo:clash" as a command of the plugin; ' +
+        "ignoring the skill.",
+    ],
+  });
+});
+
+test("D-CF2-03: skips a declared skill directory a command is named, once", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-shadow-self-");
+  const catalogDirectory = path.join(pluginRoot, "catalog");
+  await writeSkill(path.join(catalogDirectory, "clash"), "clash");
+  await writeCommand(path.join(pluginRoot, "commands", "clash.md"));
+  const resolved = resolvedPlugin(
+    pluginRoot,
+    [path.join("catalog", "clash"), "catalog"],
+    ["commands"],
+  );
+
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "demo", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [],
+    warnings: [
+      'skill source "clash" has the same name "demo:clash" as a command of the plugin; ' +
+        "ignoring the skill.",
+    ],
+  });
+});
+
+test("D-CF2-03: a shadowed skill leaves its generated name to the next skill", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-shadow-elided-");
+  const prefixedDirectory = path.join(pluginRoot, "skills", "demo-clash");
+  await writeSkill(path.join(pluginRoot, "skills", "clash"), "clash");
+  await writeSkill(prefixedDirectory, "demo-clash");
+  await writeCommand(path.join(pluginRoot, "commands", "clash.md"));
+  const resolved = resolvedPlugin(pluginRoot, ["skills"], ["commands"]);
+
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "demo", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      { sourceName: "demo-clash", generatedName: "demo-clash", skillDir: prefixedDirectory },
+    ],
+    warnings: [
+      'skill source "clash" has the same name "demo:clash" as a command of the plugin; ' +
+        "ignoring the skill.",
+    ],
+  });
+});
+
+for (const { commandsCase, commandFiles } of [
+  { commandsCase: "a command of another name", commandFiles: ["other.md"] },
+  { commandsCase: "a missing commands directory", commandFiles: [] },
+  { commandsCase: "a nested command of the same basename", commandFiles: ["sub/clash.md"] },
+]) {
+  test(`D-CF2-03: ${commandsCase} shadows no skill`, async (t) => {
+    // arrange
+    const pluginRoot = await createPluginRoot(t, "skill-discover-unshadowed-");
+    const clashDirectory = path.join(pluginRoot, "skills", "clash");
+    await writeSkill(clashDirectory, "clash");
+    for (const commandFile of commandFiles) {
+      await writeCommand(path.join(pluginRoot, "commands", commandFile));
+    }
+
+    const resolved = resolvedPlugin(pluginRoot, ["skills"], ["commands"]);
+
+    // act
+    const discovery = await discoverPluginSkills({ pluginName: "demo", resolved });
+
+    // assert
+    assert.deepStrictEqual(discovery, {
+      discovered: [{ sourceName: "clash", generatedName: "demo-clash", skillDir: clashDirectory }],
+      warnings: [],
+    });
+  });
+}
