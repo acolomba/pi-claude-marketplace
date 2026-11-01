@@ -36,9 +36,9 @@ function resolvePeerFloor(): PiRuntime {
       "name" in manifest,
   );
   assert.strictEqual(manifest.name, "@earendil-works/pi-coding-agent");
-  assert.strictEqual(manifest.version, "1.0.0");
+  assert.strictEqual(manifest.version, "1.4.0");
   const runtime = resolvePiRuntime(fixtureRoot);
-  assert.strictEqual(runtime.version, "1.0.0");
+  assert.strictEqual(runtime.version, "1.4.0");
   const relativeCli = path.relative(realpathSync(packageRoot), realpathSync(runtime.cliPath));
   assert.ok(
     relativeCli.length > 0 &&
