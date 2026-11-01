@@ -235,6 +235,14 @@ function toolNameOf(token: string): string {
   return open > 0 && token.endsWith(")") ? token.slice(0, open) : token;
 }
 
+/**
+ * AGSK-03 / D-CF4-08 as amended: whether `token` names the Skill tool,
+ * bare or as `Skill(spec)`. Exact match on the tool name, like TOOL_MAP.
+ */
+function isSkillToken(token: string): boolean {
+  return toolNameOf(token) === "Skill";
+}
+
 /** The value with one pair of matching surrounding quotes removed. */
 function withoutMatchingQuotes(value: string): string {
   if (
@@ -394,7 +402,7 @@ function mapToolTokens(
     // AGSK-03 / D-83.1-02: Skill is translated to inheritSkills (computed
     // in mapTools from raw tokens), never dropped -- no droppedTools entry
     // and no warning in any branch. Exact match, like TOOL_MAP lookups.
-    if (token === "Skill") {
+    if (isSkillToken(token)) {
       continue;
     }
 
@@ -423,11 +431,12 @@ function mapTools(
   }
 
   // AGSK-05 / D-83-01: the inherit flag is computed ONCE from RAW
-  // Claude-side tokens -- exact match, case-sensitive "Skill", like
-  // TOOL_MAP lookups. The disallow check must read raw tokens because
+  // Claude-side tokens -- exact match, case-sensitive "Skill", bare or as
+  // `Skill(spec)` (D-CF4-08 as amended), like TOOL_MAP lookups. The
+  // disallow check must read raw tokens because
   // Skill has no TOOL_MAP entry, so the Pi-name filter below can never
   // see it.
-  const inheritSkills = tokens.includes("Skill") && !disallowedTokens.includes("Skill");
+  const inheritSkills = tokens.some(isSkillToken) && !disallowedTokens.some(isSkillToken);
 
   // Apply disallowedTools after mapping.
   const { mapped, dropped } = mapToolTokens(tokens, grants);
@@ -535,7 +544,7 @@ function omittedToolMapping(
   const unmapped: string[] = [];
   for (const token of disallowedTokens) {
     // Skill is excluded: it maps to inheritSkills below, not to a Pi tool.
-    if (token === "Skill") {
+    if (isSkillToken(token)) {
       continue;
     }
 
@@ -567,7 +576,7 @@ function omittedToolMapping(
     excludeTools,
     dropped: [],
     warnings,
-    inheritSkills: !disallowedTokens.includes("Skill"),
+    inheritSkills: !disallowedTokens.some(isSkillToken),
   };
 }
 
@@ -1043,7 +1052,7 @@ function assertMappedToolsNonEmpty(
     return;
   }
 
-  const skillNote = splitToolList(raw.tools).includes("Skill")
+  const skillNote = splitToolList(raw.tools).some(isSkillToken)
     ? " Note: the Skill tool maps to inheritSkills, not to a Pi tool, so it does not count toward the tool list."
     : "";
   throw new Error(

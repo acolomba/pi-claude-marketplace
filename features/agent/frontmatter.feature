@@ -230,6 +230,40 @@ Feature: Agent frontmatter
       | 2    | assistant   | tool call subagent {"action":"list","capabilities":true}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
       | 2    | tool result | subagent returned: Executable agents (capabilities):\nUser agents\n- demo:excluded (user, aliases: pi-claude-marketplace-demo-excluded): Description: Uses the excluded tools.; Tools: default/ambient; excludes: bash, edit; Model: inherits current session; Thinking: default\n- demo:narrowed (user, aliases: pi-claude-marketplace-demo-narrowed): Description: Uses the narrowed tools.; Tools: read, grep; Model: inherits current session; Thinking: default\n- demo:patterned (user, aliases: pi-claude-marketplace-demo-patterned): Description: Uses the patterned tools.; Tools: bash, read; Model: inherits current session; Thinking: default\n- demo:spaced (user, aliases: pi-claude-marketplace-demo-spaced): Description: Uses the spaced tools.; Tools: read, grep; Model: inherits current session; Thinking: default\n- demo:starred (user, aliases: pi-claude-marketplace-demo-starred): Description: Uses the starred tools.; Tools: default/ambient; Model: inherits current session; Thinking: default |
 
+  Scenario: A Skill entry with a pattern grants or disallows the skills as the Skill tool does
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file       | name    | description             | tools               | disallowedTools | body             |
+      | granted.md | granted | Uses the granted skill. | Read, Skill(helper) |                 | Answer the task. |
+      | denied.md  | denied  | Has no skills.          |                     | Skill(helper)   | Answer the task. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply                 | tool     | arguments                               |
+      |                       | subagent | {"action":"get","agent":"demo:granted"} |
+      |                       | subagent | {"action":"get","agent":"demo:denied"}  |
+      | The agents are shown. |          |                                         |
+    When the user prompts "Show the agents."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                                                                                                             |
+      | 1    | user        | Show the agents.                                                                                                                                                                                                                                                                                                                                                                 |
+      | 2    | user        | Show the agents.                                                                                                                                                                                                                                                                                                                                                                 |
+      | 2    | assistant   | tool call subagent {"action":"get","agent":"demo:granted"}                                                                                                                                                                                                                                                                                                                       |
+      | 2    | tool result | subagent returned: Agent: demo:granted (user)\nPath: {agent dir}/agents/pi-claude-marketplace-demo-granted.md\nDescription: Uses the granted skill.\nAliases: pi-claude-marketplace-demo-granted\nTools: read\nSystem prompt mode: replace\nInherit project context: true\nInherit global context: false\nInherit skills: true\nAsync: false\n\nSystem Prompt:\nAnswer the task. |
+      | 3    | user        | Show the agents.                                                                                                                                                                                                                                                                                                                                                                 |
+      | 3    | assistant   | tool call subagent {"action":"get","agent":"demo:granted"}                                                                                                                                                                                                                                                                                                                       |
+      | 3    | tool result | subagent returned: Agent: demo:granted (user)\nPath: {agent dir}/agents/pi-claude-marketplace-demo-granted.md\nDescription: Uses the granted skill.\nAliases: pi-claude-marketplace-demo-granted\nTools: read\nSystem prompt mode: replace\nInherit project context: true\nInherit global context: false\nInherit skills: true\nAsync: false\n\nSystem Prompt:\nAnswer the task. |
+      | 3    | assistant   | tool call subagent {"action":"get","agent":"demo:denied"}                                                                                                                                                                                                                                                                                                                        |
+      | 3    | tool result | subagent returned: Agent: demo:denied (user)\nPath: {agent dir}/agents/pi-claude-marketplace-demo-denied.md\nDescription: Has no skills.\nAliases: pi-claude-marketplace-demo-denied\nSystem prompt mode: replace\nInherit project context: true\nInherit global context: false\nInherit skills: false\nAsync: false\n\nSystem Prompt:\nAnswer the task.                         |
+
   Scenario: Apply reports each plugin agent field Claude Code also ignores
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:

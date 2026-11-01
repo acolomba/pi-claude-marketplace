@@ -988,6 +988,85 @@ Review files.
     );
   });
 
+  test("grants inheritSkills for a Skill entry with a pattern, as for a bare Skill", () => {
+    // arrange & act
+    const agent = convertAgent({
+      pluginName: "acme",
+      pluginRoot: "/plugins/acme",
+      pluginDataDir: "/data/acme",
+      knownSkills: [],
+      discovered: {
+        sourceName: "reviewer",
+        generatedName: "pi-claude-marketplace-acme-reviewer",
+        sourcePath: "/plugins/acme/agents/reviewer.md",
+        sourceHash: "discovery-hash",
+        raw: { description: "Reviews files", tools: "Read, Skill(helper)" },
+        body: "Review files.\n",
+      },
+      sourceHash: "converted-hash",
+      mapModel: false,
+    });
+
+    // assert
+    assert.match(agent.fileContent, /^tools: read$/m);
+    assert.match(agent.fileContent, /^inheritSkills: true$/m);
+    assert.match(agent.fileContent, /^ {2}droppedTools: \[\]$/m);
+    assert.deepStrictEqual(agent.warnings, []);
+  });
+
+  test("drops inheritSkills for a disallowed Skill entry with a pattern beside an omitted tools list", () => {
+    // arrange & act
+    const agent = convertAgent({
+      pluginName: "acme",
+      pluginRoot: "/plugins/acme",
+      pluginDataDir: "/data/acme",
+      knownSkills: [],
+      discovered: {
+        sourceName: "reviewer",
+        generatedName: "pi-claude-marketplace-acme-reviewer",
+        sourcePath: "/plugins/acme/agents/reviewer.md",
+        sourceHash: "discovery-hash",
+        raw: { description: "Reviews files", disallowedTools: "Skill(helper)" },
+        body: "Review files.\n",
+      },
+      sourceHash: "converted-hash",
+      mapModel: false,
+    });
+
+    // assert
+    assert.match(agent.fileContent, /^inheritSkills: false$/m);
+    assert.deepStrictEqual(agent.warnings, []);
+  });
+
+  test("rejects a source whose only tool is a Skill entry with a pattern with the inheritSkills explanation", () => {
+    // arrange
+    const convertSkillPatternOnlyAgent = () =>
+      convertAgent({
+        pluginName: "acme",
+        pluginRoot: "/plugins/acme",
+        pluginDataDir: "/data/acme",
+        knownSkills: [],
+        discovered: {
+          sourceName: "reviewer",
+          generatedName: "pi-claude-marketplace-acme-reviewer",
+          sourcePath: "/plugins/acme/agents/reviewer.md",
+          sourceHash: "discovery-hash",
+          raw: { description: "Reviews files", tools: "Skill(helper)" },
+          body: "Review files.\n",
+        },
+        sourceHash: "converted-hash",
+        mapModel: false,
+      });
+
+    // act & assert
+    assert.throws(
+      convertSkillPatternOnlyAgent,
+      new Error(
+        'Cannot convert agent "reviewer" in plugin "acme": the mapped tool list is empty (pi-subagents has no safe representation of "no tools"). Source tools: Skill(helper); disallowedTools: (none). Note: the Skill tool maps to inheritSkills, not to a Pi tool, so it does not count toward the tool list.',
+      ),
+    );
+  });
+
   test("labels a malformed changing tools accessor as omitted when the value disappears", () => {
     // arrange
     let toolsReadCount = 0;
