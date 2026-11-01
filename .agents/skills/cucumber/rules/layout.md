@@ -68,7 +68,7 @@ Phase 1 creates one function directory for each kind (D-CF1-08). Each starts wit
 
 | Kind           | Function directory        | Seed features                                 | Fixture writer                        | Seed step module                                           |
 | -------------- | ------------------------- | --------------------------------------------- | ------------------------------------- | ---------------------------------------------------------- |
-| Skills         | `features/skill/`         | `invocation.feature`                          | `features/lib/skill-files.ts`         | `features/step_definitions/skill/invocation.steps.ts`      |
+| Skills         | `features/skill/`         | `invocation.feature`                          | `features/lib/skill-files.ts`         | `features/step_definitions/skill/listing.steps.ts`         |
 | Slash commands | `features/slash-command/` | `listing.feature`                             | `features/lib/slash-command-files.ts` | `features/step_definitions/slash-command/listing.steps.ts` |
 | Agents         | `features/agent/`         | `invocation.feature`, `project-trust.feature` | `features/lib/agent-files.ts`         | `features/step_definitions/agent/runs.steps.ts`            |
 | Hooks          | `features/hook/`          | `tool-use.feature`                            | `features/lib/hook-files.ts`          | `features/step_definitions/hook/runs.steps.ts`             |
