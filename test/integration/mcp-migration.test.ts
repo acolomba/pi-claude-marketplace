@@ -658,6 +658,7 @@ test("AMIG-01: /reload skips a malformed server in .mcp.json, moves its valid si
           "Moved to mcp-adapter.json:",
           "  srv -> plugin_hello_srv_ (hello) [project]",
           "Removed from mcp.json:",
+          // Imprecise reconcile wording: `hello` still declares `broken`, skipped as malformed.
           "  broken (hello) [project] hello no longer declares it.",
           COST_LINE,
           "/reload to pick up changes",
