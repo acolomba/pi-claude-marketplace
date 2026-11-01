@@ -724,3 +724,10 @@ Indented `---` fence; record-key spellings; stale staged file falling through to
 9. No scenario for IN-01, IN-02, or IN-06 (no user-visible change). The IN-06 FIFO unit test uses `mkfifo` (Linux/macOS only).
 10. All findings marked "fixed"; the logic changes in WR-05, IN-01, and CR-01 may still deserve a human read.
 - Parent lines: D-CF2-13/14 into CONTEXT and PROJECT; CHANGELOG lines (AAP change; existing project installs need a reinstall); the hooks phase adopts the per-project ledger; IN-04 update and enable scenarios; maybe a `docs/output-catalog.md` entry for the new diagnostic header.
+
+#### verify-phase: human_needed, 4/5 (criterion 5 needs the user to file the Pi gap report)
+1. `human_needed`, not `passed`: criterion 5 says the gap "is reported to Pi"; D-CF2-10 makes the filing the user's. `phase.complete` refuses until `/gsd-verify-work 02`; the parent recorded `verification_deferred_human` in STATE.md and continued rather than stop autonomous mode.
+2. Path variables in a skill body (other than `${CLAUDE_SKILL_DIR}` inside a `!` command) are proven only by the verifier's throwaway probe, not a committed scenario.
+3. Reused the parent's gate log (3bfaab5, exit 0) by timestamp.
+4. Edits outside Phase 2's ownership list (`load.ts`, `uninstall.ts`, `enable-disable.ts`, `marketplace/{remove,shared}.ts`, `features/plugin/autoapply.feature`, `index.ts`) rated Info; re-verify after the Phase 3 and 5 merges. `index.ts` also withholds project prompt paths in an untrusted project, which affects Phase 3 (told).
+5. `02-SECURITY.md` predates the review rounds: no entry for the ledger, D-CF2-14, or the WR-03 residual.
