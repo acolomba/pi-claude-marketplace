@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: component-features
 milestone_name: Component Behavioral Tests
-current_phase: 02
-current_phase_name: Skills
+current_phase: 06
+current_phase_name: MCP Servers
 status: executing
 stopped_at: Phase 01 complete, ready to plan Phase 2
-last_updated: "2026-11-01T09:15:44.950Z"
+last_updated: "2026-11-01T14:19:02.398Z"
 last_activity: 2026-11-01
-last_activity_desc: Phase 02 execution started
-state_head: 105a97950f378c6f8180888978645da4363c016b
+last_activity_desc: Phase 06 execution started
+state_head: 753cc11646f30001b772b4ab99754c2694660646
 progress:
   total_phases: 7
   completed_phases: 1
-  total_plans: 22
-  completed_plans: 15
+  total_plans: 31
+  completed_plans: 21
   percent: 14
 ---
 
@@ -27,14 +27,14 @@ See: `.planning/PROJECT.md` (updated 2026-11-01 after Phase 1)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 02 — Skills
+**Current focus:** Phase 06 — MCP Servers
 
 ## Current Position
 
-Phase: 02 (Skills) — EXECUTING
-Plan: 1 of 7
-Status: Executing Phase 02
-Last activity: 2026-11-01 — Phase 02 execution started
+Phase: 06 (MCP Servers) — EXECUTING
+Plan: 1 of 9
+Status: Executing Phase 06
+Last activity: 2026-11-01 — Phase 06 execution started
 
 Progress: [█░░░░░░░░░] 14% (1/7 phases; 15/15 planned plans done, Phases 2-7 not yet planned)
 
