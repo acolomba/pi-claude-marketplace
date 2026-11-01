@@ -360,3 +360,29 @@ session writes this file. Each subagent ends its report with a
   6. The new When requires the prompt disposition `started`; the routed
      `updatedToolOutput` scenario is its own test-only commit.
 - **Recorded in:** `05-08-SUMMARY.md`.
+
+### P5-DC-19: Docs and gate plan choices (05-09)
+
+- **Phase / source:** executor of 05-09.
+- **Severity:** Low. **Status:** open.
+- **Choices:**
+  1. `docs/hooks-compatibility.md` downgrades five rows from ✓ to ⚠ where a
+     plan measured a gap (PreCompact exit 2 does not stop compaction; "other
+     exit" stderr not shown; `continue:false` on PostToolUse only logs and on
+     UserPromptSubmit gives no notice; `updatedToolOutput` reads only Pi's
+     content array; `transcript_path` is `""` under `--no-session`) and raises
+     PostCompact to ✓.
+  2. Fixed two TOOL-02 comments in `hook-events.ts` that said "unavailable"
+     where the code gives "partially-available".
+  3. Left the stale `bypass_permissions_disabled` in
+     `docs/research/claude-hook-config-syntax.md:103` as a parent line (file
+     outside the plan; D-CF5-21 says such mentions are removed).
+  4. The session events table lists Pi `/new` beside RPC `new_session` and
+     saved-session resume as `resume`; scenarios drive only RPC `new_session`,
+     resume is unit-tested only.
+  5. Decision rows mark D-CF5-06, 08, 16, 20, 28 "Deferred", the rest "Locked".
+  6. The GSD plan-commit ledger write was refused by the worktree guard, so
+     `plan_head_before` is the known base `df1a1fbc`.
+- **Gate:** the merged tree's build inputs equal the gated commit `e3f0676`, so
+  the session reused 05-09's phase-gate result instead of rerunning it.
+- **Recorded in:** `05-09-SUMMARY.md`.
