@@ -308,6 +308,7 @@ Remove a marketplace and uninstall its plugins. A dependency that another plugin
 Autoupdate is a setting for each marketplace. It controls what happens when the marketplace updates:
 
 - If autoupdate is on, the extension updates the marketplace and its installed plugins in the background. The update starts after the first message of a `tui` session, with a random delay of up to ten minutes. A manual `marketplace update` also updates the installed plugins of the marketplace.
+- The background update changes only the marketplaces of the user scope. A repository can turn autoupdate on in its project config, so the background update never changes the project scope. To update the project scope, run `/claude:plugin marketplace update` or `/claude:plugin update --scope project`.
 - If autoupdate is off, `marketplace update` refreshes only the list of plugins in the marketplace.
 
 Turn autoupdate on or off for one marketplace.

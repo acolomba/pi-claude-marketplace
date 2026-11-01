@@ -297,6 +297,7 @@ Elimina un mercado y desinstala sus complementos. Una dependencia que otro compl
 `autoupdate` es un ajuste de cada mercado. Controla lo que pasa cuando el mercado se actualiza:
 
 - Si `autoupdate` está activado, la extensión actualiza el mercado y sus complementos instalados en segundo plano. La actualización empieza después del primer mensaje de una sesión `tui`, con un retraso aleatorio de hasta diez minutos. Un `marketplace update` manual también actualiza los complementos instalados del mercado.
+- La actualización en segundo plano solo cambia los mercados del ámbito de usuario. Un repositorio puede activar `autoupdate` en su configuración de proyecto, así que la actualización en segundo plano nunca cambia el ámbito de proyecto. Para actualizar el ámbito de proyecto, ejecuta `/claude:plugin marketplace update` o `/claude:plugin update --scope project`.
 - Si `autoupdate` está desactivado, `marketplace update` solo actualiza la lista de complementos del mercado.
 
 Activa o desactiva `autoupdate` para un mercado.

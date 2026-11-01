@@ -24,6 +24,7 @@
   - A project-scope skill now runs its `` !`command` `` lines only when you installed its plugin into the project on this machine. For a project skill installed earlier, run `/claude:plugin reinstall <plugin>@<marketplace> --scope project` once.
   - A project-scope hook now runs only when you installed its plugin into the project on this machine. For a project hook installed earlier, run `/claude:plugin reinstall <plugin>@<marketplace> --scope project` once.
   - A load with `autoapply` on now applies only the user scope and shows the pending changes of the project scope. `/claude:plugin apply` still applies both scopes.
+  - The background autoupdate now updates only the user scope. `/claude:plugin update --scope project` or `/claude:plugin marketplace update` still updates the project scope.
   - Agents in subfolders now install under their folder names, such as `demo:review:security`, and hidden agent files, `.MD` files, and declared agent files install too.
   - An agent with no description now gets Claude Code's text: its `when_to_use` text, or `Agent from <plugin> plugin`.
   - Plugin agents now run in the foreground unless they set `background: true`, as in Claude Code.

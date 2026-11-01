@@ -1,7 +1,16 @@
 // D-PL8-01 / D-PL8-06: one background autoupdate pass. It runs
-// `marketplace update <name>` for each recorded marketplace whose merged config
-// turns autoupdate on, project scope first (MSG-GR-3). It is a separate run,
-// not a load, so a load still changes no installation state (APL-D1).
+// `marketplace update <name>` for each user-scope marketplace whose merged
+// config turns autoupdate on. It is a separate run, not a load, so a load
+// still changes no installation state (APL-D1).
+//
+// D-CF2-15: the pass never changes the project scope, as a load with
+// autoapply on never applies it (D-CF2-14). The project's config and
+// `state.json` sit in the repository, so a cloned repository could otherwise
+// move its own plugins to a version it chose, and record their skills,
+// commands, and hooks as this user's installs (D-CF2-13), with no command
+// typed. Claude Code acts on a repository's plugin settings only after its
+// trust dialog. `/claude:plugin update` and `marketplace update`, which the
+// user types, still update the project scope.
 //
 // D-PL8-06 / D-PL8-12: the pass reports through a print-mode context whose
 // text goes to the debug log, and through a load-origin run whose entry sink
@@ -93,7 +102,8 @@ export interface BackgroundPassDeps {
   readonly runWithAbortSignal: <T>(signal: AbortSignal, step: () => Promise<T>) => Promise<T>;
 }
 
-const SCOPES: readonly Scope[] = ["project", "user"];
+/** D-CF2-15: the one scope a background pass reads and changes. */
+const PASS_SCOPE: Scope = "user";
 
 const DEBUG_TAG = "autoupdate";
 
@@ -361,21 +371,18 @@ function yieldingPluginUpdate(args: YieldingPluginUpdateArgs): PluginUpdateFn {
   };
 }
 
-/** Updates the autoupdate marketplaces of each scope; returns early once the pass is halted. */
-async function updateEveryScope(step: PassStep): Promise<void> {
-  for (const scope of SCOPES) {
-    // D-PL8-15 / D-PL8-25: a halted pass reads no further scope.
-    if (step.halt.isHalted()) {
-      return;
-    }
+/** Updates the user scope's autoupdate marketplaces; returns early once the pass is halted. */
+async function updateUserScope(step: PassStep): Promise<void> {
+  // D-PL8-15 / D-PL8-25: a halted pass reads nothing.
+  if (step.halt.isHalted()) {
+    return;
+  }
 
-    // eslint-disable-next-line no-await-in-loop -- MSG-GR-3: the project scope runs before the user scope.
-    const names = await autoupdateMarketplaces(scope, step.cwd);
-    for (const name of names) {
-      // eslint-disable-next-line no-await-in-loop -- each update locks its scope and yields to commands one step at a time.
-      if (!(await updateOneMarketplace(step, name, scope))) {
-        return;
-      }
+  const names = await autoupdateMarketplaces(PASS_SCOPE, step.cwd);
+  for (const name of names) {
+    // eslint-disable-next-line no-await-in-loop -- each update locks its scope and yields to commands one step at a time.
+    if (!(await updateOneMarketplace(step, name, PASS_SCOPE))) {
+      return;
     }
   }
 }
@@ -415,7 +422,7 @@ export function createBackgroundPass(deps: BackgroundPassDeps): BackgroundPass {
     };
 
     try {
-      await updateEveryScope(step);
+      await updateUserScope(step);
     } catch (err: unknown) {
       // The pass's own error stays the one that propagates.
       try {

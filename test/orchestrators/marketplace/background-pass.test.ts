@@ -261,15 +261,15 @@ function updatesPlugins(
   };
 }
 
-/** Project `alpha` and user `gamma` with autoupdate on. */
+/** User `alpha` and `gamma` with autoupdate on. */
 async function seedTwoAutoupdateMarketplaces(cwd: string): Promise<void> {
-  await seedMarketplace(cwd, "project", "alpha", true);
+  await seedMarketplace(cwd, "user", "alpha", true);
   await seedMarketplace(cwd, "user", "gamma", true);
 }
 
 async function seedRealCascade(cwd: string): Promise<void> {
-  await seedMarketplace(cwd, "project", "alpha", true);
-  const locations = locationsFor("project", cwd);
+  await seedMarketplace(cwd, "user", "alpha", true);
+  const locations = locationsFor("user", cwd);
   const state = await loadState(locations.extensionRoot);
   const marketplace = state.marketplaces.alpha;
   assert.ok(marketplace);
@@ -399,11 +399,11 @@ function observeDebugLog(t: TestContext): string[] {
   return lines;
 }
 
-test("updates each recorded marketplace whose merged autoupdate is true, project scope first", async (t) => {
+test("updates each user-scope marketplace whose merged autoupdate is true", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-select-");
-  await seedMarketplace(cwd, "project", "alpha", true);
-  await seedMarketplace(cwd, "project", "beta", false);
+  await seedMarketplace(cwd, "user", "alpha", true);
+  await seedMarketplace(cwd, "user", "beta", false);
   await seedMarketplace(cwd, "user", "gamma", true);
   await seedMarketplace(cwd, "user", "delta");
   const { calls, deps } = createPassUnderTest({});
@@ -413,7 +413,7 @@ test("updates each recorded marketplace whose merged autoupdate is true, project
   await pass({ ctx: sessionContext(cwd), isStopped: () => false });
 
   // assert
-  assert.deepStrictEqual(updatedTargets(calls), ["alpha [project]", "gamma [user]"]);
+  assert.deepStrictEqual(updatedTargets(calls), ["alpha [user]", "gamma [user]"]);
   assert.deepStrictEqual(
     calls.map((call) => call.cwd),
     [cwd, cwd],
@@ -423,7 +423,7 @@ test("updates each recorded marketplace whose merged autoupdate is true, project
 test("D-PL2-10: hands each autoupdate cascade a missing-dependency step", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-dependency-step-");
-  await seedMarketplace(cwd, "project", "alpha", true);
+  await seedMarketplace(cwd, "user", "alpha", true);
   await seedMarketplace(cwd, "user", "gamma", true);
   const { calls, deps } = createPassUnderTest({});
   const pass = createBackgroundPass(deps);
@@ -519,7 +519,7 @@ test("a real cascade rechecks autoupdate before settling dependencies", async (t
     updateMarketplace,
     beginPluginUpdateRun: () => async (plugin) => {
       log.push(`update ${plugin}`);
-      await seedAutoupdateConfig(locationsFor("project", cwd), "alpha", false);
+      await seedAutoupdateConfig(locationsFor("user", cwd), "alpha", false);
       return unchangedOutcome(plugin);
     },
     installMissingDependencies: () => {
@@ -670,7 +670,7 @@ test("a held scope lock skips the real cascade cleanly and a later pass can sett
   });
 
   // act
-  await withExistingScopeLock(locationsFor("project", cwd), async () => {
+  await withExistingScopeLock(locationsFor("user", cwd), async () => {
     await pass({ ctx: sessionContext(cwd), isStopped: () => false });
     await gate.runForeground(() => {
       log.push("foreground after lock refusal");
@@ -692,8 +692,8 @@ test("a held scope lock skips the real cascade cleanly and a later pass can sett
 test("D-PL8-07: updates an official marketplace without a config value and skips a default-off one", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-official-");
-  await seedMarketplace(cwd, "project", "claude-plugins-official");
-  await seedMarketplace(cwd, "project", "knowledge-work-plugins");
+  await seedMarketplace(cwd, "user", "claude-plugins-official");
+  await seedMarketplace(cwd, "user", "knowledge-work-plugins");
   await seedMarketplace(cwd, "user", "anthropic-agent-skills");
   const { calls, deps } = createPassUnderTest({});
   const pass = createBackgroundPass(deps);
@@ -703,7 +703,7 @@ test("D-PL8-07: updates an official marketplace without a config value and skips
 
   // assert
   assert.deepStrictEqual(updatedTargets(calls), [
-    "claude-plugins-official [project]",
+    "claude-plugins-official [user]",
     "anthropic-agent-skills [user]",
   ]);
 });
@@ -727,7 +727,7 @@ test("runs every update through one silent load run", async (t) => {
     piMcpAdapterLoaded: false,
     workflowEngineLoaded: false,
   });
-  assert.deepStrictEqual(updatedTargets(calls), ["alpha [project]", "gamma [user]"]);
+  assert.deepStrictEqual(updatedTargets(calls), ["alpha [user]", "gamma [user]"]);
   for (const call of calls) {
     assert.strictEqual(call.ctx, notification.ctx);
     assert.strictEqual(call.run, notification.run);
@@ -738,14 +738,14 @@ test("runs every update through one silent load run", async (t) => {
 test("routes the update's own output to the debug log only", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-silent-");
-  await seedMarketplace(cwd, "project", "alpha", true);
+  await seedMarketplace(cwd, "user", "alpha", true);
   const lines = observeDebugLog(t);
   const { deps } = createPassUnderTest({
     scripts: new Map([
       [
         "alpha",
         (opts: UpdateMarketplaceOptions): Promise<void> => {
-          opts.ctx.ui.notify("● alpha [project] (updated)", "info");
+          opts.ctx.ui.notify("● alpha [user] (updated)", "info");
           opts.run.entrySink.appendEntry("claude-plugin", { kind: "cascade" });
           return Promise.resolve();
         },
@@ -758,13 +758,13 @@ test("routes the update's own output to the debug log only", async (t) => {
   await pass({ ctx: sessionContext(cwd), isStopped: () => false });
 
   // assert
-  assert.deepStrictEqual(lines, ["[autoupdate] ● alpha [project] (updated)"]);
+  assert.deepStrictEqual(lines, ["[autoupdate] ● alpha [user] (updated)"]);
 });
 
 test("yields to a command that arrives during the refresh before the first plugin update", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-refresh-yield-");
-  await seedMarketplace(cwd, "project", "alpha", true);
+  await seedMarketplace(cwd, "user", "alpha", true);
   const log: string[] = [];
   const gate = createBackgroundGate();
   const commands: Promise<void>[] = [];
@@ -782,7 +782,7 @@ test("yields to a command that arrives during the refresh before the first plugi
               return Promise.resolve();
             }),
           );
-          await requirePluginUpdate(opts)("demo", "alpha", "project");
+          await requirePluginUpdate(opts)("demo", "alpha", "user");
         },
       ],
     ]),
@@ -800,7 +800,7 @@ test("yields to a command that arrives during the refresh before the first plugi
 test("a command that arrives during a plugin update waits for it", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-plugin-yield-");
-  await seedMarketplace(cwd, "project", "alpha", true);
+  await seedMarketplace(cwd, "user", "alpha", true);
   const log: string[] = [];
   const gate = createBackgroundGate();
   const commands: Promise<void>[] = [];
@@ -825,8 +825,8 @@ test("a command that arrives during a plugin update waits for it", async (t) => 
         "alpha",
         async (opts: UpdateMarketplaceOptions): Promise<void> => {
           const pluginUpdate = requirePluginUpdate(opts);
-          await pluginUpdate("first", "alpha", "project");
-          await pluginUpdate("second", "alpha", "project");
+          await pluginUpdate("first", "alpha", "user");
+          await pluginUpdate("second", "alpha", "user");
         },
       ],
     ]),
@@ -844,7 +844,7 @@ test("a command that arrives during a plugin update waits for it", async (t) => 
 test("D-PL8-01: a command that turns autoupdate off during the pass stops the marketplace's remaining plugin updates", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-autoupdate-off-");
-  await seedMarketplace(cwd, "project", "alpha", true);
+  await seedMarketplace(cwd, "user", "alpha", true);
   const log: string[] = [];
   const gate = createBackgroundGate();
   const commands: Promise<void>[] = [];
@@ -858,7 +858,7 @@ test("D-PL8-01: a command that turns autoupdate off during the pass stops the ma
         (): void => {
           commands.push(
             gate.runForeground(async () => {
-              await seedAutoupdateConfig(locationsFor("project", cwd), "alpha", false);
+              await seedAutoupdateConfig(locationsFor("user", cwd), "alpha", false);
               log.push("noautoupdate alpha");
             }),
           );
@@ -871,8 +871,8 @@ test("D-PL8-01: a command that turns autoupdate off during the pass stops the ma
         "alpha",
         async (opts: UpdateMarketplaceOptions): Promise<void> => {
           const pluginUpdate = requirePluginUpdate(opts);
-          outcomes.push(await pluginUpdate("first", "alpha", "project"));
-          outcomes.push(await pluginUpdate("second", "alpha", "project"));
+          outcomes.push(await pluginUpdate("first", "alpha", "user"));
+          outcomes.push(await pluginUpdate("second", "alpha", "user"));
         },
       ],
     ]),
@@ -901,14 +901,13 @@ test("D-PL8-01: a command that turns autoupdate off during the pass stops the ma
   assert.deepStrictEqual(capture.entries, []);
 });
 
-test("skips a scope whose install state cannot be read", async (t) => {
+test("skips the user scope when its install state cannot be read", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-unreadable-");
-  await seedMarketplace(cwd, "user", "gamma", true);
-  const projectRoot = locationsFor("project", cwd).extensionRoot;
-  await mkdir(projectRoot, { recursive: true });
+  const userRoot = locationsFor("user", cwd).extensionRoot;
+  await mkdir(userRoot, { recursive: true });
   await writeFile(
-    path.join(projectRoot, "state.json"),
+    path.join(userRoot, "state.json"),
     JSON.stringify({ schemaVersion: 99, marketplaces: {} }),
   );
   const lines = observeDebugLog(t);
@@ -919,11 +918,49 @@ test("skips a scope whose install state cannot be read", async (t) => {
   await pass({ ctx: sessionContext(cwd), isStopped: () => false });
 
   // assert
-  assert.deepStrictEqual(updatedTargets(calls), ["gamma [user]"]);
+  assert.deepStrictEqual(calls, []);
   assert.deepStrictEqual(lines, [
-    "[autoupdate] background update skipped the project scope: " +
-      `state.json at ${path.join(projectRoot, "state.json")} has an unsupported schema version`,
+    "[autoupdate] background update skipped the user scope: " +
+      `state.json at ${path.join(userRoot, "state.json")} has an unsupported schema version`,
   ]);
+});
+
+test("D-CF2-15: never updates a project-scope marketplace, whatever its config says", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-pass-project-");
+  await seedMarketplace(cwd, "project", "alpha", true);
+  await seedMarketplace(cwd, "project", "claude-plugins-official");
+  await seedMarketplace(cwd, "user", "gamma", true);
+  const { calls, deps } = createPassUnderTest({});
+  const pass = createBackgroundPass(deps);
+
+  // act
+  await pass({ ctx: sessionContext(cwd), isStopped: () => false });
+
+  // assert
+  assert.deepStrictEqual(updatedTargets(calls), ["gamma [user]"]);
+});
+
+test("D-CF2-15: reads no project install state", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-pass-project-unread-");
+  const projectRoot = locationsFor("project", cwd).extensionRoot;
+  await mkdir(projectRoot, { recursive: true });
+  await writeFile(
+    path.join(projectRoot, "state.json"),
+    JSON.stringify({ schemaVersion: 99, marketplaces: {} }),
+  );
+  await seedMarketplace(cwd, "user", "gamma", true);
+  const lines = observeDebugLog(t);
+  const { calls, deps } = createPassUnderTest({});
+  const pass = createBackgroundPass(deps);
+
+  // act
+  await pass({ ctx: sessionContext(cwd), isStopped: () => false });
+
+  // assert
+  assert.deepStrictEqual(updatedTargets(calls), ["gamma [user]"]);
+  assert.deepStrictEqual(lines, []);
 });
 
 test("a marketplace whose update throws does not stop the others", async (t) => {
@@ -940,8 +977,8 @@ test("a marketplace whose update throws does not stop the others", async (t) => 
   await pass({ ctx: sessionContext(cwd), isStopped: () => false });
 
   // assert
-  assert.deepStrictEqual(updatedTargets(calls), ["alpha [project]", "gamma [user]"]);
-  assert.deepStrictEqual(lines, ["[autoupdate] background update of alpha [project] failed: boom"]);
+  assert.deepStrictEqual(updatedTargets(calls), ["alpha [user]", "gamma [user]"]);
+  assert.deepStrictEqual(lines, ["[autoupdate] background update of alpha [user] failed: boom"]);
 });
 
 test("an invalid GitHub base override ends the pass", async (t) => {
@@ -973,7 +1010,7 @@ test("an invalid GitHub base override ends the pass", async (t) => {
   );
 
   // assert
-  assert.deepStrictEqual(updatedTargets(calls), ["alpha [project]"]);
+  assert.deepStrictEqual(updatedTargets(calls), ["alpha [user]"]);
   assert.deepStrictEqual(capture.entries, []);
 });
 
@@ -983,7 +1020,7 @@ test("AUP-03: a pass that an invalid GitHub base override ends still reports the
   await seedTwoAutoupdateMarketplaces(cwd);
   const { calls, capture, deps } = createPassUnderTest({
     scripts: new Map([
-      ["alpha", updatesPlugins("alpha", "project", ["one"])],
+      ["alpha", updatesPlugins("alpha", "user", ["one"])],
       [
         "gamma",
         (): Promise<void> =>
@@ -1008,7 +1045,7 @@ test("AUP-03: a pass that an invalid GitHub base override ends still reports the
   );
 
   // assert
-  assert.deepStrictEqual(updatedTargets(calls), ["alpha [project]", "gamma [user]"]);
+  assert.deepStrictEqual(updatedTargets(calls), ["alpha [user]", "gamma [user]"]);
   assert.deepStrictEqual(capture.entries, [
     {
       customType: "claude-plugin",
@@ -1022,7 +1059,7 @@ test("AUP-03: a pass that an invalid GitHub base override ends still reports the
           {
             name: "one",
             marketplace: "alpha",
-            scope: "project",
+            scope: "user",
             fromVersion: "1.0.0",
             toVersion: "1.1.0",
           },
@@ -1047,7 +1084,7 @@ test("D-PL8-22: a runtime stopped during an update skips the further plugin upda
         "alpha",
         async (opts: UpdateMarketplaceOptions): Promise<void> => {
           stopped = true;
-          outcomes.push(await requirePluginUpdate(opts)("b", "alpha", "project"));
+          outcomes.push(await requirePluginUpdate(opts)("b", "alpha", "user"));
         },
       ],
     ]),
@@ -1069,13 +1106,13 @@ test("D-PL8-22: a runtime stopped during an update skips the further plugin upda
   // assert
   assert.deepStrictEqual(outcomes, [expectedOutcome]);
   assert.deepStrictEqual(log, []);
-  assert.deepStrictEqual(updatedTargets(calls), ["alpha [project]"]);
+  assert.deepStrictEqual(updatedTargets(calls), ["alpha [user]"]);
 });
 
 test("a runtime stopped during the plugin config read starts no plugin update", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-config-stop-");
-  await seedMarketplace(cwd, "project", "alpha", true);
+  await seedMarketplace(cwd, "user", "alpha", true);
   let stopped = false;
   const gate = actDuringPluginConfigRead(createBackgroundGate(), () => {
     stopped = true;
@@ -1090,8 +1127,8 @@ test("a runtime stopped during the plugin config read starts no plugin update", 
         "alpha",
         async (opts: UpdateMarketplaceOptions): Promise<void> => {
           const pluginUpdate = requirePluginUpdate(opts);
-          outcomes.push(await pluginUpdate("one", "alpha", "project"));
-          outcomes.push(await pluginUpdate("two", "alpha", "project"));
+          outcomes.push(await pluginUpdate("one", "alpha", "user"));
+          outcomes.push(await pluginUpdate("two", "alpha", "user"));
         },
       ],
     ]),
@@ -1120,7 +1157,7 @@ test("a plugin step aborted during the config read starts no update and halts la
   // arrange
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const { cwd } = await createHermeticEnvironment(t, "background-pass-config-abort-");
-  await seedMarketplace(cwd, "project", "alpha", true);
+  await seedMarketplace(cwd, "user", "alpha", true);
   const gate = createBackgroundGate(WAIT_CAP_MS);
   const commands: Promise<void>[] = [];
   const observedGate = actDuringPluginConfigRead(gate, () => {
@@ -1137,8 +1174,8 @@ test("a plugin step aborted during the config read starts no update and halts la
         "alpha",
         async (opts: UpdateMarketplaceOptions): Promise<void> => {
           const pluginUpdate = requirePluginUpdate(opts);
-          outcomes.push(await pluginUpdate("one", "alpha", "project"));
-          outcomes.push(await pluginUpdate("two", "alpha", "project"));
+          outcomes.push(await pluginUpdate("one", "alpha", "user"));
+          outcomes.push(await pluginUpdate("two", "alpha", "user"));
         },
       ],
     ]),
@@ -1183,7 +1220,7 @@ test("D-PL8-25: runs each marketplace refresh and each plugin update in its own 
   const { scopes, deps } = createPassUnderTest({
     gate: recordingGate(begun),
     activeScopes,
-    scripts: new Map([["alpha", updatesPlugins("alpha", "project", ["one", "two"])]]),
+    scripts: new Map([["alpha", updatesPlugins("alpha", "user", ["one", "two"])]]),
   });
   const pass = createBackgroundPass(deps);
 
@@ -1224,14 +1261,14 @@ test("D-PL8-25: a refresh the gate aborts at the cap ends the pass before any fu
   await Promise.all(commands);
 
   // assert
-  assert.deepStrictEqual(updatedTargets(calls), ["alpha [project]"]);
+  assert.deepStrictEqual(updatedTargets(calls), ["alpha [user]"]);
   assert.deepStrictEqual(
     begun.map((signal) => signal.aborted),
     [true],
   );
   assert.deepStrictEqual(lines, [
     "[autoupdate] a background step ran past the 1000 ms wait cap and was stopped",
-    "[autoupdate] background update of alpha [project] was stopped at the wait cap",
+    "[autoupdate] background update of alpha [user] was stopped at the wait cap",
   ]);
 });
 
@@ -1266,7 +1303,7 @@ test("D-PL8-25: an aborted plugin update that failed is skipped, and the notice 
         async (opts: UpdateMarketplaceOptions): Promise<void> => {
           const pluginUpdate = requirePluginUpdate(opts);
           for (const plugin of ["one", "two", "three"]) {
-            outcomes.push(await pluginUpdate(plugin, "alpha", "project"));
+            outcomes.push(await pluginUpdate(plugin, "alpha", "user"));
           }
         },
       ],
@@ -1301,7 +1338,7 @@ test("D-PL8-25: an aborted plugin update that failed is skipped, and the notice 
     },
   ]);
   assert.deepStrictEqual(log, ["update one", "update two"]);
-  assert.deepStrictEqual(updatedTargets(calls), ["alpha [project]"]);
+  assert.deepStrictEqual(updatedTargets(calls), ["alpha [user]"]);
   assert.deepStrictEqual(capture.entries, [
     {
       customType: "claude-plugin",
@@ -1315,7 +1352,7 @@ test("D-PL8-25: an aborted plugin update that failed is skipped, and the notice 
           {
             name: "one",
             marketplace: "alpha",
-            scope: "project",
+            scope: "user",
             fromVersion: "1.0.0",
             toVersion: "1.1.0",
           },
@@ -1330,7 +1367,7 @@ test("D-PL8-25: an aborted plugin update that threw is skipped", async (t) => {
   // arrange
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const { cwd } = await createHermeticEnvironment(t, "background-pass-plugin-abort-throw-");
-  await seedMarketplace(cwd, "project", "alpha", true);
+  await seedMarketplace(cwd, "user", "alpha", true);
   const gate = recordingGate([]);
   const commands: Promise<void>[] = [];
   const outcomes: PluginUpdateOutcome[] = [];
@@ -1349,7 +1386,7 @@ test("D-PL8-25: an aborted plugin update that threw is skipped", async (t) => {
       [
         "alpha",
         async (opts: UpdateMarketplaceOptions): Promise<void> => {
-          outcomes.push(await requirePluginUpdate(opts)("one", "alpha", "project"));
+          outcomes.push(await requirePluginUpdate(opts)("one", "alpha", "user"));
         },
       ],
     ]),
@@ -1378,7 +1415,7 @@ test("D-PL8-25: an aborted plugin update that finished keeps its outcome and is 
   // arrange
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const { cwd } = await createHermeticEnvironment(t, "background-pass-plugin-abort-done-");
-  await seedMarketplace(cwd, "project", "alpha", true);
+  await seedMarketplace(cwd, "user", "alpha", true);
   const gate = recordingGate([]);
   const commands: Promise<void>[] = [];
   const outcomes: PluginUpdateOutcome[] = [];
@@ -1397,7 +1434,7 @@ test("D-PL8-25: an aborted plugin update that finished keeps its outcome and is 
       [
         "alpha",
         async (opts: UpdateMarketplaceOptions): Promise<void> => {
-          outcomes.push(await requirePluginUpdate(opts)("one", "alpha", "project"));
+          outcomes.push(await requirePluginUpdate(opts)("one", "alpha", "user"));
         },
       ],
     ]),
@@ -1423,7 +1460,7 @@ test("D-PL8-25: an aborted plugin update that finished keeps its outcome and is 
           {
             name: "one",
             marketplace: "alpha",
-            scope: "project",
+            scope: "user",
             fromVersion: "1.0.0",
             toVersion: "1.1.0",
           },
@@ -1436,7 +1473,7 @@ test("D-PL8-25: an aborted plugin update that finished keeps its outcome and is 
 test("a plugin update that throws without an abort passes the error to the cascade", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-plugin-throw-");
-  await seedMarketplace(cwd, "project", "alpha", true);
+  await seedMarketplace(cwd, "user", "alpha", true);
   const failure = new Error("plugin update failed");
   const rejections: unknown[] = [];
   const { deps } = createPassUnderTest({
@@ -1452,7 +1489,7 @@ test("a plugin update that throws without an abort passes the error to the casca
       [
         "alpha",
         async (opts: UpdateMarketplaceOptions): Promise<void> => {
-          await requirePluginUpdate(opts)("one", "alpha", "project").catch((error: unknown) => {
+          await requirePluginUpdate(opts)("one", "alpha", "user").catch((error: unknown) => {
             rejections.push(error);
           });
         },
@@ -1468,10 +1505,9 @@ test("a plugin update that throws without an abort passes the error to the casca
   assert.deepStrictEqual(rejections, [failure]);
 });
 
-test("D-PL8-15: a runtime stopped during the project scope reads nothing of the user scope", async (t) => {
+test("D-PL8-15: a runtime stopped before the pass starts reads nothing", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-stopped-scope-");
-  await seedMarketplace(cwd, "project", "alpha", true);
   const userRoot = locationsFor("user", cwd).extensionRoot;
   await mkdir(userRoot, { recursive: true });
   await writeFile(
@@ -1479,25 +1515,14 @@ test("D-PL8-15: a runtime stopped during the project scope reads nothing of the 
     JSON.stringify({ schemaVersion: 99, marketplaces: {} }),
   );
   const lines = observeDebugLog(t);
-  let stopped = false;
-  const { calls, deps } = createPassUnderTest({
-    scripts: new Map([
-      [
-        "alpha",
-        (): Promise<void> => {
-          stopped = true;
-          return Promise.resolve();
-        },
-      ],
-    ]),
-  });
+  const { calls, deps } = createPassUnderTest({});
   const pass = createBackgroundPass(deps);
 
   // act
-  await pass({ ctx: sessionContext(cwd), isStopped: () => stopped });
+  await pass({ ctx: sessionContext(cwd), isStopped: () => true });
 
   // assert
-  assert.deepStrictEqual(updatedTargets(calls), ["alpha [project]"]);
+  assert.deepStrictEqual(calls, []);
   assert.deepStrictEqual(lines, []);
 });
 
@@ -1532,13 +1557,13 @@ test("a runtime stopped while the pass waits for a command starts no update", as
   assert.deepStrictEqual(calls, []);
 });
 
-test("AUP-03: reports the plugins the pass updated across both scopes in one load entry", async (t) => {
+test("AUP-03: reports the plugins the pass updated across marketplaces in one load entry", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-notice-");
   await seedTwoAutoupdateMarketplaces(cwd);
   const { capture, deps } = createPassUnderTest({
     scripts: new Map([
-      ["alpha", updatesPlugins("alpha", "project", ["one", "same"])],
+      ["alpha", updatesPlugins("alpha", "user", ["one", "same"])],
       ["gamma", updatesPlugins("gamma", "user", ["two", "skip", "fail"])],
     ]),
     outcomes: new Map<string, PluginUpdateOutcome>([
@@ -1567,7 +1592,7 @@ test("AUP-03: reports the plugins the pass updated across both scopes in one loa
           {
             name: "one",
             marketplace: "alpha",
-            scope: "project",
+            scope: "user",
             fromVersion: "1.0.0",
             toVersion: "1.1.0",
           },
@@ -1591,7 +1616,7 @@ test("AUP-03: a pass that updated no plugin raises no notice", async (t) => {
   await seedTwoAutoupdateMarketplaces(cwd);
   const { capture, deps } = createPassUnderTest({
     scripts: new Map([
-      ["alpha", updatesPlugins("alpha", "project", ["same"])],
+      ["alpha", updatesPlugins("alpha", "user", ["same"])],
       ["gamma", updatesPlugins("gamma", "user", ["skip", "fail"])],
     ]),
     outcomes: new Map<string, PluginUpdateOutcome>([
@@ -1612,9 +1637,9 @@ test("AUP-03: a pass that updated no plugin raises no notice", async (t) => {
 test("D-PL8-15: a runtime stopped after a plugin moved raises no notice", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-stopped-notice-");
-  await seedMarketplace(cwd, "project", "alpha", true);
+  await seedMarketplace(cwd, "user", "alpha", true);
   let stopped = false;
-  const update = updatesPlugins("alpha", "project", ["one"]);
+  const update = updatesPlugins("alpha", "user", ["one"]);
   const { capture, deps } = createPassUnderTest({
     scripts: new Map([
       [
@@ -1640,10 +1665,10 @@ test("D-PL8-15: a runtime stopped after a plugin moved raises no notice", async 
 test("D-PL8-15: a notice that throws on a stale context rejects the pass", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-stale-notice-");
-  await seedMarketplace(cwd, "project", "alpha", true);
+  await seedMarketplace(cwd, "user", "alpha", true);
   const staleError = new Error("the session is stale");
   const { deps } = createPassUnderTest({
-    scripts: new Map([["alpha", updatesPlugins("alpha", "project", ["one"])]]),
+    scripts: new Map([["alpha", updatesPlugins("alpha", "user", ["one"])]]),
     outcomes: new Map([["one", updatedOutcome("one", "1.1.0")]]),
     appendEntry: () => {
       throw staleError;
@@ -1664,10 +1689,9 @@ test("D-PL8-15: a notice that throws on a stale context rejects the pass", async
 test("an invalid config layer turns autoupdate off for the scope, even for an official marketplace", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-invalid-config-");
-  await seedMarketplace(cwd, "project", "claude-plugins-official");
-  await seedMarketplace(cwd, "project", "alpha", true);
-  await seedMarketplace(cwd, "user", "anthropic-agent-skills");
-  await writeFile(locationsFor("project", cwd).localConfigJsonPath, "{ invalid", "utf8");
+  await seedMarketplace(cwd, "user", "claude-plugins-official");
+  await seedMarketplace(cwd, "user", "alpha", true);
+  await writeFile(locationsFor("user", cwd).localConfigJsonPath, "{ invalid", "utf8");
   const { calls, deps } = createPassUnderTest({});
   const pass = createBackgroundPass(deps);
 
@@ -1675,23 +1699,21 @@ test("an invalid config layer turns autoupdate off for the scope, even for an of
   await pass({ ctx: sessionContext(cwd), isStopped: () => false });
 
   // assert
-  assert.deepStrictEqual(updatedTargets(calls), ["anthropic-agent-skills [user]"]);
+  assert.deepStrictEqual(calls, []);
 });
 
 test("a config layer that turns invalid during the pass stops the marketplace's remaining plugin updates", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-invalid-recheck-");
-  await seedMarketplace(cwd, "project", "claude-plugins-official");
+  await seedMarketplace(cwd, "user", "claude-plugins-official");
   const outcomes: PluginUpdateOutcome[] = [];
   const { deps } = createPassUnderTest({
     scripts: new Map([
       [
         "claude-plugins-official",
         async (opts: UpdateMarketplaceOptions): Promise<void> => {
-          await writeFile(locationsFor("project", cwd).baseConfigJsonPath, "{ invalid", "utf8");
-          outcomes.push(
-            await requirePluginUpdate(opts)("one", "claude-plugins-official", "project"),
-          );
+          await writeFile(locationsFor("user", cwd).baseConfigJsonPath, "{ invalid", "utf8");
+          outcomes.push(await requirePluginUpdate(opts)("one", "claude-plugins-official", "user"));
         },
       ],
     ]),
@@ -1718,7 +1740,7 @@ test("a config layer that turns invalid during the pass stops the marketplace's 
 test("a stopped runtime keeps the marketplace step until updateMarketplace returns", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-shutdown-wait-");
-  await seedMarketplace(cwd, "project", "alpha", true);
+  await seedMarketplace(cwd, "user", "alpha", true);
   const gate = createBackgroundGate();
   const finish = deferred();
   const reached = deferred();
@@ -1735,7 +1757,7 @@ test("a stopped runtime keeps the marketplace step until updateMarketplace retur
           waiter = gate.waitForStep().then(() => {
             waiterResolved = true;
           });
-          await requirePluginUpdate(opts)("one", "alpha", "project");
+          await requirePluginUpdate(opts)("one", "alpha", "user");
           reached.resolve();
           await finish.promise;
         },
@@ -1761,7 +1783,7 @@ test("a stopped runtime keeps the marketplace step until updateMarketplace retur
 test("a notice that throws does not replace the error that ended the pass", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-notice-after-error-");
-  await seedMarketplace(cwd, "project", "alpha", true);
+  await seedMarketplace(cwd, "user", "alpha", true);
   const lines = observeDebugLog(t);
   const baseUrlError = new InvalidGitHubBaseUrlError(
     "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
@@ -1772,7 +1794,7 @@ test("a notice that throws does not replace the error that ended the pass", asyn
       [
         "alpha",
         async (opts: UpdateMarketplaceOptions): Promise<void> => {
-          await updatesPlugins("alpha", "project", ["one"])(opts);
+          await updatesPlugins("alpha", "user", ["one"])(opts);
           throw baseUrlError;
         },
       ],

@@ -199,7 +199,9 @@ The sections above cover the variables that the extension delivers to plugin com
 
 In an interactive session, the extension updates plugins in the background, as Claude Code does. The background update arms on the first message that you send in a session. A message is a prompt that is not an extension command. Only the `tui` mode arms the background update, as Claude Code updates in its interactive mode only. The `rpc`, `print`, and `json` modes never arm it.
 
-After the first message, the extension waits a random delay of up to ten minutes. Then it refreshes each marketplace whose autoupdate is on, and it updates the plugins installed from that marketplace, as `/claude:plugin marketplace update` does. The background update uses stored git credentials only and never prompts.
+After the first message, the extension waits a random delay of up to ten minutes. Then it refreshes each user-scope marketplace whose autoupdate is on, and it updates the plugins installed from that marketplace, as `/claude:plugin marketplace update` does. The background update uses stored git credentials only and never prompts.
+
+The background update never changes the project scope, even when the project's config turns autoupdate on. A repository can hold that config and the project's install records, and Claude Code acts on a repository's plugin settings only after you trust the folder and agree to the install. To update the project scope, run `/claude:plugin marketplace update` or `/claude:plugin update --scope project` (D-CF2-15).
 
 The background update runs once in each extension runtime. `/reload` and a new, resumed, or forked session start a new runtime, and the new runtime arms again on its own first message. Claude Code runs the update once in each process. Pi gives an extension no hook for the lifetime of the process, so this extension cannot do the same.
 
