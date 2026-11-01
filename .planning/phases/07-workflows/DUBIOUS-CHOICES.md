@@ -205,3 +205,17 @@ theirs under `## Dubious Choices` and the orchestrator copies them here.
   engine registers the command and refuses at run); rewording touches three
   unit tests, `docs/output-catalog.md`, and `refusals.feature`.
 - **Recorded in:** `07-02-SUMMARY.md`.
+
+### P7-DC-11: Wave 2 executor choices (lifecycle)
+
+- **Phase / source:** Phase 7 wave 2, lifecycle executor (`07-05-SUMMARY.md`).
+- **Severity:** Low. **Status:** open.
+- **Choices:**
+  1. The worktree isolation guard refused a write of the plan-ledger file
+     under `.git/worktrees/...`; the plan base was recorded in the executor's
+     scratch folder instead, and the SUMMARY's commit count excludes the
+     SUMMARY commit.
+  2. The plan duration in the SUMMARY is estimated (no start time captured).
+  3. Plan 07-01's stale-notice scenario keeps its title and steps; only its
+     setup moved into the new `Background:`.
+- **Recorded in:** `07-05-SUMMARY.md`.
