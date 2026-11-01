@@ -32,6 +32,9 @@
 //     rewrite in routing order. Every hook's `additionalContext` is joined in
 //     routing order, and every hook's outcome is kept, with its
 //     `systemMessage`, for the output carriers.
+//   - after the fold, the notices go to the user (D-CF5-14), and on a tool
+//     event the joined context goes to the model after the tool result, also
+//     when the call was denied (D-CF5-13).
 //   - a call that pi-mcp-adapter's `mcp` proxy makes in call mode runs no
 //     hook: its nested call fires them under the real tool name (D-CF5-12).
 //
@@ -544,6 +547,51 @@ function showHookNotices(
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// Tool hook context (HOOK-04 / D-CF5-13)
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Custom-message type of a tool hook's additional context. Distinct from the
+ * prompt and session context type and from the Stop and async-rewake
+ * re-entry types, so each carrier stays separable in the transcript.
+ */
+const TOOL_CONTEXT_CUSTOM_TYPE = "claude-hook-tool-context" as const;
+
+/**
+ * D-CF5-13: send the folded `additionalContext` of a PreToolUse,
+ * PostToolUse, or PostToolUseFailure bucket to the model as one hidden
+ * message, `<label> hook additional context: <values>`, also when a hook
+ * denied the call. While the agent streams, `triggerTurn: false` queues the
+ * message until the turn ends, so the next model call reads it after the
+ * tool result, as a user message. No context, an empty one, or no Pi API
+ * sends nothing; a send that throws is debug-logged and never fails the
+ * event.
+ */
+function sendToolContext(
+  pi: ExtensionAPI | undefined,
+  label: string,
+  result: HookExecResult,
+): void {
+  const context = result.additionalContext;
+  if (pi === undefined || context === undefined || context === "") {
+    return;
+  }
+
+  try {
+    pi.sendMessage(
+      {
+        customType: TOOL_CONTEXT_CUSTOM_TYPE,
+        content: `${label} hook additional context: ${context}`,
+        display: false,
+      },
+      { triggerTurn: false },
+    );
+  } catch (error: unknown) {
+    hookDebugLog(`dispatch: tool hook context failed: ${errorMessage(error)}`);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // pi-mcp-adapter's proxy (D-CF5-12)
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -627,7 +675,11 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
     const folded = await runAndFold(runtime, bucket, event, ctx, pi, executor, (entry) =>
       entryFires(claudeEvent, entry, event),
     );
-    showHookNotices(ctx, pi, hookNotices(claudeEvent, noticeLabel(claudeEvent, event), folded));
+    const label = noticeLabel(claudeEvent, event);
+    showHookNotices(ctx, pi, hookNotices(claudeEvent, label, folded));
+    if (claudeEvent === "PreToolUse") {
+      sendToolContext(pi, label, folded.result);
+    }
 
     const context = { runtime, ctx, pi, attributedTo: folded.attributedTo };
     return (await adaptForEvent(
@@ -672,11 +724,9 @@ export function toolResultCompositeHandler(
     const folded = await runAndFold(runtime, bucket, event, ctx, pi, executor, (entry) =>
       matcherFiresOnToolEvent(entry.matcher, event.toolName),
     );
-    showHookNotices(
-      ctx,
-      pi,
-      hookNotices(claudeEvent, hookEventLabel(claudeEvent, event.toolName), folded),
-    );
+    const label = hookEventLabel(claudeEvent, event.toolName);
+    showHookNotices(ctx, pi, hookNotices(claudeEvent, label, folded));
+    sendToolContext(pi, label, folded.result);
 
     return adaptToolResultResult(folded.result, event, {
       runtime,
