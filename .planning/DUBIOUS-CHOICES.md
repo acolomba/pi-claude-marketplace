@@ -707,3 +707,20 @@ Indented `---` fence; record-key spellings; stale staged file falling through to
 7. `test/index.test.ts` answers `isProjectTrusted()` with `anyTimes()` in the shared helper.
 8. Files outside Phase 2 touched: `index.ts`, `orchestrators/discover.ts`, and their tests; `install-flow-ledger.test.ts`.
 - Parent line: the hooks bridge has the same pre-existing exposure; the Hooks phase should adopt the same provenance check.
+
+### DC-30: Phase 2 code review round 3
+
+**Decision for the user to review: D-CF2-14, taken by the parent without asking.** Round 3 showed that project-scope autoapply (AAP-01) let a load install a repository-declared plugin and write the D-CF2-13 ledger itself, so the skill's `!` commands ran on the next session. A load with autoapply on now applies the user scope only, whichever file turned the setting on, and shows the project scope's pending block. An explicit `/claude:plugin apply` still applies both scopes. Pi 1.4.0 gives the extension only `isProjectTrusted()`, which is also true for an auto-trusted project, so a load cannot tell explicit trust apart and never changes the project scope. Upstream parity: Claude Code needs the trust dialog and an install prompt. This changes AAP-01 behavior.
+
+#### Fixer choices (10 findings fixed, each with a red/green proof; IN-04 and IN-05 left to the parent)
+1. **D-CF2-14 scope:** reading Pi's `trust.json` directly was judged not an allowed route. A repository's project config can still turn on load-time apply for the user scope; how AAP-01 resolves the setting is unchanged. Users who explicitly trusted a project also lose load-time project apply. Re-exporting Pi's `ProjectTrustStore` through `platform/pi-api.ts` would restore it (parent line).
+2. **D-CF2-14 ordering:** the user-scope apply now runs before the project's read-only pass, so the output is the apply cascade, then the project pending block. This departs from project-first ordering (MSG-GR-3), to keep one pending block when the apply step throws.
+3. **IN-01:** `? name` followed by `: x` is read as `name` and rewritten, not refused, because Claude Code reads it that way.
+4. **IN-06:** the ledger is now one file per project, `<agentDir>/pi-claude-marketplace/project-installs/<sha256(realpath)>/skills.json`, written under that project's state lock. This replaces DC-29 item 1 (the unlocked writer). It relies on every writer holding the lock (install-outcome, update-swap, `cascadeUnstagePlugin` checked). No migration: the D-CF2-13 layout was never released.
+5. **WR-02:** an unreadable or unknown ledger now fails the write with `ProjectSkillLedgerError`. An `update` or `reinstall` against it reports "failed during physical replace"; the new files stay unrecorded and fail closed. No scenario.
+6. **WR-03:** the digest covers every file and symlink in the staged skill directory, checked again at use time. Plugin-root files outside the skill directory and link targets stay unhashed (accepted risk; needs a threat-register ID). The provenance Background's skill now runs `sh ${CLAUDE_SKILL_DIR}/status.sh`, which assumes `sh`.
+7. **WR-04:** uninstall, disable, and `marketplace remove` show the skills ledger warning as one `diagnostic` per plugin, header "N cleanup warning(s)" (wording invented). The install undo, cascade undo, orchestrated, and partial-failure arms still drop it.
+8. **WR-05:** a frontmatter node holding the key with other keys (flow mapping) fails the install again, naming the skill, line, and keys. A writer called outside staging gives a generic message.
+9. No scenario for IN-01, IN-02, or IN-06 (no user-visible change). The IN-06 FIFO unit test uses `mkfifo` (Linux/macOS only).
+10. All findings marked "fixed"; the logic changes in WR-05, IN-01, and CR-01 may still deserve a human read.
+- Parent lines: D-CF2-13/14 into CONTEXT and PROJECT; CHANGELOG lines (AAP change; existing project installs need a reinstall); the hooks phase adopts the per-project ledger; IN-04 update and enable scenarios; maybe a `docs/output-catalog.md` entry for the new diagnostic header.
