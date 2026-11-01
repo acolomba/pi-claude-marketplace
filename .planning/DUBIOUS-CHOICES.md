@@ -263,3 +263,52 @@ this project.
   notification; an optional ESLint zone for `platform/prompt-shell.ts` that
   CONTEXT does not ask for.
 - **Recorded in:** `01-PATTERNS.md`.
+
+### DC-15: Phase 1 planning choices
+
+- **Phase / source:** Phase 1 planner (`01-01-PLAN.md` … `01-15-PLAN.md`).
+- **Severity:** Medium. **Status:** open (plan check pending).
+- **Items:**
+  1. **15 plans instead of 9 + 2.** 01-01 is split: 01-15 takes the Pi
+     1.4.0 e2e floor fixture, Pi types, and version docs. The invocation core
+     is split across 01-10, 01-12, and 01-13. Reason: `.fallowrc.json` can
+     have one editor per wave, and fallow accepts a `dynamicallyLoaded` path
+     whose file does not exist yet (measured), so 01-10 registers all six core
+     paths in wave 1. An inline `fallow-ignore-file` marker would turn stale
+     once Phase 2 or 3 imports the file (measured), so the config route is
+     required.
+  2. **D-CF1-13 split:** 01-01 keeps install-time `:-` resolution and widens
+     the adapter TRIGGER in wave 1 (keeps the 7.0 drift guard green); 01-14
+     adds the delegation in wave 2.
+  3. **Component-directory plan 01-11 moved to wave 2** (reverses DC-13 item
+     4): it now defines its own generic plugin-file step.
+  4. **Shadowed-folder warning** shows on install, enable, import, apply,
+     update, and reinstall; travels as a typed optional resolver field plus a
+     discovery warning; text is upstream's `Default <kind>/ folder is ignored
+     because the manifest sets "<kind>"`.
+  5. **Ownership inside Phase 1:** 01-03 does not edit `ci.yml` (01-01 makes
+     `test:cucumber` install peers first); the generic file step lives in
+     01-11; 01-04 alone edits `world.ts`/`session.steps.ts`, 01-07 alone edits
+     `model.steps.ts`/`companion.steps.ts` in wave 3.
+  6. **Project-server approval Given** lands in Phase 1 and a seed uses it.
+     It writes `settings.projectServers: "allow"` to `<agentDir>/mcp-adapter.json`
+     (adapter 7.0 `config.ts:218`), not `~/.config/mcp/mcp.json`. FG-29 stays
+     open.
+  7. **Workflow seed runs with no arguments**, so FG-32's argument shape is
+     left to Phase 7.
+  8. **The model-turn When fails** on any extension error or dialog during the
+     turn; a phase that needs to observe one adds its own When.
+  9. **`!` spawn residuals (D-CF1-02):** PowerShell is `pwsh -NoProfile
+     -Command` on Linux/macOS and `powershell.exe` on Windows; 120 s timeout
+     uses the "interrupted" message; output is not truncated; core error
+     classes live in their own modules rather than `shared/errors.ts`; no
+     ESLint zone restricts importers of `prompt-shell.ts`.
+  10. **Smaller:** CHANGELOG entry has no PR number yet (parent appends it);
+      an undefined thinking level maps `${CLAUDE_EFFORT}` to `high`; the
+      profile Given turns Pi auto-retry off (settles research A6); core plans
+      list DEC-01 as their requirement; automated `npm view` legitimacy checks
+      replace human checkpoints (DC-13 item 7).
+- **Probe note:** `check verify-command-paths 1` flagged one warning
+  (01-09 Task 3, `script_missing`), a misread: the `npm run test:e2e` half
+  runs at the repo root, not in the `--prefix` directory.
+- **Recorded in:** the plans' "Flagged assumptions" sections and `COVERAGE.md`.
