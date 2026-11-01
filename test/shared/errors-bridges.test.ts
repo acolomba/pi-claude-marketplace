@@ -743,18 +743,18 @@ describe("ProjectSkillLedgerError", () => {
       defect: "unreadable" as const,
       cause: new Error("EACCES"),
       message:
-        "The project skill ledger /agent/pi-claude-marketplace/project-installs.json cannot be read; it was left unchanged.",
+        "The project skill ledger /agent/pi-claude-marketplace/project-installs/0a1b/skills.json cannot be read; it was left unchanged.",
     },
     {
       defect: "unknown-content" as const,
       cause: undefined,
       message:
-        "The project skill ledger /agent/pi-claude-marketplace/project-installs.json holds content this version cannot update; it was left unchanged.",
+        "The project skill ledger /agent/pi-claude-marketplace/project-installs/0a1b/skills.json holds content this version cannot update; it was left unchanged.",
     },
   ]) {
     test(`D-CF2-13: names the ledger file and the ${defect} defect, and keeps its cause`, () => {
       // arrange
-      const ledgerPath = "/agent/pi-claude-marketplace/project-installs.json";
+      const ledgerPath = "/agent/pi-claude-marketplace/project-installs/0a1b/skills.json";
 
       // act
       const error = new ProjectSkillLedgerError(

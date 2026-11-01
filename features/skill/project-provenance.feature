@@ -101,8 +101,8 @@ Feature: Skill project provenance
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id            | name | status | reasons | scope   | version | cause chain                                                                                                       | cause truncated | leaks | rollback partial |
-      | fixtures         | project           | demo@fixtures | demo | failed |         | project | 1.0.0   | The project skill ledger project-installs.json holds content this version cannot update; it was left unchanged. | false           |       |                  |
+      | marketplace name | marketplace scope | id            | name | status | reasons | scope   | version | cause chain                                                                                           | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed |         | project | 1.0.0   | The project skill ledger skills.json holds content this version cannot update; it was left unchanged. | false           |       |                  |
     Then the user's record of project skill installs holds this text:
       """
       { "version": 2, "projects": {} }

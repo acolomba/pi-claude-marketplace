@@ -85,11 +85,12 @@ function stateWith(plugins: Readonly<Record<string, readonly string[]>>): SkillA
   };
 }
 
-const LEDGER = "/agent/pi-claude-marketplace/project-installs.json";
-
 function sha256(content: string): string {
   return createHash("sha256").update(content, "utf8").digest("hex");
 }
+
+/** IN-06: the ledger file of the project `/work` under the agent directory `/agent`. */
+const LEDGER = `/agent/pi-claude-marketplace/project-installs/${sha256("/work")}/skills.json`;
 
 /**
  * D-CF2-13: a user ledger that lists `skills` (name to staged bytes) for the
@@ -99,7 +100,7 @@ function ledgerText(project: string, skills: Readonly<Record<string, string>>): 
   const listed = Object.entries(skills).map(
     ([name, content]) => [name, { plugin: "demo", sha256: skillTreeDigest([], content) }] as const,
   );
-  return JSON.stringify({ version: 1, projects: { [project]: Object.fromEntries(listed) } });
+  return JSON.stringify({ version: 1, project, skills: Object.fromEntries(listed) });
 }
 
 /** A ledger that lists every project skill among `files` with the digest of its bytes. */

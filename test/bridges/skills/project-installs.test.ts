@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
@@ -14,9 +14,10 @@ import {
 import { ProjectSkillLedgerError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
-/** The user ledger file under the agent directory `agentDir`. */
-function projectInstallsFile(agentDir: string): string {
-  return path.join(agentDir, "pi-claude-marketplace", "project-installs.json");
+/** The ledger file of the project at the canonical path `project` under the agent directory `agentDir`. */
+function projectLedgerFile(agentDir: string, project: string): string {
+  const key = createHash("sha256").update(project).digest("hex");
+  return path.join(agentDir, "pi-claude-marketplace", "project-installs", key, "skills.json");
 }
 
 interface LedgerCase {
@@ -27,7 +28,8 @@ interface LedgerCase {
 
 async function allocateCase(t: TestContext): Promise<LedgerCase> {
   const { agentDir, cwd } = await createHermeticEnvironment(t, "project-installs-");
-  return { agentDir, project: cwd, file: projectInstallsFile(agentDir) };
+  const project = await realpath(cwd);
+  return { agentDir, project, file: projectLedgerFile(agentDir, project) };
 }
 
 function readLedger(file: string): Promise<unknown> {
@@ -143,7 +145,7 @@ describe("skillTreeDigest", () => {
 });
 
 describe("NODE_PROJECT_SKILL_LEDGER", () => {
-  test("D-CF2-13: lists the remembered skills under the project's real path", async (t) => {
+  test("D-CF2-13: lists the remembered skills in the ledger of the project's real path", async (t) => {
     // arrange
     const { project, file } = await allocateCase(t);
     const link = path.join(path.dirname(project), "link");
@@ -160,30 +162,33 @@ describe("NODE_PROJECT_SKILL_LEDGER", () => {
     // assert
     assert.deepStrictEqual(await readLedger(file), {
       version: 1,
-      projects: { [project]: { "demo-greet": DEMO_GREET } },
+      project,
+      skills: { "demo-greet": DEMO_GREET },
     });
   });
 
   test("D-CF2-13: keys a project that does not exist by its resolved path", async (t) => {
     // arrange
-    const { project, file } = await allocateCase(t);
+    const { agentDir, project } = await allocateCase(t);
+    const gone = path.join(project, "gone");
     const ledger = NODE_PROJECT_SKILL_LEDGER;
 
     // act
     await ledger.update({
-      projectPath: path.join(project, "gone", ".."),
+      projectPath: path.join(gone, "deeper", ".."),
       forget: [],
       remember: new Map([["demo-greet", DEMO_GREET]]),
     });
 
     // assert
-    assert.deepStrictEqual(await readLedger(file), {
+    assert.deepStrictEqual(await readLedger(projectLedgerFile(agentDir, gone)), {
       version: 1,
-      projects: { [project]: { "demo-greet": DEMO_GREET } },
+      project: gone,
+      skills: { "demo-greet": DEMO_GREET },
     });
   });
 
-  test("D-CF2-13: replaces forgotten names and keeps the other projects in their order", async (t) => {
+  test("D-CF2-13: replaces forgotten names and keeps the other skills in their order", async (t) => {
     // arrange
     const { project, file } = await allocateCase(t);
     await mkdir(path.dirname(file), { recursive: true });
@@ -191,11 +196,8 @@ describe("NODE_PROJECT_SKILL_LEDGER", () => {
       file,
       JSON.stringify({
         version: 1,
-        projects: {
-          "/first": { "other-skill": DEMO_STATUS },
-          [project]: { "demo-old": DEMO_STATUS, "demo-greet": DEMO_STATUS },
-          "/last": { "other-skill": DEMO_STATUS },
-        },
+        project,
+        skills: { "demo-first": DEMO_STATUS, "demo-old": DEMO_STATUS, "demo-greet": DEMO_STATUS },
       }),
     );
     const ledger = NODE_PROJECT_SKILL_LEDGER;
@@ -208,19 +210,42 @@ describe("NODE_PROJECT_SKILL_LEDGER", () => {
     });
 
     // assert
-    const written = (await readLedger(file)) as { projects: object };
+    const written = (await readLedger(file)) as { skills: object };
     assert.deepStrictEqual(written, {
       version: 1,
-      projects: {
-        "/first": { "other-skill": DEMO_STATUS },
-        [project]: { "demo-greet": DEMO_GREET },
-        "/last": { "other-skill": DEMO_STATUS },
-      },
+      project,
+      skills: { "demo-first": DEMO_STATUS, "demo-greet": DEMO_GREET },
     });
-    assert.deepStrictEqual(Object.keys(written.projects), ["/first", project, "/last"]);
+    assert.deepStrictEqual(Object.keys(written.skills), ["demo-first", "demo-greet"]);
   });
 
-  test("D-CF2-13: drops a project whose last skill is forgotten", async (t) => {
+  test("IN-06: a change to one project leaves the ledger of another project untouched", async (t) => {
+    // arrange
+    const { agentDir, project, file } = await allocateCase(t);
+    const other = path.join(path.dirname(project), "other");
+    const otherFile = projectLedgerFile(agentDir, other);
+    await mkdir(path.dirname(otherFile), { recursive: true });
+    const otherText = JSON.stringify({ version: 1, project: other, skills: { s: DEMO_STATUS } });
+    await writeFile(otherFile, otherText);
+    const ledger = NODE_PROJECT_SKILL_LEDGER;
+
+    // act
+    await ledger.update({
+      projectPath: project,
+      forget: [],
+      remember: new Map([["demo-greet", DEMO_GREET]]),
+    });
+
+    // assert
+    assert.strictEqual(await readFile(otherFile, "utf8"), otherText);
+    assert.deepStrictEqual(await readLedger(file), {
+      version: 1,
+      project,
+      skills: { "demo-greet": DEMO_GREET },
+    });
+  });
+
+  test("D-CF2-13: removes the ledger of a project whose last skill is forgotten", async (t) => {
     // arrange
     const { project, file } = await allocateCase(t);
     const ledger = NODE_PROJECT_SKILL_LEDGER;
@@ -234,17 +259,14 @@ describe("NODE_PROJECT_SKILL_LEDGER", () => {
     await ledger.update({ projectPath: project, forget: ["demo-greet"], remember: new Map() });
 
     // assert
-    assert.deepStrictEqual(await readLedger(file), { version: 1, projects: {} });
+    await assert.rejects(stat(path.dirname(file)), { code: "ENOENT" });
   });
 
   test("D-CF2-13: writes nothing for a change that alters nothing", async (t) => {
     // arrange
     const { project, file } = await allocateCase(t);
     const ledger = NODE_PROJECT_SKILL_LEDGER;
-    const compact = JSON.stringify({
-      version: 1,
-      projects: { [project]: { "demo-greet": DEMO_GREET } },
-    });
+    const compact = JSON.stringify({ version: 1, project, skills: { "demo-greet": DEMO_GREET } });
     await ledger.update({ projectPath: project, forget: ["demo-greet"], remember: new Map() });
     const absentAfterForget = await readFile(file, "utf8").catch((error: unknown) => error);
     await mkdir(path.dirname(file), { recursive: true });
@@ -263,18 +285,26 @@ describe("NODE_PROJECT_SKILL_LEDGER", () => {
   });
 
   for (const { label, text } of [
-    { label: "not JSON", text: "{" },
-    { label: "of another version", text: JSON.stringify({ version: 2, projects: {} }) },
+    { label: "not JSON", text: () => "{" },
+    {
+      label: "of another version",
+      text: (project: string) => JSON.stringify({ version: 2, project, skills: {} }),
+    },
     {
       label: "missing a digest",
-      text: JSON.stringify({ version: 1, projects: { "/p": { s: { plugin: "demo" } } } }),
+      text: (project: string) =>
+        JSON.stringify({ version: 1, project, skills: { s: { plugin: "demo" } } }),
+    },
+    {
+      label: "naming another project",
+      text: () => JSON.stringify({ version: 1, project: "/elsewhere", skills: {} }),
     },
   ]) {
     test(`WR-02: refuses to update a ledger that is ${label} and leaves it unchanged`, async (t) => {
       // arrange
       const { project, file } = await allocateCase(t);
       await mkdir(path.dirname(file), { recursive: true });
-      await writeFile(file, text);
+      await writeFile(file, text(project));
       const ledger = NODE_PROJECT_SKILL_LEDGER;
 
       // act & assert
@@ -290,7 +320,7 @@ describe("NODE_PROJECT_SKILL_LEDGER", () => {
           return true;
         },
       );
-      assert.strictEqual(await readFile(file, "utf8"), text);
+      assert.strictEqual(await readFile(file, "utf8"), text(project));
     });
   }
 
@@ -321,9 +351,9 @@ describe("NODE_PROJECT_SKILL_LEDGER", () => {
 });
 
 describe("provenProjectSkills", () => {
-  test("D-CF2-13: maps each skill the ledger lists for the project to its digest", async (t) => {
+  test("D-CF2-13: maps each skill the ledger of the project lists to its digest", async (t) => {
     // arrange
-    const { agentDir, project } = await allocateCase(t);
+    const { agentDir, project, file } = await allocateCase(t);
     await NODE_PROJECT_SKILL_LEDGER.update({
       projectPath: project,
       forget: [],
@@ -335,9 +365,9 @@ describe("provenProjectSkills", () => {
     const reads: string[] = [];
 
     // act
-    const proven = await provenProjectSkills(agentDir, project, (file) => {
-      reads.push(file);
-      return readFile(file, "utf8");
+    const proven = await provenProjectSkills(agentDir, project, (target) => {
+      reads.push(target);
+      return readFile(target, "utf8");
     });
 
     // assert
@@ -348,14 +378,14 @@ describe("provenProjectSkills", () => {
         ["demo-status", DEMO_STATUS.sha256],
       ]),
     );
-    assert.deepStrictEqual(reads, [projectInstallsFile(agentDir)]);
+    assert.deepStrictEqual(reads, [file]);
   });
 
-  test("D-CF2-13: lists nothing for a project the ledger does not name", async (t) => {
+  test("D-CF2-13: lists nothing for a project whose ledger is another project's", async (t) => {
     // arrange
     const { agentDir, project } = await allocateCase(t);
     await NODE_PROJECT_SKILL_LEDGER.update({
-      projectPath: "/elsewhere",
+      projectPath: path.join(path.dirname(project), "elsewhere"),
       forget: [],
       remember: new Map([["demo-greet", DEMO_GREET]]),
     });
@@ -372,7 +402,13 @@ describe("provenProjectSkills", () => {
     { label: "a ledger that is not JSON", read: () => Promise.resolve("not json") },
     {
       label: "a ledger of another shape",
-      read: () => Promise.resolve(JSON.stringify({ version: 1, projects: { "/p": { s: "x" } } })),
+      read: () =>
+        Promise.resolve(JSON.stringify({ version: 1, project: "/p", skills: { s: "x" } })),
+    },
+    {
+      label: "a ledger that names another project",
+      read: () =>
+        Promise.resolve(JSON.stringify({ version: 1, project: "/q", skills: { s: DEMO_GREET } })),
     },
   ]) {
     test(`D-CF2-13: lists nothing from ${label}`, async () => {

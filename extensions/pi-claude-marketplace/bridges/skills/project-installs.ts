@@ -9,17 +9,23 @@
 // project-scope entry tagged with its `projectPath`, and drops a plugin that
 // only the repository's own files name (`not_installed_here`).
 //
-// This ledger is the same anchor: one file under the USER scope root, which a
-// repository cannot write, keyed by the canonical project path. It lists each
-// skill that this user's install staged into the project, with its plugin and
-// the digest of the staged skill directory (WR-03): every file and symbolic
-// link under it, so a helper script that a `!` command runs is covered as
-// well as `SKILL.md`. A project skill runs its `!` commands and claims an
-// alias only when the ledger lists it for the current project with the digest
-// of the directory as it is now.
+// This ledger is the same anchor, kept under the USER scope root, which a
+// repository cannot write: one file per project, named by the SHA-256 of the
+// canonical project path. It lists each skill that this user's install staged
+// into the project, with its plugin and the digest of the staged skill
+// directory (WR-03): every file and symbolic link under it, so a helper script
+// that a `!` command runs is covered as well as `SKILL.md`. A project skill
+// runs its `!` commands and claims an alias only when the ledger lists it for
+// the current project with the digest of the directory as it is now.
+//
+// IN-06: one file per project means a write for one project never rewrites
+// another project's entries. Every write for a project runs inside an
+// operation that holds that project's state lock (`withStateGuard`), so two
+// writes for one project never interleave, and a removed entry cannot come
+// back from a stale read.
 
 import { createHash } from "node:crypto";
-import { readdir, readFile, readlink, realpath } from "node:fs/promises";
+import { readdir, readFile, readlink, realpath, rm } from "node:fs/promises";
 import path from "node:path";
 
 import Type from "typebox";
@@ -34,10 +40,8 @@ import type { Dirent } from "node:fs";
 
 const LEDGER_SCHEMA = Type.Object({
   version: Type.Literal(1),
-  projects: Type.Record(
-    Type.String(),
-    Type.Record(Type.String(), Type.Object({ plugin: Type.String(), sha256: Type.String() })),
-  ),
+  project: Type.String(),
+  skills: Type.Record(Type.String(), Type.Object({ plugin: Type.String(), sha256: Type.String() })),
 });
 
 const LEDGER_VALIDATOR = Compile(LEDGER_SCHEMA);
@@ -48,8 +52,8 @@ export interface LedgerSkill {
   readonly sha256: string;
 }
 
-/** The ledger: each canonical project path maps generated skill names to their entry. */
-type Ledger = Readonly<Record<string, Readonly<Record<string, LedgerSkill>>>>;
+/** The skills one project's ledger lists: each generated skill name maps to its entry. */
+type ProjectSkills = Readonly<Record<string, LedgerSkill>>;
 
 /** A change to the skills the ledger lists for one project. */
 export interface ProjectSkillLedgerChange {
@@ -66,9 +70,17 @@ export interface ProjectSkillLedger {
   readonly update: (change: ProjectSkillLedgerChange) => Promise<void>;
 }
 
-/** `<agentDir>/pi-claude-marketplace/project-installs.json`, inside the user scope (NFR-10). */
-function projectInstallsFile(agentDir: string): string {
-  return path.join(agentDir, "pi-claude-marketplace", "project-installs.json");
+/** `<agentDir>/pi-claude-marketplace/project-installs/`, inside the user scope (NFR-10). */
+function projectInstallsRoot(agentDir: string): string {
+  return path.join(agentDir, "pi-claude-marketplace", "project-installs");
+}
+
+/**
+ * The directory of the ledger of the project whose canonical path is
+ * `project`: `<root>/<SHA-256 of the path>/`, which holds `skills.json`.
+ */
+function projectLedgerDir(agentDir: string, project: string): string {
+  return path.join(projectInstallsRoot(agentDir), sha256Hex(project));
 }
 
 /**
@@ -152,26 +164,14 @@ async function canonicalProjectPath(projectPath: string): Promise<string> {
   }
 }
 
-/** The ledger `text` holds; an unreadable or malformed ledger lists nothing. */
-function parseLedger(text: string | undefined): Ledger {
-  if (text === undefined) {
-    return {};
-  }
-
+/**
+ * The skills the ledger `text` lists for `project`. Content that is not this
+ * version's layout, or that names another project, lists nothing.
+ */
+function parseProjectSkills(text: string, project: string): ProjectSkills | undefined {
   try {
     const value: unknown = JSON.parse(text);
-    return LEDGER_VALIDATOR.Check(value) ? value.projects : {};
-  } catch {
-    return {};
-  }
-}
-
-async function readLedgerText(
-  file: string,
-  read: (file: string) => Promise<string>,
-): Promise<string | undefined> {
-  try {
-    return await read(file);
+    return LEDGER_VALIDATOR.Check(value) && value.project === project ? value.skills : undefined;
   } catch {
     return undefined;
   }
@@ -180,30 +180,30 @@ async function readLedgerText(
 /**
  * D-CF2-13: the generated names of the skills this user installed into the
  * project at `projectPath`, each mapped to the digest its staged directory
- * had. A missing or unreadable ledger lists none, so every project skill
- * fails the check.
+ * had. A missing, unreadable or malformed ledger lists none, so every project
+ * skill fails the check.
  */
 export async function provenProjectSkills(
   agentDir: string,
   projectPath: string,
   read: (file: string) => Promise<string>,
 ): Promise<ReadonlyMap<string, string>> {
-  const ledger = parseLedger(await readLedgerText(projectInstallsFile(agentDir), read));
-  const skills = ledger[await canonicalProjectPath(projectPath)];
-  return new Map(
-    skills === undefined
-      ? []
-      : Object.entries(skills).map(([name, skill]) => [name, skill.sha256] as const),
-  );
+  const project = await canonicalProjectPath(projectPath);
+  let text: string;
+  try {
+    text = await read(path.join(projectLedgerDir(agentDir, project), "skills.json"));
+  } catch {
+    return new Map();
+  }
+
+  const skills = parseProjectSkills(text, project) ?? {};
+  return new Map(Object.entries(skills).map(([name, skill]) => [name, skill.sha256] as const));
 }
 
 /** The skills of one project after `change`. */
-function changedSkills(
-  current: Readonly<Record<string, LedgerSkill>> | undefined,
-  change: ProjectSkillLedgerChange,
-): Record<string, LedgerSkill> {
+function changedSkills(current: ProjectSkills, change: ProjectSkillLedgerChange): ProjectSkills {
   const skills = Object.fromEntries(
-    Object.entries(current ?? {}).filter(([name]) => !change.forget.includes(name)),
+    Object.entries(current).filter(([name]) => !change.forget.includes(name)),
   );
   for (const [name, skill] of change.remember) {
     skills[name] = { plugin: skill.plugin, sha256: skill.sha256 };
@@ -212,24 +212,13 @@ function changedSkills(
   return skills;
 }
 
-/** The ledger after `change` to the project at `key`, keeping the order of the other projects. */
-function changedLedger(ledger: Ledger, key: string, change: ProjectSkillLedgerChange): Ledger {
-  const skills = changedSkills(ledger[key], change);
-  const entries = Object.entries(ledger);
-  const updated = Object.hasOwn(ledger, key)
-    ? entries.map(([project, current]) => [project, project === key ? skills : current] as const)
-    : [...entries, [key, skills] as const];
-  return Object.fromEntries(
-    updated.filter(([, projectSkills]) => Object.keys(projectSkills).length > 0),
-  );
-}
-
 /**
- * The ledger the writer changes. A missing file lists nothing. Any other read
- * failure, and content this version did not write, throws, so the write never
- * drops entries it could not read (WR-02).
+ * The skills the ledger `file` of `project` lists, for the writer. A missing
+ * file lists nothing. Any other read failure, and content this version did
+ * not write or that names another project, throws, so the write never drops
+ * entries it could not read (WR-02).
  */
-async function ledgerToUpdate(file: string): Promise<Ledger> {
+async function skillsToUpdate(file: string, project: string): Promise<ProjectSkills> {
   let text: string;
   try {
     text = await readFile(file, "utf8");
@@ -241,39 +230,38 @@ async function ledgerToUpdate(file: string): Promise<Ledger> {
     throw new ProjectSkillLedgerError(file, "unreadable", { cause: err });
   }
 
-  let value: unknown;
-  try {
-    value = JSON.parse(text);
-  } catch (err) {
-    throw new ProjectSkillLedgerError(file, "unknown-content", { cause: err });
-  }
-
-  if (!LEDGER_VALIDATOR.Check(value)) {
+  const skills = parseProjectSkills(text, project);
+  if (skills === undefined) {
     throw new ProjectSkillLedgerError(file, "unknown-content");
   }
 
-  return value.projects;
+  return skills;
 }
 
 /**
  * D-CF2-13: the ledger under the user scope root of `agentDir()`, written
- * atomically (NFR-1) and only when a change alters what it lists.
+ * atomically (NFR-1) and only when a change alters what it lists. A project
+ * whose last skill is forgotten loses its ledger directory.
  */
 function createProjectSkillLedger(agentDir: () => string): ProjectSkillLedger {
   return {
     update: async (change) => {
-      const root = path.join(agentDir(), "pi-claude-marketplace");
-      const file = projectInstallsFile(agentDir());
-      await assertPathInside(root, file, "project skill ledger");
-      const ledger = await ledgerToUpdate(file);
-      const projects = changedLedger(
-        ledger,
-        await canonicalProjectPath(change.projectPath),
-        change,
-      );
-      if (JSON.stringify(projects) !== JSON.stringify(ledger)) {
-        await atomicWriteJson(file, { version: 1, projects });
+      const project = await canonicalProjectPath(change.projectPath);
+      const dir = projectLedgerDir(agentDir(), project);
+      await assertPathInside(projectInstallsRoot(agentDir()), dir, "project skill ledger");
+      const file = path.join(dir, "skills.json");
+      const current = await skillsToUpdate(file, project);
+      const skills = changedSkills(current, change);
+      if (JSON.stringify(skills) === JSON.stringify(current)) {
+        return;
       }
+
+      if (Object.keys(skills).length === 0) {
+        await rm(dir, { recursive: true, force: true });
+        return;
+      }
+
+      await atomicWriteJson(file, { version: 1, project, skills });
     },
   };
 }

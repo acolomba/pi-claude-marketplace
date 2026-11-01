@@ -6,16 +6,29 @@
  */
 
 import assert from "node:assert/strict";
-import { access, appendFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { access, appendFile, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { Given, Then } from "@cucumber/cucumber";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
-/** The user's record of the plugins installed into projects, under the agent directory. */
-function projectInstallsRecord(world: ScenarioWorld): string {
-  return path.join(world.tokens.agentDir, "pi-claude-marketplace", "project-installs.json");
+/**
+ * The user's record of the skills installed into the scenario's project, under
+ * the agent directory and named by the SHA-256 of the project's real path
+ * (IN-06).
+ */
+async function projectInstallsRecord(world: ScenarioWorld): Promise<string> {
+  const project = await realpath(world.tokens.projectDir);
+  const key = createHash("sha256").update(project).digest("hex");
+  return path.join(
+    world.tokens.agentDir,
+    "pi-claude-marketplace",
+    "project-installs",
+    key,
+    "skills.json",
+  );
 }
 
 // D-CF2-13: the project keeps its `.pi/pi-claude-marketplace/` tree and the
@@ -24,8 +37,8 @@ function projectInstallsRecord(world: ScenarioWorld): string {
 Given(
   "the user's pi directory records no plugin install for the project",
   async function (this: ScenarioWorld) {
-    const ledger = projectInstallsRecord(this);
-    await rm(ledger, { force: true });
+    const ledger = path.dirname(await projectInstallsRecord(this));
+    await rm(ledger, { recursive: true, force: true });
     await assert.rejects(access(ledger), { code: "ENOENT" });
     await access(path.join(this.tokens.projectDir, ".pi", "pi-claude-marketplace", "state.json"));
   },
@@ -57,7 +70,7 @@ Given(
 Given(
   "the user's record of project skill installs was replaced with this text:",
   async function (this: ScenarioWorld, text: string) {
-    const record = projectInstallsRecord(this);
+    const record = await projectInstallsRecord(this);
     await mkdir(path.dirname(record), { recursive: true });
     await writeFile(record, text, "utf8");
     assert.strictEqual(await readFile(record, "utf8"), text);
@@ -67,6 +80,6 @@ Given(
 Then(
   "the user's record of project skill installs holds this text:",
   async function (this: ScenarioWorld, text: string) {
-    assert.strictEqual(await readFile(projectInstallsRecord(this), "utf8"), text);
+    assert.strictEqual(await readFile(await projectInstallsRecord(this), "utf8"), text);
   },
 );

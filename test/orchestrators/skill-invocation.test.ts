@@ -75,11 +75,12 @@ function skillFile(body: string, frontmatter: readonly string[] = []): string {
   );
 }
 
-const LEDGER = "/agent/pi-claude-marketplace/project-installs.json";
-
 function sha256(content: string): string {
   return createHash("sha256").update(content, "utf8").digest("hex");
 }
+
+/** IN-06: the ledger file of the project `/work` under the agent directory `/agent`. */
+const LEDGER = `/agent/pi-claude-marketplace/project-installs/${sha256("/work")}/skills.json`;
 
 /** WR-03: the in-memory files under the skill directory `dir`, as the lister reports them. */
 function skillTree(files: Readonly<Record<string, string>>, dir: string): SkillTreeEntry[] {
@@ -98,7 +99,7 @@ function ledgerText(project: string, digests: Readonly<Record<string, string>>):
   const listed = Object.entries(digests).map(
     ([name, digest]) => [name, { plugin: "demo", sha256: digest }] as const,
   );
-  return JSON.stringify({ version: 1, projects: { [project]: Object.fromEntries(listed) } });
+  return JSON.stringify({ version: 1, project, skills: Object.fromEntries(listed) });
 }
 
 /** A ledger that lists every project skill among `files` with the digest of its directory. */
