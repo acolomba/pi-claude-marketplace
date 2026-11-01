@@ -651,7 +651,9 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
   // keeps matching; `declaredName` is what pi-subagents takes as the agent's
   // localName and what the host workflow engine keys its agentType registry
   // on, so a bridged workflow's agent({ agentType }) call resolves.
-  const declaredName = declaredAgentName(pluginName, sourceName);
+  // D-CF4-01: a nested file's folders name it as Claude Code does,
+  // `<plugin>:<folder>...:<name>`.
+  const declaredName = declaredAgentName(pluginName, sourceName, discovered.namespace);
 
   const warnings: string[] = [];
 

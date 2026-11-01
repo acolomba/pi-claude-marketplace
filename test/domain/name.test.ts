@@ -1242,6 +1242,57 @@ describe("generatedAgentName", () => {
       });
     });
   }
+
+  for (const { namespace, expectedAgentName } of [
+    { namespace: [], expectedAgentName: "pi-claude-marketplace-demo-security" },
+    { namespace: ["review"], expectedAgentName: "pi-claude-marketplace-demo-review-security" },
+    {
+      namespace: ["review", "deep"],
+      expectedAgentName: "pi-claude-marketplace-demo-review-deep-security",
+    },
+    { namespace: [".hidden"], expectedAgentName: "pi-claude-marketplace-demo-.hidden-security" },
+  ]) {
+    test(`D-CF4-01 joins the folders ${JSON.stringify(namespace)} with a dash`, () => {
+      // arrange
+      const folders = namespace;
+
+      // act
+      const agentName = generatedAgentName("demo", "security", folders);
+
+      // assert
+      assert.strictEqual(agentName, expectedAgentName);
+    });
+  }
+
+  for (const { segment, errorMessage } of [
+    {
+      segment: "a/b",
+      errorMessage: 'agent namespace segment "a/b" must not contain path separators.',
+    },
+    {
+      segment: "a\u0001b",
+      errorMessage: 'agent namespace segment "a\u0001b" must not contain ASCII control characters.',
+    },
+    { segment: "", errorMessage: "agent namespace segment must be a non-empty string." },
+    { segment: ".", errorMessage: 'agent namespace segment must not be "." or "..".' },
+    { segment: "..", errorMessage: 'agent namespace segment must not be "." or "..".' },
+  ]) {
+    test(`D-CF4-01 rejects the folder ${JSON.stringify(segment)} in a generated name`, () => {
+      // arrange
+      const namespace = ["review", segment];
+
+      // act
+      const generateAgentName = () => generatedAgentName("demo", "security", namespace);
+
+      // assert
+      assert.throws(generateAgentName, (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual(error.constructor, Error);
+        assert.strictEqual(error.message, errorMessage);
+        return true;
+      });
+    });
+  }
 });
 
 describe("declaredAgentName", () => {
@@ -1302,6 +1353,54 @@ describe("declaredAgentName", () => {
 
       // act
       const declareAgentName = () => declaredAgentName(plugin, source);
+
+      // assert
+      assert.throws(declareAgentName, (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual(error.constructor, Error);
+        assert.strictEqual(error.message, errorMessage);
+        return true;
+      });
+    });
+  }
+
+  for (const { namespace, expectedDeclaredName } of [
+    { namespace: [], expectedDeclaredName: "demo:security" },
+    { namespace: ["review"], expectedDeclaredName: "demo:review:security" },
+    { namespace: ["review", "deep"], expectedDeclaredName: "demo:review:deep:security" },
+    { namespace: [".hidden"], expectedDeclaredName: "demo:.hidden:security" },
+  ]) {
+    test(`D-CF4-01 joins the folders ${JSON.stringify(namespace)} with a colon`, () => {
+      // arrange
+      const folders = namespace;
+
+      // act
+      const declaredName = declaredAgentName("demo", "security", folders);
+
+      // assert
+      assert.strictEqual(declaredName, expectedDeclaredName);
+    });
+  }
+
+  for (const { segment, errorMessage } of [
+    {
+      segment: "a/b",
+      errorMessage: 'agent namespace segment "a/b" must not contain path separators.',
+    },
+    {
+      segment: "a\u0001b",
+      errorMessage: 'agent namespace segment "a\u0001b" must not contain ASCII control characters.',
+    },
+    { segment: "", errorMessage: "agent namespace segment must be a non-empty string." },
+    { segment: ".", errorMessage: 'agent namespace segment must not be "." or "..".' },
+    { segment: "..", errorMessage: 'agent namespace segment must not be "." or "..".' },
+  ]) {
+    test(`D-CF4-01 rejects the folder ${JSON.stringify(segment)} in a declared name`, () => {
+      // arrange
+      const namespace = ["review", segment];
+
+      // act
+      const declareAgentName = () => declaredAgentName("demo", "security", namespace);
 
       // assert
       assert.throws(declareAgentName, (error: unknown) => {

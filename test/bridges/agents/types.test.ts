@@ -36,6 +36,17 @@ const discoveredAgent: DiscoveredAgent = {
 } satisfies DiscoveredAgent;
 void discoveredAgent;
 
+const nestedDiscoveredAgent: DiscoveredAgent = {
+  sourceName: "security",
+  generatedName: "pi-claude-marketplace-acme-review-security",
+  sourcePath: "/plugin/agents/review/security.md",
+  namespace: ["review"],
+  sourceHash: "source-hash",
+  raw: { description: "Checks security." },
+  body: "Check the change.\n",
+} satisfies DiscoveredAgent;
+void nestedDiscoveredAgent;
+
 const convertedAgent: ConvertedAgent = {
   generatedName: "pi-claude-marketplace-acme-reviewer",
   sourceName: "reviewer",

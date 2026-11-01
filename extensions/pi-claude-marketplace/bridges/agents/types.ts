@@ -39,6 +39,12 @@ export interface DiscoveredAgent {
   readonly generatedName: string;
   /** Absolute path to the source .md file. */
   readonly sourcePath: string;
+  /**
+   * D-CF4-01: the folder segments between the agents folder and the file,
+   * present only for a file in a subfolder (`["review"]` for
+   * `agents/review/security.md`).
+   */
+  readonly namespace?: readonly string[];
   /** sha256 hex digest of the source file's raw bytes (BOM/line-ending tolerant). */
   readonly sourceHash: string;
   /** Parsed frontmatter -- typed strings for known fields; open index for extras. */

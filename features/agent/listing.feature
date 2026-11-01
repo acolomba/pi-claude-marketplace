@@ -124,3 +124,144 @@ Feature: Agent listing
       | 2    | user        | List the agents.                                                                                                                                                                                                                                                 |
       | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                                                                                                                             |
       | 2    | tool result | subagent returned: Executable agents:\nUser agents\n- demo:reviewer (user, aliases: pi-claude-marketplace-demo-reviewer): Reviews the files it is given.\n- tools:reviewer (user, aliases: pi-claude-marketplace-tools-reviewer): Reviews the tools it is given. |
+
+  Scenario: Agent files in subfolders are listed under their folder names
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file                  | name     | description                            | body                                  |
+      | review/security.md    |          | Checks the code for security problems. | Check the code for security problems. |
+      | review/deep/nested.md | nested-x | Reviews the code in depth.             | Review the code in depth.             |
+      | reviewer.md           | reviewer | Reviews the files it is given.         | Review the files named in the task.   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply                  | tool     | arguments         |
+      |                        | subagent | {"action":"list"} |
+      | The agents are listed. |          |                   |
+    When the user prompts "List the agents."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                                                                                                                                           |
+      | 1    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                                                               |
+      | 2    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                                                               |
+      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                                                                                                                                                                                                                                                                           |
+      | 2    | tool result | subagent returned: Executable agents:\nUser agents\n- demo:review:deep:nested-x (user, aliases: pi-claude-marketplace-demo-review-deep-nested-x): Reviews the code in depth.\n- demo:review:security (user, aliases: pi-claude-marketplace-demo-review-security): Checks the code for security problems.\n- demo:reviewer (user, aliases: pi-claude-marketplace-demo-reviewer): Reviews the files it is given. |
+
+  Scenario: Hidden and upper-case agent files are listed as Claude Code lists them
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file                 | description                  | body                        |
+      | .hidden.md           | Works in a hidden file.      | Work in a hidden file.      |
+      | .hiddendir/inside.md | Works in a hidden folder.    | Work in a hidden folder.    |
+      | UPPER.MD             | Works in an upper-case file. | Work in an upper-case file. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply                  | tool     | arguments         |
+      |                        | subagent | {"action":"list"} |
+      | The agents are listed. |          |                   |
+    When the user prompts "List the agents."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                                                                                                   |
+      | 1    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                       |
+      | 2    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                       |
+      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                                                                                                                                                                                                                                   |
+      | 2    | tool result | subagent returned: Executable agents:\nUser agents\n- demo:.hidden (user, aliases: pi-claude-marketplace-demo-.hidden): Works in a hidden file.\n- demo:.hiddendir:inside (user, aliases: pi-claude-marketplace-demo-.hiddendir-inside): Works in a hidden folder.\n- demo:UPPER.MD (user, aliases: pi-claude-marketplace-demo-UPPER.MD): Works in an upper-case file. |
+
+  Scenario: A file without the markdown extension is not listed as an agent
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file        | name     | description                    | body                                |
+      | reviewer.md | reviewer | Reviews the files it is given. | Review the files named in the task. |
+      | notes.txt   | notes    | Holds notes.                   | Keep notes.                         |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply                | tool     | arguments         |
+      |                      | subagent | {"action":"list"} |
+      | One agent is listed. |          |                   |
+    When the user prompts "List the agents."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                     |
+      | 1    | user        | List the agents.                                                                                                                                         |
+      | 2    | user        | List the agents.                                                                                                                                         |
+      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                     |
+      | 2    | tool result | subagent returned: Executable agents:\nUser agents\n- demo:reviewer (user, aliases: pi-claude-marketplace-demo-reviewer): Reviews the files it is given. |
+
+  Scenario: A declared agent file is listed under its own name
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      { "name": "demo", "version": "1.0.0", "agents": "./custom/review/security.md" }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "custom/review/security.md" with this text:
+      """
+      ---
+      description: Checks the code for security problems.
+      ---
+
+      Check the code for security problems.
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply                | tool     | arguments         |
+      |                      | subagent | {"action":"list"} |
+      | One agent is listed. |          |                   |
+    When the user prompts "List the agents."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                             |
+      | 1    | user        | List the agents.                                                                                                                                                 |
+      | 2    | user        | List the agents.                                                                                                                                                 |
+      | 2    | assistant   | tool call subagent {"action":"list"}                                                                                                                             |
+      | 2    | tool result | subagent returned: Executable agents:\nUser agents\n- demo:security (user, aliases: pi-claude-marketplace-demo-security): Checks the code for security problems. |
+
+  Scenario: An agent whose folder name flattens onto another agent's file name is reported as skipped
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file               | description                            | body                                  |
+      | review/security.md | Checks the code for security problems. | Check the code for security problems. |
+      | review-security.md | Reviews the security notes.            | Review the security notes.            |
+    Given the marketplace "fixtures" is added to the user scope
+    When the user runs "/claude:plugin install demo@fixtures --scope user"
+    Then the command reports these results:
+      | kind       | severity | needs reload | summary                             | header                                                           | lines                                              |
+      | cascade    | warning  | true         | A plugin operation needs attention. |                                                                  |                                                    |
+      | diagnostic | warning  | false        |                                     | Plugin "demo" [user] installed; 1 declared component has a note. | agent source "review-security" at "[redacted path] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons               | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed | requires pi-subagents | user  | 1.0.0   |

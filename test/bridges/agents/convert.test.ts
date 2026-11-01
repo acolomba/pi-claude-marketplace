@@ -1542,6 +1542,52 @@ Body content.
     });
   }
 
+  test("D-CF4-01 names a nested agent after its folders and keeps its generated alias", () => {
+    // arrange
+    const expectedFileContent = `---
+name: acme:review:security
+description: Checks security.
+aliases: pi-claude-marketplace-acme-review-security
+tools: read
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: security
+  sourcePath: /plugins/acme/agents/review/security.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Check security.
+`;
+
+    // act
+    const agent = convertAgent({
+      pluginName: "acme",
+      pluginRoot: "/plugins/acme",
+      pluginDataDir: "/data",
+      knownSkills: [],
+      discovered: {
+        sourceName: "security",
+        generatedName: "pi-claude-marketplace-acme-review-security",
+        sourcePath: "/plugins/acme/agents/review/security.md",
+        namespace: ["review"],
+        sourceHash: "abc123",
+        raw: { description: "Checks security.", tools: "Read" },
+        body: "Check security.\n",
+      },
+      sourceHash: "abc",
+      mapModel: false,
+    });
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
   test("preserves a token-free CRLF body's final carriage return", () => {
     // arrange
     const expectedFileContent = `---
