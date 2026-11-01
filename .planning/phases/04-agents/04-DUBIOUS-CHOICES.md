@@ -274,3 +274,34 @@ entries into the root file. Severity and status follow the root file's rules.
   the source-reading view; decision rows cite `P4-DC-NN` IDs, which the parent
   renumbers when merging the log; D-CF4-11..13 carry no "settled
   autonomously" tag (CONTEXT does not mark them).
+
+### P4-DC-11: Verification-step choices (Nyquist, security, code review, regression gate)
+
+- **Phase / source:** verify:post subagents (validate-phase, secure-phase),
+  code review and fixer, orchestrator regression gate.
+- **Severity:** Medium for items 4 and 5; the rest Low. **Status:** open.
+- **Items:**
+  1. validate-phase and secure-phase ran as general-purpose subagents (as
+     DC-22 C); both reused the phase gate instead of re-running it.
+     Nyquist: 0 gaps, AGT-04 counted COVERED by the recorded gap plus the
+     pinned `Async: true` line, with the real background run manual-only.
+  2. Security: 19 threats (package-install rows of six plans counted as one),
+     15 mitigated, 4 accepted, 0 open. Not registered: the preload reader's
+     `readFile` follows a symlinked `SKILL.md` swapped in after discovery
+     (only the plugin's own author could do it).
+  3. Code review ran without subagents (the reviewer could not spawn any):
+     round 1 one warning, three info; WR-01 fixed (`Skill(spec)` maps to the
+     Skill tool, red-proofed scenario). The three info findings were deferred
+     with reasons by the fixer: IN-01 a full `claude-*` ID keeps a `[1m]`
+     suffix Pi cannot resolve; IN-02 the thinking-fallback warning quotes the
+     raw effort; IN-03 `agents/.md` or an unsafe nested folder name now fails
+     the whole install (the old flat walk skipped dotfiles).
+  4. WR-01 widens a pattern grant: `tools: Skill(helper)` gives the child all
+     skills (pi-subagents cannot limit inheritance to one skill).
+  5. A non-conforming commit is on the branch: `72f9a02 docs(04): record code
+     review disposition`, made by the disposition step's `gsd-tools query
+     commit` (phase number in the title, no trailers). It is pushed; amend
+     and rebase are forbidden, so it stays (a squash merge removes it).
+  6. The regression gate reuses the post-review `npm run check` (exit 0,
+     seed 17555, 1256/1256), which runs every prior phase's tests, instead of
+     a separate run over Phase 1's listed test files.
