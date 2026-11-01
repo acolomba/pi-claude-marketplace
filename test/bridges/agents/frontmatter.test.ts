@@ -1025,4 +1025,53 @@ Body.
       assert.strictEqual(agentFile, expectedAgentFile);
     });
   }
+
+  for (const launchAsync of [true, false]) {
+    test(`D-CF4-05 writes async: ${launchAsync} right after the advertise line`, () => {
+      // arrange
+      const expectedAgentFile = `---
+name: acme:bot
+description: d
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+advertise: true
+async: ${launchAsync}
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: agents/bot.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Body.
+`;
+
+      // act
+      const agentFile = emitGeneratedAgentFile({
+        frontmatter: {
+          name: "acme:bot",
+          description: "d",
+          skills: [],
+          inheritSkills: false,
+          async: launchAsync,
+        },
+        provenance: {
+          pluginName: "acme",
+          sourceName: "bot",
+          sourcePath: "agents/bot.md",
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [],
+        },
+        body: "Body.",
+      });
+
+      // assert
+      assert.strictEqual(agentFile, expectedAgentFile);
+    });
+  }
 });
