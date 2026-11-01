@@ -274,6 +274,8 @@ Each hook's `additionalContext` reaches the model. When several hooks of one eve
 
 When `SessionStart` and `UserPromptSubmit` both give context for one prompt, one message carries both parts, `SessionStart` first. A value that is empty or only white space adds nothing. Each bridge load, `/reload` included, empties the context that waits for the next prompt.
 
+A `UserPromptSubmit` context belongs to its own prompt. When a prompt starts no turn, for example because another extension handled it, the next prompt drops its context. A prompt that you send while the agent runs (a steer or a follow-up) starts no turn of its own, so its context goes in a hidden message on the turn that reads the prompt. Pi queues the prompt only after the hooks finish, so that message comes just before the prompt, where upstream puts the text after it (Pi gap) (D-CF5-13).
+
 ### Messages to the user
 
 A hook's `systemMessage` is shown to you and never sent to the model (D-CF5-14). The bridge shows it through the extension's notifications, at `info` severity, as `<label> says: <text>`. In JSON and RPC mode, each notice is a `hook-notice` entry. `<label>` names the event and the value that the hook matched, as upstream names the hook:

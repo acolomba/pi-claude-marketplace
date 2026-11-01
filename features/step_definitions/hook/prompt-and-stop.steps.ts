@@ -1,6 +1,7 @@
 /**
- * @fileoverview Steps about Stop hooks that send the turn back: a prompt
- * whose turn the Stop hooks continue, recorded with the turn they start.
+ * @fileoverview Steps about prompts whose turn goes on past its first model
+ * reply: a prompt whose turn the Stop hooks continue, recorded with the turn
+ * they start, and a prompt the user steers while its tool runs.
  *
  * Pi runs the extension `agent_settled` handlers, the Stop hooks among them,
  * before it reports `agent_settled`, and it starts the turn a Stop hook asks
@@ -8,6 +9,11 @@
  * the re-entered turn runs. The `When` here waits for the second
  * `agent_settled` instead, and keeps every record and stand-in log line of
  * both turns as the last turn (HAR-03).
+ *
+ * A steer is a prompt the user sends while the agent runs. Pi queues it into
+ * the running agent, which reads it after the running tool returns, so the
+ * steer step waits for the tool to start, sends the steer, and keeps the
+ * whole run as the last turn.
  */
 
 import assert from "node:assert/strict";
@@ -41,6 +47,10 @@ function isSettled(record: RpcRecord): boolean {
   return record.type === "agent_settled";
 }
 
+function isToolStart(record: RpcRecord): boolean {
+  return record.type === "tool_execution_start";
+}
+
 // Waits for the next `agent_settled` at or after `from`, within the time left
 // before `deadline`, asserts that its turn was not aborted, and returns the
 // index after it.
@@ -71,6 +81,22 @@ function callsPastScript(logs: ReadonlyMap<string, readonly unknown[]>): string[
     .map((call) => `call ${call.index + 1}`);
 }
 
+// Asserts that the run since `from` had no fault and no model call past the
+// script, and keeps its records and the log lines since `lengths` as the
+// last turn of `prompt`.
+async function recordRun(
+  world: ScenarioWorld,
+  prompt: string,
+  lengths: ReadonlyMap<string, number>,
+  from: number,
+): Promise<void> {
+  const records = world.pi.recordsSince(from);
+  assert.deepStrictEqual(records.filter(isFault), []);
+  const logs = await readLogLinesSince(world.profileHarness(), lengths);
+  assert.deepStrictEqual(callsPastScript(logs), [], "the model was called past its script");
+  world.recordTurn({ prompt, disposition: "started", records, logs });
+}
+
 When(
   "the user prompts {string} and the stop hooks send the turn back",
   async function (this: ScenarioWorld, text: string) {
@@ -78,10 +104,24 @@ When(
     const prompt = expandTokens(text, this.tokens);
     const { lengths, from } = await startPrompt(this, prompt);
     await settledAfter(this, await settledAfter(this, from, deadline), deadline);
-    const records = this.pi.recordsSince(from);
-    assert.deepStrictEqual(records.filter(isFault), []);
-    const logs = await readLogLinesSince(this.profileHarness(), lengths);
-    assert.deepStrictEqual(callsPastScript(logs), [], "the model was called past its script");
-    this.recordTurn({ prompt, disposition: "started", records, logs });
+    await recordRun(this, prompt, lengths, from);
+  },
+);
+
+When(
+  "the user prompts {string} and steers with {string} while the tool runs",
+  async function (this: ScenarioWorld, text: string, steerText: string) {
+    const deadline = Date.now() + REENTERED_TURNS_DEADLINE_MS;
+    const prompt = expandTokens(text, this.tokens);
+    const { lengths, from } = await startPrompt(this, prompt);
+    await this.pi.waitForRecord(from, isToolStart, deadline - Date.now());
+    const steer = await this.pi.request({
+      type: "prompt",
+      message: expandTokens(steerText, this.tokens),
+      streamingBehavior: "steer",
+    });
+    assert.strictEqual(promptDisposition(steer.response), "queued", JSON.stringify(steer.response));
+    await settledAfter(this, from, deadline);
+    await recordRun(this, prompt, lengths, from);
   },
 );

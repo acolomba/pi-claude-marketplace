@@ -55,6 +55,7 @@
 // hook on one snapshot, so a mutation applies once, after every hook ran.
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
+import { errorMessage } from "../../shared/errors.ts";
 
 import { hookBlockingErrorText, hookErrorText, hookEventLabel } from "./hook-labels.ts";
 
@@ -337,6 +338,39 @@ export function adaptToolResultResult(
 // adaptInputResult -- UserPromptSubmit
 // ──────────────────────────────────────────────────────────────────────────
 
+/** The custom type of the message that carries prompt and session hook context to the model. */
+export const HOOK_CONTEXT_MESSAGE_TYPE = "claude-hook-additional-context";
+
+/**
+ * D-CF5-13: send the context of a prompt that Pi queues into the running
+ * agent (a steer or a follow-up) as a hidden message. No
+ * `before_agent_start` fires for a queued prompt, so a buffered context would
+ * wait for a later prompt's turn. `triggerTurn: false` queues the message
+ * until the running turn ends, so the model reads it on the turn that takes
+ * the queued prompt. Pi queues the prompt itself only after its `input`
+ * handlers return, so the context comes just before the prompt (Pi gap: no
+ * carrier puts a message after a queued prompt). A blank context, or no Pi
+ * API, sends nothing; a send that throws is debug-logged.
+ */
+function sendQueuedPromptContext(pi: ExtensionAPI | undefined, text: string): void {
+  if (pi === undefined || text.trim() === "") {
+    return;
+  }
+
+  try {
+    pi.sendMessage(
+      {
+        customType: HOOK_CONTEXT_MESSAGE_TYPE,
+        content: [{ type: "text", text: `UserPromptSubmit hook additional context: ${text}` }],
+        display: false,
+      },
+      { triggerTurn: false },
+    );
+  } catch (error: unknown) {
+    hookDebugLog(`adaptInput: queued prompt context failed: ${errorMessage(error)}`);
+  }
+}
+
 /**
  * D-60-03: convert a folded `HookExecResult` to the Pi `input` handler
  * return shape (`InputEventResult | undefined`).
@@ -344,14 +378,14 @@ export function adaptToolResultResult(
  * D-CF5-13 / HOOK-05: a hook's `additionalContext` never replaces the
  * prompt. The adapter buffers it with the provenance of the attributed entry
  * and lets the prompt continue; the `before_agent_start` handler of the same
- * turn sends it as a message after the prompt. A block or stop buffers
- * nothing, so a stopped prompt sends no context to any turn. The `_event`
- * parameter keeps the adapter signature uniform; this adapter does not read
- * it.
+ * turn sends it as a message after the prompt. A prompt that Pi queues into
+ * the running agent starts no turn of its own, so its context is sent at
+ * once instead (`sendQueuedPromptContext`). A block or stop buffers nothing,
+ * so a stopped prompt sends no context to any turn.
  */
 export function adaptInputResult(
   result: HookExecResult,
-  _event: InputEvent,
+  event: InputEvent,
   context: HookAdapterContext,
 ): InputEventResult | undefined {
   switch (result.kind) {
@@ -359,10 +393,16 @@ export function adaptInputResult(
       return { action: "handled" };
 
     case "mutate":
-      if (result.additionalContext !== undefined) {
+      if (result.additionalContext === undefined) {
+        return undefined;
+      }
+
+      if (event.streamingBehavior === undefined) {
         context.runtime.appendPendingPromptContext(
           bufferedContext(result.additionalContext, context),
         );
+      } else {
+        sendQueuedPromptContext(context.pi, result.additionalContext);
       }
 
       return undefined;

@@ -637,6 +637,20 @@ export type CompositeDispatchEvent = Exclude<
 >;
 
 /**
+ * D-CF5-13: a prompt's context belongs to that prompt's own turn. Context an
+ * earlier `input` buffered for a turn that never started (a prompt another
+ * extension handled, or one whose run failed to start) is dropped when the
+ * next prompt arrives, before its hooks run, so it never reaches a later
+ * prompt's turn.
+ */
+function dropStalePromptContext(runtime: HooksRuntime): void {
+  const stale = runtime.drainPendingPromptContext();
+  if (stale.length > 0) {
+    hookDebugLog(`dispatch: dropped ${stale.length} stale UserPromptSubmit context(s)`);
+  }
+}
+
+/**
  * D-59-01 / D-60-03: six-uniform composite handler factory.
  *
  * `claudeEvent` constrains which bucket the closure reads and which
@@ -665,6 +679,10 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
   return async (event, ctx) => {
     if (capturedGeneration !== runtime.currentGeneration()) {
       return undefined as CompositeReturnFor<E>;
+    }
+
+    if (claudeEvent === "UserPromptSubmit") {
+      dropStalePromptContext(runtime);
     }
 
     const bucket = runtime.getRoutingBucket(claudeEvent);

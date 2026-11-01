@@ -16,6 +16,7 @@ import type { HookAdapterContext } from "../../../extensions/pi-claude-marketpla
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type {
+  ExtensionAPI,
   ExtensionContext,
   InputEvent,
   ToolCallEvent,
@@ -72,6 +73,24 @@ function provenanceContext(
   provenance: Pick<RoutingEntry, "scope" | "marketplace" | "pluginId">,
 ): HookAdapterContext {
   return { ...adapterContext({ ...guardEntry(), ...provenance }), runtime };
+}
+
+interface SentMessage {
+  readonly message: unknown;
+  readonly options: unknown;
+}
+
+/** A Pi API that records every message an adapter sends, or throws `failure` on a send. */
+function createMessagePi(sent: SentMessage[], failure?: Error): ExtensionAPI {
+  return {
+    sendMessage(message: unknown, options: unknown): void {
+      if (failure !== undefined) {
+        throw failure;
+      }
+
+      sent.push({ message, options });
+    },
+  } as ExtensionAPI;
 }
 
 describe("adaptToolCallResult", () => {
@@ -848,6 +867,109 @@ describe("adaptInputResult", () => {
       },
     ]);
     assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+  });
+
+  for (const streamingBehavior of ["steer", "followUp"] as const) {
+    test(`sends the context of a queued ${streamingBehavior} to the model instead of buffering it (D-CF5-13)`, () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      const sent: SentMessage[] = [];
+      const event = {
+        type: "input",
+        text: "queued prompt",
+        source: "rpc",
+        streamingBehavior,
+      } satisfies InputEvent;
+
+      // act
+      const adaptation = adaptInputResult(
+        { kind: "mutate", additionalContext: "ctx-a\nctx-b" },
+        event,
+        { ...adapterContext(guardEntry()), runtime, pi: createMessagePi(sent) },
+      );
+
+      // assert
+      assert.strictEqual(adaptation, undefined);
+      assert.deepStrictEqual(sent, [
+        {
+          message: {
+            customType: "claude-hook-additional-context",
+            content: [
+              { type: "text", text: "UserPromptSubmit hook additional context: ctx-a\nctx-b" },
+            ],
+            display: false,
+          },
+          options: { triggerTurn: false },
+        },
+      ]);
+      assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
+    });
+  }
+
+  test("sends no blank context of a queued steer", () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const sent: SentMessage[] = [];
+
+    // act
+    const adaptation = adaptInputResult(
+      { kind: "mutate", additionalContext: " \n " },
+      { type: "input", text: "queued prompt", source: "rpc", streamingBehavior: "steer" },
+      { ...adapterContext(guardEntry()), runtime, pi: createMessagePi(sent) },
+    );
+
+    // assert
+    assert.strictEqual(adaptation, undefined);
+    assert.deepStrictEqual(sent, []);
+    assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
+  });
+
+  test("buffers no context of a queued steer when no Pi API can send it", () => {
+    // arrange
+    const runtime = createHooksRuntime();
+
+    // act
+    const adaptation = adaptInputResult(
+      { kind: "mutate", additionalContext: "ctx" },
+      { type: "input", text: "queued prompt", source: "rpc", streamingBehavior: "steer" },
+      { ...adapterContext(guardEntry()), runtime },
+    );
+
+    // assert
+    assert.strictEqual(adaptation, undefined);
+    assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
+  });
+
+  test("lets a queued steer continue when sending its context throws", (t) => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const debugKey = "PI_CLAUDE_MARKETPLACE_DEBUG";
+    const hadDebug = Object.hasOwn(process.env, debugKey);
+    const previousDebug = process.env[debugKey];
+    t.after(() => {
+      if (hadDebug) {
+        process.env[debugKey] = previousDebug;
+      } else {
+        delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+      }
+    });
+    process.env[debugKey] = "1";
+    const consoleErrorSpy = t.mock.method(console, "error", () => undefined);
+
+    // act
+    const adaptation = adaptInputResult(
+      { kind: "mutate", additionalContext: "ctx" },
+      { type: "input", text: "queued prompt", source: "rpc", streamingBehavior: "steer" },
+      { ...adapterContext(guardEntry()), runtime, pi: createMessagePi([], new Error("closed")) },
+    );
+
+    // assert
+    assert.strictEqual(adaptation, undefined);
+    assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
+    assert.deepStrictEqual(
+      consoleErrorSpy.mock.calls.map(({ arguments: consoleArguments }) => consoleArguments),
+      [["[hooks] adaptInput: queued prompt context failed: closed"]],
+    );
   });
 
   test("buffers no empty additional context and lets the prompt continue", () => {

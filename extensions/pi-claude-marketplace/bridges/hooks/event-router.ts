@@ -59,6 +59,7 @@ import { SCOPES } from "../../shared/types.ts";
 
 import { reapOrphans, shutdownInMemoryChildren } from "./async-rewake/registry.ts";
 import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
+import { HOOK_CONTEXT_MESSAGE_TYPE } from "./event-adapters.ts";
 import { compileIfPredicate, MATCH_ALL_IF } from "./if-field/index.ts";
 import { claudeSessionEndReason } from "./payloads/session-end.ts";
 import { claudeSessionStartSource } from "./payloads/session-start.ts";
@@ -178,9 +179,6 @@ async function readAndCachePluginHooksWith(
 // ──────────────────────────────────────────────────────────────────────────
 // Hook additionalContext bridge (D-CF5-13)
 // ──────────────────────────────────────────────────────────────────────────
-
-// The custom type of the message that carries hook context to the model.
-const HOOK_CONTEXT_MESSAGE_TYPE = "claude-hook-additional-context";
 
 // HOOK-05: one `<Event> hook additional context: <values>` text part, the
 // values joined by `\n` in buffer order, as Claude Code 2.1.316 words it. A

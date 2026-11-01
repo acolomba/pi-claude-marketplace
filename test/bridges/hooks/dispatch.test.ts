@@ -2052,6 +2052,80 @@ describe("composite per-event adapters", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
+  test("drops prompt context an earlier input left before the prompt's hooks buffer theirs (D-CF5-13)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.appendPendingPromptContext({
+      context: "stale context",
+      scope: "user",
+      marketplace: "stale-marketplace",
+      pluginId: "stale-plugin",
+    });
+    const entry = createRoutingEntry({
+      pluginId: "input-context",
+      claudeEvent: "UserPromptSubmit",
+      rawMatcher: "",
+      declarationIndex: 0,
+    });
+    runtime.setRoutingBucket("UserPromptSubmit", [entry]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor(
+        { "input-context": { kind: "mutate", additionalContext: "fresh context" } },
+        [],
+      ),
+    );
+
+    // act
+    await handler(
+      { type: "input", text: "review hooks", source: "interactive" },
+      createExtensionContext("/workspace/input-context"),
+    );
+
+    // assert
+    assert.deepStrictEqual(runtime.pendingPromptContextEntries(), [
+      {
+        context: "fresh context",
+        scope: entry.scope,
+        marketplace: entry.marketplace,
+        pluginId: "input-context",
+      },
+    ]);
+  });
+
+  test("drops prompt context an earlier input left when no UserPromptSubmit hook is routed", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.appendPendingPromptContext({
+      context: "stale context",
+      scope: "project",
+      marketplace: "stale-marketplace",
+      pluginId: "stale-plugin",
+    });
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor({}, []),
+    );
+
+    // act
+    const output = await handler(
+      { type: "input", text: "review hooks", source: "interactive" },
+      createExtensionContext("/workspace/input-stale"),
+    );
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
+  });
+
   test("passes a UserPromptSubmit noop through as undefined", async () => {
     // arrange
     const runtime = createHooksRuntime();
