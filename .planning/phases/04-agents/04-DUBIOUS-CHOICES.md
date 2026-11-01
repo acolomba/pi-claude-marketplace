@@ -225,3 +225,34 @@ entries into the root file. Severity and status follow the root file's rules.
   2. The update scenario's new body is not observed; closing model replies
      are free text past the compared calls; tables aligned by a scratch
      script (no Gherkin formatter in the repo).
+
+### P4-DC-09: Plan 04-05 executor choices (skill preload, child runs, AGT-04 gap)
+
+- **Phase / source:** executor for 04-05 (`04-05-SUMMARY.md`).
+- **Severity:** Low, except item 1 (Medium: which skills preload).
+  **Status:** open.
+- **Items:**
+  1. Only `description` and `when_to_use` make a skill preloadable; the
+     hyphenated `when-to-use` does not (plan and upstream pool rule).
+  2. The skill body is trimmed whether or not it has frontmatter; frontmatter
+     that parses to a non-object counts as "no description"; the unparseable
+     warning omits "(Claude Code skips it too)"; a skipped skill named twice
+     warns once; the agent body loses trailing blank lines only when a skill
+     is inlined.
+  3. Preloads are read in parallel and the first read error rejects the stage;
+     a skill row no agent names is never read.
+  4. Scenario (C) (`disable-model-invocation` skipped) failed before the change
+     (pi-subagents wrote two stray blank lines), so it counts as a red proof
+     and the seed is the negative control, as the plan allows.
+  5. Scenario (F) records the observed child tools `read`, `bash`,
+     `contact_supervisor` (no `bg_wait`); (E) records the plugin row's
+     `requires pi-subagents` reason.
+  6. Orchestrator-assigned bug fix: `TOOL_MAP` is now a `ReadonlyMap`
+     (`tools: constructor` threw, `disallowedTools: constructor toString`
+     wrote function source); `THINKING_VALUES` and `SUPPORTED_SOURCE_FIELDS`
+     are Sets and unaffected.
+  7. AGT-04 stays a recorded gap: pi-subagents' `HOST_PEER_ALIASES` maps the
+     bare `@earendil-works/pi-ai` to `./compat` by prefix, so the scripted
+     model's faux import resolves under `compat.js`; the parent/child call race
+     also remains. Fix routes (parent lines): change the frozen scripted
+     model's import, or report the alias-prefix problem to pi-subagents.
