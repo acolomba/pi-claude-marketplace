@@ -122,3 +122,66 @@ Feature: Hook configuration
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status              | reasons           | hint            |
       | fixtures         | project           | demo@fixtures | demo | partially-available | unsupported hooks | partial-install |
+
+  Scenario: A hook with an if condition on a session event does not run
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event        | matcher | if           |
+      | gated | SessionStart | *       | Bash(echo *) |
+      | open  | SessionStart | *       |              |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    When the user starts a new pi session with the hooks recording
+    Then the hooks record these runs:
+      | event        | session | source | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_ENV_FILE                                                           | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | SessionStart | first   | clear  | {project dir} |                 | open      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | {project dir}/.pi/pi-claude-marketplace/data/_shared/claude-env-first.env | first                  | first             | 1          |
+
+  Scenario: An if condition selects the tool calls a hook runs on
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name      | event      | matcher | if           |
+      | echo-only | PreToolUse | Bash    | Bash(echo *) |
+      | rm-only   | PreToolUse | Bash    | Bash(rm *)   |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      | Done. |      |                                |
+    When the user prompts "run the echo"
+    Then the hooks record these runs:
+      | event      | session | tool name | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {"command":"echo from-model"} | {project dir} |                 | echo-only | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
+
+  Scenario: A hook marked once runs on every matching tool call
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event      | matcher | once |
+      | every | PreToolUse | Bash    | true |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments               |
+      |       | bash | {"command": "echo one"} |
+      |       | bash | {"command": "echo two"} |
+      | Done. |      |                         |
+    When the user prompts "run two echoes"
+    Then the hooks record these runs:
+      | event      | session | tool name | tool input             | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {"command":"echo one"} | {project dir} |                 | every     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
+      | PreToolUse | first   | Bash      | {"command":"echo two"} | {project dir} |                 | every     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |

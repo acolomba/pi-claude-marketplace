@@ -29,6 +29,7 @@ interface ExpectedCompileIfPredicateContext {
 }
 type ExpectedIfPredicate =
   | { readonly kind: "match-all" }
+  | { readonly kind: "tool-less-event" }
   | {
       readonly kind: "bash";
       readonly piEvents: ReadonlySet<PiToolName>;
@@ -72,6 +73,7 @@ const typeEvidencePathGlob = {
 } satisfies CompiledPathGlob;
 
 void ({ kind: "match-all" } satisfies IfPredicate);
+void ({ kind: "tool-less-event" } satisfies IfPredicate);
 void ({
   kind: "bash",
   piEvents: new Set<PiToolName>(["bash"]),
@@ -106,7 +108,7 @@ void ({
 void ({ kind: "mcp-literal", serverPrefix: "mcp__files__" } satisfies IfPredicate);
 // @ts-expect-error MCP server-prefix predicates require serverPrefix rather than toolName
 void ({ kind: "mcp-server-prefix", toolName: "mcp__files__read" } satisfies IfPredicate);
-// @ts-expect-error the predicate vocabulary has exactly six discriminants
+// @ts-expect-error the predicate vocabulary has exactly seven discriminants
 void ({ kind: "unknown" } satisfies IfPredicate);
 
 test("compiles and evaluates a Read path declaration", () => {
@@ -271,7 +273,7 @@ test("compiles known command and path-tool prefixes in stable row order", () => 
   assert.deepStrictEqual(compiledRows, expected);
 });
 
-test("partitions empty, non-tool, unknown-prefix, and MCP boundary declarations", () => {
+test("partitions empty, unknown-prefix, and MCP boundary declarations", () => {
   // arrange
   const compileContext = {
     homedir: "/home/plugin-user",
@@ -280,7 +282,6 @@ test("partitions empty, non-tool, unknown-prefix, and MCP boundary declarations"
   } satisfies CompileIfPredicateContext;
   const rows = [
     { declaration: "  \t ", event: "PreToolUse", reason: "empty" },
-    { declaration: "Bash(git *)", event: "SessionStart", reason: "non-tool event" },
     { declaration: "Grep(src/**)", event: "PreToolUse", reason: "unknown prefix" },
     { declaration: "Cd(/tmp)", event: "PreToolUse", reason: "unsupported tool prefix" },
     { declaration: "plain", event: "PreToolUse", reason: "unrecognized shape" },
@@ -297,12 +298,6 @@ test("partitions empty, non-tool, unknown-prefix, and MCP boundary declarations"
   }>;
   const expected = [
     { declaration: "  \t ", event: "PreToolUse", reason: "empty", predicate: MATCH_ALL_IF },
-    {
-      declaration: "Bash(git *)",
-      event: "SessionStart",
-      reason: "non-tool event",
-      predicate: MATCH_ALL_IF,
-    },
     {
       declaration: "Grep(src/**)",
       event: "PreToolUse",
@@ -373,11 +368,55 @@ test("partitions empty, non-tool, unknown-prefix, and MCP boundary declarations"
   assert.strictEqual(compiledRows[1]?.predicate, MATCH_ALL_IF);
   assert.strictEqual(compiledRows[2]?.predicate, MATCH_ALL_IF);
   assert.strictEqual(compiledRows[3]?.predicate, MATCH_ALL_IF);
-  assert.strictEqual(compiledRows[4]?.predicate, MATCH_ALL_IF);
+  assert.strictEqual(compiledRows[6]?.predicate, MATCH_ALL_IF);
   assert.strictEqual(compiledRows[7]?.predicate, MATCH_ALL_IF);
   assert.strictEqual(compiledRows[8]?.predicate, MATCH_ALL_IF);
   assert.strictEqual(compiledRows[9]?.predicate, MATCH_ALL_IF);
-  assert.strictEqual(compiledRows[10]?.predicate, MATCH_ALL_IF);
+});
+
+for (const event of [
+  "SessionStart",
+  "SessionEnd",
+  "UserPromptSubmit",
+  "PreCompact",
+  "PostCompact",
+  "Stop",
+  "StopFailure",
+] as const satisfies readonly BucketAEvent[]) {
+  test(`D-CF5-23: compiles an if condition on ${event} to a predicate that never fires`, () => {
+    // arrange
+    const compileContext = {
+      homedir: "/home/plugin-user",
+      cwd: "/workspace/plugin",
+      projectRoot: "/workspace/plugin",
+    } satisfies CompileIfPredicateContext;
+    const extensionContext = { cwd: compileContext.cwd, mode: "print" } as ExtensionContext;
+
+    // act
+    const predicate = compileIfPredicate("Bash(echo *)", event, compileContext);
+    const fires = ifFires(predicate, { reason: "startup" }, extensionContext, event);
+
+    // assert
+    assert.deepStrictEqual(
+      { predicate, fires },
+      { predicate: { kind: "tool-less-event" }, fires: false },
+    );
+  });
+}
+
+test("D-CF5-23: compiles a blank if condition on a session event to match-all", () => {
+  // arrange
+  const compileContext = {
+    homedir: "/home/plugin-user",
+    cwd: "/workspace/plugin",
+    projectRoot: "/workspace/plugin",
+  } satisfies CompileIfPredicateContext;
+
+  // act
+  const predicate = compileIfPredicate("  ", "SessionStart", compileContext);
+
+  // assert
+  assert.strictEqual(predicate, MATCH_ALL_IF);
 });
 
 test("compiles MCP literals and both server-prefix forms exactly", () => {
@@ -871,7 +910,7 @@ for (const declaration of ["mcp__plugin_acme_db", "mcp__plugin_acme_db__*"]) {
   });
 }
 
-test("dispatches all six predicate arms in stable row order", () => {
+test("dispatches all seven predicate arms in stable row order", () => {
   // arrange
   const compileContext = {
     homedir: "/home/plugin-user",
@@ -883,6 +922,12 @@ test("dispatches all six predicate arms in stable row order", () => {
     {
       name: "match-all",
       predicate: MATCH_ALL_IF,
+      event: { reason: "startup" },
+      eventName: "SessionStart",
+    },
+    {
+      name: "tool-less-event",
+      predicate: compileIfPredicate("Bash(git *)", "SessionStart", compileContext),
       event: { reason: "startup" },
       eventName: "SessionStart",
     },
@@ -924,6 +969,7 @@ test("dispatches all six predicate arms in stable row order", () => {
   }>;
   const expected = [
     { name: "match-all", predicateKind: "match-all", fires: true },
+    { name: "tool-less-event", predicateKind: "tool-less-event", fires: false },
     { name: "bash", predicateKind: "bash", fires: true },
     { name: "powershell", predicateKind: "powershell", fires: true },
     { name: "path-tool", predicateKind: "path-tool", fires: true },
