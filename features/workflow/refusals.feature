@@ -122,3 +122,59 @@ Feature: Workflow refusals
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
       | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
+
+  Scenario: A new session offers a command for each installed script and none for a refused or skipped one
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/clock.js" with this text:
+      """
+      export const meta = {name:"clock",description:"Tells the time."};
+
+      return String(Date.now());
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/broken.js" with this text:
+      """
+      export const meta = {name:"broken",description:"Does not parse."};
+
+      return (;
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/helper.js" with this text:
+      """
+      const shout = (text) => text.toUpperCase();
+
+      return shout("hi");
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/dyn.js" with this text:
+      """
+      export const meta = {name:String("dyn"),description:"Has a computed name."};
+
+      return "dyn";
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/late.js" with this text:
+      """
+      const greeting = "late";
+      export const meta = {name:"late",description:"Declares its meta late."};
+
+      return greeting;
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/reserved.js" with this text:
+      """
+      export const meta = {name:"reserved",description:"Uses a reserved key.",constructor:"x"};
+
+      return "reserved";
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/nodesc.js" with this text:
+      """
+      export const meta = {name:"nodesc"};
+
+      return "nodesc";
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the workflow "hello" described as "Says hello." that returns "Hello from demo."
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which reported notes on workflow scripts of the plugin
+    Given the user has started a new pi session
+    When the user lists the slash commands pi offers
+    Then pi offers these workflow commands:
+      | command        | description                 |
+      | /demo:hello    | Says hello.                 |
+      | /demo:late     | Declares its meta late.     |
+      | /demo:nodesc   | Saved workflow: demo:nodesc |
+      | /demo:reserved | Uses a reserved key.        |
