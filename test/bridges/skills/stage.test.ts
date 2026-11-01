@@ -911,6 +911,23 @@ describe("prepareStageSkills", () => {
     assert.strictEqual(stagedBytes, expectedBytes);
   });
 
+  test("WTU-01: stages when_to_use after the fallback as one double-quoted scalar", async (t) => {
+    // arrange
+    const expectedBytes =
+      "---\nname: acme-greet\nwhen_to_use: Use it when greeting.\n" +
+      'description: "Greets. Use it when greeting."\n---\n\nGreets.\n';
+
+    // act
+    const stagedBytes = await stageSingleSkill(
+      t,
+      "greet",
+      "---\nname: greet\nwhen_to_use: Use it when greeting.\n---\n\nGreets.\n",
+    );
+
+    // assert
+    assert.strictEqual(stagedBytes, expectedBytes);
+  });
+
   test("WTU-01: folds when_to_use onto the fallback and cuts the result at 1,536", async (t) => {
     // arrange
     const whenToUse = "w".repeat(1600);
