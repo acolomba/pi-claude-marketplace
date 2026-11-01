@@ -311,3 +311,119 @@ test("treats absent and null strict declarations as empty", async () => {
     },
   );
 });
+
+type FolderRuleKind = "skills" | "commands" | "agents" | "workflows";
+
+interface FolderRuleCase {
+  readonly title: string;
+  readonly kind: FolderRuleKind;
+  readonly declaredIn: "entry" | "manifest" | "nowhere";
+  readonly value: unknown;
+  readonly expectedPaths: readonly string[];
+}
+
+const REPLACE_KINDS = ["commands", "agents", "workflows"] as const;
+
+// D-CF1-06: Claude Code 2.1.316 reads the conventional commands, agents, and
+// workflows folders only when the kind's declaration is falsy, and always
+// reads `skills/`.
+const folderRuleCases: readonly FolderRuleCase[] = [
+  ...REPLACE_KINDS.flatMap((kind): FolderRuleCase[] => [
+    {
+      title: `D-CF1-06 an entry-declared ${kind} path replaces the existing ${kind}/ folder`,
+      kind,
+      declaredIn: "entry",
+      value: "custom",
+      expectedPaths: ["custom"],
+    },
+    {
+      title: `D-CF1-06 a manifest-declared ${kind} path replaces the existing ${kind}/ folder`,
+      kind,
+      declaredIn: "manifest",
+      value: "custom",
+      expectedPaths: ["custom"],
+    },
+    {
+      title: `D-CF1-06 a declared empty ${kind} list leaves the existing ${kind}/ folder unread`,
+      kind,
+      declaredIn: "manifest",
+      value: [],
+      expectedPaths: [],
+    },
+    {
+      title: `D-CF1-06 an empty-string ${kind} declaration reads the ${kind}/ folder and nothing else`,
+      kind,
+      declaredIn: "entry",
+      value: "",
+      expectedPaths: [kind],
+    },
+    {
+      title: `D-CF1-06 a null ${kind} declaration reads the ${kind}/ folder`,
+      kind,
+      declaredIn: "manifest",
+      value: null,
+      expectedPaths: [kind],
+    },
+  ]),
+  {
+    title: "D-CF1-06 an entry-declared skills path adds to the existing skills/ folder",
+    kind: "skills",
+    declaredIn: "entry",
+    value: "custom",
+    expectedPaths: ["custom", "skills"],
+  },
+  {
+    title: "D-CF1-06 a manifest-declared skills path adds to the existing skills/ folder",
+    kind: "skills",
+    declaredIn: "manifest",
+    value: "custom",
+    expectedPaths: ["custom", "skills"],
+  },
+  {
+    title: "D-CF1-06 a declared empty skills list still reads the existing skills/ folder",
+    kind: "skills",
+    declaredIn: "manifest",
+    value: [],
+    expectedPaths: ["skills"],
+  },
+  ...(["skills", ...REPLACE_KINDS] as const).map((kind): FolderRuleCase => ({
+    title: `D-CF1-06 an undeclared ${kind} kind reads its existing ${kind}/ folder`,
+    kind,
+    declaredIn: "nowhere",
+    value: undefined,
+    expectedPaths: [kind],
+  })),
+];
+
+for (const { title, kind, declaredIn, value, expectedPaths } of folderRuleCases) {
+  test(title, async () => {
+    // arrange
+    const { collectStrictComponentPaths } =
+      await import("../../extensions/pi-claude-marketplace/domain/component-paths.ts");
+    const pluginRoot = "/plugins/alpha";
+    const resolution = emptyResolution();
+    const expected = emptyResolution();
+    expected.componentPaths[kind].push(...expectedPaths);
+    if (expectedPaths.length > 0) {
+      expected.supported.push(kind);
+    }
+
+    // act
+    const dirty = await collectStrictComponentPaths(
+      {
+        entry: {
+          name: "alpha",
+          source: "./alpha",
+          ...(declaredIn === "entry" && { [kind]: value }),
+        },
+        manifest: declaredIn === "manifest" ? { [kind]: value } : null,
+        pluginRoot,
+        resolution,
+      },
+      (candidate) => Promise.resolve(candidate === path.join(pluginRoot, kind) ? "dir" : null),
+    );
+
+    // assert
+    assert.deepStrictEqual({ dirty, resolution }, { dirty: false, resolution: expected });
+  });
+}

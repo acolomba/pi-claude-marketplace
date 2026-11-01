@@ -43,8 +43,10 @@ export interface ComponentPathResolution {
   componentPaths: { skills: string[]; commands: string[]; agents: string[]; workflows: string[] };
 }
 
+// An empty string declares nothing, as `null` does: Claude Code 2.1.316 loads
+// a declared path only when the field is truthy (D-CF1-06).
 function readPathOrArray(value: unknown): readonly unknown[] {
-  if (value === undefined || value === null) {
+  if (value === undefined || value === null || value === "") {
     return [];
   }
 
@@ -127,6 +129,20 @@ async function addValidatedComponentPath(
   return true;
 }
 
+/**
+ * D-CF1-06: whether the conventional `<kind>/` folder joins the declared
+ * paths. Claude Code 2.1.316 always reads `skills/`, and reads `commands/`,
+ * `agents/`, and `workflows/` only when the kind's declaration is falsy
+ * (absent, `null`, or `""`), so a declared `[]` also leaves the folder unread.
+ */
+function conventionalFolderApplies(
+  kind: ComponentPathKind,
+  entryRaw: unknown,
+  manifestRaw: unknown,
+): boolean {
+  return kind === "skills" || (!entryRaw && !manifestRaw);
+}
+
 async function collectStrictComponentKind(
   entry: PluginEntry,
   manifest: Record<string, unknown> | null,
@@ -137,16 +153,19 @@ async function collectStrictComponentKind(
 ): Promise<boolean> {
   let dirty = false;
   const seenPaths = new Set<string>();
-  const fromEntry = readPathOrArray((entry as Record<string, unknown>)[kind]);
-  const fromManifest = readPathOrArray(manifest?.[kind]);
+  const entryRaw = (entry as Record<string, unknown>)[kind];
+  const manifestRaw = manifest?.[kind];
 
-  for (const raw of [...fromEntry, ...fromManifest]) {
+  for (const raw of [...readPathOrArray(entryRaw), ...readPathOrArray(manifestRaw)]) {
     dirty =
       // eslint-disable-next-line no-await-in-loop -- first-declared path wins the shared `seenPaths` set
       (await addValidatedComponentPath(resolution, kind, seenPaths, raw, pluginRoot)) || dirty;
   }
 
-  if ((await statKind(path.join(pluginRoot, kind))) === "dir") {
+  if (
+    conventionalFolderApplies(kind, entryRaw, manifestRaw) &&
+    (await statKind(path.join(pluginRoot, kind))) === "dir"
+  ) {
     addComponentPath(resolution, kind, seenPaths, kind);
   }
 
@@ -157,7 +176,13 @@ async function collectStrictComponentKind(
   return dirty;
 }
 
-/** Collects strict entry, manifest, and conventional component paths. */
+/**
+ * Collects strict entry, manifest, and conventional component paths, entry
+ * paths first, with first-wins deduplication. Per D-CF1-06, as in Claude Code
+ * 2.1.316, a declared `skills` path adds to the conventional `skills/` folder,
+ * while a declared `commands`, `agents`, or `workflows` path replaces its
+ * conventional folder, which is read only for an undeclared kind.
+ */
 export async function collectStrictComponentPaths(
   input: {
     readonly entry: PluginEntry;

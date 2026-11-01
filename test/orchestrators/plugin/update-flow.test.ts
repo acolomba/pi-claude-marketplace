@@ -1278,7 +1278,7 @@ test("PDEF-01: update preview detects an agent conflict from a later resolved di
           hello: {
             version: "1.0.1",
             hasSkill: false,
-            agentDirectories: ["declared-agents"],
+            agentDirectories: ["declared-agents", "agents"],
             agents: [
               { directory: "declared-agents", sourceName: "first" },
               { sourceName: "later" },
@@ -1360,7 +1360,7 @@ test("PDEF-01: update stages every agent directory and warns on a later duplicat
         hello: {
           version: "1.0.1",
           hasSkill: false,
-          agentDirectories: ["declared-agents"],
+          agentDirectories: ["declared-agents", "agents"],
           agents: [
             {
               directory: "declared-agents",

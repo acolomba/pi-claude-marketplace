@@ -322,3 +322,17 @@ Given(
     assert.strictEqual((await stat(file)).isFile(), true, `${file} is not a file`);
   },
 );
+
+// Writes any file of a published plugin by its path, replacing one that
+// exists, such as the plugin's own `.claude-plugin/plugin.json`.
+Given(
+  "the published plugin {string} of the marketplace {string} has the file {string} with this text:",
+  async function (this: ScenarioWorld, plugin: string, name: string, file: string, text: string) {
+    const published = this.requirePublished(name);
+    await writePublishedPluginFiles(published, plugin, { [file]: text });
+    assert.strictEqual(
+      await readFile(path.join(published.root, "plugins", plugin, file), "utf8"),
+      text,
+    );
+  },
+);

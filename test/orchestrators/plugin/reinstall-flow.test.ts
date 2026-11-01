@@ -920,7 +920,7 @@ test("PDEF-01: reinstall preview detects an agent conflict from a later resolved
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
-        agentDirectories: ["declared-agents"],
+        agentDirectories: ["declared-agents", "agents"],
         resources: {
           agents: [
             { directory: "declared-agents", sourceName: "first", body: "First agent.\n" },
@@ -983,7 +983,7 @@ test("PDEF-01: reinstall stages every agent directory", async () => {
       await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
-        agentDirectories: ["declared-agents"],
+        agentDirectories: ["declared-agents", "agents"],
         resources: {
           agents: [
             {
