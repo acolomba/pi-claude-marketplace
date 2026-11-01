@@ -80,6 +80,7 @@ function request(overrides: Partial<SkillInvocationRequest> = {}): SkillInvocati
     typed: "/skill:demo-greet",
     args: "Ada",
     cwd: CWD,
+    projectTrusted: true,
     sessionId: "session-1",
     thinkingLevel: "medium",
     ...overrides,
@@ -118,6 +119,43 @@ test("D-CF2-06: frames a user skill under the agent directory", async () => {
 
   // act
   const outcome = await invokeBridgedSkill(request({ commands }), dependencies(files));
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    kind: "ok",
+    text: block(USER_SKILL, USER_SKILL_DIR, "Greet Ada."),
+  });
+});
+
+test("T-02-17: aborts a project skill in an untrusted project without reading its file", async () => {
+  // arrange
+  const files = {};
+
+  // act
+  const outcome = await invokeBridgedSkill(
+    request({ projectTrusted: false, typed: "/fancy" }),
+    dependencies(files),
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    kind: "abort",
+    message:
+      "The skill /fancy belongs to the project /work, which Pi does not trust. " +
+      "Trust the project folder, then run /reload to use it.",
+  });
+});
+
+test("T-02-17: frames a user skill in an untrusted project", async () => {
+  // arrange
+  const files = { [USER_SKILL]: skillFile("Greet $ARGUMENTS.") };
+  const commands = [skillCommand("skill:demo-greet", USER_SKILL)];
+
+  // act
+  const outcome = await invokeBridgedSkill(
+    request({ commands, projectTrusted: false }),
+    dependencies(files),
+  );
 
   // assert
   assert.deepStrictEqual(outcome, {

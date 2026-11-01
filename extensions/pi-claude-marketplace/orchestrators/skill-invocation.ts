@@ -52,6 +52,8 @@ export interface SkillInvocationRequest {
   /** The rest of the line, trimmed; `""` when the user typed no arguments. */
   readonly args: string;
   readonly cwd: string;
+  /** Whether Pi trusts the project at `cwd` (`ctx.isProjectTrusted()`). */
+  readonly projectTrusted: boolean;
   readonly sessionId: string;
   /** Pi's session thinking level, which `${CLAUDE_EFFORT}` follows. */
   readonly thinkingLevel: string | undefined;
@@ -199,6 +201,11 @@ async function fillSkill(
   return { kind: "ok", text: skillBlock(skill, expanded) };
 }
 
+/** The abort message for a project skill in a project Pi does not trust. */
+function untrustedProjectMessage(request: SkillInvocationRequest): string {
+  return `The skill ${request.typed} belongs to the project ${request.cwd}, which Pi does not trust. Trust the project folder, then run /reload to use it.`;
+}
+
 /** The abort message for a staged skill file that cannot be read or parsed. */
 function unreadableSkillMessage(typed: string, error: unknown): string {
   return `Cannot read the skill ${typed}: ${errorMessage(error)}. Run /reload to load the installed skills again.`;
@@ -207,8 +214,9 @@ function unreadableSkillMessage(typed: string, error: unknown): string {
 /**
  * D-CF2-06: builds what the model receives for a typed bridged skill, reports
  * that the skill is not one this extension staged, or aborts with Claude
- * Code's message (T-01-24). A staged file that cannot be read or parsed
- * aborts too. A failure other than these propagates.
+ * Code's message (T-01-24). A project skill in a project Pi does not trust,
+ * and a staged file that cannot be read or parsed, abort too. A failure other
+ * than these propagates.
  */
 export async function invokeBridgedSkill(
   request: SkillInvocationRequest,
@@ -217,6 +225,14 @@ export async function invokeBridgedSkill(
   const skill = findBridgedSkill(request, dependencies.getAgentDir());
   if (skill === undefined) {
     return { kind: "not-bridged" };
+  }
+
+  // T-02-17: Claude Code loads no project-scope plugin before the workspace
+  // is trusted. A skill staged in an untrusted project may come from a cloned
+  // repository rather than from an install, so it runs nothing and nothing of
+  // it reaches the model.
+  if (skill.projectScope && !request.projectTrusted) {
+    return { kind: "abort", message: untrustedProjectMessage(request) };
   }
 
   // A file that changed after Pi loaded it, such as one an uninstall,

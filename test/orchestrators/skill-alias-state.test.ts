@@ -120,6 +120,7 @@ test("D-CF2-02: maps each name a loaded skill stored to its generated name", asy
   const aliases = await loadQualifiedSkillAliases(
     pi,
     CWD,
+    true,
     dependencies(
       { [PROJECT_ROOT]: stateWith({ demo: ["demo-review"] }) },
       { [file]: recordedSkill("demo-review", ["demo:review", "demo:fancy", "fancy"]) },
@@ -147,6 +148,7 @@ test("D-CF2-02: a skill with a record no longer answers to the name its plugin p
   const aliases = await loadQualifiedSkillAliases(
     pi,
     CWD,
+    true,
     dependencies(
       { [PROJECT_ROOT]: stateWith({ demo: ["demo-tool"] }) },
       { [file]: recordedSkill("demo-tool", ["demo:demo-tool", "demo-tool"]) },
@@ -176,6 +178,7 @@ test("DC-25: a skill staged without a record keeps the alias its plugin prefix w
   const aliases = await loadQualifiedSkillAliases(
     pi,
     CWD,
+    true,
     dependencies({ [AGENT_DIR]: stateWith({ foo: skills }) }, files),
   );
 
@@ -199,6 +202,7 @@ test("DC-25: a skill staged without a record under a plugin name that names no s
   const aliases = await loadQualifiedSkillAliases(
     pi,
     CWD,
+    true,
     dependencies({ [AGENT_DIR]: stateWith({ "": ["invalid"] }) }, { [file]: unrecordedSkill("x") }),
   );
 
@@ -226,6 +230,7 @@ for (const { problem, brokenFiles } of [
     const aliases = await loadQualifiedSkillAliases(
       pi,
       CWD,
+      true,
       dependencies({ [PROJECT_ROOT]: stateWith({ demo: ["demo-broken", "demo-greet"] }) }, files),
     );
 
@@ -244,6 +249,7 @@ test("D-CF2-02: a skill whose staged file Pi did not load adds no alias", async 
   const aliases = await loadQualifiedSkillAliases(
     pi,
     CWD,
+    true,
     dependencies(
       { [PROJECT_ROOT]: stateWith({ demo: ["demo-review"] }) },
       { [file]: recordedSkill("demo-review", ["demo:review", "demo:fancy", "fancy"]) },
@@ -252,6 +258,73 @@ test("D-CF2-02: a skill whose staged file Pi did not load adds no alias", async 
 
   // assert
   assert.deepStrictEqual([...aliases], []);
+  verify(pi);
+});
+
+test("T-02-17: an untrusted project adds no alias, while the user scope still does", async () => {
+  // arrange
+  const projectFile = stagedPath(PROJECT_ROOT, "demo-review");
+  const userFile = stagedPath(AGENT_DIR, "tools-lint");
+  const pi = piWith([
+    skillCommand("demo-review", projectFile),
+    skillCommand("tools-lint", userFile),
+  ]);
+
+  // act
+  const aliases = await loadQualifiedSkillAliases(
+    pi,
+    CWD,
+    false,
+    dependencies(
+      {
+        [AGENT_DIR]: stateWith({ tools: ["tools-lint"] }),
+        [PROJECT_ROOT]: stateWith({ demo: ["demo-review"] }),
+      },
+      {
+        [userFile]: recordedSkill("tools-lint", ["tools:lint"]),
+        [projectFile]: recordedSkill("demo-review", ["demo:review", "review"]),
+      },
+    ),
+  );
+
+  // assert
+  assert.deepStrictEqual([...aliases], [["tools:lint", "tools-lint"]]);
+  verify(pi);
+});
+
+test("T-02-17: keeps only the stored names install writes: the plugin's own prefix and one bare name", async () => {
+  // arrange
+  const file = stagedPath(PROJECT_ROOT, "demo-review");
+  const pi = piWith([skillCommand("demo-review", file)]);
+
+  // act
+  const aliases = await loadQualifiedSkillAliases(
+    pi,
+    CWD,
+    true,
+    dependencies(
+      { [PROJECT_ROOT]: stateWith({ demo: ["demo-review"] }) },
+      {
+        [file]: recordedSkill("demo-review", [
+          "demo:review",
+          "other:review",
+          "review",
+          "commit",
+          "demo:other:thing",
+        ]),
+      },
+    ),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    [...aliases],
+    [
+      ["demo:review", "demo-review"],
+      ["review", "demo-review"],
+      ["demo:other:thing", "demo-review"],
+    ],
+  );
   verify(pi);
 });
 
@@ -264,6 +337,7 @@ test("SK-6: a name that a command of another source has stays with that command"
   const aliases = await loadQualifiedSkillAliases(
     pi,
     CWD,
+    true,
     dependencies(
       { [PROJECT_ROOT]: stateWith({ demo: ["demo-review"] }) },
       { [file]: recordedSkill("demo-review", ["demo:review", "demo:fancy", "fancy"]) },
@@ -291,6 +365,7 @@ test("D-CF2-02: a name the user scope claimed is not mapped again by the project
   const aliases = await loadQualifiedSkillAliases(
     pi,
     CWD,
+    true,
     dependencies(
       {
         [AGENT_DIR]: stateWith({ tools: ["tools-same"] }),
@@ -326,7 +401,7 @@ test("D-CF2-02: reads the project scope when the user scope state cannot be read
   );
 
   // act
-  const aliases = await loadQualifiedSkillAliases(pi, CWD, {
+  const aliases = await loadQualifiedSkillAliases(pi, CWD, true, {
     ...projectOnly,
     loadState: (extensionRoot) => {
       loadedRoots.push(extensionRoot);
@@ -399,6 +474,7 @@ for (const { claimants, reservedNames, expectedAliases } of [
     const aliases = await loadQualifiedSkillAliases(
       pi,
       CWD,
+      true,
       dependencies(
         { [PROJECT_ROOT]: stateWith({ demo: claimants.map(({ skill }) => skill) }) },
         files,
@@ -422,7 +498,7 @@ test("D-CF2-02: reads the staged skill file from disk with the production reader
   const pi = piWith([skillCommand("demo-review", file)]);
 
   // act
-  const aliases = await loadQualifiedSkillAliases(pi, cwd, {
+  const aliases = await loadQualifiedSkillAliases(pi, cwd, true, {
     getAgentDir: () => AGENT_DIR,
     loadState: (extensionRoot) =>
       extensionRoot === path.join(projectRoot, "pi-claude-marketplace")

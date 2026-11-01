@@ -45,7 +45,10 @@ function appendAliasSuggestions(
 function aliasProvider(
   ctx: ExtensionContext,
   current: AutocompleteProvider,
-  getQualifiedAliases: (cwd: string) => Promise<ReadonlyMap<string, string>>,
+  getQualifiedAliases: (
+    cwd: string,
+    projectTrusted: boolean,
+  ) => Promise<ReadonlyMap<string, string>>,
 ): AutocompleteProvider {
   return {
     getSuggestions: async (lines, line, col, options) => {
@@ -60,7 +63,7 @@ function aliasProvider(
         return suggestions;
       }
 
-      const aliases = await getQualifiedAliases(ctx.cwd);
+      const aliases = await getQualifiedAliases(ctx.cwd, ctx.isProjectTrusted());
       return appendAliasSuggestions(typed, suggestions, aliases.keys());
     },
     applyCompletion: (lines, line, col, item, prefix) =>
@@ -105,6 +108,7 @@ export function registerSkillAliases(
   loadAliases: (
     pi: ExtensionAPI,
     cwd: string,
+    projectTrusted: boolean,
   ) => Promise<ReadonlyMap<string, string>> = loadQualifiedSkillAliases,
   invokeSkill: (
     request: SkillInvocationRequest,
@@ -122,12 +126,18 @@ export function registerSkillAliases(
     notifyUsageError(ctx, run, { message, usage: "" });
   };
 
+  // T-02-17: the table of an untrusted project leaves out its project skills,
+  // so it is kept apart from the table of the same directory once trusted.
   const cache = new Map<string, Promise<ReadonlyMap<string, string>>>();
-  const getQualifiedAliases = (cwd: string): Promise<ReadonlyMap<string, string>> => {
-    let aliases = cache.get(cwd);
+  const getQualifiedAliases = (
+    cwd: string,
+    projectTrusted: boolean,
+  ): Promise<ReadonlyMap<string, string>> => {
+    const key = `${projectTrusted ? "trusted" : "untrusted"}\0${cwd}`;
+    let aliases = cache.get(key);
     if (aliases === undefined) {
-      aliases = loadAliases(pi, cwd);
-      cache.set(cwd, aliases);
+      aliases = loadAliases(pi, cwd, projectTrusted);
+      cache.set(key, aliases);
     }
 
     return aliases;
@@ -158,6 +168,7 @@ export function registerSkillAliases(
         typed: `/${token}`,
         args: event.text.slice(token.length + 1).trim(),
         cwd: ctx.cwd,
+        projectTrusted: ctx.isProjectTrusted(),
         sessionId: ctx.sessionManager.getSessionId(),
         thinkingLevel: pi.getThinkingLevel(),
       });
@@ -192,7 +203,7 @@ export function registerSkillAliases(
     // DC-25 item 3: a bare alias that equals a Pi built-in command name is
     // not reserved here, because Pi does not export its built-in list.
     // A table that cannot be loaded holds no alias, so the token stays Pi's.
-    return getQualifiedAliases(ctx.cwd).then(
+    return getQualifiedAliases(ctx.cwd, ctx.isProjectTrusted()).then(
       (aliases) => {
         const generatedName = aliases.get(token);
         return generatedName === undefined

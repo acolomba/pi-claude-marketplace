@@ -41,7 +41,11 @@ const GREET_SKILL: PiCommand = {
 
 const GREET_BLOCK = '<skill name="demo-greet">\nGreet Ada.\n</skill>';
 
-type AliasLoader = (pi: ExtensionAPI, cwd: string) => Promise<ReadonlyMap<string, string>>;
+type AliasLoader = (
+  pi: ExtensionAPI,
+  cwd: string,
+  projectTrusted: boolean,
+) => Promise<ReadonlyMap<string, string>>;
 
 /** Registers the handlers on strict mocks and captures the input listener. */
 function registerWithInvoker(
@@ -72,8 +76,11 @@ function registerWithInvoker(
   return { pi, input };
 }
 
-/** A context whose session id an invocation reads once, and its directory `cwdReads` times. */
-function invocationContext(cwdReads = 1): ExtensionContext {
+/**
+ * A context whose session id an invocation reads once, and its directory and
+ * project trust `cwdReads` times.
+ */
+function invocationContext(cwdReads = 1, projectTrusted = true): ExtensionContext {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "context" });
   const sessionManager = mock<ExtensionContext["sessionManager"]>({
     exactParams: true,
@@ -81,6 +88,9 @@ function invocationContext(cwdReads = 1): ExtensionContext {
   });
   when(() => ctx.cwd)
     .thenReturn("/workspace")
+    .times(cwdReads);
+  when(() => ctx.isProjectTrusted())
+    .thenReturn(projectTrusted)
     .times(cwdReads);
   when(() => ctx.sessionManager)
     .thenReturn(sessionManager)
@@ -98,6 +108,7 @@ function greetRequest(args: string): SkillInvocationRequest {
     typed: "/skill:demo-greet",
     args,
     cwd: "/workspace",
+    projectTrusted: true,
     sessionId: "session-1",
     thinkingLevel: "low",
   };
@@ -251,6 +262,38 @@ for (const source of ["interactive", "rpc"] as const) {
   }
 }
 
+test("T-02-17: passes Pi's project trust to the alias table and the invocation", async () => {
+  // arrange
+  const invokeSkill = mock<SkillInvoker>({ exactParams: true, name: "skill invocation" });
+  when(() => invokeSkill({ ...greetRequest("Ada"), typed: "/greet", projectTrusted: false }))
+    .thenResolve({ kind: "ok", text: GREET_BLOCK })
+    .times(1);
+  const ctx = invocationContext(2, false);
+  const trustSeen: boolean[] = [];
+  const { pi, input } = registerWithInvoker(invokeSkill, {
+    loadAliases: (_pi, _cwd, projectTrusted) => {
+      trustSeen.push(projectTrusted);
+      return Promise.resolve(GREET_ALIASES);
+    },
+  });
+  when(() => pi.getCommands())
+    .thenReturn([GREET_SKILL])
+    .times(1);
+  when(() => pi.getThinkingLevel())
+    .thenReturn("low")
+    .times(1);
+
+  // act
+  const sent = await input.value?.({ type: "input", text: "/greet Ada", source: "rpc" }, ctx);
+
+  // assert
+  assert.deepStrictEqual(sent, { action: "transform", text: GREET_BLOCK });
+  assert.deepStrictEqual(trustSeen, [false]);
+  verify(pi);
+  verify(ctx);
+  verify(invokeSkill);
+});
+
 test("leaves text that is not a slash token to Pi without reading commands", () => {
   // arrange
   const invokeSkill = mock<SkillInvoker>({ exactParams: true, name: "skill invocation" });
@@ -273,6 +316,9 @@ test("D-CF2-05: leaves a token the alias table does not hold to Pi, loading the 
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "context" });
   when(() => ctx.cwd)
     .thenReturn("/workspace")
+    .times(2);
+  when(() => ctx.isProjectTrusted())
+    .thenReturn(true)
     .times(2);
   let loads = 0;
   const { pi, input } = registerWithInvoker(invokeSkill, {
@@ -527,6 +573,9 @@ test("leaves a token to Pi when the alias table cannot be loaded", async () => {
   when(() => ctx.cwd)
     .thenReturn("/workspace")
     .times(1);
+  when(() => ctx.isProjectTrusted())
+    .thenReturn(true)
+    .times(1);
   const { pi, input } = registerWithInvoker(invokeSkill, {
     loadAliases: () => Promise.reject(new Error("commands unavailable")),
   });
@@ -631,6 +680,9 @@ test("offers plugin-qualified completion without replacing native commands", asy
   when(() => ctx.cwd)
     .thenReturn(cwd)
     .times(1);
+  when(() => ctx.isProjectTrusted())
+    .thenReturn(true)
+    .times(1);
   const base = {
     getSuggestions: () =>
       Promise.resolve({ items: [{ value: "foo:command", label: "foo:command" }], prefix: "/foo:" }),
@@ -686,6 +738,9 @@ test("creates a plugin-qualified completion when Pi has none", async () => {
     .times(1);
   when(() => ctx.cwd)
     .thenReturn(cwd)
+    .times(2);
+  when(() => ctx.isProjectTrusted())
+    .thenReturn(true)
     .times(2);
   const base = {
     getSuggestions: () => Promise.resolve(null),
@@ -887,6 +942,9 @@ test("DC-25: offers only plugin-qualified aliases in completion", async () => {
     .times(1);
   when(() => ctx.cwd)
     .thenReturn("/workspace")
+    .times(1);
+  when(() => ctx.isProjectTrusted())
+    .thenReturn(true)
     .times(1);
   const base = {
     getSuggestions: () => Promise.resolve(null),

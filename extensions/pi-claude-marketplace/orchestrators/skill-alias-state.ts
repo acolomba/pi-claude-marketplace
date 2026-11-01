@@ -80,6 +80,18 @@ function legacyAliases(skill: LoadedSkill): readonly string[] {
   return suffix === undefined ? [] : [`${skill.pluginName}:${suffix}`];
 }
 
+/**
+ * D-CF2-02 / T-02-17: the stored names in the forms install writes for a skill
+ * of `pluginName`: names under the plugin's own prefix, and the one bare
+ * frontmatter name. A record that claims other names was not written by
+ * install for this plugin, so those names are dropped.
+ */
+function installedForms(pluginName: string, names: readonly string[]): readonly string[] {
+  const prefix = `${pluginName}:`;
+  const bare = names.find((name) => !name.includes(":"));
+  return names.filter((name) => name.startsWith(prefix) || name === bare);
+}
+
 /** The names stored in the staged `SKILL.md` of `skill`; none when it cannot be read. */
 async function skillNames(
   skill: LoadedSkill,
@@ -92,7 +104,10 @@ async function skillNames(
     return [];
   }
 
-  return readSkillRecord(frontmatter)?.names ?? legacyAliases(skill);
+  const record = readSkillRecord(frontmatter);
+  return record === undefined
+    ? legacyAliases(skill)
+    : installedForms(skill.pluginName, record.names);
 }
 
 /** The skills of the state under `root` whose staged file Pi has loaded, in state order. */
@@ -117,11 +132,14 @@ function loadedSkills(
 /**
  * D-CF2-02: maps each name that a loaded bridged skill stored to its
  * generated name. The first claim wins, and a name that `reserved` holds is
- * never mapped (SK-6).
+ * never mapped (SK-6). T-02-17: the project root is read only when Pi trusts
+ * the project (`projectTrusted`), as Claude Code loads no project-scope
+ * plugin before the workspace is trusted.
  */
 export async function loadQualifiedSkillAliases(
   pi: ExtensionAPI,
   cwd: string,
+  projectTrusted: boolean,
   dependencies: Partial<SkillAliasDependencies> = {},
 ): Promise<ReadonlyMap<string, string>> {
   const resolved = { ...DEFAULT_DEPENDENCIES, ...dependencies };
@@ -135,7 +153,8 @@ export async function loadQualifiedSkillAliases(
       .map((command) => path.resolve(command.sourceInfo.path)),
   );
   const skills: LoadedSkill[] = [];
-  for (const root of [resolved.getAgentDir(), path.join(cwd, ".pi")]) {
+  const roots = [resolved.getAgentDir(), ...(projectTrusted ? [path.join(cwd, ".pi")] : [])];
+  for (const root of roots) {
     let state: SkillAliasState;
     try {
       // eslint-disable-next-line no-await-in-loop -- two scope roots, one state read each
