@@ -30,6 +30,7 @@ import {
   saveState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { recordStagedProjectHooks } from "../bridges/hooks/project-ledger-seeds.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
@@ -103,119 +104,126 @@ test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hoo
   const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
   const completionCache = createCompletionCache();
 
-  return withHermeticEnvironment("hooks-cross-scope-recon-", async ({ root: tmpRoot }) => {
-    const projectCwd = path.join(tmpRoot, "project");
+  return withHermeticEnvironment(
+    "hooks-cross-scope-recon-",
+    async ({ agentDir, root: tmpRoot }) => {
+      const projectCwd = path.join(tmpRoot, "project");
 
-    await mkdir(projectCwd, { recursive: true });
+      await mkdir(projectCwd, { recursive: true });
 
-    // Seed USER scope: one hooks-bearing plugin with a PreToolUse handler.
-    const userLoc = locationsFor("user", projectCwd);
-    const userPluginRoot = path.join(tmpRoot, "user-mp-src", "plugins", "user-plugin");
-    await mkdir(userPluginRoot, { recursive: true });
-    await saveState(
-      userLoc.extensionRoot,
-      buildStateWithSingleHooksPlugin({
-        scope: "user",
-        marketplace: "user-mp",
-        plugin: "user-plugin",
-        resolvedSource: userPluginRoot,
-        marketplaceRoot: path.join(tmpRoot, "user-mp-src"),
-      }),
-    );
-    const userHooksDir = path.join(userLoc.extensionRoot, "hooks", "user-plugin");
-    await mkdir(userHooksDir, { recursive: true });
-    await writeFile(
-      path.join(userHooksDir, "hooks.json"),
-      JSON.stringify({
-        PreToolUse: [
-          {
-            hooks: [{ type: "command", command: "echo user" }],
-          },
-        ],
-      }),
-      "utf8",
-    );
+      // Seed USER scope: one hooks-bearing plugin with a PreToolUse handler.
+      const userLoc = locationsFor("user", projectCwd);
+      const userPluginRoot = path.join(tmpRoot, "user-mp-src", "plugins", "user-plugin");
+      await mkdir(userPluginRoot, { recursive: true });
+      await saveState(
+        userLoc.extensionRoot,
+        buildStateWithSingleHooksPlugin({
+          scope: "user",
+          marketplace: "user-mp",
+          plugin: "user-plugin",
+          resolvedSource: userPluginRoot,
+          marketplaceRoot: path.join(tmpRoot, "user-mp-src"),
+        }),
+      );
+      const userHooksDir = path.join(userLoc.extensionRoot, "hooks", "user-plugin");
+      await mkdir(userHooksDir, { recursive: true });
+      await writeFile(
+        path.join(userHooksDir, "hooks.json"),
+        JSON.stringify({
+          PreToolUse: [
+            {
+              hooks: [{ type: "command", command: "echo user" }],
+            },
+          ],
+        }),
+        "utf8",
+      );
 
-    // Seed PROJECT scope: one DIFFERENT hooks-bearing plugin with the same
-    // event so the routing bucket should hold BOTH entries after rebuild.
-    const projectLoc = locationsFor("project", projectCwd);
-    const projectPluginRoot = path.join(tmpRoot, "project-mp-src", "plugins", "project-plugin");
-    await mkdir(projectPluginRoot, { recursive: true });
-    await saveState(
-      projectLoc.extensionRoot,
-      buildStateWithSingleHooksPlugin({
-        scope: "project",
-        marketplace: "project-mp",
-        plugin: "project-plugin",
-        resolvedSource: projectPluginRoot,
-        marketplaceRoot: path.join(tmpRoot, "project-mp-src"),
-      }),
-    );
-    const projectHooksDir = path.join(projectLoc.extensionRoot, "hooks", "project-plugin");
-    await mkdir(projectHooksDir, { recursive: true });
-    await writeFile(
-      path.join(projectHooksDir, "hooks.json"),
-      JSON.stringify({
-        PreToolUse: [
-          {
-            hooks: [{ type: "command", command: "echo project" }],
-          },
-        ],
-      }),
-      "utf8",
-    );
+      // Seed PROJECT scope: one DIFFERENT hooks-bearing plugin with the same
+      // event so the routing bucket should hold BOTH entries after rebuild.
+      const projectLoc = locationsFor("project", projectCwd);
+      const projectPluginRoot = path.join(tmpRoot, "project-mp-src", "plugins", "project-plugin");
+      await mkdir(projectPluginRoot, { recursive: true });
+      await saveState(
+        projectLoc.extensionRoot,
+        buildStateWithSingleHooksPlugin({
+          scope: "project",
+          marketplace: "project-mp",
+          plugin: "project-plugin",
+          resolvedSource: projectPluginRoot,
+          marketplaceRoot: path.join(tmpRoot, "project-mp-src"),
+        }),
+      );
+      const projectHooksDir = path.join(projectLoc.extensionRoot, "hooks", "project-plugin");
+      await mkdir(projectHooksDir, { recursive: true });
+      await writeFile(
+        path.join(projectHooksDir, "hooks.json"),
+        JSON.stringify({
+          PreToolUse: [
+            {
+              hooks: [{ type: "command", command: "echo project" }],
+            },
+          ],
+        }),
+        "utf8",
+      );
+      // D-CF2-13: the user's ledger lists the staged config, as an install does.
+      await recordStagedProjectHooks(agentDir, projectCwd, path.dirname(projectHooksDir), [
+        "project-plugin",
+      ]);
 
-    // Boot the bridge: hydrate the cache from disk for both scopes so the
-    // rebuild walks both scopes' cached entries.
-    const placeholderCtx = {
-      mode: "tui",
-      cwd: projectCwd,
-      ui: { notify: () => {} },
-      sessionManager: {
-        getSessionId: () => "hooks-cross-scope-recon",
-        getSessionFile: () => undefined,
-      },
-    } as unknown as ExtensionContext;
-    await hooksHydration.registerHooksBridge(makeMockPi(), {
-      cwd: projectCwd,
-    });
+      // Boot the bridge: hydrate the cache from disk for both scopes so the
+      // rebuild walks both scopes' cached entries.
+      const placeholderCtx = {
+        mode: "tui",
+        cwd: projectCwd,
+        ui: { notify: () => {} },
+        sessionManager: {
+          getSessionId: () => "hooks-cross-scope-recon",
+          getSessionFile: () => undefined,
+        },
+      } as unknown as ExtensionContext;
+      await hooksHydration.registerHooksBridge(makeMockPi(), {
+        cwd: projectCwd,
+      });
 
-    // Sanity: after boot, the routing table holds both scopes' PreToolUse
-    // entries. This is the pre-condition the regression broke.
-    const preBucket = runtime.routingTableEntries().get("PreToolUse") ?? [];
-    assert.equal(
-      preBucket.length,
-      2,
-      `expected user + project PreToolUse entries after registerHooksBridge; got ${String(preBucket.length)}`,
-    );
+      // Sanity: after boot, the routing table holds both scopes' PreToolUse
+      // entries. This is the pre-condition the regression broke.
+      const preBucket = runtime.routingTableEntries().get("PreToolUse") ?? [];
+      assert.equal(
+        preBucket.length,
+        2,
+        `expected user + project PreToolUse entries after registerHooksBridge; got ${String(preBucket.length)}`,
+      );
 
-    // Drive applyReconcile across BOTH scopes (omitted `scope` fan-out).
-    // The per-scope rebuild loop runs for project then user. Before the
-    // fix, the second iteration's filtered view would wipe the first
-    // scope's entries from the global routing table.
-    await applyReconcile({
-      ctx: placeholderCtx,
-      run: runWithNothingLoaded(),
-      cwd: projectCwd,
-      completionCache,
-      hooksRouting,
-    });
+      // Drive applyReconcile across BOTH scopes (omitted `scope` fan-out).
+      // The per-scope rebuild loop runs for project then user. Before the
+      // fix, the second iteration's filtered view would wipe the first
+      // scope's entries from the global routing table.
+      await applyReconcile({
+        ctx: placeholderCtx,
+        run: runWithNothingLoaded(),
+        cwd: projectCwd,
+        completionCache,
+        hooksRouting,
+      });
 
-    // Post-condition: BOTH scopes' PreToolUse entries must still surface.
-    // This is the regression gate -- if the per-scope rebuild ever
-    // returns to a scope-filtered cache walk, the test red-fails because
-    // one of the two entries goes missing.
-    const postBucket = runtime.routingTableEntries().get("PreToolUse") ?? [];
-    assert.equal(
-      postBucket.length,
-      2,
-      `cross-scope wipe regression: expected BOTH user + project entries after applyReconcile; got ${String(postBucket.length)}`,
-    );
-    const pluginIds = postBucket.map((e) => `${e.scope}/${e.pluginId}`).sort();
-    assert.deepStrictEqual(
-      pluginIds,
-      ["project/project-plugin", "user/user-plugin"],
-      "applyReconcile's per-scope rebuild must preserve entries from BOTH scopes",
-    );
-  });
+      // Post-condition: BOTH scopes' PreToolUse entries must still surface.
+      // This is the regression gate -- if the per-scope rebuild ever
+      // returns to a scope-filtered cache walk, the test red-fails because
+      // one of the two entries goes missing.
+      const postBucket = runtime.routingTableEntries().get("PreToolUse") ?? [];
+      assert.equal(
+        postBucket.length,
+        2,
+        `cross-scope wipe regression: expected BOTH user + project entries after applyReconcile; got ${String(postBucket.length)}`,
+      );
+      const pluginIds = postBucket.map((e) => `${e.scope}/${e.pluginId}`).sort();
+      assert.deepStrictEqual(
+        pluginIds,
+        ["project/project-plugin", "user/user-plugin"],
+        "applyReconcile's per-scope rebuild must preserve entries from BOTH scopes",
+      );
+    },
+  );
 });

@@ -52,6 +52,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { recordStagedProjectHooks } from "../../bridges/hooks/project-ledger-seeds.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
@@ -121,8 +122,10 @@ async function populateRuntimeRoute(
   opts: { readonly command: string; readonly marketplace: string; readonly plugin: string },
 ): Promise<HooksRouting> {
   const pluginRoot = path.join(cwd, "runtime-routes", `${opts.marketplace}-${opts.plugin}`);
-  const hooksJsonPath = path.join(pluginRoot, "hooks.json");
-  await mkdir(pluginRoot, { recursive: true });
+  const { hooksDir } = locationsFor("project", cwd);
+  // D-CF2-13: a project route reads the staged config the user's ledger lists.
+  const hooksJsonPath = path.join(hooksDir, opts.plugin, "hooks.json");
+  await mkdir(path.dirname(hooksJsonPath), { recursive: true });
   await writeFile(
     hooksJsonPath,
     JSON.stringify({
@@ -130,6 +133,7 @@ async function populateRuntimeRoute(
     }),
     "utf8",
   );
+  await recordStagedProjectHooks(locationsFor("user", cwd).scopeRoot, cwd, hooksDir, [opts.plugin]);
   const hooksRouting = createHooksRouting(runtime, { readHooksJson });
   await hooksRouting.readAndCachePluginHooks({
     cwd,

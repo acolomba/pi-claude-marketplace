@@ -1045,6 +1045,8 @@ test("WR-04: cascadeUnstagePlugin carries the warning of a project skill ledger 
           "holds content this version cannot update; it was left unchanged.",
         `could not remove the commands from the project skill ledger: The project skill ledger ${ledgerFile} ` +
           "holds content this version cannot update; it was left unchanged.",
+        `could not remove the hooks from the project skill ledger: The project skill ledger ${ledgerFile} ` +
+          "holds content this version cannot update; it was left unchanged.",
       ],
     ],
   );

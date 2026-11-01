@@ -1396,6 +1396,8 @@ async function runInstallLedgerBody(
         pluginName: c.plugin,
         pluginRoot: c.resolved.pluginRoot,
         hooksValue: parsed.value,
+        // D-CF2-13: the user's ledger records the staged project hooks.
+        ledger: NODE_PROJECT_SKILL_LEDGER,
       });
       c.hooksFileWritten = true;
       // D-100-01 / D-100-02 / ENBL-11: describe the hooks this install
@@ -1408,7 +1410,13 @@ async function runInstallLedgerBody(
         return;
       }
 
-      await removeHookConfig({ locations: c.locations, pluginName: c.plugin });
+      // WR-04: a ledger warning here would report an entry whose own write
+      // may just have failed, so the rollback does not show it.
+      await removeHookConfig({
+        locations: c.locations,
+        pluginName: c.plugin,
+        ledger: NODE_PROJECT_SKILL_LEDGER,
+      });
     },
   };
 

@@ -66,6 +66,7 @@ import {
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import { stageListedProjectHooks } from "../../bridges/hooks/project-ledger-seeds.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
@@ -4714,12 +4715,12 @@ async function seedHookRoute(
   command: string,
 ): Promise<void> {
   const pluginRoot = path.join(cwd, `${marketplace}-${plugin}`);
-  const hooksJsonPath = path.join(pluginRoot, "hooks", "hooks.json");
-  await writeUnder(
-    hooksJsonPath,
-    JSON.stringify({
-      PreToolUse: [{ matcher: "", hooks: [{ type: "command", command }] }],
-    }),
+  // D-CF2-13: a project route reads the staged config the user's ledger lists.
+  const hooksJsonPath = await stageListedProjectHooks(
+    locationsFor("user", cwd).scopeRoot,
+    cwd,
+    plugin,
+    JSON.stringify({ PreToolUse: [{ matcher: "", hooks: [{ type: "command", command }] }] }),
   );
   await hooksRouting.readAndCachePluginHooks({
     cwd,

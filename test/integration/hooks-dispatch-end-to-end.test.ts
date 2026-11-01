@@ -36,6 +36,7 @@ import {
   loadState,
   saveState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { recordStagedProjectHooks } from "../bridges/hooks/project-ledger-seeds.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type { HookExecutor } from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
@@ -266,6 +267,10 @@ test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_
     await mkdir(projectHooksDir, { recursive: true });
     await saveState(projectExtensionRoot, buildProjectScopeStateWithHooksPlugin());
     await writeFile(path.join(projectHooksDir, "hooks.json"), HOOKS_JSON_BYTES, "utf8");
+    // D-CF2-13: the user's ledger lists the staged config, as an install does.
+    await recordStagedProjectHooks(agentDir, projectCwd, path.dirname(projectHooksDir), [
+      "project-session-start",
+    ]);
 
     const executorCalls: Array<{ pluginId: string; claudeEvent: string; scope: string }> = [];
     const injectedExecutor: HookExecutor = (entry: RoutingEntry) => {

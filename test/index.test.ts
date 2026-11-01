@@ -56,6 +56,7 @@ import claudeMarketplaceExtension from "../extensions/pi-claude-marketplace/inde
 import * as entryModule from "../extensions/pi-claude-marketplace/index.ts";
 import { loadState } from "../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
+import { recordStagedProjectHooks } from "./bridges/hooks/project-ledger-seeds.ts";
 import {
   buildInstalledPluginRecord,
   mergeMarketplaceIntoState,
@@ -748,7 +749,7 @@ function hookContext(cwd: string, sessionId: string): ExtensionContext {
 }
 
 /** Seed one enabled project plugin whose PreToolUse hook denies Bash. */
-async function seedBlockingHookPlugin(cwd: string): Promise<void> {
+async function seedBlockingHookPlugin(cwd: string, agentDir: string): Promise<void> {
   const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
   const marketplaceRoot = path.join(cwd, "hook-marketplace");
   const pluginRoot = path.join(marketplaceRoot, "plugins", "hook-owner");
@@ -808,6 +809,8 @@ async function seedBlockingHookPlugin(cwd: string): Promise<void> {
     }),
     "utf8",
   );
+  // D-CF2-13: the user's ledger lists the staged config, as an install does.
+  await recordStagedProjectHooks(agentDir, cwd, path.join(extensionRoot, "hooks"), ["hook-owner"]);
 }
 
 /** Seed a path marketplace accepted by the public `marketplace add` command. */
@@ -1581,7 +1584,7 @@ test("keeps hook routing and command completion state inside each extension-load
   const ownerCwd = scope.cwd;
   const peerCwd = path.join(scope.cwd, "peer-project");
   await mkdir(peerCwd, { recursive: true });
-  await seedBlockingHookPlugin(ownerCwd);
+  await seedBlockingHookPlugin(ownerCwd, scope.agentDir);
   const ownerMarketplace = await seedMarketplaceSource(ownerCwd, "owned-rows", "hello");
   process.chdir(ownerCwd);
   // One probe: the command's notification run is the only one, and the add

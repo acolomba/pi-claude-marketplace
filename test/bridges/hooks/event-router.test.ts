@@ -45,6 +45,8 @@ import {
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
+import { recordStagedProjectHooks } from "./project-ledger-seeds.ts";
+
 import type { SpawnDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import type { HookExecutor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import type { HooksHydrationDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
@@ -175,7 +177,7 @@ test(
       shutdownInMemoryChildren(peerRuntime);
       peerChild.destroy();
     });
-    const { root } = await createHermeticEnvironment(t, "hooks-router-reload-");
+    const { agentDir, root } = await createHermeticEnvironment(t, "hooks-router-reload-");
     const projectRoot = path.join(root, "project");
     shutdownInMemoryChildren(runtime);
     const userLocations = locationsFor("user", projectRoot);
@@ -284,6 +286,9 @@ test(
     );
     await saveState(userLocations.extensionRoot, userState);
     await saveState(projectLocations.extensionRoot, projectState);
+    await recordStagedProjectHooks(agentDir, projectRoot, projectLocations.hooksDir, [
+      "project-hooks",
+    ]);
     const notifications: Array<{
       readonly text: string;
       readonly severity: "info" | "warning" | "error" | undefined;
@@ -727,6 +732,7 @@ function makeScopeState(input: {
 }
 
 interface ProjectHookFixture {
+  readonly agentDir: string;
   readonly root: string;
   readonly factoryRoot: string;
   readonly projectRoot: string;
@@ -763,8 +769,7 @@ async function makeProjectHookFixture(
   label: string,
   event: "PreToolUse" | "SessionStart",
 ): Promise<ProjectHookFixture> {
-  const root = await mkdtemp(path.join(tmpdir(), `hooks-router-${label}-`));
-  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+  const { agentDir, root } = await createHermeticEnvironment(t, `hooks-router-${label}-`);
   const factoryRoot = path.join(root, "factory");
   const projectRoot = path.join(root, "project");
   const locations = locationsFor("project", projectRoot);
@@ -772,7 +777,9 @@ async function makeProjectHookFixture(
   const hookBytes = JSON.stringify(makeConfig([{ event, handlers: 1 }]));
   await mkdir(path.dirname(hookPath), { recursive: true });
   await writeFile(hookPath, hookBytes, "utf8");
+  await recordStagedProjectHooks(agentDir, projectRoot, locations.hooksDir, ["owner-hooks"]);
   return {
+    agentDir,
     root,
     factoryRoot,
     projectRoot,
@@ -834,7 +841,7 @@ async function makeSessionStartFixture(t: TestContext): Promise<{
   readonly projectRoot: string;
   readonly sharedPaths: readonly string[];
 }> {
-  const { root } = await createHermeticEnvironment(t, "hooks-router-session-mode-");
+  const { agentDir, root } = await createHermeticEnvironment(t, "hooks-router-session-mode-");
   const projectRoot = path.join(root, "project");
   const sharedPaths: string[] = [];
   for (const scope of ["user", "project"] as const) {
@@ -858,6 +865,12 @@ async function makeSessionStartFixture(t: TestContext): Promise<{
     sharedPaths.push(path.join(loc.dataRoot, "_shared"));
   }
 
+  await recordStagedProjectHooks(
+    agentDir,
+    projectRoot,
+    locationsFor("project", projectRoot).hooksDir,
+    ["session-hooks"],
+  );
   return { root, projectRoot, sharedPaths };
 }
 
@@ -1192,7 +1205,7 @@ test("readAndCachePluginHooks reads and parses one case-owned config", async (t)
 
   // act
   await createHooksRouting(runtime, { readHooksJson }).readAndCachePluginHooks({
-    scope: "project",
+    scope: "user",
     marketplace: "catalog",
     plugin: "reader",
     resolvedSource: asAbsolutePluginRoot(path.join(root, "plugin")),
@@ -1212,7 +1225,7 @@ test("readAndCachePluginHooks reads and parses one case-owned config", async (t)
   // assert
   assert.deepStrictEqual(cache, [
     {
-      scope: "project",
+      scope: "user",
       marketplace: "catalog",
       pluginId: "reader",
       resolvedSource: path.join(root, "plugin"),
@@ -1242,7 +1255,7 @@ test("runtime-bound routing mutations update only their supplied lifecycle owner
 
   // act
   await routing.readAndCachePluginHooks({
-    scope: "project",
+    scope: "user",
     marketplace: "catalog",
     plugin: "owned",
     resolvedSource: asAbsolutePluginRoot(root),
@@ -1260,7 +1273,7 @@ test("runtime-bound routing mutations update only their supplied lifecycle owner
   assert.deepStrictEqual(peerRuntime.getRoutingBucket("PreToolUse"), []);
 
   // act
-  routing.removePluginConfigFromCache("project", "catalog", "owned");
+  routing.removePluginConfigFromCache("user", "catalog", "owned");
   routing.rebuildRoutingTables();
 
   // assert
@@ -1276,7 +1289,7 @@ test("readAndCachePluginHooks leaves the cache unchanged after a read failure", 
 
   // act
   await createHooksRouting(runtime, { readHooksJson }).readAndCachePluginHooks({
-    scope: "project",
+    scope: "user",
     marketplace: "catalog",
     plugin: "missing",
     resolvedSource: asAbsolutePluginRoot(path.join(root, "plugin")),
@@ -1299,7 +1312,7 @@ test("readAndCachePluginHooks leaves the cache unchanged after a parse failure",
 
   // act
   await createHooksRouting(runtime, { readHooksJson }).readAndCachePluginHooks({
-    scope: "project",
+    scope: "user",
     marketplace: "catalog",
     plugin: "invalid",
     resolvedSource: asAbsolutePluginRoot(path.join(root, "plugin")),
@@ -1756,8 +1769,10 @@ test(
   async (t) => {
     // arrange
     const runtime = createHooksRuntime();
-    const root = await mkdtemp(path.join(tmpdir(), "hooks-router-hydrate-matrix-"));
-    t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+    const { agentDir, cwd: root } = await createHermeticEnvironment(
+      t,
+      "hooks-router-hydrate-matrix-",
+    );
     const locations = locationsFor("project", root);
     const projectState = makeScopeState({
       scope: "project",
@@ -1843,6 +1858,13 @@ test(
       "utf8",
     );
     await saveState(locations.extensionRoot, state);
+    await recordStagedProjectHooks(agentDir, root, locations.hooksDir, [
+      "disabled-hooks",
+      "foreign-hooks",
+      "invalid-hooks",
+      "valid-hooks-a",
+      "valid-hooks-b",
+    ]);
 
     // act
     await createHooksHydration(runtime, { loadState, readHooksJson }).hydrateProjectScopeForCwd(
@@ -2333,6 +2355,106 @@ test("project hydration parses a plugin's hooks.json into the parsed-config cach
   assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
 });
 
+/** A hydration reader that serves `fixture.state` for its project and no plugins elsewhere. */
+function fixtureStateReader(fixture: ProjectHookFixture): HooksHydrationDeps {
+  return {
+    loadState(extensionRoot: string): Promise<ExtensionState> {
+      return Promise.resolve(
+        extensionRoot === fixture.locations.extensionRoot
+          ? fixture.state
+          : { schemaVersion: 2, marketplaces: {} },
+      );
+    },
+    readHooksJson,
+  };
+}
+
+test("D-CF2-13 project hydration skips a config the user's project ledger does not list", async (t) => {
+  // arrange
+  const fixture = await makeProjectHookFixture(t, "unlisted-project-hydration", "PreToolUse");
+  await rm(path.join(fixture.agentDir, "pi-claude-marketplace", "project-installs"), {
+    recursive: true,
+  });
+  const runtime = createHooksRuntime();
+
+  // act
+  await createHooksHydration(runtime, fixtureStateReader(fixture)).hydrateProjectScopeForCwd(
+    fixture.projectRoot,
+  );
+
+  // assert
+  assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
+});
+
+test("D-CF2-13 project hydration skips a config whose bytes changed after the ledger listed them", async (t) => {
+  // arrange
+  const fixture = await makeProjectHookFixture(t, "changed-project-hydration", "PreToolUse");
+  await writeFile(fixture.hookPath, `${fixture.hookBytes}\n`, "utf8");
+  const runtime = createHooksRuntime();
+
+  // act
+  await createHooksHydration(runtime, fixtureStateReader(fixture)).hydrateProjectScopeForCwd(
+    fixture.projectRoot,
+  );
+
+  // assert
+  assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
+});
+
+test("D-CF2-13 readAndCachePluginHooks caches the staged project config the ledger lists", async (t) => {
+  // arrange
+  const fixture = await makeProjectHookFixture(t, "listed-project-read", "PreToolUse");
+  const runtime = createHooksRuntime();
+
+  // act
+  await createHooksRouting(runtime, { readHooksJson }).readAndCachePluginHooks({
+    scope: "project",
+    marketplace: "catalog",
+    plugin: "owner-hooks",
+    resolvedSource: asAbsolutePluginRoot(path.join(fixture.root, "plugins", "owner")),
+    hooksJsonPath: path.join(fixture.root, "plugins", "owner", "missing-source-hooks.json"),
+    cwd: fixture.projectRoot,
+    logPrefix: "install",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
+      scope: entry.scope,
+      pluginId: entry.pluginId,
+      config: entry.config,
+    })),
+    [
+      {
+        scope: "project",
+        pluginId: "owner-hooks",
+        config: makeConfig([{ event: "PreToolUse", handlers: 1 }]),
+      },
+    ],
+  );
+});
+
+test("D-CF2-13 readAndCachePluginHooks skips a staged project config the ledger does not list", async (t) => {
+  // arrange
+  const fixture = await makeProjectHookFixture(t, "unlisted-project-read", "PreToolUse");
+  await writeFile(fixture.hookPath, `${fixture.hookBytes}\n`, "utf8");
+  const runtime = createHooksRuntime();
+
+  // act
+  await createHooksRouting(runtime, { readHooksJson }).readAndCachePluginHooks({
+    scope: "project",
+    marketplace: "catalog",
+    plugin: "owner-hooks",
+    resolvedSource: asAbsolutePluginRoot(path.join(fixture.root, "plugins", "owner")),
+    hooksJsonPath: fixture.hookPath,
+    cwd: fixture.projectRoot,
+    logPrefix: "install",
+  });
+
+  // assert
+  assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
+});
+
 test("project hydration stops before parsing a plugin's hooks.json read under a stale generation", async (t) => {
   // arrange
   const fixture = await makeProjectHookFixture(t, "stale-after-hooks-read", "PreToolUse");
@@ -2356,7 +2478,10 @@ test("project hydration stops before parsing a plugin's hooks.json read under a 
       );
     },
     readHooksJson(hooksJsonPath: string): Promise<string> {
-      runtime.advanceGeneration();
+      if (hooksJsonPath === fixture.hookPath) {
+        runtime.advanceGeneration();
+      }
+
       // The call below is the imported production reader, not this member --
       // an object-literal method name binds no identifier in its own body.
       return readHooksJson(hooksJsonPath);
@@ -2995,7 +3120,7 @@ test(
   async (t) => {
     // arrange
     const runtime = createHooksRuntime();
-    const { root } = await createHermeticEnvironment(t, "hooks-router-lazy-project-");
+    const { agentDir, root } = await createHermeticEnvironment(t, "hooks-router-lazy-project-");
     const factoryRoot = path.join(root, "factory-cwd");
     const projectRoot = path.join(root, "actual-project");
     const projectLocations = locationsFor("project", projectRoot);
@@ -3024,6 +3149,10 @@ test(
     }
 
     await saveState(projectLocations.extensionRoot, projectState);
+    await recordStagedProjectHooks(agentDir, projectRoot, projectLocations.hooksDir, [
+      "alpha-hooks",
+      "beta-hooks",
+    ]);
     const context = makeContext(projectRoot, root);
     const { pi, registrations, messages } = makeRecordingPi();
     const dispatches: Array<{ readonly pluginId: string; readonly event: string }> = [];

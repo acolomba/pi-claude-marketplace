@@ -626,8 +626,13 @@ export async function cascadeUnstagePlugin(
     // LIFE-01 / D-63-01: 5th cascade slot between the agents foreign-content
     // guard and mcp. removeHookConfig is idempotent (NFR-3) -- a plugin that
     // never staged hooks returns `{ removed: pluginName }` cleanly.
-    const hooksResult = await removeHookConfig({ locations, pluginName: plugin });
+    const hooksResult = await removeHookConfig({
+      locations,
+      pluginName: plugin,
+      ledger: NODE_PROJECT_SKILL_LEDGER,
+    });
     dropped.hooks = [hooksResult.removed];
+    skillWarnings = [...skillWarnings, ...hooksResult.warnings];
 
     const mcpResult = await unstageMcpServers({
       locations,

@@ -18,6 +18,10 @@
 // runs its `!` commands and claims an alias only when the ledger lists it for
 // the current project with the digest of the directory as it is now.
 //
+// The commands and hooks bridges list their project installs in the same
+// map, under keys no skill name can take (`bridges/commands/project-ledger.ts`,
+// `bridges/hooks/project-ledger.ts`).
+//
 // IN-06: one file per project means a write for one project never rewrites
 // another project's entries. Every write for a project runs inside an
 // operation that holds that project's state lock (`withStateGuard`), so two

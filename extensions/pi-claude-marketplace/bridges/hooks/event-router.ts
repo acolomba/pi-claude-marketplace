@@ -36,6 +36,12 @@
 //
 // DISP-01 / DISP-02 / DISP-03 / DISP-04 / OBS-01 anchor the contracts this
 // module enforces; D-59-01 / D-59-02 / D-59-03 anchor the decisions.
+//
+// D-CF2-13: both cache writers route a project-scope config only when the
+// user's project ledger lists the staged `hooks.json` bytes for that project.
+// A project whose `.pi/` tree came from a repository, not from this user's
+// install, contributes no hooks. The skip is silent, as Claude Code's
+// `not_installed_here` skip is; the reason goes to the OBS-01 debug log.
 
 import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -45,11 +51,13 @@ import { BUCKET_A_EVENTS, type BucketAEvent } from "../../domain/components/hook
 import { parseHooksConfig, parseMatcher, type HooksConfig } from "../../domain/components/hooks.ts";
 import { asAbsolutePluginRoot, type AbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
+import { provenProjectSkills } from "../../persistence/project-installs.ts";
 import {
   DEFAULT_STATE,
   isRecordedButDisabled,
   type ExtensionState,
 } from "../../persistence/state-io.ts";
+import { getAgentDir } from "../../platform/pi-api.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -63,6 +71,7 @@ import { HOOK_CONTEXT_MESSAGE_TYPE, sendDueFollowUpContext } from "./event-adapt
 import { compileIfPredicate, MATCH_ALL_IF } from "./if-field/index.ts";
 import { claudeSessionEndReason } from "./payloads/session-end.ts";
 import { claudeSessionStartSource } from "./payloads/session-start.ts";
+import { hookConfigDigest, projectHookLedgerKey } from "./project-ledger.ts";
 import {
   createRoutingStateOperations,
   type CacheEntry,
@@ -119,12 +128,48 @@ type EventRouterRoutingState = Pick<
 >;
 
 /**
+ * D-CF2-13: the hook configs the user's project ledger lists for the project
+ * whose scope `loc` names, each key mapped to the digest of its staged bytes.
+ * The ledger is read through the hooks read port. A missing, unreadable, or
+ * malformed ledger lists none. A user scope needs no ledger: no repository can
+ * write it, so it returns `undefined`.
+ */
+async function provenProjectHooks(
+  reader: HooksFileReader,
+  loc: ScopedLocations,
+): Promise<ReadonlyMap<string, string> | undefined> {
+  if (loc.scope === "user") {
+    return undefined;
+  }
+
+  return provenProjectSkills(getAgentDir(), path.dirname(loc.scopeRoot), reader.readHooksJson);
+}
+
+/**
+ * D-CF2-13: whether the staged config `raw` of the hooks slug `slug` may be
+ * routed. A user-scope config always may. A project-scope config may only
+ * when the ledger lists the slug with the digest of exactly these bytes.
+ */
+function isInstalledHere(
+  proven: ReadonlyMap<string, string> | undefined,
+  slug: string,
+  raw: string,
+): boolean {
+  return proven === undefined || proven.get(projectHookLedgerKey(slug)) === hookConfigDigest(raw);
+}
+
+/**
  * Read `hooks.json` from disk, parse via `parseHooksConfig`, and
  * populate `parsedConfigCache`. Both failure arms (read-throw / parse-
  * error) are non-fatal: the resolver already validated the file at
  * orchestrator-entry time, so a fresh failure here is defensive only.
  * The detail routes through the OBS-01 debug seam; reconcile rehydrates
  * the cache from disk on the next pass.
+ *
+ * D-CF2-13: a project-scope call reads the config that the install staged
+ * under the project's hooks directory, not `hooksJsonPath`, and caches it only
+ * when the user's project ledger lists those bytes. The command that called
+ * it wrote that entry under the project's state lock.
  *
  * `logPrefix` distinguishes install / reinstall / update call sites in
  * debug-log lines so the same shared helper can serve all three
@@ -135,6 +180,7 @@ export interface ReadAndCachePluginHooksOptions {
   readonly marketplace: string;
   readonly plugin: string;
   readonly resolvedSource: AbsolutePluginRoot;
+  /** The config a user-scope call reads; a project-scope call reads the staged one. */
   readonly hooksJsonPath: string;
   readonly cwd: string;
   readonly logPrefix: string;
@@ -145,12 +191,23 @@ async function readAndCachePluginHooksWith(
   routingState: EventRouterRoutingState,
   opts: ReadAndCachePluginHooksOptions,
 ): Promise<void> {
+  const loc = locationsFor(opts.scope, opts.cwd);
+  const proven = await provenProjectHooks(reader, loc);
+  const hooksJsonPath =
+    proven === undefined ? opts.hooksJsonPath : path.join(loc.hooksDir, opts.plugin, "hooks.json");
   let raw: string;
   try {
-    raw = await reader.readHooksJson(opts.hooksJsonPath);
+    raw = await reader.readHooksJson(hooksJsonPath);
   } catch (err) {
     hookDebugLog(
       `${opts.logPrefix}: hooks.json read failed for ${opts.plugin}@${opts.marketplace}: ${errorMessage(err)}`,
+    );
+    return;
+  }
+
+  if (!isInstalledHere(proven, opts.plugin, raw)) {
+    hookDebugLog(
+      `${opts.logPrefix}: hooks.json of ${opts.plugin}@${opts.marketplace} skipped: the project ledger does not list it`,
     );
     return;
   }
@@ -587,42 +644,55 @@ async function hydrateScopeFromState(
   routingState: EventRouterRoutingState,
   generationIsCurrent: GenerationGuard,
 ): Promise<void> {
+  const targets = hydrateTargets(state, loc, cwd);
+  if (targets.length === 0) {
+    return;
+  }
+
+  // D-CF2-13: one ledger read covers every project config of this pass.
+  const proven = await provenProjectHooks(reader, loc);
+  for (const target of targets) {
+    // eslint-disable-next-line no-await-in-loop -- each plugin's hydrate writes the shared routing table
+    await tryHydrateOnePlugin(reader, routingState, generationIsCurrent, { ...target, proven });
+    if (!generationIsCurrent()) {
+      return;
+    }
+  }
+}
+
+/** The hydration targets of every enabled plugin of `loc`'s scope with recorded hooks. */
+function hydrateTargets(
+  state: ExtensionState,
+  loc: ScopedLocations,
+  cwd: string,
+): Omit<HydrateOnePluginTarget, "proven">[] {
   const scopedMarketplaces = Object.entries(state.marketplaces).filter(
     ([, marketplace]) => marketplace.scope === loc.scope,
   );
-  for (const [mpName, mpRecord] of scopedMarketplaces) {
-    const hookPlugins = Object.entries(mpRecord.plugins).filter(([, plugin]) => {
+  return scopedMarketplaces.flatMap(([mpName, mpRecord]) =>
+    Object.entries(mpRecord.plugins)
       // ENBL-14 / D-100-05: a disabled plugin's hooks must not re-register.
       // ENBL-18 keeps `resources.hooks` populated on a disabled record, so a
       // file restored by any means would hydrate again -- this guard is what
       // stops it. Read through the single predicate so this site cannot
       // drift from ENBL-05.
-      return !isRecordedButDisabled(plugin) && plugin.resources.hooks.length > 0;
-    });
-    for (const [pluginId, pluginRecord] of hookPlugins) {
-      const hookSlugs = pluginRecord.resources.hooks;
-
+      .filter(([, plugin]) => !isRecordedButDisabled(plugin))
       // D-57-03: `resources.hooks` carries the per-plugin hooks-container-dir
       // generatedName; the on-disk file is `<hooksDir>/<generatedName>/hooks.json`.
       // Zero or one entry today; iterate defensively for forward-compat.
-      for (const slug of hookSlugs) {
-        const hooksJsonPath = path.join(loc.hooksDir, slug, "hooks.json");
-        // eslint-disable-next-line no-await-in-loop -- each plugin's hydrate writes the shared routing table
-        await tryHydrateOnePlugin(reader, routingState, generationIsCurrent, {
+      .flatMap(([pluginId, pluginRecord]) =>
+        pluginRecord.resources.hooks.map((slug) => ({
           scope: loc.scope,
           marketplace: mpName,
           pluginId,
           resolvedSource: pluginRecord.resolvedSource,
-          hooksJsonPath,
+          slug,
+          hooksJsonPath: path.join(loc.hooksDir, slug, "hooks.json"),
           hooksDir: loc.hooksDir,
           cwd,
-        });
-        if (!generationIsCurrent()) {
-          return;
-        }
-      }
-    }
-  }
+        })),
+      ),
+  );
 }
 
 /**
@@ -638,9 +708,13 @@ interface HydrateOnePluginTarget {
   readonly marketplace: string;
   readonly pluginId: string;
   readonly resolvedSource: string;
+  /** The generated name `resources.hooks` records; the staged config's directory. */
+  readonly slug: string;
   readonly hooksJsonPath: string;
   readonly hooksDir: string;
   readonly cwd: string;
+  /** D-CF2-13: the project ledger's digests, or `undefined` for the user scope. */
+  readonly proven: ReadonlyMap<string, string> | undefined;
 }
 
 async function tryHydrateOnePlugin(
@@ -694,6 +768,13 @@ async function tryHydrateOnePlugin(
   }
 
   if (!generationIsCurrent()) {
+    return;
+  }
+
+  if (!isInstalledHere(target.proven, target.slug, raw)) {
+    hookDebugLog(
+      `hydrate: ${scope}/${marketplace}/${pluginId} skipped: the project ledger does not list ${hooksJsonPath}`,
+    );
     return;
   }
 

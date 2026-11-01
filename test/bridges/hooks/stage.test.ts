@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   mkdir,
   mkdtemp,
@@ -23,8 +24,13 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { HooksTreeInspector } from "../../../extensions/pi-claude-marketplace/bridges/hooks/stage.ts";
+import type {
+  ProjectSkillLedger,
+  ProjectSkillLedgerChange,
+} from "../../../extensions/pi-claude-marketplace/persistence/project-installs.ts";
 import type { Dirent, Stats } from "node:fs";
 
 interface CasePaths {
@@ -80,6 +86,8 @@ function filesystemErrorCode(error: unknown): string | undefined {
 }
 
 const writeHookConfig = createWriteHookConfig(realHooksTreeInspector());
+// A ledger that accepts every change, for the cases that are not about it.
+const ledger = { update: () => Promise.resolve() } satisfies ProjectSkillLedger;
 
 const PLUGIN = "acme";
 const HOOKS_VALUE = {
@@ -108,6 +116,7 @@ test("writes when the plugin hooks subtree is absent", async () => {
     const write = await writeHookConfig({
       locations,
       pluginName: PLUGIN,
+      ledger,
       pluginRoot: normalizedPluginRoot,
       hooksValue: {},
     });
@@ -140,6 +149,7 @@ test("writes when the plugin hooks path is not a directory", async () => {
     const write = await writeHookConfig({
       locations,
       pluginName: PLUGIN,
+      ledger,
       pluginRoot: normalizedPluginRoot,
       hooksValue: {},
     });
@@ -172,6 +182,7 @@ test("walks ordinary nested hook directories without changing their files", asyn
     const write = await writeHookConfig({
       locations,
       pluginName: PLUGIN,
+      ledger,
       pluginRoot: normalizedPluginRoot,
       hooksValue: {},
     });
@@ -217,6 +228,7 @@ test("treats an in-tree directory link as a safe traversal boundary", async () =
     const write = await writeHookConfig({
       locations,
       pluginName: PLUGIN,
+      ledger,
       pluginRoot: normalizedPluginRoot,
       hooksValue: {},
     });
@@ -251,6 +263,7 @@ test("rejects a direct directory link that escapes the plugin root", async () =>
       await writeHookConfig({
         locations,
         pluginName: PLUGIN,
+        ledger,
         pluginRoot: normalizedPluginRoot,
         hooksValue: {},
       });
@@ -313,6 +326,7 @@ test("rejects a buried directory link that escapes the plugin root", async () =>
       await writeHookConfig({
         locations,
         pluginName: PLUGIN,
+        ledger,
         pluginRoot: normalizedPluginRoot,
         hooksValue: {},
       });
@@ -405,6 +419,7 @@ test("uses the unreadable target marker when the required inspector cannot read 
       await writeHookConfigWithInspector({
         locations,
         pluginName: PLUGIN,
+        ledger,
         pluginRoot: normalizedPluginRoot,
         hooksValue: HOOKS_VALUE,
       });
@@ -489,6 +504,7 @@ test("preserves an in-tree symlink refusal when a resolved target becomes a link
       await writeHookConfigWithInspector({
         locations,
         pluginName: PLUGIN,
+        ledger,
         pluginRoot: normalizedPluginRoot,
         hooksValue: HOOKS_VALUE,
       });
@@ -577,6 +593,7 @@ test("propagates a path walk failure caused by a resolved target replacement", a
       await writeHookConfigWithInspector({
         locations,
         pluginName: PLUGIN,
+        ledger,
         pluginRoot: normalizedPluginRoot,
         hooksValue: HOOKS_VALUE,
       });
@@ -627,6 +644,7 @@ test("propagates an unexpected hook directory read failure unchanged", async () 
       await writeHookConfigWithInspector({
         locations,
         pluginName: PLUGIN,
+        ledger,
         pluginRoot: normalizedPluginRoot,
         hooksValue: HOOKS_VALUE,
       });
@@ -682,6 +700,7 @@ test("propagates an unexpected hook entry inspection failure unchanged", async (
       await writeHookConfigWithInspector({
         locations,
         pluginName: PLUGIN,
+        ledger,
         pluginRoot: normalizedPluginRoot,
         hooksValue: HOOKS_VALUE,
       });
@@ -713,6 +732,7 @@ test("writes hooks.json and returns its absolute path", async () => {
     const write = await writeHookConfig({
       locations,
       pluginName: PLUGIN,
+      ledger,
       pluginRoot: normalizedPluginRoot,
       hooksValue: HOOKS_VALUE,
     });
@@ -742,6 +762,7 @@ test("writes the same bytes when the hook config is staged twice", async () => {
     const firstWrite = await writeHookConfig({
       locations,
       pluginName: PLUGIN,
+      ledger,
       pluginRoot: normalizedPluginRoot,
       hooksValue: HOOKS_VALUE,
     });
@@ -749,6 +770,7 @@ test("writes the same bytes when the hook config is staged twice", async () => {
     const secondWrite = await writeHookConfig({
       locations,
       pluginName: PLUGIN,
+      ledger,
       pluginRoot: normalizedPluginRoot,
       hooksValue: HOOKS_VALUE,
     });
@@ -773,17 +795,18 @@ test("removes an existing staged plugin directory", async () => {
     await writeHookConfig({
       locations,
       pluginName: PLUGIN,
+      ledger,
       pluginRoot: normalizedPluginRoot,
       hooksValue: HOOKS_VALUE,
     });
     const expectedDirectory = path.join(locations.hooksDir, PLUGIN);
 
     // act
-    const removal = await removeHookConfig({ locations, pluginName: PLUGIN });
+    const removal = await removeHookConfig({ locations, pluginName: PLUGIN, ledger });
     const directoryState = await stat(expectedDirectory).then(() => "present", filesystemErrorCode);
 
     // assert
-    assert.deepStrictEqual(removal, { removed: PLUGIN });
+    assert.deepStrictEqual(removal, { removed: PLUGIN, warnings: [] });
     assert.strictEqual(directoryState, "ENOENT");
   } finally {
     await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
@@ -797,11 +820,11 @@ test("treats removal of an absent staged plugin as a no-op", async () => {
     const expectedDirectory = path.join(locations.hooksDir, PLUGIN);
 
     // act
-    const removal = await removeHookConfig({ locations, pluginName: PLUGIN });
+    const removal = await removeHookConfig({ locations, pluginName: PLUGIN, ledger });
     const directoryState = await stat(expectedDirectory).then(() => "present", filesystemErrorCode);
 
     // assert
-    assert.deepStrictEqual(removal, { removed: PLUGIN });
+    assert.deepStrictEqual(removal, { removed: PLUGIN, warnings: [] });
     assert.strictEqual(directoryState, "ENOENT");
   } finally {
     await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
@@ -820,6 +843,7 @@ test("rejects an unsafe plugin name before writing", async () => {
       writeHookConfig({
         locations,
         pluginName: "../escape",
+        ledger,
         pluginRoot: normalizedPluginRoot,
         hooksValue: HOOKS_VALUE,
       }),
@@ -848,7 +872,7 @@ test("rejects an unsafe plugin name before removal", async () => {
 
     // act & assert
     await assert.rejects(
-      removeHookConfig({ locations, pluginName: unsafePluginName }),
+      removeHookConfig({ locations, pluginName: unsafePluginName, ledger }),
       (error: unknown) => {
         assert.ok(error instanceof Error);
         assert.deepStrictEqual(
@@ -897,4 +921,206 @@ test("rejects when the hooks.json path does not exist", async () => {
   } finally {
     await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
   }
+});
+
+/** A project ledger that keeps every change it is given. */
+function recordingLedger(): {
+  readonly ledger: ProjectSkillLedger;
+  readonly changes: ProjectSkillLedgerChange[];
+} {
+  const changes: ProjectSkillLedgerChange[] = [];
+  return {
+    ledger: {
+      update: (change) => {
+        changes.push(change);
+        return Promise.resolve();
+      },
+    },
+    changes,
+  };
+}
+
+/** A project ledger whose every update rejects with `error`. */
+function failingLedger(error: Error): ProjectSkillLedger {
+  return { update: () => Promise.reject(error) };
+}
+
+test("D-CF2-13 lists a project config in the ledger with the digest of its written bytes", async () => {
+  const { locations, pluginRoot, scopeRoot } = await allocateCasePaths("hooks-stage-ledger-");
+  try {
+    // arrange
+    await mkdir(pluginRoot, { recursive: true });
+    const recorded = recordingLedger();
+    const expectedDigest = createHash("sha256").update(EXPECTED_HOOKS_BYTES).digest("hex");
+
+    // act
+    await writeHookConfig({
+      locations,
+      pluginName: PLUGIN,
+      ledger: recorded.ledger,
+      pluginRoot: await realpath(pluginRoot),
+      hooksValue: HOOKS_VALUE,
+    });
+
+    // assert
+    assert.deepStrictEqual(recorded.changes, [
+      {
+        projectPath: scopeRoot,
+        forget: ["hooks/acme"],
+        remember: new Map([["hooks/acme", { plugin: PLUGIN, sha256: expectedDigest }]]),
+      },
+    ]);
+  } finally {
+    await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+test("D-CF2-13 removes the written project config when the ledger write fails", async () => {
+  const { locations, pluginRoot, scopeRoot } = await allocateCasePaths("hooks-stage-ledger-fail-");
+  try {
+    // arrange
+    await mkdir(pluginRoot, { recursive: true });
+    const ledgerError = new Error("ledger unreadable");
+    const stagedDirectory = path.join(locations.hooksDir, PLUGIN);
+
+    // act
+    const writeError: unknown = await writeHookConfig({
+      locations,
+      pluginName: PLUGIN,
+      ledger: failingLedger(ledgerError),
+      pluginRoot: await realpath(pluginRoot),
+      hooksValue: HOOKS_VALUE,
+    }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    const directoryState = await stat(stagedDirectory).then(() => "present", filesystemErrorCode);
+
+    // assert
+    assert.strictEqual(writeError, ledgerError);
+    assert.strictEqual(directoryState, "ENOENT");
+  } finally {
+    await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+test("D-CF2-13 writes a user-scope config without the project ledger", async (t) => {
+  // arrange
+  const { agentDir, root } = await createHermeticEnvironment(t, "hooks-stage-user-");
+  const locations = locationsFor("user", agentDir);
+  const pluginRoot = path.join(root, "plugin");
+  await mkdir(pluginRoot, { recursive: true });
+  const recorded = recordingLedger();
+
+  // act
+  const write = await writeHookConfig({
+    locations,
+    pluginName: PLUGIN,
+    ledger: recorded.ledger,
+    pluginRoot,
+    hooksValue: HOOKS_VALUE,
+  });
+
+  // assert
+  assert.deepStrictEqual(write, {
+    written: true,
+    path: path.join(locations.hooksDir, PLUGIN, "hooks.json"),
+  });
+  assert.strictEqual(await readFile(write.path, "utf8"), EXPECTED_HOOKS_BYTES);
+  assert.deepStrictEqual(recorded.changes, []);
+});
+
+test("D-CF2-13 drops a removed project config from the ledger", async () => {
+  const { locations, scopeRoot } = await allocateCasePaths("hooks-stage-forget-");
+  try {
+    // arrange
+    await mkdir(path.join(locations.hooksDir, PLUGIN), { recursive: true });
+    await writeFile(path.join(locations.hooksDir, PLUGIN, "hooks.json"), "{}\n");
+    const recorded = recordingLedger();
+
+    // act
+    const removal = await removeHookConfig({
+      locations,
+      pluginName: PLUGIN,
+      ledger: recorded.ledger,
+    });
+
+    // assert
+    assert.deepStrictEqual(removal, { removed: PLUGIN, warnings: [] });
+    assert.deepStrictEqual(recorded.changes, [
+      { projectPath: scopeRoot, forget: ["hooks/acme"], remember: new Map() },
+    ]);
+  } finally {
+    await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+test("D-CF2-13 removes a project config and warns when the ledger cannot drop it", async () => {
+  const { locations, scopeRoot } = await allocateCasePaths("hooks-stage-forget-fail-");
+  try {
+    // arrange
+    const stagedDirectory = path.join(locations.hooksDir, PLUGIN);
+    await mkdir(stagedDirectory, { recursive: true });
+    await writeFile(path.join(stagedDirectory, "hooks.json"), "{}\n");
+
+    // act
+    const removal = await removeHookConfig({
+      locations,
+      pluginName: PLUGIN,
+      ledger: failingLedger(new Error("ledger unreadable")),
+    });
+    const directoryState = await stat(stagedDirectory).then(() => "present", filesystemErrorCode);
+
+    // assert
+    assert.deepStrictEqual(removal, {
+      removed: PLUGIN,
+      warnings: ["could not remove the hooks from the project skill ledger: ledger unreadable"],
+    });
+    assert.strictEqual(directoryState, "ENOENT");
+  } finally {
+    await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+test("D-CF2-13 leaves the ledger alone when no project config was staged", async () => {
+  const { locations, scopeRoot } = await allocateCasePaths("hooks-stage-forget-absent-");
+  try {
+    // arrange
+    const ledgerError = new Error("the ledger was read");
+
+    // act
+    const removal = await removeHookConfig({
+      locations,
+      pluginName: PLUGIN,
+      ledger: failingLedger(ledgerError),
+    });
+
+    // assert
+    assert.deepStrictEqual(removal, { removed: PLUGIN, warnings: [] });
+  } finally {
+    await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+test("D-CF2-13 removes a user-scope config without the project ledger", async (t) => {
+  // arrange
+  const { agentDir } = await createHermeticEnvironment(t, "hooks-stage-user-remove-");
+  const locations = locationsFor("user", agentDir);
+  const stagedDirectory = path.join(locations.hooksDir, PLUGIN);
+  await mkdir(stagedDirectory, { recursive: true });
+  await writeFile(path.join(stagedDirectory, "hooks.json"), "{}\n");
+  const recorded = recordingLedger();
+
+  // act
+  const removal = await removeHookConfig({
+    locations,
+    pluginName: PLUGIN,
+    ledger: recorded.ledger,
+  });
+  const directoryState = await stat(stagedDirectory).then(() => "present", filesystemErrorCode);
+
+  // assert
+  assert.deepStrictEqual(removal, { removed: PLUGIN, warnings: [] });
+  assert.strictEqual(directoryState, "ENOENT");
+  assert.deepStrictEqual(recorded.changes, []);
 });

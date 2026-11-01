@@ -1078,7 +1078,11 @@ async function commitUpdateHooks(
 ): Promise<readonly HookSummaryEntry[] | undefined> {
   if (installable.hooksConfigPath === undefined) {
     // Version B has no hooks: remove any stale file from version A.
-    await removeHookConfig({ locations: args.locations, pluginName: args.plugin });
+    await removeHookConfig({
+      locations: args.locations,
+      pluginName: args.plugin,
+      ledger: NODE_PROJECT_SKILL_LEDGER,
+    });
     return undefined;
   }
 
@@ -1097,6 +1101,8 @@ async function commitUpdateHooks(
     pluginName: args.plugin,
     pluginRoot: installable.pluginRoot,
     hooksValue: parsed.value,
+    // D-CF2-13: the user's ledger records the staged project hooks.
+    ledger: NODE_PROJECT_SKILL_LEDGER,
   });
   // D-100-02 / ENBL-11: `parsed.value` is the supported subset already.
   return projectHookSummaryEntries(parsed.value);

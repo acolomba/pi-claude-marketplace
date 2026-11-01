@@ -11,19 +11,27 @@
 // walk is belt-and-suspenders to the write-side `assertPathInside` + the
 // `assertSafeName` guard on the plugin name. `removeHookConfig` is a single
 // `fs.rm(..., { recursive: true, force: true })` and is idempotent (NFR-3).
+//
+// D-CF2-13: at project scope a write lists the staged config in the user's
+// project ledger with the digest of its bytes, and a removal drops it. The
+// hydrate routes a project config only when the ledger lists those bytes.
 
-import { readFile, rm } from "node:fs/promises";
+import { lstat, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
+import { errorMessage } from "../../shared/errors.ts";
 import {
   PathContainmentError,
   SymlinkRefusedError,
   assertPathInside,
 } from "../../shared/path-safety.ts";
 
+import { hookConfigDigest, projectHookChange, projectHookLedgerKey } from "./project-ledger.ts";
+
 import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { ProjectSkillLedger } from "../../persistence/project-installs.ts";
 import type { Dirent, Stats } from "node:fs";
 
 /** Required read-only filesystem operations for inspecting a hooks tree. */
@@ -224,11 +232,41 @@ export interface WriteHookConfigInput {
   readonly pluginName: string;
   readonly pluginRoot: string;
   readonly hooksValue: unknown;
+  /** The user's project ledger, written at project scope (D-CF2-13). */
+  readonly ledger: ProjectSkillLedger;
 }
 
 export interface WriteHookConfigResult {
   readonly written: true;
   readonly path: string;
+}
+
+/**
+ * D-CF2-13: lists the config `bytes` that a project-scope write staged in the
+ * user's project ledger. If the ledger write fails, the config is removed
+ * before the error propagates, so no project config stays on disk that the
+ * ledger does not list. The update runner has no undo, so this matters there.
+ */
+async function recordProjectHooks(
+  input: WriteHookConfigInput,
+  target: string,
+  bytes: Buffer,
+): Promise<void> {
+  const change = projectHookChange(input.locations, input.pluginName);
+  if (change === undefined) {
+    return;
+  }
+
+  const entry = { plugin: input.pluginName, sha256: hookConfigDigest(bytes) };
+  try {
+    await input.ledger.update({
+      ...change,
+      remember: new Map([[projectHookLedgerKey(input.pluginName), entry]]),
+    });
+  } catch (err) {
+    await rm(path.dirname(target), { recursive: true, force: true });
+    throw err;
+  }
 }
 
 /**
@@ -238,6 +276,8 @@ export interface WriteHookConfigResult {
  *   3. `assertPathInside(hooksDir, target)` -- belt-and-suspenders NFR-10
  *      containment on the constructed target path.
  *   4. `atomicWriteJson` -- single tmp+rename+fsync (NFR-1).
+ *   5. At project scope, the user's project ledger lists the written bytes
+ *      (D-CF2-13). A failed ledger write removes the config and throws.
  *
  * Idempotent: a second call with the same input produces the same final
  * file content (NFR-3).
@@ -255,7 +295,8 @@ export function createWriteHookConfig(
 
     const target = hookConfigPathFor(locations, pluginName);
     await assertPathInside(locations.hooksDir, target, "hooks bridge write target");
-    await atomicWriteJson(target, hooksValue);
+    const bytes = await atomicWriteJson(target, hooksValue);
+    await recordProjectHooks(input, target, bytes);
 
     return { written: true, path: target };
   };
@@ -264,16 +305,42 @@ export function createWriteHookConfig(
 export interface RemoveHookConfigInput {
   readonly locations: ScopedLocations;
   readonly pluginName: string;
+  /** The user's project ledger, written at project scope (D-CF2-13). */
+  readonly ledger: ProjectSkillLedger;
 }
 
 export interface RemoveHookConfigResult {
   readonly removed: string;
+  /** WR-04: a project ledger the removal could not update, one line each. */
+  readonly warnings: readonly string[];
+}
+
+/**
+ * WR-04: the warnings of dropping a removed project config from the user's
+ * project ledger. A stale entry only names a config this user once installed,
+ * so a ledger the removal cannot update becomes a warning and never blocks the
+ * removal. A user-scope removal leaves the ledger alone.
+ */
+async function forgetProjectHooks(input: RemoveHookConfigInput): Promise<readonly string[]> {
+  const change = projectHookChange(input.locations, input.pluginName);
+  if (change === undefined) {
+    return [];
+  }
+
+  return input.ledger.update(change).then(
+    () => [],
+    (err: unknown) => [
+      `could not remove the hooks from the project skill ledger: ${errorMessage(err)}`,
+    ],
+  );
 }
 
 /**
  * LIFE-03 / D-63-02 hooks bridge remove. Idempotent (NFR-3) via
  * `{ recursive: true, force: true }` -- ENOENT is swallowed and the
- * result still names the plugin.
+ * result still names the plugin. Only a config that was on disk leaves the
+ * user's project ledger, so removing a plugin that staged no hooks reads no
+ * ledger and adds no warning (D-CF2-13).
  */
 export async function removeHookConfig(
   input: RemoveHookConfigInput,
@@ -284,7 +351,12 @@ export async function removeHookConfig(
 
   const dir = path.join(locations.hooksDir, pluginName);
   await assertPathInside(locations.hooksDir, dir, "hooks bridge unstage target");
+  const staged = await lstat(dir).then(
+    () => true,
+    () => false,
+  );
   await rm(dir, { recursive: true, force: true });
+  const warnings = staged ? await forgetProjectHooks(input) : [];
 
-  return { removed: pluginName };
+  return { removed: pluginName, warnings };
 }
