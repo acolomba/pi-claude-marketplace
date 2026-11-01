@@ -5,7 +5,8 @@
  * A step starts it on `127.0.0.1` before the plugin's `.mcp.json` names its
  * URL, and the scenario's release closes it. It answers the JSON-RPC requests
  * pi-mcp-adapter's MCP client sends in plain JSON, a notification with `202`,
- * and any other HTTP method with `405`, which the client accepts for its
+ * a `POST` body that holds no JSON-RPC message with `400` and a JSON-RPC parse
+ * error, and any other HTTP method with `405`, which the client accepts for its
  * optional event stream. It lists one `echo` tool and answers a `tools/call`
  * with `echo:<text>`. It appends every request it receives, with its HTTP
  * method, its JSON-RPC method and params, and its headers, to
@@ -93,15 +94,30 @@ async function bodyOf(request: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-// A POST body holds one JSON-RPC message, an object.
-function parseMessage(body: string): Readonly<Record<string, unknown>> {
-  const message: unknown = JSON.parse(body);
-  if (!isRecord(message)) {
-    throw new Error(`the HTTP MCP server takes one JSON-RPC message per request: ${body}`);
+// A POST body holds one JSON-RPC message, an object. Any other body, such as
+// text that is not JSON or a batch array, holds no message the server knows.
+function parseMessage(body: string): Readonly<Record<string, unknown>> | undefined {
+  let message: unknown;
+  try {
+    message = JSON.parse(body);
+  } catch (error: unknown) {
+    if (error instanceof SyntaxError) {
+      return undefined;
+    }
+
+    throw error;
   }
 
-  return message;
+  return isRecord(message) ? message : undefined;
 }
+
+// The JSON-RPC answer to a body that holds no message, with the error code
+// JSON-RPC gives a parse error.
+const PARSE_ERROR = JSON.stringify({
+  jsonrpc: "2.0",
+  id: null,
+  error: { code: -32700, message: "Parse error" },
+});
 
 function isStringRecord(value: unknown): value is Readonly<Record<string, string>> {
   return isRecord(value) && Object.values(value).every((item) => typeof item === "string");
@@ -140,7 +156,10 @@ export class McpHttpServer {
   private readonly name: string;
   private readonly log: string;
   // The log appends, chained so the lines keep the order the requests came in.
+  // A failed append never rejects the chain, so later requests still log.
   private appended: Promise<void> = Promise.resolve();
+  // What went wrong while answering a request, which `close` reports.
+  private readonly failures: unknown[] = [];
 
   private constructor(server: Server, url: string, name: string, log: string) {
     this.server = server;
@@ -148,18 +167,24 @@ export class McpHttpServer {
     this.name = name;
     this.log = log;
     server.on("request", (request: IncomingMessage, response: ServerResponse) => {
-      void this.answer(request, response);
+      this.answer(request, response).catch((error: unknown) => {
+        this.failed(request, response, error);
+      });
     });
   }
 
   /**
    * Starts the server `name` of the sandbox home `home` on a free port of
-   * `127.0.0.1`.
+   * `127.0.0.1`, and rejects when it cannot listen there.
    */
   static async start(home: string, name: string): Promise<McpHttpServer> {
     const server = createServer();
-    await new Promise<void>((resolve) => {
-      server.listen({ port: 0, host: LOOPBACK }, resolve);
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen({ port: 0, host: LOOPBACK }, () => {
+        server.off("error", reject);
+        resolve();
+      });
     });
     const address = server.address();
     if (!isRecord(address)) {
@@ -171,7 +196,10 @@ export class McpHttpServer {
     return new McpHttpServer(server, url, name, path.join(harnessDirectory(home), REQUESTS_FILE));
   }
 
-  /** Drops every open connection, stops listening, and waits for the log. */
+  /**
+   * Drops every open connection, stops listening, and waits for the log.
+   * Rejects when the server failed to answer a request it received whole.
+   */
   async close(): Promise<void> {
     const stopped = new Promise<void>((resolve, reject) => {
       this.server.close((error) => {
@@ -185,14 +213,40 @@ export class McpHttpServer {
     this.server.closeAllConnections();
     await stopped;
     await this.appended;
+    if (this.failures.length > 0) {
+      throw new AggregateError(
+        this.failures,
+        `the HTTP MCP server ${this.name} failed to answer a request`,
+      );
+    }
+  }
+
+  // A request the client cut off before its body ended, as the release's
+  // `closeAllConnections` does, has no one to answer and is no failure.
+  private failed(request: IncomingMessage, response: ServerResponse, error: unknown): void {
+    if (!request.complete) {
+      return;
+    }
+
+    this.failures.push(error);
+    if (!response.headersSent && !response.destroyed) {
+      response.writeHead(500).end();
+    }
   }
 
   private async answer(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const httpMethod = request.method ?? "";
     const headers = headersOf(request);
-    const body = bodyOf(request);
+    const body = httpMethod === "POST" ? bodyOf(request) : undefined;
+    if (body === undefined) {
+      request.resume();
+    } else {
+      // The body may reject before the chain reaches it; `entry` reports it.
+      body.catch(() => undefined);
+    }
+
     const entry = this.appended.then(async () => {
-      const message = httpMethod === "POST" ? parseMessage(await body) : undefined;
+      const message = body === undefined ? undefined : parseMessage(await body);
       const record = {
         server: this.name,
         httpMethod,
@@ -203,10 +257,15 @@ export class McpHttpServer {
       await appendFile(this.log, `${JSON.stringify(record)}\n`);
       return message;
     });
-    this.appended = entry.then(() => undefined);
+    this.appended = entry.then(
+      () => undefined,
+      () => undefined,
+    );
     const message = await entry;
-    if (message === undefined) {
+    if (body === undefined) {
       response.writeHead(405).end();
+    } else if (message === undefined) {
+      response.writeHead(400, { "content-type": "application/json" }).end(PARSE_ERROR);
     } else if (message.id === undefined) {
       response.writeHead(202).end();
     } else {
