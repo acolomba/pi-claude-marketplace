@@ -165,7 +165,13 @@ type ToolMappingResult = ExplicitToolMapping | OmittedToolMapping;
 type ValidatedToolMapping =
   (ExplicitToolMapping & { readonly mapped: [string, ...string[]] }) | OmittedToolMapping;
 
-function splitCsv(value: string | undefined): string[] {
+/**
+ * D-CF4-08 as amended: splits a `tools`, `disallowedTools`, or `skills` value
+ * as Claude Code does, on commas and on whitespace outside parentheses, so
+ * `Read Grep` is two entries and `Bash(git log *)` stays one. Empty parts
+ * are dropped.
+ */
+function splitToolList(value: string | undefined): string[] {
   if (value === undefined) {
     return [];
   }
@@ -180,10 +186,44 @@ function splitCsv(value: string | undefined): string[] {
     raw = raw.slice(1, -1);
   }
 
-  return raw
-    .split(",")
+  return topLevelParts(raw)
     .map((part) => withoutMatchingQuotes(part.trim()))
     .filter((part) => part !== "");
+}
+
+/** The parts of `raw` between commas and whitespace outside parentheses. */
+function topLevelParts(raw: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (const char of raw) {
+    if (depth === 0 && (char === "," || /\s/.test(char))) {
+      parts.push(current);
+      current = "";
+      continue;
+    }
+
+    if (char === "(") {
+      depth += 1;
+    } else if (char === ")" && depth > 0) {
+      depth -= 1;
+    }
+
+    current += char;
+  }
+
+  parts.push(current);
+  return parts;
+}
+
+/**
+ * D-CF4-08 as amended: Claude Code resolves a `Tool(spec)` entry to its
+ * tool, so the bridge maps it by the tool name and drops the spec. A grant
+ * becomes the whole tool and a disallow removes the whole tool.
+ */
+function toolNameOf(token: string): string {
+  const open = token.indexOf("(");
+  return open > 0 && token.endsWith(")") ? token.slice(0, open) : token;
 }
 
 /** The value with one pair of matching surrounding quotes removed. */
@@ -315,7 +355,7 @@ function mcpEntry(match: McpGrantMatch): string {
 
 /** A TOOL_MAP name, or the `mcp:` entry of a written server's MCP name. */
 function mapToolName(token: string, grants: readonly McpGrant[]): string | undefined {
-  const piName = TOOL_MAP[token];
+  const piName = TOOL_MAP[toolNameOf(token)];
   if (piName !== undefined) {
     return piName;
   }
@@ -365,12 +405,13 @@ function mapTools(
   rawDisallowed: string | undefined,
   grants: readonly McpGrant[],
 ): ToolMappingResult {
-  const disallowedTokens = splitCsv(rawDisallowed);
-  if (rawTools === undefined) {
+  const disallowedTokens = splitToolList(rawDisallowed);
+  const tokens = splitToolList(rawTools);
+  // D-CF4-08 as amended: Claude Code reads a `*` entry as every tool, which
+  // is what an omitted list grants.
+  if (rawTools === undefined || tokens.includes("*")) {
     return omittedToolMapping(disallowedTokens, grants);
   }
-
-  const tokens = splitCsv(rawTools);
 
   // AGSK-05 / D-83-01: the inherit flag is computed ONCE from RAW
   // Claude-side tokens -- exact match, case-sensitive "Skill", like
@@ -433,10 +474,12 @@ function isDisallowed(entry: string, disallow: ExplicitDisallow): boolean {
 }
 
 /**
- * ANAME-02: pi-subagents takes no `excludeTools` beside an explicit `tools:`
- * list, so a per-tool disallow cannot narrow a whole-server grant that
- * survives the filter, and it warns. Any `mcp:` entry in the final list
- * needs a background launch, which this extension states and never injects.
+ * ANAME-02: a per-tool disallow cannot narrow a whole-server grant that
+ * survives the filter, so it warns. pi-subagents 0.62 and later do apply
+ * `excludeTools` beside an explicit `tools:` list (D-CF4-08); the per-tool
+ * warning text still says otherwise and stays unchanged, because it belongs
+ * to the MCP-07 warning surface. Any `mcp:` entry in the final list needs a
+ * background launch, which this extension states and never injects.
  */
 function explicitMcpWarnings(kept: readonly string[], disallow: ExplicitDisallow): string[] {
   const keptSet = new Set(kept);
@@ -487,7 +530,7 @@ function omittedToolMapping(
       continue;
     }
 
-    const name = TOOL_MAP[token] ?? perToolMcpName(token, grants);
+    const name = TOOL_MAP[toolNameOf(token)] ?? perToolMcpName(token, grants);
     if (name === undefined) {
       unmapped.push(token);
     } else {
@@ -590,7 +633,7 @@ function mapSkills(
   pluginName: string,
   knownSkills: readonly string[],
 ): { emit: string[]; warnings: string[] } {
-  const tokens = splitCsv(rawSkills);
+  const tokens = splitToolList(rawSkills);
   if (tokens.length === 0) {
     return { emit: [], warnings: [] };
   }
@@ -894,7 +937,7 @@ function assertMappedToolsNonEmpty(
     return;
   }
 
-  const skillNote = splitCsv(raw.tools).includes("Skill")
+  const skillNote = splitToolList(raw.tools).includes("Skill")
     ? " Note: the Skill tool maps to inheritSkills, not to a Pi tool, so it does not count toward the tool list."
     : "";
   throw new Error(
@@ -933,7 +976,17 @@ function toolsFields(result: ValidatedToolMapping): GeneratedToolsFields {
  * points at the mechanism that does work instead. GUIDED_DROPPED_FIELDS is
  * derived from this table, which keeps the stage layer's generic
  * `dropped fields:` summary and these warnings in lockstep.
+ *
+ * D-CF4-05: Claude Code 2.1.316 also ignores `initialPrompt`, `observer`,
+ * `observerMessage`, and `observeSubagents` for plugin agents, with a
+ * warning of its own, so each gets the same guided warning. `memory`,
+ * `maxTurns`, `isolation`, `color`, `omitClaudeMd`, `autoCompactWindow`, and
+ * `experimental`, which Claude Code applies, stay in the generic line.
  */
+function pluginIgnoredFieldWarning(field: string): string {
+  return `agent-level \`${field}\` is not converted -- dropped (Claude Code ignores it for plugin agents too).`;
+}
+
 const GUIDED_DROPPED_FIELD_WARNINGS: Readonly<Record<string, (declaredName: string) => string>> =
   Object.freeze({
     "allowed-tools": (): string =>
@@ -946,6 +999,10 @@ const GUIDED_DROPPED_FIELD_WARNINGS: Readonly<Record<string, (declaredName: stri
       "agent-level `permissionMode` is not converted -- dropped (Claude Code ignores it for plugin agents too).",
     hooks: (): string =>
       "agent-level `hooks` is not converted -- dropped (Claude Code ignores it for plugin agents too; plugin-level hooks/hooks.json still installs).",
+    initialPrompt: (): string => pluginIgnoredFieldWarning("initialPrompt"),
+    observer: (): string => pluginIgnoredFieldWarning("observer"),
+    observerMessage: (): string => pluginIgnoredFieldWarning("observerMessage"),
+    observeSubagents: (): string => pluginIgnoredFieldWarning("observeSubagents"),
   });
 
 /**

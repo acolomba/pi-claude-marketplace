@@ -76,7 +76,16 @@ Body content.
 }
 
 describe("GUIDED_DROPPED_FIELDS", () => {
-  const expectedGuidedFields = ["allowed-tools", "mcpServers", "permissionMode", "hooks"];
+  const expectedGuidedFields = [
+    "allowed-tools",
+    "mcpServers",
+    "permissionMode",
+    "hooks",
+    "initialPrompt",
+    "observer",
+    "observerMessage",
+    "observeSubagents",
+  ];
 
   test("exposes the complete guided set", () => {
     // act
@@ -1023,7 +1032,9 @@ Review files.
     const expectedWarnings = [
       'malformed skill reference "spec-tree:" -- dropped',
       'malformed skill reference "spec-tree:sub/skill" -- dropped',
-      'malformed skill reference "spec-tree:a\tb" -- dropped',
+      // D-CF4-08: whitespace separates two references, as in Claude Code.
+      'unknown skill reference "spec-tree:a" -- dropped',
+      'unknown skill reference "b" -- dropped',
     ];
 
     // act
@@ -2140,4 +2151,176 @@ Body content.
     // assert
     assert.strictEqual(agent.fileContent, expectedFileContent);
   });
+});
+
+describe("D-CF4-08 tool lists", () => {
+  for (const { label, tools, expectedTools } of [
+    { label: "spaces", tools: "Read Grep", expectedTools: "read,grep" },
+    { label: "commas", tools: "Read, Grep", expectedTools: "read,grep" },
+    { label: "an inline array", tools: '["Read", "Bash"]', expectedTools: "read,bash" },
+    { label: "a patterned entry", tools: "Bash(git log *), Read", expectedTools: "bash,read" },
+    {
+      label: "a comma inside parentheses",
+      tools: "Bash(a, b) Read",
+      expectedTools: "bash,read",
+    },
+    { label: "empty parts", tools: "Read  ,  Grep", expectedTools: "read,grep" },
+  ]) {
+    test(`splits a tools list with ${label} into its entries`, () => {
+      // arrange
+      const expectedFileContent = expectedMcpAgentFile({
+        toolsField: `tools: ${expectedTools}`,
+        inheritSkills: false,
+        async: false,
+        droppedTools: [],
+        warnings: [],
+      });
+
+      // act
+      const agent = convertMcpAgent({ description: "d", tools }, undefined);
+
+      // assert
+      assert.strictEqual(agent.fileContent, expectedFileContent);
+    });
+  }
+
+  test("a patterned disallowedTools entry removes the whole tool", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: read",
+      inheritSkills: false,
+      async: false,
+      droppedTools: [],
+      warnings: [],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", tools: "Read, Bash", disallowedTools: "Bash(rm *)" },
+      undefined,
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("a space-separated MCP name of a written server maps to its mcp: entry", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: read,mcp:plugin_acme_db_",
+      inheritSkills: false,
+      droppedTools: [],
+      warnings: [MCP_ASYNC_WARNING],
+    });
+
+    // act
+    const agent = convertMcpAgent({ description: "d", tools: "Read mcp__plugin_acme_db" }, ["db"]);
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  for (const tools of ["*", "Read, *"]) {
+    test(`a tools list of ${JSON.stringify(tools)} converts as an omitted list`, () => {
+      // arrange
+      const expectedAgent = convertMcpAgent({ description: "d" }, undefined);
+
+      // act
+      const agent = convertMcpAgent({ description: "d", tools }, undefined);
+
+      // assert
+      assert.deepStrictEqual(agent, expectedAgent);
+      assert.doesNotMatch(agent.fileContent, /^tools:/m);
+      assert.match(agent.fileContent, /^inheritSkills: true$/m);
+    });
+  }
+
+  test("disallowedTools narrows a wildcard tools list through excludeTools", () => {
+    // arrange
+    const expectedFileContent = `---
+name: acme:bot
+description: d
+aliases: pi-claude-marketplace-acme-bot
+excludeTools: bash,edit
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: true
+advertise: true
+async: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings:
+    - \`excludeTools\` requires pi-subagents >= 0.62.0 -- earlier versions ignore it and keep the default tool set
+---
+
+Body content.
+`;
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", tools: "*", disallowedTools: "Bash(rm *) Edit" },
+      undefined,
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("an explicit space-separated list that maps to nothing still refuses the conversion", () => {
+    // act
+    const convert = (): ConvertedAgent =>
+      convertMcpAgent({ description: "d", tools: "WebFetch NotebookEdit" }, undefined);
+
+    // assert
+    assert.throws(convert, {
+      message:
+        'Cannot convert agent "bot" in plugin "acme": the mapped tool list is empty ' +
+        '(pi-subagents has no safe representation of "no tools"). ' +
+        "Source tools: WebFetch NotebookEdit; disallowedTools: (none).",
+    });
+  });
+
+  test("a skills list splits on spaces into its references", () => {
+    // act
+    const agent = convertAgent({
+      pluginName: "acme",
+      pluginRoot: "/root",
+      pluginDataDir: "/data",
+      knownSkills: ["acme-one", "acme-two"],
+      discovered: {
+        sourceName: "bot",
+        generatedName: "pi-claude-marketplace-acme-bot",
+        sourcePath: "/abs/path/source.md",
+        sourceHash: "abc123",
+        raw: { description: "d", tools: "Read", skills: "one two" },
+        body: "Body content.\n",
+      },
+      sourceHash: "abc",
+      mapModel: false,
+    });
+
+    // assert
+    assert.match(agent.fileContent, /^skills: acme-one,acme-two$/m);
+    assert.deepStrictEqual(agent.warnings, []);
+  });
+});
+
+describe("D-CF4-05 plugin-ignored fields", () => {
+  for (const field of ["initialPrompt", "observer", "observerMessage", "observeSubagents"]) {
+    test(`drops ${field} with the plugin-ignored warning`, () => {
+      // act
+      const agent = convertMcpAgent({ description: "d", tools: "Read", [field]: "x" }, undefined);
+
+      // assert
+      assert.deepStrictEqual(agent.droppedFields, [field]);
+      assert.deepStrictEqual(agent.warnings, [
+        `agent-level \`${field}\` is not converted -- dropped (Claude Code ignores it for plugin agents too).`,
+      ]);
+    });
+  }
 });

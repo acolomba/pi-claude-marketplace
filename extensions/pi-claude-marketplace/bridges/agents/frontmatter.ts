@@ -264,7 +264,7 @@ function flushPendingBlock(raw: Record<string, string>, state: ParseState): void
  *
  * The fold happens BEFORE any colon split, so an item like
  * `- spec-tree:review-changes` is taken verbatim. Items are comma-joined for
- * downstream CSV splitting; quotes stay intact (splitCsv strips per-item
+ * downstream splitting; quotes stay intact (splitToolList strips per-item
  * quotes). Known limitation: an item containing a literal comma splits into
  * two tokens downstream (D-82-02 scan found none in the wild). Clearing
  * awaitingKey is how a first dash continuation line rules out an implicit

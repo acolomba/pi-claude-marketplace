@@ -198,3 +198,60 @@ Feature: Agent frontmatter
       | 2    | user        | Ask the reviewer to check the README.                                                                  |
       | 2    | assistant   | tool call subagent {"agent":"demo:reviewer","task":"Review the README.","async":false}                 |
       | 2    | tool result | subagent failed: Unknown subagent model 'anthropic/claude-sonnet-5-5' in the active Pi model registry. |
+
+  Scenario: Tool lists split on commas and spaces as Claude Code splits them
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file         | name      | description               | tools                 | disallowedTools | body             |
+      | spaced.md    | spaced    | Uses the spaced tools.    | Read Grep             |                 | Answer the task. |
+      | patterned.md | patterned | Uses the patterned tools. | Bash(git log *), Read |                 | Answer the task. |
+      | starred.md   | starred   | Uses the starred tools.   | *                     |                 | Answer the task. |
+      | narrowed.md  | narrowed  | Uses the narrowed tools.  | Read Grep Edit        | Edit Write      | Answer the task. |
+      | excluded.md  | excluded  | Uses the excluded tools.  |                       | Bash Edit       | Answer the task. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply                  | tool     | arguments                             |
+      |                        | subagent | {"action":"list","capabilities":true} |
+      | The agents are listed. |          |                                       |
+    When the user prompts "List the agents."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+      | 1    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+      | 2    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+      | 2    | assistant   | tool call subagent {"action":"list","capabilities":true}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+      | 2    | tool result | subagent returned: Executable agents (capabilities):\nUser agents\n- demo:excluded (user, aliases: pi-claude-marketplace-demo-excluded): Description: Uses the excluded tools.; Tools: default/ambient; excludes: bash, edit; Model: inherits current session; Thinking: default\n- demo:narrowed (user, aliases: pi-claude-marketplace-demo-narrowed): Description: Uses the narrowed tools.; Tools: read, grep; Model: inherits current session; Thinking: default\n- demo:patterned (user, aliases: pi-claude-marketplace-demo-patterned): Description: Uses the patterned tools.; Tools: bash, read; Model: inherits current session; Thinking: default\n- demo:spaced (user, aliases: pi-claude-marketplace-demo-spaced): Description: Uses the spaced tools.; Tools: read, grep; Model: inherits current session; Thinking: default\n- demo:starred (user, aliases: pi-claude-marketplace-demo-starred): Description: Uses the starred tools.; Tools: default/ambient; Model: inherits current session; Thinking: default |
+
+  Scenario: Apply reports each plugin agent field Claude Code also ignores
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the agent "helper" described as "Helps with the task." with this body:
+      """
+      Help with the task.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which warned
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file      | name   | description          | initialPrompt | observer | observerMessage | observeSubagents | memory | maxTurns | body                |
+      | helper.md | helper | Helps with the task. | Start here.   | true     | Watch the run.  | true             | user   | 5        | Help with the task. |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the command reports these results:
+      | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count | header                                               | lines                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+      | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |                                                      |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+      | diagnostic                | warning  | false        |             |                |                |                     | Plugin "demo" [project] updated; 5 staging warnings. | [helper] agent-level `initialPrompt` is not converted -- dropped (Claude Code ignores it for plugin agents too)., [helper] agent-level `observer` is not converted -- dropped (Claude Code ignores it for plugin agents too)., [helper] agent-level `observerMessage` is not converted -- dropped (Claude Code ignores it for plugin agents too)., [helper] agent-level `observeSubagents` is not converted -- dropped (Claude Code ignores it for plugin agents too)., [helper] dropped fields: memory, maxTurns |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons               | scope   | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | updated | requires pi-subagents | project | 1.0.0 | 1.1.0 |
