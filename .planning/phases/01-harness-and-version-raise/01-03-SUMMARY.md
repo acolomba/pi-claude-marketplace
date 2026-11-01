@@ -351,3 +351,9 @@ None - no external service configuration required.
 ---
 *Phase: 01-harness-and-version-raise*
 *Completed: 2026-11-01*
+
+## Self-Check: PASSED
+
+- FOUND: all nine created files; `features/skill/invocation.feature` holds 2 scenarios.
+- FOUND on HEAD: `61500db`, `cb083db`, `1447628`, `a6c8d60` (`git rev-list --count 9a815c5..a6c8d60` = 4).
+- Acceptance criteria re-run: the Task 1 greps (1 marker, 4 `agent_settled`, 0 fixed sleeps), the Task 2 greps (`pi-dynamic-workflows` in `companions.ts`, 2 scenarios), and an empty feature diff after the red proofs.
