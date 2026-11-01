@@ -1781,12 +1781,12 @@ test("MCPR-03 malformed-JSON reference file -> unavailable + malformed mcp refer
   );
 });
 
-test("MCPR-03 wrapper-less reference file (bare map) -> unavailable + malformed mcp reference note", async () => {
+test("MCPR-03 wrapper-less reference file (bare map) resolves installable with its server (D-CF6-01)", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
   const context = resolveContext(marketplaceRoot, {
     [localRoot]: "dir",
-    // D-04: a string reference MUST be wrapped; a bare server map degrades.
+    // D-CF6-01: a referenced file may hold a bare server map, as Claude Code reads it.
     [path.join(localRoot, "x.mcp.json")]: {
       contents: JSON.stringify({ srv: { command: "node" } }),
     },
@@ -1799,11 +1799,14 @@ test("MCPR-03 wrapper-less reference file (bare map) -> unavailable + malformed 
   );
 
   // assert
-  assert.strictEqual(resolvedPlugin.state, "unavailable");
-  assert.ok(
-    resolvedPlugin.notes.some((n) => n.includes("malformed mcp reference")),
+  assert.strictEqual(
+    resolvedPlugin.state,
+    "installable",
     `notes: ${resolvedPlugin.notes.join(" / ")}`,
   );
+  if (resolvedPlugin.state === "installable") {
+    assert.deepStrictEqual(resolvedPlugin.mcpServers, { srv: { command: "node" } });
+  }
 });
 
 test("WR-03: unreadable reference file (EACCES) propagates out of resolveStrict (not swallowed as malformed mcp)", async () => {
@@ -2044,10 +2047,9 @@ test("criterion 5: undeclared unwrapped standalone .mcp.json still resolves inst
   }
 });
 
-// Backstop: entry-string vs manifest-object precedence follows the existing
-// entry.mcpServers ?? manifest.mcpServers rule -- a string entry wins over an
-// object manifest declaration.
-test("MCPR-01 backstop: string entry.mcpServers shadows an object manifest.mcpServers (entry wins)", async () => {
+// Backstop (D-CF6-01): with a plugin.json, Claude Code ignores the entry's
+// mcpServers, so a string entry never shadows an object manifest declaration.
+test("MCPR-01 backstop: with a plugin.json, the manifest object resolves and the entry string is ignored (D-CF6-01)", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
   const context = resolveContext(marketplaceRoot, {
@@ -2071,8 +2073,8 @@ test("MCPR-01 backstop: string entry.mcpServers shadows an object manifest.mcpSe
     `notes: ${resolvedPlugin.notes.join(" / ")}`,
   );
   if (resolvedPlugin.state === "installable") {
-    // Entry string wins; the manifest object is shadowed.
-    assert.deepStrictEqual(resolvedPlugin.mcpServers, { srv: { command: "node" } });
+    // The manifest object wins; the entry string is never read.
+    assert.deepStrictEqual(resolvedPlugin.mcpServers, { other: { command: "python" } });
   }
 });
 
