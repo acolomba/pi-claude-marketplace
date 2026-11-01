@@ -216,3 +216,17 @@ session writes this file. Each subagent ends its report with a
 - **Why dubious:** The per-plan budget is exceeded by design; the coupling
   justification holds only if 05-07's tests never assert a context value.
 - **Recorded in:** `05-07-PLAN.md` "Scope note", `05-08-PLAN.md`, `05-09-PLAN.md`.
+
+### P5-DC-14: Executor prompts read the GSD execution files by path
+
+- **Phase / source:** Phase 5 execute-phase orchestration.
+- **Severity:** Low. **Status:** open.
+- **Choice:** As DC-17 did for Phase 1, each executor prompt names
+  `execute-plan.md`, `summary.md`, `checkpoints.md`, `tdd.md`,
+  `worktree-path-safety.md`, and `executor-examples.md` by absolute path for
+  the executor to read, instead of inlining their text. The worktree branch
+  check is embedded verbatim.
+- **Alternatives:** Inline the files verbatim, as the workflow says.
+- **Why dubious:** Departs from the literal build-time embed instruction; an
+  executor that skipped a read would miss the contract.
+- **Recorded in:** this file.
