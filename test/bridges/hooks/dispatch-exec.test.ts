@@ -635,12 +635,9 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
   {
     claudeEvent: "SessionStart",
     diagnosedOmissions: [],
-    benignOmission: "reason",
-    createEvent: () =>
-      ({
-        type: "session_start",
-        reason: "startup",
-      }) satisfies SessionStartEvent,
+    benignOmission: "source",
+    // The router dispatches the Claude-side SessionStart event (D-CF5-01).
+    createEvent: () => ({ source: "startup" }),
     eventFields: { source: "startup" },
   },
   {
@@ -764,7 +761,7 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
         reason: "threshold",
         willRetry: false,
       }) satisfies SessionCompactEvent,
-    eventFields: { trigger: "auto" },
+    eventFields: { trigger: "auto", compact_summary: "summary" },
   },
   {
     claudeEvent: "SessionEnd",
