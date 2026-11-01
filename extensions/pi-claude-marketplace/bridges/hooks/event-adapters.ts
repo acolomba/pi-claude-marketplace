@@ -18,9 +18,9 @@
 //     PostToolUseFailure). `block` keeps the tool's output and adds the
 //     hook's feedback, `<Event>:<Tool> hook blocking error from command:
 //     "<command>": <message>`, without marking the result an error;
-//     `mutate.updatedToolOutput` mutates the runtime-side surface
-//     (`event.content` and/or `event.isError`) in place + returns
-//     `undefined`; `stop` debug-logs + returns `undefined` (Pi's
+//     `mutate.updatedToolOutput` returns its `content` and/or `isError` as
+//     Pi's `tool_result` value, since Pi keeps only returned changes;
+//     `stop` debug-logs + returns `undefined` (Pi's
 //     `tool_result` cannot end the turn without aborting it); `noop` returns
 //     `undefined`. CR-01: the mutation surface is whitelisted to
 //     `{ content, isError }` -- a hook-supplied patch cannot rewrite
@@ -50,8 +50,8 @@
 // the `switch-exhaustiveness-check` lint rule at each switch.
 //
 // Mutation surface: tool_call replaces `event.input` (Record<string,
-// unknown>) key by key, tool_result mutates `event.content` (the Pi-side
-// (TextContent | ImageContent)[] array). The fold in `dispatch.ts` runs every
+// unknown>) key by key, tool_result returns the replacement `content` (the
+// Pi-side (TextContent | ImageContent)[] array) and `isError`. The fold in `dispatch.ts` runs every
 // hook on one snapshot, so a mutation applies once, after every hook ran.
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -156,20 +156,29 @@ function replaceToolCallInput(event: ToolCallEvent, updatedInput: unknown): void
  * silently dropped, so a malicious or buggy hook cannot rewrite the event's
  * discriminator (`type`), its `toolName`, or any other routing-load-bearing
  * field. Non-object patches are rejected early.
+ *
+ * The patch is the handler's return value: Pi 1.4's `emitToolResult` keeps
+ * only the changes a handler returns, so a change made to the event in place
+ * would never reach the model. `undefined` when neither field is valid.
  */
-function applyToolResultPatch(event: ToolResultEvent, updatedToolOutput: unknown): void {
+function toolResultPatch(updatedToolOutput: unknown): ToolResultEventResult | undefined {
   if (updatedToolOutput === null || typeof updatedToolOutput !== "object") {
-    return;
+    return undefined;
   }
 
   const patch = updatedToolOutput as Partial<Pick<ToolResultEvent, "content" | "isError">>;
+  const toolResult: ToolResultEventResult = {};
   if (Array.isArray(patch.content)) {
-    event.content = patch.content;
+    // Pi's `tool_result` slot takes image parts too; the frozen Pi boundary
+    // types it as text parts only, so the patch's parts are widened to it.
+    toolResult.content = patch.content as NonNullable<ToolResultEventResult["content"]>;
   }
 
   if (typeof patch.isError === "boolean") {
-    event.isError = patch.isError;
+    toolResult.isError = patch.isError;
   }
+
+  return Object.keys(toolResult).length === 0 ? undefined : toolResult;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -293,8 +302,8 @@ function withFeedback(
  * handler return shape (`ToolResultEventResult | undefined`).
  *
  * `tool_result` exposes a `content` / `details` / `isError` return shape;
- * the bridge's `mutate.updatedToolOutput` path mutates `event` in place,
- * then returns `undefined`. A `block` keeps the tool's output and returns it
+ * the bridge's `mutate.updatedToolOutput` path returns the whitelisted
+ * patch in that shape and leaves `event` alone. A `block` keeps the tool's output and returns it
  * with the hook's feedback after it, as Claude Code adds a PostToolUse
  * block's feedback after the tool result (D-CF5-11); the result is not
  * marked an error.
@@ -311,11 +320,7 @@ export function adaptToolResultResult(
       return { content: withFeedback(event, result, context) };
 
     case "mutate":
-      if (result.updatedToolOutput !== undefined) {
-        applyToolResultPatch(event, result.updatedToolOutput);
-      }
-
-      return undefined;
+      return toolResultPatch(result.updatedToolOutput);
 
     case "stop":
       hookDebugLog(

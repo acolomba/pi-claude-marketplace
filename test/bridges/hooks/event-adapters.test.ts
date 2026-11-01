@@ -439,7 +439,7 @@ describe("adaptToolResultResult", () => {
     });
   }
 
-  test("applies only whitelisted tool-result fields", () => {
+  test("returns only whitelisted tool-result fields as the Pi tool_result value", () => {
     // arrange
     const input = { command: "inspect owner" };
     const originalContent = [{ type: "text" as const, text: "original output" }];
@@ -484,14 +484,17 @@ describe("adaptToolResultResult", () => {
     const adaptation = adaptToolResultResult(hookOutcome, event, adapterContext(guardEntry()));
 
     // assert
-    assert.strictEqual(adaptation, undefined);
+    assert.deepStrictEqual(adaptation, {
+      content: [{ type: "text", text: "replacement output" }],
+      isError: true,
+    });
     assert.deepStrictEqual(event, {
       type: "tool_result",
       toolCallId: "call-original",
       toolName: "trusted-tool",
       input: { command: "inspect owner" },
-      content: [{ type: "text", text: "replacement output" }],
-      isError: true,
+      content: [{ type: "text", text: "original output" }],
+      isError: false,
       details: { exitCode: 0, routeToken: "details-original" },
       route: {
         scope: "project",
@@ -501,7 +504,7 @@ describe("adaptToolResultResult", () => {
     });
     assert.strictEqual(event, eventIdentity);
     assert.strictEqual(event.input, input);
-    assert.strictEqual(event.content, replacementContent);
+    assert.strictEqual(event.content, originalContent);
     assert.strictEqual(event.details, details);
     assert.strictEqual(Object.hasOwn(event, "usage"), false);
     assert.deepStrictEqual(hookOutcome, {
@@ -635,15 +638,16 @@ describe("adaptToolResultResult", () => {
     });
   });
 
-  test("applies array content while omitting an absent error patch", () => {
+  test("returns array content without an error field when the patch has none", () => {
     // arrange
     const replacementContent = [{ type: "text" as const, text: "replacement output" }];
+    const content = [{ type: "text" as const, text: "original output" }];
     const event = {
       type: "tool_result",
       toolCallId: "result-content-only",
       toolName: "owner-tool",
       input: { command: "inspect" },
-      content: [{ type: "text" as const, text: "original output" }],
+      content,
       isError: false,
       details: { exitCode: 0 },
     } satisfies ToolResultEvent;
@@ -656,20 +660,22 @@ describe("adaptToolResultResult", () => {
     const adaptation = adaptToolResultResult(hookOutcome, event, adapterContext(guardEntry()));
 
     // assert
-    assert.strictEqual(adaptation, undefined);
+    assert.deepStrictEqual(adaptation, {
+      content: [{ type: "text", text: "replacement output" }],
+    });
     assert.deepStrictEqual(event, {
       type: "tool_result",
       toolCallId: "result-content-only",
       toolName: "owner-tool",
       input: { command: "inspect" },
-      content: [{ type: "text", text: "replacement output" }],
+      content: [{ type: "text", text: "original output" }],
       isError: false,
       details: { exitCode: 0 },
     });
-    assert.strictEqual(event.content, replacementContent);
+    assert.strictEqual(event.content, content);
   });
 
-  test("applies a boolean error patch while omitting absent content", () => {
+  test("returns a boolean error patch without content when the patch has none", () => {
     // arrange
     const content = [{ type: "text" as const, text: "original output" }];
     const event = {
@@ -690,14 +696,14 @@ describe("adaptToolResultResult", () => {
     );
 
     // assert
-    assert.strictEqual(adaptation, undefined);
+    assert.deepStrictEqual(adaptation, { isError: true });
     assert.deepStrictEqual(event, {
       type: "tool_result",
       toolCallId: "result-error-only",
       toolName: "owner-tool",
       input: { command: "inspect" },
       content: [{ type: "text", text: "original output" }],
-      isError: true,
+      isError: false,
       details: { exitCode: 0 },
     });
     assert.strictEqual(event.content, content);

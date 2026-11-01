@@ -1777,16 +1777,11 @@ describe("toolResultCompositeHandler", () => {
       undefined,
       executor,
     );
-    const expectedOutput = undefined;
-    const expectedEvent: ToolResultEvent = {
-      type: "tool_result",
-      toolCallId: "dispatch-call",
-      toolName: "bash",
-      input: { command: "git status" },
+    const expectedOutput = {
       content: [{ type: "text", text: "patched output" }],
       isError: true,
-      details: undefined,
     };
+    const expectedEvent: ToolResultEvent = createToolResultEvent(false);
     const expectedCalls: RecordedCall[] = [
       { pluginId: "result-mutation", event: createToolResultEvent(false) },
     ];
@@ -3215,8 +3210,7 @@ describe("routing-order fold of mutations", () => {
     const output = await handler(event, createExtensionContext("/workspace/outputs"));
 
     // assert
-    assert.strictEqual(output, undefined);
-    assert.deepStrictEqual(event.content, [{ type: "text", text: "two" }]);
+    assert.deepStrictEqual(output, { content: [{ type: "text", text: "two" }] });
   });
 });
 
