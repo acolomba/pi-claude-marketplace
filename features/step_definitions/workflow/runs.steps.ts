@@ -83,11 +83,13 @@ When(
   },
 );
 
+// The run-ending steps read only the progress entries, so they leave the turn
+// uncompared: only `the workflow engine shows these notices:` marks it, and a
+// run scenario that leaves its notices unstated fails.
 Then(
   "the workflow run ends with the status {string} and the result {string}",
   function (this: ScenarioWorld, status: string, result: string) {
     assert.deepStrictEqual(runOutcome(this), { status, result, error: undefined });
-    this.markTurnCompared();
   },
 );
 
@@ -96,6 +98,5 @@ Then(
   "the workflow run ends with the status {string} and the error {string}",
   function (this: ScenarioWorld, status: string, error: string) {
     assert.deepStrictEqual(runOutcome(this), { status, result: undefined, error });
-    this.markTurnCompared();
   },
 );
