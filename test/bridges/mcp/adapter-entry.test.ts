@@ -71,8 +71,8 @@ const OAUTH_CONFIG_KEYS = [
   "skipIssuerMetadataValidation",
 ] as const;
 
-// AFILE-06: the user's fields a re-stage keeps, written independently of the
-// production set.
+// AFILE-06 / D-CF1-14: the user's fields a re-stage keeps, written
+// independently of the production set.
 const CARRIED_KEYS: readonly string[] = [
   "disabled",
   "approveTools",
@@ -85,6 +85,8 @@ const CARRIED_KEYS: readonly string[] = [
   "searchKeywords",
   "openUi",
   "trace",
+  "appendStructuredContent",
+  "roots",
 ];
 
 const MARKER = { plugin: "acme", marketplace: "catalog" };
@@ -712,6 +714,40 @@ describe("stampServers", () => {
         searchKeywords: "previous-searchKeywords",
         openUi: "previous-openUi",
         trace: "previous-trace",
+        appendStructuredContent: "previous-appendStructuredContent",
+        roots: "previous-roots",
+        _piClaudeMarketplace: MARKER,
+      },
+    });
+  });
+
+  test("D-CF1-14: a restage keeps the user's appendStructuredContent and roots", () => {
+    // arrange
+    const previous = {
+      command: "old-command",
+      roots: false,
+      appendStructuredContent: true,
+      _piClaudeMarketplace: MARKER,
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { command: "plugin-command" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous: { server: previous },
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.deepStrictEqual(stamping.stamped, {
+      server: {
+        command: "plugin-command",
+        env: INJECTED_ENV,
+        ...OWNED,
+        appendStructuredContent: true,
+        roots: false,
         _piClaudeMarketplace: MARKER,
       },
     });
@@ -1175,7 +1211,7 @@ describe("restoredOverride", () => {
     // assert
     assert.strictEqual(
       JSON.stringify(restored),
-      '{"env":{"STUB_TOKEN":"stub-secret"},"disabled":"live-disabled","approveTools":"live-approveTools","includeTools":"live-includeTools","excludeTools":"live-excludeTools","lifecycle":"live-lifecycle","idleTimeout":"live-idleTimeout","requestTimeoutMs":"live-requestTimeoutMs","debug":"live-debug","searchKeywords":"live-searchKeywords","openUi":"live-openUi","trace":"live-trace"}',
+      '{"env":{"STUB_TOKEN":"stub-secret"},"disabled":"live-disabled","approveTools":"live-approveTools","includeTools":"live-includeTools","excludeTools":"live-excludeTools","lifecycle":"live-lifecycle","idleTimeout":"live-idleTimeout","requestTimeoutMs":"live-requestTimeoutMs","debug":"live-debug","searchKeywords":"live-searchKeywords","openUi":"live-openUi","trace":"live-trace","appendStructuredContent":"live-appendStructuredContent","roots":"live-roots"}',
     );
   });
 });
@@ -1199,6 +1235,22 @@ describe("userCarriedFields", () => {
 
     // assert
     assert.strictEqual(JSON.stringify(fields), '{"disabled":true,"openUi":true,"trace":true}');
+  });
+
+  test("D-CF1-14: returns the user's appendStructuredContent and roots", () => {
+    // arrange
+    const entry = {
+      command: "plugin-command",
+      roots: false,
+      appendStructuredContent: true,
+      _piClaudeMarketplace: MARKER,
+    };
+
+    // act
+    const fields = userCarriedFields(entry);
+
+    // assert
+    assert.deepStrictEqual(fields, { appendStructuredContent: true, roots: false });
   });
 
   test("D-08-02: leaves out the carried fields the entry's marker lists as plugin-set", () => {

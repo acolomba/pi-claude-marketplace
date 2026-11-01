@@ -41,7 +41,9 @@ import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 // The closed table can set `requestTimeoutMs` from the plugin's `timeout`
 // (ANAME-07); a carried field the plugin sets is the plugin's. No
 // credential-bearing field is in the set, so a previous entry or a user stub
-// never leaks one into the new entry.
+// never leaks one into the new entry. D-CF1-14: `appendStructuredContent` and
+// `roots` have no Claude field, so they are the user's choices and survive
+// update and reinstall like the other user keys.
 const CARRIED_FIELDS = [
   "disabled",
   "approveTools",
@@ -54,6 +56,8 @@ const CARRIED_FIELDS = [
   "searchKeywords",
   "openUi",
   "trace",
+  "appendStructuredContent",
+  "roots",
 ] as const;
 
 const CARRIED_FIELD_SET: ReadonlySet<string> = new Set(CARRIED_FIELDS);
