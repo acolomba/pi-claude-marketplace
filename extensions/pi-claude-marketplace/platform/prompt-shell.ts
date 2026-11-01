@@ -11,7 +11,8 @@
 // whenever it is available. Off Windows, Bash is always available and the
 // tool is on only when CLAUDE_CODE_USE_POWERSHELL_TOOL is true, so
 // `shell: powershell` runs Bash unless that variable is set. On Windows, Bash
-// is Git Bash, found as Claude Code finds it.
+// is Git Bash, found as Claude Code finds it, and a declared `shell: bash`
+// with no Git Bash is refused rather than run under PowerShell.
 //
 // The command runs as an argv with no shell wrapper: `bash -c <command>`, or
 // PowerShell with `-NoProfile -Command <command>`. On POSIX the shell leads
@@ -206,18 +207,47 @@ function bashAvailable(host: PromptShellHost): boolean {
 }
 
 /**
+ * The shell that runs a skill's or command's `!` commands, or `bash-missing`
+ * when the frontmatter declares `shell: bash` and there is no Bash to run.
+ */
+export type PromptShellChoice =
+  { readonly kind: "shell"; readonly shell: PromptShell } | { readonly kind: "bash-missing" };
+
+const BASH_MISSING: PromptShellChoice = Object.freeze({ kind: "bash-missing" });
+
+/**
  * D-CF1-02: the shell that runs a skill's or command's `!` commands, given its
- * frontmatter `shell` value, as Claude Code 2.1.316 chooses it.
+ * frontmatter `shell` value, as Claude Code 2.1.316 chooses it. An explicit
+ * `shell: bash` with no Bash (Windows without Git Bash) gives `bash-missing`:
+ * Claude Code then aborts the invocation before it scans for `!` commands, so
+ * even a body with none of them fails, with `bashMissingMessage`'s text.
  */
 export function selectPromptShell(
   requested: string | undefined,
   host: PromptShellHost,
-): PromptShell {
+): PromptShellChoice {
   if (requested === "powershell" && powerShellToolEnabled(host)) {
-    return "powershell";
+    return { kind: "shell", shell: "powershell" };
   }
 
-  return bashAvailable(host) ? "bash" : "powershell";
+  if (bashAvailable(host)) {
+    return { kind: "shell", shell: "bash" };
+  }
+
+  return requested === "bash" ? BASH_MISSING : { kind: "shell", shell: "powershell" };
+}
+
+/**
+ * D-CF1-02: Claude Code 2.1.316's text for a `bash-missing` choice, given the
+ * typed invocation (such as `/plugin:command`). Upstream says "Skill" for
+ * commands too.
+ */
+export function bashMissingMessage(invocation: string): string {
+  return (
+    `Skill ${invocation} requires bash (\`shell: bash\` in frontmatter) but Git Bash was not ` +
+    "found. Install Git for Windows (https://git-scm.com/downloads/win), or change the " +
+    "skill's frontmatter to `shell: powershell`."
+  );
 }
 
 function launchArgv(request: PromptShellRequest, host: PromptShellHost): readonly string[] {

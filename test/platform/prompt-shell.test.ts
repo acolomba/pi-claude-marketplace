@@ -8,6 +8,7 @@ import { describe, test } from "node:test";
 import {
   NODE_PROMPT_SHELL_HOST,
   NODE_PROMPT_SHELL_SPAWN,
+  bashMissingMessage,
   createPromptShellRunner,
   selectPromptShell,
 } from "../../extensions/pi-claude-marketplace/platform/prompt-shell.ts";
@@ -15,6 +16,7 @@ import {
 import type { ShellRunResult } from "../../extensions/pi-claude-marketplace/domain/context-injection.ts";
 import type {
   PromptShell,
+  PromptShellChoice,
   PromptShellHost,
   PromptShellProcess,
   PromptShellSpawn,
@@ -183,7 +185,7 @@ describe("selectPromptShell", () => {
       const selected = selectPromptShell(requested, host);
 
       // assert
-      assert.strictEqual(selected, shell);
+      assert.deepStrictEqual(selected, { kind: "shell", shell });
     });
   }
 
@@ -203,7 +205,7 @@ describe("selectPromptShell", () => {
       shell: "powershell",
     },
     { requested: undefined, env: {}, files: [], shell: "powershell" },
-    { requested: "bash", env: {}, files: [], shell: "powershell" },
+    { requested: "sh", env: {}, files: [], shell: "powershell" },
   ] satisfies ReadonlyArray<{
     requested: string | undefined;
     env: NodeJS.ProcessEnv;
@@ -218,9 +220,39 @@ describe("selectPromptShell", () => {
       const selected = selectPromptShell(requested, host);
 
       // assert
-      assert.strictEqual(selected, shell);
+      assert.deepStrictEqual(selected, { kind: "shell", shell });
     });
   }
+
+  for (const env of [{}, { CLAUDE_CODE_USE_POWERSHELL_TOOL: "1" }]) {
+    test(`D-CF1-02: on Windows with no Git Bash, shell bash with ${JSON.stringify(env)} is refused as bash-missing`, () => {
+      // arrange
+      const host = windowsHost(env, []);
+      const refusal: PromptShellChoice = { kind: "bash-missing" };
+
+      // act
+      const selected = selectPromptShell("bash", host);
+
+      // assert
+      assert.deepStrictEqual(selected, refusal);
+    });
+  }
+
+  test("D-CF1-02: the bash-missing text is Claude Code's, naming the invocation", () => {
+    // arrange
+    const invocation = "/tools:deploy";
+
+    // act
+    const message = bashMissingMessage(invocation);
+
+    // assert
+    assert.strictEqual(
+      message,
+      "Skill /tools:deploy requires bash (`shell: bash` in frontmatter) but Git Bash was not " +
+        "found. Install Git for Windows (https://git-scm.com/downloads/win), or change the " +
+        "skill's frontmatter to `shell: powershell`.",
+    );
+  });
 });
 
 describe("createPromptShellRunner", () => {
