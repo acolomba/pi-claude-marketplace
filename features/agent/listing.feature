@@ -265,3 +265,41 @@ Feature: Agent listing
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status    | reasons               | scope | version |
       | fixtures         | user              | demo@fixtures | demo | installed | requires pi-subagents | user  | 1.0.0   |
+
+  Scenario: A new session advertises each bridged agent to the parent model
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file        | name     | description                    | body                                |
+      | reviewer.md | reviewer | Reviews the files it is given. | Review the files named in the task. |
+      | auditor.md  | auditor  | Audits the build.              | Audit the build.                    |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply                                   |
+      | I can use the auditor and the reviewer. |
+    When the user prompts "Which agents can you use?"
+    Then the model call 1 advertises these agents:
+      """
+      <advertised_subagents>
+      The following file-defined subagents opted into discovery. Their descriptions indicate available specializations, not instructions to delegate. Use subagent only when delegation is needed.
+        <subagent>
+          <name>demo:auditor</name>
+          <description>Audits the build.</description>
+        </subagent>
+        <subagent>
+          <name>demo:reviewer</name>
+          <description>Reviews the files it is given.</description>
+        </subagent>
+      </advertised_subagents>
+      """
+    Then the model receives these calls:
+      | call | role | text                      |
+      | 1    | user | Which agents can you use? |

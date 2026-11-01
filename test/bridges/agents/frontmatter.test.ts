@@ -625,6 +625,7 @@ description: ${expectedScalar}
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -682,6 +683,7 @@ description: Reviews files
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -753,6 +755,7 @@ model: anthropic/claude-sonnet-4-6
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -808,6 +811,7 @@ skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -861,6 +865,7 @@ tools: read
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -910,6 +915,7 @@ thinking: high
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -957,6 +963,7 @@ tools: write
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -976,4 +983,46 @@ Body lacks its final newline.
     // assert
     assert.strictEqual(generatedAgentFile, expectedGeneratedAgentFile);
   });
+
+  for (const inheritSkills of [true, false]) {
+    test(`D-CF4-14 advertises an agent that inherits skills: ${inheritSkills}`, () => {
+      // arrange
+      const expectedAgentFile = `---
+name: acme:bot
+description: d
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: ${inheritSkills}
+advertise: true
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: agents/bot.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Body.
+`;
+
+      // act
+      const agentFile = emitGeneratedAgentFile({
+        frontmatter: { name: "acme:bot", description: "d", skills: [], inheritSkills },
+        provenance: {
+          pluginName: "acme",
+          sourceName: "bot",
+          sourcePath: "agents/bot.md",
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [],
+        },
+        body: "Body.",
+      });
+
+      // assert
+      assert.strictEqual(agentFile, expectedAgentFile);
+    });
+  }
 });

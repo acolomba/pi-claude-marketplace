@@ -55,6 +55,7 @@ ${expected.toolsField}
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: ${expected.inheritSkills}
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -283,6 +284,7 @@ aliases: pi-claude-marketplace-acme-reviewer
 ${expectedMapping}systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -343,6 +345,7 @@ skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: spec-tree
@@ -425,6 +428,7 @@ tools: read
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -946,6 +950,7 @@ skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -997,6 +1002,7 @@ tools: read,bash
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1042,6 +1048,7 @@ tools: read
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1089,6 +1096,7 @@ aliases: pi-claude-marketplace-acme-bot
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1134,6 +1142,7 @@ excludeTools: edit
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1180,6 +1189,7 @@ aliases: pi-claude-marketplace-acme-bot
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1224,6 +1234,7 @@ aliases: pi-claude-marketplace-acme-bot
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1270,6 +1281,7 @@ excludeTools: edit,write
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1315,6 +1327,7 @@ aliases: pi-claude-marketplace-acme-bot
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1364,6 +1377,7 @@ tools: read,bash
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1409,6 +1423,7 @@ tools: read
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1504,6 +1519,7 @@ tools: read
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1552,6 +1568,7 @@ tools: read
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1600,6 +1617,7 @@ skillPath: ../pi-claude-marketplace/resources/skills
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+advertise: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme

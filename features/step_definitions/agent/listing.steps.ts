@@ -1,14 +1,15 @@
 /**
  * @fileoverview Steps that every agent feature shares: the agents a published
- * plugin holds, and the pi-subagents settings that decide which agents it
- * lists (HAR-07, AGT-01, D-CF4-13, D-08).
+ * plugin holds, the pi-subagents settings that decide which agents it lists,
+ * and the agents it advertises to the parent model (HAR-07, AGT-01,
+ * D-CF4-13, D-CF4-14, D-08).
  */
 
 import assert from "node:assert/strict";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { type DataTable, Given } from "@cucumber/cucumber";
+import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
 import {
   agentFileText,
@@ -17,6 +18,8 @@ import {
   publishAgentFiles,
   readAgentFileRows,
 } from "../../lib/agent-files.ts";
+import { projectTokens } from "../../lib/run-tokens.ts";
+import { modelCallsOf } from "../../lib/scripted-model/script.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -24,6 +27,25 @@ type JsonObject = Record<string, unknown>;
 
 function isJsonObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// A logged model message that Pi sent as a system message.
+function isSystemMessage(message: unknown): message is JsonObject & { role: "system" } {
+  return isJsonObject(message) && message.role === "system";
+}
+
+// The `advertised_subagents` section of the leading system message of model
+// call `number` in `logs`, numbered from 1. It fails when the turn has no
+// such call or the call has no such section.
+function advertisedSection(logs: ReadonlyMap<string, readonly unknown[]>, number: number): string {
+  const messages = modelCallsOf(logs).find((call) => call.index === number - 1)?.messages ?? [];
+  const sections = messages.find(isSystemMessage)?.sections;
+  const advertised = isJsonObject(sections) ? sections.advertised_subagents : undefined;
+  if (typeof advertised !== "string") {
+    assert.fail(`model call ${number} of the last turn has no advertised_subagents section`);
+  }
+
+  return advertised;
 }
 
 // Returns `settings` with `value` set at the nested `keys`, keeping every
@@ -116,5 +138,17 @@ Given(
   "pi-subagents hides the builtin agent {string}",
   async function (this: ScenarioWorld, agent: string) {
     await mergeUserSetting(this, ["subagents", "agentOverrides", agent, "disabled"], true);
+  },
+);
+
+// D-CF4-14: the catalog pi-subagents puts in the leading system message of a
+// parent call, as Claude Code lists plugin agents to its model. Calls are
+// numbered from 1 as the calls step numbers them.
+Then(
+  "the model call {int} advertises these agents:",
+  function (this: ScenarioWorld, number: number, expected: string) {
+    const advertised = advertisedSection(this.requireTurn().logs, number);
+    assert.strictEqual(projectTokens("text", advertised, this.tokens), expected);
+    this.markTurnCompared();
   },
 );
