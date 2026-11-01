@@ -11,13 +11,76 @@ requires:
     provides: the D-CF2-10 Pi gap report draft and the decision-row and parent-line formats (02-07-SUMMARY)
 provides:
   - the phase gate record on the combined Phase 3 tree
-affects: [phase verification of CMD-01..05, the parent merge of the slash command branch]
+  - thirteen ready-to-paste PROJECT.md Key Decisions rows, D-CF3-01 through D-CF3-13
+  - three Pi gap report sections to append to the D-CF2-10 draft
+  - the parent lines for every file the phase may not edit, grouped by target
+affects: [phase verification of CMD-01..05, the parent merge of the slash command branch, Phases 4 and 7 (entry-declaration re-probe)]
+
+actuals:
+  tokens: 14384
+  tasks: 3
+  commits: 3
 
 plan_head_before: 52806eafaaa8baca4817e55154d4cbd69b242e4d
+plan_head_after: 35f7c5f (before the Task 3 commit, which adds this frontmatter)
+
+tech-stack:
+  added: []
+  patterns:
+    - "A gate reuses a passing npm run check when the build inputs are byte-identical, and still runs the unit suite, two random-order cucumber runs, and fallow dupes itself"
+
+key-files:
+  created:
+    - .planning/phases/03-slash-commands/03-09-SUMMARY.md
+  modified: []
+
+key-decisions:
+  - "npm run check is reused from d164a80, whose build inputs equal this plan's base; the other gate commands ran on 52806ea"
+  - "D-CF3-07 is Pending (user review) with D-CF2-13, D-CF3-13 is Good, the other eleven rows are Locked"
+  - "The commands-bridge clone marker at bridges/commands/stage.ts:123 stays: dup:23c99c81 still spans the line below it"
+
+patterns-established:
+  - "Decision rows start with the plain ID so a row count can grep them; the parent re-bolds on paste"
 
 requirements-completed: [CMD-01, CMD-02, CMD-03, CMD-04, CMD-05]
 
-status: in-progress
+coverage:
+  - id: D1
+    description: "The combined Phase 3 tree passes the whole check, the whole unit suite, two random-order cucumber runs, and fallow dupes"
+    verification:
+      - kind: other
+        ref: "npm run check (reused, d164a80, seed 412895, 1451 scenarios)"
+        status: pass
+      - kind: unit
+        ref: "npm run test:modules"
+        status: pass
+      - kind: e2e
+        ref: "npm run test:cucumber (seed 643615, 1451 passed)"
+        status: pass
+      - kind: e2e
+        ref: "npm run test:cucumber (seed 436335, 1451 passed)"
+        status: pass
+      - kind: other
+        ref: "npx fallow dupes --fail-on-issues --format human --quiet"
+        status: pass
+    human_judgment: false
+  - id: D2
+    description: "Thirteen D-CF3 decision rows and three Pi gap report additions, ready for the parent"
+    verification: []
+    human_judgment: true
+    rationale: "The rows and the gap report are prose for the parent and the user; whether they are accurate and ready to file is a reviewer's judgment"
+  - id: D3
+    description: "Every parent line the plans handed over, in nine target groups, with no parent-owned or frozen file edited"
+    verification:
+      - kind: other
+        ref: "diff --stat 52806ea..HEAD over CHANGELOG.md, both READMEs, BACKLOG.md, PROJECT.md, docs, and .planning/codebase (empty)"
+        status: pass
+    human_judgment: true
+    rationale: "Completeness of the collected lines against the eight plan SUMMARYs needs a reviewer"
+
+duration: 50min
+completed: 2026-11-01
+status: complete
 ---
 
 # Phase 3 Plan 09: Slash command phase gate Summary
@@ -106,4 +169,237 @@ This phase did not post these additions. It holds no credential for Pi's tracker
 
 ---
 
-<!-- gsd:write-continue -->
+## Parent lines (Task 3)
+
+Each line is ready to apply when the parent merges this branch. This phase edited none of these files: `git diff --stat 52806ea..HEAD -- CHANGELOG.md README.md README.es.md .planning/BACKLOG.md .planning/PROJECT.md docs .planning/codebase` prints nothing.
+
+### 1. `CHANGELOG.md`
+
+Add these sub-bullets under the milestone's top line in `## [Unreleased]` (the line that starts "The extension now needs Pi 1.4.0 or newer"), after the skill lines. They follow `.agents/skills/changelog/rules/entries.md`: one sentence each, a second only where the reader must act.
+
+```markdown
+  - A command with no `description` is now listed with Claude Code's text: the first line of its body, or `Plugin command` for an empty body.
+  - Install now warns about the command frontmatter fields that Pi cannot honor, such as `model` or `effort`, with one line for each command.
+  - Typed commands now fill in arguments, `${CLAUDE_*}` variables, and `` !`command` `` output as Claude Code does, in the terminal UI and over RPC.
+  - A failing `` !`command` `` now stops its command with Claude Code's message, and the model gets nothing.
+  - A plugin's `commands` can now name single command files, and an object map of commands from files or inline text, as in Claude Code.
+  - A marketplace entry's `commands` now adds to the `commands/` folder instead of replacing it, as in Claude Code.
+  - A project-scope command now runs only when you installed its plugin into the project on this machine. For a project command installed earlier, run `/claude:plugin reinstall <plugin>@<marketplace> --scope project` once.
+  - Commands installed earlier keep their old description, and typed arguments keep `${CLAUDE_PLUGIN_ROOT}` literal, until you update or reinstall their plugin. Then run `/reload`.
+```
+
+The existing sub-bullet "A declared `commands`, `agents`, or `workflows` path now replaces the conventional folder, as in Claude Code, and install and update warn when that folder exists." stays. It is still true for `plugin.json` and for agents and workflows. The marketplace-entry line above, placed right after it, narrows it for commands (D-CF3-04). Run `pre-commit run --files CHANGELOG.md` after applying.
+
+### 2. `README.md` and `README.es.md`
+
+None. No passage about bridged commands became wrong. Evidence: `grep -n -i 'command' README.md` and `grep -n -i 'comando' README.es.md`, leaving out `/claude:plugin` lines, find only the component list ("Commands." / "Comandos."), the name-mapping lead and table (lines 103-111 and 101-109), and the skill-alias paragraph. The table rows (`/foo:bar`, the elided `foo-bar` row, and the Windows `.` form) still hold (D-CF3-12). Neither README describes descriptions, arguments, declared paths, or the project check, so nothing there is out of date. A future README pass could add a short "Commands" note, but no line is required by this phase.
+
+### 3. `.planning/BACKLOG.md`
+
+Append after the last entry:
+
+```markdown
+## CMDNAME-01: command frontmatter `name` aliases
+
+Deferred by component-features Phase 3 (03-CONTEXT E9, DUBIOUS-CHOICES P3-DC-07). Claude Code gives a plugin command with a frontmatter `name` the aliases `/<plugin>:<name>` and, for a name with no `:`, the bare `/<name>`, as it does for skills. The commands bridge stages only `/<plugin>:<file name>`. Resolving the aliases in `edge/command-invocation.ts`, as D-CF2-02 does for skills, would close the gap.
+
+## CMDTAG-01: Claude Code's command tag block
+
+Deferred by component-features Phase 3 (D-CF3-06, D-CF1-01 residual, P3-DC-08). Claude Code sends a typed command as a `<command-message>`, `<command-name>`, and `<command-args>` tag block followed by the substituted body. Pi sends only the body. Adding the block in the command invocation would match upstream's framing for the model.
+
+## CMDMODEL-01: commands for the model
+
+Deferred by component-features Phase 3 (D-CF3-01, P3-DC-03). Claude Code lists a plugin command with a description in the model's skill list and lets the model run it through the Skill tool. Pi gives the model no access to prompt templates. Trigger: Pi adds model access to templates (gap 4 of the Pi gap report, appended to D-CF2-10).
+
+## CMDINFO-01: `info` lists declared command files and map entries
+
+Deferred by component-features Phase 3 (D-CF3-03, D-CF3-05 residuals). `discoverComponentNames` in `orchestrators/plugin/info.ts` reads declared command directories only, so a declared `.md` file and an object-map entry install but are not listed by `/claude:plugin info` of a plugin read from its source. The state-only view reads the recorded names and is not affected.
+
+## LEDGERPRUNE-01: restore ledger entries on a `prune` rollback
+
+Deferred by component-features Phase 3 (D-CF3-07 residual, P3-DC-17 item 5). When a `prune` rolls back, `orchestrators/plugin/prune-rollback.ts` restores the staged skill and command files but not their entries in the user's project ledger, so a restored project skill or command aborts until its plugin is reinstalled.
+
+## CMDDIGEST-01: plugin-root scripts in the command digest
+
+Deferred by component-features Phase 3 (D-CF3-07 residual, T-03-23). The project-command digest covers only the staged command file. A script under the plugin root that a `!` command runs is not covered, so a changed script still runs. The skills digest covers the whole staged skill directory but not the plugin root either (D-CF2-13 residual AR-02-05).
+
+## CMDSKILLMD-01: a `SKILL.md` inside `commands/`
+
+Deferred by component-features Phase 3 (03-CONTEXT E9). Claude Code loads a `SKILL.md` found inside `commands/` as a skill named after its folder. The commands walk has no `SKILL.md` rule, so `commands/x/SKILL.md` stages as the command `<plugin>:x:SKILL`.
+```
+
+The last entry goes beyond the plan's list of six. It records the second E9 item that 03-CONTEXT's Deferred Ideas name. Drop it if the parent prefers.
+
+### 4. Docs and conventions
+
+**`docs/json-output.md`**, "Origin" section, after the paragraph that starts "A bridged plugin skill that stops when you invoke it":
+
+```markdown
+A bridged plugin command that stops when you invoke it reports a `usage-error` whose `origin.commandId` is the command's name without its slash, such as `demo:greet`. This happens when a `` !`command` `` fails, the invocation is too large, Bash is missing, or the command file cannot be read. A project command also stops when Pi does not trust the project, when this machine has no record of its install, or when its file changed after the install. Nothing reaches the model (D-CF3-06, D-CF3-07).
+```
+
+**`docs/env-vars.md`**, "Commands content":
+
+- Add this lead sentence after "Command content does not resolve `${CLAUDE_SKILL_DIR}` (skill-scoped).": "When the user invokes a command, a typed argument that names `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, or, at project scope, `${CLAUDE_PROJECT_DIR}` is filled in from the values that install recorded (D-CF3-06). Commands installed before this release have no record, so such an argument stays literal until the plugin is updated or reinstalled."
+- Add two rows to the table:
+  - `` `${CLAUDE_SESSION_ID}` `` | ✓ | ✓ | Replaced with the Pi session id when the user invokes the command (D-CF1-01, D-CF3-06). The model cannot run a command (D-CF3-01).
+  - `` `${CLAUDE_EFFORT}` `` | ✓ | ✓ | Replaced at invocation with the thinking level of the Pi session: `low`, `medium`, `high`, `xhigh`, and `max` as themselves, `off` and `minimal` as `low`, and an unknown level as `high` (D-CF1-01, D-CF3-06).
+- "Not delivered (out of scope)": the `CLAUDE_EFFORT` bullet ("deferred (EFRT-01)") is now out of date for skill and command content, which fill `${CLAUDE_EFFORT}` at invocation. Narrow it to the environment variable, which is still not set.
+- The Phase 2 note about the overview matrix (no legend letter for "filled at invocation") applies to the Commands column too.
+
+**`docs/prd/pi-claude-marketplace-prd.md`**, section 5.6 (Commands Bridge):
+
+- CM-3, replace with: "Variable substitution (`${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, and, at project scope, `${CLAUDE_PROJECT_DIR}`) MUST apply to command bodies at install. A typed command MUST fill its arguments with Claude Code's rules and `${CLAUDE_SESSION_ID}` and `${CLAUDE_EFFORT}` at invocation, then run its `` !`command` `` lines; a failure aborts with nothing sent to the model (D-CF3-06)."
+- CM-4, append: "A declared `commands` path that names a `.md` file is one command named from its basename (D-CF3-05). A marketplace entry's `commands` adds to `commands/`; only a `plugin.json` declaration replaces it (D-CF3-04)."
+- Add **CM-5**: "A command without a non-empty `description` MUST be staged with Claude Code's fallback, `descriptionFallback(body, "Plugin command")`, and install MUST report the frontmatter fields Pi cannot honor as `[<source>] dropped fields: <fields>` (D-CF3-08, D-CF3-09)."
+- Add **CM-6**: "A `commands` object map in `plugin.json` MUST install each entry as `<plugin>:<key>` from its `source` file or inline `content`, with the manifest's `description`, `argumentHint`, and `model` applied; a malformed entry makes the plugin unavailable (D-CF3-03)."
+- Add **CM-7**: "A project-scope command MUST run only when Pi trusts the project and the user-scope ledger lists its name with the digest of its staged file (D-CF3-07)."
+- Section "Custom component-path arrays as supplemental" (line 1069, open items): append "For commands, a marketplace entry's declaration now supplements the folder (D-CF3-04); a `plugin.json` declaration still replaces it, as in Claude Code."
+
+**`.planning/codebase/CONVENTIONS.md`**, "Suppressions": no change. Measured on this tree: `grep -rn fallow-ignore extensions test scripts | wc -l` = 42, of which 24 are `fallow-ignore-next-line code-duplication`. The doc says 42 and 24. It lists "the commands and skills bridge pair in `stage.ts`" and "the agents and commands commit-and-rollback shape", and both groups are still live (Gate record, marker table). The doc's sentence about the `ThinkingLevel` and `InputSource` exports "which no module imports yet" changes if the parent applies group 5.
+
+**`.fallowrc.json`** (DC-13 item 6): remove the `dynamicallyLoaded` key and the `ignoreExports` key. Each lists only the six Phase 1 cores. Measured on `52806ea`: with both keys deleted, `npm run fallow` exits 0 (rule-pack test, both dead-code runs, health, dupes). The cores are now reachable from `index.ts` through both invocation handlers. The file was restored with `git checkout -- .fallowrc.json`.
+
+### 5. `extensions/pi-claude-marketplace/platform/pi-api.ts`
+
+The two `fallow-ignore-next-line unused-type` markers (above `ThinkingLevel` and `InputSource`) say that the invocation handlers are the types' consumers. Neither handler imports them: `edge/command-invocation.ts` calls `pi.getThinkingLevel()` and compares `event.source` with literals, and only `test/platform/pi-api.test.ts` uses the two types. The parent picks one:
+
+- Wire the types: import `InputSource` in `edge/command-invocation.ts` and `edge/skill-aliases.ts` for the source filter, and `ThinkingLevel` where the effort is mapped, then delete both markers (fallow would report them as stale otherwise).
+- Drop the types: delete the two exports, their markers, and the four type checks in `test/platform/pi-api.test.ts`.
+
+The first keeps NFR-11's rule that Pi types come through the boundary.
+
+### 6. Phase 2 (its files)
+
+- **Rename the shared ledger names**, now that commands share them: the file `skills.json` (under `<agentDir>/pi-claude-marketplace/project-installs/<sha256>/`), `ProjectSkillLedgerError` and its wording "The project skill ledger ...", `NODE_PROJECT_SKILL_LEDGER`, `provenProjectSkills`, the WR-04 outcome member `skillWarnings` (`orchestrators/marketplace/shared.ts`, which now also carries the commands warnings), the commands warning `could not remove the commands from the project skill ledger: ...` (in `bridges/commands/unstage.ts`, Phase 3), and the step texts "the user's record of project skill installs ...". A neutral form: `project-installs.json`, `ProjectInstallLedgerError`, `NODE_PROJECT_INSTALL_LEDGER`, `provenProjectInstalls`, `ledgerWarnings`, "the user's record of project installs". A file rename needs a reader for both names. The commands side's structural `ProjectCommandLedger` needs no change.
+- **D-CF2-03 clash check**: `bridges/skills/skill-names.ts::commandUpstreamNames` reads each `componentPaths.commands` entry as a directory and does not read `componentPaths.commandMap`. So neither a declared command file (D-CF3-05) nor an object-map key (D-CF3-03) adds a name to the skill-command clash set. A skill with the same name as such a command is staged, and both names reach Pi.
+- **State read difference**: `orchestrators/skill-invocation.ts` loads the state with a persisted migration to word its reinstall line, while `orchestrators/command-invocation.ts` reads a snapshot (`persistMigration: false`). Make the skills side read-only too, or record why it saves.
+- **Clone markers**: no stale marker remains on either side. The milestone's marker cleanup (merge `bf0b58f`) removed the stale `bridges/skills/stage.ts` and `bridges/skills/unstage.ts` markers that 03-01 reported. The live `bridges/skills/stage.ts:437` marker still spans `dup:23c99c81`.
+
+### 7. Phases 4 and 7
+
+- Re-probe marketplace-entry declarations for agents and workflows on Claude Code 2.1.316. D-CF3-04 found that the binary reads `commands/` unless `plugin.json` declares `commands`, and that an entry's declaration adds to the folder. That corrected the entry half of D-CF1-06 for commands only. If `agents` and `workflows` behave the same, D-CF1-06's entry half is wrong for them too, and so is the CHANGELOG line "A declared `commands`, `agents`, or `workflows` path now replaces the conventional folder".
+
+Also handed over by the plans, to other owners:
+
+- **Hooks (the hooks bridge owner)**: `features/hook/tool-use.feature:26` expects `CLAUDE_PLUGIN_DATA={project dir}/.pi/pi-claude-marketplace/data/demo`. Commands and skills record `pluginDataDir(mp, plugin)`, which is `data/<marketplace>/<plugin>` (`data/fixtures/demo`). Check whether the hooks bridge uses a different data root, and which one is right (03-03).
+- **`shared/redact-absolute-paths.ts` (its owner)**: when quoted text follows a quoted absolute path on one line, the redaction replaces the rest of the line with `[redacted path]`. That cuts the commands walk's duplicate and subdirectory warnings short (03-08). The map warnings avoid it by leaving out the plugin root.
+- **REQUIREMENTS.md and ROADMAP.md (the orchestrator)**: CMD-01..05 are each declared by more than one plan (CMD-02 by 03-03, 03-06, and 03-07; CMD-05 by 03-05 and 03-06). Mark them after this plan's SUMMARY lands.
+- **Commit trailers (the parent)**: 03-02's commits end with `Claude-Session: https://claude.ai/code/session_01EDUMG8nFuockQFTkJixpie` instead of `session_01EDUMG5ARYqF6oZYKmj6oB3` (P3-DC-13 item 6). History is not rewritten.
+- **`.planning/DUBIOUS-CHOICES.md` (the parent)**: fold `.planning/phases/03-slash-commands/DUBIOUS-CHOICES.md` (P3-DC-01..20) into the root file, plus this plan's own choices (below, as a P3-DC-21 entry) and the plan choices that the phase log does not hold yet (the last list of group 9).
+- **`.planning/PROJECT.md` (the parent)**: the thirteen D-CF3 rows above, after D-CF2-14. Add a "Validated" line: "✓ Bridged slash commands have behavioral tests: Pi lists each command as `/<plugin>:<name>` with Claude Code's description fallback, a typed command fills its arguments, `${CLAUDE_*}` variables, and `!` commands as Claude Code does and reports the fields Pi cannot honor, declared files, marketplace-entry paths, and object maps install, a project command runs only when this machine recorded its install, and disable, uninstall, update, and enable change what a new session offers; the divergences are D-CF3-01..13 -- component-features Phase 3, 2026-11-01 (CMD-01..05)." Add a "Last updated" footer for Phase 3, and append the three gap sections to the D-CF2-10 draft (Decision records, gap report additions above). D-CF2-10's outcome stays "Pending (user files)".
+
+### 8. `.agents/skills/claude-code-compat-research`
+
+In `SKILL.md`, "Sandboxed probes", add after the paragraph that starts "Scrub the ambient environment":
+
+```markdown
+Run every probe inside a network namespace that has only loopback, for example `unshare -rn`, and point the binary at a local HTTP stub with a dummy key. A scrubbed environment and a throwaway `HOME` do not stop the binary from calling its built-in API address: Claude Code 2.1.316 fetched `https://api.anthropic.com/api/claude_code/policy_limits` under `env -i` and ignored `ANTHROPIC_BASE_URL` for that call. Start inside the namespace, not after the first networked run.
+```
+
+Source: P3-DC-02 and `03-UPSTREAM-EVIDENCE.md` ("Isolation gap"). The Phase 3 research re-ran its core probes in `unshare -rn` with identical results.
+
+### 9. Non-owned test edits and the plans' dubious choices
+
+Non-owned test edits made by this phase (each limited by its plan's `git diff` criterion):
+
+| Plan | File | Scope (`git diff <plan base>..<plan head> -- <file>`) |
+| --- | --- | --- |
+| 03-03 | `test/index.test.ts` | `CommandInvocationListener` may return a Promise; `LoadedExtension` and the `loadExtension` return object expose `pi`; the D-CF1-01 case stubs `pi.getCommands()` to `[]` once and keeps its `{ action: "continue" }` assertion. Base `0ab69e5`. `index.ts` unchanged. |
+| 03-06 | `test/orchestrators/marketplace/shared.test.ts` (plan-listed) | the WR-04 case's ledger setup moved into `seedUnknownProjectLedger(cwd)`; its expected value adds `dropped.commands` (`["sample-command"]`) and the commands warning; one new case for a commands-only record. Base `1c40e4f`. |
+| 03-08 | `test/architecture/declared-component-path-overlap.test.ts` (unpaired) | one expected discovered command gains `kind: "file"`, because `DiscoveredCommand` is a union. Base `f7fcf84`. |
+
+The phase's other test edits are in the pairs of the files it owns or edits in their commands arms (`test/bridges/commands/**`, `test/orchestrators/command-invocation.test.ts`, `test/edge/command-invocation.test.ts`, `test/domain/component-paths.test.ts`, `test/domain/resolver-types.test.ts`, `test/orchestrators/plugin/info.test.ts`). Measured with the phase-files script over the eight executor merges and the first-parent commits since `735b9c2`, leaving out the milestone merge `bf0b58f`.
+
+Each plan's dubious choices are logged in the phase file `DUBIOUS-CHOICES.md`: 03-01 as P3-DC-12, 03-02 as P3-DC-13, 03-03 as P3-DC-14, 03-04 as P3-DC-15, 03-05 as P3-DC-16, 03-06 as P3-DC-17, 03-07 as P3-DC-18, 03-08 as P3-DC-19, and the orchestrator's milestone merge and clone fix as P3-DC-20. These plan choices are in the plan SUMMARYs but not yet in the phase log, so the parent folds them in too:
+
+- 03-04 item 5: the duplicate warning for a declared file names the file as the place where the losing source lives (`command source "a" in "<root>/other/a.md" ...`).
+- 03-08 item 8: the argument-hint scenario's file sets its own `argument-hint` (`<file hint>`), so the scenario proves the override.
+- 03-08 item 9: the outline row "neither source nor content" also failed before 03-08 (as a not-a-string refusal), so its proof is the negative edit, not a red run.
+- 03-08 item 10: the unavailable outline shows the reason `unsupported source` for all three rows; the unit cases tell the notes apart.
+
+## Performance
+
+- **Duration:** about 50 min
+- **Started:** 2026-11-01T21:05Z (base commit `52806ea`)
+- **Completed:** 2026-11-01T21:55Z
+- **Tasks:** 3 of 3
+- **Files modified:** 1 (this SUMMARY, created)
+- **Baseline:** `BASE=52806eafaaa8baca4817e55154d4cbd69b242e4d`. The phase base (03-01's `BASE`) is `735b9c2d088b9c77fc1472bc0965dbf2d68a61fc`.
+
+## Task Commits
+
+1. **Task 1: Pass the phase gate on the combined tree** - `7421e17` (docs)
+2. **Task 2: Write the D-CF3 decision rows and the Pi gap report additions** - `35f7c5f` (docs)
+3. **Task 3: Collect the parent lines** - the commit that adds this text and completes the frontmatter (docs)
+
+## Files Created/Modified
+
+- `.planning/phases/03-slash-commands/03-09-SUMMARY.md` - the gate record, the thirteen D-CF3 decision rows, the three Pi gap report additions, and the parent lines
+
+## Decisions Made
+
+- **Gate reuse.** `npm run check` is the orchestrator's passing run on `d164a80`. This plan's base adds only a planning document, and this plan adds only this SUMMARY, so no build input differs.
+- **Outcomes.** D-CF3-07 is "Pending (user review, with D-CF2-13)", because it follows D-CF2-13, which waits for user review. D-CF3-13 is "✓ Good", as D-CF2-12 is for Phase 2. The other eleven rows are "-- Locked".
+- **Abort shape.** D-CF3-07's row states that the abort follows D-CF2-13's current reinstall shape, as 03-07 built it.
+
+## Deviations from Plan
+
+### Format adjustment
+
+**1. [Plan criterion versus table style] Decision rows start with the plain ID**
+- **Found during:** Task 2
+- **Issue:** The acceptance grep `^\| D-CF3-(0[1-9]|1[0-3]) ` needs the ID right after the pipe, but PROJECT.md's rows open with `**D-CF...`.
+- **Fix:** Each row starts `| D-CF3-NN (component-features, ...): **<decision>**.` The table's lead sentence tells the parent to move the opening `**` in front of the ID when it pastes.
+- **Committed in:** `35f7c5f`
+
+No product, test, or frozen file changed. No gate fix was needed.
+
+**Total deviations:** 1 (format). **Impact:** none on content.
+
+## Issues Encountered
+
+- The worktree guard refuses shell commands that compute values at runtime or chain `git` in compound forms. Every npm and npx run went through a scratch wrapper (`exec-03-09/run.sh`), and the phase-files listing through `exec-03-09/phase-files.sh`, which uses `git -C <worktree>` only.
+- Inside the worktree the commit hook prints "(no files to check)" for `.planning/` files, as expected. This plan commits no build input.
+
+## Known Stubs
+
+None.
+
+## Threat Flags
+
+None -- no security-relevant surface outside the plan's `<threat_model>` was introduced.
+
+T-03-28 is mitigated: the gap report additions are drafted here only and were not posted. T-03-29 holds: no gate fix was made, so no test was weakened, skipped, or loosened.
+
+## Dubious Choices
+
+This plan's own choices (a P3-DC-21 entry for the parent):
+
+1. **Rows start with the plain ID**, to satisfy the plan's row count, so a paste needs one small style edit (Deviations).
+2. **`npm run check` was reused, not run again.** AGENTS.md allows it for the same inputs, and the orchestrator's brief asked for it. A reviewer who wants a fresh full run on this exact commit must run it.
+3. **Temporary measurement edits in files this phase may not edit.** The DC-13 measurement deleted two keys from `.fallowrc.json`, and the marker measurement deleted the markers in `bridges/skills/stage.ts` (Phase 2) and `bridges/agents/stage.ts` (Phase 4). Each was restored with `git checkout -- <file>` right after the run and never staged.
+4. **The gap report proposals are this plan's suggestions** (a `model-invocable` opt-in, a frontmatter `name` for templates, an `expand: false` member on `transform`), and so is the widened issue title.
+5. **D-CF3-07 is marked Pending** because D-CF2-13 is. The parent might lock it with D-CF2-13 or on its own.
+6. **An extra BACKLOG entry, CMDSKILLMD-01**, beyond the six the plan lists.
+7. **The CHANGELOG lines add a marketplace-entry line beside the Phase 1 "declared path replaces" line** instead of rewriting that line, because the Phase 1 line stays true for `plugin.json`, agents, and workflows.
+8. **`npm run test:modules` reports no counts**, because the project's quiet reporter prints only failures. The exit status is the evidence.
+
+The plans' dubious choices are in the phase log as P3-DC-12 through P3-DC-19, and the orchestrator's as P3-DC-01, P3-DC-02, P3-DC-09 through P3-DC-11, and P3-DC-20. The plan choices that the log does not hold yet are listed at the end of Parent lines, group 9.
+
+## Next Phase Readiness
+
+- Phase complete. The parent applies the decision rows, the gap report additions, and the parent lines at merge, and the user decides whether to file the Pi gap report.
+- Phase verification can read CMD-01..05's evidence from the eight plan SUMMARYs and the gate record above.
+
+## Self-Check: PASSED
+
+- FOUND: `.planning/phases/03-slash-commands/03-09-SUMMARY.md`
+- FOUND commits on this branch: `7421e17`, `35f7c5f` (ancestors of HEAD)
+- Task 1: every command exits 0, and the dry run lists `listing`, `frontmatter`, `invocation`, `manifest-forms`, `lifecycle`, and `project-provenance`
+- Task 2: `grep -cE '^\| D-CF3-(0[1-9]|1[0-3]) '` prints 13, and the gap section has three subsections (4, 5, 6)
+- Task 3: Parent lines has the nine groups, and `git diff --stat 52806ea..HEAD -- CHANGELOG.md README.md README.es.md .planning/BACKLOG.md .planning/PROJECT.md docs .planning/codebase` prints nothing
+
+---
+*Phase: 03-slash-commands*
+*Completed: 2026-11-01*
