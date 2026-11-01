@@ -7,7 +7,10 @@
  * named `<plugin>:<meta.name>`, beside its own commands, which hold no colon.
  * The listing steps read the registry probe's report, which the shared
  * listing `When` keeps on the world. A command the engine refuses shows its
- * notice before Pi answers, so the no-run `When` waits for nothing more.
+ * notice before Pi answers, so the no-run `When` waits for nothing more. A
+ * command that starts a run shows its start notice before Pi answers, and the
+ * engine reports a delivery problem before the progress entry that ends the
+ * run, so the run `When` holds every notice of the run too.
  */
 
 import assert from "node:assert/strict";
@@ -18,6 +21,7 @@ import { resolveCompanion } from "../../lib/companions.ts";
 import { expandTokens, projectTokens } from "../../lib/run-tokens.ts";
 import { progressOf, sendWorkflowCommand } from "../../lib/workflow-files.ts";
 
+import type { RpcRecord } from "../../lib/pi-process.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
 
 // The commit hook's `fix-unicode-dashes` rewrites this character to `--` in
@@ -42,6 +46,35 @@ async function workflowCommandRows(world: ScenarioWorld): Promise<string[][]> {
     projectTokens("command", `/${name}`, world.tokens),
     projectTokens("description", description ?? "", world.tokens),
   ]);
+}
+
+// The run that the progress entry in `record` belongs to, or undefined for
+// any other record.
+function runIdOf(record: RpcRecord): string | undefined {
+  const runId = progressOf(record)?.runId;
+  return typeof runId === "string" ? runId : undefined;
+}
+
+// `message` with each of `runIds` shown as `{run id}` and `sessionId` shown
+// as `{session id}`.
+function namedAsTokens(message: string, runIds: readonly string[], sessionId: string): string {
+  return runIds.reduce(
+    (text, runId) => text.replaceAll(runId, "{run id}"),
+    message.replaceAll(sessionId, "{session id}"),
+  );
+}
+
+// The id of Pi's current session, as its RPC state reports it.
+async function currentSessionId(world: ScenarioWorld): Promise<string> {
+  const { response } = await world.pi.request({ type: "get_state" });
+  const { data } = response;
+  const sessionId =
+    typeof data === "object" && data !== null && "sessionId" in data ? data.sessionId : undefined;
+  if (typeof sessionId !== "string" || sessionId === "") {
+    assert.fail(`pi reported no session id: ${JSON.stringify(response)}`);
+  }
+
+  return sessionId;
 }
 
 // A run appends its first progress entry before Pi answers the command, so a
@@ -93,15 +126,30 @@ Then(
   },
 );
 
-// Every notice of the last workflow command, in Pi's order.
-Then("the workflow engine shows these notices:", function (this: ScenarioWorld, table: DataTable) {
-  const notices = this.requireTurn().records.filter(
-    (record) => record.type === "extension_ui_request" && record.method === "notify",
-  );
-  const rows = notices.map(({ notifyType, message }) => [
-    String(notifyType),
-    projectTokens("message", String(message).replaceAll(EM_DASH, "--"), this.tokens),
-  ]);
-  assert.deepStrictEqual([["severity", "message"], ...rows], table.raw());
-  this.markTurnCompared();
-});
+// Every notice of the last workflow command, in Pi's order. The engine names
+// the run a command started and Pi's session in its notices, and both change
+// every run, so the step shows them as `{run id}` and `{session id}`. The run
+// is the one the turn's progress entries name, and the session is the one
+// Pi's RPC state reports, so a notice that names another run or session
+// fails.
+Then(
+  "the workflow engine shows these notices:",
+  async function (this: ScenarioWorld, table: DataTable): Promise<void> {
+    const { records } = this.requireTurn();
+    const runIds = [...new Set(records.flatMap((record) => runIdOf(record) ?? []))];
+    const sessionId = await currentSessionId(this);
+    const notices = records.filter(
+      (record) => record.type === "extension_ui_request" && record.method === "notify",
+    );
+    const rows = notices.map(({ notifyType, message }) => [
+      String(notifyType),
+      projectTokens(
+        "message",
+        namedAsTokens(String(message), runIds, sessionId).replaceAll(EM_DASH, "--"),
+        this.tokens,
+      ),
+    ]);
+    assert.deepStrictEqual([["severity", "message"], ...rows], table.raw());
+    this.markTurnCompared();
+  },
+);

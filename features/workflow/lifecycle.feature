@@ -63,6 +63,10 @@ Feature: Workflow lifecycle
     Given the user has started a new pi session
     When the user runs the workflow command "/demo:hello"
     Then the workflow run ends with the status "completed" and the result "Hello from demo."
+    Then the workflow engine shows these notices:
+      | severity | message                                                                                                                                         |
+      | info     | /demo:hello running in the background ({run id}) -- check progress with /workflows status {run id}; the result is posted here when it finishes. |
+      | warning  | [workflow-delivery] delivery for {run id} deferred: endpoint for session {session id} has no thenable send function                             |
 
   Scenario: Updating a plugin runs the new script of its workflow at once, because the engine reads the script when the command runs
     Given the marketplace "fixtures" offers these plugins:
@@ -77,6 +81,10 @@ Feature: Workflow lifecycle
     Given the user has run "/claude:plugin update demo@fixtures --scope user"
     When the user runs the workflow command "/demo:hello"
     Then the workflow run ends with the status "completed" and the result "Hello 2."
+    Then the workflow engine shows these notices:
+      | severity | message                                                                                                                                         |
+      | info     | /demo:hello running in the background ({run id}) -- check progress with /workflows status {run id}; the result is posted here when it finishes. |
+      | warning  | [workflow-delivery] delivery for {run id} deferred: endpoint for session {session id} has no thenable send function                             |
 
   Scenario: The session that ran the update still lists the old description, because pi cannot change a command it already offers
     Given the marketplace "fixtures" offers these plugins:
