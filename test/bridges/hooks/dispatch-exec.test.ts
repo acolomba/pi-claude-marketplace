@@ -1758,7 +1758,7 @@ test("keeps the exit-2 block of a hook with onFailure block", async (t) => {
   );
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: "denied" });
+  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: "denied", fromStderr: true });
 });
 
 test("contains an EPIPE from stdin after registering its error listener", async (t) => {

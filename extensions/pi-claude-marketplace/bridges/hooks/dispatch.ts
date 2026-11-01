@@ -1,7 +1,7 @@
 // bridges/hooks/dispatch.ts
 //
 // Composite-handler bodies for the hooks bridge (D-59-01 / D-59-04 /
-// D-60-02 / D-60-03 / DISP-01 / DISP-03 / DISP-04 / OBS-01).
+// D-60-03 / D-CF5-09 / D-CF5-10 / D-CF5-12 / DISP-01 / DISP-03 / OBS-01).
 //
 // Two exported factories:
 //
@@ -9,36 +9,36 @@
 //     registered on six of the seven Pi events (session_start,
 //     session_shutdown, session_before_compact, session_compact, input,
 //     tool_call). Each closure: epoch-checks, looks up the bucket for
-//     `claudeEvent`, applies the per-event matcher-fires predicate, runs
-//     the D-60-02 reducer over `await executor(...)` calls, then
+//     `claudeEvent`, runs the matching hooks and folds their outcomes, then
 //     hands the folded `HookExecResult` to the per-Pi-event adapter
 //     (D-60-03) which converts it to the Pi-side handler return shape.
 //
 //   - toolResultCompositeHandler(capturedEpoch) returns the closure
 //     registered on `tool_result`. ONE handler, TWO buckets: the body
 //     reads `event.isError` once and routes to PostToolUseFailure or
-//     PostToolUse (D-59-01 / DISP-01) BEFORE the reducer loop runs.
+//     PostToolUse (D-59-01 / DISP-01) before any hook runs.
 //
-// D-60-02 reducer semantics:
-//   - first-block-wins: on `kind: "block"`, finalResult is captured and
-//     the bucket short-circuits -- subsequent entries' executors are NOT
-//     invoked.
-//   - terminal stop: on `kind: "stop"`, finalResult is captured and the
-//     bucket short-circuits.
-//   - mutate composition: on `kind: "mutate"`, applyMutationInPlace
-//     mutates the Pi event in place so the NEXT entry's executor (which
-//     re-translates) sees the post-mutation state. finalResult stays at
-//     the prior noop / mutate.
-//   - noop: continue to the next entry without changing finalResult.
-//   - the switch lists every HookExecResult kind and has no default arm, so
-//     a kind added later is a lint and type error here (NFR-7).
+// Running a bucket, as Claude Code 2.1.316 runs an event's hooks:
+//   - filter: the per-event matcher, then the entry's `if` (MATCH-03).
+//   - dedupe (D-CF5-10): one hook per upstream key, rooted at the plugin's
+//     `resolvedSource`; a copy keeps the first copy's position and takes the
+//     last copy's handler fields. The same hook in two plugins runs twice.
+//   - parallel run (D-CF5-09, superseding DISP-04's sequential fan-out):
+//     every hook starts on the same event, and each executor serializes its
+//     stdin before its first await, so all of them read one snapshot.
+//   - fold in routing order, whatever order the hooks finish in: any `stop`
+//     wins (the first supplies the reason); else the first `block`; else the
+//     first `ask`; else an allow or a plain mutation, with the last input
+//     rewrite in routing order. Every hook's `additionalContext` is joined in
+//     routing order, and every hook's outcome is kept, with its
+//     `systemMessage`, for the output carriers.
+//   - a call that pi-mcp-adapter's `mcp` proxy makes in call mode runs no
+//     hook: its nested call fires them under the real tool name (D-CF5-12).
 //
 // All handlers short-circuit when capturedEpoch != currentEpoch() so a
 // stale closure from a prior load cannot fire against the live routing
-// tables (DISP-03 zombie-defense belt-and-suspenders). Sequential
-// awaited fan-out preserved (DISP-04) -- early-exit on block is
-// compatible because DISP-04 pins sequential ordering, not
-// every-entry-must-run.
+// tables (DISP-03 zombie-defense belt-and-suspenders), and a run whose
+// generation changed while its hooks ran folds to noop.
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
 
@@ -48,11 +48,11 @@ import {
   adaptObservationResultForEvent,
   adaptToolCallResult,
   adaptToolResultResult,
-  applyMutationInPlace,
 } from "./event-adapters.ts";
 import { ifFires } from "./if-field/index.ts";
 import { compactTrigger } from "./payloads/compact-trigger.ts";
 
+import type { HookAdapterContext } from "./event-adapters.ts";
 import type { HookExecResult } from "./exec-result.ts";
 import type { ClaudeSessionEndEvent } from "./payloads/session-end.ts";
 import type { ClaudeSessionStartEvent } from "./payloads/session-start.ts";
@@ -142,124 +142,98 @@ export function matcherFiresOnClosedSetValue(entry: RoutingEntry, value: string)
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// D-60-02 reducer
+// Running a bucket: filter, dedupe, parallel run (D-CF5-09 / D-CF5-10)
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * D-60-02: fold a sequence of HookExecResult outcomes across the
- * routing bucket. Returns the final reduced outcome.
- *
- * Loop semantics:
- *   - `block`     -> capture as finalResult; break (first-block-wins).
- *   - `stop`      -> capture as finalResult; break (terminal).
- *   - `mutate`    -> applyMutationInPlace mutates `event` so the NEXT
- *                    entry's executor sees the post-mutation state;
- *                    finalResult stays at the prior outcome (a mutate is
- *                    not, by itself, a terminal Pi-side return).
- *   - `noop`      -> continue.
- *
- * Caller controls bucket selection + per-entry matcher filter; this
- * reducer just walks the pre-filtered entry list.
- */
-interface ReducedBucket {
-  readonly result: HookExecResult;
-  /**
-   * The last entry that produced a `mutate` or `block`/`stop` result.
-   * Carried so the per-event adapter at exit can attribute the result back
-   * to the contributing plugin (OBS-01 telemetry, SessionStart
-   * additionalContext buffer provenance).
-   */
-  readonly attributedTo: RoutingEntry | undefined;
-}
-
-async function reduceBucket(
-  runtime: HooksRuntime,
-  bucket: readonly RoutingEntry[],
-  event: unknown,
-  ctx: ExtensionContext,
-  pi: ExtensionAPI | undefined,
-  executor: HookExecutor,
-  matcherFires: (entry: RoutingEntry) => boolean,
-): Promise<ReducedBucket> {
-  const capturedGeneration = runtime.currentGeneration();
-  let finalResult: HookExecResult = { kind: "noop" };
-  let attributedTo: RoutingEntry | undefined;
-  for (const entry of bucket) {
-    if (!matcherFires(entry)) {
-      continue;
-    }
-
-    // MATCH-03 / D-61-02: AND composition with the group-level matcher.
-    // if-no-match -> continue (skip entry), NOT block.
-    if (!ifFires(entry.ifPredicate, event, ctx, entry.claudeEvent)) {
-      continue;
-    }
-
-    // eslint-disable-next-line no-await-in-loop -- a block or stop ends the bucket; mutations feed later hooks
-    const r = await executor(entry, event, ctx, pi, runtime);
-    if (capturedGeneration !== runtime.currentGeneration()) {
-      return { result: { kind: "noop" }, attributedTo: undefined };
-    }
-
-    switch (r.kind) {
-      case "block":
-      case "stop":
-        // Both terminal arms: the per-event adapter at exit decides
-        // whether to surface the kind on a Pi-side return slot (e.g.
-        // tool_call's deny) or to debug-log only (observation events).
-        finalResult = r;
-        attributedTo = entry;
-        return { result: finalResult, attributedTo };
-      case "mutate":
-        applyMutationInPlace(event, r);
-        // D-60-03: mutate also becomes the running finalResult so the
-        // per-event adapter at exit can consume it. The Input adapter
-        // converts `mutate.additionalContext` into `{ action:
-        // "transform", text }` (the Pi-side return value for the input
-        // event family) -- this requires the reducer to carry the
-        // mutate forward, not drop it after the in-place patch. For
-        // tool_call / tool_result, the adapter's mutate arm is a
-        // double-counting no-op against the already-mutated event
-        // (applyMutationInPlace is idempotent on identical patches).
-        finalResult = r;
-        attributedTo = entry;
-        continue;
-      case "noop":
-        continue;
-    }
-  }
-
-  return { result: finalResult, attributedTo };
-}
-
-/**
- * One collected outcome from `collectBucketOutcomes`: the entry that ran and
- * the `HookExecResult` it produced.
+ * One hook's outcome: the entry that ran and the `HookExecResult` it
+ * produced.
  */
 export interface BucketOutcome {
   readonly entry: RoutingEntry;
   readonly result: HookExecResult;
 }
 
+// D-CF5-10 / E10: the key Claude Code dedupes hooks by (its root, type,
+// shell, command, arguments, and `if`), rooted at the plugin root, so the
+// same hook in two plugins stays two hooks. A command hook always has a
+// command, so an absent one needs no default of its own.
+function hookIdentity(entry: RoutingEntry): string {
+  const decl = entry.handlerDecl;
+  return JSON.stringify([
+    entry.resolvedSource,
+    decl.type,
+    decl.shell ?? "bash",
+    decl.command,
+    decl.args ?? null,
+    decl.if ?? "",
+  ]);
+}
+
 /**
- * Run EVERY matching entry in the bucket and collect each entry's outcome
- * WITHOUT the first-block/stop short-circuit `reduceBucket` applies. The
- * settle Stop path needs every hook's outcome to honor D-88-05 aggregate
- * precedence: any `continue:false` (stop) among the group suppresses re-entry
- * regardless of another hook's block, which a short-circuited reduce cannot
- * express (the short-circuit would return the first block and never observe a
- * later stop).
+ * D-CF5-10: one entry per hook key. A Map keeps a key at the position it was
+ * first set, so a copy stays at the first copy's position, with the handler
+ * fields of the last copy.
+ */
+function dedupeHooks(entries: readonly RoutingEntry[]): RoutingEntry[] {
+  const hooks = new Map<string, RoutingEntry>();
+  for (const entry of entries) {
+    const key = hookIdentity(entry);
+    const first = hooks.get(key);
+    hooks.set(key, first === undefined ? entry : { ...first, handlerDecl: entry.handlerDecl });
+  }
+
+  return [...hooks.values()];
+}
+
+// The entries of `bucket` that run for `event`: the matcher and the `if`
+// both fire (MATCH-03 / D-61-02: an `if` that does not match skips the entry,
+// it does not block), then one entry per hook.
+function matchingHooks(
+  bucket: readonly RoutingEntry[],
+  event: unknown,
+  ctx: ExtensionContext,
+  matcherFires: (entry: RoutingEntry) => boolean,
+): RoutingEntry[] {
+  return dedupeHooks(
+    bucket.filter(
+      (entry) => matcherFires(entry) && ifFires(entry.ifPredicate, event, ctx, entry.claudeEvent),
+    ),
+  );
+}
+
+/**
+ * D-CF5-09: run every hook at once and keep the outcomes in routing order,
+ * or `undefined` when the generation changed while they ran.
+ */
+async function runHooks(
+  runtime: HooksRuntime,
+  hooks: readonly RoutingEntry[],
+  run: (entry: RoutingEntry) => Promise<HookExecResult>,
+): Promise<BucketOutcome[] | undefined> {
+  const capturedGeneration = runtime.currentGeneration();
+  const outcomes = await Promise.all(
+    hooks.map(async (entry) => ({ entry, result: await run(entry) })),
+  );
+  return capturedGeneration === runtime.currentGeneration() ? outcomes : undefined;
+}
+
+/**
+ * Run every matching hook of the bucket in parallel and return each one's
+ * outcome in routing order, with no fold. The settle Stop path needs every
+ * hook's outcome to honor D-88-05 aggregate precedence: any `continue:false`
+ * (stop) among the group suppresses re-entry regardless of another hook's
+ * block. A generation change during the run returns no outcome.
  *
  * A hook declaring `asyncRewake:true` cannot yield a SYNCHRONOUS decision --
  * `dispatchHookExec` routes it to the fire-and-forget spawn and returns `noop`
  * before a decision exists -- so running it here would silently drop its
  * block/stop desire. Such an entry is degraded to `noop` with a `hookDebugLog`
  * (rather than a pointless detached spawn) so the dropped decision is
- * observable. Mutations are NOT applied in place: the settle
- * synthetic event carries no mutable input/output surface.
+ * observable.
  *
- * Takes the same injected executor as `reduceBucket`, so one spy drives both
- * paths.
+ * Takes the same injected executor as the composite handlers, so one spy
+ * drives both paths.
  */
 export async function collectBucketOutcomes(
   runtime: HooksRuntime,
@@ -270,35 +244,186 @@ export async function collectBucketOutcomes(
   matcherFires: (entry: RoutingEntry) => boolean,
   executor: HookExecutor = dispatchHookExec,
 ): Promise<BucketOutcome[]> {
-  const capturedGeneration = runtime.currentGeneration();
-  const outcomes: BucketOutcome[] = [];
-  for (const entry of bucket) {
-    if (!matcherFires(entry)) {
-      continue;
+  const hooks = matchingHooks(bucket, event, ctx, matcherFires);
+  const outcomes = await runHooks(runtime, hooks, async (entry) => {
+    if (entry.handlerDecl.asyncRewake !== true) {
+      return executor(entry, event, ctx, pi, runtime);
     }
 
-    if (!ifFires(entry.ifPredicate, event, ctx, entry.claudeEvent)) {
-      continue;
-    }
+    hookDebugLog(
+      `collectBucketOutcomes: asyncRewake entry cannot yield a synchronous decision (${entry.pluginId}/${entry.claudeEvent}); degrading to noop`,
+    );
+    return { kind: "noop" };
+  });
+  return outcomes ?? [];
+}
 
-    if (entry.handlerDecl.asyncRewake === true) {
-      hookDebugLog(
-        `collectBucketOutcomes: asyncRewake entry cannot yield a synchronous decision (${entry.pluginId}/${entry.claudeEvent}); degrading to noop`,
-      );
-      outcomes.push({ entry, result: { kind: "noop" } });
-      continue;
-    }
+// ──────────────────────────────────────────────────────────────────────────
+// Routing-order fold (D-CF5-09 / D-CF5-25)
+// ──────────────────────────────────────────────────────────────────────────
 
-    // eslint-disable-next-line no-await-in-loop -- hooks run in bucket order; a generation change stops the rest
-    const result = await executor(entry, event, ctx, pi, runtime);
-    if (capturedGeneration !== runtime.currentGeneration()) {
-      return outcomes;
-    }
+/**
+ * The fold of a bucket's outcomes: the decision the adapters apply, the
+ * entry it is attributed to (the deciding hook, or the last mutating one;
+ * `undefined` for a fold of noops), and every hook's outcome in routing
+ * order, which the output carriers read.
+ */
+interface FoldedBucket {
+  readonly result: HookExecResult;
+  readonly attributedTo: RoutingEntry | undefined;
+  readonly outcomes: readonly BucketOutcome[];
+}
 
-    outcomes.push({ entry, result });
+const NOOP_FOLD: FoldedBucket = { result: { kind: "noop" }, attributedTo: undefined, outcomes: [] };
+
+type MutateResult = Extract<HookExecResult, { kind: "mutate" }>;
+
+interface MutateOutcome {
+  readonly entry: RoutingEntry;
+  readonly result: MutateResult;
+}
+
+// Every hook's non-empty `additionalContext`, joined in routing order, or
+// `undefined` when no hook gave one.
+function joinedContext(outcomes: readonly BucketOutcome[]): string | undefined {
+  const contexts = outcomes.flatMap(({ result }) =>
+    result.additionalContext === undefined || result.additionalContext === ""
+      ? []
+      : [result.additionalContext],
+  );
+  return contexts.length === 0 ? undefined : contexts.join("\n");
+}
+
+function withContext(result: HookExecResult, context: string | undefined): HookExecResult {
+  return context === undefined ? result : { ...result, additionalContext: context };
+}
+
+// The last value a mutation in routing order sets for `field`, or `undefined`.
+function lastSet(
+  mutations: readonly MutateOutcome[],
+  field: "updatedInput" | "updatedToolOutput",
+): unknown {
+  return mutations.reduce<unknown>(
+    (last, { result }) => (result[field] === undefined ? last : result[field]),
+    undefined,
+  );
+}
+
+// The permission decision of a fold of mutations: the first `ask` asks, else
+// any `allow` allows, else none.
+function foldedPermission(
+  mutations: readonly MutateOutcome[],
+): Pick<MutateResult, "permissionDecision" | "permissionDecisionReason"> {
+  const ask = mutations.find(({ result }) => result.permissionDecision === "ask")?.result;
+  if (ask !== undefined) {
+    return ask.permissionDecisionReason === undefined
+      ? { permissionDecision: "ask" }
+      : { permissionDecision: "ask", permissionDecisionReason: ask.permissionDecisionReason };
   }
 
-  return outcomes;
+  return mutations.some(({ result }) => result.permissionDecision === "allow")
+    ? { permissionDecision: "allow" }
+    : {};
+}
+
+// The fold of outcomes that neither stop nor block.
+function foldMutations(
+  outcomes: readonly BucketOutcome[],
+  context: string | undefined,
+): FoldedBucket {
+  const mutations = outcomes.flatMap(({ entry, result }) =>
+    result.kind === "mutate" ? [{ entry, result }] : [],
+  );
+  const lastMutation = mutations.at(-1);
+  if (lastMutation === undefined) {
+    return { result: withContext({ kind: "noop" }, context), attributedTo: undefined, outcomes };
+  }
+
+  const result: MutateResult = { kind: "mutate", ...foldedPermission(mutations) };
+  const updatedInput = lastSet(mutations, "updatedInput");
+  if (updatedInput !== undefined) {
+    result.updatedInput = updatedInput;
+  }
+
+  const updatedToolOutput = lastSet(mutations, "updatedToolOutput");
+  if (updatedToolOutput !== undefined) {
+    result.updatedToolOutput = updatedToolOutput;
+  }
+
+  const asking = mutations.find((mutation) => mutation.result.permissionDecision === "ask");
+  return {
+    result: withContext(result, context),
+    attributedTo: (asking ?? lastMutation).entry,
+    outcomes,
+  };
+}
+
+/**
+ * D-CF5-09 / D-CF5-25: fold outcomes in routing order. Any `stop` wins and
+ * the first one supplies its reason; else the first `block` blocks with its
+ * reason; else the mutations fold. The joined context rides the folded
+ * result whichever arm it is.
+ */
+function foldOutcomes(outcomes: readonly BucketOutcome[]): FoldedBucket {
+  const context = joinedContext(outcomes);
+  const decisive =
+    outcomes.find(({ result }) => result.kind === "stop") ??
+    outcomes.find(({ result }) => result.kind === "block");
+  if (decisive !== undefined) {
+    return {
+      result: withContext(decisive.result, context),
+      attributedTo: decisive.entry,
+      outcomes,
+    };
+  }
+
+  return foldMutations(outcomes, context);
+}
+
+// Run the matching hooks of `bucket` for `event` and fold their outcomes.
+async function runAndFold(
+  runtime: HooksRuntime,
+  bucket: readonly RoutingEntry[],
+  event: unknown,
+  ctx: ExtensionContext,
+  pi: ExtensionAPI | undefined,
+  executor: HookExecutor,
+  matcherFires: (entry: RoutingEntry) => boolean,
+): Promise<FoldedBucket> {
+  const hooks = matchingHooks(bucket, event, ctx, matcherFires);
+  const outcomes = await runHooks(runtime, hooks, (entry) =>
+    executor(entry, event, ctx, pi, runtime),
+  );
+  return outcomes === undefined ? NOOP_FOLD : foldOutcomes(outcomes);
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// pi-mcp-adapter's proxy (D-CF5-12)
+// ──────────────────────────────────────────────────────────────────────────
+
+const MCP_PROXY_TOOL = "mcp";
+const MCP_TOOL_PREFIX = "mcp__";
+
+/**
+ * D-CF5-12: a call pi-mcp-adapter's proxy makes in call mode: the tool is
+ * `mcp` or a namespace proxy `mcp__<server>` (a name with no further
+ * `__<tool>` part), the input names a `tool` as a string, and it sets no
+ * `action`. The adapter runs the real tool as a nested Pi call, which fires
+ * the hooks under the real name, so the outer call fires none. A search,
+ * describe, or status call still fires hooks as the proxy tool.
+ */
+function isMcpProxyCall(event: { readonly toolName: string; readonly input: object }): boolean {
+  const { toolName } = event;
+  const proxy =
+    toolName === MCP_PROXY_TOOL ||
+    (toolName.startsWith(MCP_TOOL_PREFIX) &&
+      !toolName.slice(MCP_TOOL_PREFIX.length).includes("__"));
+  if (!proxy) {
+    return false;
+  }
+
+  const { tool, action } = event.input as { readonly tool?: unknown; readonly action?: unknown };
+  return typeof tool === "string" && action === undefined;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -318,7 +443,7 @@ export type CompositeDispatchEvent = Exclude<
 >;
 
 /**
- * D-59-01 / D-60-02 / D-60-03: six-uniform composite handler factory.
+ * D-59-01 / D-60-03: six-uniform composite handler factory.
  *
  * `claudeEvent` constrains which bucket the closure reads and which
  * per-Pi-event adapter narrows the reducer's final result. The runtime
@@ -331,8 +456,8 @@ export type CompositeDispatchEvent = Exclude<
  * `ToolCallEventResult | undefined`; input returns `InputEventResult |
  * undefined`; observation events return `undefined`).
  *
- * `executor` defaults to `dispatchHookExec` and is forwarded straight to
- * `reduceBucket`. `registerHooksBridge` threads its own optional `executor`
+ * `executor` defaults to `dispatchHookExec` and runs each matching hook.
+ * `registerHooksBridge` threads its own optional `executor`
  * into every call here, so a test can register the real bridge against a spy
  * and assert on dispatch without spawning a child (see `HookExecutor`).
  */
@@ -349,24 +474,30 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
     }
 
     const bucket = runtime.getRoutingBucket(claudeEvent);
-    if (bucket.length === 0) {
+    if (bucket.length === 0 || isProxiedToolCall(claudeEvent, event)) {
       return undefined as CompositeReturnFor<E>;
     }
 
-    const reduced = await reduceBucket(runtime, bucket, event, ctx, pi, executor, (entry) =>
+    const folded = await runAndFold(runtime, bucket, event, ctx, pi, executor, (entry) =>
       entryFires(claudeEvent, entry, event),
     );
 
-    return adaptForEvent(runtime, claudeEvent, reduced, event) as CompositeReturnFor<E>;
+    const context = { runtime, ctx, pi, attributedTo: folded.attributedTo };
+    return (await adaptForEvent(
+      claudeEvent,
+      folded.result,
+      event,
+      context,
+    )) as CompositeReturnFor<E>;
   };
 }
 
 /**
- * D-59-01 / D-60-02 / D-60-03: `tool_result` composite handler. Reads
+ * D-59-01 / D-60-03: `tool_result` composite handler. Reads
  * `event.isError` once, picks the PostToolUseFailure bucket on truthy or
- * PostToolUse on falsy/undefined, then runs the D-60-02 reducer over the
- * bucket. DISP-01 (event.isError split) happens BEFORE the reducer loop;
- * DISP-03 epoch check at entry; DISP-04 sequential awaited fan-out.
+ * PostToolUse on falsy/undefined, then runs and folds the bucket's matching
+ * hooks. DISP-01 (event.isError split) happens before any hook runs; DISP-03
+ * epoch check at entry; the call-mode `mcp` proxy runs no hook (D-CF5-12).
  *
  * Returns `ToolResultEventResult | undefined` via
  * `adaptToolResultResult` (D-60-03).
@@ -387,15 +518,20 @@ export function toolResultCompositeHandler(
 
     const claudeEvent: BucketAEvent = event.isError ? "PostToolUseFailure" : "PostToolUse";
     const bucket = runtime.getRoutingBucket(claudeEvent);
-    if (bucket.length === 0) {
+    if (bucket.length === 0 || isMcpProxyCall(event)) {
       return undefined;
     }
 
-    const reduced = await reduceBucket(runtime, bucket, event, ctx, pi, executor, (entry) =>
+    const folded = await runAndFold(runtime, bucket, event, ctx, pi, executor, (entry) =>
       matcherFiresOnToolEvent(entry.matcher, event.toolName),
     );
 
-    return adaptToolResultResult(reduced.result, event);
+    return adaptToolResultResult(folded.result, event, {
+      runtime,
+      ctx,
+      pi,
+      attributedTo: folded.attributedTo,
+    });
   };
 }
 
@@ -404,46 +540,39 @@ export function toolResultCompositeHandler(
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * D-60-03: dispatch the reducer's final HookExecResult to the matching
- * per-Pi-event adapter. Observation events have no Pi-side return slot
- * -- their adapter is invoked for the block/stop debug-log side effect
- * and always returns undefined.
+ * D-60-03: dispatch the folded HookExecResult to the matching per-Pi-event
+ * adapter. Observation events have no Pi-side return slot -- their adapter
+ * is invoked for the SessionStart context buffer and the block/stop
+ * debug-log side effect and always returns undefined.
  */
-function adaptForEvent(
-  runtime: HooksRuntime,
+async function adaptForEvent(
   claudeEvent: CompositeDispatchEvent,
-  reduced: ReducedBucket,
+  result: HookExecResult,
   event: unknown,
-): ToolCallEventResult | InputEventResult | undefined {
+  context: HookAdapterContext,
+): Promise<ToolCallEventResult | InputEventResult | undefined> {
   switch (claudeEvent) {
     case "PreToolUse":
-      return adaptToolCallResult(reduced.result, event as ToolCallEvent);
+      // D-CF5-11: an ask may wait on the user's answer in the terminal.
+      return await adaptToolCallResult(result, event as ToolCallEvent, context);
     case "UserPromptSubmit":
-      return adaptInputResult(reduced.result, event as InputEvent);
+      return adaptInputResult(result, event as InputEvent, context);
     case "SessionStart":
     case "SessionEnd":
     case "PreCompact":
-    case "PostCompact": {
-      // adaptObservationResultForEvent narrows the silent-drop arms by
-      // claudeEvent so a SessionStart mutate.additionalContext can be
-      // captured into event-router.ts's pending buffer (drained by the
-      // before_agent_start handler on the next agent turn).
-      // `attributedTo` carries the routing entry that produced the
-      // mutate (or block/stop) result so the buffer entry carries
-      // scope/marketplace/pluginId provenance instead of a bare string.
-      // Falls back to a synthetic placeholder on a pure-noop bucket --
-      // observation events never reach the SessionStart-mutate path
-      // without `attributedTo` set, so the placeholder is only seen by
-      // the block/stop debug-log path's no-op semantics.
-      const provenance = reduced.attributedTo ?? {
-        scope: "user" as const,
-        marketplace: "",
-        pluginId: "",
-      };
-      adaptObservationResultForEvent(runtime, reduced.result, claudeEvent, provenance);
+    case "PostCompact":
+      adaptObservationResultForEvent(result, claudeEvent, context);
       return undefined;
-    }
   }
+}
+
+// D-CF5-12: a PreToolUse event for a call the `mcp` proxy makes in call mode.
+function isProxiedToolCall(claudeEvent: CompositeDispatchEvent, event: unknown): boolean {
+  if (claudeEvent !== "PreToolUse") {
+    return false;
+  }
+
+  return isMcpProxyCall(event as ToolCallEvent);
 }
 
 // ──────────────────────────────────────────────────────────────────────────

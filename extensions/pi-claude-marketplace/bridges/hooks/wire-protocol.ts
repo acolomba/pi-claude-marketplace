@@ -8,17 +8,23 @@
 // EXEC-03: every diagnostic path here routes through `hookDebugLog`. The
 // parser NEVER throws -- malformed JSON, unrecognized shapes, and
 // signal-kill exit codes all map to `{ kind: "noop" }` so the dispatch
-// reducer cannot crash on bad child output. The permissive default for
-// non-zero / non-2 exits is the v1.13 stance (Research Open Q2); a
-// future security-default revisit is v1.14+ scope.
+// fold cannot crash on bad child output.
 //
-// Wire-protocol branching:
-//   - exit 2          -> block (stderr trimmed as reason)
-//   - exit non-zero   -> noop (debug-log)
+// Wire-protocol branching (D-CF5-11, as Claude Code 2.1.316 reads a hook):
+//   - exit 2          -> block; the reason is the stdout JSON's block or
+//                        deny reason when it prints one, else the trimmed
+//                        stderr, marked `fromStderr`
+//   - exit non-zero   -> the stdout JSON object decides, as on exit 0, when
+//                        stdout is one; else noop (debug-log)
 //   - signal-kill     -> noop (debug-log; `exitCode === null`)
 //   - exit 0 + empty  -> noop
 //   - exit 0 + non-JSON stdout -> noop (debug-log)
 //   - exit 0 + JSON  -> normalize per § 4 (block / mutate / stop / noop)
+//
+// Whatever the decision, a JSON object's top-level `systemMessage` and its
+// `hookSpecificOutput.additionalContext` ride the arm it gives (D-CF5-13,
+// D-CF5-14), and `permissionDecision: "defer"` is ignored (Pi has no
+// deferred-permission flow; D-CF5-11).
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
 
@@ -35,15 +41,11 @@ export function parseHookStdout(
   stderr: string,
 ): HookExecResult {
   if (exitCode === 2) {
-    const reason = stderr.trim();
-    return reason === "" ? { kind: "block" } : { kind: "block", reason };
+    return exitTwoBlock(stdout, stderr);
   }
 
   if (exitCode !== 0) {
-    hookDebugLog(
-      `wire-protocol: non-zero exit (${exitCode === null ? "signal-kill" : String(exitCode)}); defaulting to noop`,
-    );
-    return { kind: "noop" };
+    return nonZeroExitResult(exitCode, stdout);
   }
 
   const trimmed = stdout.trim();
@@ -64,13 +66,98 @@ export function parseHookStdout(
   return normalizeClaudeStdout(parsed);
 }
 
+// The stdout JSON object a hook printed, or `undefined` when stdout is empty,
+// not JSON, or JSON that is not an object. Quiet: the callers log the outcome.
+function stdoutObject(stdout: string): object | undefined {
+  try {
+    const parsed: unknown = JSON.parse(stdout.trim());
+    return parsed !== null && typeof parsed === "object" ? parsed : undefined;
+  } catch {
+    // Not JSON: the caller falls back to stderr or to noop.
+    return undefined;
+  }
+}
+
+/**
+ * D-CF5-11: exit 2 blocks. The reason is the block or deny reason of the
+ * stdout JSON when the hook printed one, else the trimmed stderr, which the
+ * `fromStderr` marker labels so the adapter can show it after the hook's
+ * command, as Claude Code does.
+ */
+function exitTwoBlock(stdout: string, stderr: string): HookExecResult {
+  const parsed = stdoutObject(stdout);
+  const outputs = hookOutputs(parsed);
+  const decided = parsed === undefined ? undefined : decideClaudeStdout(parsed);
+  if (decided?.kind === "block" && decided.reason !== undefined) {
+    return { kind: "block", reason: decided.reason, ...outputs };
+  }
+
+  const reason = stderr.trim();
+  return reason === ""
+    ? { kind: "block", fromStderr: true, ...outputs }
+    : { kind: "block", reason, fromStderr: true, ...outputs };
+}
+
+/**
+ * D-CF5-11 / E15: on an exit other than 0 and 2, Claude Code ignores the exit
+ * code when stdout is a JSON object, and its fields alone decide. A signal
+ * kill, and plain or broken stdout, are a non-blocking error: noop.
+ */
+function nonZeroExitResult(exitCode: number | null, stdout: string): HookExecResult {
+  const exit = exitCode === null ? "signal-kill" : String(exitCode);
+  const parsed = exitCode === null ? undefined : stdoutObject(stdout);
+  if (parsed === undefined) {
+    hookDebugLog(`wire-protocol: non-zero exit (${exit}); defaulting to noop`);
+    return { kind: "noop" };
+  }
+
+  hookDebugLog(`wire-protocol: non-zero exit (${exit}); applying its JSON output`);
+  return normalizeClaudeStdout(parsed);
+}
+
 /**
  * Map a parsed Claude-shaped stdout object to a `HookExecResult` per
- * `docs/research/claude-hook-config-syntax.md § 4`. Unknown root types,
- * unrecognized shapes, and missing fields all fall back to `noop` --
- * the parser is permissive by design (D-60-01 v1.13 stance).
+ * `docs/research/claude-hook-config-syntax.md § 4`: the decision, with the
+ * hook's outputs on whichever arm the decision gives.
  */
 function normalizeClaudeStdout(parsed: unknown): HookExecResult {
+  return { ...decideClaudeStdout(parsed), ...hookOutputs(parsed) };
+}
+
+/**
+ * D-CF5-13 / D-CF5-14: the outputs a hook prints whatever it decides, a
+ * top-level string `systemMessage` and a string
+ * `hookSpecificOutput.additionalContext`. None for stdout that is no object.
+ */
+function hookOutputs(parsed: unknown): { additionalContext?: string; systemMessage?: string } {
+  const outputs: { additionalContext?: string; systemMessage?: string } = {};
+  if (parsed === null || typeof parsed !== "object") {
+    return outputs;
+  }
+
+  const obj = parsed as Record<string, unknown>;
+  if (typeof obj.systemMessage === "string") {
+    outputs.systemMessage = obj.systemMessage;
+  }
+
+  const hso = obj.hookSpecificOutput;
+  const context =
+    hso !== null && typeof hso === "object"
+      ? (hso as Record<string, unknown>).additionalContext
+      : undefined;
+  if (typeof context === "string") {
+    outputs.additionalContext = context;
+  }
+
+  return outputs;
+}
+
+/**
+ * The decision of a parsed Claude-shaped stdout object. Unknown root types,
+ * unrecognized shapes, and missing fields all fall back to `noop` -- the
+ * parser is permissive by design (D-60-01).
+ */
+function decideClaudeStdout(parsed: unknown): HookExecResult {
   if (parsed === null || typeof parsed !== "object") {
     return { kind: "noop" };
   }
@@ -123,6 +210,11 @@ function matchTopLevelStopOrBlock(obj: Record<string, unknown>): HookExecResult 
  * to the `suppressOutput` / default-noop arms.
  */
 function matchHookSpecificOutput(hso: Record<string, unknown>): HookExecResult | null {
+  if (hso.permissionDecision === "defer") {
+    // D-CF5-11: Pi has no deferred-permission flow, so the decision is ignored.
+    hookDebugLog("wire-protocol: permissionDecision defer ignored (no deferred permission in Pi)");
+  }
+
   if (hso.permissionDecision === "deny") {
     const reason =
       typeof hso.permissionDecisionReason === "string" ? hso.permissionDecisionReason : undefined;

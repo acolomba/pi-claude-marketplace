@@ -1587,7 +1587,10 @@ test("keeps hook routing and command completion state inside each extension-load
   const ownerHookAfterPeerLoad = await owner.toolCall(structuredClone(toolEvent), ownerHookContext);
 
   // assert
-  assert.deepStrictEqual(ownerHookBeforeMutation, { block: true, reason: "owned hook" });
+  assert.deepStrictEqual(ownerHookBeforeMutation, {
+    block: true,
+    reason: "PreToolUse:Bash hook error: owned hook",
+  });
   assert.strictEqual(peerHookResult, undefined);
   assert.deepStrictEqual(ownerCandidates, [
     {
@@ -1596,7 +1599,10 @@ test("keeps hook routing and command completion state inside each extension-load
     },
   ]);
   assert.deepStrictEqual(peerCandidates, []);
-  assert.deepStrictEqual(ownerHookAfterPeerLoad, { block: true, reason: "owned hook" });
+  assert.deepStrictEqual(ownerHookAfterPeerLoad, {
+    block: true,
+    reason: "PreToolUse:Bash hook error: owned hook",
+  });
   assert.deepStrictEqual(owner.notifications, [{ message: "● owned-rows [project] (added)" }]);
   owner.verifyBoundary();
   peer.verifyBoundary();

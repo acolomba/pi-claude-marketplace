@@ -6,314 +6,353 @@ import {
   adaptObservationResultForEvent,
   adaptToolCallResult,
   adaptToolResultResult,
-  applyMutationInPlace,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
+import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
+import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
+import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
+import type { HookAdapterContext } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
+import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type {
+  ExtensionContext,
   InputEvent,
   ToolCallEvent,
   ToolResultEvent,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-describe("applyMutationInPlace", () => {
-  for (const { name, event } of [
-    { name: "null", event: null },
-    { name: "primitive", event: "tool_call" },
-  ] as const) {
-    test(`drops a ${name} event without changing the hook outcome`, () => {
+// The declared command of the hook every block below is attributed to.
+const GUARD_COMMAND = "$" + "{CLAUDE_PLUGIN_ROOT}/hooks/guard.sh";
+
+function guardEntry(): RoutingEntry {
+  return {
+    scope: "project",
+    marketplace: "fixtures",
+    pluginId: "demo",
+    resolvedSource: asAbsolutePluginRoot("/plugins/demo"),
+    claudeEvent: "PreToolUse",
+    matcher: parseMatcher("Bash"),
+    rawMatcher: "Bash",
+    handlerDecl: { type: "command", command: GUARD_COMMAND },
+    declarationIndex: 0,
+    ifPredicate: MATCH_ALL_IF,
+  };
+}
+
+// The adapters read only the context's `mode` and, in a terminal, its
+// confirm dialog, so a context with those two members stands in for Pi's.
+// Without a terminal, reading `ui` fails the case: no dialog may open there.
+function headlessContext(mode: "rpc" | "json" | "print"): ExtensionContext {
+  return {
+    mode,
+    get ui(): ExtensionContext["ui"] {
+      throw new Error("no dialog opens without a terminal");
+    },
+  } as ExtensionContext;
+}
+
+// A terminal context whose confirm dialog answers through `confirm`.
+function terminalContext(confirm: ExtensionContext["ui"]["confirm"]): ExtensionContext {
+  return { mode: "tui", ui: { confirm } } as ExtensionContext;
+}
+
+function adapterContext(attributedTo: RoutingEntry | undefined): HookAdapterContext {
+  return {
+    runtime: createHooksRuntime(),
+    ctx: headlessContext("print"),
+    pi: undefined,
+    attributedTo,
+  };
+}
+
+// A context attributed to an entry of the given plugin, over `runtime`.
+function provenanceContext(
+  runtime: HookAdapterContext["runtime"],
+  provenance: Pick<RoutingEntry, "scope" | "marketplace" | "pluginId">,
+): HookAdapterContext {
+  return { ...adapterContext({ ...guardEntry(), ...provenance }), runtime };
+}
+
+describe("adaptToolCallResult", () => {
+  function bashCall(input: Record<string, unknown>): ToolCallEvent {
+    return { type: "tool_call", toolCallId: "call-bash", toolName: "bash", input };
+  }
+
+  test("returns undefined for noop without changing the complete event", async () => {
+    // arrange
+    const input = { command: "inspect", keep: "original" };
+    const event = bashCall(input);
+
+    // act
+    const adaptation = await adaptToolCallResult(
+      { kind: "noop" },
+      event,
+      adapterContext(guardEntry()),
+    );
+
+    // assert
+    assert.strictEqual(adaptation, undefined);
+    assert.deepStrictEqual(event, bashCall({ command: "inspect", keep: "original" }));
+    assert.strictEqual(event.input, input);
+  });
+
+  for (const { name, hookOutcome, reason } of [
+    {
+      name: "a JSON reason as the hook error",
+      hookOutcome: { kind: "block", reason: "no echo" } as const,
+      reason: "PreToolUse:Bash hook error: no echo",
+    },
+    {
+      name: "an exit-2 stderr reason after the hook's bracketed command",
+      hookOutcome: { kind: "block", reason: "blocked by policy", fromStderr: true } as const,
+      reason: `PreToolUse:Bash hook error: [${GUARD_COMMAND}]: blocked by policy`,
+    },
+    {
+      name: "an onFailure reason without bracketing its command again",
+      hookOutcome: {
+        kind: "block",
+        reason: `[${GUARD_COMMAND}]: failed; blocking because onFailure is "block"\nboom`,
+      } as const,
+      reason: `PreToolUse:Bash hook error: [${GUARD_COMMAND}]: failed; blocking because onFailure is "block"\nboom`,
+    },
+    {
+      name: "Claude Code's default for a decision without a reason",
+      hookOutcome: { kind: "block" } as const,
+      reason: "PreToolUse:Bash hook error: Blocked by hook",
+    },
+    {
+      name: "Claude Code's default for an exit 2 without stderr",
+      hookOutcome: { kind: "block", fromStderr: true } as const,
+      reason: `PreToolUse:Bash hook error: [${GUARD_COMMAND}]: No stderr output`,
+    },
+  ]) {
+    test(`blocks a bash call with ${name} (D-CF5-11)`, async () => {
       // arrange
-      const hookOutcome = {
-        kind: "mutate",
-        updatedInput: { command: "replacement" },
-      } satisfies HookExecResult;
-      let thrown: unknown;
+      const event = bashCall({ command: "echo from-model" });
 
       // act
-      try {
-        applyMutationInPlace(event, hookOutcome);
-      } catch (error) {
-        thrown = error;
-      }
+      const adaptation = await adaptToolCallResult(
+        hookOutcome,
+        event,
+        adapterContext(guardEntry()),
+      );
 
       // assert
-      assert.strictEqual(thrown, undefined);
-      assert.deepStrictEqual(hookOutcome, {
-        kind: "mutate",
-        updatedInput: { command: "replacement" },
-      });
+      assert.deepStrictEqual(adaptation, { block: true, reason });
+      assert.deepStrictEqual(event, bashCall({ command: "echo from-model" }));
     });
   }
 
-  test("leaves an event outside the mutable tool families unchanged", () => {
+  test("names an empty command for a block attributed to no hook", async () => {
     // arrange
     const event = {
-      type: "input",
-      text: "original prompt",
-      source: "interactive",
-    } satisfies InputEvent;
+      type: "tool_call",
+      toolCallId: "call-block-unattributed",
+      toolName: "read",
+      input: { path: "notes.md" },
+    } satisfies ToolCallEvent;
+
+    // act
+    const adaptation = await adaptToolCallResult(
+      { kind: "block", reason: "denied", fromStderr: true },
+      event,
+      adapterContext(undefined),
+    );
+
+    // assert
+    assert.deepStrictEqual(adaptation, {
+      block: true,
+      reason: "PreToolUse:Read hook error: []: denied",
+    });
+  });
+
+  test("replaces the whole input with an allowed rewrite (D-CF5-11)", async () => {
+    // arrange
+    const input = { command: "echo from-model", timeout: 30 };
+    const event = bashCall(input);
     const hookOutcome = {
       kind: "mutate",
-      updatedInput: { text: "hostile prompt" },
-      updatedToolOutput: { isError: true },
+      permissionDecision: "allow",
+      updatedInput: { command: "echo rewritten" },
     } satisfies HookExecResult;
 
     // act
-    applyMutationInPlace(event, hookOutcome);
-
-    // assert
-    assert.deepStrictEqual(event, {
-      type: "input",
-      text: "original prompt",
-      source: "interactive",
-    });
-    assert.deepStrictEqual(hookOutcome, {
-      kind: "mutate",
-      updatedInput: { text: "hostile prompt" },
-      updatedToolOutput: { isError: true },
-    });
-  });
-});
-
-describe("adaptToolCallResult", () => {
-  test("returns undefined for noop without changing the complete event", () => {
-    // arrange
-    const input = { command: "inspect", keep: "original" };
-    const event = {
-      type: "tool_call",
-      toolCallId: "call-noop",
-      toolName: "owner-tool",
-      input,
-    } satisfies ToolCallEvent;
-
-    // act
-    const adaptation = adaptToolCallResult({ kind: "noop" }, event);
+    const adaptation = await adaptToolCallResult(hookOutcome, event, adapterContext(guardEntry()));
 
     // assert
     assert.strictEqual(adaptation, undefined);
-    assert.deepStrictEqual(event, {
-      type: "tool_call",
-      toolCallId: "call-noop",
-      toolName: "owner-tool",
-      input: { command: "inspect", keep: "original" },
-    });
+    assert.deepStrictEqual(event, bashCall({ command: "echo rewritten" }));
     assert.strictEqual(event.input, input);
+    assert.deepStrictEqual(hookOutcome.updatedInput, { command: "echo rewritten" });
   });
 
-  test("blocks with the exact supplied reason", () => {
-    // arrange
-    const event = {
-      type: "tool_call",
-      toolCallId: "call-block-reason",
-      toolName: "owner-tool",
-      input: { command: "inspect" },
-    } satisfies ToolCallEvent;
-
-    // act
-    const adaptation = adaptToolCallResult({ kind: "block", reason: "policy denied" }, event);
-
-    // assert
-    assert.deepStrictEqual(adaptation, { block: true, reason: "policy denied" });
-    assert.deepStrictEqual(event, {
-      type: "tool_call",
-      toolCallId: "call-block-reason",
-      toolName: "owner-tool",
-      input: { command: "inspect" },
-    });
-  });
-
-  test("omits the optional reason key when a block has no reason", () => {
-    // arrange
-    const event = {
-      type: "tool_call",
-      toolCallId: "call-block-absent",
-      toolName: "owner-tool",
-      input: { command: "inspect" },
-    } satisfies ToolCallEvent;
-
-    // act
-    const adaptation = adaptToolCallResult({ kind: "block" }, event);
-
-    // assert
-    assert.deepStrictEqual(adaptation, { block: true });
-    assert.strictEqual(Object.hasOwn(adaptation, "reason"), false);
-    assert.deepStrictEqual(event, {
-      type: "tool_call",
-      toolCallId: "call-block-absent",
-      toolName: "owner-tool",
-      input: { command: "inspect" },
-    });
-  });
-
-  test("patches only the existing tool-call input object", () => {
+  test("drops a __proto__ key from the rewrite without polluting the input's prototype", async () => {
     // arrange
     const input = { command: "inspect", keep: "original" };
-    const event = {
-      type: "tool_call",
-      toolCallId: "call-mutate",
-      toolName: "owner-tool",
-      input,
-    } satisfies ToolCallEvent;
-    const eventIdentity = event;
-    const updatedInput = { command: "replacement", added: "field" };
-    const hookOutcome = { kind: "mutate", updatedInput } satisfies HookExecResult;
-
-    // act
-    const adaptation = adaptToolCallResult(hookOutcome, event);
-
-    // assert
-    assert.strictEqual(adaptation, undefined);
-    assert.deepStrictEqual(event, {
-      type: "tool_call",
-      toolCallId: "call-mutate",
-      toolName: "owner-tool",
-      input: { command: "replacement", keep: "original", added: "field" },
-    });
-    assert.strictEqual(event, eventIdentity);
-    assert.strictEqual(event.input, input);
-    assert.deepStrictEqual(updatedInput, { command: "replacement", added: "field" });
-    assert.deepStrictEqual(hookOutcome, {
-      kind: "mutate",
-      updatedInput: { command: "replacement", added: "field" },
-    });
-  });
-
-  test("drops a __proto__ key from the patch without polluting the input's prototype", () => {
-    // arrange
-    const input = { command: "inspect", keep: "original" };
-    const event = {
-      type: "tool_call",
-      toolCallId: "call-mutate-proto",
-      toolName: "owner-tool",
-      input,
-    } satisfies ToolCallEvent;
+    const event = bashCall(input);
     const updatedInput = JSON.parse(
       '{"__proto__":{"polluted":true},"command":"replacement"}',
     ) as Record<string, unknown>;
-    const hookOutcome = { kind: "mutate", updatedInput } satisfies HookExecResult;
 
     // act
-    const adaptation = adaptToolCallResult(hookOutcome, event);
+    const adaptation = await adaptToolCallResult(
+      { kind: "mutate", updatedInput },
+      event,
+      adapterContext(guardEntry()),
+    );
 
     // assert
     assert.strictEqual(adaptation, undefined);
-    assert.deepStrictEqual(event, {
-      type: "tool_call",
-      toolCallId: "call-mutate-proto",
-      toolName: "owner-tool",
-      input: { command: "replacement", keep: "original" },
-    });
+    assert.deepStrictEqual(event, bashCall({ command: "replacement" }));
     assert.strictEqual(event.input, input);
     assert.strictEqual(Object.getPrototypeOf(event.input), Object.prototype);
     assert.strictEqual(Object.hasOwn(event.input, "__proto__"), false);
     assert.strictEqual((Object.prototype as Record<string, unknown>).polluted, undefined);
   });
 
-  test("leaves input unchanged when updated input is absent", () => {
-    // arrange
-    const input = { command: "inspect", keep: "original" };
-    const event = {
-      type: "tool_call",
-      toolCallId: "call-mutate-absent",
-      toolName: "owner-tool",
-      input,
-    } satisfies ToolCallEvent;
-
-    // act
-    const adaptation = adaptToolCallResult({ kind: "mutate" }, event);
-
-    // assert
-    assert.strictEqual(adaptation, undefined);
-    assert.deepStrictEqual(event, {
-      type: "tool_call",
-      toolCallId: "call-mutate-absent",
-      toolName: "owner-tool",
-      input: { command: "inspect", keep: "original" },
-    });
-    assert.strictEqual(event.input, input);
-  });
-
   for (const { name, updatedInput } of [
-    { name: "null", updatedInput: null },
-    { name: "primitive", updatedInput: "hostile" },
-    { name: "array", updatedInput: ["hostile"] },
+    { name: "an absent", updatedInput: undefined },
+    { name: "a null", updatedInput: null },
+    { name: "a primitive", updatedInput: "hostile" },
+    { name: "an array", updatedInput: ["hostile"] },
   ] as const) {
-    test(`drops a ${name} updated input`, () => {
+    test(`leaves the input unchanged for ${name} rewrite`, async () => {
       // arrange
       const input = { command: "inspect", keep: "original" };
-      const event = {
-        type: "tool_call",
-        toolCallId: `call-mutate-${name}`,
-        toolName: "owner-tool",
-        input,
-      } satisfies ToolCallEvent;
-      const hookOutcome = { kind: "mutate", updatedInput } satisfies HookExecResult;
+      const event = bashCall(input);
+      const hookOutcome: HookExecResult =
+        updatedInput === undefined ? { kind: "mutate" } : { kind: "mutate", updatedInput };
 
       // act
-      const adaptation = adaptToolCallResult(hookOutcome, event);
+      const adaptation = await adaptToolCallResult(
+        hookOutcome,
+        event,
+        adapterContext(guardEntry()),
+      );
 
       // assert
       assert.strictEqual(adaptation, undefined);
-      assert.deepStrictEqual(event, {
-        type: "tool_call",
-        toolCallId: `call-mutate-${name}`,
-        toolName: "owner-tool",
-        input: { command: "inspect", keep: "original" },
-      });
+      assert.deepStrictEqual(event, bashCall({ command: "inspect", keep: "original" }));
       assert.strictEqual(event.input, input);
-      assert.deepStrictEqual(hookOutcome, { kind: "mutate", updatedInput });
     });
   }
 
-  for (const { name, stopOutcome, diagnostic } of [
-    {
-      name: "its supplied reason",
-      stopOutcome: { kind: "stop", stopReason: "halt requested" } as const,
-      diagnostic: "[hooks] adaptToolCall: stop ignored (no Pi return slot); reason=halt requested",
-    },
-    {
-      name: "an absent reason",
-      stopOutcome: { kind: "stop" } as const,
-      diagnostic: "[hooks] adaptToolCall: stop ignored (no Pi return slot); reason=<none>",
-    },
-  ]) {
-    test(`reports a stopped tool call with ${name}`, (t) => {
+  for (const mode of ["rpc", "json", "print"] as const) {
+    test(`blocks an ask with its reason without a dialog in ${mode} mode (D-CF5-11)`, async () => {
       // arrange
-      const debugKey = "PI_CLAUDE_MARKETPLACE_DEBUG";
-      const hadDebug = Object.hasOwn(process.env, debugKey);
-      const previousDebug = process.env[debugKey];
-      t.after(() => {
-        if (hadDebug) {
-          process.env[debugKey] = previousDebug;
-        } else {
-          delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
-        }
-      });
-      process.env[debugKey] = "1";
-      const consoleErrorSpy = t.mock.method(console, "error", () => undefined);
-      const event = {
-        type: "tool_call",
-        toolCallId: "call-stop",
-        toolName: "owner-tool",
-        input: { command: "inspect" },
-      } satisfies ToolCallEvent;
+      const event = bashCall({ command: "echo from-model" });
+      const hookOutcome = {
+        kind: "mutate",
+        permissionDecision: "ask",
+        permissionDecisionReason: "please confirm",
+        updatedInput: { command: "echo rewritten" },
+      } satisfies HookExecResult;
 
       // act
-      const adaptation = adaptToolCallResult(stopOutcome, event);
+      const adaptation = await adaptToolCallResult(hookOutcome, event, {
+        ...adapterContext(guardEntry()),
+        ctx: headlessContext(mode),
+      });
 
       // assert
-      assert.strictEqual(adaptation, undefined);
-      assert.deepStrictEqual(
-        consoleErrorSpy.mock.calls.map(({ arguments: consoleArguments }) => consoleArguments),
-        [[diagnostic]],
-      );
-      assert.deepStrictEqual(event, {
-        type: "tool_call",
-        toolCallId: "call-stop",
-        toolName: "owner-tool",
-        input: { command: "inspect" },
+      assert.deepStrictEqual(adaptation, { block: true, reason: "please confirm" });
+      assert.deepStrictEqual(event, bashCall({ command: "echo from-model" }));
+    });
+  }
+
+  test("blocks an ask without a reason as Pi's default block", async () => {
+    // act
+    const adaptation = await adaptToolCallResult(
+      { kind: "mutate", permissionDecision: "ask" },
+      bashCall({ command: "echo from-model" }),
+      adapterContext(guardEntry()),
+    );
+
+    // assert
+    assert.deepStrictEqual(adaptation, { block: true });
+  });
+
+  for (const { answer, adaptation, input } of [
+    {
+      answer: false,
+      adaptation: { block: true, reason: "please confirm" },
+      input: { command: "echo from-model" },
+    },
+    { answer: true, adaptation: undefined, input: { command: "echo rewritten" } },
+  ]) {
+    test(`asks in the terminal and ${answer ? "allows the rewrite" : "blocks"} when the user answers ${String(answer)}`, async (t) => {
+      // arrange
+      const confirm = t.mock.fn((_title: string, _message: string) => Promise.resolve(answer));
+      const event = bashCall({ command: "echo from-model" });
+      const hookOutcome = {
+        kind: "mutate",
+        permissionDecision: "ask",
+        permissionDecisionReason: "please confirm",
+        updatedInput: { command: "echo rewritten" },
+      } satisfies HookExecResult;
+
+      // act
+      const adapted = await adaptToolCallResult(hookOutcome, event, {
+        ...adapterContext(guardEntry()),
+        ctx: terminalContext(confirm),
       });
+
+      // assert
+      assert.deepStrictEqual(adapted, adaptation);
+      assert.deepStrictEqual(event, bashCall(input));
+      assert.deepStrictEqual(
+        confirm.mock.calls.map((call) => call.arguments),
+        [["PreToolUse:Bash hook asks to allow this call", "please confirm"]],
+      );
+    });
+  }
+
+  test("asks in the terminal with a default question for an ask without a reason", async (t) => {
+    // arrange
+    const confirm = t.mock.fn((_title: string, _message: string) => Promise.resolve(true));
+
+    // act
+    const adapted = await adaptToolCallResult(
+      { kind: "mutate", permissionDecision: "ask" },
+      bashCall({ command: "echo from-model" }),
+      { ...adapterContext(guardEntry()), ctx: terminalContext(confirm) },
+    );
+
+    // assert
+    assert.strictEqual(adapted, undefined);
+    assert.deepStrictEqual(
+      confirm.mock.calls.map((call) => call.arguments),
+      [["PreToolUse:Bash hook asks to allow this call", "Allow this tool call?"]],
+    );
+  });
+
+  for (const { name, stopOutcome, reason } of [
+    {
+      name: "its reason",
+      stopOutcome: { kind: "stop", stopReason: "halt" } as const,
+      reason: "halt",
+    },
+    {
+      name: "the default reason",
+      stopOutcome: { kind: "stop" } as const,
+      reason: "Operation stopped by hook",
+    },
+  ]) {
+    test(`blocks a stopped tool call with ${name} and ends the turn (D-CF5-11)`, async () => {
+      // arrange
+      const event = bashCall({ command: "echo from-model" });
+
+      // act
+      const adaptation = await adaptToolCallResult(
+        stopOutcome,
+        event,
+        adapterContext(guardEntry()),
+      );
+
+      // assert
+      assert.deepStrictEqual(adaptation, { block: true, reason, terminate: true });
+      assert.deepStrictEqual(event, bashCall({ command: "echo from-model" }));
     });
   }
 });
@@ -335,7 +374,7 @@ describe("adaptToolResultResult", () => {
     } satisfies ToolResultEvent;
 
     // act
-    const adaptation = adaptToolResultResult({ kind: "noop" }, event);
+    const adaptation = adaptToolResultResult({ kind: "noop" }, event, adapterContext(guardEntry()));
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -353,49 +392,52 @@ describe("adaptToolResultResult", () => {
     assert.strictEqual(event.details, details);
   });
 
-  test("blocks with an error envelope carrying the supplied reason", () => {
-    // arrange
-    const event = {
-      type: "tool_result",
-      toolCallId: "result-block-reason",
-      toolName: "owner-tool",
-      input: { command: "inspect" },
-      content: [{ type: "text" as const, text: "original output" }],
+  for (const { name, isError, hookOutcome, feedback } of [
+    {
+      name: "a PostToolUse block reason",
       isError: false,
-      details: { exitCode: 0 },
-    } satisfies ToolResultEvent;
-
-    // act
-    const adaptation = adaptToolResultResult({ kind: "block", reason: "policy denied" }, event);
-
-    // assert
-    assert.deepStrictEqual(adaptation, {
+      hookOutcome: { kind: "block", reason: "check the output" } as const,
+      feedback: `PostToolUse:Bash hook blocking error from command: "${GUARD_COMMAND}": check the output`,
+    },
+    {
+      name: "a PostToolUseFailure exit-2 stderr reason",
       isError: true,
-      content: [{ type: "text", text: "policy denied" }],
-    });
-    assert.strictEqual(event.isError, false);
-  });
-
-  test("omits optional content when a block has no reason", () => {
-    // arrange
-    const event = {
-      type: "tool_result",
-      toolCallId: "result-block-absent",
-      toolName: "owner-tool",
-      input: { command: "inspect" },
-      content: [{ type: "text" as const, text: "original output" }],
+      hookOutcome: { kind: "block", reason: "look again", fromStderr: true } as const,
+      feedback: `PostToolUseFailure:Bash hook blocking error from command: "${GUARD_COMMAND}": [${GUARD_COMMAND}]: look again`,
+    },
+    {
+      name: "Claude Code's default for a block without a reason",
       isError: false,
-      details: { exitCode: 0 },
-    } satisfies ToolResultEvent;
+      hookOutcome: { kind: "block" } as const,
+      feedback: `PostToolUse:Bash hook blocking error from command: "${GUARD_COMMAND}": Blocked by hook`,
+    },
+  ]) {
+    test(`keeps the tool output and adds the feedback of ${name} (D-CF5-11)`, () => {
+      // arrange
+      const event = {
+        type: "tool_result",
+        toolCallId: "result-block",
+        toolName: "bash",
+        input: { command: "echo from-model" },
+        content: [{ type: "text" as const, text: "from-model\n" }],
+        isError,
+        details: { exitCode: 0 },
+      } satisfies ToolResultEvent;
 
-    // act
-    const adaptation = adaptToolResultResult({ kind: "block" }, event);
+      // act
+      const adaptation = adaptToolResultResult(hookOutcome, event, adapterContext(guardEntry()));
 
-    // assert
-    assert.deepStrictEqual(adaptation, { isError: true });
-    assert.strictEqual(Object.hasOwn(adaptation, "content"), false);
-    assert.strictEqual(event.isError, false);
-  });
+      // assert
+      assert.deepStrictEqual(adaptation, {
+        content: [
+          { type: "text", text: "from-model\n" },
+          { type: "text", text: feedback },
+        ],
+      });
+      assert.deepStrictEqual(event.content, [{ type: "text", text: "from-model\n" }]);
+      assert.strictEqual(event.isError, isError);
+    });
+  }
 
   test("applies only whitelisted tool-result fields", () => {
     // arrange
@@ -439,7 +481,7 @@ describe("adaptToolResultResult", () => {
     } satisfies HookExecResult;
 
     // act
-    const adaptation = adaptToolResultResult(hookOutcome, event);
+    const adaptation = adaptToolResultResult(hookOutcome, event, adapterContext(guardEntry()));
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -496,7 +538,11 @@ describe("adaptToolResultResult", () => {
     } satisfies ToolResultEvent;
 
     // act
-    const adaptation = adaptToolResultResult({ kind: "mutate" }, event);
+    const adaptation = adaptToolResultResult(
+      { kind: "mutate" },
+      event,
+      adapterContext(guardEntry()),
+    );
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -532,7 +578,7 @@ describe("adaptToolResultResult", () => {
       const hookOutcome = { kind: "mutate", updatedToolOutput } satisfies HookExecResult;
 
       // act
-      const adaptation = adaptToolResultResult(hookOutcome, event);
+      const adaptation = adaptToolResultResult(hookOutcome, event, adapterContext(guardEntry()));
 
       // assert
       assert.strictEqual(adaptation, undefined);
@@ -569,7 +615,7 @@ describe("adaptToolResultResult", () => {
     } satisfies HookExecResult;
 
     // act
-    const adaptation = adaptToolResultResult(hookOutcome, event);
+    const adaptation = adaptToolResultResult(hookOutcome, event, adapterContext(guardEntry()));
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -607,7 +653,7 @@ describe("adaptToolResultResult", () => {
     } satisfies HookExecResult;
 
     // act
-    const adaptation = adaptToolResultResult(hookOutcome, event);
+    const adaptation = adaptToolResultResult(hookOutcome, event, adapterContext(guardEntry()));
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -640,6 +686,7 @@ describe("adaptToolResultResult", () => {
     const adaptation = adaptToolResultResult(
       { kind: "mutate", updatedToolOutput: { isError: true } },
       event,
+      adapterContext(guardEntry()),
     );
 
     // assert
@@ -694,7 +741,7 @@ describe("adaptToolResultResult", () => {
       } satisfies ToolResultEvent;
 
       // act
-      const adaptation = adaptToolResultResult(stopOutcome, event);
+      const adaptation = adaptToolResultResult(stopOutcome, event, adapterContext(guardEntry()));
 
       // assert
       assert.strictEqual(adaptation, undefined);
@@ -719,7 +766,7 @@ describe("adaptInputResult", () => {
     } satisfies InputEvent;
 
     // act
-    const adaptation = adaptInputResult({ kind: "noop" }, event);
+    const adaptation = adaptInputResult({ kind: "noop" }, event, adapterContext(guardEntry()));
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -742,7 +789,11 @@ describe("adaptInputResult", () => {
     } satisfies InputEvent;
 
     // act
-    const adaptation = adaptInputResult({ kind: "block", reason: "policy denied" }, event);
+    const adaptation = adaptInputResult(
+      { kind: "block", reason: "policy denied" },
+      event,
+      adapterContext(guardEntry()),
+    );
 
     // assert
     assert.deepStrictEqual(adaptation, { action: "handled" });
@@ -766,6 +817,7 @@ describe("adaptInputResult", () => {
     const adaptation = adaptInputResult(
       { kind: "mutate", additionalContext: "added context" },
       event,
+      adapterContext(guardEntry()),
     );
 
     // assert
@@ -786,7 +838,11 @@ describe("adaptInputResult", () => {
     } satisfies InputEvent;
 
     // act
-    const adaptation = adaptInputResult({ kind: "mutate", additionalContext: "" }, event);
+    const adaptation = adaptInputResult(
+      { kind: "mutate", additionalContext: "" },
+      event,
+      adapterContext(guardEntry()),
+    );
 
     // assert
     assert.deepStrictEqual(adaptation, { action: "transform", text: "" });
@@ -805,7 +861,7 @@ describe("adaptInputResult", () => {
     } satisfies HookExecResult;
 
     // act
-    const adaptation = adaptInputResult(hookOutcome, event);
+    const adaptation = adaptInputResult(hookOutcome, event, adapterContext(guardEntry()));
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -817,32 +873,12 @@ describe("adaptInputResult", () => {
     });
   });
 
-  for (const { name, stopOutcome, diagnostic } of [
-    {
-      name: "its supplied reason",
-      stopOutcome: { kind: "stop", stopReason: "halt requested" } as const,
-      diagnostic: "[hooks] adaptInput: stop ignored (no Pi return slot); reason=halt requested",
-    },
-    {
-      name: "an absent reason",
-      stopOutcome: { kind: "stop" } as const,
-      diagnostic: "[hooks] adaptInput: stop ignored (no Pi return slot); reason=<none>",
-    },
+  for (const { name, stopOutcome } of [
+    { name: "its reason", stopOutcome: { kind: "stop", stopReason: "halt requested" } as const },
+    { name: "no reason", stopOutcome: { kind: "stop" } as const },
   ]) {
-    test(`reports a stopped input with ${name}`, (t) => {
+    test(`stops the prompt for a continue false with ${name} (D-CF5-11)`, () => {
       // arrange
-      const debugKey = "PI_CLAUDE_MARKETPLACE_DEBUG";
-      const hadDebug = Object.hasOwn(process.env, debugKey);
-      const previousDebug = process.env[debugKey];
-      t.after(() => {
-        if (hadDebug) {
-          process.env[debugKey] = previousDebug;
-        } else {
-          delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
-        }
-      });
-      process.env[debugKey] = "1";
-      const consoleErrorSpy = t.mock.method(console, "error", () => undefined);
       const event = {
         type: "input",
         text: "original prompt",
@@ -850,14 +886,10 @@ describe("adaptInputResult", () => {
       } satisfies InputEvent;
 
       // act
-      const adaptation = adaptInputResult(stopOutcome, event);
+      const adaptation = adaptInputResult(stopOutcome, event, adapterContext(guardEntry()));
 
       // assert
-      assert.strictEqual(adaptation, undefined);
-      assert.deepStrictEqual(
-        consoleErrorSpy.mock.calls.map(({ arguments: consoleArguments }) => consoleArguments),
-        [[diagnostic]],
-      );
+      assert.deepStrictEqual(adaptation, { action: "handled" });
       assert.deepStrictEqual(event, {
         type: "input",
         text: "original prompt",
@@ -884,16 +916,14 @@ describe("adaptObservationResultForEvent", () => {
 
     // act
     adaptObservationResultForEvent(
-      runtime,
       { kind: "mutate", additionalContext: "first context" },
       "SessionStart",
-      firstProvenance,
+      provenanceContext(runtime, firstProvenance),
     );
     adaptObservationResultForEvent(
-      runtime,
       { kind: "mutate", additionalContext: "second context" },
       "SessionStart",
-      secondProvenance,
+      provenanceContext(runtime, secondProvenance),
     );
 
     // assert
@@ -927,7 +957,11 @@ describe("adaptObservationResultForEvent", () => {
     } satisfies HookExecResult;
 
     // act
-    adaptObservationResultForEvent(runtime, hookOutcome, "SessionStart", provenance);
+    adaptObservationResultForEvent(
+      hookOutcome,
+      "SessionStart",
+      provenanceContext(runtime, provenance),
+    );
 
     // assert
     assert.strictEqual(Object.hasOwn(hookOutcome, "additionalContext"), false);
@@ -945,10 +979,9 @@ describe("adaptObservationResultForEvent", () => {
 
     // act
     adaptObservationResultForEvent(
-      runtime,
       { kind: "mutate", additionalContext: "" },
       "SessionStart",
-      provenance,
+      provenanceContext(runtime, provenance),
     );
 
     // assert
@@ -971,16 +1004,32 @@ describe("adaptObservationResultForEvent", () => {
 
       // act
       adaptObservationResultForEvent(
-        runtime,
         { kind: "mutate", additionalContext: context },
         eventName,
-        provenance,
+        provenanceContext(runtime, provenance),
       );
 
       // assert
       assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
     });
   }
+
+  test("captures SessionStart context that no entry is attributed to under an empty provenance", () => {
+    // arrange
+    const runtime = createHooksRuntime();
+
+    // act
+    adaptObservationResultForEvent(
+      { kind: "mutate", additionalContext: "orphan context" },
+      "SessionStart",
+      { ...adapterContext(undefined), runtime },
+    );
+
+    // assert
+    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [
+      { context: "orphan context", scope: "user", marketplace: "", pluginId: "" },
+    ]);
+  });
 
   test("returns from noop without changing pending state", () => {
     // arrange
@@ -992,7 +1041,11 @@ describe("adaptObservationResultForEvent", () => {
     } as const;
 
     // act
-    adaptObservationResultForEvent(runtime, { kind: "noop" }, "SessionStart", provenance);
+    adaptObservationResultForEvent(
+      { kind: "noop" },
+      "SessionStart",
+      provenanceContext(runtime, provenance),
+    );
 
     // assert
     assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
@@ -1050,7 +1103,11 @@ describe("adaptObservationResultForEvent", () => {
       } as const;
 
       // act
-      adaptObservationResultForEvent(runtime, hookOutcome, eventName, provenance);
+      adaptObservationResultForEvent(
+        hookOutcome,
+        eventName,
+        provenanceContext(runtime, provenance),
+      );
 
       // assert
       assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
