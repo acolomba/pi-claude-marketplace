@@ -483,7 +483,12 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
     );
 
     const context = { runtime, ctx, pi, attributedTo: folded.attributedTo };
-    return adaptForEvent(claudeEvent, folded.result, event, context) as CompositeReturnFor<E>;
+    return (await adaptForEvent(
+      claudeEvent,
+      folded.result,
+      event,
+      context,
+    )) as CompositeReturnFor<E>;
   };
 }
 
@@ -540,15 +545,16 @@ export function toolResultCompositeHandler(
  * is invoked for the SessionStart context buffer and the block/stop
  * debug-log side effect and always returns undefined.
  */
-function adaptForEvent(
+async function adaptForEvent(
   claudeEvent: CompositeDispatchEvent,
   result: HookExecResult,
   event: unknown,
   context: HookAdapterContext,
-): ToolCallEventResult | InputEventResult | undefined {
+): Promise<ToolCallEventResult | InputEventResult | undefined> {
   switch (claudeEvent) {
     case "PreToolUse":
-      return adaptToolCallResult(result, event as ToolCallEvent, context);
+      // D-CF5-11: an ask may wait on the user's answer in the terminal.
+      return await adaptToolCallResult(result, event as ToolCallEvent, context);
     case "UserPromptSubmit":
       return adaptInputResult(result, event as InputEvent, context);
     case "SessionStart":

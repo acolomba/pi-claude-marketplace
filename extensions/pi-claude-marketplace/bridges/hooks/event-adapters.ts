@@ -1,29 +1,36 @@
 // bridges/hooks/event-adapters.ts
 //
-// D-60-03: per-Pi-event adapters that convert a reducer-folded
-// `HookExecResult` (D-60-01) into the Pi-side handler return shape.
+// D-60-03: per-Pi-event adapters that convert a folded `HookExecResult`
+// (D-60-01) into the Pi-side handler return shape, as Claude Code 2.1.316
+// applies a hook decision (D-CF5-11).
 //
-// Four adapters cover the v1.13 Bucket-A surface:
+// Four adapters cover the Bucket-A surface:
 //
 //   - adaptToolCallResult        -> Pi `tool_call` (PreToolUse).
-//     `block` → `{ block: true, reason }`; `mutate.updatedInput` mutates
-//     `event.input` in place + returns `undefined`; `stop` debug-logs the
-//     ignored outcome + returns `undefined`; `noop` returns `undefined`.
+//     `block` -> `{ block: true, reason }`, the reason reading
+//     `PreToolUse:<Tool> hook error: <message>`; `stop` -> a block with
+//     `terminate: true`, which ends the turn; a mutation that asks blocks with
+//     its reason when Pi has no terminal (`print`, `json`, `rpc`) and asks
+//     through `ctx.ui.confirm` in `tui`; an allowed mutation's `updatedInput`
+//     replaces the tool's whole input; `noop` returns `undefined`.
 //
 //   - adaptToolResultResult      -> Pi `tool_result` (PostToolUse +
-//     PostToolUseFailure). `block` → `{ block: true, reason }`;
+//     PostToolUseFailure). `block` keeps the tool's output and adds the
+//     hook's feedback, `<Event>:<Tool> hook blocking error from command:
+//     "<command>": <message>`, without marking the result an error;
 //     `mutate.updatedToolOutput` mutates the runtime-side surface
 //     (`event.content` and/or `event.isError`) in place + returns
-//     `undefined`; `stop` debug-logs + returns `undefined`; `noop` returns
+//     `undefined`; `stop` debug-logs + returns `undefined` (Pi's
+//     `tool_result` cannot end the turn without aborting it); `noop` returns
 //     `undefined`. CR-01: the mutation surface is whitelisted to
 //     `{ content, isError }` -- a hook-supplied patch cannot rewrite
 //     `event.type`, `event.toolName`, or any other field.
 //
 //   - adaptInputResult           -> Pi `input` (UserPromptSubmit).
-//     `block` → `{ action: "handled" }`; `mutate.additionalContext` (when
-//     defined) → `{ action: "transform", text }`; `mutate` without an
-//     `additionalContext` field → `undefined`; `stop` debug-logs + returns
-//     `undefined`; `noop` returns `undefined`.
+//     `block` -> `{ action: "handled" }`; `stop` -> `{ action: "handled" }`,
+//     so the prompt stops; `mutate.additionalContext` (when defined) ->
+//     `{ action: "transform", text }`; `mutate` without an
+//     `additionalContext` field -> `undefined`; `noop` returns `undefined`.
 //
 //   - adaptObservationResultForEvent -> Pi `session_start` /
 //     `session_shutdown` / `session_before_compact` / `session_compact`
@@ -41,14 +48,14 @@
 // default arm (NFR-7). Adding a fifth `HookExecResult` arm fails `tsc` and
 // the `switch-exhaustiveness-check` lint rule at each switch.
 //
-// Mutation surface: tool_call mutates `event.input` (Record<string,
-// unknown>), tool_result mutates `event.content` (the Pi-side
+// Mutation surface: tool_call replaces `event.input` (Record<string,
+// unknown>) key by key, tool_result mutates `event.content` (the Pi-side
 // (TextContent | ImageContent)[] array). The fold in `dispatch.ts` runs every
 // hook on one snapshot, so a mutation applies once, after every hook ran.
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
 
-import { hookErrorText, hookEventLabel } from "./hook-labels.ts";
+import { hookBlockingErrorText, hookErrorText, hookEventLabel } from "./hook-labels.ts";
 
 import type { HookExecResult } from "./exec-result.ts";
 import type { RoutingEntry } from "./routing-state.ts";
@@ -98,22 +105,28 @@ function attributedCommand(context: HookAdapterContext): string {
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * CR-01: reject non-object patches (null, array, primitive) early so a hook
- * returning `updatedInput: null` cannot pollute via array index keys. The
- * patch must be a plain object shape; anything else is silently dropped.
+ * D-CF5-11: an `updatedInput` replaces the tool's whole input, so a key the
+ * rewrite omits is gone. The input object keeps its identity, since Pi runs
+ * the tool with it.
  *
- * Copies own enumerable keys one at a time via `Object.entries` rather than
+ * CR-01: a non-object rewrite (null, array, primitive) changes nothing, so a
+ * hook returning `updatedInput: null` cannot pollute via array index keys.
+ * Keys are copied one at a time via `Object.entries` rather than
  * `Object.assign`, skipping an own `"__proto__"` key: `JSON.parse` creates
  * `__proto__` as an ordinary own data property (not the prototype link), so
- * a hook-supplied patch carrying that key would otherwise let
+ * a hook-supplied rewrite carrying that key would otherwise let
  * `Object.assign` reassign `event.input`'s prototype.
  */
-function applyToolCallInputPatch(event: ToolCallEvent, updatedInput: unknown): void {
+function replaceToolCallInput(event: ToolCallEvent, updatedInput: unknown): void {
   if (updatedInput === null || typeof updatedInput !== "object" || Array.isArray(updatedInput)) {
     return;
   }
 
   const target = event.input as Record<string, unknown>;
+  for (const key of Object.keys(target)) {
+    Reflect.deleteProperty(target, key);
+  }
+
   for (const [key, value] of Object.entries(updatedInput as Record<string, unknown>)) {
     if (key === "__proto__") {
       continue;
@@ -150,19 +163,66 @@ function applyToolResultPatch(event: ToolResultEvent, updatedToolOutput: unknown
 // adaptToolCallResult -- PreToolUse
 // ──────────────────────────────────────────────────────────────────────────
 
+// The reason a PreToolUse `continue: false` blocks with when it gives none.
+const DEFAULT_STOP_REASON = "Operation stopped by hook";
+
+type MutateResult = Extract<HookExecResult, { kind: "mutate" }>;
+
+/**
+ * D-CF5-11: whether the user allows a call a hook asks about. Only a terminal
+ * can answer, so in `print`, `json`, and `rpc` the answer is no, and no
+ * dialog opens; in `tui` Pi's confirm dialog asks.
+ */
+async function userAllows(
+  result: MutateResult,
+  event: ToolCallEvent,
+  context: HookAdapterContext,
+): Promise<boolean> {
+  if (context.ctx.mode !== "tui") {
+    return false;
+  }
+
+  const label = hookEventLabel("PreToolUse", event.toolName);
+  return context.ctx.ui.confirm(
+    `${label} hook asks to allow this call`,
+    result.permissionDecisionReason ?? "Allow this tool call?",
+  );
+}
+
+// D-CF5-11: an allowed mutation rewrites the input; an `ask` the user does
+// not allow blocks with the hook's reason, as Claude Code's print mode shows
+// it to the model.
+async function adaptToolCallMutation(
+  result: MutateResult,
+  event: ToolCallEvent,
+  context: HookAdapterContext,
+): Promise<ToolCallEventResult | undefined> {
+  if (result.permissionDecision === "ask" && !(await userAllows(result, event, context))) {
+    const reason = result.permissionDecisionReason;
+    return reason === undefined ? { block: true } : { block: true, reason };
+  }
+
+  if (result.updatedInput !== undefined) {
+    replaceToolCallInput(event, result.updatedInput);
+  }
+
+  return undefined;
+}
+
 /**
  * D-60-03: convert a folded `HookExecResult` to the Pi `tool_call` handler
  * return shape (`ToolCallEventResult | undefined`).
  *
  * A block reaches the model as Claude Code sends it (D-CF5-11):
  * `PreToolUse:<Tool> hook error: <reason>`, with an exit-2 stderr reason
- * after the attributed hook's bracketed command.
+ * after the attributed hook's bracketed command. A `continue: false` blocks
+ * the call and sets `terminate`, so Pi ends the turn after the batch.
  */
-export function adaptToolCallResult(
+export async function adaptToolCallResult(
   result: HookExecResult,
   event: ToolCallEvent,
   context: HookAdapterContext,
-): ToolCallEventResult | undefined {
+): Promise<ToolCallEventResult | undefined> {
   switch (result.kind) {
     case "block":
       return {
@@ -176,17 +236,10 @@ export function adaptToolCallResult(
       };
 
     case "mutate":
-      if (result.updatedInput !== undefined) {
-        applyToolCallInputPatch(event, result.updatedInput);
-      }
-
-      return undefined;
+      return adaptToolCallMutation(result, event, context);
 
     case "stop":
-      hookDebugLog(
-        `adaptToolCall: stop ignored (no Pi return slot); reason=${result.stopReason ?? "<none>"}`,
-      );
-      return undefined;
+      return { block: true, reason: result.stopReason ?? DEFAULT_STOP_REASON, terminate: true };
 
     case "noop":
       return undefined;
@@ -197,34 +250,52 @@ export function adaptToolCallResult(
 // adaptToolResultResult -- PostToolUse + PostToolUseFailure
 // ──────────────────────────────────────────────────────────────────────────
 
+// The tool's output followed by the feedback text of a PostToolUse or
+// PostToolUseFailure block (D-CF5-11).
+function withFeedback(
+  event: ToolResultEvent,
+  result: Extract<HookExecResult, { kind: "block" }>,
+  context: HookAdapterContext,
+): NonNullable<ToolResultEventResult["content"]> {
+  const label = hookEventLabel(
+    event.isError ? "PostToolUseFailure" : "PostToolUse",
+    event.toolName,
+  );
+  const feedback = {
+    type: "text",
+    text: hookBlockingErrorText(
+      label,
+      result.reason,
+      attributedCommand(context),
+      result.fromStderr === true,
+    ),
+  } as const;
+  // Pi's `tool_result` slot takes image parts too; the frozen Pi boundary
+  // types it as text parts only, so the kept output is widened to it.
+  return [...(event.content as NonNullable<ToolResultEventResult["content"]>), feedback];
+}
+
 /**
- * D-60-03: convert a reducer-folded `HookExecResult` to the Pi
- * `tool_result` handler return shape (`ToolResultEventResult | undefined`).
+ * D-60-03: convert a folded `HookExecResult` to the Pi `tool_result`
+ * handler return shape (`ToolResultEventResult | undefined`).
  *
  * `tool_result` exposes a `content` / `details` / `isError` return shape;
- * the bridge's `mutate.updatedToolOutput` path mutates `event` in place
- * (so the next entry sees the mutation), then returns `undefined`. A
- * `block` outcome returns a synthetic `{ isError: true }` envelope with
- * the reason routed through the surrounding error channel -- Pi's
- * `tool_result` return shape does not have a `block` field; this adapter
- * follows Claude Code upstream's PostToolUse `decision: "block"` semantics
- * by reporting the failure through `isError`.
+ * the bridge's `mutate.updatedToolOutput` path mutates `event` in place,
+ * then returns `undefined`. A `block` keeps the tool's output and returns it
+ * with the hook's feedback after it, as Claude Code adds a PostToolUse
+ * block's feedback after the tool result (D-CF5-11); the result is not
+ * marked an error.
  */
 export function adaptToolResultResult(
   result: HookExecResult,
   event: ToolResultEvent,
-  _context: HookAdapterContext,
+  context: HookAdapterContext,
 ): ToolResultEventResult | undefined {
   switch (result.kind) {
     case "block":
-      // Pi `tool_result` has no `block` field; signal the block via
-      // `isError: true` + a synthetic text block carrying the reason.
-      return result.reason === undefined
-        ? { isError: true }
-        : {
-            isError: true,
-            content: [{ type: "text", text: result.reason }],
-          };
+      // D-CF5-11: the tool already ran, so its output stays and the hook's
+      // feedback follows it; the result is not marked an error.
+      return { content: withFeedback(event, result, context) };
 
     case "mutate":
       if (result.updatedToolOutput !== undefined) {
@@ -272,10 +343,8 @@ export function adaptInputResult(
       return undefined;
 
     case "stop":
-      hookDebugLog(
-        `adaptInput: stop ignored (no Pi return slot); reason=${result.stopReason ?? "<none>"}`,
-      );
-      return undefined;
+      // D-CF5-11: a UserPromptSubmit `continue: false` stops the prompt.
+      return { action: "handled" };
 
     case "noop":
       return undefined;

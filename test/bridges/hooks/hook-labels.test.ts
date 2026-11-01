@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  hookBlockingErrorText,
   hookErrorText,
   hookEventLabel,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/hook-labels.ts";
@@ -77,6 +78,31 @@ describe("hookErrorText", () => {
 
       // assert
       assert.strictEqual(errorText, text);
+    });
+  }
+});
+
+describe("hookBlockingErrorText", () => {
+  for (const { name, reason, fromStderr, text } of [
+    {
+      name: "a decision reason after the quoted command",
+      reason: "check the output",
+      fromStderr: false,
+      text: `PostToolUse:Bash hook blocking error from command: "${GUARD_COMMAND}": check the output`,
+    },
+    {
+      name: "an exit-2 stderr reason after the bracketed command",
+      reason: "look again",
+      fromStderr: true,
+      text: `PostToolUse:Bash hook blocking error from command: "${GUARD_COMMAND}": [${GUARD_COMMAND}]: look again`,
+    },
+  ]) {
+    test(`writes ${name} (D-CF5-11)`, () => {
+      // act
+      const feedback = hookBlockingErrorText("PostToolUse:Bash", reason, GUARD_COMMAND, fromStderr);
+
+      // assert
+      assert.strictEqual(feedback, text);
     });
   }
 });

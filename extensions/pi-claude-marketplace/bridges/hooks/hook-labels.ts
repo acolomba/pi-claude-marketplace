@@ -39,6 +39,20 @@ function blockMessage(reason: string | undefined, command: string, fromStderr: b
 }
 
 /**
+ * D-CF5-11: the feedback a PostToolUse or PostToolUseFailure block adds after
+ * the tool's output, `<label> hook blocking error from command: "<command>":
+ * <message>`, the message as `hookErrorText` writes it.
+ */
+export function hookBlockingErrorText(
+  label: string,
+  reason: string | undefined,
+  command: string,
+  fromStderr: boolean,
+): string {
+  return `${label} hook blocking error from command: "${command}": ${blockMessage(reason, command, fromStderr)}`;
+}
+
+/**
  * D-CF5-11: the text of a hook error, `<label> hook error: <message>`. The
  * message is `[<command>]: <reason>` for a reason `fromStderr` marks as exit-2
  * stderr, else the reason. A missing reason reads as Claude Code's default.

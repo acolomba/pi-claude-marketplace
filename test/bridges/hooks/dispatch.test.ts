@@ -484,12 +484,7 @@ describe("compositeHandlerFor", () => {
       type: "tool_call",
       toolCallId: "dispatch-call",
       toolName: "bash",
-      input: {
-        command: "git status",
-        original: "kept",
-        secondMutation: "composed",
-        shared: "second",
-      },
+      input: { secondMutation: "composed", shared: "second" },
     } satisfies ToolCallEvent;
     const expectedAdaptedOutput: CompositeReturnFor<"PreToolUse"> = undefined;
 
@@ -895,7 +890,11 @@ describe("composite dispatch reduction", () => {
       undefined,
       executor,
     );
-    const expectedOutput: CompositeReturnFor<"PreToolUse"> = undefined;
+    const expectedOutput: CompositeReturnFor<"PreToolUse"> = {
+      block: true,
+      reason: "stop now",
+      terminate: true,
+    };
     const expectedCalls: RecordedCall[] = [
       { pluginId: "first-stop", event: createToolCallEvent() },
       { pluginId: "later-block", event: createToolCallEvent() },
@@ -945,12 +944,7 @@ describe("composite dispatch reduction", () => {
       undefined,
       executor,
     );
-    const expectedEvent = createToolCallEvent("bash", {
-      command: "git status",
-      preserved: true,
-      second: 2,
-      shared: "second",
-    });
+    const expectedEvent = createToolCallEvent("bash", { second: 2, shared: "second" });
     const expectedOutput: CompositeReturnFor<"PreToolUse"> = undefined;
     const expectedCalls: RecordedCall[] = [
       {
@@ -1655,7 +1649,7 @@ describe("toolResultCompositeHandler", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("adapts a block without a reason to an error result", async () => {
+  test("adapts a block without a reason to the tool output and the default feedback", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -1675,7 +1669,15 @@ describe("toolResultCompositeHandler", () => {
       undefined,
       executor,
     );
-    const expectedOutput = { isError: true };
+    const expectedOutput = {
+      content: [
+        { type: "text", text: "original output" },
+        {
+          type: "text",
+          text: 'PostToolUse:Bash hook blocking error from command: "printf block-empty": Blocked by hook',
+        },
+      ],
+    };
     const expectedCalls: RecordedCall[] = [
       { pluginId: "block-empty", event: createToolResultEvent(false) },
     ];
@@ -1721,8 +1723,13 @@ describe("toolResultCompositeHandler", () => {
       executor,
     );
     const expectedOutput = {
-      isError: true,
-      content: [{ type: "text", text: "tool denied" }],
+      content: [
+        { type: "text", text: "original output" },
+        {
+          type: "text",
+          text: 'PostToolUse:Bash hook blocking error from command: "printf block-first": tool denied',
+        },
+      ],
     };
     const expectedCalls: RecordedCall[] = [
       { pluginId: "block-first", event: createToolResultEvent(false) },
@@ -2004,7 +2011,7 @@ describe("composite per-event adapters", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("drops a UserPromptSubmit stop after terminating the bucket", async () => {
+  test("stops the prompt on a UserPromptSubmit continue false (D-CF5-11)", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -2033,7 +2040,7 @@ describe("composite per-event adapters", () => {
       undefined,
       executor,
     );
-    const expectedOutput = undefined;
+    const expectedOutput = { action: "handled" };
     const expectedCalls: RecordedCall[] = [
       {
         pluginId: "input-stop",
@@ -3210,5 +3217,40 @@ describe("routing-order fold of mutations", () => {
     // assert
     assert.strictEqual(output, undefined);
     assert.deepStrictEqual(event.content, [{ type: "text", text: "two" }]);
+  });
+});
+
+describe("PreToolUse decisions (D-CF5-11)", () => {
+  test("blocks a folded ask with its reason in print mode without opening a dialog", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", preToolUseEntries(["rewriter", "asker"]));
+    const executor = createRecordingExecutor(
+      {
+        rewriter: { kind: "mutate", permissionDecision: "allow", updatedInput: { command: "x" } },
+        asker: {
+          kind: "mutate",
+          permissionDecision: "ask",
+          permissionDecisionReason: "please confirm",
+        },
+      },
+      [],
+    );
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+    const event = createToolCallEvent();
+
+    // act
+    const output = await handler(event, createExtensionContext("/workspace/ask-print"));
+
+    // assert
+    assert.deepStrictEqual(output, { block: true, reason: "please confirm" });
+    assert.deepStrictEqual(event, createToolCallEvent());
   });
 });
