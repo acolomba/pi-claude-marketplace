@@ -307,3 +307,18 @@ theirs under `## Dubious Choices` and the orchestrator copies them here.
      (the stop hook requires a clean tree) instead of once at the end, and
      the iteration backups were kept in the scratchpad.
 - **Recorded in:** `07-REVIEW.md`, `07-REVIEW-FIX.md`, `07-REVIEW-DISPOSITION.md`.
+
+### P7-DC-16: Verification choices
+
+- **Phase / source:** Phase 7 verifier (`07-VERIFICATION.md`, status passed 5/5).
+- **Severity:** Medium. **Status:** open.
+- **Choices:**
+  1. WFL-04 passed on the settings `packages` entry plus a new session (with
+     a negative control), not a literal `/reload`; a stricter reading would
+     mark it uncertain and ask a human.
+  2. WFL-03's "reserved names" read as the engine's reserved `meta` keys
+     (`__proto__`, `constructor`, `prototype`); `<plugin>:` command names
+     cannot collide with Pi's reserved commands.
+  3. The verifier re-ran only `features/workflow` and relied on the
+     orchestrator's recorded full gate.
+- **Recorded in:** `07-VERIFICATION.md`.
