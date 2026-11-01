@@ -393,11 +393,11 @@ Plans:
 - Wave 3: decision IDs, the re-measured `docs/mcp-compatibility.md` rows (FG-30), SUMMARY lines for the parent, and the phase gate.
 - Owns: `features/mcp-server/**`, `features/step_definitions/mcp-server/**`, `features/lib/mcp-server-files.ts`, `bridges/mcp/**` (including Phase 1's escape fix once merged), `platform/mcp-status.ts`, `domain/mcp-resolution.ts`, `domain/components/mcp.ts`, `docs/mcp-compatibility.md`, `test/bridges/mcp/**`, `test/integration/mcp-*`. MCP-07 uses Phase 1's agent fixture writer and stand-ins, never a Phase 4 file.
 
-**Plans:** 9 plans in 4 waves (the template's wave-2 "configuration variants and sources" plan splits into a configuration plan and a sources plan with disjoint files; FG-28's silent skip moves to wave 3 because it edits `domain/mcp-resolution.ts`, which the wave-2 sources plan owns, and it changes outcomes that non-owned tests pin; the docs re-measure runs in wave 3 beside it, so the decision records, the parent lines, and the phase gate are wave 4; wave 1 also moves the Phase 1 seed's steps out of `calls.steps.ts` and the allowed project-scope scenario into `project-scope.feature`)
+**Plans:** 1/9 plans executed in 4 waves (the template's wave-2 "configuration variants and sources" plan splits into a configuration plan and a sources plan with disjoint files; FG-28's silent skip moves to wave 3 because it edits `domain/mcp-resolution.ts`, which the wave-2 sources plan owns, and it changes outcomes that non-owned tests pin; the docs re-measure runs in wave 3 beside it, so the decision records, the parent lines, and the phase gate are wave 4; wave 1 also moves the Phase 1 seed's steps out of `calls.steps.ts` and the allowed project-scope scenario into `project-scope.feature`)
 
 Plans:
 **Wave 1**
-- [ ] 06-01-PLAN.md — Wave 1 tracer: listing and Claude Code's tool names through the `mcp` proxy, the shared MCP steps, every fixture writer wave 2 needs, and the project-scope scenario move (MCP-01; D-CF6-05, D-CF6-06, D-CF6-07, D-CF6-09)
+- [x] 06-01-PLAN.md — Wave 1 tracer: listing and Claude Code's tool names through the `mcp` proxy, the shared MCP steps, every fixture writer wave 2 needs, and the project-scope scenario move (MCP-01; D-CF6-05, D-CF6-06, D-CF6-07, D-CF6-09)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 06-02-PLAN.md — Wave 2: env values, `${VAR}` and `${VAR:-default}`, the plugin path variables, and a loopback remote server with headers (MCP-03; D-CF6-06)
@@ -446,7 +446,7 @@ Plans:
 | 3. Slash Commands | 0/TBD | Not started | - |
 | 4. Agents | 0/TBD | Not started | - |
 | 5. Hooks | 0/TBD | Not started | - |
-| 6. MCP Servers | 0/TBD | Not started | - |
+| 6. MCP Servers | 1/9 | In Progress | - |
 | 7. Workflows | 0/TBD | Not started | - |
 
 ## Carried Forward
