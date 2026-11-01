@@ -1,7 +1,7 @@
 ---
 phase: 01-harness-and-version-raise
 verified: 2026-11-01T07:20:00Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified
 covered_files:
   - ".github/workflows/ci.yml"
@@ -45,7 +45,7 @@ covered_files:
   - "features/lib/scripted-model/script.ts"
   - "features/support/world.ts"
   - "package.json"
-covered_digest: "v4:sha256:f72d27ded69a83b7ec7f0947b24f8465bed88c7ac2d67a3882d0f6663f3fccd2"
+covered_digest: "v4:sha256:48559d15971680112b8e844c416f013fba81c771def5343b2ad81b50372b5687"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
@@ -61,10 +61,17 @@ human_verification:
 
 **Phase Goal:** A component phase can write its scenarios by adding only its own files: Pi and its three companions run at their latest releases with the declared floors raised, a scenario can start a profile Pi with a scripted model and the stand-ins that observe each kind, every kind has a seed scenario, and the decisions that span more than one component phase are recorded.
 **Verified:** 2026-11-01T07:20:00Z
-**Status:** human_needed
+**Status:** passed (both human-verification items resolved 2026-11-01, see "Human Verification Resolution")
 **Re-verification:** No, initial verification
 
 The tree is branch `claude/quirky-planck-hhm592` at `5dbc77a`. Every claim below comes from reading the code and running targeted tests in this session. The long suites were not re-run (`npm run check`, full cucumber, e2e). The orchestrator measured them, see "Gate results reused".
+
+## Human Verification Resolution
+
+Both items in `human_verification` were resolved by the orchestrator on 2026-11-01, under the user's standing instruction for this autonomous run ("make decisions as you see fit ... do not interrupt unless there's a truly unresolvable conflict"). Each is logged in `.planning/DUBIOUS-CHOICES.md` (DC-22) for the user's later review.
+
+1. **CI shard wall time (CI-01): measured, holds.** The orchestrator dispatched `ci.yml` on this branch (run 41283935457, head `5dbc77a`, all 8 jobs green). On the hosted `ubuntu-latest` runner the `behavioral tests, lifecycle` job took 3 min 21 s (cucumber step 2 min 11 s) and `behavioral tests, components` took 1 min 34 s (cucumber step 52 s). The 15-minute timeouts hold each run with more than 4.5x margin. The `ci.yml` comment and the D-CF1-16 row now carry the measured figures (commit `a724bd4`).
+2. **HAR-06 observation change: accepted.** The trust pair observes a project-scope agent run (`agentScope: "project"` refused without trust) instead of the agent list, because pi-subagents 0.84 lists project agents whatever the trust. The change tests the requirement's intent (a trusted and an untrusted project differ only in the trust entry, and only the trusted one runs its agent), and it diverges from no upstream behavior: it is a choice of what the test observes. The pi-subagents listing behavior and Claude Code's own handling of agents in an untrusted project are carried to the agents phase.
 
 ## Goal Achievement
 

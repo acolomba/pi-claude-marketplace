@@ -522,3 +522,27 @@ this project.
 8. e2e verdict counts the third full run; the first full run had one flake (`ADET-01` sentinel still alive after the 2 s wait, `test/e2e/adapter-detection-rpc.test.ts:452`), passing 3/3 alone and in the next two full runs.
 9. Existing `uses: $/.github/workflows/sonarcloud.yml` line in ci.yml left as on origin/main.
 - Parent follow-ups: phase-specific findings listed in 01-09-SUMMARY (Phase 4: `convert.ts` `THINKING_VALUES` lacks `max`; pi-subagents `list` ignores trust. Phase 5: three hook findings. Phase 6: FG-29, startup listing in the seed log. Phase 7: the run When fails on any model call).
+
+### DC-22: Phase 1 verification, review, and human-item resolution
+
+- **Phase / source:** parent, Phase 1 verify:post hooks, code review, verifier.
+- **Severity:** Medium (items A and B below); the rest Low. **Status:** open.
+- **A. Human items resolved without the user.** The verifier returned `human_needed` with two items. (1) CI shard timing: the parent dispatched `ci.yml` on the branch (`workflow_dispatch`, run 41283935457, all 8 jobs green); lifecycle job 3 min 21 s, components 1 min 34 s, so the 15-minute timeouts hold with more than 4.5x margin; `ci.yml` and the D-CF1-16 row now carry the measured figures. (2) HAR-06 observation change (trust pair observes a project-scope agent run, not the list): accepted by the parent under the standing "decide, do not interrupt" instruction; it is a choice of test observation, not an upstream divergence. VERIFICATION.md was set to `passed` with a resolution section and a recomputed fingerprint.
+- **B. Code review scope and loop.** One reviewer at standard depth over 56 of 113 changed files (source, harness, CI, scripts; tests, feature files, docs left to the gates). Three fix rounds (the cap); no fourth review after round 3.
+- **C. Skill runners.** `validate-phase` and `secure-phase` ran as general-purpose subagents (no Agent tool, so the security auditor ran inline); `code-review` ran in the parent.
+
+#### validate-phase (Nyquist audit, phase 1) — compliant, 0 gaps
+1. "Feedback latency < 60s" sign-off box left unchecked (the wave gate is ~10 min by design) while `nyquist_compliant: true` is set; each task command is under 60 s.
+2. The 4 Manual-Only rows (CI shard wall time, real PowerShell, live adapter 7.0.0 canary, package legitimacy) accepted, not treated as gaps.
+3. Reused the merged-tree check/e2e/cucumber results instead of re-running.
+#### secure-phase (threat audit, phase 1) — 43 threats, 0 open (34 mitigated, 9 accepted as AR-01-01..10)
+1. The runner had no Agent tool, so it did the gsd-security-auditor's work inline (allowed at ASVS L1 with zero open threats).
+2. T-01-22 and T-01-24 closed for what Phase 1 built; the edge wiring (substitution before injection, errors via notification-dispatch, user-invoked only per D-CF1-03) carries forward to Phases 2 and 3.
+3. T-01-41 (CI timeout) closed on an estimate; re-measure on the first CI run.
+4. T-01-SC written as one row (high/mitigated for 01-01 and 01-15, low/accepted elsewhere).
+5. Plain `git commit` instead of the helper (would title `docs(phase-01)`).
+#### code review (phase 1): 0 blocker, 5 warning, 4 info; fixer fixed WR-01..05
+- Review scope limited to 56 source/harness/CI files of 113 changed (tests, features, docs excluded; gates cover them). The upstream oracle for the tokenizer is the research's tree-sitter-bash 0.25.1 re-implementation (assumed equivalent to Claude's grammar). Info items IN-01..IN-04 not fixed (out of fix scope): residual table omits common differences such as `100% coverage`; blanket fallow export suppressions on the six cores have nothing forcing removal; exact `pi-ai` 1.4.0 dev pin may drift from the `pi-coding-agent` pin; a `!` command whose background child holds stdout blocks until the 120 s timeout (upstream behavior unchecked).
+- Fixer: worked in the main checkout (no node_modules in a fresh worktree); zizmor run offline (invalid session GH_TOKEN); two `\$` error-recovery cases kept as residuals; untrusted start budget 180 s (2x trusted); upstream's "Skill /<name> requires bash..." text kept even for commands; new oracle rows in `UPSTREAM_ROWS`.
+- Review round 2: WR-02..05 resolved; WR-01 fix regressed `x="a"\$ b c` (pre-command assignment); IN-05 new (`x $\$5 y`).
+- Fix round 3 (cap): guard added (0 regressions on 53,248-input grid); IN-05 ported via `[\p{Alphabetic}\p{Nd}]` found by probing 120 characters (scanner source not read); one punctuation input traded (`$\$ b; c'`, error recovery after an unclosed quote) recorded as a residual; 11 unbalanced-bracket/quote `$\$` cases left under the best-effort clause. Parent did not run a fourth review pass after the third fix (iteration cap reached); the tokenizer has no production caller yet, and the full gate re-ran on the result.
