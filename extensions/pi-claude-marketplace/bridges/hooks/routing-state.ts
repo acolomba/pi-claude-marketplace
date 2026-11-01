@@ -155,6 +155,16 @@ export interface PendingPromptContext {
   readonly scope: Scope;
 }
 
+/**
+ * D-CF5-13: the context of a follow-up that Pi queued into the running agent,
+ * with the follow-up's text. Pi reads a follow-up only when the agent would
+ * otherwise stop, so the context waits for the turn end after which the agent
+ * reads that text, and goes out then, just before the follow-up.
+ */
+export interface PendingFollowUpContext extends PendingPromptContext {
+  readonly prompt: string;
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Runtime-bound operations
 // ──────────────────────────────────────────────────────────────────────────

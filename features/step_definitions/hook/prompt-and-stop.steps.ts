@@ -10,10 +10,11 @@
  * `agent_settled` instead, and keeps every record and stand-in log line of
  * both turns as the last turn (HAR-03).
  *
- * A steer is a prompt the user sends while the agent runs. Pi queues it into
- * the running agent, which reads it after the running tool returns, so the
- * steer step waits for the tool to start, sends the steer, and keeps the
- * whole run as the last turn.
+ * A steer or a follow-up is a prompt the user sends while the agent runs. Pi
+ * queues it into the running agent, which reads a steer after the running
+ * tool returns and a follow-up only when it would otherwise stop. So the
+ * step waits for the tool to start, queues the prompt, and keeps the whole
+ * run as the last turn.
  */
 
 import assert from "node:assert/strict";
@@ -108,20 +109,38 @@ When(
   },
 );
 
+// Sends `prompt`, waits for its tool to start, and queues `queuedText` into
+// the running agent as `behavior`. Keeps the whole run as the last turn.
+async function promptAndQueue(
+  world: ScenarioWorld,
+  text: string,
+  queuedText: string,
+  behavior: "steer" | "followUp",
+): Promise<void> {
+  const deadline = Date.now() + REENTERED_TURNS_DEADLINE_MS;
+  const prompt = expandTokens(text, world.tokens);
+  const { lengths, from } = await startPrompt(world, prompt);
+  await world.pi.waitForRecord(from, isToolStart, deadline - Date.now());
+  const queued = await world.pi.request({
+    type: "prompt",
+    message: expandTokens(queuedText, world.tokens),
+    streamingBehavior: behavior,
+  });
+  assert.strictEqual(promptDisposition(queued.response), "queued", JSON.stringify(queued.response));
+  await settledAfter(world, from, deadline);
+  await recordRun(world, prompt, lengths, from);
+}
+
 When(
   "the user prompts {string} and steers with {string} while the tool runs",
   async function (this: ScenarioWorld, text: string, steerText: string) {
-    const deadline = Date.now() + REENTERED_TURNS_DEADLINE_MS;
-    const prompt = expandTokens(text, this.tokens);
-    const { lengths, from } = await startPrompt(this, prompt);
-    await this.pi.waitForRecord(from, isToolStart, deadline - Date.now());
-    const steer = await this.pi.request({
-      type: "prompt",
-      message: expandTokens(steerText, this.tokens),
-      streamingBehavior: "steer",
-    });
-    assert.strictEqual(promptDisposition(steer.response), "queued", JSON.stringify(steer.response));
-    await settledAfter(this, from, deadline);
-    await recordRun(this, prompt, lengths, from);
+    await promptAndQueue(this, text, steerText, "steer");
+  },
+);
+
+When(
+  "the user prompts {string} and follows up with {string} while the tool runs",
+  async function (this: ScenarioWorld, text: string, followUpText: string) {
+    await promptAndQueue(this, text, followUpText, "followUp");
   },
 );

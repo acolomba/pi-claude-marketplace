@@ -7,16 +7,21 @@ import {
   adaptPreCompactResult,
   adaptToolCallResult,
   adaptToolResultResult,
+  sendDueFollowUpContext,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
-import type { HookAdapterContext } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
+import type {
+  FollowUpTurnEnd,
+  HookAdapterContext,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type {
+  AgentMessage,
   ExtensionAPI,
   ExtensionContext,
   InputEvent,
@@ -870,42 +875,82 @@ describe("adaptInputResult", () => {
     assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
   });
 
-  for (const streamingBehavior of ["steer", "followUp"] as const) {
-    test(`sends the context of a queued ${streamingBehavior} to the model instead of buffering it (D-CF5-13)`, () => {
-      // arrange
-      const runtime = createHooksRuntime();
-      const sent: SentMessage[] = [];
-      const event = {
-        type: "input",
-        text: "queued prompt",
-        source: "rpc",
-        streamingBehavior,
-      } satisfies InputEvent;
+  test("sends the context of a queued steer to the model instead of buffering it (D-CF5-13)", () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const sent: SentMessage[] = [];
+    const event = {
+      type: "input",
+      text: "queued prompt",
+      source: "rpc",
+      streamingBehavior: "steer",
+    } satisfies InputEvent;
 
-      // act
-      const adaptation = adaptInputResult(
-        { kind: "mutate", additionalContext: "ctx-a\nctx-b" },
-        event,
-        { ...adapterContext(guardEntry()), runtime, pi: createMessagePi(sent) },
-      );
+    // act
+    const adaptation = adaptInputResult(
+      { kind: "mutate", additionalContext: "ctx-a\nctx-b" },
+      event,
+      { ...adapterContext(guardEntry()), runtime, pi: createMessagePi(sent) },
+    );
 
-      // assert
-      assert.strictEqual(adaptation, undefined);
-      assert.deepStrictEqual(sent, [
-        {
-          message: {
-            customType: "claude-hook-additional-context",
-            content: [
-              { type: "text", text: "UserPromptSubmit hook additional context: ctx-a\nctx-b" },
-            ],
-            display: false,
-          },
-          options: { triggerTurn: false },
+    // assert
+    assert.strictEqual(adaptation, undefined);
+    assert.deepStrictEqual(sent, [
+      {
+        message: {
+          customType: "claude-hook-additional-context",
+          content: [
+            { type: "text", text: "UserPromptSubmit hook additional context: ctx-a\nctx-b" },
+          ],
+          display: false,
         },
-      ]);
-      assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
-    });
-  }
+        options: { triggerTurn: false },
+      },
+    ]);
+    assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
+    assert.deepStrictEqual(runtime.drainFollowUpContext(), []);
+  });
+
+  test("queues the context of a queued follow-up for the turn that reads it (D-CF5-13)", () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const sent: SentMessage[] = [];
+    const event = {
+      type: "input",
+      text: "queued prompt",
+      source: "rpc",
+      streamingBehavior: "followUp",
+    } satisfies InputEvent;
+    const context = {
+      ...provenanceContext(runtime, {
+        scope: "user",
+        marketplace: "owner-marketplace",
+        pluginId: "owner-plugin",
+      }),
+      pi: createMessagePi(sent),
+    };
+
+    // act
+    const adaptation = adaptInputResult(
+      { kind: "mutate", additionalContext: "ctx-a\nctx-b" },
+      event,
+      context,
+    );
+
+    // assert
+    assert.strictEqual(adaptation, undefined);
+    assert.deepStrictEqual(sent, []);
+    assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
+    assert.deepStrictEqual(runtime.drainFollowUpContext(), [
+      {
+        context: "ctx-a\nctx-b",
+        scope: "user",
+        marketplace: "owner-marketplace",
+        pluginId: "owner-plugin",
+        prompt: "queued prompt",
+      },
+    ]);
+  });
 
   test("sends no blank context of a queued steer", () => {
     // arrange
@@ -1071,6 +1116,121 @@ describe("adaptInputResult", () => {
         text: "original prompt",
         source: "interactive",
       });
+    });
+  }
+});
+
+describe("sendDueFollowUpContext", () => {
+  const FOLLOW_UP_CONTEXT = {
+    context: "follow-up context",
+    scope: "project",
+    marketplace: "fixtures",
+    pluginId: "demo",
+    prompt: "also say hi",
+  } as const;
+
+  function assistantTurn(
+    content: readonly object[],
+    stopReason: "stop" | "toolUse" | "error" | "aborted" = "stop",
+  ): AgentMessage {
+    return { role: "assistant", content, stopReason, timestamp: 1 } as unknown as AgentMessage;
+  }
+
+  function userMessage(content: string | readonly object[]): AgentMessage {
+    return { role: "user", content, timestamp: 2 } as unknown as AgentMessage;
+  }
+
+  function turnEnd(
+    message: AgentMessage,
+    pendingMessages: readonly AgentMessage[],
+  ): FollowUpTurnEnd {
+    return { message, context: { pendingMessages } };
+  }
+
+  const DONE = assistantTurn([{ type: "text", text: "Done." }]);
+  const FOLLOW_UP = userMessage([{ type: "text", text: "also say hi" }]);
+
+  for (const { name, follows } of [
+    { name: "a text part", follows: FOLLOW_UP },
+    { name: "a string", follows: userMessage("also say hi") },
+    {
+      name: "a text part beside an image",
+      follows: userMessage([
+        { type: "text", text: "also say hi" },
+        { type: "image", data: "", mimeType: "image/png" },
+      ]),
+    },
+  ]) {
+    test(`sends the follow-up's context when the agent reads that follow-up next, given as ${name}`, () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      const sent: SentMessage[] = [];
+      runtime.queueFollowUpContext(FOLLOW_UP_CONTEXT);
+
+      // act
+      sendDueFollowUpContext(turnEnd(DONE, [follows]), runtime, createMessagePi(sent));
+
+      // assert
+      assert.deepStrictEqual(sent, [
+        {
+          message: {
+            customType: "claude-hook-additional-context",
+            content: [
+              { type: "text", text: "UserPromptSubmit hook additional context: follow-up context" },
+            ],
+            display: false,
+          },
+          options: { triggerTurn: false },
+        },
+      ]);
+      assert.deepStrictEqual(runtime.drainFollowUpContext(), []);
+    });
+  }
+
+  for (const { name, turn } of [
+    {
+      name: "the turn ends with a tool call",
+      turn: turnEnd(
+        assistantTurn([{ type: "toolCall", id: "c1", name: "bash", arguments: {} }], "toolUse"),
+        [FOLLOW_UP],
+      ),
+    },
+    { name: "the turn ends in an error", turn: turnEnd(assistantTurn([], "error"), [FOLLOW_UP]) },
+    { name: "the turn is aborted", turn: turnEnd(assistantTurn([], "aborted"), [FOLLOW_UP]) },
+    {
+      name: "another prompt comes next",
+      turn: turnEnd(DONE, [userMessage([{ type: "text", text: "a steer" }])]),
+    },
+    {
+      name: "a custom message comes next",
+      turn: turnEnd(DONE, [
+        {
+          role: "custom",
+          customType: "x",
+          content: "also say hi",
+          display: false,
+          timestamp: 3,
+        } as unknown as AgentMessage,
+      ]),
+    },
+    { name: "nothing is queued", turn: turnEnd(DONE, []) },
+    {
+      name: "the turn ends on a message that is not the model's",
+      turn: turnEnd(FOLLOW_UP, [FOLLOW_UP]),
+    },
+  ]) {
+    test(`keeps the follow-up's context while ${name}`, () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      const sent: SentMessage[] = [];
+      runtime.queueFollowUpContext(FOLLOW_UP_CONTEXT);
+
+      // act
+      sendDueFollowUpContext(turn, runtime, createMessagePi(sent));
+
+      // assert
+      assert.deepStrictEqual(sent, []);
+      assert.deepStrictEqual(runtime.drainFollowUpContext(), [FOLLOW_UP_CONTEXT]);
     });
   }
 });

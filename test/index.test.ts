@@ -85,6 +85,7 @@ import type {
   ToolCallEventResult,
   ToolResultEvent,
 } from "../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { TurnEndEvent } from "@earendil-works/pi-coding-agent";
 
 /**
  * The listener shape every `on` overload accepts. Each overload declares
@@ -398,6 +399,11 @@ async function loadExtension(
       "before_agent_start",
       It.willCapture<EventListener<BeforeAgentStartEvent>>("before agent start"),
     );
+  })
+    .thenReturn()
+    .times(1);
+  when(() => {
+    pi.on("turn_end", It.willCapture<EventListener<TurnEndEvent>>("turn end"));
   })
     .thenReturn()
     .times(1);

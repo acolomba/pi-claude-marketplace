@@ -601,6 +601,7 @@ test(
       "register:tool_call",
       "register:tool_result",
       "register:before_agent_start",
+      "register:turn_end",
       "register:agent_end",
       "register:agent_settled",
       "register:input",
@@ -616,6 +617,7 @@ test(
         { event: "tool_call", handlerType: "function" },
         { event: "tool_result", handlerType: "function" },
         { event: "before_agent_start", handlerType: "function" },
+        { event: "turn_end", handlerType: "function" },
         { event: "agent_end", handlerType: "function" },
         { event: "agent_settled", handlerType: "function" },
         { event: "input", handlerType: "function" },
@@ -1528,6 +1530,56 @@ test("registered before_agent_start rejects a stale epoch without draining live 
   ]);
 });
 
+test("registered turn_end sends a follow-up's context before the agent reads it (D-CF5-13)", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const { root } = await createHermeticEnvironment(t, "hooks-router-turn-end-");
+  const { pi, registrations, messages } = makeRecordingPi();
+  const context = makeContext(root, root);
+  const hydration = createHooksHydration(runtime, EMPTY_STATE_READER);
+  await hydration.registerHooksBridge(pi, { cwd: root });
+  const staleHandler = registeredHandler(registrations, "turn_end");
+  await hydration.registerHooksBridge(pi, { cwd: root });
+  const handler = registeredHandler(registrations, "turn_end", 1);
+  runtime.queueFollowUpContext({
+    context: "follow-up context",
+    scope: "project",
+    marketplace: "catalog",
+    pluginId: "live",
+    prompt: "also say hi",
+  });
+  const event = {
+    type: "turn_end",
+    message: { role: "assistant", content: [{ type: "text", text: "Done." }], stopReason: "stop" },
+    context: {
+      pendingMessages: [{ role: "user", content: [{ type: "text", text: "also say hi" }] }],
+    },
+  };
+
+  // act
+  const staleOutput = await staleHandler(event, context);
+  const sentByStale = [...messages];
+  const output = await handler(event, context);
+
+  // assert
+  assert.strictEqual(staleOutput, undefined);
+  assert.deepStrictEqual(sentByStale, []);
+  assert.strictEqual(output, undefined);
+  assert.deepStrictEqual(messages, [
+    {
+      message: {
+        customType: "claude-hook-additional-context",
+        content: [
+          { type: "text", text: "UserPromptSubmit hook additional context: follow-up context" },
+        ],
+        display: false,
+      },
+      options: { triggerTurn: false },
+    },
+  ]);
+  assert.deepStrictEqual(runtime.drainFollowUpContext(), []);
+});
+
 test("rebuildRoutingTables preserves stable plugin and declaration order in all ten buckets", () => {
   // arrange
   const runtime = createHooksRuntime();
@@ -1965,7 +2017,7 @@ test(
     assert.strictEqual(sessionStartUpdate, undefined);
     assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
     assert.deepStrictEqual(messages, []);
-    assert.strictEqual(registrations.length, 11);
+    assert.strictEqual(registrations.length, 12);
     assert.deepStrictEqual(diagnostics, [
       `[hooks] hydrate: loadState failed for scope=project extensionRoot=${factoryProjectLocations.extensionRoot}: factory project state refused`,
     ]);
@@ -2018,7 +2070,7 @@ test("same-runtime registration invalidates an earlier callback before lazy hydr
     locationsFor("project", projectRoot).extensionRoot,
   ]);
   assert.deepStrictEqual(messages, []);
-  assert.strictEqual(registrations.length, 22);
+  assert.strictEqual(registrations.length, 24);
 });
 
 test(
@@ -2107,7 +2159,7 @@ test(
     assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
     assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
     assert.deepStrictEqual(messages, []);
-    assert.strictEqual(registrations.length, 22);
+    assert.strictEqual(registrations.length, 24);
   },
 );
 
@@ -2490,6 +2542,7 @@ test(
         { event: "tool_call", handlerType: "function" },
         { event: "tool_result", handlerType: "function" },
         { event: "before_agent_start", handlerType: "function" },
+        { event: "turn_end", handlerType: "function" },
         { event: "agent_end", handlerType: "function" },
         { event: "agent_settled", handlerType: "function" },
         { event: "input", handlerType: "function" },
@@ -2538,7 +2591,7 @@ test(
     assert.deepStrictEqual(dispatched, ["project", "user"]);
     assert.strictEqual(userSharedBytes, "regular-file-boundary");
     assert.strictEqual(projectSharedStat.isDirectory(), true);
-    assert.strictEqual(registrations.length, 11);
+    assert.strictEqual(registrations.length, 12);
   },
 );
 
@@ -2587,7 +2640,7 @@ for (const mode of ["tui", "print", "json", "rpc"] as const) {
     assert.deepStrictEqual(messages, []);
     assert.deepStrictEqual(capture.entries, []);
     capture.assertValid();
-    assert.strictEqual(registrations.length, 11);
+    assert.strictEqual(registrations.length, 12);
   });
 }
 
@@ -3085,7 +3138,7 @@ test("session_start contains a lazy project cwd failure and still delegates safe
   assert.strictEqual(sessionStartUpdate, undefined);
   assert.deepStrictEqual(dispatches, []);
   assert.deepStrictEqual(messages, []);
-  assert.strictEqual(registrations.length, 11);
+  assert.strictEqual(registrations.length, 12);
 });
 
 /** A manual compaction event whose entry carries `summary`. */

@@ -2,6 +2,7 @@ import type { RingBuffer } from "./async-rewake/ring-buffer.ts";
 import type { ChildLike, TimerLadder } from "./exec-timer.ts";
 import type {
   CacheEntry,
+  PendingFollowUpContext,
   PendingPromptContext,
   PendingSessionStartContext,
   RoutingEntry,
@@ -73,6 +74,9 @@ export interface HooksRuntime {
   readonly appendPendingPromptContext: (entry: PendingPromptContext) => void;
   readonly pendingPromptContextEntries: () => readonly PendingPromptContext[];
   readonly drainPendingPromptContext: () => readonly PendingPromptContext[];
+  readonly queueFollowUpContext: (entry: PendingFollowUpContext) => void;
+  readonly takeFollowUpContext: (prompt: string) => PendingFollowUpContext | undefined;
+  readonly drainFollowUpContext: () => readonly PendingFollowUpContext[];
   readonly preparePendingContextForRegistration: () => void;
   readonly prepareSettleForRegistration: () => void;
   readonly recordLastAssistant: (message: AssistantMessage | undefined) => void;
@@ -93,6 +97,11 @@ interface ContextBuffer<T extends { readonly context: string }> {
   readonly append: (entry: T) => void;
   readonly entries: () => readonly T[];
   readonly drain: () => readonly T[];
+  /**
+   * Removes and returns the first entry `matches` accepts, with every entry
+   * before it, or removes nothing when it accepts none.
+   */
+  readonly takeThrough: (matches: (entry: T) => boolean) => T | undefined;
 }
 
 // An entry with an empty context adds nothing, so the buffer drops it.
@@ -114,6 +123,16 @@ function createContextBuffer<T extends { readonly context: string }>(): ContextB
       pending = [];
       return entries;
     },
+
+    takeThrough(matches: (entry: T) => boolean): T | undefined {
+      const index = pending.findIndex(matches);
+      const taken = pending[index];
+      if (taken !== undefined) {
+        pending = pending.slice(index + 1);
+      }
+
+      return taken;
+    },
   };
 }
 
@@ -128,6 +147,11 @@ export function createHooksRuntime(): HooksRuntime {
   // session; a prompt's context belongs to the turn of that prompt.
   const pendingSessionStartContext = createContextBuffer<PendingSessionStartContext>();
   const pendingPromptContext = createContextBuffer<PendingPromptContext>();
+  // A queued follow-up's context waits, in queue order, for the turn end
+  // after which the agent reads that follow-up. Pi reads its follow-ups in
+  // order, so the contexts queued before the one it reads are for follow-ups
+  // it already read or dropped.
+  const pendingFollowUpContext = createContextBuffer<PendingFollowUpContext>();
   let lastAssistant: AssistantMessage | undefined;
   let stopHookActive = false;
   let consecutiveBlockCount = 0;
@@ -184,12 +208,18 @@ export function createHooksRuntime(): HooksRuntime {
     appendPendingPromptContext: pendingPromptContext.append,
     pendingPromptContextEntries: pendingPromptContext.entries,
     drainPendingPromptContext: pendingPromptContext.drain,
+    queueFollowUpContext: pendingFollowUpContext.append,
+    takeFollowUpContext(prompt: string): PendingFollowUpContext | undefined {
+      return pendingFollowUpContext.takeThrough((entry) => entry.prompt === prompt);
+    },
+    drainFollowUpContext: pendingFollowUpContext.drain,
 
-    // D-CF5-13: a bridge load empties both buffers, so no context reaches a
+    // D-CF5-13: a bridge load empties every buffer, so no context reaches a
     // later session.
     preparePendingContextForRegistration(): void {
       pendingSessionStartContext.drain();
       pendingPromptContext.drain();
+      pendingFollowUpContext.drain();
     },
 
     prepareSettleForRegistration,

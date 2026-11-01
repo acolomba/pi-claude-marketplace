@@ -59,7 +59,7 @@ import { SCOPES } from "../../shared/types.ts";
 
 import { reapOrphans, shutdownInMemoryChildren } from "./async-rewake/registry.ts";
 import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
-import { HOOK_CONTEXT_MESSAGE_TYPE } from "./event-adapters.ts";
+import { HOOK_CONTEXT_MESSAGE_TYPE, sendDueFollowUpContext } from "./event-adapters.ts";
 import { compileIfPredicate, MATCH_ALL_IF } from "./if-field/index.ts";
 import { claudeSessionEndReason } from "./payloads/session-end.ts";
 import { claudeSessionStartSource } from "./payloads/session-start.ts";
@@ -82,6 +82,7 @@ import type {
   CompositeReturnFor,
   HookExecutor,
 } from "./dispatch.ts";
+import type { FollowUpTurnEnd } from "./event-adapters.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type {
   BeforeAgentStartEvent,
@@ -1164,6 +1165,15 @@ async function registerHooksBridgeWith(
   pi.on(
     "before_agent_start",
     bindWithMode(() => createBeforeAgentStartHandler(runtime)),
+  );
+  // The context of a queued follow-up goes out at the turn end after which
+  // the agent reads that follow-up (D-CF5-13).
+  pi.on(
+    "turn_end",
+    bindWithMode(() => (event: FollowUpTurnEnd) => {
+      sendDueFollowUpContext(event, runtime, pi);
+      return Promise.resolve(undefined);
+    }),
   );
   // Settle-time turn-boundary dispatch: agent_end caches the run's
   // last-assistant message; agent_settled reads it and gates on stopReason

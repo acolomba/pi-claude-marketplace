@@ -2126,6 +2126,57 @@ describe("composite per-event adapters", () => {
     assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
   });
 
+  for (const { name, streamingBehavior, left } of [
+    { name: "drops", streamingBehavior: undefined, left: [] },
+    {
+      name: "keeps",
+      streamingBehavior: "followUp",
+      left: [
+        {
+          context: "unread context",
+          scope: "project",
+          marketplace: "stale-marketplace",
+          pluginId: "stale-plugin",
+          prompt: "an earlier follow-up",
+        },
+      ],
+    },
+  ] as const) {
+    test(`${name} the follow-up context Pi has not read when a prompt arrives with streaming behavior ${String(streamingBehavior)} (D-CF5-13)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.queueFollowUpContext({
+        context: "unread context",
+        scope: "project",
+        marketplace: "stale-marketplace",
+        pluginId: "stale-plugin",
+        prompt: "an earlier follow-up",
+      });
+      const handler = compositeHandlerFor(
+        runtime,
+        "UserPromptSubmit",
+        runtime.currentGeneration(),
+        undefined,
+        createRecordingExecutor({}, []),
+      );
+
+      // act
+      await handler(
+        {
+          type: "input",
+          text: "review hooks",
+          source: "rpc",
+          ...(streamingBehavior === undefined ? {} : { streamingBehavior }),
+        },
+        createExtensionContext("/workspace/follow-up-stale"),
+      );
+
+      // assert
+      assert.deepStrictEqual(runtime.drainFollowUpContext(), left);
+    });
+  }
+
   test("passes a UserPromptSubmit noop through as undefined", async () => {
     // arrange
     const runtime = createHooksRuntime();

@@ -12,6 +12,7 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-timer.ts";
 import type {
   CacheEntry,
+  PendingFollowUpContext,
   PendingPromptContext,
   PendingSessionStartContext,
   RoutingEntry,
@@ -268,7 +269,7 @@ test("appends and drains pending prompt context once in arrival order, apart fro
   assert.deepStrictEqual(secondDrain, []);
 });
 
-test("empties both pending context buffers at registration (D-CF5-13)", () => {
+test("empties every pending context buffer at registration (D-CF5-13)", () => {
   // arrange
   const runtime = createHooksRuntime();
   const entry = {
@@ -279,6 +280,7 @@ test("empties both pending context buffers at registration (D-CF5-13)", () => {
   } satisfies PendingPromptContext;
   runtime.appendPendingSessionStartContext(entry);
   runtime.appendPendingPromptContext(entry);
+  runtime.queueFollowUpContext({ ...entry, prompt: "stale follow-up" });
 
   // act
   runtime.preparePendingContextForRegistration();
@@ -287,6 +289,38 @@ test("empties both pending context buffers at registration (D-CF5-13)", () => {
   assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
   assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
   assert.deepStrictEqual(runtime.drainPendingPromptContext(), []);
+  assert.deepStrictEqual(runtime.drainFollowUpContext(), []);
+});
+
+test("hands out the context of the follow-up Pi reads and drops the ones queued before it (D-CF5-13)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const entry = (name: string): PendingFollowUpContext => ({
+    context: `${name} context`,
+    pluginId: `${name}-plugin`,
+    marketplace: "catalog",
+    scope: "user",
+    prompt: `${name} follow-up`,
+  });
+  runtime.queueFollowUpContext({ ...entry("empty"), context: "" });
+  runtime.queueFollowUpContext(entry("first"));
+  runtime.queueFollowUpContext(entry("second"));
+  runtime.queueFollowUpContext(entry("third"));
+
+  // act
+  const forUnknown = runtime.takeFollowUpContext("unknown follow-up");
+  const forSecond = runtime.takeFollowUpContext("second follow-up");
+  const forFirst = runtime.takeFollowUpContext("first follow-up");
+  const left = runtime.drainFollowUpContext();
+  const leftAfterDrain = runtime.drainFollowUpContext();
+
+  // assert
+  assert.strictEqual(forUnknown, undefined);
+  assert.deepStrictEqual(forSecond, entry("second"));
+  assert.strictEqual(forFirst, undefined);
+  assert.deepStrictEqual(left, [entry("third")]);
+  assert.deepStrictEqual(leftAfterDrain, []);
+  assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
 });
 
 test("applies settle registration, input, and bounded reentry transitions", () => {

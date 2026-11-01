@@ -654,12 +654,23 @@ export type CompositeDispatchEvent = Exclude<
  * earlier `input` buffered for a turn that never started (a prompt another
  * extension handled, or one whose run failed to start) is dropped when the
  * next prompt arrives, before its hooks run, so it never reaches a later
- * prompt's turn.
+ * prompt's turn. A prompt that Pi does not queue arrives while no agent
+ * runs, so a follow-up context still waiting belongs to a follow-up that Pi
+ * did not read, and is dropped too.
  */
-function dropStalePromptContext(runtime: HooksRuntime): void {
+function dropStalePromptContext(runtime: HooksRuntime, event: InputEvent): void {
   const stale = runtime.drainPendingPromptContext();
   if (stale.length > 0) {
     hookDebugLog(`dispatch: dropped ${stale.length} stale UserPromptSubmit context(s)`);
+  }
+
+  if (event.streamingBehavior !== undefined) {
+    return;
+  }
+
+  const unread = runtime.drainFollowUpContext();
+  if (unread.length > 0) {
+    hookDebugLog(`dispatch: dropped ${unread.length} unread follow-up context(s)`);
   }
 }
 
@@ -695,7 +706,7 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
     }
 
     if (claudeEvent === "UserPromptSubmit") {
-      dropStalePromptContext(runtime);
+      dropStalePromptContext(runtime, event as InputEvent);
     }
 
     const bucket = runtime.getRoutingBucket(claudeEvent);

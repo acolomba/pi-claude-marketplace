@@ -64,6 +64,7 @@ import type { PendingPromptContext, RoutingEntry } from "./routing-state.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type {
+  AgentMessage,
   ExtensionAPI,
   ExtensionContext,
   InputEvent,
@@ -374,15 +375,18 @@ export function adaptPreCompactResult(
 export const HOOK_CONTEXT_MESSAGE_TYPE = "claude-hook-additional-context";
 
 /**
- * D-CF5-13: send the context of a prompt that Pi queues into the running
- * agent (a steer or a follow-up) as a hidden message. No
- * `before_agent_start` fires for a queued prompt, so a buffered context would
- * wait for a later prompt's turn. `triggerTurn: false` queues the message
- * until the running turn ends, so the model reads it on the turn that takes
- * the queued prompt. Pi queues the prompt itself only after its `input`
- * handlers return, so the context comes just before the prompt (Pi gap: no
- * carrier puts a message after a queued prompt). A blank context, or no Pi
- * API, sends nothing; a send that throws is debug-logged.
+ * D-CF5-13: send the context of a prompt that Pi queued into the running
+ * agent as a hidden message. No `before_agent_start` fires for a queued
+ * prompt, so a buffered context would wait for a later prompt's turn.
+ * `triggerTurn: false` holds the message until the running turn ends, so the
+ * model reads it on the next model call. A steer is read on that call, so
+ * its context goes out at once; a follow-up's waits for the turn before Pi
+ * reads it (`sendDueFollowUpContext`). Pi queues the prompt itself only after
+ * its `input` handlers return, so the context comes just before the prompt
+ * (Pi gap: no carrier puts a message after a queued prompt). Pi's
+ * `deliverAs` cannot carry it: Pi reads one queued message per model call by
+ * default, so the context would get a model call of its own. A blank
+ * context, or no Pi API, sends nothing; a send that throws is debug-logged.
  */
 function sendQueuedPromptContext(pi: ExtensionAPI | undefined, text: string): void {
   if (pi === undefined || text.trim() === "") {
@@ -403,6 +407,85 @@ function sendQueuedPromptContext(pi: ExtensionAPI | undefined, text: string): vo
   }
 }
 
+/** The parts of Pi's `turn_end` event that tell what the agent reads next. */
+export interface FollowUpTurnEnd {
+  readonly message: AgentMessage;
+  readonly context: { readonly pendingMessages: readonly AgentMessage[] };
+}
+
+// Whether the agent stops working after `message` and so reads the next
+// follow-up: the turn ended without a tool call, an error, or an abort.
+function endsTheWork(message: AgentMessage): boolean {
+  if (message.role !== "assistant") {
+    return false;
+  }
+
+  return (
+    message.stopReason !== "error" &&
+    message.stopReason !== "aborted" &&
+    !message.content.some((part) => part.type === "toolCall")
+  );
+}
+
+// The text of a queued user message, as Pi matches its queues by text.
+function userMessageText(message: AgentMessage | undefined): string | undefined {
+  if (message?.role !== "user") {
+    return undefined;
+  }
+
+  const { content } = message;
+  return typeof content === "string"
+    ? content
+    : content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("");
+}
+
+/**
+ * D-CF5-13: at a turn end, send the context of the follow-up the agent reads
+ * next. Pi reads a follow-up only when the agent would otherwise stop, and
+ * its next queued message (`context.pendingMessages[0]`) is a steer when one
+ * waits, else the next follow-up. So the context goes out when the turn ends
+ * the work and that message is a follow-up whose context waits, matched by
+ * text as Pi matches its own queues. Pi appends the message at this turn
+ * end, before it reads the follow-up.
+ */
+export function sendDueFollowUpContext(
+  turn: FollowUpTurnEnd,
+  runtime: HooksRuntime,
+  pi: ExtensionAPI | undefined,
+): void {
+  const next = userMessageText(turn.context.pendingMessages[0]);
+  if (next === undefined || !endsTheWork(turn.message)) {
+    return;
+  }
+
+  const entry = runtime.takeFollowUpContext(next);
+  if (entry !== undefined) {
+    sendQueuedPromptContext(pi, entry.context);
+  }
+}
+
+// D-CF5-13: where a prompt's context waits. A prompt that starts its own run
+// buffers it for `before_agent_start`; a steer sends it at once; a follow-up
+// queues it for the turn end before Pi reads the follow-up.
+function queuePromptContext(text: string, event: InputEvent, context: HookAdapterContext): void {
+  switch (event.streamingBehavior) {
+    case undefined:
+      context.runtime.appendPendingPromptContext(bufferedContext(text, context));
+      return;
+
+    case "steer":
+      sendQueuedPromptContext(context.pi, text);
+      return;
+
+    case "followUp":
+      context.runtime.queueFollowUpContext({
+        ...bufferedContext(text, context),
+        prompt: event.text,
+      });
+      return;
+  }
+}
+
 /**
  * D-60-03: convert a folded `HookExecResult` to the Pi `input` handler
  * return shape (`InputEventResult | undefined`).
@@ -411,9 +494,9 @@ function sendQueuedPromptContext(pi: ExtensionAPI | undefined, text: string): vo
  * prompt. The adapter buffers it with the provenance of the attributed entry
  * and lets the prompt continue; the `before_agent_start` handler of the same
  * turn sends it as a message after the prompt. A prompt that Pi queues into
- * the running agent starts no turn of its own, so its context is sent at
- * once instead (`sendQueuedPromptContext`). A block or stop buffers nothing,
- * so a stopped prompt sends no context to any turn.
+ * the running agent starts no turn of its own, so its context goes out as a
+ * message on the model call that reads it (`queuePromptContext`). A block or
+ * stop buffers nothing, so a stopped prompt sends no context to any turn.
  */
 export function adaptInputResult(
   result: HookExecResult,
@@ -429,14 +512,7 @@ export function adaptInputResult(
         return undefined;
       }
 
-      if (event.streamingBehavior === undefined) {
-        context.runtime.appendPendingPromptContext(
-          bufferedContext(result.additionalContext, context),
-        );
-      } else {
-        sendQueuedPromptContext(context.pi, result.additionalContext);
-      }
-
+      queuePromptContext(result.additionalContext, event, context);
       return undefined;
 
     case "stop":
