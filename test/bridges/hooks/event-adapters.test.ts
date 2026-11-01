@@ -1084,6 +1084,65 @@ describe("adaptObservationResultForEvent", () => {
     ]);
   });
 
+  for (const { arm, hookOutcome } of [
+    {
+      arm: "blocks",
+      hookOutcome: { kind: "block", reason: "denied", additionalContext: "kept context" } as const,
+    },
+    {
+      arm: "stops",
+      hookOutcome: { kind: "stop", stopReason: "halt", additionalContext: "kept context" } as const,
+    },
+    { arm: "is a noop", hookOutcome: { kind: "noop", additionalContext: "kept context" } as const },
+  ]) {
+    test(`captures the SessionStart context of a fold that ${arm} (D-CF5-09)`, () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      const provenance = {
+        scope: "project",
+        marketplace: "owner-marketplace",
+        pluginId: "owner-plugin",
+      } as const;
+
+      // act
+      adaptObservationResultForEvent(
+        hookOutcome,
+        "SessionStart",
+        provenanceContext(runtime, provenance),
+      );
+
+      // assert
+      assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [
+        {
+          context: "kept context",
+          scope: "project",
+          marketplace: "owner-marketplace",
+          pluginId: "owner-plugin",
+        },
+      ]);
+    });
+  }
+
+  test("drops the PreCompact context of a fold that blocks", () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const provenance = {
+      scope: "project",
+      marketplace: "owner-marketplace",
+      pluginId: "owner-plugin",
+    } as const;
+
+    // act
+    adaptObservationResultForEvent(
+      { kind: "block", reason: "denied", additionalContext: "dropped context" },
+      "PreCompact",
+      provenanceContext(runtime, provenance),
+    );
+
+    // assert
+    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+  });
+
   test("returns from noop without changing pending state", () => {
     // arrange
     const runtime = createHooksRuntime();

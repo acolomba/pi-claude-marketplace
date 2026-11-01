@@ -387,18 +387,20 @@ export function adaptInputResult(
  *
  * Pi's lifecycle splits the upstream Claude Code SessionStart-hook contract
  * across two surfaces: `session_start` returns void, and
- * `before_agent_start` can add a message to the next agent turn. The
- * mutate-arm path here captures `additionalContext` from a SessionStart
- * event into the runtime's pending buffer; the `before_agent_start` handler
- * in `event-router.ts` drains the buffer on the next turn into a persisted
+ * `before_agent_start` can add a message to the next agent turn. This
+ * adapter captures the folded `additionalContext` of a SessionStart event
+ * into the runtime's pending buffer; the `before_agent_start` handler in
+ * `event-router.ts` drains the buffer on the next turn into a persisted
  * message after the prompt (D-CF5-13).
  *
  * Per-event semantics:
  *
  *   - SessionStart:
- *       mutate.additionalContext -> appendPendingSessionStartContext()
- *       mutate without additionalContext -> drop (no upstream payload to carry)
- *       block / stop / noop -> debug-log (block/stop) and return undefined
+ *       additionalContext on any arm -> appendPendingSessionStartContext().
+ *       The fold joins every hook's context into its decisive arm, so one
+ *       hook that blocks or stops does not take the context of the others
+ *       away, as in Claude Code (D-CF5-09).
+ *       block / stop -> also debug-logged; no Pi return slot exists
  *
  *   - SessionEnd / PreCompact / PostCompact:
  *       all arms silently drop the additionalContext (and other mutate
@@ -419,28 +421,25 @@ export function adaptObservationResultForEvent(
   claudeEvent: Extract<BucketAEvent, "SessionStart" | "SessionEnd" | "PreCompact" | "PostCompact">,
   context: HookAdapterContext,
 ): undefined {
+  if (
+    claudeEvent === "SessionStart" &&
+    result.additionalContext !== undefined &&
+    result.additionalContext !== ""
+  ) {
+    // Capture for drain at the next before_agent_start. The buffer is
+    // drained one-shot by beforeAgentStartHandlerFor and cleared on
+    // registerHooksBridge entry (so /reload does not leak stale context
+    // across sessions).
+    context.runtime.appendPendingSessionStartContext(
+      bufferedContext(result.additionalContext, context),
+    );
+  }
+
   switch (result.kind) {
     case "block":
       hookDebugLog(
         `adaptObservation: block ignored (no Pi return slot); event=${claudeEvent} reason=${result.reason ?? "<none>"}`,
       );
-      return undefined;
-
-    case "mutate":
-      if (claudeEvent === "SessionStart" && typeof result.additionalContext === "string") {
-        // Capture for drain at the next before_agent_start. The buffer is
-        // drained one-shot by beforeAgentStartHandlerFor and cleared on
-        // registerHooksBridge entry (so /reload does not leak stale
-        // context across sessions).
-        context.runtime.appendPendingSessionStartContext(
-          bufferedContext(result.additionalContext, context),
-        );
-      }
-
-      // SessionEnd / PreCompact / PostCompact: no logical drain point for
-      // additionalContext. Other mutate fields (updatedInput,
-      // updatedToolOutput, permissionDecision) are not meaningful for
-      // observation events either; the adapter silently drops them.
       return undefined;
 
     case "stop":
@@ -449,6 +448,11 @@ export function adaptObservationResultForEvent(
       );
       return undefined;
 
+    // SessionEnd / PreCompact / PostCompact: no logical drain point for
+    // additionalContext. Other mutate fields (updatedInput,
+    // updatedToolOutput, permissionDecision) are not meaningful for
+    // observation events either; the adapter silently drops them.
+    case "mutate":
     case "noop":
       return undefined;
   }
