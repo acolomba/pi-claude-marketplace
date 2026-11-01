@@ -1681,7 +1681,7 @@ test("DFEN-01 non-boolean defaultEnabled in plugin.json -> unavailable + malform
 // observe schema leniency and would pass even under `additionalProperties: false`.
 
 // ──────────────────────────────────────────────────────────────────────────
-// MCPR-01..04: string mcpServers references (wrapped .mcp.json, D-01/D-04)
+// MCPR-01..04: string mcpServers references (a wrapped or bare MCP file, D-CF6-01)
 // ──────────────────────────────────────────────────────────────────────────
 
 const WRAPPED_MCP = JSON.stringify({ mcpServers: { srv: { command: "node" } } });
@@ -2056,9 +2056,9 @@ test("MCPR-03 wrapped reference with malformed INNER map is skipped silently -> 
 });
 
 // Criterion 5 regression: an UNDECLARED conventional <pluginRoot>/.mcp.json in
-// the UNWRAPPED bare-server-map form still resolves installable. The
-// wrapped-only rule applies ONLY to the declared string reference;
-// readStandaloneMcp's unwrapped tolerance is unchanged.
+// the UNWRAPPED bare-server-map form still resolves installable. Every file
+// source may hold its map with or without the `mcpServers` wrapper
+// (D-CF6-01).
 test("criterion 5: undeclared unwrapped standalone .mcp.json still resolves installable", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");

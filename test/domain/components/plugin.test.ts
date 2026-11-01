@@ -21,7 +21,7 @@ void ({ source: "./plugin" } satisfies PluginEntry);
 void ({ name: "plugin" } satisfies PluginEntry);
 // @ts-expect-error The enablement declaration is boolean when present.
 void ({ name: "plugin", source: "./plugin", defaultEnabled: "false" } satisfies PluginEntry);
-// @ts-expect-error MCP servers are a file reference or a server map.
+// @ts-expect-error MCP servers are a file reference, a server map, or an array of both.
 void ({ name: "plugin", source: "./plugin", mcpServers: 42 } satisfies PluginEntry);
 
 describe("PLUGIN_ENTRY_SCHEMA", () => {
