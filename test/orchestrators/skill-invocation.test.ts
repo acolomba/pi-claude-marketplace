@@ -9,6 +9,7 @@ import { invokeBridgedSkill } from "../../extensions/pi-claude-marketplace/orche
 import { parseFrontmatter } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
+import type { SkillAliasState } from "../../extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts";
 import type {
   SkillInvocationDependencies,
   SkillInvocationRequest,
@@ -92,14 +93,28 @@ function provingLedger(files: Readonly<Record<string, string>>): string {
   return ledgerText(CWD, Object.fromEntries(projectSkills));
 }
 
+/** The project's `state.json`: plugin `demo` of marketplace `fixtures` staged `demo-greet`. */
+const OWNER_STATE: SkillAliasState = {
+  marketplaces: {
+    fixtures: {
+      plugins: {
+        other: { resources: { skills: ["other-skill"] } },
+        demo: { resources: { skills: ["demo-greet"] } },
+      },
+    },
+  },
+};
+
 /**
  * Reads only the named files and the user ledger, `ledger` (by default one
  * that lists each project skill among `files`, and none for `null`); any
- * other read fails the case.
+ * other read fails the case. The project's `state.json` is `state`, and
+ * `null` makes it unreadable.
  */
 function dependencies(
   files: Readonly<Record<string, string>>,
   ledger: string | null = provingLedger(files),
+  state: SkillAliasState | null = OWNER_STATE,
 ): SkillInvocationDependencies {
   const readable = ledger === null ? files : { ...files, [LEDGER]: ledger };
   return {
@@ -110,6 +125,10 @@ function dependencies(
         ? Promise.reject(new Error(`unexpected read of ${file}`))
         : Promise.resolve(content);
     },
+    loadState: (extensionRoot) =>
+      extensionRoot !== `${CWD}/.pi/pi-claude-marketplace` || state === null
+        ? Promise.reject(new Error(`unexpected state read of ${extensionRoot}`))
+        : Promise.resolve(state),
     host,
     runShell: () => Promise.reject(new Error("a body without a ! command must not run a shell")),
   };
@@ -609,8 +628,36 @@ for (const { title, ledger } of [
       kind: "abort",
       message:
         "The skill /skill:demo-greet was not installed into the project /work on this machine, " +
-        "or its file changed after the install. Install its plugin into this project with " +
-        "--scope project, then run /reload to use it.",
+        "or its file changed after the install. Reinstall its plugin into this project with " +
+        "/claude:plugin reinstall demo@fixtures --scope project, then run /reload to use it.",
+    });
+  });
+}
+
+for (const { title, state } of [
+  { title: "cannot be read", state: null },
+  {
+    title: "lists the skill under no plugin",
+    state: { marketplaces: { fixtures: { plugins: {} } } },
+  },
+]) {
+  test(`D-CF2-13: the abort names a reinstall of every project plugin when the project state ${title}`, async () => {
+    // arrange
+    const files = { [PROJECT_SKILL]: STATUS_SKILL };
+
+    // act
+    const outcome = await invokeBridgedSkill(
+      request({ args: "" }),
+      dependencies(files, null, state),
+    );
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      kind: "abort",
+      message:
+        "The skill /skill:demo-greet was not installed into the project /work on this machine, " +
+        "or its file changed after the install. Reinstall its plugin into this project with " +
+        "/claude:plugin reinstall --scope project, then run /reload to use it.",
     });
   });
 }

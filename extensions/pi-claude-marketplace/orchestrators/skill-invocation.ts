@@ -30,6 +30,7 @@ import {
   substituteArguments,
 } from "../domain/argument-substitution.ts";
 import { ContextInjectionError, expandContextInjections } from "../domain/context-injection.ts";
+import { loadState } from "../persistence/state-io.ts";
 import { getAgentDir, parseFrontmatter } from "../platform/pi-api.ts";
 import {
   bashMissingMessage,
@@ -40,6 +41,7 @@ import {
 } from "../platform/prompt-shell.ts";
 import { errorMessage } from "../shared/errors.ts";
 
+import type { SkillAliasState } from "./skill-alias-state.ts";
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 import type { PromptShellHost, PromptShellRunner } from "../platform/prompt-shell.ts";
 
@@ -70,6 +72,8 @@ export type SkillInvocationOutcome =
 export interface SkillInvocationDependencies {
   readonly getAgentDir: () => string;
   readonly readFile: (file: string) => Promise<string>;
+  /** Reads the `state.json` of the scope whose extension root is given. */
+  readonly loadState: (extensionRoot: string) => Promise<SkillAliasState>;
   /** The machine facts that choose a shell and give the commands their environment. */
   readonly host: PromptShellHost;
   readonly runShell: PromptShellRunner;
@@ -78,6 +82,7 @@ export interface SkillInvocationDependencies {
 const DEFAULT_DEPENDENCIES: SkillInvocationDependencies = {
   getAgentDir,
   readFile: (file) => readFile(file, "utf8"),
+  loadState,
   host: NODE_PROMPT_SHELL_HOST,
   runShell: createPromptShellRunner({
     spawn: NODE_PROMPT_SHELL_SPAWN,
@@ -208,11 +213,45 @@ function untrustedProjectMessage(request: SkillInvocationRequest): string {
 }
 
 /**
+ * The command that stages the project skill again and records it as this
+ * user's install. The project's `state.json` already records the plugin, so
+ * `install` would refuse it as installed; `reinstall` names the plugin that
+ * the record lists the skill under, or every project plugin when no record
+ * lists it.
+ */
+async function reinstallCommand(
+  request: SkillInvocationRequest,
+  skill: BridgedSkill,
+  dependencies: SkillInvocationDependencies,
+): Promise<string> {
+  let state: SkillAliasState;
+  try {
+    state = await dependencies.loadState(path.join(request.cwd, ".pi", "pi-claude-marketplace"));
+  } catch {
+    return "/claude:plugin reinstall --scope project";
+  }
+
+  const owner = Object.entries(state.marketplaces)
+    .flatMap(([marketplace, entry]) =>
+      Object.entries(entry.plugins).map(([plugin, record]) => ({ marketplace, plugin, record })),
+    )
+    .find(({ record }) => record.resources.skills.includes(skill.name));
+  return owner === undefined
+    ? "/claude:plugin reinstall --scope project"
+    : `/claude:plugin reinstall ${owner.plugin}@${owner.marketplace} --scope project`;
+}
+
+/**
  * The abort message for a project skill that this user did not install into
  * the project, or whose file changed after the install (D-CF2-13).
  */
-function notInstalledHereMessage(request: SkillInvocationRequest): string {
-  return `The skill ${request.typed} was not installed into the project ${request.cwd} on this machine, or its file changed after the install. Install its plugin into this project with --scope project, then run /reload to use it.`;
+async function notInstalledHereMessage(
+  request: SkillInvocationRequest,
+  skill: BridgedSkill,
+  dependencies: SkillInvocationDependencies,
+): Promise<string> {
+  const command = await reinstallCommand(request, skill, dependencies);
+  return `The skill ${request.typed} was not installed into the project ${request.cwd} on this machine, or its file changed after the install. Reinstall its plugin into this project with ${command}, then run /reload to use it.`;
 }
 
 /**
@@ -283,7 +322,7 @@ export async function invokeBridgedSkill(
   // user installed. The ledger in the user scope can, and the digest is of
   // the very bytes that run below.
   if (!(await isInstalledHere(request, skill, content, agentDir, dependencies))) {
-    return { kind: "abort", message: notInstalledHereMessage(request) };
+    return { kind: "abort", message: await notInstalledHereMessage(request, skill, dependencies) };
   }
 
   try {
