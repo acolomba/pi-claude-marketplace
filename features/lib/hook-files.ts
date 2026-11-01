@@ -38,6 +38,8 @@
  *   `"stop_hook_active":true`, so a Stop hook blocks once and lets the
  *   re-entered turn end.
  * - `stderr` and `output`: text it prints, as written, to stderr and stdout.
+ * - `output bytes`: a number of `x` bytes it prints to stdout after `output`,
+ *   enough to pass the bridge's stdout limit.
  * - `sleep`: seconds it waits after printing.
  * - `exit code`: the code it exits with, 0 by default.
  * - `meets`: before recording, it creates `$HOME/hook-meetings/<name>` and
@@ -76,6 +78,7 @@ export interface RecordingHook {
   readonly form?: RecordingHookForm;
   readonly arguments?: readonly string[];
   readonly output?: string;
+  readonly outputBytes?: number;
   readonly stderr?: string;
   readonly exitCode?: number;
   readonly sleep?: number;
@@ -99,6 +102,7 @@ const SCRIPT_FORMS: ReadonlySet<RecordingHookForm | undefined> = new Set<Recordi
 // The fields only a script can act on, by the column that sets each.
 const BEHAVIOR_FIELDS = {
   output: "output",
+  "output bytes": "outputBytes",
   stderr: "stderr",
   "exit code": "exitCode",
   sleep: "sleep",
@@ -148,6 +152,14 @@ function parseExitCode(cell: string): number {
   return Number(cell);
 }
 
+function parseByteCount(cell: string): number {
+  if (!/^\d+$/u.test(cell)) {
+    throw new Error(`a hook's output bytes is a whole number: ${cell}`);
+  }
+
+  return Number(cell);
+}
+
 function parseSeconds(cell: string, what: string): number {
   if (!/^\d+(?:\.\d+)?$/u.test(cell)) {
     throw new Error(`a hook's ${what} is a number of seconds: ${cell}`);
@@ -165,6 +177,7 @@ const COLUMN_PARSERS: Readonly<Record<string, (cell: string) => Partial<Recordin
   form: (cell) => ({ form: oneOf(cell, FORMS, "a hook form") }),
   arguments: (cell) => ({ arguments: parseArguments(cell) }),
   output: (cell) => ({ output: cell }),
+  "output bytes": (cell) => ({ outputBytes: parseByteCount(cell) }),
   stderr: (cell) => ({ stderr: cell }),
   "exit code": (cell) => ({ exitCode: parseExitCode(cell) }),
   sleep: (cell) => ({ sleep: parseSeconds(cell, "sleep") }),
@@ -305,6 +318,9 @@ function afterRecording(hook: RecordingHook): string[] {
       : []),
     ...(hook.stderr === undefined ? [] : [`printf '%s' ${shellQuoted(hook.stderr)} >&2`]),
     ...(hook.output === undefined ? [] : [`printf '%s' ${shellQuoted(hook.output)}`]),
+    ...(hook.outputBytes === undefined
+      ? []
+      : [String.raw`head -c ${hook.outputBytes} /dev/zero | tr '\0' x`]),
     // The sleep keeps no pipe of the hook open, so killing the script ends
     // the hook's output at once.
     ...(hook.sleep === undefined ? [] : [`sleep ${hook.sleep} </dev/null >/dev/null 2>&1`]),

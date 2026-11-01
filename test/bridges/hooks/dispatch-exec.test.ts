@@ -1750,6 +1750,43 @@ test("keeps the exit-2 block of a hook with onFailure block", async (t) => {
   assert.deepStrictEqual(hookOutcome, { kind: "block", reason: "denied", fromStderr: true });
 });
 
+test("blocks a hook its stderr overflow killed when onFailure is block", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+
+  // act
+  const hookOutcome = await dispatchDriven(
+    t,
+    { command: "guard", onFailure: "block" },
+    async (child) => {
+      child.stderr?.write("boom\n");
+      child.stderr?.write(Buffer.alloc(64 * 1024, 0x65));
+      await child.close(null, "SIGTERM");
+    },
+  );
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: `${ON_FAILURE_HEAD}\nboom` });
+});
+
+test("keeps a hook that exits 0 after its stdout overflow a noop when onFailure is block", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+
+  // act
+  const hookOutcome = await dispatchDriven(
+    t,
+    { command: "guard", onFailure: "block" },
+    async (child) => {
+      child.stdout?.write(Buffer.alloc(1024 * 1024 + 1, 0x78));
+      await child.close(0);
+    },
+  );
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+});
+
 test("contains an EPIPE from stdin after registering its error listener", async (t) => {
   // arrange
   const runtime = createHooksRuntime();

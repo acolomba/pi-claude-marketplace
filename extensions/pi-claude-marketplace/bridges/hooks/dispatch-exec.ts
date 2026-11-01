@@ -405,7 +405,17 @@ async function spawnAndCollect(
 
     child.once("close", (code) => {
       if (overflowed) {
-        settle({ kind: "noop" });
+        // D-CF5-18: the overflow kill is a failure (a signal leaves `code`
+        // null), so an onFailure "block" guard stays closed. The truncated
+        // stdout is not parsed.
+        const failure = onFailureBlock(entry, {
+          startFailed: false,
+          timedOut: false,
+          exitCode: code,
+          stdout: "",
+          stderr,
+        });
+        settle(failure ?? { kind: "noop" });
         return;
       }
 
