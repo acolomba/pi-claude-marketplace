@@ -1,219 +1,213 @@
 ---
 phase: 02-skills
-reviewed: 2026-11-01T13:06:30Z
+reviewed: 2026-11-01T14:42:42Z
 depth: standard
-iteration: 2
-files_reviewed: 13
+iteration: 3
+files_reviewed: 25
 files_reviewed_list:
-  - extensions/pi-claude-marketplace/bridges/skills/skill-names.ts
-  - extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts
-  - extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts
   - extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts
+  - extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts
+  - extensions/pi-claude-marketplace/bridges/skills/index.ts
+  - extensions/pi-claude-marketplace/bridges/skills/project-installs.ts
+  - extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts
+  - extensions/pi-claude-marketplace/bridges/skills/skill-names.ts
   - extensions/pi-claude-marketplace/bridges/skills/stage.ts
-  - extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts
-  - extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts
+  - extensions/pi-claude-marketplace/bridges/skills/types.ts
+  - extensions/pi-claude-marketplace/bridges/skills/unstage.ts
+  - extensions/pi-claude-marketplace/index.ts
   - extensions/pi-claude-marketplace/orchestrators/discover.ts
-  - extensions/pi-claude-marketplace/edge/skill-aliases.ts
-  - features/step_definitions/skill/project-trust.steps.ts
-  - features/skill/project-trust.feature
+  - extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts
+  - extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts
   - features/skill/frontmatter.feature
-  - features/skill/lifecycle.feature
+  - features/skill/project-provenance.feature
+  - features/skill/project-trust.feature
+  - features/step_definitions/skill/project-provenance.steps.ts
+  - test/bridges/skills/frontmatter-degrade.test.ts
+  - test/bridges/skills/frontmatter-scan.test.ts
+  - test/bridges/skills/project-installs.test.ts
+  - test/bridges/skills/rewrite-frontmatter.test.ts
+  - test/bridges/skills/stage.test.ts
+  - test/bridges/skills/unstage.test.ts
+  - test/orchestrators/skill-alias-state.test.ts
+  - test/orchestrators/skill-invocation.test.ts
 findings:
   critical: 1
-  warning: 3
-  info: 5
-  total: 9
+  warning: 5
+  info: 6
+  total: 12
 status: issues_found
 ---
 
-# Phase 2: Code Review Report (iteration 2)
+# Phase 2: Code Review Report (iteration 3)
 
-**Reviewed:** 2026-11-01T13:06:30Z
+**Reviewed:** 2026-11-01T14:42:42Z
 **Depth:** standard
-**Files Reviewed:** 13
+**Files Reviewed:** 25
 **Status:** issues_found
 
 ## Narrative Findings (AI reviewer)
 
 ## Summary
 
-This pass checks the fixes in commits 6218a48, cd7b747, b1ea2de, and 488472b (diff base 1ab4199). It also looks for regressions in them and rates the three gaps the fixer reported. I ran the real modules under Node against each input below.
+This pass reviews the round-2 fixes, `git diff 9cbcd36 c284184` (commits 4e3b32f, 6a7ea1b, 8b05948, c284184). I ran the real modules under Node for the frontmatter cases and ran two throwaway cucumber scenarios from the scratchpad against the real harness. Nothing in the tree was changed.
 
-Status of the iteration-1 findings:
+Status of the round-2 findings:
 
-- **CR-01 (record writer, indented `---`): resolved.** The original input now gives `description: "Part one.\n---\nPart two.\n"` plus the record. `closingFenceIndex` uses Pi's own rule (`indexOf("\n---", 3)` in `dist/utils/frontmatter.js`). The same input class still breaks the other writers in the same staging pipeline (WR-02).
-- **WR-01 (record key spellings): resolved.** The double-quoted, single-quoted, spaced, and escaped (`"pi-claude-\x6darketplace":`) forms are all removed and replaced. A nested `meta.pi-claude-marketplace` is kept. Running the writer twice gives one record. The same spelling class still breaks the `name` and `description` writers (WR-03). One exotic form now leaves an empty key behind (IN-04).
-- **WR-02 (failures escaping the input handler): resolved.** A read or parse failure aborts with a usage error. Any other rejection is turned into an abort at the edge, and a table-load failure returns `continue`. I found no regression. One small robustness item remains (IN-05).
-- **WR-03 (project trust): not resolved for the scenario it described.** Pi 1.4.0 treats a project as trusted, with no prompt, when the project holds no resource from `TRUST_REQUIRING_PROJECT_CONFIG_RESOURCES`. `.pi/pi-claude-marketplace/` is not on that list. So the cloned repository in the original finding still runs its `!` commands and claims a bare alias. The new gate only works when the repository also ships, for example, `.pi/settings.json`, and an attacker would not ship one. The fix's own scenario has to add "the project holds a pi settings file" to make the gate bite. This is now **CR-01**. The model-side exposure that the fix left in place is **WR-01**.
-
-Fixer gaps:
-
-1. **The WR-03 residual is CR-01 (critical).** Requiring a `state.json` record does not close it, because the project's `state.json` sits in the same tree the attacker controls. The alias loader already requires it, and the original scenario forged it. Upstream keeps provenance outside the repository; see CR-01.
-2. **A forged record claiming a bare name is IN-03.** Only CR-01's attacker can reach it. A record written by install claims exactly one bare name, which matches upstream. Once provenance exists, this gap is closed too.
-3. **`frontmatterBlockEnd` is WR-02 (warning, pre-existing).** It is wider than reported. `setDescriptionScalar` breaks the same way whenever the description is rewritten (a `when_to_use` fold, a path variable, the empty-description fallback, or the 1,536 cap). The phase now has two fence rules in one pipeline.
+- **CR-01 (repository content runs `!` commands): not closed.** The ledger check works for the case it was built for. A repository that ships staged files and a forged `state.json` is stopped, whether at invocation or at the alias. Symlinked cwds, trailing slashes, and missing or malformed ledgers all fail closed. The digest covers the same string that is parsed and run, so there is no gap between check and use. User-scope skills are not gated. But D-CF2-13 assumes that "a repository cannot write" the ledger, and that is false. A repository that commits `.pi/claude-plugins.json` with `autoapply: true` makes this extension install the repository's own plugin at load time. That install writes the ledger, and the user's first `/skill:<x>` runs the `!` commands. I reproduced this end to end (**CR-01** below).
+- **WR-01 (discovery in an untrusted project): resolved.** Pi resolves trust before `resources_discover`, and the untrusted branch now gives Pi no project paths. I found no regression.
+- **WR-02 (one fence rule): resolved.** `frontmatterBlockEnd` now matches Pi 1.4.0's `indexOf("\n---", 3)` (`dist/utils/frontmatter.js:9`), and `skill-names.ts` has no local copy left.
+- **WR-03 (key spellings): resolved for the listed spellings, with one regression.** A node that holds more than one key (a flow mapping) is now treated as the `name` node. The rewrite then drops every other key without an error, where it used to fail loudly (**WR-05**).
 
 ## Critical Issues
 
-### CR-01: Plugin content the user never installed still runs its `!` commands, because Pi trusts a project that holds only `.pi/pi-claude-marketplace/`
+### CR-01: A repository's own project config can make the extension write the provenance ledger, so a cloned repository still runs its `!` commands
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts:107-134,234-236`; `extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts:156,166`; `extensions/pi-claude-marketplace/orchestrators/discover.ts:25-43`. Pi side: `node_modules/@earendil-works/pi-coding-agent/dist/core/trust-manager.js:8-17,151-170`, `core/project-trust.js:22-24`, `main.js:594-599`.
+**File:** `extensions/pi-claude-marketplace/orchestrators/reconcile/load.ts:89-106`; `extensions/pi-claude-marketplace/bridges/skills/stage.ts:523-544,616`; the premise at `extensions/pi-claude-marketplace/bridges/skills/project-installs.ts:12-17` and `orchestrators/skill-invocation.ts:281-287`
 
-**Issue:**
+**Issue:** D-CF2-13 trusts a ledger entry because "a repository cannot write" the user scope. It does not need to. Three facts combine:
 
-- Pi's `resolveProjectTrusted` returns `true` when `hasTrustRequiringProjectResources(cwd)` is false (`project-trust.js:22-24`). `main.js:596-599` computes `projectTrusted = !hasTrustRequiringResources || trustStore.get(cwd) === true`.
-- That check looks only at `.pi/{settings.json, mcp.json, extensions, skills, prompts, themes, SYSTEM.md, APPEND_SYSTEM.md}` and the `.agents/skills` directories on the way up the tree.
-- A repository that commits only `.pi/pi-claude-marketplace/` (a `state.json` plus `resources/skills/<x>/SKILL.md`) is therefore trusted, and the user is never asked.
+- `loadReconcileWithReader` reads `effectiveAutoapply` from four config files, the project base config `<cwd>/.pi/claude-plugins.json` among them. When the value is `true`, it runs `applyReconcile` on every load. Nothing checks trust or provenance first.
+- Pi 1.4.0 does not ask about trust for `.pi/claude-plugins.json`, because it is not in `TRUST_REQUIRING_PROJECT_CONFIG_RESOURCES` (`core/trust-manager.js:8-17`). The project is trusted with no prompt.
+- `apply` adds the declared marketplace and installs the declared plugin into the project scope. A marketplace `source` can be a path relative to the cwd (`marketplace/add.ts:1946`), so the marketplace can sit in the repository itself, and no network is needed. The skills commit then runs `recordProjectSkills`, which records every project-scope commit, including this one. The ledger now lists the repository's skill with its digest.
 
-In such a project:
+**Failure scenario (reproduced):** I used a scratchpad copy of the provenance background with no `.pi/settings.json`. The setup was a project base config with `{ "autoapply": true }`, a `marketplaces` entry, and a `plugins` entry for `demo`, plus a new session. The user never ran `install`. `/skill:demo-status` then sent the model `<skill name="demo-status" ...>Status: ran</skill>`, so `printf ran` ran. The same files with autoapply off pass the typed text through unchanged. A real repository would ship `.pi/claude-plugins.json` and `./mp/` and wait for the user to type the skill name, or its bare alias (`/review`, `/commit`).
 
-- `aggregateDiscoveredResources` serves every `resources/skills/*/SKILL.md` and reads no state at all, so Pi lists `/skill:<x>`.
-- `findBridgedSkill` accepts any loaded file at the staged path. `request.projectTrusted` is `true`, so the gate at line 234 passes, and `fillSkill` runs the file's `!` commands with the user's whole environment.
-- With a forged `state.json` and record line, `loadQualifiedSkillAliases` also gives the skill one bare name (`/review`, `/test`, `/commit`). `installedForms` keeps that name, because a bare name is a form that install writes.
+Upstream Claude Code 2.1.316 never installs a plugin because repository settings name it. Such a plugin is `not_installed_here` until the user installs it. The extension's own `autoapply` feature is the divergence that reopens the hole. A repository must not be able to turn it on for the user.
 
-This is the exact scenario WR-03 described. Deterministic shell execution is new in this milestone (D-CF1-02 / D-CF2-06), and its threat-model premise ("the commands come from the installed plugin") is still false for files the user did not install.
+**Fix:** Make provenance come from a user decision, and add an ID for this decision next to D-CF2-13:
 
-The project-scope hooks bridge hydrates from the same tree and also never calls `ctx.isProjectTrusted()`. It is outside this phase's file scope, but the same project-level decision should cover it.
-
-**Would requiring the plugin in `state.json` close it?** No. `<cwd>/.pi/pi-claude-marketplace/state.json` is inside the repository, so the attacker writes it along with the staged file. The alias loader already filters by state (`loadedSkills`), and the original attack included a forged state. Matching the staged directory against that record only checks the attacker's files against each other. The only variant it closes is `/skill:<x>` without a state file, and that is the cheapest variant to forge around.
-
-**What upstream does:** Claude Code 2.1.316 (`/opt/claude-code/bin/claude`) never takes plugin content from the repository:
-
-- The installed set is `installed_plugins.json` under the user's config directory. Each project-scope entry carries `scope: "project"` and `projectPath`. The loader picks `a.find((r) => r.scope === "project" && r.projectPath === o)` for the current project.
-- A plugin that only the repository's settings enable is dropped with reason `not_installed_here`: "only the repository's settings enable it and it is not installed on this machine".
-- A folder the user has not trusted drops project plugins with `untrusted_for_folder`. Trust is stored per project as `projects[<path>].hasTrustDialogAccepted`, also in user config.
-- In both cases, provenance lives outside the repository.
-
-**Fix:**
-
-1. Anchor provenance in the user scope, which a cloned repository cannot write. On every project-scope materialization (install, update, reinstall, enable, apply, import), write `<agentDir>/pi-claude-marketplace/project-installs.json` atomically. Key it by the canonical project path, and store the plugin id, the generated skill names, and a SHA-256 of each staged `SKILL.md`.
-2. At discovery, in the project branch of `aggregateDiscoveredResources`, accept a project skill directory only when that ledger lists it for `canonical(cwd)` and the hash matches. Make the same check in `findBridgedSkill`, in `loadQualifiedSkillAliases`, and in the project-scope hooks hydration.
-3. When content is present but not listed, report it the way upstream reports `not_installed_here`. The user runs `/claude:plugin apply` or `install` to adopt it.
-4. Keep the `ctx.isProjectTrusted()` gate as a second condition.
-
-All new writes stay inside `<scopeRoot>/pi-claude-marketplace/` (NFR-10). Record the decision in CONTEXT with an ID, together with the hooks bridge. Add a cucumber scenario with no `.pi/settings.json`: a committed `.pi/pi-claude-marketplace/` tree whose `/skill:<x>` and bare alias run nothing.
+1. Ignore `autoapply` from project-scope config files (both layers) when deciding whether a load runs `apply`. A repository cannot opt the user in. Only the user-scope configs can turn on load-time apply.
+2. Even with user-scope autoapply on, a load-time apply should not add project-scope entries to the ledger unless Pi's trust store explicitly trusts the project. The default no-files trust does not count. One way is to have `applyReconcile` take a ledger port, and pass a no-op ledger for the project scope during a load. The installed skills then abort with the not-installed message until the user runs an explicit command.
+3. Add a scenario to `features/skill/project-provenance.feature`. It has no `.pi/settings.json`, a project base config `{ "autoapply": true }` that declares a marketplace and a plugin, and a new session. `/skill:demo-status` must run nothing, and the model must receive nothing.
 
 ## Warnings
 
-### WR-01: In a project that Pi does not trust, the staged skills are still discovered, listed to the model, and readable
+### WR-01: The abort message tells the user to `install`, which fails with "already installed" in every case that reaches it
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/discover.ts:17-43`; `extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts:230-236`
+**File:** `extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts:214-216`
 
-**Issue:** The fix gates only typed invocation and aliases. `aggregateDiscoveredResources` still returns the project's skill and prompt paths when `ctx.isProjectTrusted()` is false. So in a project Pi refuses to trust:
+**Issue:** `notInstalledHereMessage` says "Install its plugin into this project with --scope project, then run /reload". A project skill reaches this abort only when the project's `state.json` already records its plugin, because otherwise the alias and discovery paths would not offer it under a staged name. This happens in three cases:
 
-- Pi lists this extension's project skills in the system prompt.
-- The model can read their bodies, and the bodies can tell it to run commands through its bash tool. Pi has no permission modes (D-CF1-02).
-- Pi itself withholds `.pi/skills` and `.pi/prompts` in that state (`package-manager.js:2024`).
-- Upstream loads no project-scope plugin component before trust (`project-scope-suppressed-untrusted`).
+- a clone whose committed `state.json` records the plugin (the CR-01 case);
+- a project install made before this change (DUBIOUS-CHOICES DC-29 item 3);
+- a `SKILL.md` that changed after the install, for example after a `git pull`.
 
-The fixer licensed this by citing a Pi gap ("`resources_discover` registers project skills before it can know..."). That gap does not exist. `ResourceLoader.reload` resolves trust and calls `setProjectTrusted` (`core/resource-loader.js:362-365`) before `extendResourcesFromExtensions` emits `resources_discover` (`core/agent-session.js:2688`). The handler receives a `ctx` whose `isProjectTrusted()` already holds the decision.
+In all three, `/claude:plugin install demo@fixtures --scope project` fails with `Plugin "demo" is already installed in marketplace "fixtures".` (`features/plugin/install.feature:211-221`). Plain `apply` does not re-stage either, so the user is left with no working fix. Only `reinstall`, or `uninstall` followed by `install`, rewrites the ledger.
 
-The comment at `skill-invocation.ts:231-233` ("nothing of it reaches the model") is therefore inaccurate. Under the parity constraint in CLAUDE.md, this divergence has no license.
+**Fix:** Name the command that works: "... Reinstall its plugin into this project with /claude:plugin reinstall <plugin>@<marketplace> --scope project, then run /reload." Take the plugin id from the project's `state.json` record, which is already read on the alias path. Update the provenance scenario's expected message. Add a CHANGELOG line for existing project installs.
 
-**Fix:** In the `resources_discover` handler (`index.ts` `prepareResources` / the aggregate call), pass the project locations only when `ctx.isProjectTrusted()` is true:
+### WR-02: Any read error or unknown content makes the ledger writer replace the whole ledger, dropping every other project's entries
+
+**File:** `extensions/pi-claude-marketplace/bridges/skills/project-installs.ts:86-109,162-180`
+
+**Issue:** `update` uses the same lenient `readLedgerText` and `parseLedger` as the check. Every read error (`EACCES`, `EIO`, `EMFILE`, `EISDIR`) and every validation miss becomes `{}`. The writer then saves `{version: 1, projects: {<this project>: ...}}`. `test/bridges/skills/project-installs.test.ts:169-193` pins this as intended ("replaces a ledger that is of another shape").
+
+**Failure scenarios:**
+
+- A transient `EMFILE` during a bulk `import`, or one hand-edited entry missing `sha256`. The next project-scope install deletes the provenance of every other project, and nothing is reported. Each of those projects' skills then aborts and needs a reinstall (WR-01).
+- A later release writes `version: 2`. Running an older extension once wipes it.
+
+Failing closed is right for the read side. On the write side it destroys data.
+
+**Fix:** In `update`, treat only `ENOENT` as an empty ledger. Throw a typed error for any other read failure and for content that fails `LEDGER_VALIDATOR`. The install then rolls back through the existing undo, and its message names the ledger file. Keep `provenProjectSkills` lenient. Change the two "replaces a ledger" unit cases to expect a rejection and an unchanged file.
+
+### WR-03: The digest covers only `SKILL.md`, but `!` commands run other files of the staged skill and of the project plugin root, which sit in the repository tree
+
+**File:** `extensions/pi-claude-marketplace/bridges/skills/stage.ts:523-544`; `extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts:138-153,281-287`
+
+**Issue:** `stageSkill` copies the whole skill directory (`stage.ts:313`). A `!` command usually runs a helper script, for example ``!`bash ${CLAUDE_SKILL_DIR}/scripts/status.sh` ``. `CLAUDE_SKILL_DIR` is the staged directory under `<cwd>/.pi/pi-claude-marketplace/resources/skills/<name>/`. For a project install, `CLAUDE_PLUGIN_ROOT` is a clone under `<cwd>/.pi/pi-claude-marketplace/`. Neither is hashed. The comment "the digest is of the very bytes that run below" holds for the command text, not for the code the command runs.
+
+**Failure scenario:** The user installs plugin `p` into a team repository that commits its `.pi/pi-claude-marketplace/` tree, and the ledger records `p-status`. A later pull changes only `resources/skills/p-status/scripts/status.sh`. The `SKILL.md` digest still matches, and `/skill:p-status` runs the new script. Upstream keeps plugin files in `~/.claude/plugins/cache`, where the repository cannot write.
+
+**Fix:** Hash the staged skill tree, not just its `SKILL.md`. Use sorted relative paths, entry types, symlink targets, and file bytes, store that digest, and compute it again at invocation. Either add the plugin root's tree for project scope, or record that root as an accepted residual with an ID in the threat register.
+
+### WR-04: The ledger warning that unstage returns is dropped by every caller
+
+**File:** `extensions/pi-claude-marketplace/bridges/skills/unstage.ts:43-61,99-102`; callers `extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts:571-575`, `extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts:1250-1253`
+
+**Issue:** `forgetProjectSkills` turns a failed ledger write into `warnings`, and its doc comment promises that the failure "becomes a warning". `cascadeUnstagePlugin` reads only `skillsResult.removedNames`, and the install undo ignores the result entirely. No caller has ever read `UnstageSkillsResult.warnings`, which was always empty until now. So when uninstall, disable, or `marketplace remove` cannot update the ledger, the user is told nothing, and stale entries stay behind. If the same bytes come back (`git checkout` of a committed tree), a skill the user removed passes the check again.
+
+**Fix:** Fold `skillsResult.warnings` into the cascade's bridge warnings in `cascadeUnstagePlugin` (`hygieneWarning` or the existing staging-warning path), and into the undo's rollback notes. Add a unit case in `test/orchestrators/marketplace/shared.test.ts` with a ledger that rejects.
+
+### WR-05: `topLevelNodeIndex` takes a node that holds several keys as the `name` node, so the rewrite drops the others without an error (regression from c284184)
+
+**File:** `extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts:81-88,95-107`; `extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts:28-39`; `extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts:122`
+
+**Issue:** `nodeHoldsKey` asks only whether the parsed node *has* the key. A flow-mapping frontmatter, `{name: review, description: Reviews a change., disable-model-invocation: true}`, is one column-0 node that holds `name`. `rewriteNameNode` replaces the whole node with `name: demo-review`. SKILL-03 checks only `name`, so the check passes. `augmentSkillDescription` compares against the source's description, finds it unchanged, and writes nothing. The staged frontmatter is `{name: "demo-review"}` plus the record. `description`, `disable-model-invocation`, `allowed-tools`, `arguments`, and `shell` are gone. Before c284184, the `startsWith("name:")` lookup missed this node, the inserted line made the YAML invalid, and the install failed loudly.
+
+**Failure scenario (reproduced):** I ran a scratchpad scenario with that skill file. `install demo@fixtures --scope project` reports `cascade | info`, but the new session offers only `/skill:demo-skill`. Pi drops `demo-review` because it has no description, and the user is told nothing. A YAML-valid skill that Pi and Claude Code both accept now disappears without a message. If the description is rewritten instead (with `when_to_use`), `disable-model-invocation: true` is lost, so the model can invoke a skill its author restricted to the user.
+
+**Fix:** Count a node as `key`'s node only when it holds that key alone:
 
 ```ts
-const discovered = await aggregateDiscoveredResources(
-  userLocations,
-  ctx.isProjectTrusted() ? projectLocations : undefined,
-);
+const keys = Object.keys(frontmatter);
+return keys.length === 1 && keys[0] === key;
 ```
 
-Keep the invocation gate for a trust change within a session. Then the untrusted `/skill:<x>` is an unknown name to Pi, as it is upstream. Correct the comment.
-
-### WR-02: The shared scanner `frontmatterBlockEnd` still stops at an indented `---`, so `name` and `description` rewrites break skills that Pi accepts (pre-existing; fixer gap 3)
-
-**File:** `extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts:12-21`; callers `rewrite-frontmatter.ts:30-49`, `frontmatter-degrade.ts:114-140,211-216`; local duplicate `skill-names.ts:173-176`
-
-**Issue:** `frontmatterBlockEnd` matches any line whose `trim()` is `---`. Pi closes the block only at a column-0 `---`. Reproduced with the real modules:
-
-- **Name after the scalar.** `description: |\n  Part one.\n  ---\n  Part two.\nname: review` parses in Pi. `rewriteFrontmatterName` does not see `name`, inserts a second one, and fails with `Map keys must be unique`. This is the fixer's case.
-- **Name before the scalar, description rewritten.** `name` comes first, and `when_to_use` follows the same block scalar. `setDescriptionScalar` cuts the description node at the indented `---`, and the leftover lines give `All mapping items must start at the same column`. `augmentSkillDescription` calls `setDescriptionScalar` whenever the effective value changes: a `when_to_use` fold, a `${CLAUDE_*}` path variable in the description, the empty-description fallback, or the 1,536 cap. So the trigger is wider than the fixer reported.
-- **Degrade path.** `repairSingleLineScalars` stops early, so a repairable line after such a scalar is never repaired, and the skill degrades to the placeholder.
-
-Every failure throws inside `stageSkill`, and the whole plugin install, update, or reinstall fails with an error that points at this extension's own line. This was not introduced by this phase.
-
-The CR-01 fix makes the code harder to maintain. One staging pass now runs two different fence rules (`frontmatterBlockEnd` and `closingFenceIndex`). The header of `frontmatter-scan.ts` says the module exists so "a fix to the span rule lands once".
-
-**Fix:** Move Pi's rule into the shared scanner and delete the local copy:
-
-```ts
-/** Index of Pi's closing fence: the first later line that starts with `---` at column 0. */
-export function frontmatterBlockEnd(lines: readonly string[]): number {
-  const index = lines.findIndex((line, i) => i > 0 && line.startsWith("---"));
-  return index === -1 ? lines.length : index;
-}
-```
-
-`skill-names.ts` then imports it in place of `closingFenceIndex`. Add unit rows to `rewrite-frontmatter.test.ts` and `frontmatter-degrade.test.ts`: `name` after the scalar, and `when_to_use` after the scalar. Extend the existing frontmatter scenario with a `name`-after row and a `when_to_use` row.
-
-### WR-03: The WR-01 key-spelling class still breaks the `name` and `description` writers (pre-existing)
-
-**File:** `extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts:14,35-45`; `extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts:121-138`
-
-**Issue:** `rewriteNameNode` finds the key with `startsWith("name:")`, and `setDescriptionScalar` finds it with `startsWith(DESCRIPTION_KEY)`. Reproduced:
-
-- With `"name": review` or `name : review`, Pi parses `name: "review"`. The rewriter does not see the key, inserts `name: <generated>` as the first line, and the SKILL-03 check throws `Map keys must be unique`.
-- `"description": d` with a `when_to_use` gets a second `description`, with the same error.
-
-In both cases the plugin install fails on a skill that Pi and upstream accept. This is the WR-01 defect in the two sibling writers that run right before the record writer. The cd7b747 fix (`isRecordNode`) solves it, but only for the record key.
-
-**Fix:** Generalize the parse-per-node lookup into `frontmatter-scan.ts`, for example `topLevelNodeIndex(lines, blockEnd, key)`, which uses `parseFrontmatter` on each column-0 node exactly as `isRecordNode` does. Use it for `name`, `description`, and the record key. Add unit rows for the quoted and spaced spellings of `name` and `description`.
+When a node holds the key along with others, make the writers throw a typed error that names the skill, as the pre-c284184 code effectively did, or degrade the skill. Add a `frontmatter-scan.test.ts` row for a flow mapping and an explicit-key (`? name`) node (IN-01).
 
 ## Info
 
-### IN-01: A `!` command cannot be cancelled by the user (carried forward)
+### IN-01: An explicit-key `name` node now leaves an empty key behind (IN-04 class, now in the name writer)
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts:193-200`
+**File:** `extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts:95-107`
 
-**Issue:** `runShell` is called without `signal`, although `PromptShellRequest.signal` exists for this purpose. A slow `!` command holds Pi's input pipeline until the 120 s timeout. When the user cancels, upstream reports `Shell command interrupted ...`.
+**Issue:** For `? name` followed by `: x`, the `?` line parses alone as `{name: null}`. `rewriteFrontmatterName` replaces only that line, and the staged frontmatter becomes `{name: <gen>, "": "x"}`. Before c284184 this input failed the install. It now installs with a key the author never wrote. `setDescriptionScalar` handles `? description` the same way.
 
-**Fix:** Pass `ctx.signal` through `SkillInvocationRequest` when it is defined. Record the remaining gap in the D-CF2-10 Pi report.
+**Fix:** Treat a column-0 `?` line and the `:` line after it as one node in `keyValueEnd`, or reject the node as in WR-05.
 
-### IN-02: Variable values in the body are not guarded against `!`, so a project path can form an injection pattern (carried forward)
+### IN-02: A failed ledger write skips staging cleanup
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts:137-152`; `extensions/pi-claude-marketplace/bridges/skills/stage.ts:361`
+**File:** `extensions/pi-claude-marketplace/bridges/skills/stage.ts:616-619`
 
-**Issue:** `${CLAUDE_PROJECT_DIR}` and the other path variables go into the body without `guardBangs` before `expandContextInjections` scans it. This matches upstream, so it is parity, not a bug. It is listed so the threat model names it.
+**Issue:** `recordProjectSkills` throws before `cleanupStaging` runs. The skills undo removes the target directories but not `<skillsStagingDir>/<uuid>/`, so each failed write leaves an empty staging directory behind, and no leak warning names it.
 
-**Fix:** None needed for parity. If a stricter stance is wanted, guard variable values before injection and record the divergence.
+**Fix:** Run `cleanupStaging` before `recordProjectSkills`, or in a `finally`, and keep the leak message.
 
-### IN-03: A forged record can still claim one bare name (fixer gap 2), and only CR-01's attacker can reach it
+### IN-03: The `createUnstagePluginSkills` doc comment now documents the wrong function
 
-**File:** `extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts:89-93`
+**File:** `extensions/pi-claude-marketplace/bridges/skills/unstage.ts:22-36,37-42`
 
-**Issue:** `installedForms` filters by shape, not by provenance. Any one colon-free name passes, because install writes exactly one bare name: `frontmatterNameAliases` gives `[qualified, name]` for a colon-free frontmatter `name`, which is upstream parity. The name cannot be checked against the frontmatter, because SK-3 rewrites `name` at install.
+**Issue:** The new `forgetProjectSkills` and its comment were inserted between `createUnstagePluginSkills` and its "Per-name `rm({recursive:true})` loop" comment. TypeScript attaches the nearest comment, so the factory now has no doc and the old comment documents nothing.
 
-Plugin authors cannot forge a record, since the WR-01 fix strips any author key before writing. Only someone who writes the staged file directly can, and that is CR-01's attacker. A built-in Pi command name still wins in interactive mode, because `interactive-mode.js` handles built-ins before `prompt()`/`emitInput`.
+**Fix:** Move the old comment back above `createUnstagePluginSkills`.
 
-**Fix:** None beyond CR-01. A user-scope ledger that stores each staged file's hash makes the record trustworthy as written.
+### IN-04: The new scenarios check that the install succeeds, not what Pi offers, and the provenance feature does not cover the digest
 
-### IN-04: Exotic record-key forms change or fail the staged frontmatter
+**File:** `features/skill/frontmatter.feature:117-148,180-209`; `features/skill/project-provenance.feature`
 
-**File:** `extensions/pi-claude-marketplace/bridges/skills/skill-names.ts:195-206,223-228`
+**Issue:**
 
-**Issue:** Reproduced:
+- The WR-02 and WR-03 outlines stop at `cascade | info` and `installed`. They would still pass if the writer had silently dropped the description or `when_to_use` (WR-05 shows such a loss is possible).
+- The provenance feature tests only "ledger deleted". No scenario changes the staged `SKILL.md` while the ledger is present. That digest half is the part that stops a `git pull` from changing what runs, and only unit tests cover it.
+- No scenario shows that `update`, `reinstall`, or `enable` keep a project skill runnable. Each of those reaches the ledger through `commitPreparedSkills` on a separate path.
 
-- An explicit-key node, `? pi-claude-marketplace` with `: v` on the next line, is detected from its `?` line alone. Only that line is removed, so the staged frontmatter gains `"": "v"`. The install succeeds with an empty key the author never wrote.
-- `x: &a 1` with `pi-claude-marketplace: *a` (an alias that does not parse alone; the fixer knew this) gives a duplicate key and the install fails.
-- A `...` document-end line before the closing fence makes the record line a second YAML document, and the install fails.
+**Fix:** Add `Then the session offers these skills:` with the expected description to each outline. Add a provenance scenario that appends a line to the staged `SKILL.md`, starts a new session, and expects the usage-error. Add one that runs `/claude:plugin update` or `reinstall` and then `/skill:demo-status`, and expects `Status: ran`.
 
-All three need deliberately unusual YAML. Both failures are fail-closed.
+### IN-05: D-CF2-13 is not recorded in `02-CONTEXT.md`, and the upgrade effect has no CHANGELOG line
 
-**Fix:** Treat a `?` line and the `:` line that follows it as one node. Alternatively, detect `RECORD_KEY in parsed.frontmatter` before writing, and refuse with a discovery warning that names the author's key when the node cannot be removed cleanly.
+**File:** `.planning/phases/02-skills/02-CONTEXT.md` (decisions end at D-CF2-12); `CHANGELOG.md`
 
-### IN-05: A rejected alias-table load is cached for the rest of the session
+**Issue:** The round-2 fix asked for the decision to be recorded in CONTEXT with an ID. It exists only in `02-REVIEW-FIX.md` and `DUBIOUS-CHOICES.md` DC-29. DC-29 item 3 says the reinstall requirement for existing project installs "needs a CHANGELOG line", and none was added.
 
-**File:** `extensions/pi-claude-marketplace/edge/skill-aliases.ts:131-144,206-214`
+**Fix:** Add D-CF2-13, and the CR-01 autoapply decision, to `02-CONTEXT.md`. Add the CHANGELOG line with the working command (WR-01).
 
-**Issue:** `getQualifiedAliases` caches the promise before it settles. If `loadAliases` rejects (for example, `pi.getCommands()` or `getAgentDir()` throws once), every later lookup reuses the rejected promise. The new `onRejected` handler returns `continue`, so every alias stays silent until the next `session_start`. Completion rejects too.
+### IN-06: Without a lock, a lost `forget` brings back a removed entry
 
-`loadQualifiedSkillAliases` catches state and file errors internally, so the trigger is unlikely.
+**File:** `extensions/pi-claude-marketplace/bridges/skills/project-installs.ts:162-180`
 
-**Fix:** `aliases.catch(() => cache.delete(key))` when the promise is cached, so the next input retries.
+**Issue:** DC-29 item 1 calls a lost update "closed (that project's skills abort)". That holds for a lost `remember`. A lost `forget` fails open instead. Process A installs into project X while process B uninstalls from project Y. Both read the ledger, B writes, then A writes from its earlier read, and Y's removed entries return. As in WR-04, the risk is limited to the same bytes coming back.
+
+**Fix:** None needed beyond the accepted residual. Correct DC-29 item 1 so that it says this.
+
+## Previous rounds
+
+- **Round 1** (1 critical, 3 warnings, all fixed): indented `---` in the record writer, record-key spellings, a stale staged file falling through to Pi's expansion, and an untrusted project running `!`.
+- **Round 2** (1 critical, 3 warnings, 5 info): CR-01 was Pi auto-trusting a project that holds only `.pi/pi-claude-marketplace/`. WR-01 to WR-03 were discovery in untrusted projects, the fence rule, and the `name`/`description` key spellings. All four were addressed in this diff. Round-2 IN-01 to IN-05 (cancelling a `!` command, guarding `!` in variable values, a forged bare-name record, exotic record-key forms, and the cached rejected alias load) were outside the fix scope. They are unchanged, and this round did not score them again. Round-2 IN-03 is now covered by the ledger except in the CR-01 autoapply case.
 
 ---
 
-_Reviewed: 2026-11-01T13:06:30Z_
+_Reviewed: 2026-11-01T14:42:42Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
-_Iteration: 2_
+_Iteration: 3_
