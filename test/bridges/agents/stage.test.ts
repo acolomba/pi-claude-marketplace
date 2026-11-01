@@ -340,7 +340,7 @@ Helper body.
 name: acme:bot
 description: A bot agent
 aliases: pi-claude-marketplace-acme-bot
-model: anthropic/claude-sonnet-4-6
+model: anthropic/claude-sonnet-5-5
 tools: read,bash,edit
 systemPromptMode: replace
 inheritProjectContext: true
@@ -1146,7 +1146,7 @@ Helper body.
 name: acme:bot
 description: A bot agent
 aliases: pi-claude-marketplace-acme-bot
-model: anthropic/claude-sonnet-4-6
+model: anthropic/claude-sonnet-5-5
 tools: read,bash,edit
 systemPromptMode: replace
 inheritProjectContext: true

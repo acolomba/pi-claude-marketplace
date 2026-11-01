@@ -41,14 +41,22 @@ const SUPPORTED_SOURCE_FIELDS = new Set([
 ]);
 
 /**
- * AG-7 user contract: allowlisted Claude model strings. Anything else is
- * omitted from the generated frontmatter.
+ * AG-7 / D-CF4-07 as amended: Claude Code's model aliases, keyed lower-case,
+ * mapped to the first-party models of Claude Code's model catalog.
+ * `opusplan` runs a subagent on sonnet, because its plan-mode upgrade to opus
+ * applies only to a session that inherits it; `best` selects fable.
  */
-const MODEL_MAP: Readonly<Record<string, string>> = Object.freeze({
-  sonnet: "anthropic/claude-sonnet-4-6",
-  opus: "anthropic/claude-opus-4-7",
-  haiku: "anthropic/claude-haiku-4-5",
-});
+const MODEL_MAP: ReadonlyMap<string, string> = new Map([
+  ["sonnet", "anthropic/claude-sonnet-5-5"],
+  ["opusplan", "anthropic/claude-sonnet-5-5"],
+  ["opus", "anthropic/claude-opus-5-5"],
+  ["haiku", "anthropic/claude-haiku-5-5"],
+  ["fable", "anthropic/claude-fable-5-1"],
+  ["best", "anthropic/claude-fable-5-1"],
+]);
+
+/** The suffix of Claude Code's one-million-token context aliases. */
+const LONG_CONTEXT_SUFFIX = "[1m]";
 
 /**
  * AG-7 user contract: Claude tool name -> Pi tool name. Tokens not present
@@ -101,7 +109,10 @@ const MCP_ASYNC_WARNING =
   "launch this agent with `async: true`; a foreground launch fails, and so does a launch " +
   "before pi-mcp-adapter has cached the server's tools";
 
-/** Allowlist for thinking/effort values. */
+/**
+ * Allowlist for thinking/effort values. D-CF4-06 as amended: `max` is one of
+ * Claude Code's effort levels (`low`, `medium`, `high`, `xhigh`, `max`).
+ */
 const THINKING_VALUES: ReadonlySet<string> = new Set([
   "off",
   "minimal",
@@ -109,6 +120,7 @@ const THINKING_VALUES: ReadonlySet<string> = new Set([
   "medium",
   "high",
   "xhigh",
+  "max",
 ]);
 
 interface ToolMappingBase {
@@ -199,29 +211,58 @@ function dedupePreservingOrder(values: readonly string[]): string[] {
   return out;
 }
 
-function mapModel(raw: string | undefined): {
-  emit: string | undefined;
-  originalModel: string | undefined;
-  warning: string | undefined;
-} {
-  if (raw === undefined || raw === "") {
+interface ModelMapping {
+  readonly emit: string | undefined;
+  readonly originalModel: string | undefined;
+  readonly warning: string | undefined;
+}
+
+/**
+ * AG-7 / D-CF4-07 as amended: the model a source `model` selects, read as
+ * Claude Code reads it. The value is trimmed; `inherit`, in any case, leaves
+ * the session's model; an alias maps through MODEL_MAP; a full `claude-` ID
+ * passes through. `originalModel` keeps the source value.
+ */
+function mapModel(raw: string | undefined): ModelMapping {
+  const value = raw?.trim() ?? "";
+  if (raw === undefined || value === "") {
     return { emit: undefined, originalModel: undefined, warning: undefined };
   }
 
-  if (raw === "inherit") {
-    return { emit: undefined, originalModel: "inherit", warning: undefined };
+  if (value.toLowerCase() === "inherit") {
+    return { emit: undefined, originalModel: raw, warning: undefined };
   }
 
-  const mapped = MODEL_MAP[raw];
-  if (mapped !== undefined) {
-    return { emit: mapped, originalModel: raw, warning: undefined };
-  }
-
+  const emit = aliasModel(value) ?? fullModelId(value);
   return {
-    emit: undefined,
+    emit,
     originalModel: raw,
-    warning: `unknown model "${raw}" -- omitted from generated frontmatter`,
+    warning:
+      emit === undefined
+        ? `unknown model "${raw}" -- omitted from generated frontmatter`
+        : undefined,
   };
+}
+
+/**
+ * D-CF4-07 as amended: Claude Code matches its aliases case-insensitively,
+ * and one trailing `[1m]` selects the same model with a longer context.
+ */
+function aliasModel(value: string): string | undefined {
+  const lower = value.toLowerCase();
+  const alias = lower.endsWith(LONG_CONTEXT_SUFFIX)
+    ? lower.slice(0, -LONG_CONTEXT_SUFFIX.length)
+    : lower;
+  return MODEL_MAP.get(alias);
+}
+
+/**
+ * D-CF4-07 as amended: Claude Code sends any other value as a model ID. Only
+ * a `claude-` ID with no whitespace and no `:` passes through, because
+ * pi-subagents reads a `:` suffix as a thinking level (T-04-06).
+ */
+function fullModelId(value: string): string | undefined {
+  return value.startsWith("claude-") && !/[\s:]/.test(value) ? `anthropic/${value}` : undefined;
 }
 
 /**
@@ -488,42 +529,60 @@ function omittedToolMapping(
  * - thinking absent, effort set+valid -> emit effort
  * - thinking absent, effort set+invalid -> warn, omit
  * - both absent -> omit silently
+ *
+ * `thinking` matches exactly; `effort` is normalized first (D-CF4-06).
  */
 function mapThinking(
   rawThinking: string | undefined,
   rawEffort: string | undefined,
 ): { emit: string | undefined; warning: string | undefined } {
-  if (rawThinking !== undefined && rawThinking !== "") {
-    if (THINKING_VALUES.has(rawThinking)) {
-      return { emit: rawThinking, warning: undefined };
-    }
+  const effort = mapEffort(rawEffort);
+  if (rawThinking === undefined || rawThinking === "") {
+    return effort;
+  }
 
-    // thinking present but invalid -- try effort as documented fallback
-    if (rawEffort !== undefined && rawEffort !== "" && THINKING_VALUES.has(rawEffort)) {
-      return {
-        emit: rawEffort,
-        warning: `unknown thinking value "${rawThinking}" -- using effort "${rawEffort}" as fallback`,
-      };
-    }
+  if (THINKING_VALUES.has(rawThinking)) {
+    return { emit: rawThinking, warning: undefined };
+  }
 
+  // thinking present but invalid -- try effort as documented fallback
+  if (effort.emit !== undefined) {
     return {
-      emit: undefined,
-      warning: `unknown thinking value "${rawThinking}" -- omitted from generated frontmatter`,
+      emit: effort.emit,
+      warning: `unknown thinking value "${rawThinking}" -- using effort "${rawEffort}" as fallback`,
     };
   }
 
-  if (rawEffort !== undefined && rawEffort !== "") {
-    if (THINKING_VALUES.has(rawEffort)) {
-      return { emit: rawEffort, warning: undefined };
-    }
+  return {
+    emit: undefined,
+    warning: `unknown thinking value "${rawThinking}" -- omitted from generated frontmatter`,
+  };
+}
 
-    return {
-      emit: undefined,
-      warning: `unknown effort value "${rawEffort}" -- omitted from generated frontmatter`,
-    };
+/**
+ * D-CF4-06 as amended: Claude Code trims and lower-cases `effort` and reads
+ * `med` as `medium`. Claude Code also takes an integer effort, which
+ * pi-subagents has no level for, so it is dropped with the unknown-effort
+ * warning.
+ */
+function mapEffort(rawEffort: string | undefined): {
+  emit: string | undefined;
+  warning: string | undefined;
+} {
+  if (rawEffort === undefined || rawEffort === "") {
+    return { emit: undefined, warning: undefined };
   }
 
-  return { emit: undefined, warning: undefined };
+  const lower = rawEffort.trim().toLowerCase();
+  const level = lower === "med" ? "medium" : lower;
+  if (THINKING_VALUES.has(level)) {
+    return { emit: level, warning: undefined };
+  }
+
+  return {
+    emit: undefined,
+    warning: `unknown effort value "${rawEffort}" -- omitted from generated frontmatter`,
+  };
 }
 
 function mapSkills(

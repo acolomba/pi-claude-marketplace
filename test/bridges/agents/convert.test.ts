@@ -130,7 +130,7 @@ describe("convertAgent", () => {
       sourceFields: {
         model: "sonnet",
       },
-      expectedMapping: "model: anthropic/claude-sonnet-4-6\ntools: read\n",
+      expectedMapping: "model: anthropic/claude-sonnet-5-5\ntools: read\n",
       expectedModelProvenance: "  originalModel: sonnet\n",
       expectedOriginalModel: {
         originalModel: "sonnet",
@@ -141,7 +141,7 @@ describe("convertAgent", () => {
       sourceFields: {
         model: "opus",
       },
-      expectedMapping: "model: anthropic/claude-opus-4-7\ntools: read\n",
+      expectedMapping: "model: anthropic/claude-opus-5-5\ntools: read\n",
       expectedModelProvenance: "  originalModel: opus\n",
       expectedOriginalModel: {
         originalModel: "opus",
@@ -152,7 +152,7 @@ describe("convertAgent", () => {
       sourceFields: {
         model: "haiku",
       },
-      expectedMapping: "model: anthropic/claude-haiku-4-5\ntools: read\n",
+      expectedMapping: "model: anthropic/claude-haiku-5-5\ntools: read\n",
       expectedModelProvenance: "  originalModel: haiku\n",
       expectedOriginalModel: {
         originalModel: "haiku",
@@ -343,7 +343,7 @@ Review files.
 name: spec-tree:changes-reviewer
 description: Reviews changes
 aliases: pi-claude-marketplace-spec-tree-changes-reviewer
-model: anthropic/claude-sonnet-4-6
+model: anthropic/claude-sonnet-5-5
 tools: bash,read
 thinking: high
 skills: spec-tree-review-changes
@@ -497,16 +497,112 @@ Review files.
       expectedWarnings: [],
     },
     {
+      sourceModel: "INHERIT",
+      expectedModelLine: undefined,
+      expectedOriginalModel: "INHERIT",
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: "sonnet",
+      expectedModelLine: "model: anthropic/claude-sonnet-5-5",
+      expectedOriginalModel: "sonnet",
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: "SONNET",
+      expectedModelLine: "model: anthropic/claude-sonnet-5-5",
+      expectedOriginalModel: "SONNET",
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: "opusplan",
+      expectedModelLine: "model: anthropic/claude-sonnet-5-5",
+      expectedOriginalModel: "opusplan",
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: "sonnet[1m]",
+      expectedModelLine: "model: anthropic/claude-sonnet-5-5",
+      expectedOriginalModel: "sonnet[1m]",
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: "Sonnet[1M]",
+      expectedModelLine: "model: anthropic/claude-sonnet-5-5",
+      expectedOriginalModel: "Sonnet[1M]",
+      expectedWarnings: [],
+    },
+    {
       sourceModel: "opus",
-      expectedModelLine: "model: anthropic/claude-opus-4-7",
+      expectedModelLine: "model: anthropic/claude-opus-5-5",
       expectedOriginalModel: "opus",
       expectedWarnings: [],
     },
     {
+      sourceModel: "opus[1m]",
+      expectedModelLine: "model: anthropic/claude-opus-5-5",
+      expectedOriginalModel: "opus[1m]",
+      expectedWarnings: [],
+    },
+    {
       sourceModel: "haiku",
-      expectedModelLine: "model: anthropic/claude-haiku-4-5",
+      expectedModelLine: "model: anthropic/claude-haiku-5-5",
       expectedOriginalModel: "haiku",
       expectedWarnings: [],
+    },
+    {
+      sourceModel: "fable",
+      expectedModelLine: "model: anthropic/claude-fable-5-1",
+      expectedOriginalModel: "fable",
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: "fable[1m]",
+      expectedModelLine: "model: anthropic/claude-fable-5-1",
+      expectedOriginalModel: "fable[1m]",
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: "best",
+      expectedModelLine: "model: anthropic/claude-fable-5-1",
+      expectedOriginalModel: "best",
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: "claude-opus-4-7",
+      expectedModelLine: "model: anthropic/claude-opus-4-7",
+      expectedOriginalModel: "claude-opus-4-7",
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: " claude-haiku-5-5 ",
+      expectedModelLine: "model: anthropic/claude-haiku-5-5",
+      expectedOriginalModel: " claude-haiku-5-5 ",
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: "gpt-5",
+      expectedModelLine: undefined,
+      expectedOriginalModel: "gpt-5",
+      expectedWarnings: ['unknown model "gpt-5" -- omitted from generated frontmatter'],
+    },
+    {
+      sourceModel: "claude-x:high",
+      expectedModelLine: undefined,
+      expectedOriginalModel: "claude-x:high",
+      expectedWarnings: ['unknown model "claude-x:high" -- omitted from generated frontmatter'],
+    },
+    {
+      sourceModel: "Claude-Opus-4-7",
+      expectedModelLine: undefined,
+      expectedOriginalModel: "Claude-Opus-4-7",
+      expectedWarnings: ['unknown model "Claude-Opus-4-7" -- omitted from generated frontmatter'],
+    },
+    {
+      sourceModel: "claude opus",
+      expectedModelLine: undefined,
+      expectedOriginalModel: "claude opus",
+      expectedWarnings: ['unknown model "claude opus" -- omitted from generated frontmatter'],
     },
     {
       sourceModel: "future-model",
@@ -583,6 +679,60 @@ Review files.
       sourceEffort: "turbo",
       expectedThinkingLine: undefined,
       expectedWarnings: ['unknown effort value "turbo" -- omitted from generated frontmatter'],
+    },
+    {
+      sourceThinking: undefined,
+      sourceEffort: "max",
+      expectedThinkingLine: "thinking: max",
+      expectedWarnings: [],
+    },
+    {
+      sourceThinking: undefined,
+      sourceEffort: "med",
+      expectedThinkingLine: "thinking: medium",
+      expectedWarnings: [],
+    },
+    {
+      sourceThinking: undefined,
+      sourceEffort: "MED",
+      expectedThinkingLine: "thinking: medium",
+      expectedWarnings: [],
+    },
+    {
+      sourceThinking: undefined,
+      sourceEffort: "HIGH",
+      expectedThinkingLine: "thinking: high",
+      expectedWarnings: [],
+    },
+    {
+      sourceThinking: undefined,
+      sourceEffort: " low ",
+      expectedThinkingLine: "thinking: low",
+      expectedWarnings: [],
+    },
+    {
+      sourceThinking: undefined,
+      sourceEffort: "32000",
+      expectedThinkingLine: undefined,
+      expectedWarnings: ['unknown effort value "32000" -- omitted from generated frontmatter'],
+    },
+    {
+      sourceThinking: "max",
+      sourceEffort: "",
+      expectedThinkingLine: "thinking: max",
+      expectedWarnings: [],
+    },
+    {
+      sourceThinking: "HIGH",
+      sourceEffort: "",
+      expectedThinkingLine: undefined,
+      expectedWarnings: ['unknown thinking value "HIGH" -- omitted from generated frontmatter'],
+    },
+    {
+      sourceThinking: "turbo",
+      sourceEffort: "MED",
+      expectedThinkingLine: "thinking: medium",
+      expectedWarnings: ['unknown thinking value "turbo" -- using effort "MED" as fallback'],
     },
   ]) {
     test(`maps thinking ${JSON.stringify(sourceThinking)} and effort ${JSON.stringify(sourceEffort)}`, () => {

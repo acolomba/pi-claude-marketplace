@@ -467,7 +467,7 @@ async function readFootprint(workspace: HermeticWorkspace): Promise<Footprint> {
 
 const ONE_AGENT_FILE = "pi-claude-marketplace-one-scout.md";
 const DEGRADED_AGENT_FILE = "pi-claude-marketplace-degraded-scout.md";
-const MAPPED_MODEL = "anthropic/claude-sonnet-4-6";
+const MAPPED_MODEL = "anthropic/claude-sonnet-5-5";
 
 const ONE_STALE: InstallRecordProjection = {
   marketplace: "alpha",

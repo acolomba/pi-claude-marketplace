@@ -76,3 +76,125 @@ Feature: Agent frontmatter
       | 3    | user        | Ask the reviewer to check the README.                                                                             |
       | 3    | assistant   | tool call subagent {"agent":"demo:reviewer","task":"Review the README."}                                          |
       | 3    | tool result | subagent returned: Run fan-out: 1/64 used, 63 remaining\nThe README has no problems.\nMission: {uuid} (completed) |
+
+  Scenario: Effort levels are listed as the thinking levels pi-subagents runs
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file       | name    | description      | effort | body             |
+      | maximal.md | maximal | Thinks at max.   | max    | Answer the task. |
+      | mid.md     | mid     | Thinks at med.   | med    | Answer the task. |
+      | loud.md    | loud    | Thinks at HIGH.  | HIGH   | Answer the task. |
+      | numeric.md | numeric | Thinks at 32000. | 32000  | Answer the task. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply                  | tool     | arguments                             |
+      |                        | subagent | {"action":"list","capabilities":true} |
+      | The agents are listed. |          |                                       |
+    When the user prompts "List the agents."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+      | 1    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+      | 2    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+      | 2    | assistant   | tool call subagent {"action":"list","capabilities":true}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+      | 2    | tool result | subagent returned: Executable agents (capabilities):\nUser agents\n- demo:loud (user, aliases: pi-claude-marketplace-demo-loud): Description: Thinks at HIGH.; Tools: default/ambient; Model: inherits current session; Thinking: high\n- demo:maximal (user, aliases: pi-claude-marketplace-demo-maximal): Description: Thinks at max.; Tools: default/ambient; Model: inherits current session; Thinking: max\n- demo:mid (user, aliases: pi-claude-marketplace-demo-mid): Description: Thinks at med.; Tools: default/ambient; Model: inherits current session; Thinking: medium\n- demo:numeric (user, aliases: pi-claude-marketplace-demo-numeric): Description: Thinks at 32000.; Tools: default/ambient; Model: inherits current session; Thinking: default |
+
+  Scenario: With --map-model Claude Code's model names are listed as the models they select
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file         | name      | description              | model           | body             |
+      | sonnet.md    | sonnet    | Runs on sonnet.          | sonnet          | Answer the task. |
+      | opus.md      | opus      | Runs on opus.            | opus            | Answer the task. |
+      | opusplan.md  | opusplan  | Runs on opusplan.        | opusplan        | Answer the task. |
+      | haiku.md     | haiku     | Runs on haiku.           | haiku           | Answer the task. |
+      | fable.md     | fable     | Runs on fable.           | fable           | Answer the task. |
+      | best.md      | best      | Runs on best.            | best            | Answer the task. |
+      | sonnet-1m.md | sonnet-1m | Runs on sonnet[1m].      | sonnet[1m]      | Answer the task. |
+      | full-id.md   | full-id   | Runs on claude-opus-4-7. | claude-opus-4-7 | Answer the task. |
+      | inherit.md   | inherit   | Runs on inherit.         | inherit         | Answer the task. |
+      | unknown.md   | unknown   | Runs on gpt-5.           | gpt-5           | Answer the task. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user --map-model"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply                  | tool     | arguments                             |
+      |                        | subagent | {"action":"list","capabilities":true} |
+      | The agents are listed. |          |                                       |
+    When the user prompts "List the agents."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+      | 1    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+      | 2    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+      | 2    | assistant   | tool call subagent {"action":"list","capabilities":true}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+      | 2    | tool result | subagent returned: Executable agents (capabilities):\nUser agents\n- demo:best (user, aliases: pi-claude-marketplace-demo-best): Description: Runs on best.; Tools: default/ambient; Model: anthropic/claude-fable-5-1; Thinking: default\n- demo:fable (user, aliases: pi-claude-marketplace-demo-fable): Description: Runs on fable.; Tools: default/ambient; Model: anthropic/claude-fable-5-1; Thinking: default\n- demo:full-id (user, aliases: pi-claude-marketplace-demo-full-id): Description: Runs on claude-opus-4-7.; Tools: default/ambient; Model: anthropic/claude-opus-4-7; Thinking: default\n- demo:haiku (user, aliases: pi-claude-marketplace-demo-haiku): Description: Runs on haiku.; Tools: default/ambient; Model: anthropic/claude-haiku-5-5; Thinking: default\n- demo:inherit (user, aliases: pi-claude-marketplace-demo-inherit): Description: Runs on inherit.; Tools: default/ambient; Model: inherits current session; Thinking: default\n- demo:opus (user, aliases: pi-claude-marketplace-demo-opus): Description: Runs on opus.; Tools: default/ambient; Model: anthropic/claude-opus-5-5; Thinking: default\n- demo:opusplan (user, aliases: pi-claude-marketplace-demo-opusplan): Description: Runs on opusplan.; Tools: default/ambient; Model: anthropic/claude-sonnet-5-5; Thinking: default\n- demo:sonnet (user, aliases: pi-claude-marketplace-demo-sonnet): Description: Runs on sonnet.; Tools: default/ambient; Model: anthropic/claude-sonnet-5-5; Thinking: default\n- demo:sonnet-1m (user, aliases: pi-claude-marketplace-demo-sonnet-1m): Description: Runs on sonnet[1m].; Tools: default/ambient; Model: anthropic/claude-sonnet-5-5; Thinking: default\n- demo:unknown (user, aliases: pi-claude-marketplace-demo-unknown): Description: Runs on gpt-5.; Tools: default/ambient; Model: inherits current session; Thinking: default |
+
+  Scenario: Without --map-model every agent inherits the session's model
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file      | name   | description     | model  | body             |
+      | sonnet.md | sonnet | Runs on sonnet. | sonnet | Answer the task. |
+      | opus.md   | opus   | Runs on opus.   | opus   | Answer the task. |
+      | fable.md  | fable  | Runs on fable.  | fable  | Answer the task. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply                  | tool     | arguments                             |
+      |                        | subagent | {"action":"list","capabilities":true} |
+      | The agents are listed. |          |                                       |
+    When the user prompts "List the agents."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+      | 1    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+      | 2    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+      | 2    | assistant   | tool call subagent {"action":"list","capabilities":true}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+      | 2    | tool result | subagent returned: Executable agents (capabilities):\nUser agents\n- demo:fable (user, aliases: pi-claude-marketplace-demo-fable): Description: Runs on fable.; Tools: default/ambient; Model: inherits current session; Thinking: default\n- demo:opus (user, aliases: pi-claude-marketplace-demo-opus): Description: Runs on opus.; Tools: default/ambient; Model: inherits current session; Thinking: default\n- demo:sonnet (user, aliases: pi-claude-marketplace-demo-sonnet): Description: Runs on sonnet.; Tools: default/ambient; Model: inherits current session; Thinking: default |
+
+  Scenario: A run of an agent whose model --map-model mapped reports the model pi does not know
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file        | name     | description                    | model  | body                                |
+      | reviewer.md | reviewer | Reviews the files it is given. | sonnet | Review the files named in the task. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user --map-model"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply                       | tool     | arguments                                                           |
+      |                             | subagent | {"agent":"demo:reviewer","task":"Review the README.","async":false} |
+      | The reviewer did not start. |          |                                                                     |
+    When the user prompts "Ask the reviewer to check the README."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                   |
+      | 1    | user        | Ask the reviewer to check the README.                                                                  |
+      | 2    | user        | Ask the reviewer to check the README.                                                                  |
+      | 2    | assistant   | tool call subagent {"agent":"demo:reviewer","task":"Review the README.","async":false}                 |
+      | 2    | tool result | subagent failed: Unknown subagent model 'anthropic/claude-sonnet-5-5' in the active Pi model registry. |
