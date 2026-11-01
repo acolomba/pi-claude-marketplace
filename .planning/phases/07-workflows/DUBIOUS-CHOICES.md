@@ -219,3 +219,18 @@ theirs under `## Dubious Choices` and the orchestrator copies them here.
   3. Plan 07-01's stale-notice scenario keeps its title and steps; only its
      setup moved into the new `Background:`.
 - **Recorded in:** `07-05-SUMMARY.md`.
+
+### P7-DC-12: Wave 2 executor choices (argument runs)
+
+- **Phase / source:** Phase 7 wave 2, runs executor (`07-03-SUMMARY.md`).
+- **Severity:** Low. **Status:** open.
+- **Choices:**
+  1. `run.feature`'s description names the no-approval gap in words ("a Pi
+     gap") without the ID D-CF7-01, since no feature file in the suite cites
+     decision IDs; the SUMMARY maps the wording to D-CF7-01 and D-CF7-02.
+  2. The three-line description dropped "ends with the value the script
+     returns" (the seed title still states it); its third line is about 92
+     characters.
+  3. `nope.js` keeps an unreachable `return "never";` after its `throw` so
+     every fixture body ends in a `return`.
+- **Recorded in:** `07-03-SUMMARY.md`.
