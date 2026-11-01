@@ -305,3 +305,38 @@ session writes this file. Each subagent ends its report with a
 - **05-05:** no product change; the update scenario checks hook runs, not
   model calls.
 - **Recorded in:** `05-03-SUMMARY.md`, `05-04-SUMMARY.md`, `05-05-SUMMARY.md`.
+
+### P5-DC-17: Wave 3 executor choices (05-06 additional context, 05-07 hook notices)
+
+- **Phase / source:** executors of 05-06 and 05-07.
+- **Severity:** Medium. **Status:** open.
+- **05-06:**
+  1. Edited two cases in `test/bridges/hooks/dispatch.test.ts` (05-07's file)
+     for the returned `updatedToolOutput` patch; merge was clean.
+  2. Plain-text context follows the documented rule: stdout not starting
+     with `{` and ending with `}` is plain text (a JSON array or number
+     counts as context); braced stdout that fails to parse adds nothing;
+     multi-line JSON is a parse failure (upstream edge not probed).
+  3. Context reaches the model as one hidden custom message
+     (`claude-hook-additional-context`, `display: false`), one text part per
+     event; upstream injects a system-reminder in the same request.
+  4. Whitespace-only context is dropped when the message is built; a prompt
+     queued while streaming sends its context with the next run (not probed).
+  5. The `updatedToolOutput` fix (routed by the session) is pinned by unit
+     cases and an uncommitted probe scenario; the session routes the
+     committed scenario to 05-08, which owns `tool-use.feature`.
+  6. A type assertion keeps 100% branch coverage in `wire-protocol.ts`.
+- **05-07:**
+  1. Session notices are labelled `<Event>:<value>` (`SessionStart:clear says:
+     ...`), not D-CF5-14's literal `<Event>[:<Tool>]`; SessionStart is verified
+     upstream, SessionEnd and PostCompact by inference.
+  2. The kind has one severity, `info`; upstream draws the blocked-prompt
+     message as a warning and the hook error in the error colour.
+  3. Exit-2 blocks on SessionStart, SessionEnd, PostCompact are reported too;
+     a blocked prompt still shows its hooks' system messages first (unverified
+     upstream); UserPromptSubmit `continue:false` shows no notice (BACKLOG).
+  4. `HOOK_NOTICE_PAYLOAD` sits before the `internal-error` arm, moving it from
+     index 22 to 23; an extra step `the hooks show the user no messages`.
+  5. A manual TruffleHog run flags existing fake `ghp_` fixtures as verified
+     through the proxy; commits ran without any skip.
+- **Recorded in:** `05-06-SUMMARY.md`, `05-07-SUMMARY.md`.
