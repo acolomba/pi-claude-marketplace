@@ -137,14 +137,36 @@ export function registerSkillAliases(
     ctx.ui.addAutocompleteProvider((current) => aliasProvider(ctx, current, getQualifiedAliases));
   });
 
+  // D-CF2-05: one path for a `/skill:` token and for every alias the table
+  // resolves, qualified or bare, from interactive and RPC input alike.
+  const invoke = (
+    generatedName: string,
+    token: string,
+    commands: ReturnType<ExtensionAPI["getCommands"]>,
+    event: InputEvent,
+    ctx: ExtensionContext,
+  ): Promise<InputEventResult> =>
+    invokeSkill({
+      commands,
+      generatedName,
+      typed: `/${token}`,
+      args: event.text.slice(token.length + 1).trim(),
+      cwd: ctx.cwd,
+      sessionId: ctx.sessionManager.getSessionId(),
+      thinkingLevel: pi.getThinkingLevel(),
+    }).then((outcome) =>
+      inputResult(outcome, event, (message) => {
+        reportAbort(ctx, message);
+      }),
+    );
+
   pi.on("input", (event, ctx) => {
     if (event.source === "extension") {
       return { action: "continue" };
     }
 
-    const match = /^\/(\S+)(?=\s|$)/.exec(event.text);
-    const token = match?.[1];
-    if (!token?.includes(":")) {
+    const token = /^\/(\S+)(?=\s|$)/.exec(event.text)?.[1];
+    if (token === undefined) {
       return { action: "continue" };
     }
 
@@ -154,30 +176,16 @@ export function registerSkillAliases(
     }
 
     if (token.startsWith("skill:")) {
-      return invokeSkill({
-        commands,
-        generatedName: token.slice("skill:".length),
-        typed: `/${token}`,
-        args: event.text.slice(token.length + 1).trim(),
-        cwd: ctx.cwd,
-        sessionId: ctx.sessionManager.getSessionId(),
-        thinkingLevel: pi.getThinkingLevel(),
-      }).then((outcome) =>
-        inputResult(outcome, event, (message) => {
-          reportAbort(ctx, message);
-        }),
-      );
+      return invoke(token.slice("skill:".length), token, commands, event, ctx);
     }
 
+    // DC-25 item 3: a bare alias that equals a Pi built-in command name is
+    // not reserved here, because Pi does not export its built-in list.
     return getQualifiedAliases(ctx.cwd).then((aliases) => {
       const generatedName = aliases.get(token);
       return generatedName === undefined
         ? { action: "continue" }
-        : {
-            action: "transform",
-            text: `/skill:${generatedName}${event.text.slice(token.length + 1)}`,
-            ...(event.images !== undefined && { images: event.images }),
-          };
+        : invoke(generatedName, token, commands, event, ctx);
     });
   });
 }

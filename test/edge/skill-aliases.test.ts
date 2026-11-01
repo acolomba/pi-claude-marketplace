@@ -41,12 +41,19 @@ const GREET_SKILL: PiCommand = {
 
 const GREET_BLOCK = '<skill name="demo-greet">\nGreet Ada.\n</skill>';
 
+type AliasLoader = (pi: ExtensionAPI, cwd: string) => Promise<ReadonlyMap<string, string>>;
+
 /** Registers the handlers on strict mocks and captures the input listener. */
 function registerWithInvoker(
   invokeSkill: SkillInvoker,
-  createInvocationId: () => string = () => {
-    throw new Error("an invocation that does not abort must not open a notification run");
-  },
+  {
+    createInvocationId = () => {
+      throw new Error("an invocation that does not abort must not open a notification run");
+    },
+    loadAliases = () => {
+      throw new Error("this input must not load skill aliases");
+    },
+  }: { createInvocationId?: () => string; loadAliases?: AliasLoader } = {},
 ): { pi: ExtensionAPI; input: ReturnType<typeof It.willCapture<InputListener>> } {
   const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
   const session = It.willCapture<SessionListener>("session");
@@ -61,19 +68,12 @@ function registerWithInvoker(
   })
     .thenReturn()
     .times(1);
-  registerSkillAliases(
-    pi,
-    () => {
-      throw new Error("a /skill: token must not load skill aliases");
-    },
-    invokeSkill,
-    createInvocationId,
-  );
+  registerSkillAliases(pi, loadAliases, invokeSkill, createInvocationId);
   return { pi, input };
 }
 
-/** A context whose working directory and session id an invocation reads once each. */
-function invocationContext(): ExtensionContext {
+/** A context whose session id an invocation reads once, and its directory `cwdReads` times. */
+function invocationContext(cwdReads = 1): ExtensionContext {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "context" });
   const sessionManager = mock<ExtensionContext["sessionManager"]>({
     exactParams: true,
@@ -81,7 +81,7 @@ function invocationContext(): ExtensionContext {
   });
   when(() => ctx.cwd)
     .thenReturn("/workspace")
-    .times(1);
+    .times(cwdReads);
   when(() => ctx.sessionManager)
     .thenReturn(sessionManager)
     .times(1);
@@ -110,13 +110,15 @@ test("D-CF2-05: passes extension input through without invoking a skill", () => 
   const { pi, input } = registerWithInvoker(invokeSkill);
 
   // act
-  const passed = input.value?.(
+  const skill = input.value?.(
     { type: "input", text: "/skill:demo-greet Ada", source: "extension" },
     ctx,
   );
+  const alias = input.value?.({ type: "input", text: "/demo:greet Ada", source: "extension" }, ctx);
 
   // assert
-  assert.deepStrictEqual(passed, { action: "continue" });
+  assert.deepStrictEqual(skill, { action: "continue" });
+  assert.deepStrictEqual(alias, { action: "continue" });
   verify(pi);
   verify(ctx);
   verify(invokeSkill);
@@ -211,88 +213,95 @@ test("D-CF1-03: leaves a skill the invocation does not own to Pi's expansion", a
   verify(invokeSkill);
 });
 
-test("leaves a bare marketplace skill name unchanged", () => {
+const GREET_ALIASES: ReadonlyMap<string, string> = new Map([
+  ["demo:greet", "demo-greet"],
+  ["greet", "demo-greet"],
+]);
+
+// D-CF2-05: one table over both user sources, so an alias and `/skill:` reach
+// the invocation the same way from interactive and RPC input.
+for (const source of ["interactive", "rpc"] as const) {
+  for (const token of ["demo:greet", "greet"]) {
+    test(`D-CF2-05: sends the alias /${token} from ${source} input through the invocation`, async () => {
+      // arrange
+      const invokeSkill = mock<SkillInvoker>({ exactParams: true, name: "skill invocation" });
+      when(() => invokeSkill({ ...greetRequest("Ada"), typed: `/${token}` }))
+        .thenResolve({ kind: "ok", text: GREET_BLOCK })
+        .times(1);
+      const ctx = invocationContext(2);
+      const { pi, input } = registerWithInvoker(invokeSkill, {
+        loadAliases: () => Promise.resolve(GREET_ALIASES),
+      });
+      when(() => pi.getCommands())
+        .thenReturn([GREET_SKILL])
+        .times(1);
+      when(() => pi.getThinkingLevel())
+        .thenReturn("low")
+        .times(1);
+
+      // act
+      const sent = await input.value?.({ type: "input", text: `/${token} Ada`, source }, ctx);
+
+      // assert
+      assert.deepStrictEqual(sent, { action: "transform", text: GREET_BLOCK });
+      verify(pi);
+      verify(ctx);
+      verify(invokeSkill);
+    });
+  }
+}
+
+test("leaves text that is not a slash token to Pi without reading commands", () => {
   // arrange
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+  const invokeSkill = mock<SkillInvoker>({ exactParams: true, name: "skill invocation" });
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "context" });
-  const session = It.willCapture<SessionListener>("session");
-  const input = It.willCapture<InputListener>("input");
-  when(() => {
-    pi.on("session_start", session);
-  })
-    .thenReturn()
-    .times(1);
-  when(() => {
-    pi.on("input", input);
-  })
-    .thenReturn()
-    .times(1);
+  const { pi, input } = registerWithInvoker(invokeSkill);
 
   // act
-  registerSkillAliases(pi, () => {
-    throw new Error("bare input must not load skill aliases");
-  });
-  const plain = input.value?.({ type: "input", text: "hello", source: "interactive" }, ctx);
-  const bare = input.value?.(
-    { type: "input", text: "/plugin-dev-agent-development build it", source: "interactive" },
-    ctx,
-  );
+  const plain = input.value?.({ type: "input", text: "hello /demo:greet", source: "rpc" }, ctx);
 
   // assert
   assert.deepStrictEqual(plain, { action: "continue" });
-  assert.deepStrictEqual(bare, { action: "continue" });
   verify(pi);
   verify(ctx);
+  verify(invokeSkill);
 });
 
-test("transforms a plugin-qualified skill alias and caches the mapping", async () => {
+test("D-CF2-05: leaves a token the alias table does not hold to Pi, loading the table once per directory", async () => {
   // arrange
-  const cwd = "/workspace";
-  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+  const invokeSkill = mock<SkillInvoker>({ exactParams: true, name: "skill invocation" });
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "context" });
-  const session = It.willCapture<SessionListener>("session");
-  const input = It.willCapture<InputListener>("input");
-  when(() => {
-    pi.on("session_start", session);
-  })
-    .thenReturn()
-    .times(1);
-  when(() => {
-    pi.on("input", input);
-  })
-    .thenReturn()
-    .times(1);
   when(() => ctx.cwd)
-    .thenReturn(cwd)
-    .times(2);
-  when(() => pi.getCommands())
-    .thenReturn([])
+    .thenReturn("/workspace")
     .times(2);
   let loads = 0;
-  const images: NonNullable<InputEvent["images"]> = [
-    { type: "image", data: "a", mimeType: "image/png" },
-  ];
+  const { pi, input } = registerWithInvoker(invokeSkill, {
+    loadAliases: () => {
+      loads++;
+      return Promise.resolve(GREET_ALIASES);
+    },
+  });
+  when(() => pi.getCommands())
+    .thenReturn([GREET_SKILL])
+    .times(2);
 
   // act
-  registerSkillAliases(pi, () => {
-    loads++;
-    return Promise.resolve(new Map([["foo:bar", "foo-bar"]]));
-  });
-  const matched = await input.value?.(
-    { type: "input", text: "/foo:bar build it", source: "interactive", images },
+  const bare = await input.value?.(
+    { type: "input", text: "/plugin-dev-agent-development build it", source: "interactive" },
     ctx,
   );
-  const unknown = await input.value?.(
-    { type: "input", text: "/foo:missing", source: "interactive" },
+  const qualified = await input.value?.(
+    { type: "input", text: "/demo:missing", source: "rpc" },
     ctx,
   );
 
   // assert
-  assert.deepStrictEqual(matched, { action: "transform", text: "/skill:foo-bar build it", images });
-  assert.deepStrictEqual(unknown, { action: "continue" });
+  assert.deepStrictEqual(bare, { action: "continue" });
+  assert.deepStrictEqual(qualified, { action: "continue" });
   assert.strictEqual(loads, 1);
   verify(pi);
   verify(ctx);
+  verify(invokeSkill);
 });
 
 test("leaves a command collision unchanged", () => {
@@ -345,7 +354,7 @@ test("leaves a command collision unchanged", () => {
         },
       },
     ])
-    .times(1);
+    .times(2);
 
   // act
   registerSkillAliases(pi, () => {
@@ -385,7 +394,9 @@ test("T-01-24: reports an aborted skill as a usage error entry over RPC and hand
   when(() => ctx.mode)
     .thenReturn("rpc")
     .times(1);
-  const { pi, input } = registerWithInvoker(invokeSkill, () => "invocation-1");
+  const { pi, input } = registerWithInvoker(invokeSkill, {
+    createInvocationId: () => "invocation-1",
+  });
   when(() => pi.getCommands())
     .thenReturn([GREET_SKILL])
     .times(2);
@@ -440,7 +451,9 @@ test("T-01-24: shows an aborted skill's message alone in the terminal UI and han
   })
     .thenReturn()
     .times(1);
-  const { pi, input } = registerWithInvoker(invokeSkill, () => "invocation-1");
+  const { pi, input } = registerWithInvoker(invokeSkill, {
+    createInvocationId: () => "invocation-1",
+  });
   when(() => pi.getCommands())
     .thenReturn([GREET_SKILL])
     .times(2);
@@ -770,6 +783,69 @@ test("keeps native suggestions outside qualified skill names", async () => {
   assert.deepStrictEqual(other, native);
   assert.strictEqual(missing, null);
   assert.strictEqual(bareSkill, null);
+  verify(pi);
+  verify(ctx);
+  verify(ui);
+});
+
+test("DC-25: offers only plugin-qualified aliases in completion", async () => {
+  // arrange
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "context" });
+  const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "UI" });
+  const session = It.willCapture<SessionListener>("session");
+  const input = It.willCapture<InputListener>("input");
+  const factory = It.willCapture<ProviderFactory>("provider factory");
+  when(() => {
+    pi.on("session_start", session);
+  })
+    .thenReturn()
+    .times(1);
+  when(() => {
+    pi.on("input", input);
+  })
+    .thenReturn()
+    .times(1);
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(1);
+  when(() => {
+    ui.addAutocompleteProvider(factory);
+  })
+    .thenReturn()
+    .times(1);
+  when(() => ctx.cwd)
+    .thenReturn("/workspace")
+    .times(1);
+  const base = {
+    getSuggestions: () => Promise.resolve(null),
+    applyCompletion: (lines: string[]) => ({ lines, cursorLine: 0, cursorCol: 0 }),
+  } satisfies AutocompleteProvider;
+
+  // act
+  registerSkillAliases(pi, () =>
+    Promise.resolve(
+      new Map([
+        ["demo:fancy", "demo-review"],
+        ["fancy", "demo-review"],
+      ]),
+    ),
+  );
+  session.value?.({ type: "session_start", reason: "startup" }, ctx);
+  const provider = factory.value?.(base);
+  const qualified = await provider?.getSuggestions(["/demo:f"], 0, 7, {
+    signal: new AbortController().signal,
+  });
+  const bare = await provider?.getSuggestions(["/fan"], 0, 4, {
+    signal: new AbortController().signal,
+  });
+
+  // assert
+  assert.deepStrictEqual(qualified, {
+    items: [{ value: "demo:fancy", label: "demo:fancy" }],
+    prefix: "/demo:f",
+  });
+  assert.strictEqual(bare, null);
   verify(pi);
   verify(ctx);
   verify(ui);
