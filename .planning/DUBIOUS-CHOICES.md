@@ -312,3 +312,20 @@ this project.
   (01-09 Task 3, `script_missing`), a misread: the `npm run test:e2e` half
   runs at the repo root, not in the `--prefix` directory.
 - **Recorded in:** the plans' "Flagged assumptions" sections and `COVERAGE.md`.
+
+### DC-16: Plan-check revisions made by the parent
+
+- **Phase / source:** Phase 1 plan checker (0 blockers, 2 warnings, 1 info).
+- **Severity:** Low. **Status:** open.
+- **Items:**
+  1. **Cucumber scenario for connect-time `:-` (warning 1).** The parent,
+     not a re-spawned planner, added Task 3 to `01-06-PLAN.md`: a plugin
+     server's `env` holds `${PI_CM_STUB_TAG:-install-default}`, the variable is
+     set after install, and the model sees `late:echo:ping`. 01-06 now depends
+     on 01-14 and lists VER-05. The stub prefixes its echo with `STUB_TAG` when
+     set, so Task 1's expectations do not change. The task may need a new
+     `Given` that sets a variable in the profile Pi's process environment.
+  2. **Three plans over 15 files (warning 2) not split further:** 01-01 (19),
+     01-15 (18), 01-11 (16). Most files are source-test pairs and docs; each
+     plan has 3 tasks; the planner already split once.
+- **Recorded in:** `01-06-PLAN.md`, `01-14-PLAN.md` objective.
