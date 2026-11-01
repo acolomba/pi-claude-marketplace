@@ -553,3 +553,17 @@ this project.
 - **Severity:** Medium. **Status:** open.
 - **Decision:** ROADMAP plans Phases 2-7 as six parallel sessions and worktrees, each on its own branch, merged by the parent in the order 7, 6, 4, 2, 3, 5. This session may push only to `claude/quirky-planck-hhm592`, and its background subagents have no Agent tool, so they cannot run the GSD phase pipelines (researcher, planner, checker, executors, verifier). The parent instead runs Phases 2-7 one after another in numeric order on the milestone branch, each through discuss, plan, and execute, with the plans of one wave still running in parallel worktrees. The merge-order rationale (conflict avoidance between parallel branches) no longer applies; each phase starts from the previous phase's merged tree, so a later phase sees an earlier one's files. File-ownership rules still hold, so phases stay out of each other's files.
 - **Also:** the Phase 1 transition runner marked D-CF1-06/07/08/13/14/15/16/17 `✓ Good` and kept the rest `-- Locked`; STATE.md frontmatter was hand-corrected after `phase.complete`.
+
+### DC-24: Phase 2 (Skills) discuss decisions settled without the user
+
+- **Phase / source:** Phase 2 smart discuss (`02-CONTEXT.md`, D-CF2-01..12).
+- **Severity:** Medium (items 1-4); the rest Low. **Status:** open.
+- **Upstream probes:** live, offline, against Claude Code 2.1.316 (local marketplace, throwaway HOME/CLAUDE_CONFIG_DIR, `env -i`, and a local HTTP stub with a dummy key to capture the model request; no credential, no LLM). The binary contradicts the docs on FG-07 and FG-08.
+- **Items:**
+  1. **D-CF2-01/02 (FG-07):** the Pi name stays `/skill:<plugin>-<dir>` (the binary keeps the directory name and adds frontmatter `name` as aliases, `Qqn` at byte 287674833). Aliases become exactly upstream's: `<plugin>:<dir>` (non-`[a-zA-Z0-9_-]` to `-`), `<plugin>:<fm name>`, and the bare `<fm name>`. The elided alias reverse-derived from the Pi name (e.g. `acme:foo` for directory `acme-foo`) is DROPPED, which a user may rely on today. Bare-name collisions across plugins were not probed.
+  2. **D-CF2-03 (FG-08):** inside one plugin a command wins over a same-named skill (binary; the docs table suggests the opposite). The skill is not staged and install WARNS, a warning upstream does not print; before, the skill stayed reachable as `/skill:`.
+  3. **D-CF2-05 (FG-09):** the alias and skill invocation also run for `rpc` input (upstream `-p` mode resolves the names), superseding SK-6's "interactive" wording; `extension` input passes through.
+  4. **D-CF2-10:** the Pi gap report (no hide-from-`/`, no skill display name/alias, no hook on the model's own skill path) is drafted as ready-to-file text in the phase SUMMARY, not filed; the ROADMAP's "reported to Pi" criterion needs the user to file it.
+  5. **D-CF2-06:** the Phase 1 cores are wired into `edge/skill-aliases.ts`; Pi's `<skill>` block framing is kept instead of upstream's `Base directory for this skill:` text.
+  6. **D-CF2-12:** Phase 2 ownership widened to `orchestrators/skill-alias-state.ts` (+ test) and an optional, backward-compatible profile in `features/lib/pi-tui.ts` (a frozen-list file? `pi-tui.ts` is not in the frozen list).
+  7. **D-CF2-04, 07, 08, 09, 11** pin earlier decisions (first-wins with `skills/` copy winning, upstream `A2e` description fallback, dropped-field warnings, `user-invocable: false` stays listed under D-CF1-09, lifecycle in a new session after `/reload`).
