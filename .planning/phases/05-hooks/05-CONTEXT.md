@@ -195,7 +195,7 @@ Decision IDs are `D-CF5-NN`. Each cites its evidence (E-n) and license.
   in parallel on one translated snapshot, and their results fold in routing
   order (E11): `continue:false` stops; deny > ask > allow; every hook's
   `additionalContext` and `systemMessage` kept in routing order; the input
-  rewrite of the winning decision, ties to the last hook in routing order.
+  rewrite that comes last in routing order, whatever that hook decided (upstream's fold `jFt` keeps the last `updatedInput`; corrected after code review WR-01, P5-DC-22).
   Supersedes DISP-04 ("fan-out sequential"). Scenarios that check several runs
   of one event compare them keyed by hook name, never by append order.
 - **D-CF5-10 (dedupe):** one hook per upstream key (E10), rooted at the
