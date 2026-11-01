@@ -426,3 +426,30 @@ session writes this file. Each subagent ends its report with a
   plugin that read `tool_response` on PostToolUseFailure (non-upstream) would
   break.
 - **Recorded in:** `05-VALIDATION.md`, the fix commit.
+
+### P5-DC-22: Code review fixes and the D-CF5-09 rewrite rule
+
+- **Phase / source:** `/gsd-code-review 5 --fix --auto` (reviewer and fixer).
+- **Severity:** Medium. **Status:** open.
+- **Choices:**
+  1. WR-01 skipped and D-CF5-09 reworded: the input rewrite is the last one in
+     routing order whatever the hook decided, as upstream's fold (`jFt`) keeps
+     the last `updatedInput` (the old wording "of the winning decision"
+     contradicted E11). Upstream uses finish order; the bridge uses routing
+     order for determinism.
+  2. WR-02: a steer's or follow-up's prompt context reaches the model just
+     before the queued prompt, not after it (Pi gap: no carrier after a queued
+     prompt), documented in `docs/hooks-compatibility.md`.
+  3. WR-03: hook notices lose control characters (except line breaks and tabs)
+     and are cut at 2,000 user-visible characters with `… (+N chars)`; the cap
+     is the fixer's choice (no upstream cap found).
+  4. WR-04: a PreCompact block now cancels the compaction (upstream stops it
+     and reports `Compaction blocked by PreCompact hook: ...`); the notice is
+     `info`, not upstream's warning (new severity would extend the closed set).
+  5. CR-01: only the bridge's own overflow kill counts as an `onFailure`
+     failure; a hook that exits 0 after overflowing stays a noop.
+  6. One fix commit (`0df61e7`) ran its hook without the non-DAC env; the hook
+     still passed.
+  7. IN-01 (generation-change discard) refuted as intended (DISP-03); the six
+     info findings were left out of the fix scope.
+- **Recorded in:** `05-REVIEW.md`, `05-REVIEW-FIX.md`, `05-CONTEXT.md` D-CF5-09.
