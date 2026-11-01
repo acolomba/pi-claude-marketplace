@@ -89,6 +89,33 @@ Feature: Hook session
       | SessionStart | first   |         | compact |                                                                          | {project dir} |                 | start     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | {project dir}/.pi/pi-claude-marketplace/data/_shared/claude-env-first.env | first                  | first             | 1          |
       | PostCompact  | first   | manual  |         | No prior history.\n\n---\n\n**Turn Context (split turn):**\n\nSummary A. | {project dir} |                 | post      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo |                                                                           | first                  | first             | 1          |
 
+  Scenario: A PreCompact hook that exits 2 blocks the compaction
+    Given pi keeps only one recent token when the hooks session compacts
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event        | matcher | form   | exit code | stderr          |
+      | keep  | PreCompact   | *       | script | 2         | keep it all     |
+      | start | SessionStart | compact |        |           |                 |
+      | post  | PostCompact  | *       |        |           |                 |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Hello. |
+    Given the user has prompted "hello" with the hooks recording
+    When the user compacts the session with the hooks recording, which fails with "Compaction cancelled"
+    Then the hooks record these runs:
+      | event      | session | trigger | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreCompact | first   | manual  | {project dir} |                 | keep      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
+    Then the hooks show the user these messages:
+      | severity | text                                                                                        |
+      | info     | Compaction blocked by PreCompact hook: [${CLAUDE_PLUGIN_ROOT}/hooks/keep.sh]: keep it all |
+
   Scenario: A second compaction in a session runs SessionStart compact again
     Given pi keeps only one recent token when the hooks session compacts
     Given pi runs with the scripted model

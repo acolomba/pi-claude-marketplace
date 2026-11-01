@@ -15,7 +15,7 @@ The upstream column reflects Claude Code 2.1.316 and its published hooks referen
 | `PreToolUse`                            | ✓           | ✓   | tool-name matcher and `if` field                                                                                                                                                                  |
 | `PostToolUse`                           | ✓           | ✓   | tool-name matcher and `if` field                                                                                                                                                                  |
 | `PostToolUseFailure`                    | ✓           | ✓   | tool-name matcher and `if` field                                                                                                                                                                  |
-| `PreCompact`                            | ✓           | ⚠   | `trigger` matcher `manual` or `auto` (D-CF5-04). An exit 2 or a block does not stop the compaction. The bridge writes a debug line                                                                |
+| `PreCompact`                            | ✓           | ✓   | `trigger` matcher `manual` or `auto` (D-CF5-04). A block cancels the compaction, as upstream; see [Compaction](#compaction) (D-CF5-18)                                                            |
 | `PostCompact`                           | ✓           | ✓   | `trigger` matcher `manual` or `auto`, and stdin carries `compact_summary` (D-CF5-04)                                                                                                              |
 | `SessionEnd`                            | ✓           | ⚠   | `reason` is `clear`, `resume`, `prompt_input_exit`, or `other`. `logout` is admitted and never sent, as upstream. A quit in the terminal by a signal sends `prompt_input_exit` (D-CF5-02, Pi gap) |
 | `Stop`                                  | ✓           | ✓   | full decision control; see the turn-boundary timing shift below                                                                                                                                   |
@@ -66,6 +66,8 @@ Each compaction runs three events in order, as upstream does (D-CF5-04, D-CF5-05
 3. `PostCompact`, with `trigger` and `compact_summary`. `compact_summary` is the summary that Pi wrote for the compaction.
 
 Pi reports a compaction as `manual`, `threshold`, or `overflow`. The bridge sends `manual` as `manual`, and `threshold` and `overflow` as `auto`. A `PreCompact` or `PostCompact` matcher of `manual` or `auto` compares with that value. A second compaction in the same session runs the three events again.
+
+A `PreCompact` block cancels the compaction, as upstream does, so `SessionStart` and `PostCompact` do not run. A block is an exit 2, a `decision` of `block`, or a failure under `onFailure: "block"`. The bridge shows `Compaction blocked by PreCompact hook: <message>`, with one `[<command>]: <stderr>` message for each blocking hook, one per line. Upstream shows that notice as a warning. The bridge shows it at `info` severity, as every hook notice (D-CF5-18, D-CF5-24). Pi then answers the compaction with `Compaction cancelled`.
 
 ### Turn-boundary timing shift
 
@@ -241,7 +243,7 @@ The default, `continue`, lets the failure pass. The bridge ignores `onFailure` o
 | `last_assistant_message` (Stop / StopFailure stdin)                               | ✓           | ✓   | Stop: final assistant message text (concatenated text blocks); StopFailure: Pi's rendered error text (`errorMessage`; empty on `length` endings)                                                                                                      |
 | Exit 0 -> success                                                                 | ✓           | ✓   |                                                                                                                                                                                                                                                       |
 | Plain stdout on exit 0 as context                                                 | ✓           | ✓   | on `SessionStart` and `UserPromptSubmit` only, as upstream. Stdout that does not start with `{` and end with `}` is plain text (D-CF5-13). On other events, the bridge ignores it                                                                     |
-| Exit 2 -> blocking error, stderr to Claude                                        | ✓           | ✓   | the reason is `[<command>]: <stderr>`, or the reason that a JSON object on stdout gives (D-CF5-11). On Stop, rides the block arm with stderr as the re-entry reason. On `PreCompact`, the compaction still runs                                       |
+| Exit 2 -> blocking error, stderr to Claude                                        | ✓           | ✓   | the reason is `[<command>]: <stderr>`, or the reason that a JSON object on stdout gives (D-CF5-11). On Stop, rides the block arm with stderr as the re-entry reason. On `PreCompact`, cancels the compaction                                          |
 | Other exit -> non-blocking, stderr to user                                        | ✓           | ⚠   | a JSON object on stdout still applies whole, so a `deny` printed before exit 1 blocks the call (D-CF5-11). The bridge does not show the stderr to the user                                                                                            |
 | `continue: false` -> stop                                                         | ✓           | ⚠   | on `PreToolUse`, the turn ends (D-CF5-11). On `UserPromptSubmit`, the prompt stops with no notice. On `PostToolUse` and `PostToolUseFailure`, the bridge only writes a debug line. On Stop, top-level `continue: false` takes precedence over a block |
 | `decision: "block"` (top-level)                                                   | ✓           | ✓   | per-event arms in `event-adapters.ts`. A `PostToolUse` or `PostToolUseFailure` block keeps the tool output and adds the hook's feedback. On Stop, re-enters via `followUp` + `triggerTurn`                                                            |
@@ -287,10 +289,11 @@ A hook's `systemMessage` is shown to you and never sent to the model (D-CF5-14).
 
 `SessionEnd`, `PreCompact`, `PostCompact`, and `StopFailure` drop a `systemMessage` with a debug line, as upstream. An empty `systemMessage` shows nothing. When several hooks give a message, the messages show in routing order.
 
-The same notice kind carries two more notices (D-CF5-24):
+The same notice kind carries three more notices (D-CF5-24):
 
 - A blocked prompt shows `UserPromptSubmit operation blocked by hook:` and the reason on the next line. The prompt does not reach the model. Upstream adds a third line, `Original prompt: <prompt>`. The bridge leaves it out.
 - A block on `SessionStart`, `SessionEnd`, or `PostCompact`, which cannot block, shows as `<label> hook error: <message>`. An exit 2 gives the message `[<command>]: <stderr>`.
+- A `PreCompact` block shows `Compaction blocked by PreCompact hook: <message>` (see [Compaction](#compaction)).
 
 A notice can echo data that a hook read, such as a tool input or a file. So every notice loses its terminal escape sequences, every other control character except a line break or a tab becomes a space, and a notice longer than 2,000 characters is cut and ends with `… (+N chars)`.
 

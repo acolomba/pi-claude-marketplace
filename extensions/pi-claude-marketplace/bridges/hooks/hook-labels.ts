@@ -67,6 +67,26 @@ export function hookBlockingErrorText(
   return `${label} hook blocking error from command: "${command}": ${blockMessage(reason, command, fromStderr)}`;
 }
 
+/** One blocking hook outcome, with the command the hook declares. */
+export interface HookBlock {
+  readonly reason: string | undefined;
+  readonly command: string;
+  readonly fromStderr: boolean;
+}
+
+/**
+ * The notice a PreCompact block shows the user, as Claude Code 2.1.316
+ * reports a blocked compaction: `Compaction blocked by PreCompact hook:
+ * <messages>`, one message per blocking hook in routing order, each as
+ * `hookErrorText` writes it, joined by line breaks.
+ */
+export function compactionBlockedText(blocks: readonly HookBlock[]): string {
+  const messages = blocks.map(({ reason, command, fromStderr }) =>
+    blockMessage(reason, command, fromStderr),
+  );
+  return `Compaction blocked by PreCompact hook: ${messages.join("\n")}`;
+}
+
 /**
  * D-CF5-14: the notice Claude Code shows the user for a hook's
  * `systemMessage`, `<label> says: <text>`.

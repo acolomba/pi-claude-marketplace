@@ -51,11 +51,13 @@ import { openNotificationRun } from "../../shared/notification-run.ts";
 import { dispatchHookExec } from "./dispatch-exec.ts";
 import {
   adaptInputResult,
+  adaptPreCompactResult,
   adaptObservationResultForEvent,
   adaptToolCallResult,
   adaptToolResultResult,
 } from "./event-adapters.ts";
 import {
+  compactionBlockedText,
   hookErrorText,
   hookEventLabel,
   hookMatchLabel,
@@ -65,8 +67,9 @@ import {
 import { ifFires } from "./if-field/index.ts";
 import { compactTrigger } from "./payloads/compact-trigger.ts";
 
-import type { HookAdapterContext } from "./event-adapters.ts";
+import type { CompactionCancel, HookAdapterContext } from "./event-adapters.ts";
 import type { HookExecResult } from "./exec-result.ts";
+import type { HookBlock } from "./hook-labels.ts";
 import type { ClaudeSessionEndEvent } from "./payloads/session-end.ts";
 import type { ClaudeSessionStartEvent } from "./payloads/session-start.ts";
 import type { RoutingEntry } from "./routing-state.ts";
@@ -417,8 +420,6 @@ async function runAndFold(
 /** The events whose hooks a composite handler runs and whose notices it shows. */
 type NoticeEvent = CompositeDispatchEvent | "PostToolUse" | "PostToolUseFailure";
 
-type BlockResult = Extract<HookExecResult, { kind: "block" }>;
-
 // D-CF5-14: every hook's non-empty `systemMessage`, in routing order.
 function systemMessages(outcomes: readonly BucketOutcome[]): string[] {
   return outcomes.flatMap(({ result }) =>
@@ -462,46 +463,54 @@ function systemMessageNotices(
   return [];
 }
 
-// The text `compose` writes for each blocking outcome, in routing order, with
-// the hook's declared command, empty when the hook declares none, as the
-// adapters name it.
-function blockTexts(
-  outcomes: readonly BucketOutcome[],
-  compose: (result: BlockResult, command: string) => string,
-): string[] {
-  return outcomes.flatMap(({ entry, result }) =>
-    result.kind === "block" ? [compose(result, entry.handlerDecl.command ?? "")] : [],
-  );
-}
-
 /**
  * D-CF5-11 / D-CF5-18 / D-CF5-24: the notices a block shows the user. A
  * blocked prompt shows why once, with the first block in routing order. A
  * SessionStart, SessionEnd, or PostCompact block changes nothing, so each one
  * shows as the event's hook error, as Claude Code shows exit-2 stderr there.
- * A tool block goes to the model instead, and a PreCompact block stays a
- * debug line.
+ * A PreCompact block cancels the compaction and shows one notice that names
+ * every blocking hook, as Claude Code reports a blocked compaction. A tool
+ * block goes to the model instead.
  */
 function blockNotices(claudeEvent: NoticeEvent, label: string, folded: FoldedBucket): string[] {
   switch (claudeEvent) {
     case "UserPromptSubmit":
       return folded.result.kind === "block"
-        ? blockTexts(folded.outcomes, (result, command) =>
-            promptBlockedText(result.reason, command, result.fromStderr === true),
-          ).slice(0, 1)
+        ? blocks(folded.outcomes)
+            .slice(0, 1)
+            .map(({ reason, command, fromStderr }) =>
+              promptBlockedText(reason, command, fromStderr),
+            )
         : [];
     case "SessionStart":
     case "SessionEnd":
     case "PostCompact":
-      return blockTexts(folded.outcomes, (result, command) =>
-        hookErrorText(label, result.reason, command, result.fromStderr === true),
+      return blocks(folded.outcomes).map(({ reason, command, fromStderr }) =>
+        hookErrorText(label, reason, command, fromStderr),
       );
+    case "PreCompact":
+      return folded.result.kind === "block" ? [compactionBlockedText(blocks(folded.outcomes))] : [];
     case "PreToolUse":
     case "PostToolUse":
     case "PostToolUseFailure":
-    case "PreCompact":
       return [];
   }
+}
+
+// Each blocking outcome, in routing order, with the hook's declared command,
+// empty when the hook declares none, as the adapters name it.
+function blocks(outcomes: readonly BucketOutcome[]): HookBlock[] {
+  return outcomes.flatMap(({ entry, result }) =>
+    result.kind === "block"
+      ? [
+          {
+            reason: result.reason,
+            command: entry.handlerDecl.command ?? "",
+            fromStderr: result.fromStderr === true,
+          },
+        ]
+      : [],
+  );
 }
 
 /**
@@ -770,16 +779,17 @@ async function adaptForEvent(
   result: HookExecResult,
   event: unknown,
   context: HookAdapterContext,
-): Promise<ToolCallEventResult | InputEventResult | undefined> {
+): Promise<ToolCallEventResult | InputEventResult | CompactionCancel | undefined> {
   switch (claudeEvent) {
     case "PreToolUse":
       // D-CF5-11: an ask may wait on the user's answer in the terminal.
       return await adaptToolCallResult(result, event as ToolCallEvent, context);
     case "UserPromptSubmit":
       return adaptInputResult(result, event as InputEvent, context);
+    case "PreCompact":
+      return adaptPreCompactResult(result);
     case "SessionStart":
     case "SessionEnd":
-    case "PreCompact":
     case "PostCompact":
       adaptObservationResultForEvent(result, claudeEvent, context);
       return undefined;
@@ -825,14 +835,17 @@ export type CompositeEventFor<E extends BucketAEvent> = E extends "SessionStart"
  * D-60-03: per-event return type bridge mapping each composite-handler
  * `claudeEvent` to the Pi-side handler return shape its registered
  * closure must produce. PreToolUse -> ToolCallEventResult;
- * UserPromptSubmit -> InputEventResult; the four observation events ->
- * undefined (Pi handler return slot is void for those).
+ * UserPromptSubmit -> InputEventResult; PreCompact -> a cancel of the
+ * compaction (D-CF5-18); the other observation events -> undefined (Pi
+ * handler return slot is void for those).
  */
 export type CompositeReturnFor<E extends BucketAEvent> = E extends "PreToolUse"
   ? ToolCallEventResult | undefined
   : E extends "UserPromptSubmit"
     ? InputEventResult | undefined
-    : undefined;
+    : E extends "PreCompact"
+      ? CompactionCancel | undefined
+      : undefined;
 
 /**
  * The value a matcher of `claudeEvent` selects on: the mapped SessionStart

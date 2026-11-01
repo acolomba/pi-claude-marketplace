@@ -2437,10 +2437,37 @@ describe("composite per-event adapters", () => {
     ];
 
     // act
-    await handler(event, context);
+    const output = await handler(event, context);
 
     // assert
+    assert.strictEqual(output, undefined);
     assert.deepStrictEqual(executorCalls, expectedCalls);
+  });
+
+  test("cancels the compaction on a PreCompact block, as Claude Code does", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreCompact", routedEntries("PreCompact", ["quiet", "keeper"]));
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreCompact",
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor(
+        { quiet: { kind: "noop" }, keeper: { kind: "block", reason: "keep", fromStderr: true } },
+        [],
+      ),
+    );
+
+    // act
+    const output = await handler(
+      { reason: "threshold" } as SessionBeforeCompactEvent,
+      createExtensionContext("/workspace/pre-compact-block"),
+    );
+
+    // assert
+    assert.deepStrictEqual(output, { cancel: true });
   });
 
   test("passes a PostCompact noop through after observing it", async () => {
@@ -3543,10 +3570,23 @@ describe("hook notices (HOOK-05 / D-CF5-14)", () => {
       notices: ["PostCompact:auto hook error: Blocked by hook"],
     },
     {
-      name: "no notice for a PreCompact block",
+      name: "one compaction-blocked notice for the PreCompact blocks in routing order",
       claudeEvent: "PreCompact",
       event: PRE_COMPACT,
-      results: { compactor: { kind: "block", reason: "not now" } },
+      results: {
+        compactor: { kind: "block", reason: "not now", fromStderr: true },
+        quiet: { kind: "noop" },
+        keeper: { kind: "block", reason: "keep the history" },
+      },
+      notices: [
+        "Compaction blocked by PreCompact hook: [printf compactor]: not now\nkeep the history",
+      ],
+    },
+    {
+      name: "no notice for a PreCompact hook that stops",
+      claudeEvent: "PreCompact",
+      event: PRE_COMPACT,
+      results: { stopper: { kind: "stop" }, keeper: { kind: "block", reason: "keep" } },
       notices: [],
     },
   ] satisfies ReadonlyArray<{

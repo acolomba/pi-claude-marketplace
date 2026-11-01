@@ -335,6 +335,38 @@ export function adaptToolResultResult(
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// adaptPreCompactResult -- PreCompact
+// ──────────────────────────────────────────────────────────────────────────
+
+/** What the `session_before_compact` handler returns to cancel the compaction. */
+export interface CompactionCancel {
+  readonly cancel: true;
+}
+
+/**
+ * D-CF5-18: convert a folded PreCompact result to the Pi
+ * `session_before_compact` return. A block (exit 2, a `decision: "block"`, or
+ * a failure under `onFailure: "block"`) cancels the compaction, as Claude
+ * Code 2.1.316 skips a compaction a PreCompact hook blocks, so neither
+ * SessionStart(`compact`) nor PostCompact runs. Claude Code acts on no other
+ * PreCompact outcome: a stop is debug-logged, and context is dropped (D-60-03).
+ */
+export function adaptPreCompactResult(result: HookExecResult): CompactionCancel | undefined {
+  switch (result.kind) {
+    case "block":
+      return { cancel: true };
+
+    case "stop":
+      hookDebugLog(`adaptPreCompact: stop ignored; reason=${result.stopReason ?? "<none>"}`);
+      return undefined;
+
+    case "mutate":
+    case "noop":
+      return undefined;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // adaptInputResult -- UserPromptSubmit
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -442,13 +474,14 @@ export function adaptInputResult(
  *       away, as in Claude Code (D-CF5-09).
  *       block / stop -> also debug-logged; no Pi return slot exists
  *
- *   - SessionEnd / PreCompact / PostCompact:
+ *   - SessionEnd / PostCompact:
  *       all arms silently drop the additionalContext (and other mutate
  *       fields). No downstream drain point exists for these events under
- *       Pi's lifecycle: SessionEnd has no future turn; PreCompact /
- *       PostCompact interact with compaction summaries, not the session
- *       prompt. Deferred per D-60-03. `block` / `stop` are still
- *       debug-logged for observability.
+ *       Pi's lifecycle: SessionEnd has no future turn; PostCompact
+ *       interacts with the compaction summary, not the session prompt.
+ *       Deferred per D-60-03. `block` / `stop` are still debug-logged for
+ *       observability. PreCompact has an adapter of its own
+ *       (`adaptPreCompactResult`).
  *
  * The buffered context carries the provenance of the entry the fold
  * attributes it to (the last mutating hook).
@@ -458,7 +491,7 @@ export function adaptInputResult(
  */
 export function adaptObservationResultForEvent(
   result: HookExecResult,
-  claudeEvent: Extract<BucketAEvent, "SessionStart" | "SessionEnd" | "PreCompact" | "PostCompact">,
+  claudeEvent: Extract<BucketAEvent, "SessionStart" | "SessionEnd" | "PostCompact">,
   context: HookAdapterContext,
 ): undefined {
   if (
@@ -488,7 +521,7 @@ export function adaptObservationResultForEvent(
       );
       return undefined;
 
-    // SessionEnd / PreCompact / PostCompact: no logical drain point for
+    // SessionEnd / PostCompact: no logical drain point for
     // additionalContext. Other mutate fields (updatedInput,
     // updatedToolOutput, permissionDecision) are not meaningful for
     // observation events either; the adapter silently drops them.

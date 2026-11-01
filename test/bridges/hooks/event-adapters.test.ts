@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   adaptInputResult,
   adaptObservationResultForEvent,
+  adaptPreCompactResult,
   adaptToolCallResult,
   adaptToolResultResult,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
@@ -1165,7 +1166,6 @@ describe("adaptObservationResultForEvent", () => {
 
   for (const { eventName, context, scope } of [
     { eventName: "SessionEnd", context: "discarded SessionEnd context", scope: "user" },
-    { eventName: "PreCompact", context: "discarded PreCompact context", scope: "project" },
     { eventName: "PostCompact", context: "discarded PostCompact context", scope: "user" },
   ] as const) {
     test(`drops ${eventName} additional context`, () => {
@@ -1245,7 +1245,7 @@ describe("adaptObservationResultForEvent", () => {
     });
   }
 
-  test("drops the PreCompact context of a fold that blocks", () => {
+  test("drops the PostCompact context of a fold that blocks", () => {
     // arrange
     const runtime = createHooksRuntime();
     const provenance = {
@@ -1257,7 +1257,7 @@ describe("adaptObservationResultForEvent", () => {
     // act
     adaptObservationResultForEvent(
       { kind: "block", reason: "denied", additionalContext: "dropped context" },
-      "PreCompact",
+      "PostCompact",
       provenanceContext(runtime, provenance),
     );
 
@@ -1288,10 +1288,10 @@ describe("adaptObservationResultForEvent", () => {
   for (const { name, eventName, hookOutcome, diagnostic } of [
     {
       name: "blocked observation with its reason",
-      eventName: "PreCompact" as const,
+      eventName: "PostCompact" as const,
       hookOutcome: { kind: "block", reason: "policy denied" } as const,
       diagnostic:
-        "[hooks] adaptObservation: block ignored (no Pi return slot); event=PreCompact reason=policy denied",
+        "[hooks] adaptObservation: block ignored (no Pi return slot); event=PostCompact reason=policy denied",
     },
     {
       name: "blocked observation with an absent reason",
@@ -1345,6 +1345,68 @@ describe("adaptObservationResultForEvent", () => {
 
       // assert
       assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+      assert.deepStrictEqual(
+        consoleErrorSpy.mock.calls.map(({ arguments: consoleArguments }) => consoleArguments),
+        [[diagnostic]],
+      );
+    });
+  }
+});
+
+describe("adaptPreCompactResult", () => {
+  test("cancels the compaction for a block, as Claude Code does", () => {
+    // act
+    const adaptation = adaptPreCompactResult({ kind: "block", reason: "keep the history" });
+
+    // assert
+    assert.deepStrictEqual(adaptation, { cancel: true });
+  });
+
+  for (const hookOutcome of [
+    { kind: "noop" },
+    { kind: "mutate", additionalContext: "dropped" },
+  ] satisfies HookExecResult[]) {
+    test(`lets the compaction run for a ${hookOutcome.kind}`, () => {
+      // act
+      const adaptation = adaptPreCompactResult(hookOutcome);
+
+      // assert
+      assert.strictEqual(adaptation, undefined);
+    });
+  }
+
+  for (const { name, hookOutcome, diagnostic } of [
+    {
+      name: "its reason",
+      hookOutcome: { kind: "stop", stopReason: "halt requested" } as const,
+      diagnostic: "[hooks] adaptPreCompact: stop ignored; reason=halt requested",
+    },
+    {
+      name: "no reason",
+      hookOutcome: { kind: "stop" } as const,
+      diagnostic: "[hooks] adaptPreCompact: stop ignored; reason=<none>",
+    },
+  ]) {
+    test(`lets the compaction run for a stop with ${name} and reports it`, (t) => {
+      // arrange
+      const debugKey = "PI_CLAUDE_MARKETPLACE_DEBUG";
+      const hadDebug = Object.hasOwn(process.env, debugKey);
+      const previousDebug = process.env[debugKey];
+      t.after(() => {
+        if (hadDebug) {
+          process.env[debugKey] = previousDebug;
+        } else {
+          delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+        }
+      });
+      process.env[debugKey] = "1";
+      const consoleErrorSpy = t.mock.method(console, "error", () => undefined);
+
+      // act
+      const adaptation = adaptPreCompactResult(hookOutcome);
+
+      // assert
+      assert.strictEqual(adaptation, undefined);
       assert.deepStrictEqual(
         consoleErrorSpy.mock.calls.map(({ arguments: consoleArguments }) => consoleArguments),
         [[diagnostic]],

@@ -575,7 +575,7 @@ The one notice of a background update, which runs after the first message of a s
 
 #### hook-notice
 
-One notice that a plugin's hook shows the user: a hook's `systemMessage` as `<Event>[:<Tool>] says: <text>`, a blocked prompt, or a block on an event that cannot block. Its origin is `hook`, severity is always `info`, and `needsReload` is always `false`. A hook's text never reaches the model. A notice with empty text emits nothing.
+One notice that a plugin's hook shows the user: a hook's `systemMessage` as `<Event>[:<Tool>] says: <text>`, a blocked prompt, a blocked compaction, or a block on an event that cannot block. Its origin is `hook`, severity is always `info`, and `needsReload` is always `false`. A hook's text never reaches the model. A notice with empty text emits nothing.
 
 <!-- fields: kind:hook-notice -->
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  compactionBlockedText,
   hookBlockingErrorText,
   hookErrorText,
   hookEventLabel,
@@ -180,4 +181,21 @@ describe("promptBlockedText", () => {
       assert.strictEqual(notice, text);
     });
   }
+});
+
+describe("compactionBlockedText", () => {
+  test("joins the message of each blocking hook in routing order (Claude Code 2.1.316)", () => {
+    // act
+    const text = compactionBlockedText([
+      { reason: "not now", command: GUARD_COMMAND, fromStderr: true },
+      { reason: "keep the history", command: "other", fromStderr: false },
+      { reason: undefined, command: "quiet", fromStderr: true },
+    ]);
+
+    // assert
+    assert.strictEqual(
+      text,
+      `Compaction blocked by PreCompact hook: [${GUARD_COMMAND}]: not now\nkeep the history\n[quiet]: No stderr output`,
+    );
+  });
 });

@@ -13,7 +13,8 @@
  * Pi compacts nothing in a session shorter than its recent-token budget, so a
  * compaction scenario first lowers the budget in the agent settings, before
  * the profile Pi starts. The scripted model plays each summarization call of
- * a compaction, so the script lists one reply for each.
+ * a compaction, so the script lists one reply for each. A compaction that a
+ * hook cancels fails, and its step states the error Pi answers with.
  *
  * Pi offers `/reload` only in the terminal, so the reload and the terminal
  * quit run a Pi in the terminal beside the profile Pi, which installed the
@@ -217,6 +218,19 @@ When(
   "the user compacts the session with the hooks recording",
   async function (this: ScenarioWorld) {
     await recordSessionAction(this, "compact", () => compactSession(this));
+  },
+);
+
+When(
+  "the user compacts the session with the hooks recording, which fails with {string}",
+  async function (this: ScenarioWorld, message: string) {
+    await recordSessionAction(this, "compact", async () => {
+      const { response } = await this.pi.request({ type: "compact" });
+      assert.deepStrictEqual(
+        { success: response.success, error: response.error },
+        { success: false, error: message },
+      );
+    });
   },
 );
 
