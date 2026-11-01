@@ -70,12 +70,16 @@ Phase 1 creates one function directory for each kind (D-CF1-08). Each starts wit
 | -------------- | ------------------------- | --------------------------------------------- | ------------------------------------- | ---------------------------------------------------------- |
 | Skills         | `features/skill/`         | `invocation.feature`                          | `features/lib/skill-files.ts`         | `features/step_definitions/skill/listing.steps.ts`         |
 | Slash commands | `features/slash-command/` | `listing.feature`                             | `features/lib/slash-command-files.ts` | `features/step_definitions/slash-command/listing.steps.ts` |
-| Agents         | `features/agent/`         | `invocation.feature`, `project-trust.feature` | `features/lib/agent-files.ts`         | `features/step_definitions/agent/runs.steps.ts`            |
+| Agents         | `features/agent/`         | `invocation.feature`, `project-trust.feature` | `features/lib/agent-files.ts`         | `features/step_definitions/agent/listing.steps.ts`         |
 | Hooks          | `features/hook/`          | `tool-use.feature`                            | `features/lib/hook-files.ts`          | `features/step_definitions/hook/runs.steps.ts`             |
-| MCP servers    | `features/mcp-server/`    | `invocation.feature`                          | `features/lib/mcp-server-files.ts`    | `features/step_definitions/mcp-server/calls.steps.ts`      |
+| MCP servers    | `features/mcp-server/`    | `invocation.feature`                          | `features/lib/mcp-server-files.ts`    | `features/step_definitions/mcp-server/listing.steps.ts`    |
 | Workflows      | `features/workflow/`      | `run.feature`                                 | `features/lib/workflow-files.ts`      | `features/step_definitions/workflow/runs.steps.ts`         |
 
 For workflows, `runs.steps.ts` stays the seed module and `features/step_definitions/workflow/listing.steps.ts` is the shared topic module (the listing `Then` steps, the no-run `When`, and the notices `Then`). The shared record helpers `progressOf`, `WorkflowCommandTurn`, and `sendWorkflowCommand` live in `features/lib/workflow-files.ts` beside the fixture writer.
+
+For agents, `listing.steps.ts` is the shared step module: the agent `Given` steps, the pi-subagents settings `Given` steps, and the advertised-agents `Then`. The run steps live in `features/step_definitions/agent/runs.steps.ts`. The directory now holds six features: `listing`, `frontmatter`, `invocation`, `companion-missing`, `project-trust`, and `lifecycle`.
+
+For MCP servers, `listing.steps.ts` is the shared step module, and every MCP step module writes its fixtures through `features/lib/mcp-server-files.ts`. Its stub marker, an object whose one own member is `stub`, is read wherever it sits in a document. So a wrapped file whose only server is named `stub`, `{"mcpServers": {"stub": {...}}}`, cannot be written through the stub-marker `Given` steps: the marker becomes a server named `mcpServers`.
 
 ### Frozen after Phase 1
 
