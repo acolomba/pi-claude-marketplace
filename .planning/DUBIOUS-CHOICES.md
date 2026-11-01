@@ -815,3 +815,18 @@ Full entries: `.planning/phases/04-agents/04-DUBIOUS-CHOICES.md`, P4-DC-01..12. 
 4. Not applied, recorded in BACKLOG: the stale ANAME-02 "cannot narrow" warning (AGTEXCL-01; user-visible, no drafted text, needs a scenario), the `info` agent listing (AGTINFO-01), the frozen-harness `{pi-subagents dir}` token and scripted-model import (AGTTOKEN-01, AGTASYNC-01), and the unfiled pi-subagents report (AGTSUB-01, an ID the parent added).
 5. `shared/fs-utils.ts`: the comment names the commands bridge and the skills bridge's command-name check, not the commands bridge only, because `bridges/skills/skill-names.ts` also calls `isPlainMarkdownFile`.
 6. The sibling re-verification that D-CF4-14 asks for (every whole parent-prompt comparison) rests on the full `npm run check` above.
+
+### DC-34: Phase 3 (Slash Commands), merged at 5e81db0
+
+Full entries: `.planning/phases/03-slash-commands/DUBIOUS-CHOICES.md`, P3-DC-01..23. This is the replacement session (the first one stalled in setup; it later woke, stood down, and pushed nothing). It ran discuss, plan (9 plans, 5 waves), execute, security (30/30 closed), validation (compliant), two review rounds (two warnings fixed) and verification (passed 5/5). Before its phase gate it merged the milestone branch (Phases 4, 6, 7) into its own and removed one new clone group without a suppression marker.
+
+**For the user to review first:**
+1. **P3-DC-02 (High, process): the upstream probe reached `api.anthropic.com`.** Under `env -i` with a throwaway HOME, the Claude Code 2.1.316 binary still fetched `https://api.anthropic.com/api/claude_code/policy_limits` in the first 16 probe trees and received a signed policy tied to an identity the probe cannot name. The core probes were re-run in a loopback-only namespace (`unshare -rn`) with identical results; a few edge variants rest on the networked runs. Together with DC-33 item 6 (Phase 4's probe read host token files), future probes should start inside `unshare -rn` where `/home/claude/.claude/remote` is absent; the research skill's recipe should say so.
+2. **P3-DC-03 (High), D-CF3-01:** commands stay invisible to the model, because Pi cannot show the model a prompt template. Upstream lists a described command in the model's skill list. Recorded as a Pi gap; staging each command also as a skill was rejected.
+3. **P3-DC-04, D-CF3-02:** `user-invocable: false` commands stay listed and runnable (extends D-CF1-09); upstream hides them from the user.
+4. **P3-DC-06:** a marketplace entry's `commands` now adds to `commands/` instead of replacing it, as the binary does. This corrects the earlier D-CF1-06.
+5. **D-CF2-13 extended to commands:** a project-scope command runs only when this user installed it into this project, checked by file digest in the user-scope ledger. Project commands installed before this change abort until updated or reinstalled (CHANGELOG line).
+6. Behavior changes for parity: the description fallback is upstream's (first body line, 100 characters); the `plugin.json` object-map `commands` form and a single declared `.md` file now install; typed commands fill arguments and run `!` lines as upstream.
+- Deferred: command frontmatter `name` aliases (P3-DC-07); Claude Code's command tag block is not sent (P3-DC-08).
+- Parent lines pending: CHANGELOG, seven BACKLOG items, PRD and docs, PROJECT D-CF3-01..13, the Pi gap report additions (unfiled), two Phase 2 follow-ups (ledger naming, the clash check missing declared command files), a re-probe note for marketplace-entry declarations, and the research-skill probe fix.
+- Merge: clean; the parent restored STATE.md's position block.
