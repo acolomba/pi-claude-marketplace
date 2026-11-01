@@ -3,6 +3,7 @@ import { createHook } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import { renameSync, symlinkSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -146,6 +147,188 @@ test("preserves declared command-root order for absolute and relative roots", as
 
   // assert
   assert.deepStrictEqual(discovery, expectedDiscovery);
+});
+
+test("D-CF3-05 names a declared command file and a nested declared file from their basenames", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-declared-file-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const filePath = path.join(directory, "cmds", "a.md");
+  const nestedPath = path.join(directory, "cmds", "sub", "x.md");
+  await mkdir(path.dirname(nestedPath), { recursive: true });
+  await writeFile(filePath, "a\n");
+  await writeFile(nestedPath, "x\n");
+  const resolved = resolvedPlugin(directory, ["cmds/a.md", "cmds/sub/x.md"]);
+  const expectedDiscovery = {
+    discovered: [
+      { sourceName: "a", generatedName: "acme:a", commandFile: filePath },
+      { sourceName: "x", generatedName: "acme:x", commandFile: nestedPath },
+    ],
+    warnings: [],
+  };
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
+});
+
+test("D-CF3-05 skips each declared path that is not a command file with a warning naming it", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-declared-skips-"));
+  const socketPath = path.join(directory, "cmds", "sock.md");
+  const server = createServer();
+  t.after(async () => {
+    await new Promise<void>((resolve) => {
+      server.close(() => {
+        resolve();
+      });
+    });
+    await rm(directory, { recursive: true, force: true, maxRetries: 3 });
+  });
+  const goodPath = path.join(directory, "cmds", "good.md");
+  await mkdir(path.join(directory, "cmds", "linked-dir-target"), { recursive: true });
+  await writeFile(path.join(directory, "cmds", "readme.txt"), "readme\n");
+  await writeFile(path.join(directory, "cmds", ".secret.md"), "secret\n");
+  await writeFile(path.join(directory, "cmds", "target.md"), "target\n");
+  await writeFile(goodPath, "good\n");
+  await symlink(path.join(directory, "cmds", "target.md"), path.join(directory, "cmds", "link.md"));
+  await symlink(
+    path.join(directory, "cmds", "linked-dir-target"),
+    path.join(directory, "cmds", "linked-dir"),
+  );
+  await new Promise<void>((resolve) => {
+    server.listen(socketPath, resolve);
+  });
+  const resolved = resolvedPlugin(directory, [
+    "cmds/readme.txt",
+    "cmds/.secret.md",
+    "cmds/link.md",
+    "cmds/linked-dir",
+    "cmds/sock.md",
+    "cmds/good.md",
+  ]);
+  const expectedDiscovery = {
+    discovered: [{ sourceName: "good", generatedName: "acme:good", commandFile: goodPath }],
+    warnings: [
+      `declared command path "cmds/readme.txt" in "${directory}" is not a markdown file; skipping path.`,
+      `declared command path "cmds/.secret.md" in "${directory}" is dotfile-prefixed; skipping path.`,
+      `declared command path "cmds/link.md" in "${directory}" is a symlink; skipping path.`,
+      `declared command path "cmds/linked-dir" in "${directory}" is a symlink; skipping path.`,
+      `declared command path "cmds/sock.md" in "${directory}" is not a regular file; skipping path.`,
+    ],
+  };
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
+});
+
+test("D-CF3-05 keeps one command for a declared file its declared directory also reaches", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-declared-overlap-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const filePath = path.join(directory, "cmds", "a.md");
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, "a\n");
+  const resolved = resolvedPlugin(directory, ["cmds", "cmds/a.md"]);
+  const expectedDiscovery = {
+    discovered: [{ sourceName: "a", generatedName: "acme:a", commandFile: filePath }],
+    warnings: [],
+  };
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
+});
+
+test("D-CF3-05 keeps the first of two declared files that name the same command", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-declared-collision-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const winningPath = path.join(directory, "cmds", "a.md");
+  const losingPath = path.join(directory, "other", "a.md");
+  await mkdir(path.dirname(winningPath), { recursive: true });
+  await mkdir(path.dirname(losingPath), { recursive: true });
+  await writeFile(winningPath, "winner\n");
+  await writeFile(losingPath, "duplicate\n");
+  const resolved = resolvedPlugin(directory, ["cmds/a.md", "other/a.md"]);
+  const expectedDiscovery = {
+    discovered: [{ sourceName: "a", generatedName: "acme:a", commandFile: winningPath }],
+    warnings: [
+      `command source "a" in "${losingPath}" elides to generated name "acme:a", already produced by command source "a"; ignoring duplicate.`,
+    ],
+  };
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
+});
+
+test("D-CF3-05 skips a declared command file whose name is unsafe and reports its cause chain", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-declared-bad-name-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const commandsDirectory = path.join(directory, "cmds");
+  const unsafeSourceName = "bad\u0001";
+  await mkdir(commandsDirectory, { recursive: true });
+  await writeFile(path.join(commandsDirectory, `${unsafeSourceName}.md`), "unsafe\n");
+  const resolved = resolvedPlugin(directory, [`cmds/${unsafeSourceName}.md`]);
+  const nameErrorMessage = `invalid command source "${unsafeSourceName}" in "${commandsDirectory}"`;
+  const expectedDiscovery = {
+    discovered: [],
+    warnings: [
+      `${nameErrorMessage} -- cause: ${nameErrorMessage} -> command path segment in "${unsafeSourceName}" "${unsafeSourceName}" must not contain ASCII control characters.; skipping file.`,
+    ],
+  };
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
+});
+
+test("D-CF3-05 propagates a non-tolerated error when a declared path cannot be classified", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-declared-loop-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const loopPath = path.join(directory, "loop");
+  const declaredPath = path.join(loopPath, "a.md");
+  await symlink(loopPath, loopPath);
+  const resolved = resolvedPlugin(directory, ["loop/a.md"]);
+
+  // act & assert
+  await assert.rejects(
+    () => discoverPluginCommands({ pluginName: "acme", resolved }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        {
+          name: error.name,
+          message: error.message,
+          code: (error as NodeJS.ErrnoException).code,
+          path: (error as NodeJS.ErrnoException).path,
+          syscall: (error as NodeJS.ErrnoException).syscall,
+        },
+        {
+          name: "Error",
+          message: `ELOOP: too many symbolic links encountered, lstat '${declaredPath}'`,
+          code: "ELOOP",
+          path: declaredPath,
+          syscall: "lstat",
+        },
+      );
+      return true;
+    },
+  );
 });
 
 test("returns an empty frozen inventory when the plugin declares no command roots", async (t) => {
@@ -492,7 +675,7 @@ test("propagates a non-tolerated error when a discovered subdirectory becomes a 
       }
 
       completedFilesystemRequests += 1;
-      if (completedFilesystemRequests === 1) {
+      if (completedFilesystemRequests === 2) {
         hook.disable();
         renameSync(volatileDirectory, displacedDirectory);
         symlinkSync(volatileDirectory, volatileDirectory, "dir");
@@ -553,7 +736,7 @@ test("propagates a non-tolerated error when a discovered file gains a looping pa
       }
 
       completedFilesystemRequests += 1;
-      if (completedFilesystemRequests === 2) {
+      if (completedFilesystemRequests === 3) {
         hook.disable();
         renameSync(volatileDirectory, displacedDirectory);
         symlinkSync(volatileDirectory, volatileDirectory, "dir");

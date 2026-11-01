@@ -317,96 +317,139 @@ type FolderRuleKind = "skills" | "commands" | "agents" | "workflows";
 interface FolderRuleCase {
   readonly title: string;
   readonly kind: FolderRuleKind;
-  readonly declaredIn: "entry" | "manifest" | "nowhere";
-  readonly value: unknown;
+  /** The marketplace entry's and `plugin.json`'s declarations; a missing key declares nothing. */
+  readonly declared: { readonly entry?: unknown; readonly manifest?: unknown };
   readonly expectedPaths: readonly string[];
   readonly leavesFolderUnread?: true;
 }
 
-const REPLACE_KINDS = ["commands", "agents", "workflows"] as const;
+const REPLACE_KINDS = ["agents", "workflows"] as const;
 
-// D-CF1-06: Claude Code 2.1.316 reads the conventional commands, agents, and
-// workflows folders only when the kind's declaration is falsy, and always
-// reads `skills/`.
+// D-CF1-06: Claude Code 2.1.316 reads the conventional agents and workflows
+// folders only when the kind's declaration is falsy, and always reads
+// `skills/`. D-CF3-04 (E4): it reads `commands/` unless `plugin.json`
+// declares `commands`, in the order folder, `plugin.json` paths, entry paths.
 const folderRuleCases: readonly FolderRuleCase[] = [
   ...REPLACE_KINDS.flatMap((kind): FolderRuleCase[] => [
     {
       title: `D-CF1-06 an entry-declared ${kind} path replaces the existing ${kind}/ folder`,
       kind,
-      declaredIn: "entry",
-      value: "custom",
+      declared: { entry: "custom" },
       expectedPaths: ["custom"],
       leavesFolderUnread: true,
     },
     {
       title: `D-CF1-06 a manifest-declared ${kind} path replaces the existing ${kind}/ folder`,
       kind,
-      declaredIn: "manifest",
-      value: "custom",
+      declared: { manifest: "custom" },
       expectedPaths: ["custom"],
       leavesFolderUnread: true,
     },
     {
       title: `D-CF1-06 a declared empty ${kind} list leaves the existing ${kind}/ folder unread`,
       kind,
-      declaredIn: "manifest",
-      value: [],
+      declared: { manifest: [] },
       expectedPaths: [],
       leavesFolderUnread: true,
     },
     {
       title: `D-CF1-06 an empty-string ${kind} declaration reads the ${kind}/ folder and nothing else`,
       kind,
-      declaredIn: "entry",
-      value: "",
+      declared: { entry: "" },
       expectedPaths: [kind],
     },
     {
       title: `D-CF1-06 a null ${kind} declaration reads the ${kind}/ folder`,
       kind,
-      declaredIn: "manifest",
-      value: null,
+      declared: { manifest: null },
       expectedPaths: [kind],
     },
   ]),
   {
+    title: "D-CF3-04 an entry-declared commands path adds to the existing commands/ folder",
+    kind: "commands",
+    declared: { entry: "./more" },
+    expectedPaths: ["commands", "more"],
+  },
+  {
+    title: "D-CF3-04 a declared empty commands list in the entry still reads the commands/ folder",
+    kind: "commands",
+    declared: { entry: [] },
+    expectedPaths: ["commands"],
+  },
+  {
+    title: "D-CF3-04 a manifest-declared commands path replaces the existing commands/ folder",
+    kind: "commands",
+    declared: { manifest: "./custom" },
+    expectedPaths: ["custom"],
+    leavesFolderUnread: true,
+  },
+  {
+    title:
+      "D-CF3-04 manifest and entry commands paths are read in that order and leave the folder unread",
+    kind: "commands",
+    declared: { entry: "./more", manifest: "./custom" },
+    expectedPaths: ["custom", "more"],
+    leavesFolderUnread: true,
+  },
+  {
+    title: "D-CF3-04 an entry path that reaches the commands/ folder leaves no folder unread",
+    kind: "commands",
+    declared: { entry: "./commands/extra", manifest: "./custom" },
+    expectedPaths: ["custom", "commands/extra"],
+  },
+  {
+    title: "D-CF3-04 a declared empty commands list in the manifest leaves the folder unread",
+    kind: "commands",
+    declared: { entry: "./more", manifest: [] },
+    expectedPaths: ["more"],
+    leavesFolderUnread: true,
+  },
+  {
+    title: "D-CF3-04 an empty-string commands declaration in the manifest reads the folder",
+    kind: "commands",
+    declared: { manifest: "" },
+    expectedPaths: ["commands"],
+  },
+  {
+    title: "D-CF3-04 a null commands declaration in the manifest reads the folder",
+    kind: "commands",
+    declared: { manifest: null },
+    expectedPaths: ["commands"],
+  },
+  {
+    title: "D-CF3-04 the commands/ folder comes before an entry path that names it again",
+    kind: "commands",
+    declared: { entry: ["./more", "./commands"] },
+    expectedPaths: ["commands", "more"],
+  },
+  {
     title: "D-CF1-06 an entry-declared skills path adds to the existing skills/ folder",
     kind: "skills",
-    declaredIn: "entry",
-    value: "custom",
+    declared: { entry: "custom" },
     expectedPaths: ["custom", "skills"],
   },
   {
     title: "D-CF1-06 a manifest-declared skills path adds to the existing skills/ folder",
     kind: "skills",
-    declaredIn: "manifest",
-    value: "custom",
+    declared: { manifest: "custom" },
     expectedPaths: ["custom", "skills"],
   },
   {
     title: "D-CF1-06 a declared empty skills list still reads the existing skills/ folder",
     kind: "skills",
-    declaredIn: "manifest",
-    value: [],
+    declared: { manifest: [] },
     expectedPaths: ["skills"],
   },
-  ...(["skills", ...REPLACE_KINDS] as const).map((kind): FolderRuleCase => ({
+  ...(["skills", "commands", ...REPLACE_KINDS] as const).map((kind): FolderRuleCase => ({
     title: `D-CF1-06 an undeclared ${kind} kind reads its existing ${kind}/ folder`,
     kind,
-    declaredIn: "nowhere",
-    value: undefined,
+    declared: {},
     expectedPaths: [kind],
   })),
 ];
 
-for (const {
-  title,
-  kind,
-  declaredIn,
-  value,
-  expectedPaths,
-  leavesFolderUnread,
-} of folderRuleCases) {
+for (const { title, kind, declared, expectedPaths, leavesFolderUnread } of folderRuleCases) {
   test(title, async () => {
     // arrange
     const { collectStrictComponentPaths } =
@@ -425,9 +468,9 @@ for (const {
         entry: {
           name: "alpha",
           source: "./alpha",
-          ...(declaredIn === "entry" && { [kind]: value }),
+          ...(Object.hasOwn(declared, "entry") && { [kind]: declared.entry }),
         },
-        manifest: declaredIn === "manifest" ? { [kind]: value } : null,
+        manifest: Object.hasOwn(declared, "manifest") ? { [kind]: declared.manifest } : null,
         pluginRoot,
         resolution,
       },

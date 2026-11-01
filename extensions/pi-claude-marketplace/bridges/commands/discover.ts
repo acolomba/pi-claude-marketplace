@@ -42,8 +42,19 @@
 // `commands/.hidden/secret.md` as `acme:.hidden:secret`. Containment of the
 // commands directory itself is the resolver's job (it called
 // `assertPathInside(pluginRoot, ...)` when populating componentPaths).
+//
+// D-CF3-05: a declared `componentPaths.commands` entry may name a file as
+// well as a directory, as Claude Code 2.1.316 loads it (E5). Each entry is
+// classified once with `lstat` before anything reads it. A regular `.md`
+// file whose name does not start with a dot is one command, named from its
+// basename without `.md` (`cmds/sub/x.md` is `<plugin>:x`). A directory is
+// walked as above. Any other file, and a symlink of any kind, is skipped
+// with a warning that names the declared path. A missing entry stays
+// silent. The resolver already refuses a declared path that passes through
+// a link, so the symlink check here guards only a path that changed after
+// resolving, as the walk's PS-1 rule does for the entries it lists.
 
-import { readdir, stat } from "node:fs/promises";
+import { lstat, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { generatedCommandName } from "../../domain/name.ts";
@@ -53,7 +64,7 @@ import { isPlainMarkdownFile, readDirEntriesTolerant } from "../../shared/fs-uti
 
 import type { DiscoveredCommand } from "./types.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
-import type { Dirent } from "node:fs";
+import type { Dirent, Stats } from "node:fs";
 
 /** D-07 return shape: `{ discovered, warnings }`. */
 export interface DiscoverPluginCommandsResult {
@@ -345,14 +356,104 @@ async function walkCommandsDir(
   }
 }
 
+/**
+ * D-CF3-05: the warning for a declared commands path that is neither a
+ * directory nor a command file. It names the path relative to the plugin
+ * root, in the walk's wording.
+ */
+function declaredPathWarning(declared: string, pluginRoot: string, reason: string): string {
+  return `declared command path "${relFrom(pluginRoot, declared)}" in "${pluginRoot}" ${reason}; skipping path.`;
+}
+
+/**
+ * D-CF3-05: why a declared path that is not a directory is not a command
+ * file, or `undefined` when it is one: a regular file whose name ends in
+ * `.md` and does not start with a dot. A symlink is refused whatever it
+ * points at (PS-1).
+ */
+function declaredFileRefusal(declared: string, stats: Stats): string | undefined {
+  const name = path.basename(declared);
+  if (stats.isSymbolicLink()) {
+    return "is a symlink";
+  }
+
+  if (!stats.isFile()) {
+    return "is not a regular file";
+  }
+
+  if (name.startsWith(".")) {
+    return "is dotfile-prefixed";
+  }
+
+  return name.endsWith(".md") ? undefined : "is not a markdown file";
+}
+
+/**
+ * `lstat` of a declared path, or `undefined` when the path is absent
+ * (ENOENT) or a file stands where a parent directory should be (ENOTDIR).
+ * Both mean the plugin declares no commands there, as an absent directory
+ * always has. Every other errno propagates as an install failure.
+ */
+async function lstatDeclaredPath(declared: string): Promise<Stats | undefined> {
+  try {
+    return await lstat(declared);
+  } catch (err) {
+    if (isErrnoException(err) && (err.code === "ENOENT" || err.code === "ENOTDIR")) {
+      return undefined;
+    }
+
+    throw err;
+  }
+}
+
+/**
+ * D-CF3-05: the commands that one declared `componentPaths.commands` entry
+ * holds. A directory is walked recursively, a command file is one command
+ * named from its basename, and every other path is skipped with a warning.
+ * The caller folds the result into its first-wins sets in declared order.
+ */
+async function discoverDeclaredPath(
+  declared: string,
+  pluginRoot: string,
+  pluginName: string,
+  warnings: string[],
+): Promise<DiscoveredCommand[]> {
+  const found: DiscoveredCommand[] = [];
+  const stats = await lstatDeclaredPath(declared);
+  if (stats === undefined) {
+    return found;
+  }
+
+  if (stats.isDirectory()) {
+    await walkCommandsDir(declared, declared, pluginName, found, warnings);
+    return found;
+  }
+
+  const refusal = declaredFileRefusal(declared, stats);
+  if (refusal !== undefined) {
+    warnings.push(declaredPathWarning(declared, pluginRoot, refusal));
+    return found;
+  }
+
+  const sourceName = path.basename(declared).slice(0, -3); // strip ".md"
+  const named = nameCommandInDir(pluginName, sourceName, path.dirname(declared));
+  if (!named.ok) {
+    warnings.push(badNameWarning(named.error));
+    return found;
+  }
+
+  found.push({ sourceName, generatedName: named.name, commandFile: declared });
+  return found;
+}
+
 export async function discoverPluginCommands(input: {
   pluginName: string;
   resolved: MaterializablePlugin;
 }): Promise<DiscoverPluginCommandsResult> {
   // The resolver populates componentPaths.commands with one element per
-  // declared (or implicit-by-convention) commands directory. Empty array
-  // means the plugin has no commands -- return the empty discovered + no
-  // warnings.
+  // declared (or implicit-by-convention) commands directory or, under
+  // D-CF3-05, declared command file. Empty array means the plugin has no
+  // commands -- return the empty discovered + no warnings.
   const commandsDirs = input.resolved.componentPaths.commands;
 
   const seenByGenerated = new Map<string, DiscoveredCommand>();
@@ -369,9 +470,13 @@ export async function discoverPluginCommands(input: {
       ? commandsRel
       : path.resolve(input.resolved.pluginRoot, commandsRel);
 
-    const found: DiscoveredCommand[] = [];
-    // eslint-disable-next-line no-await-in-loop -- first-seen dir wins the shared dedup sets
-    await walkCommandsDir(commandsDir, commandsDir, input.pluginName, found, warnings);
+    // eslint-disable-next-line no-await-in-loop -- first-seen path wins the shared dedup sets
+    const found = await discoverDeclaredPath(
+      commandsDir,
+      input.resolved.pluginRoot,
+      input.pluginName,
+      warnings,
+    );
 
     for (const command of found) {
       if (seenByFile.has(command.commandFile)) {

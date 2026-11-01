@@ -140,10 +140,92 @@ async function addValidatedComponentPath(
 }
 
 /**
+ * Validates and adds each declared path in order. Returns whether any path
+ * was refused with a note.
+ */
+async function addValidatedComponentPaths(
+  resolution: ComponentPathResolution,
+  kind: ComponentPathKind,
+  seenPaths: Set<string>,
+  raws: readonly unknown[],
+  pluginRoot: string,
+): Promise<boolean> {
+  let dirty = false;
+  for (const raw of raws) {
+    dirty =
+      // eslint-disable-next-line no-await-in-loop -- first-declared path wins the shared `seenPaths` set
+      (await addValidatedComponentPath(resolution, kind, seenPaths, raw, pluginRoot)) || dirty;
+  }
+
+  return dirty;
+}
+
+/**
+ * D-CF1-06: records the existing conventional folder of `kind` as unread,
+ * unless a collected declared path reaches it.
+ */
+function recordShadowedFolder(resolution: ComponentPathResolution, kind: ComponentPathKind): void {
+  if (!declaredPathReachesFolder(resolution.componentPaths[kind], kind)) {
+    resolution.shadowedFolders = [...(resolution.shadowedFolders ?? []), kind];
+  }
+}
+
+function markSupportedWhenCollected(
+  resolution: ComponentPathResolution,
+  kind: ComponentPathKind,
+): void {
+  if (resolution.componentPaths[kind].length > 0) {
+    resolution.supported.push(kind);
+  }
+}
+
+/**
+ * D-CF3-04 (E4): the commands kind's own collection. Claude Code 2.1.316
+ * reads `commands/` unless `plugin.json` declares `commands` (a truthy
+ * declaration, `[]` included). A marketplace entry's `commands` adds to the
+ * folder and never leaves it unread. The order is the folder, then the
+ * `plugin.json` paths, then the entry paths; it decides only which file wins
+ * when two name the same command. The folder is reported unread only when
+ * `plugin.json` declares, the folder exists, and no collected path reaches it.
+ */
+async function collectStrictCommandPaths(
+  entry: PluginEntry,
+  manifest: Record<string, unknown> | null,
+  pluginRoot: string,
+  resolution: ComponentPathResolution,
+  statKind: StatKindReader,
+): Promise<boolean> {
+  const seenPaths = new Set<string>();
+  const manifestRaw = manifest?.commands;
+  const manifestDeclares = Boolean(manifestRaw);
+  const folderExists = (await statKind(path.join(pluginRoot, "commands"))) === "dir";
+  if (folderExists && !manifestDeclares) {
+    addComponentPath(resolution, "commands", seenPaths, "commands");
+  }
+
+  const dirty = await addValidatedComponentPaths(
+    resolution,
+    "commands",
+    seenPaths,
+    [...readPathOrArray(manifestRaw), ...readPathOrArray(entry.commands)],
+    pluginRoot,
+  );
+
+  if (folderExists && manifestDeclares) {
+    recordShadowedFolder(resolution, "commands");
+  }
+
+  markSupportedWhenCollected(resolution, "commands");
+  return dirty;
+}
+
+/**
  * D-CF1-06: whether the conventional `<kind>/` folder joins the declared
- * paths. Claude Code 2.1.316 always reads `skills/`, and reads `commands/`,
- * `agents/`, and `workflows/` only when the kind's declaration is falsy
- * (absent, `null`, or `""`), so a declared `[]` also leaves the folder unread.
+ * paths. Claude Code 2.1.316 always reads `skills/`, and reads `agents/` and
+ * `workflows/` only when the kind's declaration is falsy (absent, `null`, or
+ * `""`), so a declared `[]` also leaves the folder unread. `commands/` follows
+ * its own rule (D-CF3-04) in `collectStrictCommandPaths` and never reaches
+ * this function.
  */
 function conventionalFolderApplies(
   kind: ComponentPathKind,
@@ -171,38 +253,42 @@ async function collectStrictComponentKind(
   statKind: StatKindReader,
   kind: ComponentPathKind,
 ): Promise<boolean> {
-  let dirty = false;
+  if (kind === "commands") {
+    return await collectStrictCommandPaths(entry, manifest, pluginRoot, resolution, statKind);
+  }
+
   const seenPaths = new Set<string>();
   const entryRaw = (entry as Record<string, unknown>)[kind];
   const manifestRaw = manifest?.[kind];
-
-  for (const raw of [...readPathOrArray(entryRaw), ...readPathOrArray(manifestRaw)]) {
-    dirty =
-      // eslint-disable-next-line no-await-in-loop -- first-declared path wins the shared `seenPaths` set
-      (await addValidatedComponentPath(resolution, kind, seenPaths, raw, pluginRoot)) || dirty;
-  }
+  const dirty = await addValidatedComponentPaths(
+    resolution,
+    kind,
+    seenPaths,
+    [...readPathOrArray(entryRaw), ...readPathOrArray(manifestRaw)],
+    pluginRoot,
+  );
 
   if ((await statKind(path.join(pluginRoot, kind))) === "dir") {
     if (conventionalFolderApplies(kind, entryRaw, manifestRaw)) {
       addComponentPath(resolution, kind, seenPaths, kind);
-    } else if (!declaredPathReachesFolder(resolution.componentPaths[kind], kind)) {
-      resolution.shadowedFolders = [...(resolution.shadowedFolders ?? []), kind];
+    } else {
+      recordShadowedFolder(resolution, kind);
     }
   }
 
-  if (resolution.componentPaths[kind].length > 0) {
-    resolution.supported.push(kind);
-  }
-
+  markSupportedWhenCollected(resolution, kind);
   return dirty;
 }
 
 /**
- * Collects strict entry, manifest, and conventional component paths, entry
- * paths first, with first-wins deduplication. Per D-CF1-06, as in Claude Code
- * 2.1.316, a declared `skills` path adds to the conventional `skills/` folder,
- * while a declared `commands`, `agents`, or `workflows` path replaces its
- * conventional folder, which is read only for an undeclared kind.
+ * Collects strict entry, manifest, and conventional component paths with
+ * first-wins deduplication. Per D-CF1-06, as in Claude Code 2.1.316, entry
+ * paths come first, a declared `skills` path adds to the conventional
+ * `skills/` folder, and a declared `agents` or `workflows` path replaces its
+ * conventional folder, which is read only for an undeclared kind. Commands
+ * are the exception (D-CF3-04, E4): `commands/` comes first and is read
+ * unless `plugin.json` declares `commands`, then the `plugin.json` paths,
+ * then the marketplace entry's paths, which add to the folder.
  */
 export async function collectStrictComponentPaths(
   input: {
