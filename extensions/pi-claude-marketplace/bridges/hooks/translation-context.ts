@@ -42,14 +42,18 @@ export interface TranslationContext {
  * from a Pi `ExtensionContext`. Called once per `dispatchHookExec`
  * invocation before the per-event `translate(event, ctx)` call.
  *
- * `transcriptPath` falls back to the empty string when
- * `ctx.sessionManager.getSessionFile()` returns `undefined` (Pi creates
- * the session file lazily; the first `SessionStart` with `reason:
- * "startup"` may fire before any session file exists). An empty string
- * is preferred over a synthesized fake path -- a hook reading
- * `transcript_path` can defensively check for empty and skip the file
- * open, whereas a synthesized path would invite an `ENOENT`. The
- * trade-off is documented for plugin authors in the SURF-06 docs.
+ * D-CF5-07: a saved Pi session has a session file path from its first
+ * turn, `SessionStart` included, because Pi names the file when it
+ * creates the session, before the file exists on disk; Claude Code also
+ * sends a path before the file exists. An in-memory session
+ * (`--no-session`) has no transcript location, so
+ * `ctx.sessionManager.getSessionFile()` returns `undefined` and
+ * `transcriptPath` is the empty string (a Pi gap). An empty string is
+ * preferred over a synthesized fake path -- a hook reading
+ * `transcript_path` can check for empty and skip the file open, whereas a
+ * synthesized path would invite an `ENOENT`. An empty path seen on a first
+ * turn in the test harness comes from its `--no-session` launch, not from
+ * the turn. `docs/hooks-compatibility.md` states this for plugin authors.
  */
 export function buildTranslationContext(ctx: ExtensionContext): TranslationContext {
   return {
