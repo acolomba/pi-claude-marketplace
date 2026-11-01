@@ -192,7 +192,7 @@ tests (`test/bridges/<kind>/**`) and integration tests
   touches a reviewed clone pair. Re-verify a phase after any later merge that
   touches its files.
 
-- [ ] **Phase 1: Harness and Version Raise** - Pi and the three companions at their latest releases, a profile Pi with a scripted model and stand-ins, and a seed scenario per kind, with the pre-fan-out decisions settled
+- [x] **Phase 1: Harness and Version Raise** - Pi and the three companions at their latest releases, a profile Pi with a scripted model and stand-ins, and a seed scenario per kind, with the pre-fan-out decisions settled (completed 2026-11-01)
 - [ ] **Phase 2: Skills** - Bridged skills list, carry their frontmatter, reach the model, resolve name clashes, and follow the plugin lifecycle as upstream
 - [ ] **Phase 3: Slash Commands** - Bridged commands list as prompt templates, expand their arguments as decided, and follow the plugin lifecycle
 - [ ] **Phase 4: Agents** - pi-subagents lists and runs bridged agents with converted fields, preloaded skills, and companion-missing recovery
@@ -233,7 +233,7 @@ tests (`test/bridges/<kind>/**`) and integration tests
 
 01-01 finishes before 01-03: the faux import needs `pi-ai` in `package.json`, and the companion profile needs the engine in the peer cache. Wave 3 works only because wave 2 put every shared registration in place. If 01-01 grows because adapter 7.x needs larger `bridges/mcp` work, split it into a wave-1 raise plus file-disjoint per-companion fix plans. Once Phase 1 merges, each seed feature file belongs to its kind's phase.
 
-**Plans:** 15/15 plans executed in 4 waves (the nine above, split and extended at planning: 01-15 carries the file-disjoint half of the version raise, 01-10/12/13 build the invocation cores, 01-11 the component-directory rule in wave 2, 01-14 the `:-` delegation)
+**Plans:** 15/15 plans complete in 4 waves (the nine above, split and extended at planning: 01-15 carries the file-disjoint half of the version raise, 01-10/12/13 build the invocation cores, 01-11 the component-directory rule in wave 2, 01-14 the `:-` delegation)
 
 Plans:
 **Wave 1**
@@ -407,7 +407,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Harness and Version Raise | 15/15 | In Progress | - |
+| 1. Harness and Version Raise | 15/15 | Complete    | 2026-11-01 |
 | 2. Skills | 0/TBD | Not started | - |
 | 3. Slash Commands | 0/TBD | Not started | - |
 | 4. Agents | 0/TBD | Not started | - |

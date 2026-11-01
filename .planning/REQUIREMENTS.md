@@ -35,32 +35,32 @@ the parent applies them at merge.
 
 ### Versions
 
-- [ ] **VER-01**: `package.json` declares Pi `@earendil-works/pi-coding-agent` peer `>=1.4.0` and dev `^1.4.0`, `@earendil-works/pi-tui` dev `^1.4.0`, and `@earendil-works/pi-ai` dev at exactly `1.4.0`; the lockfile matches and `npm run check` passes
-- [ ] **VER-02**: The optional peer ranges are `pi-mcp-adapter >=7.0.0 <8` and `pi-subagents >=0.84.0`, and `@quintinshaw/pi-dynamic-workflows >=3.15.0 <4` is a new optional peer; none of them is a dependency, devDependency, or lockfile package (PIFL-03)
-- [ ] **VER-03**: `scripts/install-test-peers.mjs` installs all three companions at their declared floors, and the floor-pinning tests (`peer-floor.test.ts`, `test/e2e/pi-peer-floor`, the MCP conformance tests) prove the new floors
-- [ ] **VER-04**: An MCP value the bridge writes as a literal stays literal under pi-mcp-adapter 7.x, including the `${NAME:-default}` form the adapter now expands, so no environment secret reaches a server through a literal; the adapter-expansion conformance property is re-proved on 7.x
-- [ ] **VER-05**: The decision on `${NAME:-default}` (resolve at install versus leave to the adapter at connect time) and on the new adapter entry keys (`appendStructuredContent`, `roots`) is recorded with an ID
-- [ ] **VER-06**: README, `README.es.md`, the compatibility docs, `AGENTS.md`, and `.planning/codebase/STACK.md` name the new versions
+- [x] **VER-01**: `package.json` declares Pi `@earendil-works/pi-coding-agent` peer `>=1.4.0` and dev `^1.4.0`, `@earendil-works/pi-tui` dev `^1.4.0`, and `@earendil-works/pi-ai` dev at exactly `1.4.0`; the lockfile matches and `npm run check` passes
+- [x] **VER-02**: The optional peer ranges are `pi-mcp-adapter >=7.0.0 <8` and `pi-subagents >=0.84.0`, and `@quintinshaw/pi-dynamic-workflows >=3.15.0 <4` is a new optional peer; none of them is a dependency, devDependency, or lockfile package (PIFL-03)
+- [x] **VER-03**: `scripts/install-test-peers.mjs` installs all three companions at their declared floors, and the floor-pinning tests (`peer-floor.test.ts`, `test/e2e/pi-peer-floor`, the MCP conformance tests) prove the new floors
+- [x] **VER-04**: An MCP value the bridge writes as a literal stays literal under pi-mcp-adapter 7.x, including the `${NAME:-default}` form the adapter now expands, so no environment secret reaches a server through a literal; the adapter-expansion conformance property is re-proved on 7.x
+- [x] **VER-05**: The decision on `${NAME:-default}` (resolve at install versus leave to the adapter at connect time) and on the new adapter entry keys (`appendStructuredContent`, `roots`) is recorded with an ID
+- [x] **VER-06**: README, `README.es.md`, the compatibility docs, `AGENTS.md`, and `.planning/codebase/STACK.md` name the new versions
 
 ### Harness
 
-- [ ] **HAR-01**: A scenario can start a per-scenario profile Pi through a `Given`: the real extension plus the scripted model, the registry probe, and optionally the three companions loaded from their manifest `pi.extensions` entries; the run's shared Pi keeps no model and no companions, and every existing scenario still passes
-- [ ] **HAR-02**: The scripted model plays a per-scenario script of replies and tool calls written in the feature file, records every model call (messages, tools, system prompt), refuses to run past its script, and fails the scenario when steps are left unused
-- [ ] **HAR-03**: A model-turn `When` waits for the turn to settle (`agent_settled`, not aborted) and keeps every record the turn produced (tool events, custom entries, notifies), with no fixed sleeps
-- [ ] **HAR-04**: The registry probe reports Pi's tools (all and active) and commands; the hook recorder captures each hook process's event, stdin, arguments, and `CLAUDE_*` environment; the MCP stub server is a dependency-free stdio server that logs every request
-- [ ] **HAR-05**: Profile Pis are hermetic: `TMPDIR` and every companion write stay inside the scenario sandbox, nothing reaches the network or the real home directory, and the reset asserts a clean baseline (no queued model steps, no live stub process, no leftover runs or recorder output)
-- [ ] **HAR-06**: The profile Pi trusts its project and approves project MCP servers as the pre-fan-out decision specifies, and a scenario shows the untrusted behavior beside it
-- [ ] **HAR-07**: Phase 1 creates the six function directories (`features/{skill,slash-command,agent,hook,mcp-server,workflow}/`), one fixture writer and one step module per kind, and the shared steps, each used by a seed scenario, so component phases add files only and `npm run check:features` stays green
-- [ ] **HAR-08**: The cucumber skill rules describe the profile Pi, the scripted model, the stand-ins, and this milestone's file-ownership table
+- [x] **HAR-01**: A scenario can start a per-scenario profile Pi through a `Given`: the real extension plus the scripted model, the registry probe, and optionally the three companions loaded from their manifest `pi.extensions` entries; the run's shared Pi keeps no model and no companions, and every existing scenario still passes
+- [x] **HAR-02**: The scripted model plays a per-scenario script of replies and tool calls written in the feature file, records every model call (messages, tools, system prompt), refuses to run past its script, and fails the scenario when steps are left unused
+- [x] **HAR-03**: A model-turn `When` waits for the turn to settle (`agent_settled`, not aborted) and keeps every record the turn produced (tool events, custom entries, notifies), with no fixed sleeps
+- [x] **HAR-04**: The registry probe reports Pi's tools (all and active) and commands; the hook recorder captures each hook process's event, stdin, arguments, and `CLAUDE_*` environment; the MCP stub server is a dependency-free stdio server that logs every request
+- [x] **HAR-05**: Profile Pis are hermetic: `TMPDIR` and every companion write stay inside the scenario sandbox, nothing reaches the network or the real home directory, and the reset asserts a clean baseline (no queued model steps, no live stub process, no leftover runs or recorder output)
+- [x] **HAR-06**: The profile Pi trusts its project and approves project MCP servers as the pre-fan-out decision specifies, and a scenario shows the untrusted behavior beside it
+- [x] **HAR-07**: Phase 1 creates the six function directories (`features/{skill,slash-command,agent,hook,mcp-server,workflow}/`), one fixture writer and one step module per kind, and the shared steps, each used by a seed scenario, so component phases add files only and `npm run check:features` stays green
+- [x] **HAR-08**: The cucumber skill rules describe the profile Pi, the scripted model, the stand-ins, and this milestone's file-ownership table
 
 ### Pre-fan-out decisions
 
-- [ ] **DEC-01**: Before the component phases start, the user's decisions on positional argument numbering (FG-01), the `ARGUMENTS:` append (FG-02), other substitution forms (FG-03), skill arguments (FG-04), `` !`cmd` `` injection (FG-05), the description fallback (FG-06), dropped skill and command frontmatter fields (FG-10), custom component directories (FG-14), and project trust are recorded with IDs
-- [ ] **DEC-02**: The 2026-10-31 hook and skill decisions (`user-invocable: false` divergence, `new` sent as `clear`, `compact` on compaction, `fork` matchers) carry IDs, and the PROJECT.md bullet that contradicts D-07 is corrected
+- [x] **DEC-01**: Before the component phases start, the user's decisions on positional argument numbering (FG-01), the `ARGUMENTS:` append (FG-02), other substitution forms (FG-03), skill arguments (FG-04), `` !`cmd` `` injection (FG-05), the description fallback (FG-06), dropped skill and command frontmatter fields (FG-10), custom component directories (FG-14), and project trust are recorded with IDs
+- [x] **DEC-02**: The 2026-10-31 hook and skill decisions (`user-invocable: false` divergence, `new` sent as `clear`, `compact` on compaction, `fork` matchers) carry IDs, and the PROJECT.md bullet that contradicts D-07 is corrected
 
 ### CI
 
-- [ ] **CI-01**: The CI behavioral job installs the companions and runs as path shards (lifecycle and components) whose timeouts hold the measured combined run with margin
+- [x] **CI-01**: The CI behavioral job installs the companions and runs as path shards (lifecycle and components) whose timeouts hold the measured combined run with margin
 
 ### Skills
 
@@ -148,23 +148,23 @@ Deferred to a milestone with a real model provider.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| VER-01 | Phase 1 | Pending |
-| VER-02 | Phase 1 | Pending |
-| VER-03 | Phase 1 | Pending |
-| VER-04 | Phase 1 | Pending |
-| VER-05 | Phase 1 | Pending |
-| VER-06 | Phase 1 | Pending |
-| HAR-01 | Phase 1 | Pending |
-| HAR-02 | Phase 1 | Pending |
-| HAR-03 | Phase 1 | Pending |
-| HAR-04 | Phase 1 | Pending |
-| HAR-05 | Phase 1 | Pending |
-| HAR-06 | Phase 1 | Pending |
-| HAR-07 | Phase 1 | Pending |
-| HAR-08 | Phase 1 | Pending |
-| DEC-01 | Phase 1 | Pending |
-| DEC-02 | Phase 1 | Pending |
-| CI-01 | Phase 1 | Pending |
+| VER-01 | Phase 1 | Complete |
+| VER-02 | Phase 1 | Complete |
+| VER-03 | Phase 1 | Complete |
+| VER-04 | Phase 1 | Complete |
+| VER-05 | Phase 1 | Complete |
+| VER-06 | Phase 1 | Complete |
+| HAR-01 | Phase 1 | Complete |
+| HAR-02 | Phase 1 | Complete |
+| HAR-03 | Phase 1 | Complete |
+| HAR-04 | Phase 1 | Complete |
+| HAR-05 | Phase 1 | Complete |
+| HAR-06 | Phase 1 | Complete |
+| HAR-07 | Phase 1 | Complete |
+| HAR-08 | Phase 1 | Complete |
+| DEC-01 | Phase 1 | Complete |
+| DEC-02 | Phase 1 | Complete |
+| CI-01 | Phase 1 | Complete |
 | SKL-01 | Phase 2 | Pending |
 | SKL-02 | Phase 2 | Pending |
 | SKL-03 | Phase 2 | Pending |
