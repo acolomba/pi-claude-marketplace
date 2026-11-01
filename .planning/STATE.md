@@ -5,16 +5,16 @@ milestone_name: Component Behavioral Tests
 current_phase: 02
 current_phase_name: Skills
 status: executing
-stopped_at: Phase 2 executed and verified (human item deferred); Phase 7 merged
+stopped_at: Phases 2 and 6 verified with human items deferred; Phases 6 and 7 merged
 last_updated: "2026-11-01T16:22:57.289Z"
 last_activity: 2026-11-01
-last_activity_desc: Phase 7 (Workflows) merged into the milestone branch
+last_activity_desc: Phase 6 (MCP Servers) merged into the milestone branch
 state_head: 2e31f73843f33e4937b5c5c81d13f1c9792c3d23
 progress:
   total_phases: 7
   completed_phases: 2
-  total_plans: 28
-  completed_plans: 27
+  total_plans: 37
+  completed_plans: 36
   percent: 29
 ---
 
@@ -27,14 +27,14 @@ See: `.planning/PROJECT.md` (updated 2026-11-01 after Phase 1)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 02 — Skills (verification deferred to the user); Phases 3-6 running in child sessions
+**Current focus:** Phase 02 — Skills (verification deferred to the user); Phases 3-5 running in child sessions
 
 ## Current Position
 
 Phase: 02 (Skills) — 7/7 plans done, verification_deferred_human (see Deferred Verification)
 Plan: 7 of 7
-Status: Phase 7 (Workflows) complete and merged; Phases 3-6 executing in child sessions
-Last activity: 2026-11-01 — Phase 7 (Workflows) merged into the milestone branch
+Status: Phase 7 complete and merged; Phase 6 merged with verification deferred; Phases 3-5 executing in child sessions
+Last activity: 2026-11-01 — Phase 6 (MCP Servers) merged into the milestone branch
 
 Progress: [███░░░░░░░] 29% (2/7 phases complete: 1 and 7; Phase 2 awaits the user's verification item)
 
@@ -138,6 +138,7 @@ injected collaborator honoring a prose-only contract that nothing type-enforces.
 | Phase | State | Resume |
 |-------|-------|--------|
 | 02 | verification_deferred_human -- code verified 4/5; criterion 5 needs the user to file the drafted Pi gap report (02-07-SUMMARY.md) or decide not to (D-CF2-10) | /gsd-verify-work 02 |
+| 06 | verification_deferred_human -- 4/5; SC4/MCP-07 (an agent calls a plugin MCP tool) is met only as the D-CF6-10 gap pin (pi-subagents refuses the selector); accept the pin as an override or reject it. Also decide the in-root symlink rule for referenced MCP files (WR-01/WR-02, `06-UAT.md`) | /gsd-verify-work 06 |
 
 ## Deferred Items
 
