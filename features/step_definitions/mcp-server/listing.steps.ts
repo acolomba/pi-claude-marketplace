@@ -1,8 +1,8 @@
 /**
- * @fileoverview Steps about calling the MCP servers of a plugin: the stub
- * servers a published plugin holds, a profile Pi started with a variable the
- * user set, pi-mcp-adapter's first listing of the servers' tools, and the
- * messages a stub receives (HAR-04, HAR-07).
+ * @fileoverview The steps every MCP server feature shares: the stub servers a
+ * published plugin holds, a profile Pi started with a variable the user set,
+ * pi-mcp-adapter's first listing of the servers' tools, and the messages a
+ * stub receives (HAR-04, HAR-07, D-CF6-05).
  *
  * When a session starts, pi-mcp-adapter connects to a server whose tools it
  * has not cached, lists them, and disconnects, in the background. A model
