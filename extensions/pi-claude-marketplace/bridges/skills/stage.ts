@@ -39,7 +39,11 @@ import {
   synthesizeUnparseableSkill,
   truncate1536,
 } from "./frontmatter-degrade.ts";
-import { NODE_PROJECT_SKILL_LEDGER, skillFileDigest } from "./project-installs.ts";
+import {
+  NODE_PROJECT_SKILL_LEDGER,
+  NODE_SKILL_TREE_LISTER,
+  skillTreeDigest,
+} from "./project-installs.ts";
 import { rewriteFrontmatterName } from "./rewrite-frontmatter.ts";
 import {
   commandUpstreamNames,
@@ -516,9 +520,9 @@ export async function prepareStageSkills(
 
 /**
  * D-CF2-13: lists the committed skills of a project-scope stage in the user's
- * project ledger, with the digest of each `SKILL.md` as it now sits at its
- * target, and drops the previous names this stage replaced. A user-scope
- * stage needs no ledger: no repository can write the user scope.
+ * project ledger, with the digest of each skill directory as it now sits at
+ * its target (WR-03), and drops the previous names this stage replaced. A
+ * user-scope stage needs no ledger: no repository can write the user scope.
  */
 async function recordProjectSkills(
   ledger: ProjectSkillLedger,
@@ -531,7 +535,8 @@ async function recordProjectSkills(
   const digests = await Promise.all(
     prepared.result.recorded.map(async (skill) => {
       const content = await readFile(path.join(skill.targetPath, "SKILL.md"), "utf8");
-      const entry = { plugin: prepared._pluginName, sha256: skillFileDigest(content) };
+      const entries = await NODE_SKILL_TREE_LISTER(skill.targetPath);
+      const entry = { plugin: prepared._pluginName, sha256: skillTreeDigest(entries, content) };
       return [skill.generatedName, entry] as const;
     }),
   );

@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdir, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
 import {
   NODE_PROJECT_SKILL_LEDGER,
+  NODE_SKILL_TREE_LISTER,
   provenProjectSkills,
-  skillFileDigest,
+  skillTreeDigest,
 } from "../../../extensions/pi-claude-marketplace/bridges/skills/project-installs.ts";
 import { ProjectSkillLedgerError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -34,17 +37,109 @@ function readLedger(file: string): Promise<unknown> {
 const DEMO_GREET = { plugin: "demo", sha256: "a".repeat(64) };
 const DEMO_STATUS = { plugin: "demo", sha256: "b".repeat(64) };
 
-describe("skillFileDigest", () => {
-  test("is the hex SHA-256 of the file's UTF-8 bytes", () => {
+describe("NODE_SKILL_TREE_LISTER", () => {
+  test("WR-03: lists every file and symbolic link under the directory with a digest, and follows no link", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "skill-tree-");
+    const dir = path.join(cwd, "demo-status");
+    await mkdir(path.join(dir, "scripts", "deep"), { recursive: true });
+    await mkdir(path.join(cwd, "outside"), { recursive: true });
+    await writeFile(path.join(dir, "SKILL.md"), "abc");
+    await writeFile(path.join(dir, "scripts", "deep", "run.sh"), "é");
+    await writeFile(path.join(cwd, "outside", "hidden.txt"), "not listed");
+    await symlink(path.join(cwd, "outside"), path.join(dir, "linked"));
+
     // act
-    const digests = [skillFileDigest("abc"), skillFileDigest("é")];
+    const entries = await NODE_SKILL_TREE_LISTER(dir);
 
     // assert
-    assert.deepStrictEqual(digests, [
-      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-      "4a99557e4033c3539de2eb65472017cad5f9557f7a0625a09f1c3f6e2ba69c4c",
-    ]);
+    assert.deepStrictEqual(
+      [...entries].sort((a, b) => a.path.localeCompare(b.path)),
+      [
+        {
+          path: "linked",
+          kind: "symlink",
+          sha256: createHash("sha256").update(path.join(cwd, "outside")).digest("hex"),
+        },
+        {
+          path: "scripts/deep/run.sh",
+          kind: "file",
+          sha256: "4a99557e4033c3539de2eb65472017cad5f9557f7a0625a09f1c3f6e2ba69c4c",
+        },
+        {
+          path: "SKILL.md",
+          kind: "file",
+          sha256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        },
+      ],
+    );
   });
+
+  test("WR-03: refuses an entry that is neither a file, a directory nor a symbolic link", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "skill-tree-fifo-");
+    const dir = path.join(cwd, "demo-status");
+    await mkdir(dir, { recursive: true });
+    const fifo = path.join(dir, "pipe");
+    execFileSync("mkfifo", [fifo]);
+
+    // act & assert
+    await assert.rejects(NODE_SKILL_TREE_LISTER(dir), {
+      message: `${fifo} is neither a file, a directory nor a symbolic link`,
+    });
+  });
+});
+
+describe("skillTreeDigest", () => {
+  const SCRIPT = { path: "scripts/run.sh", kind: "file" as const, sha256: "c".repeat(64) };
+  const NOTES = { path: "notes.txt", kind: "file" as const, sha256: "d".repeat(64) };
+
+  test("WR-03: hashes the path-sorted entries with the given SKILL.md bytes in place of the listed ones", () => {
+    // arrange
+    const listedSkillFile = { path: "SKILL.md", kind: "file" as const, sha256: "e".repeat(64) };
+    const expected = createHash("sha256")
+      .update(
+        JSON.stringify([
+          ["SKILL.md", "file", createHash("sha256").update("abc").digest("hex")],
+          ["notes.txt", "file", NOTES.sha256],
+          ["scripts/run.sh", "file", SCRIPT.sha256],
+        ]),
+      )
+      .digest("hex");
+
+    // act
+    const digests = [
+      skillTreeDigest([SCRIPT, listedSkillFile, NOTES], "abc"),
+      skillTreeDigest([NOTES, SCRIPT], "abc"),
+    ];
+
+    // assert
+    assert.deepStrictEqual(digests, [expected, expected]);
+  });
+
+  for (const { label, entries, skillFile } of [
+    { label: "an added entry", entries: [SCRIPT, NOTES], skillFile: "abc" },
+    { label: "a removed entry", entries: [], skillFile: "abc" },
+    {
+      label: "a changed entry",
+      entries: [{ ...SCRIPT, sha256: "f".repeat(64) }],
+      skillFile: "abc",
+    },
+    {
+      label: "a symbolic link in place of a file",
+      entries: [{ ...SCRIPT, kind: "symlink" as const }],
+      skillFile: "abc",
+    },
+    { label: "other SKILL.md bytes", entries: [SCRIPT], skillFile: "abd" },
+  ]) {
+    test(`WR-03: changes with ${label}`, () => {
+      // act
+      const digest = skillTreeDigest(entries, skillFile);
+
+      // assert
+      assert.notStrictEqual(digest, skillTreeDigest([SCRIPT], "abc"));
+    });
+  }
 });
 
 describe("NODE_PROJECT_SKILL_LEDGER", () => {

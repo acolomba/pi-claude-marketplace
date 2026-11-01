@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
+import { skillTreeDigest } from "../../../extensions/pi-claude-marketplace/bridges/skills/project-installs.ts";
 import {
   abortPreparedSkills,
   commitPreparedSkills,
@@ -1789,7 +1790,16 @@ describe("commitPreparedSkills", () => {
             "acme-alpha",
             {
               plugin: "acme",
-              sha256: createHash("sha256").update(targetBytes, "utf8").digest("hex"),
+              sha256: skillTreeDigest(
+                [
+                  {
+                    path: "resources/a.txt",
+                    kind: "file",
+                    sha256: createHash("sha256").update(resourceBytes, "utf8").digest("hex"),
+                  },
+                ],
+                targetBytes,
+              ),
             },
           ],
         ]),

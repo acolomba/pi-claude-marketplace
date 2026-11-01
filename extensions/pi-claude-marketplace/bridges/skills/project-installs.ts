@@ -12,12 +12,14 @@
 // This ledger is the same anchor: one file under the USER scope root, which a
 // repository cannot write, keyed by the canonical project path. It lists each
 // skill that this user's install staged into the project, with its plugin and
-// the SHA-256 of the staged `SKILL.md`. A project skill runs its `!` commands
-// and claims an alias only when the ledger lists it for the current project
-// with the digest of the file as it is now.
+// the digest of the staged skill directory (WR-03): every file and symbolic
+// link under it, so a helper script that a `!` command runs is covered as
+// well as `SKILL.md`. A project skill runs its `!` commands and claims an
+// alias only when the ledger lists it for the current project with the digest
+// of the directory as it is now.
 
 import { createHash } from "node:crypto";
-import { readFile, realpath } from "node:fs/promises";
+import { readdir, readFile, readlink, realpath } from "node:fs/promises";
 import path from "node:path";
 
 import Type from "typebox";
@@ -27,6 +29,8 @@ import { getAgentDir } from "../../platform/pi-api.ts";
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import { ProjectSkillLedgerError } from "../../shared/errors-bridges.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
+
+import type { Dirent } from "node:fs";
 
 const LEDGER_SCHEMA = Type.Object({
   version: Type.Literal(1),
@@ -38,7 +42,7 @@ const LEDGER_SCHEMA = Type.Object({
 
 const LEDGER_VALIDATOR = Compile(LEDGER_SCHEMA);
 
-/** One staged skill of a project: its plugin and the digest of its `SKILL.md`. */
+/** One staged skill of a project: its plugin and the digest of its staged directory. */
 export interface LedgerSkill {
   readonly plugin: string;
   readonly sha256: string;
@@ -67,9 +71,73 @@ function projectInstallsFile(agentDir: string): string {
   return path.join(agentDir, "pi-claude-marketplace", "project-installs.json");
 }
 
-/** The SHA-256, in hex, of the UTF-8 bytes of a staged `SKILL.md`. */
-export function skillFileDigest(content: string): string {
-  return createHash("sha256").update(content, "utf8").digest("hex");
+/**
+ * One entry of a staged skill directory: its path relative to the directory,
+ * with `/` separators, and the SHA-256 of a file's bytes or of a symbolic
+ * link's target. Directories carry no entry of their own.
+ */
+export interface SkillTreeEntry {
+  readonly path: string;
+  readonly kind: "file" | "symlink";
+  readonly sha256: string;
+}
+
+/** Lists the entries of the staged skill directory `dir`. */
+export type SkillTreeLister = (dir: string) => Promise<readonly SkillTreeEntry[]>;
+
+function sha256Hex(bytes: string | Buffer): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+/** The entries `dirent` stands for, named relative to `root`; a directory stands for its contents. */
+async function direntEntries(
+  root: string,
+  dir: string,
+  dirent: Dirent,
+): Promise<readonly SkillTreeEntry[]> {
+  const absolute = path.join(dir, dirent.name);
+  const relative = path.relative(root, absolute).split(path.sep).join("/");
+  if (dirent.isDirectory()) {
+    return treeEntries(root, absolute);
+  }
+
+  if (dirent.isFile()) {
+    return [{ path: relative, kind: "file", sha256: sha256Hex(await readFile(absolute)) }];
+  }
+
+  if (dirent.isSymbolicLink()) {
+    return [{ path: relative, kind: "symlink", sha256: sha256Hex(await readlink(absolute)) }];
+  }
+
+  throw new Error(`${absolute} is neither a file, a directory nor a symbolic link`);
+}
+
+/** The entries under `dir`, named relative to `root`; it never follows a symbolic link. */
+async function treeEntries(root: string, dir: string): Promise<readonly SkillTreeEntry[]> {
+  const dirents = await readdir(dir, { withFileTypes: true });
+  const nested = await Promise.all(dirents.map((dirent) => direntEntries(root, dir, dirent)));
+  return nested.flat();
+}
+
+/**
+ * WR-03: lists every file and symbolic link under the staged skill directory
+ * `dir`. Any other kind of entry throws, so the check fails closed.
+ */
+export const NODE_SKILL_TREE_LISTER: SkillTreeLister = (dir) => treeEntries(dir, dir);
+
+/**
+ * WR-03: the digest of a staged skill directory. `skillFile` stands for the
+ * entry `SKILL.md`, so the bytes the invocation parses and runs are the bytes
+ * the digest covers. The entries are sorted by path, so the digest does not
+ * depend on the order the directory lists them in, and an added, removed, or
+ * changed entry changes it.
+ */
+export function skillTreeDigest(entries: readonly SkillTreeEntry[], skillFile: string): string {
+  const covered = [
+    ...entries.filter((entry) => entry.path !== "SKILL.md"),
+    { path: "SKILL.md", kind: "file", sha256: sha256Hex(Buffer.from(skillFile, "utf8")) },
+  ].sort((a, b) => (a.path < b.path ? -1 : 1));
+  return sha256Hex(JSON.stringify(covered.map((entry) => [entry.path, entry.kind, entry.sha256])));
 }
 
 /**
@@ -111,7 +179,7 @@ async function readLedgerText(
 
 /**
  * D-CF2-13: the generated names of the skills this user installed into the
- * project at `projectPath`, each mapped to the digest its staged `SKILL.md`
+ * project at `projectPath`, each mapped to the digest its staged directory
  * had. A missing or unreadable ledger lists none, so every project skill
  * fails the check.
  */

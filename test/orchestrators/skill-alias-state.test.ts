@@ -6,7 +6,10 @@ import { test } from "node:test";
 
 import { mock, verify, when } from "strong-mock";
 
-import { NODE_PROJECT_SKILL_LEDGER } from "../../extensions/pi-claude-marketplace/bridges/skills/project-installs.ts";
+import {
+  NODE_PROJECT_SKILL_LEDGER,
+  skillTreeDigest,
+} from "../../extensions/pi-claude-marketplace/bridges/skills/project-installs.ts";
 import { loadQualifiedSkillAliases } from "../../extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
@@ -88,10 +91,13 @@ function sha256(content: string): string {
   return createHash("sha256").update(content, "utf8").digest("hex");
 }
 
-/** D-CF2-13: a user ledger that lists `skills` (name to staged bytes) for the project `project`. */
+/**
+ * D-CF2-13: a user ledger that lists `skills` (name to staged bytes) for the
+ * project `project`, each skill directory holding only its `SKILL.md`.
+ */
 function ledgerText(project: string, skills: Readonly<Record<string, string>>): string {
   const listed = Object.entries(skills).map(
-    ([name, content]) => [name, { plugin: "demo", sha256: sha256(content) }] as const,
+    ([name, content]) => [name, { plugin: "demo", sha256: skillTreeDigest([], content) }] as const,
   );
   return JSON.stringify({ version: 1, projects: { [project]: Object.fromEntries(listed) } });
 }
@@ -129,6 +135,15 @@ function dependencies(
         ? Promise.reject(new Error(`unreadable ${file}`))
         : Promise.resolve(text);
     },
+    // WR-03: the files directly inside `dir`, which is all a staged skill here holds.
+    listSkillTree: (dir) =>
+      Promise.resolve(
+        Object.entries(readable).flatMap(([file, text]) =>
+          path.dirname(file) === dir
+            ? [{ path: path.basename(file), kind: "file" as const, sha256: sha256(text) }]
+            : [],
+        ),
+      ),
   };
 }
 
@@ -528,7 +543,7 @@ test("D-CF2-02: reads the staged skill file from disk with the production reader
   await NODE_PROJECT_SKILL_LEDGER.update({
     projectPath: cwd,
     forget: [],
-    remember: new Map([["demo-review", { plugin: "demo", sha256: sha256(content) }]]),
+    remember: new Map([["demo-review", { plugin: "demo", sha256: skillTreeDigest([], content) }]]),
   });
   const pi = piWith([skillCommand("demo-review", file)]);
 
@@ -590,6 +605,50 @@ for (const { title, ledger } of [
         ledger(),
       ),
     );
+
+    // assert
+    assert.deepStrictEqual([...aliases], [["tools:lint", "tools-lint"]]);
+    verify(pi);
+  });
+}
+
+for (const { title, listSkillTree } of [
+  {
+    title: "a file was added to its directory after the install",
+    listSkillTree: undefined,
+  },
+  {
+    title: "its directory cannot be listed",
+    listSkillTree: () => Promise.reject(new Error("EACCES")),
+  },
+]) {
+  test(`WR-03: a project skill claims no name when ${title}, and a user skill still does`, async () => {
+    // arrange
+    const projectFile = stagedPath(PROJECT_ROOT, "demo-review");
+    const userFile = stagedPath(AGENT_DIR, "tools-lint");
+    const projectSkill = recordedSkill("demo-review", ["demo:review", "fancy"]);
+    const pi = piWith([
+      skillCommand("tools-lint", userFile),
+      skillCommand("demo-review", projectFile),
+    ]);
+    const resolved = dependencies(
+      {
+        [AGENT_DIR]: stateWith({ tools: ["tools-lint"] }),
+        [PROJECT_ROOT]: stateWith({ demo: ["demo-review"] }),
+      },
+      {
+        [userFile]: recordedSkill("tools-lint", ["tools:lint"]),
+        [projectFile]: projectSkill,
+        [path.join(path.dirname(projectFile), "added.sh")]: "printf added",
+      },
+      ledgerText(CWD, { "demo-review": projectSkill }),
+    );
+
+    // act
+    const aliases = await loadQualifiedSkillAliases(pi, CWD, true, {
+      ...resolved,
+      ...(listSkillTree === undefined ? {} : { listSkillTree }),
+    });
 
     // assert
     assert.deepStrictEqual([...aliases], [["tools:lint", "tools-lint"]]);

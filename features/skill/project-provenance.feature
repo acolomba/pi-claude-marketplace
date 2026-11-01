@@ -18,7 +18,11 @@ Feature: Skill project provenance
       description: Reports the status.
       ---
 
-      Status: !`printf ran`
+      Status: !`sh ${CLAUDE_SKILL_DIR}/status.sh`
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "skills/status/status.sh" with this text:
+      """
+      printf ran
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
@@ -33,6 +37,23 @@ Feature: Skill project provenance
       | needs reload | false                                                                                                                                                                                                                                                                 |
       | message      | The skill /skill:demo-status was not installed into the project {project dir} on this machine, or its file changed after the install. Reinstall its plugin into this project with /claude:plugin reinstall demo@fixtures --scope project, then run /reload to use it. |
       | usage        |                                                                                                                                                                                                                                                                       |
+
+  Scenario Outline: A project skill whose staged directory changed after the install runs no context command
+    Given the line "<line>" was appended to the file "<file>" of the staged project skill "demo-status"
+    Given the user has started a new pi session
+    When the user runs "/skill:demo-status"
+    Then the result has these fields:
+      | kind         | usage-error                                                                                                                                                                                                                                                           |
+      | severity     | error                                                                                                                                                                                                                                                                 |
+      | needs reload | false                                                                                                                                                                                                                                                                 |
+      | message      | The skill /skill:demo-status was not installed into the project {project dir} on this machine, or its file changed after the install. Reinstall its plugin into this project with /claude:plugin reinstall demo@fixtures --scope project, then run /reload to use it. |
+      | usage        |                                                                                                                                                                                                                                                                       |
+
+    Examples:
+      | file           | line         |
+      | SKILL.md       | Changed.     |
+      | status.sh      | printf pwned |
+      | notes/added.md | Added.       |
 
   Scenario: A skill alias of a project skill whose install the user's pi directory does not record reaches the model as typed
     Given the user's pi directory records no plugin install for the project

@@ -6,7 +6,7 @@
  */
 
 import assert from "node:assert/strict";
-import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, appendFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { Given, Then } from "@cucumber/cucumber";
@@ -28,6 +28,28 @@ Given(
     await rm(ledger, { force: true });
     await assert.rejects(access(ledger), { code: "ENOENT" });
     await access(path.join(this.tokens.projectDir, ".pi", "pi-claude-marketplace", "state.json"));
+  },
+);
+
+// WR-03: a change to the staged skill directory after the install, such as
+// one a pull of a repository that commits it brings: an edited `SKILL.md`, an
+// edited script that a context command runs, or an added file.
+Given(
+  "the line {string} was appended to the file {string} of the staged project skill {string}",
+  async function (this: ScenarioWorld, line: string, file: string, skill: string) {
+    const target = path.join(
+      this.tokens.projectDir,
+      ".pi",
+      "pi-claude-marketplace",
+      "resources",
+      "skills",
+      skill,
+      file,
+    );
+    await mkdir(path.dirname(target), { recursive: true });
+    await appendFile(target, `\n${line}\n`, "utf8");
+    const appended = `\n${line}\n`;
+    assert.strictEqual((await readFile(target, "utf8")).slice(-appended.length), appended);
   },
 );
 
