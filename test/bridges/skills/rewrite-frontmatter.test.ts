@@ -54,6 +54,11 @@ for (const { description, skillDocument, expectedSkillDocument } of [
     expectedSkillDocument: "---\nname: generated-name\ndescription: Spelled key\n---\n\nBody.\n",
   })),
   {
+    description: "IN-01: replaces an explicit name key together with its value line",
+    skillDocument: "---\n? name\n: review\ndescription: Explicit key\n---\n\nBody.\n",
+    expectedSkillDocument: "---\nname: generated-name\ndescription: Explicit key\n---\n\nBody.\n",
+  },
+  {
     description: "replaces a name whose value is an alias of another node's anchor",
     skillDocument: "---\nlabel: &n review\nname: *n\n---\n\nBody.\n",
     expectedSkillDocument: "---\nlabel: &n review\nname: generated-name\n---\n\nBody.\n",

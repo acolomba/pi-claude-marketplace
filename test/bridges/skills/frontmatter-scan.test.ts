@@ -145,6 +145,34 @@ describe("keyValueEnd", () => {
       expectedKeyValueEnd: 4,
     },
     {
+      description: "IN-01: includes the value line of an explicit key and its continuation",
+      lines: ["---", "? name", "  # key comment", ": >", "  long", "description: d", "---"],
+      keyIndex: 1,
+      blockEnd: 6,
+      expectedKeyValueEnd: 4,
+    },
+    {
+      description: "IN-01: includes only the first value line of an explicit key",
+      lines: ["---", "? name", ": review", ": other", "---"],
+      keyIndex: 1,
+      blockEnd: 4,
+      expectedKeyValueEnd: 2,
+    },
+    {
+      description: "IN-01: stops at a value line after a key that is not explicit",
+      lines: ["---", "name: review", ": other", "---"],
+      keyIndex: 1,
+      blockEnd: 3,
+      expectedKeyValueEnd: 1,
+    },
+    {
+      description: "IN-01: stops at the next key after an explicit key with no value line",
+      lines: ["---", "? name", "description: d", "---"],
+      keyIndex: 1,
+      blockEnd: 3,
+      expectedKeyValueEnd: 1,
+    },
+    {
       description: "reports the last occupied line of a complete multiline span",
       lines: [
         "---",
@@ -233,6 +261,11 @@ describe("topLevelNodeIndex", () => {
       description: "finds nothing after the block end",
       lines: ["---", "description: d", "---", "name: body"],
       expectedIndex: -1,
+    },
+    {
+      description: "IN-01: finds an explicit key with its value line",
+      lines: ["---", "description: d", "? name", ": review", "---"],
+      expectedIndex: 2,
     },
     {
       description: "WR-05: finds a flow mapping that holds the key alone",

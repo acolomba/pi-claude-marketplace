@@ -223,6 +223,13 @@ describe("setDescriptionScalar", () => {
       }),
     ),
     {
+      description: "an explicit description key and its value line",
+      sourceContent:
+        "---\nname: explicit\n? description\n: old value\nwhen_to_use: Reviews.\n---\nBody.\n",
+      expectedContent:
+        '---\nname: explicit\ndescription: "new value"\nwhen_to_use: Reviews.\n---\nBody.\n',
+    },
+    {
       description: "a literal block scalar holding an indented rule line before when_to_use",
       sourceContent:
         "---\nname: review\ndescription: |\n  Part one.\n  ---\n  Part two.\nwhen_to_use: Reviews.\n---\nBody.\n",
