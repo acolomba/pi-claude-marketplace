@@ -135,6 +135,10 @@ jobs:
   # run 41283935457): lifecycle job 3 min 21 s (cucumber step 2 min 11 s,
   # 1158 scenarios), components job 1 min 34 s (cucumber step 52 s, 11
   # scenarios). Both shards take the 15-minute floor.
+  # After the workflow, MCP server, and agent merges, a local run (4 CPUs,
+  # not a hosted runner, 2026-11-01, seed 520794) took 2 min 26 s for the
+  # components shard's 215 scenarios, still far under the floor. The hosted
+  # re-measure is still to do.
   # Re-measure after each component merge, and raise a timeout that no
   # longer holds 1.5 times its shard's run.
   behavioral:
