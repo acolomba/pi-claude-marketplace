@@ -20,7 +20,7 @@ Legend: **S** = install-time substitution · **E** = runtime env injection · **
 | --------------------------------------- | ----------- | ------ | -------- | ------ | ---- | ----- | ---------- | ------- |
 | `CLAUDE_PLUGIN_ROOT`                    | ✓           | S      | S        | S      | --   | E     | S          | I       |
 | `CLAUDE_PLUGIN_DATA`                    | ✓           | S      | S        | S      | --   | E     | S          | I       |
-| `CLAUDE_SKILL_DIR`                      | ✓           | S      | --       | --     | --   | --    | --         | --      |
+| `CLAUDE_SKILL_DIR`                      | ✓           | S      | --       | S‖     | --   | --    | --         | --      |
 | `CLAUDE_PROJECT_DIR`                    | ✓           | S†     | S†       | S†     | E†   | E     | S / ⚠†     | E‡      |
 | `CLAUDECODE`                            | ✓           | --     | --       | --     | E    | E     | --         | E‡      |
 | `CLAUDE_CODE_SESSION_ID`                | ✓           | --     | --       | --     | E    | E     | --         | E‡      |
@@ -35,6 +35,7 @@ Legend: **S** = install-time substitution · **E** = runtime env injection · **
 - **†** -- In skill, command and agent content, the token resolves for project-scope installs only, and user-scope occurrences stay literal (SUB-02). An MCP entry resolves it at install for the project scope. A user-scope entry keeps `${CLAUDE_PROJECT_DIR}`, and pi-mcp-adapter expands it from Pi's process. Bash children inherit `CLAUDE_PROJECT_DIR`, which Claude Code does not set for Bash (AVAR-01). See "`CLAUDE_PROJECT_DIR` at user scope".
 - **‡** -- reaches MCP servers only through Pi's live `process.env` at spawn time. The spawn-order caveat applies to every row. Session-switch staleness applies only to the session vars and `CLAUDE_PROJECT_DIR`. The `PATH` rows and `PI_CLAUDE_MARKETPLACE_EMPTY` do not change on a session switch. See "MCP runtime env inheritance".
 - **§** -- exposed on the SessionStart hook event only, and Pi does not source the file back. See "`CLAUDE_ENV_FILE` is exposed but not sourced".
+- **‖** -- In the content of a skill that an agent preloads only. The agent body keeps it literal. See "Agents content".
 - **¶** -- Pi sets `AI_AGENT` on its own process at start, before any extension code runs. It has no spawn-order caveat. See "Pi-only `AI_AGENT`".
 
 ## Per-surface delivery
@@ -83,7 +84,7 @@ Command content does not resolve `${CLAUDE_SKILL_DIR}` (skill-scoped).
 
 ### Agents content
 
-Agent content does not resolve `${CLAUDE_SKILL_DIR}` (skill-scoped).
+The agent body does not resolve `${CLAUDE_SKILL_DIR}` (skill-scoped). The content of a skill that an agent preloads does: there, `${CLAUDE_SKILL_DIR}` is the staged skill folder, `${CLAUDE_PLUGIN_ROOT}` and `${CLAUDE_PLUGIN_DATA}` are filled at install, and `${CLAUDE_PROJECT_DIR}` follows SUB-02, so it resolves for project-scope installs only (D-CF4-04).
 
 | Variable                | Claude Code | Pi  | Notes                                                                                                                |
 | ----------------------- | ----------- | --- | -------------------------------------------------------------------------------------------------------------------- |
