@@ -26,12 +26,23 @@ const READY_TEXT = "Warning: No models available.";
 const DEFAULT_READY_MS = 15_000;
 const DEFAULT_STOP_MS = 5_000;
 
-/** What `PiTuiSession.start` needs: the sandbox, the git environment, and the time limits. */
+/**
+ * What `PiTuiSession.start` needs: the sandbox, the git environment, and the
+ * time limits. D-CF2-12: a scenario that profiles the TUI, such as with the
+ * scripted model, also passes its extensions, its extra CLI arguments, and the
+ * text its first screen shows; every other caller passes none of them.
+ */
 export interface PiTuiOptions {
   readonly sandbox: RpcSandbox;
   readonly git: RpcGitEnvironment;
   /** Variables added to the child's environment after the allowlisted ones. */
   readonly variables?: Readonly<Record<string, string>>;
+  /** Absolute paths of the extensions Pi loads after the real one, in load order. */
+  readonly extensions?: readonly string[];
+  /** CLI arguments added after the extensions, such as the model to select. */
+  readonly arguments?: readonly string[];
+  /** The text the first rendered screen shows; `Warning: No models available.` by default. */
+  readonly readyText?: string;
   readonly signal?: AbortSignal;
   readonly readyMs?: number;
   readonly stopMs?: number;
@@ -118,6 +129,7 @@ export function backgroundUpdateNoticeTexts(terminalOutput: string): readonly st
 export class PiTuiSession {
   private readonly child: TuiChild;
   private readonly stopMs: number;
+  private readonly readyText: string;
   private output = "";
   private bridgeOutput = "";
   private bridgeReady = false;
@@ -125,9 +137,15 @@ export class PiTuiSession {
   private released = false;
   private readonly changes = new Set<() => void>();
 
-  private constructor(child: TuiChild, stopMs: number, signal: AbortSignal | undefined) {
+  private constructor(
+    child: TuiChild,
+    stopMs: number,
+    readyText: string,
+    signal: AbortSignal | undefined,
+  ) {
     this.child = child;
     this.stopMs = stopMs;
+    this.readyText = readyText;
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
       this.output += chunk;
@@ -165,13 +183,23 @@ export class PiTuiSession {
     const sandbox = await resolveRpcSandbox(options.sandbox);
 
     options.signal?.throwIfAborted();
-    const child = spawn("python3", [PTY_BRIDGE, "--", process.execPath, ...piArguments("tui")], {
+    const piCommand = [
+      process.execPath,
+      ...piArguments("tui", options.extensions),
+      ...(options.arguments ?? []),
+    ];
+    const child = spawn("python3", [PTY_BRIDGE, "--", ...piCommand], {
       cwd: sandbox.cwd,
       detached: true,
       env: { ...rpcChildEnvironment(sandbox, options.git), ...options.variables },
       stdio: ["pipe", "pipe", "pipe"],
     });
-    return new PiTuiSession(child, options.stopMs ?? DEFAULT_STOP_MS, options.signal);
+    return new PiTuiSession(
+      child,
+      options.stopMs ?? DEFAULT_STOP_MS,
+      options.readyText ?? READY_TEXT,
+      options.signal,
+    );
   }
 
   /** Waits for an interactive slave and the first rendered TUI screen. */
@@ -195,11 +223,16 @@ export class PiTuiSession {
 
   /** Types one line into the TUI. */
   sendLine(line: string): void {
+    this.typeText(`${line}\r`);
+  }
+
+  /** Types `text` into the TUI as keystrokes, with no Enter after it, such as a Tab. */
+  typeText(text: string): void {
     if (this.exited) {
       throw new Error(`Pi TUI exited before input:\n${this.diagnostics()}`);
     }
 
-    this.child.stdin.write(`${line}\r`);
+    this.child.stdin.write(text);
   }
 
   /** Waits until the normalized terminal contains `text`. */
@@ -294,7 +327,7 @@ export class PiTuiSession {
 
   private tuiRendered(): boolean {
     const text = removeTerminalControls(this.output);
-    return text.includes(READY_TEXT) && !text.includes("Invalid mode");
+    return text.includes(this.readyText) && !text.includes("Invalid mode");
   }
 
   private waitFor(condition: () => boolean, timeoutMs: number, description: string): Promise<void> {

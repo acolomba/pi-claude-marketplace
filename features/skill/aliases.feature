@@ -214,3 +214,23 @@ Feature: Skill aliases
     Then the model receives these calls:
       | call | role | text                                                                                                                                                                                                                                                                                       |
       | 1    | user | <skill name="demo-greet" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-greet/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-greet.\n\nGreet the person named in the arguments.\n\nARGUMENTS: Ada\n</skill> |
+
+  Scenario: Completing a skill alias in the terminal sends the skill to the model
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "review" with this skill file:
+      """
+      ---
+      name: fancy
+      description: Reviews a change.
+      ---
+
+      Review the change.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user completes the skill alias "/demo:fa" in the terminal and sends it with "Ada"
+    Then the model receives these calls:
+      | call | role | text                                                                                                                                                                                                                                                                  |
+      | 1    | user | <skill name="demo-review" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-review/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-review.\n\nReview the change.\n\nARGUMENTS: Ada\n</skill> |
