@@ -184,3 +184,24 @@ theirs under `## Dubious Choices` and the orchestrator copies them here.
   into `"--"`; the executor caught it and rewrote the escape byte-exactly.
   Later executors are warned.
 - **Recorded in:** `07-01-SUMMARY.md`.
+
+### P7-DC-10: Wave 2 executor choices (refusals)
+
+- **Phase / source:** Phase 7 wave 2, refusals executor (`07-02-SUMMARY.md`).
+- **Severity:** Low. **Status:** open.
+- **Choices:**
+  1. The setup `Given` (`..., which reported notes on workflow scripts of the
+     plugin`) checks the shape only (an info cascade, then a warning diagnostic
+     whose lines all start with `workflow script "`); a zero-line diagnostic
+     would pass it. The one-script installs are pinned whole only in the
+     install scenarios.
+  2. `late.js` puts `const greeting = "late";` directly above the `meta` line;
+     the other fixtures follow the plan's `meta`, blank line, `return` form.
+  3. One `check:static` run lost its lint job to out-of-memory beside a warm-up
+     ESLint; a lone `npm run lint` and a later full `check:static` passed.
+  4. The SUMMARY's commit count was measured before the SUMMARY commit.
+- **Parent line (BACKLOG):** the caveat text "was installed but the engine will
+  refuse to load it" in `bridges/workflows/discover.ts` is inaccurate (the
+  engine registers the command and refuses at run); rewording touches three
+  unit tests, `docs/output-catalog.md`, and `refusals.feature`.
+- **Recorded in:** `07-02-SUMMARY.md`.
