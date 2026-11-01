@@ -167,3 +167,15 @@ Then(
     assert.deepStrictEqual([["kind", "method", "params"], ...rows], table.raw());
   },
 );
+
+// D-CF6-05: one row per model call of the last turn, numbered from 1 as the
+// calls step numbers them, with the names of the tools Pi offered that call
+// in the order Pi sent them. A scenario that uses it also states the calls,
+// so this step leaves the turn for that step to mark compared.
+Then("the model calls are offered these tools:", function (this: ScenarioWorld, table: DataTable) {
+  const rows = modelCallsOf(this.requireTurn().logs).map((call) => [
+    String(call.index + 1),
+    call.tools.map((tool) => tool.name).join(", "),
+  ]);
+  assert.deepStrictEqual([["call", "tools"], ...rows], table.raw());
+});
