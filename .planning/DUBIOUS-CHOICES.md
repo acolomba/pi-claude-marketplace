@@ -599,3 +599,84 @@ this project.
 - **Phase / source:** parent, after the user approved parallel sessions on `features/` branches and pushing to origin (2026-11-01).
 - **Severity:** Low. **Status:** open.
 - **Decision:** Phases 3-7 each run in their own Claude Code cloud session on `features/component-features-phase-{3..7}`, branched from the milestone head `cf00b31` (Phase 1 complete, Phase 2 waves 1-3 merged; Phase 2's last plan finishes on the milestone branch in parallel). Each child runs `gsd-autonomous --only N`, follows `.planning/CHILD-SESSION-BRIEF.md`, keeps its own `P{N}-DC-NN` log in its phase directory, and lists CHANGELOG/README/PROJECT lines as parent lines. The parent merges the branches in the ROADMAP order (7, 6, 4, 3, 5, after Phase 2), runs `npm run check` on each combined tree, applies the parent lines, and folds each phase log into this file. Branch names follow AGENTS.md (`features/*`), not the ROADMAP's unnamed per-phase branches.
+
+### DC-28: Phase 2 executor choices
+
+- **Phase / source:** executors for plans 02-01..02-07 and the parent's post-merge fix.
+- **Severity:** Medium for out-of-ownership edits (02-01, 02-03, 02-04) and the worktree hook finding; the rest Low. **Status:** open.
+
+#### 02-01 (listing, description fallback, stored names record)
+1. Edited three files outside Phase 2 ownership: `features/plugin/install-dependencies.feature` and `features/plugin/update-dependencies.feature` (expected staged SKILL.md text now includes the record line, with `{home}`/`{project dir}` tokens), and the step "the staged skills directory of the {word} scope holds these files:" in `features/step_definitions/plugin/installation.steps.ts` (now converts sandbox paths to run tokens before comparing).
+2. `readSkillRecord` left unexported (fallow fails an unused export); 02-03 and 02-06 add `export` when they import it.
+3. A list-valued frontmatter `name` stores no alias (upstream would comma-join it; avoids ESLint `no-base-to-string`); a mapping gives none either way. Upstream list behavior unchecked.
+4. Whitespace-containing name stores no alias (planned D-CF2-02 residual).
+5. `commandUpstreamNames` treats an un-`lstat`-able command file as no command; a directory error other than missing/not-a-directory now fails during the skills step instead of the commands step.
+6. No separate red commit for Task 3 unit tests (hook); the Task 1 cucumber run is the recorded red proof.
+7. Listing tables assume Pi's alphabetical order (`/skill:demo-<dir>` before `/skill:demo-skill`).
+8. A stage-test input changed to `pluginRoot: "/plugin"` so the expected YAML error excerpt does not depend on the temp path.
+- Parent lines: `.agents/skills/cucumber/rules/layout.md` still names `skill/invocation.steps.ts` (now `skill/listing.steps.ts`).
+#### 02-05 (skill lifecycle, SKL-06) — pins existing behavior, no product change
+1. Idempotency and concurrency not re-proved (left to existing plugin features and the concurrent-install integration test).
+2. Uninstall checked through the listing only, no model-side scenario.
+3. Update scenarios re-offer the whole plugin at 1.1.0, so both listing rows change and are compared.
+4. Tracer gate auto-continued (unattended, no `gate` attribute).
+5. The alias half of D-CF2-11 is left to 02-06.
+#### 02-02 (frontmatter variants, D-CF2-08 dropped-fields warning)
+1. The RED commit guessed a `warning` cascade row; the real row is `info`. The GREEN commit corrected it and the red proof was re-run with the corrected table.
+2. No TAP red for unit cases (hook); shown by reverting `stage.ts` locally.
+3. D-CF1-09 named in scenario titles by meaning ("because pi cannot hide a skill's slash command"), not by ID.
+4. Dropped-field names match case-sensitively (`Model:` is not reported); upstream unchecked.
+5. The new system-prompt skill-list step fails when Pi writes no `<available_skills>` block.
+6. Only `install` has a scenario for the dropped-fields line, though update/reinstall/enable/apply/cascades also show it (discovery channel).
+7. Unit cases use `{kind:"discovery", message}` literals rather than calling `discoveryWarning(...)`.
+8. Arbitrary fixture values in the all-eight-fields scenario (keys only are read).
+- Environment: a commit attempt was OOM-killed during the hook's parallel lint under load; warming the ESLint cache with a lone `npm run lint` fixed it.
+#### 02-04 (name clashes, D-CF2-03/04)
+1. Scenario title reworded ("Prompting /demo:clash ...") because the feature gate rejects titles starting with `/`.
+2. Expected value edited in out-of-ownership `test/architecture/declared-component-path-overlap.test.ts` (planned, DC-26 item 2).
+3. Removed the skills-side `fallow-ignore-next-line code-duplication` marker (its clone group vanished), leaving the commands-side marker at `bridges/commands/discover.ts:314` orphaned in a Phase 3 file; CONVENTIONS.md marker count drifts further.
+4. The command check runs before generated-name dedup, so a skipped skill frees its generated name (`clash/` skipped lets `demo-clash/` install); not checked upstream.
+5. Names compare exactly, no case folding (research A4, unchecked upstream).
+6. Expected model text for `/demo:clash` with no args measured from Pi (`COMMAND CLASH BODY`).
+7. MANF-03 trailing-separator unit case: expected `skillDir` lost its trailing separator (skills folder now reached first).
+8. No TAP red for unit cases (hook); cucumber red proofs recorded.
+- Parent lines: delete the orphaned commands-side clone marker after `npx fallow dupes` passes (Phase 3 or parent); object-map `commands` (FG-13) not clash-checked, re-check at Phase 3; `stage.ts` still calls `commandUpstreamNames` so commands folders are read twice; a commands-dir read error other than ENOENT/ENOTDIR now fails `discoverGeneratedNames` before the ledger opens.
+#### 02-03 (skill invocation: substitution, injection, abort; T-01-22/24 closed)
+1. Missing peer cache in the worktree filled with `node scripts/install-test-peers.mjs` instead of halting on the precondition.
+2. Rule 1 fix: skill directory from `dirname(sourceInfo.path)`, not `sourceInfo.baseDir` (Pi sets `baseDir` to the extension's dir for extension-contributed skills, so "References are relative to" was wrong).
+3. Abort origin `commandId: "skill"` is new to JSON consumers; `docs/json-output.md` does not list it yet (parent line).
+4. Every non-extension slash token reads `pi.getCommands()`; a bare token loads the alias table for its cwd; a bare alias equal to a Pi built-in is not reserved (DC-25 item 3 residual).
+5. `CLAUDE_PROJECT_DIR` set only for project-scope skills; user-scope keeps the literal.
+6. Arguments are the trimmed rest of the line after `/^\/(\S+)(?=\s|$)/`; Pi's native expansion splits at the first space only, so a tab/newline after the token behaves differently.
+7. The frozen core escapes `` !`cmd` `` in an argument as `` \! `cmd` `` (with a space), not the plan's spelling; tests state the observed text.
+8. An acceptance grep (`ThinkingLevel|InputSource` count 0) prints 1 because of the required `pi.getThinkingLevel()` call; no type imported.
+9. Exported `readSkillRecord` and rewrote its doc sentence in `skill-names.ts` (outside files_modified).
+10. Some Task 2 scenarios passed before the product change (Task 1 shipped substitution); only injection/abort failed first.
+11. No WINDOWS.md entry.
+- Measured: `${CLAUDE_EFFORT}` is `low` in the profile Pi; the abort payload arrives over RPC immediately; importing the cores did not make any `.fallowrc.json` entry stale.
+- **Tooling finding:** inside `.claude/worktrees/...` the commit hook printed "(no files to check)" for `npm run check:commit` and prettier, probably because `.pre-commit-config.yaml`'s top-level `exclude: \.claude/(?!skills/)` matches worktree paths. Executor commits in worktrees may therefore skip the npm-check hook; the post-merge `npm run check` on the main checkout is the backstop.
+- Parent lines: Phase 3's `edge/command-invocation.ts` handler now receives text starting with `<skill name=` after a successful skill invocation and must ignore text not starting with `/` (Pitfall 10).
+- **Post-merge gate fix (parent, wave 2):** `test/orchestrators/plugin/discover-names.test.ts` (outside Phase 2) failed after merge because its fixture gave a plugin same-named commands and skills, which D-CF2-03 now shadows; the parent renamed the fixture skills (`alpha-guide`, `zeta-guide`) in commit b89e2e3. Plan 02-04 had not run the full unit suite.
+#### 02-06 (skill aliases from stored names, TUI Tab completion)
+1. `loadQualifiedSkillAliases` takes `Partial<SkillAliasDependencies>` merged over defaults.
+2. TUI readiness text is `[Extensions]` (Pi prints it after binding extensions and installing autocomplete); breaks if a future Pi stops printing its loaded-resource list.
+3. The step relies on the trailing space Pi's completion adds before typing `Ada`.
+4. The step waits for the `→ ` menu marker then the redrawn prefix.
+5. TUI scenario omits the "new RPC session" Given (fresh Pi process).
+6. Shared-name rule split into two scenarios (bare, qualified) with a Background.
+7. Command-clash, unclaimed, disable and enable scenarios pass on the old loader too (guards).
+8. The legacy shortened-alias fallback also covers a malformed or hand-removed record.
+9. Bare-alias claims across two plugins and case sensitivity not checked upstream (loader order, exact match).
+10. Hook skipped in the worktree; agent ran check:static, test:modules and full `npm run check` (1219 scenarios).
+- Parent lines: CHANGELOG "Skill aliases now match Claude Code: `/<plugin>:<skill dir>`, `/<plugin>:<frontmatter name>`, and the bare `/<frontmatter name>`. The shortened alias with the plugin prefix cut from the directory name (such as `/acme:foo` for `acme-foo`) is gone; skills installed before this release keep it until you update or reinstall their plugin."; PRD SK-6 wording update.
+#### 02-07 (phase gate, Pi gap report, parent lines)
+1. One SUMMARY commit for three SUMMARY-only tasks.
+2. Stale code-duplication markers left in place (cover no clone group): `bridges/skills/stage.ts:496`, `bridges/commands/stage.ts:276`, `bridges/commands/discover.ts:314`; CONVENTIONS.md counts stale (says 41 total / 30 code-duplication; real 47 / 29). Parent decides.
+3. All six `.fallowrc.json` `dynamicallyLoaded` and core `ignoreExports` entries can be removed now (measured: `npm run fallow` exits 0 without them); SUMMARY keeps "after Phase 3" as main advice.
+4. CHANGELOG lines omit the 100-char cut, the `when_to_use` fold, and non-install verbs showing the dropped-fields warning; invocation change split into two sub-bullets.
+5. Invented README example `name: baz`.
+6. `docs/env-vars.md` calls `CLAUDE_SESSION_ID` pi-only, but `${CLAUDE_SESSION_ID}` in skill content is a Claude Code token; flagged for the parent's wording.
+7. Decision-row outcomes: D-CF2-10 "Pending (user files)", D-CF2-12 "Good", the rest "Locked".
+8. Pi gap report proposals are the agent's own; tracker URL from the SSDEDUP-01 backlog entry. Drafted, not filed.
+9. `${CLAUDE_EFFORT}` = `low` measured with the faux model only.
+- Gate (cf00b31, wrapper): `npm run check` exit 0 (cucumber seed 239193, 1219/1219); `test:cucumber` twice 1219/1219 (seeds 986925, 847603); `fallow dupes` exit 0.

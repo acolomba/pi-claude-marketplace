@@ -281,7 +281,7 @@ Plans:
 - Wave 3: decision IDs, the Pi report, SUMMARY lines for the parent, and the phase gate.
 - Owns: `features/skill/**`, `features/step_definitions/skill/**`, `features/lib/skill-files.ts`, `bridges/skills/**`, `edge/skill-aliases.ts`, `test/bridges/skills/**`, `test/integration/skills-*`.
 
-**Plans:** 6/7 plans executed in 4 waves (the template's wave 1 also stores the upstream names the alias loader reads, so the staged bytes change once; the alias plan moves to wave 3 because it builds on the invocation plan's input handler; the phase gate is wave 4)
+**Plans:** 7/7 plans executed in 4 waves (the template's wave 1 also stores the upstream names the alias loader reads, so the staged bytes change once; the alias plan moves to wave 3 because it builds on the invocation plan's input handler; the phase gate is wave 4)
 
 Plans:
 **Wave 1**
@@ -297,7 +297,7 @@ Plans:
 - [x] 02-06-PLAN.md — Wave 3: Claude Code's alias names over RPC and the TUI driver (SKL-05; D-CF2-02, D-CF2-05, D-CF2-12)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 02-07-PLAN.md — Wave 4: phase gate, the drafted Pi gap report, and the parent lines (D-CF2-10)
+- [x] 02-07-PLAN.md — Wave 4: phase gate, the drafted Pi gap report, and the parent lines (D-CF2-10)
 
 ### Phase 3: Slash Commands
 
@@ -424,7 +424,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
 | 1. Harness and Version Raise | 15/15 | Complete    | 2026-11-01 |
-| 2. Skills | 6/7 | In Progress | - |
+| 2. Skills | 7/7 | In Progress | - |
 | 3. Slash Commands | 0/TBD | Not started | - |
 | 4. Agents | 0/TBD | Not started | - |
 | 5. Hooks | 0/TBD | Not started | - |
