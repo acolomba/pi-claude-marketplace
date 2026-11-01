@@ -18,7 +18,7 @@ import { appendFile } from "node:fs/promises";
 
 import {
   fauxAssistantMessage,
-  fauxProvider,
+  createFauxCore,
   fauxText,
   fauxToolCall,
 } from "@earendil-works/pi-ai/providers/faux";
@@ -110,15 +110,34 @@ async function playNextStep(messages: readonly Message[]): Promise<AssistantMess
 
 // fallow-ignore-next-line unused-export -- Pi's --extension loader reads this default.
 export default function scriptedModel(pi: ExtensionAPI): void {
-  const handle = fauxProvider();
+  const faux = createFauxCore({});
   // The faux provider takes one queued response per call. The player queues
   // itself again on every call, so the queue never runs dry and the script
   // alone decides what the model answers.
   const player: FauxResponseFactory = (context) => {
-    handle.appendResponses([player]);
+    faux.appendResponses([player]);
     return playNextStep(context.messages);
   };
 
-  handle.setResponses([player]);
-  pi.registerProvider(handle.provider);
+  faux.setResponses([player]);
+  // A new session keeps the selected model only when Pi already counts its
+  // provider as configured. A provider registered with a literal key counts
+  // at once; one whose key only resolves at request time counts only after an
+  // availability pass that runs in the background, so a prompt right after a
+  // new session could find no model. The key reaches no service.
+  pi.registerProvider(faux.provider, {
+    baseUrl: "http://localhost:0",
+    apiKey: "scripted-model",
+    api: faux.api,
+    streamSimple: faux.streamSimple,
+    models: faux.models.map((model) => ({
+      id: model.id,
+      name: model.name,
+      input: model.input,
+      reasoning: model.reasoning,
+      cost: model.cost,
+      contextWindow: model.contextWindow,
+      maxTokens: model.maxTokens,
+    })),
+  });
 }
