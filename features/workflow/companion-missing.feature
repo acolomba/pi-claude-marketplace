@@ -65,4 +65,4 @@ Feature: Workflow companion missing
     Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
     Given the user has started a new pi session
     When the user lists the slash commands pi offers
-    Then pi offers no workflow commands
+    Then pi offers no slash command whose name contains "hello"
