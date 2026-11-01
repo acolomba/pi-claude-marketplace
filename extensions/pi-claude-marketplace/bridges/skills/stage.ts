@@ -25,6 +25,7 @@ import { assertSafeName } from "../../domain/name.ts";
 import { rewriteMarkdownReferences } from "../../domain/skill-tokens.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { stripBom } from "../../shared/bom.ts";
+import { SkillFrontmatterNodeError } from "../../shared/errors-bridges.ts";
 import { appendLeakToError, errorMessage } from "../../shared/errors.ts";
 import { cleanupStaging } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
@@ -387,6 +388,25 @@ async function stageSkill(
 }
 
 /**
+ * WR-05: stages one skill, naming it in a frontmatter node error, which the
+ * shared scanner raises without knowing which skill it reads.
+ */
+async function stageNamedSkill(
+  context: SkillStagingContext,
+  skill: DiscoveredSkill,
+): Promise<StagedSkill> {
+  try {
+    return await stageSkill(context, skill);
+  } catch (err) {
+    if (err instanceof SkillFrontmatterNodeError) {
+      throw new SkillFrontmatterNodeError(err.key, err.line, err.keys, skill.sourceName);
+    }
+
+    throw err;
+  }
+}
+
+/**
  * Phase-1 of the skills bridge two-phase commit:
  *   1. Discover skills in the source plugin (SK-5). RN-6 / D-141-04:
  *      discovery already resolved any generated-name collision by first-wins
@@ -476,7 +496,7 @@ export async function prepareStageSkills(
   try {
     for (const skill of discovered) {
       // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
-      const staged = await stageSkill(context, skill);
+      const staged = await stageNamedSkill(context, skill);
       if (staged.degraded !== undefined) {
         degraded.push(staged.degraded);
       }

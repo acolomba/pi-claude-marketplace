@@ -208,6 +208,31 @@ Feature: Skill frontmatter
       | name: review   | "description": Reviews a change. |
       | name: review   | description : Reviews a change.  |
 
+  Scenario: Installing a skill whose frontmatter holds its name in one flow mapping with other keys fails and names the skill
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "review" with this skill file:
+      """
+      ---
+      {name: review, description: Reviews a change., disable-model-invocation: true}
+      ---
+
+      Review the change.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons | scope   | version | cause chain                                                                                                                                                             | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed |         | project | 1.0.0   | The frontmatter of the skill "review" holds "name" on line 2 in one node with other keys (name, description, disable-model-invocation); write each key on its own line. | false           |       |                  |
+    Then the project scope has no installed plugins
+
   Scenario: A skill that disables model invocation stays listed
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:

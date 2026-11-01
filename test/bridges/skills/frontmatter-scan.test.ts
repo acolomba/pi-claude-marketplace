@@ -6,6 +6,7 @@ import {
   keyValueEnd,
   topLevelNodeIndex,
 } from "../../../extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts";
+import { SkillFrontmatterNodeError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 
 describe("frontmatterBlockEnd", () => {
   for (const { description, lines, expectedBlockEnd } of [
@@ -233,6 +234,16 @@ describe("topLevelNodeIndex", () => {
       lines: ["---", "description: d", "---", "name: body"],
       expectedIndex: -1,
     },
+    {
+      description: "WR-05: finds a flow mapping that holds the key alone",
+      lines: ["---", "{name: review}", "description: d", "---"],
+      expectedIndex: 1,
+    },
+    {
+      description: "WR-05: skips a flow mapping that holds only other keys",
+      lines: ["---", "{description: d, when_to_use: w}", "---"],
+      expectedIndex: -1,
+    },
   ]) {
     test(description, () => {
       // arrange
@@ -243,6 +254,40 @@ describe("topLevelNodeIndex", () => {
 
       // assert
       assert.strictEqual(index, expectedIndex);
+    });
+  }
+
+  for (const { description, lines, line, keys } of [
+    {
+      description: "a flow mapping",
+      lines: [
+        "---",
+        "{name: review, description: Reviews., disable-model-invocation: true}",
+        "---",
+      ],
+      line: 2,
+      keys: ["name", "description", "disable-model-invocation"],
+    },
+    {
+      description: "a multi-line flow mapping after another key",
+      lines: ["---", "when_to_use: w", "{description: d,", "  name: review}", "---"],
+      line: 3,
+      keys: ["description", "name"],
+    },
+  ]) {
+    test(`WR-05: throws for the key held in ${description} beside other keys`, () => {
+      // arrange
+      const blockEnd = frontmatterBlockEnd(lines);
+
+      // act & assert
+      assert.throws(
+        () => topLevelNodeIndex(lines, blockEnd, "name"),
+        (error: unknown) => {
+          assert.ok(error instanceof SkillFrontmatterNodeError);
+          assert.deepStrictEqual([error.key, error.line, error.keys], ["name", line, keys]);
+          return true;
+        },
+      );
     });
   }
 

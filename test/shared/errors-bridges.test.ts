@@ -11,6 +11,7 @@ import {
   McpServerKeyCollisionError,
   McpUnstagePartialError,
   ProjectSkillLedgerError,
+  SkillFrontmatterNodeError,
   WorkflowTargetOccupiedError,
 } from "../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 
@@ -773,6 +774,47 @@ describe("ProjectSkillLedgerError", () => {
           cause: error.cause,
         },
         { name: "ProjectSkillLedgerError", message, ledgerPath, defect, cause },
+      );
+    });
+  }
+});
+
+describe("SkillFrontmatterNodeError", () => {
+  for (const { skill, message } of [
+    {
+      skill: undefined,
+      message:
+        'The skill frontmatter holds "name" on line 2 in one node with other keys (name, description); write each key on its own line.',
+    },
+    {
+      skill: "review",
+      message:
+        'The frontmatter of the skill "review" holds "name" on line 2 in one node with other keys (name, description); write each key on its own line.',
+    },
+  ]) {
+    test(`WR-05: names the key, its line, the node's keys${skill === undefined ? "" : " and the skill"}`, () => {
+      // act
+      const error = new SkillFrontmatterNodeError("name", 2, ["name", "description"], skill);
+
+      // assert
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        {
+          name: error.name,
+          message: error.message,
+          key: error.key,
+          line: error.line,
+          keys: error.keys,
+          skill: error.skill,
+        },
+        {
+          name: "SkillFrontmatterNodeError",
+          message,
+          key: "name",
+          line: 2,
+          keys: ["name", "description"],
+          skill,
+        },
       );
     });
   }

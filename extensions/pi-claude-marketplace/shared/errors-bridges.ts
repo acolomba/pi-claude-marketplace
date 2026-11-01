@@ -272,3 +272,32 @@ export class ProjectSkillLedgerError extends Error {
     this.defect = defect;
   }
 }
+
+/**
+ * WR-05: a skill's frontmatter holds the key a staging writer rewrites in one
+ * top-level node beside other keys, such as the flow mapping
+ * `{name: x, description: y}`. The writer cannot replace that key without
+ * dropping the others, so the install stops and names the skill and the line.
+ */
+export class SkillFrontmatterNodeError extends Error {
+  readonly key: string;
+  /** The 1-based line of the node, counting the opening `---` as line 1. */
+  readonly line: number;
+  readonly keys: readonly string[];
+  /** The source name of the skill, once the staging loop knows it. */
+  readonly skill: string | undefined;
+
+  constructor(key: string, line: number, keys: readonly string[], skill?: string) {
+    const subject =
+      skill === undefined ? "The skill frontmatter" : `The frontmatter of the skill "${skill}"`;
+    super(
+      `${subject} holds "${key}" on line ${line.toString()} in one node with other keys ` +
+        `(${keys.join(", ")}); write each key on its own line.`,
+    );
+    this.name = "SkillFrontmatterNodeError";
+    this.key = key;
+    this.line = line;
+    this.keys = Object.freeze([...keys]);
+    this.skill = skill;
+  }
+}

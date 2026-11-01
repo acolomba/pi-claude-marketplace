@@ -13,6 +13,7 @@ import {
   prepareStageSkills,
 } from "../../../extensions/pi-claude-marketplace/bridges/skills/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { SkillFrontmatterNodeError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -2226,5 +2227,21 @@ describe("abortPreparedSkills", () => {
     assert.strictEqual(secondLeak, undefined);
     assert.strictEqual(stagingState, undefined);
     assert.strictEqual(targetState, undefined);
+  });
+});
+
+test("WR-05: refuses a skill whose frontmatter holds its name in a flow mapping with other keys, and names the skill", async (t) => {
+  // arrange
+  const source =
+    "---\n{name: review, description: Reviews a change., disable-model-invocation: true}\n---\n\nReview.\n";
+
+  // act & assert
+  await assert.rejects(stageSingleSkill(t, "review", source), (error: unknown) => {
+    assert.ok(error instanceof SkillFrontmatterNodeError);
+    assert.deepStrictEqual(
+      [error.skill, error.key, error.line, error.keys],
+      ["review", "name", 2, ["name", "description", "disable-model-invocation"]],
+    );
+    return true;
   });
 });

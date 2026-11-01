@@ -11,6 +11,7 @@
 // writers disagreeing about the same bytes.
 
 import { parseFrontmatter } from "../../platform/pi-api.ts";
+import { SkillFrontmatterNodeError } from "../../shared/errors-bridges.ts";
 
 /**
  * Index of the closing fence as Pi 1.4.0's `parseFrontmatter` finds it
@@ -71,34 +72,45 @@ export function keyValueEnd(lines: readonly string[], keyIndex: number, blockEnd
 }
 
 /**
- * Whether the top-level node `nodeLines`, whose first line is `firstLine`,
- * holds `key`. YAML spells one key in many ways (`"name":`, `'name':`,
- * `name :`, an escape inside quotes), and Pi's parser reads each as the same
- * key, so the node is parsed rather than matched as text. A node that does not
- * parse alone, such as one whose value is an alias of an anchor in another
- * node, holds `key` only in its plain spelling `<key>:`.
+ * The keys of the top-level node `nodeLines`, or `undefined` when the node does
+ * not parse alone, such as one whose value is an alias of an anchor in another
+ * node. YAML spells one key in many ways (`"name":`, `'name':`, `name :`, an
+ * escape inside quotes), and Pi's parser reads each as the same key, so the
+ * node is parsed rather than matched as text.
  */
-function nodeHoldsKey(firstLine: string, nodeLines: readonly string[], key: string): boolean {
+function nodeKeys(nodeLines: readonly string[]): readonly string[] | undefined {
   try {
-    const { frontmatter } = parseFrontmatter(["---", ...nodeLines, "---"].join("\n"));
-    return Object.hasOwn(frontmatter, key);
+    return Object.keys(parseFrontmatter(["---", ...nodeLines, "---"].join("\n")).frontmatter);
   } catch {
-    return firstLine.startsWith(`${key}:`);
+    return undefined;
   }
 }
 
 /**
  * Index of the first top-level node of `key` inside the block that ends at
  * `blockEnd`, or `-1`. Every column-0 line of the block starts a top-level
- * node, because a node's continuation lines are indented (`keyValueEnd`).
+ * node, because a node's continuation lines are indented (`keyValueEnd`). A
+ * node that does not parse alone holds `key` only in its plain spelling
+ * `<key>:`.
+ *
+ * WR-05: a node that holds `key` beside other keys, such as a flow mapping
+ * `{name: x, description: y}`, throws `SkillFrontmatterNodeError`. Replacing
+ * that node would drop the other keys, and inserting a second `key` would
+ * make the frontmatter invalid.
  */
 export function topLevelNodeIndex(lines: readonly string[], blockEnd: number, key: string): number {
   for (let i = 1; i < blockEnd; i++) {
     const line = lines[i] ?? "";
-    if (
-      /^\S/.test(line) &&
-      nodeHoldsKey(line, lines.slice(i, keyValueEnd(lines, i, blockEnd) + 1), key)
-    ) {
+    if (!/^\S/.test(line)) {
+      continue;
+    }
+
+    const keys = nodeKeys(lines.slice(i, keyValueEnd(lines, i, blockEnd) + 1));
+    if (keys === undefined ? line.startsWith(`${key}:`) : keys.includes(key)) {
+      if (keys !== undefined && keys.length > 1) {
+        throw new SkillFrontmatterNodeError(key, i + 1, keys);
+      }
+
       return i;
     }
   }
