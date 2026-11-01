@@ -45,11 +45,11 @@ const UNSUPPORTED_COMPONENT_FIELDS = {
   settings: Type.Optional(Type.Unknown()),
 };
 
-// MCPR-01 / MCPR-02: mcpServers may be a relative (to pluginRoot) string
-// reference to a wrapped .mcp.json OR an inline server map. Only the FIELD
-// type in the entry/manifest schemas widens; the server-map validator
-// (MCP_SERVERS_SCHEMA / MCP_SERVERS_VALIDATOR) stays object-only so the
-// resolver still validates an unwrapped map identically for both forms.
+// MCPR-01 / MCPR-02 / D-CF6-01: mcpServers may be a relative (to pluginRoot)
+// path to an MCP file, an inline server map, or an array of both. The
+// declared-value schema MCP_SERVERS_SCHEMA admits all three; the resolver
+// checks each map with MCP_SERVER_MAP_VALIDATOR, and a referenced file may
+// hold its map with or without the `mcpServers` wrapper.
 const McpServersField = Type.Union([Type.String(), MCP_SERVERS_SCHEMA]);
 
 /**
@@ -76,7 +76,8 @@ export const PLUGIN_ENTRY_SCHEMA = Type.Object({
   // optional opaque "unsupported component" declarations (MM-2 / PR-3)
   ...UNSUPPORTED_COMPONENT_FIELDS,
 
-  // optional mcpServers: string reference OR inline map (MM-2 / MC-1 / MCPR-01)
+  // optional mcpServers: string reference OR inline map OR an array of both
+  // (MM-2 / MC-1 / MCPR-01 / D-CF6-01)
   mcpServers: Type.Optional(McpServersField),
 
   // optional dependencies (MM-2 / PI-13: opaque, surfaces as warning)
@@ -100,7 +101,8 @@ const PLUGIN_MANIFEST_SCHEMA = Type.Object({
   ...SUPPORTED_COMPONENT_PATH_FIELDS,
   ...UNSUPPORTED_COMPONENT_FIELDS,
 
-  mcpServers: Type.Optional(McpServersField), // MCPR-02: string reference OR inline map
+  // MCPR-02 / D-CF6-01: string reference OR inline map OR an array of both
+  mcpServers: Type.Optional(McpServersField),
   dependencies: Type.Optional(Type.Unknown()),
 });
 

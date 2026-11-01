@@ -698,9 +698,9 @@ this project.
 Indented `---` fence; record-key spellings; stale staged file falling through to Pi's expansion; untrusted project running `!`.
 
 #### Code review round 2 fixes (CR-01, WR-01..03)
-1. **The provenance ledger is written without a lock.** The skills bridge cannot import `transaction/`. Two concurrent project installs in different projects can lose one update; the failure is closed (that project's skills abort and ask for a reinstall).
+1. **The provenance ledger is written without a lock.** (Superseded: DC-30 item 4 moved it to one file per project, written under the project's state lock.) The skills bridge cannot import `transaction/`. Two concurrent project installs in different projects can lose one update; the failure is closed (that project's skills abort and ask for a reinstall).
 2. **Discovery still lists a project skill with no ledger entry** in a project Pi trusts, so the abort message can name it. The model can still read its description and body, which upstream `not_installed_here` would hide. Same prompt-injection exposure as `AGENTS.md`.
-3. **Existing project installs lose their skills until reinstalled.** A project-scope skill staged before this change has no ledger entry. Plain `apply` does not re-stage it. Needs a CHANGELOG line.
+3. **Existing project installs lose their skills until reinstalled.** A project-scope skill staged before this change has no ledger entry. Plain `apply` does not re-stage it; the user runs `/claude:plugin reinstall <plugin>@<marketplace> --scope project`. The CHANGELOG records this.
 4. The provenance scenario models a clone by deleting the user ledger rather than forging `state.json`.
 5. After WR-01 (discovery gated on `ctx.isProjectTrusted()`), the "Pi does not trust" abort is reachable only after a trust change within a session; unit tests cover it, no scenario. `features/skill/project-trust.feature` was rewritten because the behavior changed.
 6. `topLevelNodeIndex` falls back to the plain `<key>:` spelling for a node that does not parse alone; as a side effect a record key written as a YAML alias is now replaced instead of failing the install.
@@ -731,3 +731,87 @@ Indented `---` fence; record-key spellings; stale staged file falling through to
 3. Reused the parent's gate log (3bfaab5, exit 0) by timestamp.
 4. Edits outside Phase 2's ownership list (`load.ts`, `uninstall.ts`, `enable-disable.ts`, `marketplace/{remove,shared}.ts`, `features/plugin/autoapply.feature`, `index.ts`) rated Info; re-verify after the Phase 3 and 5 merges. `index.ts` also withholds project prompt paths in an untrusted project, which affects Phase 3 (told).
 5. `02-SECURITY.md` predates the review rounds: no entry for the ledger, D-CF2-14, or the WR-03 residual.
+
+#### Parent lines (docs, decisions, scenarios)
+1. Stale clone markers removed in the commands bridge too (Phase 3 files), since the merged tree confirms them; expect small conflicts when Phase 3 merges.
+2. CHANGELOG adds a line no parent line asked for (untrusted-project discovery also leaves out prompt templates); the autoapply and reinstall lines are reworded.
+3. PROJECT.md rows for D-CF2-01..14 are shortened; measured residuals stay in 02-07-SUMMARY and 02-CONTEXT. D-CF2-13/14 use a new outcome value, "Pending (user review)".
+4. Threat IDs T-02-21..23 continue the register; T-02-23 is accepted as AR-02-05. T-02-17's row was not widened to match the code's use.
+5. `docs/json-output.md` lists all three skill abort causes (untrusted project, unreadable file, missing install record).
+6. README tables applied with the invented `name: baz` example from 02-07. No `docs/output-catalog.md` entry: the catalog lists no staging diagnostic headers.
+7. CONVENTIONS marker listing corrected for pre-existing markers too (42 total, 24 `code-duplication`).
+- Gate after these commits (7e5240e): `npm run check` exit 0, cucumber 1254/1254 (seed 311675).
+
+### DC-31: Phase 7 (Workflows), merged at a28489b
+
+Full entries: `.planning/phases/07-workflows/DUBIOUS-CHOICES.md`, P7-DC-01..17 (one High, eight Medium, eight Low). The child session ran discuss, plan, execute, three review rounds, and verification (passed 5/5) on `features/component-features-phase-7`. No production code changed.
+
+**For the user to review first:**
+1. **P7-DC-03 (High), D-CF7-01:** Pi runs a plugin workflow with no approval prompt. Claude Code asks first in manual mode. Neither the engine nor Pi gives the bridge a hook, so this is recorded as a Pi gap and the bridge adds nothing.
+2. **P7-DC-02, D-CF7-02:** the engine passes typed arguments as an object `{_, _raw, key=value}`; Claude Code passes one string. Pinned as is.
+3. **P7-DC-04, D-CF7-03 / D-CF7-04:** the bridge refuses nondeterministic or unparseable scripts at install (upstream registers them and fails at run), and installs a script with a bad `meta` with a warning (upstream skips it at load).
+4. **P7-DC-06/13/16, WFL-04:** "engine loaded later, then `/reload`" is proven by adding the engine to Pi's settings and starting a new session, because over RPC `/reload` goes to the model. The verifier accepted it.
+5. **P7-DC-15:** engine 3.15.0 never posts a run's result back over RPC and warns once per session; six run scenarios pin that warning.
+6. **P7-DC-05:** commit trailers name the child session's link, not the parent's.
+7. **P7-DC-17:** the child skipped the transition's PROJECT.md step; the parent adds D-CF7-01..04 and moves WFL-01..05 to Validated.
+- Merge: clean auto-merge; the parent restored STATE.md's position block, which the child's copy had overwritten.
+
+#### Phase 7 parent lines (applied by the parent at 12227bb..0b23370; `npm run check` exit 0, 1290/1290, seed 632189)
+1. D-CF7-01..04 rows shortened like the D-CF2 rows, outcome kept `-- Locked`; WFL-01..05 moved to Validated.
+2. The wrong install note ("the engine will refuse to load it", `bridges/workflows/discover.ts`) is user-visible but recorded as WFLNOTE-01, not fixed, because rewording it touches tests, the output catalog, and `refusals.feature`.
+3. IN-08 (`field-rows.ts` join, 44 uses) and the world-side half of IN-06 went to BACKLOG (WFLHARNESS-01). IN-02 was applied: `DIALOG_METHODS` exported once from `features/lib/pi-process.ts`, which touches files frozen during the component phases; later sibling merges may conflict there.
+4. IN-10 wording: "a `Then` that compares the whole of what a turn reports marks it compared"; the notices step still marks a run turn compared, which is arguable.
+5. `layout.md` now lags ROADMAP's ownership paragraph by the extra Phase 7 test files.
+6. Advisory review items IN-01/03/04/07/09 are not in BACKLOG (no parent line).
+
+### DC-32: Phase 6 (MCP Servers), merged at e3a003d
+
+Full entries: `.planning/phases/06-mcp-servers/DUBIOUS-CHOICES.md`, P6-DC-01..22. The child session ran discuss, plan (9 plans, 4 waves), execute, security (22/22 closed), validation, one review round (8 warnings, 7 fixed) and verification: **human_needed, 4/5**. The parent merged it without closing the phase and recorded `verification_deferred_human` in STATE.md.
+
+**For the user to decide (blocks `/gsd-verify-work 06`):**
+1. **D-CF6-10, SC4 / MCP-07:** no scenario shows an agent calling a plugin's MCP tool. pi-subagents 0.84.0 refuses it in a foreground run (`Unresolved MCP direct-tool selectors: ...`), and background children in the harness load neither the companions nor the scripted model (BACKLOG MCPBG-01). The refusal is pinned as a recorded gap. Accept the pin (override with your name) or reject it (needs a pi-subagents change and harness work).
+2. **Symlinks in referenced MCP files (WR-01, WR-02):** a referenced `mcpServers` file refuses any symlink, even one inside the plugin root (MCPR-04, NFR-10). Claude Code follows it. The root `.mcp.json` follows symlinks anywhere, as upstream does. The refusal note says "escapes plugin root" for an in-root link, which is wrong either way.
+
+**Behavior changes made for upstream parity (review these too):**
+3. **P6-DC-01, D-CF6-01:** servers from `.mcp.json` and declared `mcpServers` now merge, later same-name wins. This replaces PRD MC-1 ("first match wins, no merge").
+4. **P6-DC-02/07/18, D-CF6-02:** a malformed server in a file, or a missing, unparseable, or unreadable file source, is now skipped silently (debug log only); the plugin installs with the rest. Inline malformed servers and escaping references stay fatal. A permission-denied file is skipped instead of reported `{permission denied}`, and a transient read error (EMFILE, EIO) skips servers that a later update, apply or reload then removes (WR-03).
+5. **P6-DC-03, D-CF6-03:** project-scope plugin servers keep pi-mcp-adapter's project approval; Claude Code never asks.
+6. **P6-DC-07 item 5:** a reference without `./` stays installable; upstream refuses the manifest.
+- Also unfiled: a drafted pi-subagents gap report (user's call). Parent lines pending: CHANGELOG, PRD MC-1..4, PROJECT D-CF6-01..11, four BACKLOG items, output-catalog and hooks-compatibility docs, the canary re-run on 7.0.0, cucumber skill notes, the migration message rewording.
+- Merge: ROADMAP and STATE conflicts in the tracking tables only; the parent kept the milestone view.
+
+#### Phase 6 parent lines (applied by the parent at 249c2ec..4b29a69; `npm run check` exit 0, 1376/1376, seed 278404)
+1. D-CF6-01..11 rows shortened like the D-CF2 rows. The drafted `✓ Good` outcomes are kept, except D-CF6-10, which is `-- Pending (user review)`. MCP-01..08 are not in Validated, as SKL-01..06 are not while Phase 2 waits. The drafted REQUIREMENTS line (MCP-07 `[x]`, gap-pinned) and the ROADMAP SC4 rewording are not applied, because they would settle D-CF6-10.
+2. CHANGELOG: the five sub-bullets are joined into one sentence each, and "A bad server written in `plugin.json` still blocks the install" is cut, because it is not a change. The `Internal:` behavioral-tests line still names workflows only.
+3. PRD MC-1..MC-4 applied as drafted. The new MCP flowchart is the parent's drawing of the drafted merge.
+4. `docs/hooks-compatibility.md` states the measured nested call and says that hooks for it are not measured yet (HOOKNEST-01), instead of waiting for a hooks measurement. Phase 5 is not merged and may conflict in that file.
+5. Not done: the live canary re-run on 7.0.0 (MCPCANARY-01), the AMIG-01 wording for a skipped server (MCPMIG-01, user-visible, needs a scenario), and the MCP file link rule (MCPLINK-01, waits for the user). No gap report was filed.
+6. `withStubServers`: the stub-marker limit is documented in the fixture writer, the step, and `layout.md`, not fixed by narrowing the marker match.
+7. `ci.yml`: the note records a local components-shard run on the combined tree (215 scenarios, 2 min 26 s, seed 520794). The hosted re-measure is still to do.
+8. The optional README "or an MCP bundle" was applied in both READMEs.
+
+### DC-33: Phase 4 (Agents), merged at ef558e9
+
+Full entries: `.planning/phases/04-agents/04-DUBIOUS-CHOICES.md`, P4-DC-01..12. The child session ran discuss, plan (6 plans, 4 waves), execute, validation (compliant), security (19 threats, 0 open), one review round (one warning, fixed) and verification (passed 5/5). Phase transitioned on its branch.
+
+**For the user to review first (all High, settled without the user):**
+1. **D-CF4-04, skill preload:** a preloaded skill's content goes into the agent's system prompt, because pi-subagents passes only a path. Upstream puts it in the child's first user message. Each preloaded skill grows the generated agent file.
+2. **D-CF4-05, foreground default:** every non-MCP bridged agent now emits `async: false`, as upstream runs agents in the foreground; `background: true` emits `async: true`. Users who relied on pi-subagents' async default see a change.
+3. **D-CF4-14, `advertise: true`:** every bridged agent now appears in the parent system prompt, which changes every parent prompt when pi-subagents is loaded.
+4. **D-CF4-09, untrusted projects:** pi-subagents refuses project-scope agents in an untrusted folder; Claude Code runs them. Kept as a Pi-gap divergence and pinned.
+5. **D-CF4-10, AGT-04:** no scenario runs a background agent: the detached child cannot load the scripted model, and parent and child calls race on one script. Recorded as a gap.
+
+**Also:**
+6. **P4-DC-02 (process):** the Claude Code 2.1.316 probes ran under `env -i` with a fresh HOME, but the binary still reads `/home/claude/.claude/remote/.oauth_token` and `.session_ingress_token`. All 52 captured requests went to the local stub, no auth header was saved, no credential was written. Future probes should run where that directory is absent or unreadable.
+7. Nested agents flatten with `-` and can collide with a flat name (first wins, warns); dotfiles and case-insensitive `.md` load as upstream; `--map-model` targets the 5.x IDs; the fallback description is upstream's text.
+8. The branch carries `72f9a02 docs(04): record code review disposition` with a phase number and no trailers (a GSD helper commit, already pushed); the final squash merge drops it.
+- Parent lines pending: CHANGELOG, READMEs, PROJECT D-CF4-01..14, BACKLOG, PRD and `docs/env-vars.md`, cucumber skill notes, the unfiled pi-subagents defect report and Pi gap notes, and Phase 6's stale "cannot narrow" MCP warning.
+- Merge: REQUIREMENTS and STATE conflicts in the tracking tables only.
+
+#### Phase 4 parent lines (applied by the parent at 249c2ec..4b29a69; `npm run check` exit 0, 1376/1376, seed 278404)
+1. D-CF4-01..14 rows shortened, outcome kept `-- Locked`. The `P4-DC-NN` references are kept, not renumbered, as the D-CF7 rows keep `P7-DC-NN`. AGT-01..07 and XK-01 moved to Validated.
+2. CHANGELOG: the two sub-bullets that broke the one-sentence rule were joined, and so was the skill preload one. "Run `/claude:plugin reinstall`" names `<plugin>@<marketplace>`, as the skills bullet does.
+3. `layout.md`: the Agents row's step module is now `listing.steps.ts`, but its seed features column keeps Phase 1's two seeds (as the other rows do). The six agent features are named in a note below the table instead.
+4. Not applied, recorded in BACKLOG: the stale ANAME-02 "cannot narrow" warning (AGTEXCL-01; user-visible, no drafted text, needs a scenario), the `info` agent listing (AGTINFO-01), the frozen-harness `{pi-subagents dir}` token and scripted-model import (AGTTOKEN-01, AGTASYNC-01), and the unfiled pi-subagents report (AGTSUB-01, an ID the parent added).
+5. `shared/fs-utils.ts`: the comment names the commands bridge and the skills bridge's command-name check, not the commands bridge only, because `bridges/skills/skill-names.ts` also calls `isPlainMarkdownFile`.
+6. The sibling re-verification that D-CF4-14 asks for (every whole parent-prompt comparison) rests on the full `npm run check` above.

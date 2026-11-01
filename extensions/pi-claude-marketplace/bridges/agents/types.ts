@@ -39,6 +39,12 @@ export interface DiscoveredAgent {
   readonly generatedName: string;
   /** Absolute path to the source .md file. */
   readonly sourcePath: string;
+  /**
+   * D-CF4-01: the folder segments between the agents folder and the file,
+   * present only for a file in a subfolder (`["review"]` for
+   * `agents/review/security.md`).
+   */
+  readonly namespace?: readonly string[];
   /** sha256 hex digest of the source file's raw bytes (BOM/line-ending tolerant). */
   readonly sourceHash: string;
   /** Parsed frontmatter -- typed strings for known fields; open index for extras. */
@@ -91,6 +97,12 @@ export interface StageAgentsInput {
    */
   readonly mcpServerNames?: readonly string[] | undefined;
   /**
+   * D-CF4-04: the skills phase's recorded rows. The stage reads each row's
+   * source `SKILL.md` for the skills an agent preloads. Absent leaves every
+   * preload as a `skills:` entry.
+   */
+  readonly skillSources?: readonly AgentSkillSource[] | undefined;
+  /**
    * Install cwd (the project root for project-scope installs), substituted for
    * `${CLAUDE_PROJECT_DIR}` in agent bodies (SUB-02). Required so a
    * project-scope caller cannot silently omit it and ship the token literal.
@@ -100,6 +112,31 @@ export interface StageAgentsInput {
    */
   readonly cwd: string;
 }
+
+/**
+ * D-CF4-04: one skill the skills phase staged, as its recorded row. The
+ * agents bridge declares this shape itself, because it does not import the
+ * skills bridge.
+ */
+export interface AgentSkillSource {
+  readonly generatedName: string;
+  /** Absolute source skill folder under the resolved plugin. */
+  readonly sourcePath: string;
+  /** Absolute staged skill folder, `<extensionRoot>/resources/skills/<name>`. */
+  readonly targetPath: string;
+}
+
+/**
+ * D-CF4-04: what an agent's preload of one skill becomes. `inline` is the
+ * text written after the agent body; `skip` names why Claude Code would not
+ * preload the skill.
+ */
+export type SkillPreload =
+  | { readonly kind: "inline"; readonly text: string }
+  | {
+      readonly kind: "skip";
+      readonly reason: "disable-model-invocation" | "no-description" | "unparseable";
+    };
 
 /**
  * Per-agent stage record. Read to populate state.json.installs.

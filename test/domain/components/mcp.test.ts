@@ -1,17 +1,19 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { Compile } from "typebox/compile";
+
 import {
+  MCP_SERVER_MAP_VALIDATOR,
   MCP_SERVERS_SCHEMA,
-  MCP_SERVERS_VALIDATOR,
 } from "../../../extensions/pi-claude-marketplace/domain/components/mcp.ts";
 
 describe("MCP_SERVERS_SCHEMA", () => {
-  test("describes a string-keyed object with unknown values", () => {
+  test("D-CF6-01: describes a server map or an array of references and server maps", () => {
     // arrange
+    const serverMap = { type: "object", patternProperties: { "^.*$": {} } };
     const expectedSchema = {
-      type: "object",
-      patternProperties: { "^.*$": {} },
+      anyOf: [serverMap, { type: "array", items: { anyOf: [{ type: "string" }, serverMap] } }],
     };
 
     // act
@@ -20,9 +22,48 @@ describe("MCP_SERVERS_SCHEMA", () => {
     // assert
     assert.deepStrictEqual(schema, expectedSchema);
   });
+
+  for (const { description, mcpServers } of [
+    { description: "a server map", mcpServers: { local: { command: "node" } } },
+    { description: "an empty array", mcpServers: [] },
+    {
+      description: "an array of references and server maps",
+      mcpServers: ["./a.json", { y: { command: "node" } }, "./b.json"],
+    },
+  ]) {
+    test(`D-CF6-01: accepts ${description} as a declaration`, () => {
+      // arrange
+      const declarationValidator = Compile(MCP_SERVERS_SCHEMA);
+
+      // act
+      const isValid = declarationValidator.Check(mcpServers);
+
+      // assert
+      assert.strictEqual(isValid, true);
+    });
+  }
+
+  for (const { description, mcpServers } of [
+    { description: "null", mcpServers: null },
+    { description: "a number", mcpServers: 42 },
+    { description: "a boolean", mcpServers: false },
+    { description: "an array holding a number", mcpServers: ["./a.json", 1] },
+    { description: "an array holding an array", mcpServers: [[]] },
+  ]) {
+    test(`D-CF6-01: refuses ${description} as a declaration`, () => {
+      // arrange
+      const declarationValidator = Compile(MCP_SERVERS_SCHEMA);
+
+      // act
+      const isValid = declarationValidator.Check(mcpServers);
+
+      // assert
+      assert.strictEqual(isValid, false);
+    });
+  }
 });
 
-describe("MCP_SERVERS_VALIDATOR", () => {
+describe("MCP_SERVER_MAP_VALIDATOR", () => {
   for (const { description, servers, expectedServers } of [
     {
       description: "an empty record",
@@ -53,7 +94,7 @@ describe("MCP_SERVERS_VALIDATOR", () => {
       const expectedMcpServers = expectedServers;
 
       // act
-      const parsedMcpServers = MCP_SERVERS_VALIDATOR.Parse(mcpServers);
+      const parsedMcpServers = MCP_SERVER_MAP_VALIDATOR.Parse(mcpServers);
 
       // assert
       assert.deepStrictEqual(parsedMcpServers, expectedMcpServers);
@@ -73,7 +114,7 @@ describe("MCP_SERVERS_VALIDATOR", () => {
       const mcpServers = servers;
 
       // act
-      const parseMcpServers = () => MCP_SERVERS_VALIDATOR.Parse(mcpServers);
+      const parseMcpServers = () => MCP_SERVER_MAP_VALIDATOR.Parse(mcpServers);
 
       // assert
       assert.throws(parseMcpServers, (error: unknown) => {
@@ -94,4 +135,15 @@ describe("MCP_SERVERS_VALIDATOR", () => {
       });
     });
   }
+
+  test("reports a non-object value as must be object", () => {
+    // arrange
+    const mcpServers = ["invalid"];
+
+    // act
+    const messages = MCP_SERVER_MAP_VALIDATOR.Errors(mcpServers).map((error) => error.message);
+
+    // assert
+    assert.deepStrictEqual(messages, ["must be object"]);
+  });
 });

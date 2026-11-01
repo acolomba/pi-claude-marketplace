@@ -20,7 +20,7 @@ Legend: **S** = install-time substitution · **E** = runtime env injection · **
 | --------------------------------------- | ----------- | ------ | -------- | ------ | ---- | ----- | ---------- | ------- |
 | `CLAUDE_PLUGIN_ROOT`                    | ✓           | S      | S        | S      | --   | E     | S          | I       |
 | `CLAUDE_PLUGIN_DATA`                    | ✓           | S      | S        | S      | --   | E     | S          | I       |
-| `CLAUDE_SKILL_DIR`                      | ✓           | S      | --       | --     | --   | --    | --         | --      |
+| `CLAUDE_SKILL_DIR`                      | ✓           | S      | --       | S‖     | --   | --    | --         | --      |
 | `CLAUDE_PROJECT_DIR`                    | ✓           | S†     | S†       | S†     | E†   | E     | S / ⚠†     | E‡      |
 | `CLAUDECODE`                            | ✓           | --     | --       | --     | E    | E     | --         | E‡      |
 | `CLAUDE_CODE_SESSION_ID`                | ✓           | --     | --       | --     | E    | E     | --         | E‡      |
@@ -35,6 +35,7 @@ Legend: **S** = install-time substitution · **E** = runtime env injection · **
 - **†** -- In skill, command and agent content, the token resolves for project-scope installs only, and user-scope occurrences stay literal (SUB-02). An MCP entry resolves it at install for the project scope. A user-scope entry keeps `${CLAUDE_PROJECT_DIR}`, and pi-mcp-adapter expands it from Pi's process. Bash children inherit `CLAUDE_PROJECT_DIR`, which Claude Code does not set for Bash (AVAR-01). See "`CLAUDE_PROJECT_DIR` at user scope".
 - **‡** -- reaches MCP servers only through Pi's live `process.env` at spawn time. The spawn-order caveat applies to every row. Session-switch staleness applies only to the session vars and `CLAUDE_PROJECT_DIR`. The `PATH` rows and `PI_CLAUDE_MARKETPLACE_EMPTY` do not change on a session switch. See "MCP runtime env inheritance".
 - **§** -- exposed on the SessionStart hook event only, and Pi does not source the file back. See "`CLAUDE_ENV_FILE` is exposed but not sourced".
+- **‖** -- In the content of a skill that an agent preloads only. The agent body keeps it literal. See "Agents content".
 - **¶** -- Pi sets `AI_AGENT` on its own process at start, before any extension code runs. It has no spawn-order caveat. See "Pi-only `AI_AGENT`".
 
 ## Per-surface delivery
@@ -60,12 +61,16 @@ Pi's bash tool builds each child's env fresh, spreading the full live `process.e
 
 Skill content is the only surface that resolves the skill-scoped `${CLAUDE_SKILL_DIR}` token.
 
-| Variable                | Claude Code | Pi  | Notes                                                                                                                |
-| ----------------------- | ----------- | --- | -------------------------------------------------------------------------------------------------------------------- |
-| `${CLAUDE_PLUGIN_ROOT}` | ✓           | ✓   | Substituted into skill content at install time (SUB-01).                                                             |
-| `${CLAUDE_PLUGIN_DATA}` | ✓           | ✓   | Substituted into skill content at install time.                                                                      |
-| `${CLAUDE_SKILL_DIR}`   | ✓           | ✓   | The skill's installed directory; skill-scoped, so only skill content resolves it (SUB-01).                           |
-| `${CLAUDE_PROJECT_DIR}` | ✓           | ⚠   | Project-scope installs only; user-scope occurrences stay literal (SUB-02). See "`CLAUDE_PROJECT_DIR` at user scope". |
+When the user invokes a skill, as `/skill:` or an alias, a typed argument that names `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, `${CLAUDE_SKILL_DIR}`, or, at project scope, `${CLAUDE_PROJECT_DIR}` is filled in from the values that install recorded (D-CF2-06). A skill that the model loads on its own gets the file as staged (D-CF1-03).
+
+| Variable                | Claude Code | Pi  | Notes                                                                                                                                                                                                                                                   |
+| ----------------------- | ----------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `${CLAUDE_PLUGIN_ROOT}` | ✓           | ✓   | Substituted into skill content at install time (SUB-01).                                                                                                                                                                                                |
+| `${CLAUDE_PLUGIN_DATA}` | ✓           | ✓   | Substituted into skill content at install time.                                                                                                                                                                                                         |
+| `${CLAUDE_SKILL_DIR}`   | ✓           | ✓   | The skill's installed directory; skill-scoped, so only skill content resolves it (SUB-01).                                                                                                                                                              |
+| `${CLAUDE_PROJECT_DIR}` | ✓           | ⚠   | Project-scope installs only; user-scope occurrences stay literal (SUB-02). See "`CLAUDE_PROJECT_DIR` at user scope".                                                                                                                                    |
+| `${CLAUDE_SESSION_ID}`  | ✓           | ✓   | Replaced with the Pi session id when the user invokes the skill (D-CF1-01, D-CF2-06). A skill that the model loads on its own keeps it literal (D-CF1-03).                                                                                              |
+| `${CLAUDE_EFFORT}`      | ✓           | ✓   | Replaced at invocation with the thinking level of the Pi session: `low`, `medium`, `high`, `xhigh`, and `max` as themselves, `off` and `minimal` as `low`, and an unknown level as `high` (D-CF1-01). A model-loaded skill keeps it literal (D-CF1-03). |
 
 ### Commands content
 
@@ -79,7 +84,7 @@ Command content does not resolve `${CLAUDE_SKILL_DIR}` (skill-scoped).
 
 ### Agents content
 
-Agent content does not resolve `${CLAUDE_SKILL_DIR}` (skill-scoped).
+The agent body does not resolve `${CLAUDE_SKILL_DIR}` (skill-scoped). The content of a skill that an agent preloads does: there, `${CLAUDE_SKILL_DIR}` is the staged skill folder, `${CLAUDE_PLUGIN_ROOT}` and `${CLAUDE_PLUGIN_DATA}` are filled at install, and `${CLAUDE_PROJECT_DIR}` follows SUB-02, so it resolves for project-scope installs only (D-CF4-04).
 
 | Variable                | Claude Code | Pi  | Notes                                                                                                                |
 | ----------------------- | ----------- | --- | -------------------------------------------------------------------------------------------------------------------- |
@@ -153,7 +158,7 @@ Both hook lanes spread `...process.env` before adding the parity keys. When Pi i
 
 ### Pi-only `CLAUDE_SESSION_ID` alias
 
-`CLAUDE_SESSION_ID` is a pi-only alias of the session id, set alongside `CLAUDE_CODE_SESSION_ID` and `CLAUDECODE` from the single shared producer (`claudeSessionEnvFor`). It is present in bash children and on both hook lanes, and carries the same value as `CLAUDE_CODE_SESSION_ID` within one dispatch, so the three stay internally consistent (SENV-03, D-91-02). No upstream equivalent exists.
+`CLAUDE_SESSION_ID` is a pi-only alias of the session id, set alongside `CLAUDE_CODE_SESSION_ID` and `CLAUDECODE` from the single shared producer (`claudeSessionEnvFor`). It is present in bash children and on both hook lanes, and carries the same value as `CLAUDE_CODE_SESSION_ID` within one dispatch, so the three stay internally consistent (SENV-03, D-91-02). No upstream equivalent exists. The `${CLAUDE_SESSION_ID}` token in skill content is a different thing: Claude Code fills it in when the user invokes a skill, and so does this extension (see "Skills content").
 
 ### `CLAUDE_ENV_FILE` is exposed but not sourced
 

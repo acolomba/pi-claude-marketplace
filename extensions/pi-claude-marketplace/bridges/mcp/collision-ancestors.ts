@@ -1,6 +1,6 @@
 // bridges/mcp/collision-ancestors.ts
 //
-// pi-mcp-adapter 5's ancestor config discovery (AFILE-05). A user opts in by
+// pi-mcp-adapter 7's ancestor config discovery (AFILE-05). A user opts in by
 // setting `settings.ancestorConfigRoots` in a user-global config source. Only
 // user-global sources may set it: a project file cannot extend this trust
 // boundary, so the caller passes the value it read from those sources alone.

@@ -81,13 +81,13 @@ the parent applies them at merge.
 
 ### Agents
 
-- [ ] **AGT-01**: With pi-subagents loaded, its agent list shows each bridged agent as `<plugin>:<name>` with its alias and description, including nested agent files as decided under FG-15
-- [ ] **AGT-02**: A foreground agent run starts a child whose system prompt is the agent body and whose tools and model follow the conversion rules, with and without `--map-model` (FG-18)
-- [ ] **AGT-03**: Agent frontmatter variants behave as upstream or as a recorded divergence: `tools`, `disallowedTools`, `model`, `effort`, skill preloads (FG-16), and the fields FG-17 covers
-- [ ] **AGT-04**: A background (`async: true`) agent run completes on pi-subagents 0.84 with the scripted model, or the gap is recorded with an ID
-- [ ] **AGT-05**: Without pi-subagents, the install shows `{requires pi-subagents}` and loading the companion then reloading makes the agents available with no reinstall
-- [ ] **AGT-06**: Project-scope agents behave as upstream in a trusted project, and the untrusted behavior is pinned
-- [ ] **AGT-07**: Disable, uninstall, and update remove or replace the agent, and enable restores it
+- [x] **AGT-01**: With pi-subagents loaded, its agent list shows each bridged agent as `<plugin>:<name>` with its alias and description, including nested agent files as decided under FG-15
+- [x] **AGT-02**: A foreground agent run starts a child whose system prompt is the agent body and whose tools and model follow the conversion rules, with and without `--map-model` (FG-18)
+- [x] **AGT-03**: Agent frontmatter variants behave as upstream or as a recorded divergence: `tools`, `disallowedTools`, `model`, `effort`, skill preloads (FG-16), and the fields FG-17 covers
+- [x] **AGT-04**: A background (`async: true`) agent run completes on pi-subagents 0.84 with the scripted model, or the gap is recorded with an ID
+- [x] **AGT-05**: Without pi-subagents, the install shows `{requires pi-subagents}` and loading the companion then reloading makes the agents available with no reinstall
+- [x] **AGT-06**: Project-scope agents behave as upstream in a trusted project, and the untrusted behavior is pinned
+- [x] **AGT-07**: Disable, uninstall, and update remove or replace the agent, and enable restores it
 
 ### Hooks
 
@@ -114,15 +114,15 @@ the parent applies them at merge.
 
 ### Workflows
 
-- [ ] **WFL-01**: With the workflow engine loaded, each bridged workflow is the command `/<plugin>:<meta.name>` with its description
-- [ ] **WFL-02**: Running the command completes, and its run records the arguments in the engine's shape (FG-32) and the script's result
-- [ ] **WFL-03**: Scripts the engine refuses (meta shape, determinism, reserved names) are reported as upstream or a recorded divergence, and the missing run approval is recorded (FG-31)
-- [ ] **WFL-04**: Without the engine, the install shows `{requires pi-dynamic-workflows}` at the decided severity and loading the engine then reloading makes the workflows available with no reinstall
-- [ ] **WFL-05**: Disable, uninstall, and update remove or replace the workflow, including the lingering-command notice (WLIF-06)
+- [x] **WFL-01**: With the workflow engine loaded, each bridged workflow is the command `/<plugin>:<meta.name>` with its description
+- [x] **WFL-02**: Running the command completes, and its run records the arguments in the engine's shape (FG-32) and the script's result
+- [x] **WFL-03**: Scripts the engine refuses (meta shape, determinism, reserved names) are reported as upstream or a recorded divergence, and the missing run approval is recorded (FG-31)
+- [x] **WFL-04**: Without the engine, the install shows `{requires pi-dynamic-workflows}` at the decided severity and loading the engine then reloading makes the workflows available with no reinstall
+- [x] **WFL-05**: Disable, uninstall, and update remove or replace the workflow, including the lingering-command notice (WLIF-06)
 
 ### Cross-kind
 
-- [ ] **XK-01**: An agent that preloads a plugin skill gets that skill's content in its child session
+- [x] **XK-01**: An agent that preloads a plugin skill gets that skill's content in its child session
 
 ## v2 Requirements
 
@@ -176,13 +176,13 @@ Deferred to a milestone with a real model provider.
 | CMD-03 | Phase 3 | Pending |
 | CMD-04 | Phase 3 | Pending |
 | CMD-05 | Phase 3 | Pending |
-| AGT-01 | Phase 4 | Pending |
-| AGT-02 | Phase 4 | Pending |
-| AGT-03 | Phase 4 | Pending |
-| AGT-04 | Phase 4 | Pending |
-| AGT-05 | Phase 4 | Pending |
-| AGT-06 | Phase 4 | Pending |
-| AGT-07 | Phase 4 | Pending |
+| AGT-01 | Phase 4 | Complete |
+| AGT-02 | Phase 4 | Complete |
+| AGT-03 | Phase 4 | Complete |
+| AGT-04 | Phase 4 | Complete |
+| AGT-05 | Phase 4 | Complete |
+| AGT-06 | Phase 4 | Complete |
+| AGT-07 | Phase 4 | Complete |
 | HOOK-01 | Phase 5 | Pending |
 | HOOK-02 | Phase 5 | Pending |
 | HOOK-03 | Phase 5 | Pending |
@@ -200,12 +200,12 @@ Deferred to a milestone with a real model provider.
 | MCP-06 | Phase 6 | Pending |
 | MCP-07 | Phase 6 | Pending |
 | MCP-08 | Phase 6 | Pending |
-| WFL-01 | Phase 7 | Pending |
-| WFL-02 | Phase 7 | Pending |
-| WFL-03 | Phase 7 | Pending |
-| WFL-04 | Phase 7 | Pending |
-| WFL-05 | Phase 7 | Pending |
-| XK-01 | Phase 4 | Pending |
+| WFL-01 | Phase 7 | Complete |
+| WFL-02 | Phase 7 | Complete |
+| WFL-03 | Phase 7 | Complete |
+| WFL-04 | Phase 7 | Complete |
+| WFL-05 | Phase 7 | Complete |
+| XK-01 | Phase 4 | Complete |
 
 **Coverage:**
 

@@ -129,7 +129,12 @@ Step module paths are relative to `features/step_definitions/`, lib paths to
 `features/lib/`, and product paths to `extensions/pi-claude-marketplace/`
 (except `docs/` and `test/`). Each component phase also owns its kind's unit
 tests (`test/bridges/<kind>/**`) and integration tests
-(`test/integration/<kind>-*`).
+(`test/integration/<kind>-*`). Phase 7 also owns
+`test/integration/workflow-kind-inversion.test.ts`, which the
+`test/integration/<kind>-*` rule (`workflows-*`) does not match, and the unit
+pairs `test/domain/workflow-script.test.ts`,
+`test/domain/workflow-project-key.test.ts`, and
+`test/platform/workflow-home.test.ts`.
 
 #### Milestone rules
 
@@ -195,10 +200,10 @@ tests (`test/bridges/<kind>/**`) and integration tests
 - [x] **Phase 1: Harness and Version Raise** - Pi and the three companions at their latest releases, a profile Pi with a scripted model and stand-ins, and a seed scenario per kind, with the pre-fan-out decisions settled (completed 2026-11-01)
 - [ ] **Phase 2: Skills** - Bridged skills list, carry their frontmatter, reach the model, resolve name clashes, and follow the plugin lifecycle as upstream
 - [ ] **Phase 3: Slash Commands** - Bridged commands list as prompt templates, expand their arguments as decided, and follow the plugin lifecycle
-- [ ] **Phase 4: Agents** - pi-subagents lists and runs bridged agents with converted fields, preloaded skills, and companion-missing recovery
+- [x] **Phase 4: Agents** - pi-subagents lists and runs bridged agents with converted fields, preloaded skills, and companion-missing recovery (completed 2026-11-01)
 - [ ] **Phase 5: Hooks** - Hooks fire on Pi's session, tool, prompt, and stop events with Claude's stdin and environment, including the `clear`, `compact`, and `fork` parity fixes
 - [ ] **Phase 6: MCP Servers** - pi-mcp-adapter 7.x connects bridged servers under Claude's tool names, with configuration variants, project scope, and companion-missing recovery
-- [ ] **Phase 7: Workflows** - The workflow engine registers and runs bridged workflows, reports refused scripts, and recovers when the engine is loaded later
+- [x] **Phase 7: Workflows** - The workflow engine registers and runs bridged workflows, reports refused scripts, and recovers when the engine is loaded later (completed 2026-11-01)
 
 ## Phase Details
 
@@ -365,7 +370,22 @@ Plans:
 - Wave 3: decision IDs, SUMMARY lines for the parent, and the phase gate.
 - Owns: `features/agent/**`, `features/step_definitions/agent/**`, `features/lib/agent-files.ts`, `bridges/agents/**`, `persistence/agents-index-*`, `test/bridges/agents/**`, `test/integration/agents-*`. XK-01 uses Phase 1's skill fixture writer and stand-ins, never a Phase 2 file.
 
-**Plans:** TBD
+**Plans:** 6/6 plans complete in 4 waves (the template's wave 2 runs one `convert.ts` owner beside the two plans that change no product code, and invocation moves to wave 3 because it edits `convert.ts` after the frontmatter plan; the phase gate is wave 4)
+
+Plans:
+**Wave 1**
+- [x] 04-01-PLAN.md — Wave 1 tracer: listing and naming, the shared agent steps, the description fallback, nested and declared agent files, and `advertise` (AGT-01; D-CF4-01, -02, -03, -13, -14)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 04-02-PLAN.md — Wave 2: frontmatter conversion, the foreground default, effort, the 5.x `--map-model` table, tool splitting, and guided fields (AGT-03, AGT-02 `--map-model`; D-CF4-05, -06, -07, -08)
+- [x] 04-03-PLAN.md — Wave 2: companion missing and project trust (AGT-05, AGT-06; D-CF4-11, -09)
+- [x] 04-04-PLAN.md — Wave 2: disable, enable, uninstall, and update in pi-subagents' list (AGT-07; D-CF4-12)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 04-05-PLAN.md — Wave 3: skill preload content, foreground run tools, the same-name run, and the AGT-04 recorded gap (XK-01, AGT-02, AGT-04; D-CF4-04, -02, -10)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 04-06-PLAN.md — Wave 4: phase gate, the drafted pi-subagents report, the decision records, and the parent lines (all; D-CF4-01..14 records)
 
 ### Phase 5: Hooks
 
@@ -413,7 +433,25 @@ Plans:
 - Wave 3: decision IDs, the re-measured `docs/mcp-compatibility.md` rows (FG-30), SUMMARY lines for the parent, and the phase gate.
 - Owns: `features/mcp-server/**`, `features/step_definitions/mcp-server/**`, `features/lib/mcp-server-files.ts`, `bridges/mcp/**` (including Phase 1's escape fix once merged), `platform/mcp-status.ts`, `domain/mcp-resolution.ts`, `domain/components/mcp.ts`, `docs/mcp-compatibility.md`, `test/bridges/mcp/**`, `test/integration/mcp-*`. MCP-07 uses Phase 1's agent fixture writer and stand-ins, never a Phase 4 file.
 
-**Plans:** TBD
+**Plans:** 9/9 plans executed in 4 waves (the template's wave-2 "configuration variants and sources" plan splits into a configuration plan and a sources plan with disjoint files; FG-28's silent skip moves to wave 3 because it edits `domain/mcp-resolution.ts`, which the wave-2 sources plan owns, and it changes outcomes that non-owned tests pin; the docs re-measure runs in wave 3 beside it, so the decision records, the parent lines, and the phase gate are wave 4; wave 1 also moves the Phase 1 seed's steps out of `calls.steps.ts` and the allowed project-scope scenario into `project-scope.feature`)
+
+Plans:
+**Wave 1**
+- [x] 06-01-PLAN.md — Wave 1 tracer: listing and Claude Code's tool names through the `mcp` proxy, the shared MCP steps, every fixture writer wave 2 needs, and the project-scope scenario move (MCP-01; D-CF6-05, D-CF6-06, D-CF6-07, D-CF6-09)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 06-02-PLAN.md — Wave 2: env values, `${VAR}` and `${VAR:-default}`, the plugin path variables, and a loopback remote server with headers (MCP-03; D-CF6-06)
+- [x] 06-03-PLAN.md — Wave 2: merge `.mcp.json` and manifest servers in Claude Code's order, array sources, and the entry read only without a `plugin.json` (MCP-04; D-CF6-01)
+- [x] 06-04-PLAN.md — Wave 2: a direct call to an activated tool and the pinned pi-subagents foreground gap (MCP-02, MCP-07; D-CF6-07, D-CF6-10)
+- [x] 06-05-PLAN.md — Wave 2: companion-missing recovery and project-scope servers under the adapter's project trust (MCP-05, MCP-06; D-CF6-03, D-CF6-08, D-CF6-11)
+- [x] 06-06-PLAN.md — Wave 2: disable, uninstall, enable, and update, with a user's override surviving each verb (MCP-08; D-CF6-09, D-CF6-11)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 06-07-PLAN.md — Wave 3: skip a malformed server or a bad MCP file silently; inline and escaping cases stay fatal (MCP-04; D-CF6-02)
+- [x] 06-08-PLAN.md — Wave 3: re-measure and rewrite `docs/mcp-compatibility.md` on pi-mcp-adapter 7.0.0 (MCP-03, FG-30; D-CF6-04, D-CF6-01, D-CF6-02, D-CF6-03, D-CF6-10)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 06-09-PLAN.md — Wave 4: phase gate, the D-CF6 decision records, the drafted pi-subagents gap report, and the parent lines (MCP-01..MCP-08; D-CF6-01..D-CF6-11)
 
 ### Phase 7: Workflows
 
@@ -437,7 +475,20 @@ Plans:
 - Wave 3: decision IDs, `docs/workflows-compatibility.md`, SUMMARY lines for the parent, and the phase gate.
 - Owns: `features/workflow/**`, `features/step_definitions/workflow/**`, `features/lib/workflow-files.ts`, `bridges/workflows/**`, `platform/workflow-home.ts`, `domain/workflow-script.ts`, `docs/workflows-compatibility.md`, `test/bridges/workflows/**`, `test/integration/workflows-*`.
 
-**Plans:** TBD
+**Plans:** 6/6 plans complete in 3 waves (the wave-1 tracer also seeds `lifecycle.feature` with its stale-command scenario, because `check:features` fails on a shared step that no feature file uses yet)
+
+Plans:
+**Wave 1**
+- [x] 07-01-PLAN.md — Wave 1 tracer: listing and naming, the shared workflow steps and run helpers, and the stale-command notice (WFL-01, WFL-05; WNAM-06, WLIF-06)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 07-02-PLAN.md — Wave 2: refused, skipped, and noted scripts at install and at run (WFL-03; D-CF7-03, D-CF7-04)
+- [x] 07-03-PLAN.md — Wave 2: runs with the engine's argument object, and a failing run (WFL-02; D-CF7-01, D-CF7-02)
+- [x] 07-04-PLAN.md — Wave 2: the missing engine's marker, and the engine loaded later (WFL-04; WDEP-02)
+- [x] 07-05-PLAN.md — Wave 2: uninstall, disable, enable, and update (WFL-05; WLIF-06)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 07-06-PLAN.md — Wave 3: D-CF7-01..04 in the compatibility doc, the parent lines, and the phase gate (WFL-01..05)
 
 ## Progress
 
@@ -446,10 +497,10 @@ Plans:
 | 1. Harness and Version Raise | 15/15 | Complete    | 2026-11-01 |
 | 2. Skills | 7/7 | In Progress | - |
 | 3. Slash Commands | 8/9 | In Progress | - |
-| 4. Agents | 0/TBD | Not started | - |
+| 4. Agents | 6/6 | Complete    | 2026-11-01 |
 | 5. Hooks | 0/TBD | Not started | - |
-| 6. MCP Servers | 0/TBD | Not started | - |
-| 7. Workflows | 0/TBD | Not started | - |
+| 6. MCP Servers | 9/9 | In Progress | - |
+| 7. Workflows | 6/6 | Complete    | 2026-11-01 |
 
 ## Carried Forward
 

@@ -345,7 +345,7 @@ const NOTHING_MATERIALIZED: Footprint = { project: EMPTY_SCOPE, user: EMPTY_SCOP
 
 const ALPHA_AGENT_FILE = "pi-claude-marketplace-alpha-scout.md";
 const DEGRADED_AGENT_FILE = "pi-claude-marketplace-degraded-scout.md";
-const MAPPED_MODEL = "anthropic/claude-sonnet-4-6";
+const MAPPED_MODEL = "anthropic/claude-sonnet-5-5";
 
 const ALPHA_USER_RECORD: InstallRecordProjection = {
   plugin: "alpha",

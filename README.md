@@ -24,7 +24,7 @@ This extension installs plugins from Claude plugin marketplaces that contain the
 
 - Commands.
 - Skills.
-- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents).
+- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents). Agents in subfolders get their folder names, as in Claude Code, for example `demo:review:security`. Agents run in the foreground unless they set `background: true`. An agent gets the content of the skills it preloads.
 - Hooks. Partial support. For more information, see [Hook compatibility](docs/hooks-compatibility.md).
 - MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). For more information, see [MCP compatibility](docs/mcp-compatibility.md).
 - Workflows. Requires [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). For more information, see [Workflow compatibility](docs/workflows-compatibility.md).
@@ -110,15 +110,16 @@ Commands use a colon (`:`) on POSIX and a dot (`.`) on Windows:
 | `foo`       | `foo-bar`    | `/foo:bar`      | `/foo.bar`        |
 | `foo`       | `foo`        | `/foo:foo`      | `/foo.foo`        |
 
-Skills use Pi's `/skill:` form and also have an alias in interactive sessions:
+Skills use Pi's `/skill:` form and also have aliases in interactive sessions and over RPC:
 
-| Plugin name | Skill name | Pi skill form    | Interactive alias |
-| ----------- | ---------- | ---------------- | ----------------- |
-| `foo`       | `bar`      | `/skill:foo-bar` | `/foo:bar`        |
-| `foo`       | `foo-bar`  | `/skill:foo-bar` | `/foo:bar`        |
-| `foo`       | `foo`      | `/skill:foo`     | `/foo:foo`        |
+| Plugin name | Skill name                          | Pi skill form    | Aliases                        |
+| ----------- | ----------------------------------- | ---------------- | ------------------------------ |
+| `foo`       | `bar`                               | `/skill:foo-bar` | `/foo:bar`                     |
+| `foo`       | `foo-bar`                           | `/skill:foo-bar` | `/foo:foo-bar`                 |
+| `foo`       | `foo`                               | `/skill:foo`     | `/foo:foo`                     |
+| `foo`       | `bar`, with frontmatter `name: baz` | `/skill:foo-bar` | `/foo:bar`, `/foo:baz`, `/baz` |
 
-Skill aliases use a colon on every platform. If an alias conflicts with a command, the command takes precedence. Use `/skill:foo-bar` to invoke the skill.
+The aliases are the names that Claude Code gives a skill. The skill name is the name of the skill's folder. If the skill's frontmatter sets `name`, the skill also answers to `/<plugin>:<name>`, and to `/<name>` when the name has no colon. If two skills of a plugin set the same `name`, the first skill gets the alias. Skill aliases use a colon on every platform. If an alias conflicts with a command, the command takes precedence. If a skill has the same name as a command of its plugin, install skips the skill and warns. Use `/skill:foo-bar` to invoke the skill.
 
 Plugin MCP servers get the names that Claude Code gives them. The model sees each tool as `mcp__plugin_<plugin>_<server>__<tool>`. pi-mcp-adapter stores each server under a key that ends with `_`. `/claude:plugin info` shows each server as `plugin:<plugin>:<server>`.
 
@@ -138,7 +139,7 @@ You can also install the same plugin in both the user and project scopes. Then t
 
 ### Partially available plugins
 
-Some plugins contain unsupported components: an unmappable hook, an LSP server, a theme, or an MCP server that uses a feature pi-mcp-adapter cannot run. To install or update these plugins partially, pass the `--partial` option. This extension installs the supported components and ignores the unsupported ones.
+Some plugins contain unsupported components: an unmappable hook, an LSP server, a theme, an MCP server that uses a feature pi-mcp-adapter cannot run, or an MCP bundle. To install or update these plugins partially, pass the `--partial` option. This extension installs the supported components and ignores the unsupported ones.
 
 List partially available plugins.
 
@@ -373,7 +374,7 @@ Update one installed plugin, every installed plugin from one marketplace, or all
 ```
 
 > [!NOTE]
-> Agent definitions in plugins can name a preferred model for the agent, for example "sonnet" or "opus". This extension discards these models by default. To map them to Pi models as a best effort, use the `--map-model` option with `install` and `update`.
+> Agent definitions in plugins can name a preferred model for the agent, for example "sonnet" or "opus". This extension discards these models by default. To map them to Pi models as a best effort, use the `--map-model` option with `install` and `update`. It maps `sonnet`, `opus`, `haiku`, `fable`, `best`, and `opusplan`, with or without `[1m]`, to the current Claude models, for example `anthropic/claude-sonnet-5-5`. It keeps full `claude-` model IDs.
 
 Reinstall one installed plugin, every installed plugin from one marketplace, or all installed plugins.
 

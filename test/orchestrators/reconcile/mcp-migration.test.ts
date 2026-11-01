@@ -1593,9 +1593,12 @@ describe("migrateLegacyMcpEntries", () => {
   test("AMIG-01: a plugin whose MCP config is malformed has every legacy entry removed, none written, and its inventory emptied", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "malformed");
-    const marketplace = await seedMarketplace(cwd, {
-      hello: { servers: { srv: { command: 42 } } },
-    });
+    const marketplace = await seedMarketplace(cwd, { hello: { servers: {} } });
+    // D-CF6-02: only a server written inline in plugin.json refuses the plugin.
+    await writeFile(
+      path.join(marketplace.marketplaceRoot, "plugins", "hello", ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "hello", version: "1.0.0", mcpServers: { srv: { command: 42 } } }),
+    );
     await seedState(
       locations,
       stateWith(cwd, marketplace, {

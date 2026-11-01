@@ -229,7 +229,7 @@ async function assertAgentsMigrated(params: {
     });
     assert.strictEqual(
       await readFile(targetPath, "utf8"),
-      `---\nname: hello:${agent.sourceName}\ndescription: ${agent.description}\naliases: ${agent.generatedName}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${agentSourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
+      `---\nname: hello:${agent.sourceName}\ndescription: ${agent.description}\naliases: ${agent.generatedName}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${agentSourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
     );
   }
 
@@ -695,7 +695,7 @@ test("D-18-15: an overwrite policy commits over a previous agent file a user edi
   });
   assert.strictEqual(
     await readFile(target, "utf8"),
-    `---\nname: hello:bot\ndescription: Imported Claude Code plugin agent bot from plugin hello.\naliases: pi-claude-marketplace-hello-bot\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: bot\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings:\n    - source description was missing or empty -- using fallback\n---\n\nBody.\n`,
+    `---\nname: hello:bot\ndescription: Agent from hello plugin\naliases: pi-claude-marketplace-hello-bot\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: bot\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings:\n    - source description was missing or empty -- using fallback\n---\n\nBody.\n`,
   );
   assert.deepStrictEqual(JSON.parse(await readFile(args.locations.agentsIndexPath, "utf8")), {
     schemaVersion: 1,

@@ -200,10 +200,10 @@ export async function readDirEntriesTolerant(dir: string): Promise<Dirent[]> {
  * filesystem, and a walk that gates recursion on `isDirectory()` cannot
  * follow one.
  *
- * Shared by the agents and commands bridges, whose file-shaped components ask
- * exactly the same question. The agents bridge has no Dirent-level symlink
- * check and depends on the `lstat`; the commands walk has already refused
- * symlinked entries by the time it calls in.
+ * Shared by the commands bridge and the skills bridge's command-name check,
+ * which reads the same commands folder and asks exactly the same question.
+ * The commands walk has already refused symlinked entries by the time it
+ * calls in.
  */
 export async function isPlainMarkdownFile(dir: string, entry: Dirent): Promise<boolean> {
   if (entry.name.startsWith(".") || !entry.isFile() || !entry.name.endsWith(".md")) {

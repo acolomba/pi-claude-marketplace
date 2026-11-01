@@ -1284,7 +1284,7 @@ test("AGENT-01: fresh install preserves prefixed and unprefixed agent identities
         });
         assert.strictEqual(
           await readFile(targetPath, "utf8"),
-          `---\nname: hello:${agent.sourceName}\ndescription: ${agent.description}\naliases: ${agent.generatedName}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
+          `---\nname: hello:${agent.sourceName}\ndescription: ${agent.description}\naliases: ${agent.generatedName}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
         );
       }
 
@@ -3665,16 +3665,24 @@ test("ANAME-07: a server Claude Code's schema rejects makes the plugin unavailab
     try {
       // arrange
       const locations = locationsFor("project", cwd);
-      await seedPathMarketplaceWithPlugin({
+      const { pluginRoot } = await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         pluginName: "hello",
-        mcpServers: {
-          db: { command: "node", timeout: 1.5 },
-          live: { type: "ws", url: "wss://mcp.example.com/ws" },
-        },
       });
+      // D-CF6-02: only a server written inline in plugin.json refuses the plugin.
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({
+          name: "hello",
+          version: "0.0.1",
+          mcpServers: {
+            db: { command: "node", timeout: 1.5 },
+            live: { type: "ws", url: "wss://mcp.example.com/ws" },
+          },
+        }),
+      );
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -17808,13 +17816,14 @@ test("WLIF-01: a statePhase failure takes the envelope and the staging tree back
   });
 });
 
-test("WLIF-01: an undo before the workflows phase ran removes nothing and does not throw", async () => {
+test("WLIF-01: a plugin refused for an inline malformed MCP server saves no workflow", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-workflows-undo-noop-"));
     try {
-      // arrange -- the mcp phase runs BEFORE the workflows phase, so a
-      // malformed `.mcp.json` fails the install with `workflowsPrep` still
-      // undefined and the workflows undo reaching its early return.
+      // arrange -- a malformed server written inline in plugin.json makes the
+      // plugin unavailable (D-CF6-02), so the install fails before any ledger
+      // phase runs and the workflows phase never starts. The workflows undo's
+      // early return is reached by the workflows prepare failure case below.
       const locations = locationsFor("project", cwd);
       const { pluginRoot } = await seedPathMarketplaceWithPlugin({
         cwd,
@@ -17824,7 +17833,10 @@ test("WLIF-01: an undo before the workflows phase ran removes nothing and does n
         mcpServers: { srv: { command: "node" } },
         workflows: [{ sourceName: "greet" }],
       });
-      await writeFile(path.join(pluginRoot, ".mcp.json"), "{ not json");
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "hello", version: "0.0.1", mcpServers: { srv: { command: 42 } } }),
+      );
       const { ctx, run } = makeCtx();
 
       // act

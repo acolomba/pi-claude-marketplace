@@ -88,6 +88,51 @@ Feature: Skill project provenance
       | call | role | text                                                                                                                                                                                                                                           |
       | 1    | user | <skill name="demo-status" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status.\n\nStatus: ran\n</skill> |
 
+  Scenario: A project skill whose plugin an update changed runs the new context command
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "skills/status/status.sh" with this text:
+      """
+      printf updated
+      """
+    Given the user has run "/claude:plugin update demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/skill:demo-status"
+    Then the model receives these calls:
+      | call | role | text                                                                                                                                                                                                                                           |
+      | 1    | user | <skill name="demo-status" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status.\n\nStatus: updated\n</skill> |
+
+  Scenario: A project skill whose published files changed runs the new context command after a reinstall
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "skills/status/status.sh" with this text:
+      """
+      printf reinstalled
+      """
+    Given the user has run "/claude:plugin reinstall demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/skill:demo-status"
+    Then the model receives these calls:
+      | call | role | text                                                                                                                                                                                                                                           |
+      | 1    | user | <skill name="demo-status" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status.\n\nStatus: reinstalled\n</skill> |
+
+  Scenario: A project skill whose plugin was disabled and enabled again runs its context command
+    Given the user has run "/claude:plugin disable demo@fixtures --scope project"
+    Given the user has run "/claude:plugin enable demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/skill:demo-status"
+    Then the model receives these calls:
+      | call | role | text                                                                                                                                                                                                                                           |
+      | 1    | user | <skill name="demo-status" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status.\n\nStatus: ran\n</skill> |
+
   Scenario: Installing a project skill's plugin while the user's record of project skill installs holds content pi cannot update fails and keeps the record
     Given the user has run "/claude:plugin uninstall demo@fixtures --scope project"
     Given the user's record of project skill installs was replaced with this text:

@@ -4541,3 +4541,117 @@ Added 2026-10-31. Pi's RPC `new_session`, `switch_session`, `fork`, and `clone` 
 The hooks bridge now drops a repeat of the last `session_start` with the same session id and reason in one registration (`bridges/hooks/event-router.ts`), so a plugin's `SessionStart` hook runs once per session, as in Claude Code. `features/plugin/session-start-hooks.feature` covers it.
 
 Trigger: a Pi release that closes #10470. Users on an older Pi still need the dedupe, so delete it only when the `@earendil-works/pi-coding-agent` peer floor (now `>=1.0.0`) rises to that release. Then delete the dedupe and its two `SessionStart runs ...` cases in `test/bridges/hooks/event-router.test.ts`, keep the feature (it must still pass), and settle DBLEMIT-01's doubled rows.
+
+## SKILLNAME-01: Claude Code's skill display name in Pi
+
+Deferred by component-features Phase 2 (D-CF2-02). Claude Code shows a skill with a frontmatter `name` as `<plugin>:<name>` in its `/` menu and as `(<plugin>:<name>)` in the model's skill list. Pi has no display-name field, so Pi lists only `/skill:<plugin>-<folder>`. Trigger: Pi adds a skill display name or alias field (the D-CF2-10 report asks for one).
+
+## SKILLALIAS-02: unprobed alias rules across plugins
+
+Deferred by component-features Phase 2 (D-CF2-02, DC-25). Upstream's order for a bare alias that two plugins claim, and whether upstream matches slash names case-insensitively, were not probed. The alias table uses loader order (user root, then project root, then state order) and exact case. Probe Claude Code 2.1.316 or later before changing either.
+
+## SKILLMODEL-01: arguments and context commands for model-invoked skills
+
+Deferred by component-features Phase 1 and Phase 2 (D-CF1-03). When the model loads a skill on its own, Pi gives it the raw file, so arguments, `${CLAUDE_*}` variables, and `!` commands stay literal. Trigger: Pi adds an extension hook on the model's skill path (the D-CF2-10 report asks for one).
+
+## WFLNOTE-01: the workflow install note says the engine will refuse to load the script
+
+Reported by component-features Phase 7 (07-02, P7-DC-10). The workflow install note `workflow script "<file>" in "workflows" was installed but the engine will refuse to load it: ...` is inaccurate: the engine registers (loads) the command and refuses the script only when it runs. The text lives in `extensions/pi-claude-marketplace/bridges/workflows/discover.ts`; rewording it also touches `test/orchestrators/plugin/{install-flow-ledger,reinstall-flow,info}.test.ts`, `docs/output-catalog.md` (and its closed-set counters), and `features/workflow/refusals.feature` (the scenario "Installing a plugin installs a script the engine will refuse with a note, where Claude Code skips it at load").
+
+## WFLPARITY-01: parity options for the workflow install-time dispositions
+
+Deferred by component-features Phase 7.
+
+- Parity option for D-CF7-04: skip the scripts the six warned checks name at install, as Claude Code 2.1.316 skips them at load, instead of installing them with a note. A product change in `domain/workflow-script.ts` and `bridges/workflows/discover.ts`, with fallout in non-Phase-7 orchestrator tests and `docs/output-catalog.md`; it would revisit WGATE-03.
+- Parity option for D-CF7-03: admit nondeterministic or unparseable scripts and let the engine refuse them when they run, as Claude Code registers them and fails them at run.
+
+## WFLENGINE-01: workflow engine requests
+
+Deferred by component-features Phase 7. Trigger: `@quintinshaw/pi-dynamic-workflows` ships either feature.
+
+- Engine request for D-CF7-01: a pre-run hook (or approval option) in `@quintinshaw/pi-dynamic-workflows` so a host can ask before a saved workflow runs.
+- Engine request for D-CF7-02: a raw-string `args` mode for the slash path, so a script written for Claude Code receives the typed text as one string, or `undefined` when nothing is typed.
+
+## WFLLIST-01: the workflow listing step assumes no engine built-in command name holds a colon
+
+Noted by component-features Phase 7. The workflow listing step in `features/step_definitions/workflow/listing.steps.ts` assumes no engine built-in command name holds a colon (RESEARCH assumption A3, verified for the eleven built-ins of engine 3.15.0); a later engine that adds one breaks the whole-table comparison loudly.
+
+## WFLHARNESS-01: harness follow-ups from the workflow code review
+
+Deferred by component-features Phase 7 (07-REVIEW.md). Both touch files that were frozen during the component phases.
+
+- IN-08: the `lines` column of `the command reports these results:` still joins a diagnostic's lines with `", "` (`features/lib/field-rows.ts`), so each workflow install scenario states every note twice: once joined, and once per line in `the workflow install diagnostic reports these lines:`. Render a diagnostic's `lines` without the ambiguous join, then let the per-line step replace the column. The projection is shared by every feature that states a `lines` column, so the change rewrites tables across the whole suite.
+- IN-06: the workflow notices step reads Pi's session id with a `get_state` RPC request inside a `Then`. Keep the session id of a recorded turn in the world (`features/support/world.ts`), so the step reads it from the turn.
+- IN-10 (optional): give the world one compared marker for each part of a workflow run (the notices and the run outcome), so each step marks only its own part and the world fails when either part goes unstated.
+
+## MCPBG-01: a harness whose background subagents load the profile's companions
+
+Added 2026-11-01 (component-features Phase 6, D-CF6-10). In the cucumber harness a pi-subagents background child (`async: true`) loads neither the profile Pi's `--extension` companions nor the scripted model, so no scenario can show an agent calling a plugin MCP tool in the background. MCP-07's working call is untested. Trigger: a harness change that passes the profile's companions and model to the detached runner, or a pi-subagents change that gives foreground children MCP tools.
+
+## MCPSUB-01: file the pi-subagents foreground MCP gap report
+
+Added 2026-11-01 (component-features Phase 6, D-CF6-10). The report is drafted in `.planning/phases/06-mcp-servers/06-09-SUMMARY.md` ("pi-subagents gap report"). It was not filed, because a public post is the user's call. Trigger: the user decides to file it. When pi-subagents ships a fix, replace the D-CF6-10 pin in `features/mcp-server/invocation.feature` with a working foreground call.
+
+## MCPB-01: `.mcpb` and `.dxt` MCP bundles
+
+Added 2026-11-01 (component-features Phase 6, D-CF6-01). Claude Code unpacks an `.mcpb` or `.dxt` bundle that `mcpServers` names and runs its server. pi-mcp-adapter has no bundle runner, so such a plugin is `(partially-available) {unsupported mcp}`, and `info` does not name the bundle. Trigger: pi-mcp-adapter adds a bundle runner.
+
+## MCPREF-01: an `mcpServers` path without `./`
+
+Added 2026-11-01 (component-features Phase 6, D-CF6-01 residual). A path such as `servers.json` still loads, where Claude Code 2.1.316 refuses the `plugin.json`. It was kept so plugins that install today keep installing. Trigger: a decision to follow upstream, which would make such plugins `(unavailable) {malformed mcp}`.
+
+## MCPMIG-01: the MCP move says the plugin no longer declares a skipped server
+
+Added 2026-11-01 (component-features Phase 6, review WR-04, D-CF6-02). The AMIG-01 move reports `<server> (<plugin>) [<scope>] <plugin> no longer declares it.` for a server that the plugin still declares in a file source, but that the resolver skipped as malformed. Reconcile owns the message. Either report such a server under the existing `malformed mcp` reason, or word the line so it does not say the plugin dropped the server. The change is user-visible, so it needs a cucumber scenario, and it also changes `test/integration/mcp-migration.test.ts` (the commented expected line) and "Entries that the move removes" in `docs/mcp-compatibility.md`.
+
+## MCPLINK-01: the link rule for MCP files
+
+Added 2026-11-01 (component-features Phase 6, review WR-01 and WR-02). Waits for a user decision. The root `.mcp.json` follows links anywhere, which matches Claude Code (measured). An `mcpServers` reference refuses any link, even one inside the plugin root (MCPR-04, NFR-10), where Claude Code follows it. The options: keep both as documented; let references follow links that resolve inside the plugin root (parity, amends MCPR-04); or contain the root `.mcp.json` too, for example with the realpath boundary of D-PL2-17 and D-PL2-24 (a new divergence that needs its own license). Separately, the refusal note says `escapes plugin root` for a link inside the root. `locateReference` could check `error instanceof SymlinkRefusedError` and say that the path crosses a link.
+
+## MCPCANARY-01: re-run the live MCP adapter canary on pi-mcp-adapter 7.0.0
+
+Added 2026-11-01 (component-features Phase 6, D-CF6-04). `test/live-uat/mcp-adapter-canary.mjs` already pins pi-mcp-adapter 7.0.0, but its recorded result is the 2026-10-09 run on 5.2.0. Run it live on 7.0.0 and Pi 1.4.0, and add an "Observed result (<date>, pi-mcp-adapter 7.0.0, pi 1.4.0)" section to `test/live-uat/README.md` beside the 5.2.0 one. Then name the new run in `docs/mcp-compatibility.md`: the header's extra `/reload` after an upgrade, measured on 2026-10-09 on Pi 1.0.0, and the Further reading line that says the recorded result is from 5.2.0.
+
+## HOOKNEST-01: plugin hooks for an MCP call made through the `mcp` proxy
+
+Added 2026-11-01 (component-features Phase 6). Since pi-mcp-adapter 6.0, a call through the `mcp` proxy tool runs the real tool as a nested Pi tool call under its Claude Code name (measured on 7.0.0, Pi 1.4.0). No run has checked whether the hooks bridge fires a plugin's `PreToolUse` and `PostToolUse` matchers and `if` predicates for that nested call. Measure it with the hooks scenarios, then state the result in `docs/hooks-compatibility.md` (the two MCP matcher rows and the paragraph under "Tool name mapping") and in `docs/mcp-compatibility.md` "Hooks and agents".
+
+## AGTEXCL-01: per-tool MCP disallows beside an explicit `tools:` list
+
+Deferred by component-features Phase 4 (D-CF4-08). pi-subagents 0.62 and later apply `excludeTools` beside `tools`. Emit `excludeTools` beside an explicit `tools:` list for a per-tool MCP disallow, and reword the stale ANAME-02 warning `disallowedTools entry <tool> cannot narrow the whole-server grant <server> -- pi-subagents takes no excludeTools beside an explicit tools: list, so the agent keeps every tool of that server` (`bridges/agents/convert.ts`). The warning is user-visible, so the change needs a cucumber scenario. It touches MCP-07 (D-CF6-07, D-CF6-10).
+
+## AGTMEM-01: an agent's `memory` field
+
+Deferred by component-features Phase 4 (D-CF4-05). Map an agent's `memory` onto pi-subagents' `memory`. It needs a per-agent path and a `local` scope that pi-subagents lacks.
+
+## AGTSKILL-01: the cross-plugin skill preload fallback
+
+Deferred by component-features Phase 4 (D-CF4-04 residual). Claude Code's third lookup for a preloaded skill is the first skill whose name ends in `:<entry>`, which can be a skill of another plugin. The bridge looks only in the agent's own plugin.
+
+## AGTCHILD-01: a `PI_SUBAGENT_CHILD` guard for the load-time reconcile
+
+Deferred by component-features Phase 4 (`04-PI-SUBAGENTS.md` Q5). When pi-claude-marketplace is installed as a Pi package, a pi-subagents background child loads it and runs the load-time reconcile, and `apply` when `autoapply` is on. Skip both in a child.
+
+## AGTASYNC-01: an `async: true` agent scenario
+
+Deferred by component-features Phase 4 (D-CF4-10, AGT-04). The detached runner's `JITI_ALIAS` maps the bare `@earendil-works/pi-ai` to `./compat` by prefix, so the scripted model's `@earendil-works/pi-ai/providers/faux` import fails in a background child. Either import the faux provider in `features/lib/scripted-model/extension.ts` through a specifier that the alias table maps, or wait for pi-subagents to fix the alias (report item 2, AGTSUB-01). The shared call log also needs a way to order parent and child calls.
+
+## AGTINFO-01: `info` lists source agents flat and case-sensitively
+
+Deferred by component-features Phase 4 (D-CF4-01 residual). When `info` reads a plugin's components from its source (`composeResolvedComponents`, then `discoverComponentNames` and `nameFromEntry` in `orchestrators/plugin/info.ts`), a nested agent, an `.MD` agent, and a declared agent file are missing, although they install. Recursion, an any-case `.md` match, and a file branch would match D-CF4-01. The state-only view reads the recorded names and is not affected.
+
+## AGTTOKEN-01: a `{pi-subagents dir}` run token
+
+Deferred by component-features Phase 4 (D-CF4-09). A token in `features/lib/run-tokens.ts`, listed in the cucumber skill's run tokens, would let a scenario pin pi-subagents texts that name its folder, such as the untrusted default-scope run (`Unknown agent: ...`).
+
+## AGTNAME-01: a user's own agent named like a bridged agent
+
+Deferred by component-features Phase 4 (D-CF4-02 residual). pi-subagents allows `:` in user agent names, so a user's own agent can hold the name of a bridged one. Claude Code forbids `:` in non-plugin agent names. The case is not modeled.
+
+## AGTSUB-01: file the pi-subagents report
+
+Deferred by component-features Phase 4 (D-CF4-09, D-CF4-10). The report is drafted in `.planning/phases/04-agents/04-06-SUMMARY.md` ("pi-subagents report"): `list`, the doctor, and `/run` completions ignore project trust, and the background runner's `JITI_ALIAS` breaks deep `@earendil-works/pi-ai` imports. It was not filed, because a public post is the user's call. Trigger: the user decides to file it.
+
+## COMPSEV-01: install and reinstall disagree on a missing companion's severity
+
+Noted by component-features Phase 4 (D-CF4-11). Install reports a missing pi-subagents as `warning` (SEV-01 `companionSeverity`), and reinstall reports the same companion at `info` (`features/plugin/reinstall.feature`). Decide whether reinstall also warns.
