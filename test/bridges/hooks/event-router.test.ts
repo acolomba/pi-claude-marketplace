@@ -58,6 +58,7 @@ import type {
   BeforeAgentStartEvent,
   ExtensionAPI,
   ExtensionContext,
+  SessionCompactEvent,
   ToolCallEvent,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
@@ -2933,6 +2934,210 @@ test("session_start contains a lazy project cwd failure and still delegates safe
   assert.strictEqual(registrations.length, 11);
 });
 
+/** A manual compaction event whose entry carries `summary`. */
+function compactionEvent(summary: string): SessionCompactEvent {
+  return {
+    type: "session_compact",
+    compactionEntry: {
+      type: "compaction",
+      id: "router-compaction",
+      parentId: "router-parent",
+      timestamp: "2026-11-01T10:00:00.000Z",
+      summary,
+      firstKeptEntryId: "router-kept",
+      tokensBefore: 128,
+    },
+    fromExtension: false,
+    reason: "manual",
+    willRetry: false,
+  };
+}
+
+/** Routes one SessionStart and one PostCompact entry of the project scope. */
+function routeCompactionHooks(runtime: HooksRuntime, cwd: string): void {
+  for (const claudeEvent of ["SessionStart", "PostCompact"] as const) {
+    runtime.setRoutingBucket(claudeEvent, [
+      {
+        ...preToolUseEntry(`${claudeEvent.toLowerCase()}-plugin`, cwd),
+        claudeEvent,
+        matcher: parseMatcher(""),
+        rawMatcher: "",
+      },
+    ]);
+  }
+}
+
+test("session_compact runs SessionStart with source compact to completion, then PostCompact (D-CF5-04)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-");
+  const runtime = createHooksRuntime();
+  const { pi, registrations, messages } = makeRecordingPi();
+  const log: unknown[] = [];
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: async (entry, event) => {
+      log.push({ start: entry.claudeEvent, event });
+      await new Promise((resolve) => setImmediate(resolve));
+      log.push({ end: entry.claudeEvent });
+      return { kind: "noop" };
+    },
+  });
+  routeCompactionHooks(runtime, root);
+  const event = compactionEvent("router summary");
+
+  // act
+  const update = await registeredHandler(registrations, "session_compact")(
+    event,
+    makeContext(root, root),
+  );
+
+  // assert
+  assert.strictEqual(update, undefined);
+  assert.deepStrictEqual(log, [
+    { start: "SessionStart", event: { source: "compact" } },
+    { end: "SessionStart" },
+    { start: "PostCompact", event },
+    { end: "PostCompact" },
+  ]);
+  assert.strictEqual(
+    fs.existsSync(path.join(locationsFor("project", root).dataRoot, "_shared")),
+    true,
+  );
+  assert.deepStrictEqual(messages, []);
+});
+
+test("a second session_compact in one session runs SessionStart compact again (D-CF5-05)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-repeat-");
+  const runtime = createHooksRuntime();
+  const { pi, registrations } = makeRecordingPi();
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: (entry) => {
+      dispatched.push(entry.claudeEvent);
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+  routeCompactionHooks(runtime, root);
+  const sessionCompact = registeredHandler(registrations, "session_compact");
+  const context = makeContext(root, root);
+
+  // act
+  await sessionCompact(compactionEvent("first summary"), context);
+  await sessionCompact(compactionEvent("second summary"), context);
+
+  // assert
+  assert.deepStrictEqual(dispatched, [
+    "SessionStart",
+    "PostCompact",
+    "SessionStart",
+    "PostCompact",
+  ]);
+});
+
+test("session_compact debug-logs a failed SessionStart and still runs PostCompact (NFR-2)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-failure-");
+  const readDiagnostics = observeRouterDebug(t);
+  const runtime = createHooksRuntime();
+  const { pi, registrations, messages } = makeRecordingPi();
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: (entry) => {
+      dispatched.push(entry.claudeEvent);
+      return entry.claudeEvent === "SessionStart"
+        ? Promise.reject(new Error("session start capability lost"))
+        : Promise.resolve({ kind: "noop" });
+    },
+  });
+  routeCompactionHooks(runtime, root);
+
+  // act
+  const update = await registeredHandler(registrations, "session_compact")(
+    compactionEvent("failure summary"),
+    makeContext(root, root),
+  );
+
+  // assert
+  assert.strictEqual(update, undefined);
+  assert.deepStrictEqual(dispatched, ["SessionStart", "PostCompact"]);
+  assert.deepStrictEqual(
+    readDiagnostics().filter((line) => line.includes("session_compact")),
+    ["[hooks] session_compact SessionStart skipped: session start capability lost"],
+  );
+  assert.deepStrictEqual(messages, []);
+});
+
+test("session_compact runs no PostCompact once the compaction SessionStart went stale", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-stale-");
+  const runtime = createHooksRuntime();
+  const { pi, registrations } = makeRecordingPi();
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: (entry) => {
+      dispatched.push(entry.claudeEvent);
+      runtime.advanceGeneration();
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+  routeCompactionHooks(runtime, root);
+
+  // act
+  await registeredHandler(registrations, "session_compact")(
+    compactionEvent("stale summary"),
+    makeContext(root, root),
+  );
+
+  // assert
+  assert.deepStrictEqual(dispatched, ["SessionStart"]);
+});
+
+test("session_compact dispatches nothing when the generation goes stale while it prepares the shared directory", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-prepare-");
+  const runtime = createHooksRuntime();
+  const { pi, registrations } = makeRecordingPi();
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: (entry) => {
+      dispatched.push(entry.claudeEvent);
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+  routeCompactionHooks(runtime, root);
+  let modeReads = 0;
+  const context = new Proxy(makeContext(root, root), {
+    get(target, property, receiver): unknown {
+      if (property === "mode") {
+        modeReads += 1;
+        if (modeReads === 2) {
+          runtime.advanceGeneration();
+        }
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+  });
+
+  // act
+  await registeredHandler(registrations, "session_compact")(
+    compactionEvent("prepare summary"),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(dispatched, []);
+  assert.strictEqual(
+    fs.existsSync(path.join(locationsFor("project", root).dataRoot, "_shared")),
+    true,
+  );
+});
+
 /** Collects the OBS-01 debug lines a case emits, restoring the flag afterwards. */
 function observeRouterDebug(t: TestContext): () => string[] {
   const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
@@ -2953,8 +3158,8 @@ function observeRouterDebug(t: TestContext): () => string[] {
 
 for (const { claudeEvent, event } of [
   { claudeEvent: "SessionEnd", event: { type: "session_shutdown", reason: "quit" } },
-  { claudeEvent: "PreCompact", event: { type: "session_before_compact", trigger: "manual" } },
-  { claudeEvent: "PostCompact", event: { type: "session_compact", trigger: "manual" } },
+  { claudeEvent: "PreCompact", event: { type: "session_before_compact", reason: "manual" } },
+  { claudeEvent: "PostCompact", event: { type: "session_compact", reason: "manual" } },
   {
     claudeEvent: "UserPromptSubmit",
     event: { type: "input", text: "hello", source: "interactive" },

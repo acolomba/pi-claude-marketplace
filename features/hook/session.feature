@@ -20,8 +20,8 @@ Feature: Hook session
     Given the user has started a new pi session
     When the user starts a new pi session with the hooks recording
     Then the hooks record these runs:
-      | event        | session | reason | source | cwd           | transcript path | arguments     | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_ENV_FILE                                                      | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | SessionEnd   | first   | clear  |        | {project dir} |                 | session-end   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo |                                                                      | first                  | first             | 1          |
+      | event        | session | reason | source | cwd           | transcript path | arguments     | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_ENV_FILE                                                            | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | SessionEnd   | first   | clear  |        | {project dir} |                 | session-end   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo |                                                                            | first                  | first             | 1          |
       | SessionStart | second  |        | clear  | {project dir} |                 | session-start | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | {project dir}/.pi/pi-claude-marketplace/data/_shared/claude-env-second.env | second                 | second            | 1          |
 
   Scenario: A clear matcher selects the SessionStart run of a new session
@@ -40,7 +40,7 @@ Feature: Hook session
     Given the user has started a new pi session
     When the user starts a new pi session with the hooks recording
     Then the hooks record these runs in any order:
-      | event        | session | source | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_ENV_FILE                                                     | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | event        | session | source | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_ENV_FILE                                                           | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | SessionStart | first   | clear  | {project dir} |                 | on-clear  | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | {project dir}/.pi/pi-claude-marketplace/data/_shared/claude-env-first.env | first                  | first             | 1          |
       | SessionStart | first   | clear  | {project dir} |                 | on-any    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | {project dir}/.pi/pi-claude-marketplace/data/_shared/claude-env-first.env | first                  | first             | 1          |
 
@@ -61,3 +61,85 @@ Feature: Hook session
     Then the hooks record these runs:
       | event      | session | reason | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | SessionEnd | first   | clear  | {project dir} |                 | end-clear | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
+
+  Scenario: A compaction runs SessionStart with source compact between PreCompact and PostCompact
+    Given pi keeps only one recent token when the hooks session compacts
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event        | matcher |
+      | pre   | PreCompact   | *       |
+      | start | SessionStart | compact |
+      | post  | PostCompact  | *       |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply      |
+      | Hello.     |
+      | Summary A. |
+    Given the user has prompted "hello" with the hooks recording
+    When the user compacts the session with the hooks recording
+    Then the hooks record these runs:
+      | event        | session | trigger | source  | compact summary                                                          | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_ENV_FILE                                                           | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreCompact   | first   | manual  |         |                                                                          | {project dir} |                 | pre       | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo |                                                                           | first                  | first             | 1          |
+      | SessionStart | first   |         | compact |                                                                          | {project dir} |                 | start     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | {project dir}/.pi/pi-claude-marketplace/data/_shared/claude-env-first.env | first                  | first             | 1          |
+      | PostCompact  | first   | manual  |         | No prior history.\n\n---\n\n**Turn Context (split turn):**\n\nSummary A. | {project dir} |                 | post      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo |                                                                           | first                  | first             | 1          |
+
+  Scenario: A second compaction in a session runs SessionStart compact again
+    Given pi keeps only one recent token when the hooks session compacts
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event        | matcher |
+      | start | SessionStart | compact |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply      |
+      | Hello.     |
+      | Summary A. |
+      | Again.     |
+      | Summary B. |
+      | Summary C. |
+    Given the user has prompted "hello" with the hooks recording
+    Given the user has compacted the session with the hooks recording
+    Given the user has prompted "hello again" with the hooks recording
+    When the user compacts the session with the hooks recording
+    Then the hooks record these runs:
+      | event        | session | source  | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_ENV_FILE                                                           | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | SessionStart | first   | compact | {project dir} |                 | start     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | {project dir}/.pi/pi-claude-marketplace/data/_shared/claude-env-first.env | first                  | first             | 1          |
+
+  Scenario: A compaction trigger matcher selects the PreCompact and PostCompact runs
+    Given pi keeps only one recent token when the hooks session compacts
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name        | event       | matcher |
+      | pre-manual  | PreCompact  | manual  |
+      | pre-auto    | PreCompact  | auto    |
+      | post-manual | PostCompact | manual  |
+      | post-auto   | PostCompact | auto    |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply      |
+      | Hello.     |
+      | Summary A. |
+    Given the user has prompted "hello" with the hooks recording
+    When the user compacts the session with the hooks recording
+    Then the hooks record these runs:
+      | event       | session | trigger | compact summary                                                          | cwd           | transcript path | arguments   | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreCompact  | first   | manual  |                                                                          | {project dir} |                 | pre-manual  | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
+      | PostCompact | first   | manual  | No prior history.\n\n---\n\n**Turn Context (split turn):**\n\nSummary A. | {project dir} |                 | post-manual | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |

@@ -51,6 +51,7 @@ import {
   applyMutationInPlace,
 } from "./event-adapters.ts";
 import { ifFires } from "./if-field/index.ts";
+import { compactTrigger } from "./payloads/compact-trigger.ts";
 
 import type { HookExecResult } from "./exec-result.ts";
 import type { ClaudeSessionEndEvent } from "./payloads/session-end.ts";
@@ -127,13 +128,13 @@ function matcherFiresOnToolEvent(matcher: ParsedMatcher, toolName: string): bool
 }
 
 /**
- * Closed-set matcher-fires predicate shared by the SessionStart and
- * SessionEnd composite paths and the settle-time StopFailure path. The
- * parser admits only match-all (`""` / `"*"`) and exact members of the
- * per-event closed set at parse time, so dispatch-time filtering is literal
- * equality against the event's Claude-side value (the mapped SessionStart
- * `source` and SessionEnd `reason`, D-CF5-01 / D-CF5-02; the classified
- * StopFailure error type).
+ * Closed-set matcher-fires predicate shared by the session and compaction
+ * composite paths and the settle-time StopFailure path. The parser admits
+ * only match-all (`""` / `"*"`) and exact members of the per-event closed
+ * set at parse time, so dispatch-time filtering is literal equality against
+ * the event's Claude-side value (the mapped SessionStart `source` and
+ * SessionEnd `reason`, D-CF5-01 / D-CF5-02; the PreCompact and PostCompact
+ * `trigger`, D-CF5-04; the classified StopFailure error type).
  */
 export function matcherFiresOnClosedSetValue(entry: RoutingEntry, value: string): boolean {
   const raw = entry.rawMatcher;
@@ -486,10 +487,11 @@ export type CompositeReturnFor<E extends BucketAEvent> = E extends "PreToolUse"
 
 /**
  * Per-event filter dispatch. Routes to the per-event matcher-fires
- * predicate: SessionStart compares the mapped `source` and SessionEnd the
- * mapped `reason` (D-CF5-01 / D-CF5-02). UserPromptSubmit fires
- * unconditionally because the parser rejects a non-empty matcher on it;
- * PreCompact and PostCompact fire unconditionally too.
+ * predicate: SessionStart compares the mapped `source`, SessionEnd the
+ * mapped `reason` (D-CF5-01 / D-CF5-02), and PreCompact and PostCompact the
+ * Claude `trigger` the translators also send (D-CF5-04). UserPromptSubmit
+ * fires unconditionally because the parser rejects a non-empty matcher on
+ * it.
  */
 function entryFires(
   claudeEvent: CompositeDispatchEvent,
@@ -509,7 +511,17 @@ function entryFires(
     }
 
     case "PreCompact":
+      return matcherFiresOnClosedSetValue(
+        entry,
+        compactTrigger((event as SessionBeforeCompactEvent).reason),
+      );
+
     case "PostCompact":
+      return matcherFiresOnClosedSetValue(
+        entry,
+        compactTrigger((event as SessionCompactEvent).reason),
+      );
+
     case "UserPromptSubmit":
       return true;
   }

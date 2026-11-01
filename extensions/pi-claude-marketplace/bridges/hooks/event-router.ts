@@ -75,8 +75,12 @@ import {
   settleHandlerFor,
 } from "./settle.ts";
 
-import type { HookExecutor } from "./dispatch.ts";
-import type { ClaudeSessionEndEvent } from "./payloads/session-end.ts";
+import type {
+  CompositeDispatchEvent,
+  CompositeEventFor,
+  CompositeReturnFor,
+  HookExecutor,
+} from "./dispatch.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type {
   BeforeAgentStartEvent,
@@ -84,6 +88,7 @@ import type {
   ExtensionAPI,
   ExtensionContext,
   ExtensionMode,
+  SessionCompactEvent,
   SessionShutdownEvent,
 } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -781,6 +786,12 @@ async function ensureSharedDataDir(loc: ScopedLocations): Promise<void> {
   }
 }
 
+/** The closure `compositeHandlerFor` returns for one Claude event. */
+type CompositeHandler<E extends CompositeDispatchEvent> = (
+  event: CompositeEventFor<E>,
+  ctx: ExtensionContext,
+) => Promise<CompositeReturnFor<E>>;
+
 /**
  * D-60-06: prepares the `_shared` data directory of every scope that has
  * SessionStart entries before a SessionStart dispatch, so `CLAUDE_ENV_FILE`'s
@@ -817,7 +828,7 @@ async function prepareSessionStartDataDirs(
  * the event is read.
  */
 function sessionShutdownCallback(
-  sessionEndHandler: (event: ClaudeSessionEndEvent, ctx: ExtensionContext) => Promise<undefined>,
+  sessionEndHandler: CompositeHandler<"SessionEnd">,
 ): (event: SessionShutdownEvent, ctx: ExtensionContext) => Promise<undefined> | undefined {
   return (event, ctx) => {
     let mode: ExtensionMode;
@@ -833,6 +844,73 @@ function sessionShutdownCallback(
     }
 
     return sessionEndHandler({ reason: claudeSessionEndReason(event.reason, mode) }, ctx);
+  };
+}
+
+/**
+ * The SessionStart leg of a compaction (D-CF5-04): it prepares the shared
+ * data directories, as the `session_start` path does, so the compaction
+ * SessionStart gets its `CLAUDE_ENV_FILE` too, then runs the SessionStart
+ * composite with `source: "compact"` to completion. A failure is debug-logged
+ * and never thrown out of Pi's event (NFR-2). Returns whether the generation
+ * is still current, so a stale one stops the compaction's dispatch.
+ */
+async function runCompactionSessionStart(
+  sessionStartHandler: CompositeHandler<"SessionStart">,
+  routingState: EventRouterRoutingState,
+  ctx: ExtensionContext,
+  generationIsCurrent: GenerationGuard,
+): Promise<boolean> {
+  try {
+    if (!(await prepareSessionStartDataDirs(routingState, ctx, generationIsCurrent))) {
+      return false;
+    }
+
+    requireNotificationMode(ctx.mode);
+    await sessionStartHandler({ source: "compact" }, ctx);
+  } catch (err) {
+    hookDebugLog(`session_compact SessionStart skipped: ${errorMessage(err)}`);
+  }
+
+  return generationIsCurrent();
+}
+
+/**
+ * The `session_compact` callback (D-CF5-04, D-CF5-05): one compaction runs
+ * SessionStart with `source: "compact"` to completion and then PostCompact,
+ * as upstream. The compaction SessionStart never passes the SSDEDUP-01 guard
+ * of `session_start`, so each compaction runs it again. A context whose mode
+ * is not a notification mode is skipped with a debug line before the event
+ * is read.
+ */
+function sessionCompactCallback(
+  handlers: {
+    readonly sessionStart: CompositeHandler<"SessionStart">;
+    readonly postCompact: CompositeHandler<"PostCompact">;
+  },
+  routingState: EventRouterRoutingState,
+  generationIsCurrent: GenerationGuard,
+): (event: SessionCompactEvent, ctx: ExtensionContext) => Promise<undefined> {
+  return async (event, ctx) => {
+    try {
+      requireNotificationMode(ctx.mode);
+    } catch (error: unknown) {
+      hookDebugLog(`hook callback skipped: ${errorMessage(error)}`);
+      return undefined;
+    }
+
+    if (
+      !(await runCompactionSessionStart(
+        handlers.sessionStart,
+        routingState,
+        ctx,
+        generationIsCurrent,
+      ))
+    ) {
+      return undefined;
+    }
+
+    return handlers.postCompact(event, ctx);
   };
 }
 
@@ -1033,8 +1111,15 @@ async function registerHooksBridgeWith(
   );
   pi.on(
     "session_compact",
-    bindWithMode((generation) =>
-      compositeHandlerFor(runtime, "PostCompact", generation, pi, opts.executor),
+    bind((generation) =>
+      sessionCompactCallback(
+        {
+          sessionStart: compositeHandlerFor(runtime, "SessionStart", generation, pi, opts.executor),
+          postCompact: compositeHandlerFor(runtime, "PostCompact", generation, pi, opts.executor),
+        },
+        routingState,
+        generationIsCurrent,
+      ),
     ),
   );
   pi.on(

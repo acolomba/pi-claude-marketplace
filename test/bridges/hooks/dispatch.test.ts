@@ -2188,6 +2188,139 @@ describe("composite per-event adapters", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
+  for (const { reason, expectedPluginIds } of [
+    { reason: "manual", expectedPluginIds: ["pre-any", "pre-manual"] },
+    { reason: "threshold", expectedPluginIds: ["pre-any", "pre-auto"] },
+    { reason: "overflow", expectedPluginIds: ["pre-any", "pre-auto"] },
+  ] as const) {
+    test(`filters PreCompact matchers on the trigger of a ${reason} compaction (D-CF5-04)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const context = createExtensionContext("/workspace/pre-compact-trigger");
+      runtime.setRoutingBucket(
+        "PreCompact",
+        ["pre-any", "pre-manual", "pre-auto"].map((pluginId, declarationIndex) =>
+          createRoutingEntry({
+            pluginId,
+            claudeEvent: "PreCompact",
+            rawMatcher: ["*", "manual", "auto"][declarationIndex] ?? "",
+            declarationIndex,
+          }),
+        ),
+      );
+      const event = {
+        type: "session_before_compact",
+        preparation: {
+          firstKeptEntryId: "kept-entry",
+          messagesToSummarize: [],
+          turnPrefixMessages: [],
+          isSplitTurn: false,
+          tokensBefore: 256,
+          fileOps: {
+            read: new Set<string>(),
+            written: new Set<string>(),
+            edited: new Set<string>(),
+          },
+          settings: { enabled: true, reserveTokens: 100, keepRecentTokens: 50 },
+        },
+        branchEntries: [],
+        reason,
+        willRetry: false,
+        signal: new AbortController().signal,
+      } satisfies SessionBeforeCompactEvent;
+      const executorCalls: RecordedCall[] = [];
+      const executor = createRecordingExecutor(
+        {
+          "pre-any": { kind: "noop" },
+          "pre-manual": { kind: "noop" },
+          "pre-auto": { kind: "noop" },
+        },
+        executorCalls,
+      );
+      const handler = compositeHandlerFor(
+        runtime,
+        "PreCompact",
+        runtime.currentGeneration(),
+        undefined,
+        executor,
+      );
+
+      // act
+      await handler(event, context);
+
+      // assert
+      assert.deepStrictEqual(
+        executorCalls,
+        expectedPluginIds.map((pluginId) => ({ pluginId, event: structuredClone(event) })),
+      );
+    });
+  }
+
+  for (const { reason, expectedPluginIds } of [
+    { reason: "manual", expectedPluginIds: ["post-any", "post-manual"] },
+    { reason: "threshold", expectedPluginIds: ["post-any", "post-auto"] },
+    { reason: "overflow", expectedPluginIds: ["post-any", "post-auto"] },
+  ] as const) {
+    test(`filters PostCompact matchers on the trigger of a ${reason} compaction (D-CF5-04)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const context = createExtensionContext("/workspace/post-compact-trigger");
+      runtime.setRoutingBucket(
+        "PostCompact",
+        ["post-any", "post-manual", "post-auto"].map((pluginId, declarationIndex) =>
+          createRoutingEntry({
+            pluginId,
+            claudeEvent: "PostCompact",
+            rawMatcher: ["", "manual", "auto"][declarationIndex] ?? "",
+            declarationIndex,
+          }),
+        ),
+      );
+      const event = {
+        type: "session_compact",
+        compactionEntry: {
+          type: "compaction",
+          id: "compaction-trigger",
+          parentId: "parent-entry",
+          timestamp: "2026-08-31T12:00:00.000Z",
+          summary: "trigger summary",
+          firstKeptEntryId: "kept-entry",
+          tokensBefore: 256,
+        },
+        fromExtension: false,
+        reason,
+        willRetry: false,
+      } satisfies SessionCompactEvent;
+      const executorCalls: RecordedCall[] = [];
+      const executor = createRecordingExecutor(
+        {
+          "post-any": { kind: "noop" },
+          "post-manual": { kind: "noop" },
+          "post-auto": { kind: "noop" },
+        },
+        executorCalls,
+      );
+      const handler = compositeHandlerFor(
+        runtime,
+        "PostCompact",
+        runtime.currentGeneration(),
+        undefined,
+        executor,
+      );
+
+      // act
+      await handler(event, context);
+
+      // assert
+      assert.deepStrictEqual(
+        executorCalls,
+        expectedPluginIds.map((pluginId) => ({ pluginId, event: structuredClone(event) })),
+      );
+    });
+  }
+
   test("drops a PreCompact stop after observing it", async () => {
     // arrange
     const runtime = createHooksRuntime();
