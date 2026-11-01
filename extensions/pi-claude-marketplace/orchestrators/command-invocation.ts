@@ -13,6 +13,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { readCommandRecord } from "../bridges/commands/command-record.ts";
 import {
   claudeEffort,
   parseArgumentNames,
@@ -101,12 +102,17 @@ function locateStagedCommand(
 }
 
 /**
- * D-CF3-10: the `${CLAUDE_*}` values filled at invocation. A command has no
- * skill directory, so `${CLAUDE_SKILL_DIR}` stays literal.
+ * D-CF3-06 / D-CF3-10: the `${CLAUDE_*}` values a typed argument or the body
+ * may name. Install already filled the body's path variables (CM-3, SUB-02);
+ * the values here reach a typed argument that names one, as upstream. The
+ * plugin root and data come from the record install stored in the staged
+ * frontmatter. A command has no skill directory, so `${CLAUDE_SKILL_DIR}`
+ * stays literal.
  */
 function commandVariables(
   request: CommandInvocationRequest,
   command: StagedCommand,
+  frontmatter: Readonly<Record<string, unknown>>,
 ): Readonly<Record<string, string>> {
   const variables: Record<string, string> = {
     CLAUDE_SESSION_ID: request.sessionId,
@@ -114,6 +120,12 @@ function commandVariables(
   };
   if (command.scope === "project") {
     variables.CLAUDE_PROJECT_DIR = request.cwd;
+  }
+
+  const record = readCommandRecord(frontmatter);
+  if (record !== undefined) {
+    variables.CLAUDE_PLUGIN_ROOT = record.pluginRoot;
+    variables.CLAUDE_PLUGIN_DATA = record.pluginData;
   }
 
   return variables;
@@ -137,7 +149,7 @@ export async function invokeStagedCommand(
     body,
     args: request.args,
     argumentNames: parseArgumentNames(frontmatter.arguments),
-    variables: commandVariables(request, command),
+    variables: commandVariables(request, command, frontmatter),
   });
   return { kind: "send", text };
 }

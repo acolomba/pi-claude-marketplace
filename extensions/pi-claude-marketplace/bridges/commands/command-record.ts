@@ -7,6 +7,9 @@
 // as Claude Code does. Pi sends no frontmatter to the model, so the record
 // never reaches it.
 
+import Type from "typebox";
+import { Compile } from "typebox/compile";
+
 /** The frontmatter key that holds the record. */
 const RECORD_KEY = "pi-claude-marketplace";
 
@@ -15,6 +18,14 @@ export interface CommandRecord {
   readonly pluginRoot: string;
   readonly pluginData: string;
 }
+
+// A record with a member of its own is not one install wrote.
+const STORED_RECORD = Compile(
+  Type.Object(
+    { pluginRoot: Type.String(), pluginData: Type.String() },
+    { additionalProperties: false },
+  ),
+);
 
 /**
  * Returns a copy of `frontmatter` that ends with `record` under the record
@@ -30,4 +41,18 @@ export function withCommandRecord(
     ...entries,
     [RECORD_KEY, { pluginRoot: record.pluginRoot, pluginData: record.pluginData }],
   ]);
+}
+
+/**
+ * Returns the record under the record key of a staged command's parsed
+ * `frontmatter`, or `undefined` when the key is missing or holds anything
+ * other than exactly the two string members install writes.
+ */
+export function readCommandRecord(
+  frontmatter: Readonly<Record<string, unknown>>,
+): CommandRecord | undefined {
+  const stored = frontmatter[RECORD_KEY];
+  return STORED_RECORD.Check(stored)
+    ? { pluginRoot: stored.pluginRoot, pluginData: stored.pluginData }
+    : undefined;
 }

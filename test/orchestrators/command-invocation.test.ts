@@ -137,6 +137,78 @@ test("D-CF1-01: fills the names the frontmatter declares", async () => {
   assert.deepStrictEqual(outcome, { kind: "send", text: "Hello Ada from New York." });
 });
 
+const RECORD = '"pi-claude-marketplace": {"pluginRoot":"/p","pluginData":"/d"}';
+
+for (const { title, typed, frontmatter, expectedText } of [
+  {
+    title: "the plugin root install recorded",
+    typed: "${CLAUDE_PLUGIN_ROOT}/x",
+    frontmatter: [RECORD],
+    expectedText: "Open /p/x",
+  },
+  {
+    title: "the plugin data install recorded",
+    typed: "${CLAUDE_PLUGIN_DATA}/cache",
+    frontmatter: [RECORD],
+    expectedText: "Open /d/cache",
+  },
+  {
+    title: "the plugin root literally when the command holds no record",
+    typed: "${CLAUDE_PLUGIN_ROOT}/x",
+    frontmatter: [],
+    expectedText: "Open ${CLAUDE_PLUGIN_ROOT}/x",
+  },
+  {
+    title: "the project directory of a project command",
+    typed: "${CLAUDE_PROJECT_DIR}/notes",
+    frontmatter: [RECORD],
+    expectedText: "Open /work/notes",
+  },
+  {
+    title: "the skill directory literally, because a command has none",
+    typed: "${CLAUDE_SKILL_DIR}/x",
+    frontmatter: [RECORD],
+    expectedText: "Open ${CLAUDE_SKILL_DIR}/x",
+  },
+]) {
+  test(`D-CF3-06: a typed argument names ${title}`, async () => {
+    // arrange
+    const files = { [PROJECT_COMMAND]: commandFile("Open $ARGUMENTS", frontmatter) };
+
+    // act
+    const outcome = await invokeStagedCommand(request({ args: typed }), dependencies(files));
+
+    // assert
+    assert.deepStrictEqual(outcome, { kind: "send", text: expectedText });
+  });
+}
+
+test("D-CF3-06: a typed argument names the project directory literally in a user command", async () => {
+  // arrange
+  const files = { [USER_COMMAND]: commandFile("Open $ARGUMENTS", [RECORD]) };
+  const commands = [piCommand("demo:greet", "prompt", USER_COMMAND)];
+
+  // act
+  const outcome = await invokeStagedCommand(
+    request({ commands, args: "${CLAUDE_PROJECT_DIR}/notes" }),
+    dependencies(files),
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, { kind: "send", text: "Open ${CLAUDE_PROJECT_DIR}/notes" });
+});
+
+test("D-CF1-01: sends a body that starts with another command as it is, which pi expands again", async () => {
+  // arrange
+  const files = { [PROJECT_COMMAND]: commandFile("/demo:other $0") };
+
+  // act
+  const outcome = await invokeStagedCommand(request(), dependencies(files));
+
+  // assert
+  assert.deepStrictEqual(outcome, { kind: "send", text: "/demo:other Ada" });
+});
+
 for (const { title, commands } of [
   { title: "pi lists no command of that name", commands: [] },
   {
