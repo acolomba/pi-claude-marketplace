@@ -264,3 +264,44 @@ session writes this file. Each subagent ends its report with a
      running at its deadline (HKDR-01 grandchild case not counted).
   5. Script hooks need a `dir` or `file` publication (mode bit).
 - **Recorded in:** `05-01-SUMMARY.md`, `05-02-SUMMARY.md`.
+
+### P5-DC-16: Wave 2 executor choices (05-03 tool use, 05-04 configuration, 05-05 lifecycle)
+
+- **Phase / source:** executors of 05-03, 05-04, 05-05.
+- **Severity:** Medium. **Status:** open.
+- **05-03:**
+  1. On an exit other than 0 and 2, a JSON object on stdout is applied whole
+     ("the fields alone decide"); a signal kill and plain stdout stay noop.
+  2. Default reasons taken from the binary: `[<command>]: No stderr output`,
+     `Blocked by hook`; `Operation stopped by hook` for `continue:false`
+     without `stopReason` (not verified upstream).
+  3. `ask` without a terminal blocks with the hook's reason alone; an `ask`
+     without a reason uses Pi's default block text; the TUI dialog wording
+     (`PreToolUse:<Tool> hook asks to allow this call`) is the bridge's own.
+  4. One type assertion widens `tool_result` content past the frozen
+     `pi-api.ts` text-only type (parent line to widen it).
+  5. Contexts: empty ones dropped; the SessionStart buffer now holds one joined
+     entry (before, only the last hook's context survived).
+  6. `applyMutationInPlace` and its three tests removed; the dispatch-level
+     UserPromptSubmit context case deleted, not moved (fallow clone).
+  7. Tests outside its list edited minimally: `dispatch-exec.test.ts`,
+     `event-router.test.ts`, `test/index.test.ts`.
+  8. Found, not fixed in 05-03: PostToolUse `updatedToolOutput` edits
+     `event.content` in place and returns `undefined`, so Pi 1.4 drops it.
+     The session routes the fix to 05-06 (owns `event-adapters.ts` in wave 3)
+     under the bug policy.
+- **05-04:**
+  1. Edited `test/domain/plugin-resolver.test.ts` (3 cases) and
+     `test/orchestrators/plugin/list-flow.test.ts` (1 case), which pinned the
+     old silent-ignore rule.
+  2. A marketplace-entry `hooks` counts in every form; only the manifest gets
+     the D-CF5-27 convention-path exception. An empty inline `{}` counts as
+     declared; `""`, `null`, `[]`, `[""]` do not.
+  3. A whitespace-only `if` on a tool-less event still compiles to match-all
+     (upstream skips only an empty `if`).
+  4. Info names manifest/entry hooks only through the `unsupported hooks`
+     reason (`orchestrators/plugin/info.ts` is not owned).
+  5. One commit per TDD task (no separate red commit); one style-only commit.
+- **05-05:** no product change; the update scenario checks hook runs, not
+  model calls.
+- **Recorded in:** `05-03-SUMMARY.md`, `05-04-SUMMARY.md`, `05-05-SUMMARY.md`.
