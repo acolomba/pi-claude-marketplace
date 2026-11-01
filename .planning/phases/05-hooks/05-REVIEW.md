@@ -1,7 +1,8 @@
 ---
 phase: 05-hooks
-reviewed: 2026-11-01T20:30:48Z
+reviewed: 2026-11-01T21:27:21Z
 depth: standard
+iteration: 2
 files_reviewed: 36
 files_reviewed_list:
   - extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts
@@ -41,168 +42,160 @@ files_reviewed_list:
   - features/step_definitions/hook/session.steps.ts
   - features/step_definitions/hook/tool-use.steps.ts
 findings:
-  critical: 2
-  warning: 5
-  info: 6
-  total: 13
+  critical: 1
+  warning: 2
+  info: 9
+  total: 12
 status: issues_found
 ---
 
-# Phase 5: Code Review Report
+# Phase 5: Code Review Report (iteration 2)
 
-**Reviewed:** 2026-11-01T20:30:48Z
+**Reviewed:** 2026-11-01T21:27:21Z
 **Depth:** standard
 **Files Reviewed:** 36
 **Status:** issues_found
 
 ## Summary
 
-I reviewed the Phase 5 hooks changes since `74829438`: the parallel run and fold, dedupe, session and compaction mapping, `onFailure`, exec-form substitution, the `hook-notice` surface, the manifest `hooks` detection, and the new cucumber steps. Each finding was checked against the D-CF5 decisions in `05-CONTEXT.md`.
+This pass re-reviews the phase after fix commits `0d877aa..40367d9`. I checked each fix against the iteration-1 findings, against the locked decisions in `05-CONTEXT.md` (D-CF5-09 now says the input rewrite is the last one in routing order, so iteration-1 WR-01 is closed and not raised again), against Pi 1.4's `agent-session.js`, and against the upstream binary `/opt/claude-code/bin/claude` (2.1.316). The paired unit suites pass on this tree (`dispatch`, `dispatch-exec`, `event-adapters`, `hook-labels`, `notification-resolve`, `notification-dispatch`: 712 pass, 0 fail).
 
-Verdicts on the three security-audit leads:
+What happened to each iteration-1 finding:
 
-1. **Confirmed (CR-01).** A stdout or stderr overflow settles `noop` before the `onFailure` check, so an `onFailure: "block"` guard fails open. A tool input over 64 KB that the hook echoes to stderr is enough to trigger it.
-2. **Refuted as a defect (IN-01).** A generation change that discards the fold is the established DISP-03 pattern. It was already in the sequential reducer before this phase. The generation advances only in `registerHooksBridge`, which means an extension reload. A fail-closed refinement is listed as optional.
-3. **Confirmed, but lower severity (WR-03).** Notice text reaches `ctx.ui.notify` verbatim, with no control-character filter and no length bound. The hook already runs as the user, so the main risk is untrusted data that a hook echoes, not the hook itself.
-
-Beyond the leads: a blocking SessionStart hook drops every other hook's context (CR-02). The input rewrite does not follow the winning decision (WR-01). UserPromptSubmit context can attach to the wrong turn (WR-02). A PreCompact block does nothing, although Pi can cancel the compaction (WR-04). One negative cucumber assertion depends on timing (WR-05).
+| Prior | Verdict |
+| ----- | ------- |
+| CR-01 overflow fails open under `onFailure: "block"` | Fixed for that case. The same overflow path still drops an exit-2 deny (new **CR-01**). |
+| CR-02 blocking SessionStart drops others' context | Fixed. Context is buffered on every arm (`event-adapters.ts:494-509`). |
+| WR-01 rewrite follows the winning decision | Closed by the D-CF5-09 amendment (upstream `jFt` keeps the last `updatedInput`). |
+| WR-02 prompt context on the wrong turn | Fixed for the stale buffer and for a steer. A follow-up's context still reaches the wrong turn (new **WR-02**). |
+| WR-03 notices verbatim and unbounded | Fixed. `terminalSafeHookNotice` strips VT sequences and `\p{Cc}`, and caps at 2,000 graphemes. Both strategies get the clean text. |
+| WR-04 PreCompact block does nothing | Fixed. A folded block returns `{ cancel: true }` and shows a notice. One regression in the fold: a `continue:false` hides the block (new **WR-01**). |
+| WR-05 reload scenario depends on a quiet window | Fixed. A positive UserPromptSubmit marker replaces the quiet window. |
+| IN-01..IN-06 | Out of the fix scope (`critical_warning`). All six are still present and are listed again as IN-04..IN-09. |
 
 ## Critical Issues
 
-### CR-01: Output overflow makes an `onFailure: "block"` hook fail open
+### CR-01: An output overflow still turns an exit-2 deny into an allow
 
-**File:** `extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts:406-410`
-**Issue:** The `close` handler returns `{ kind: "noop" }` when `overflowed` is set. It returns before the D-CF5-18 `onFailureBlock` check at lines 419-427. The bridge kills an overflowing hook (SIGTERM at line 351), so the process ends by a signal, with exit code `null`. That is "an exit other than 0 and 2", which `isFailure` (`on-failure.ts:54-64`) treats as a failure, and which upstream (E6) turns into a block. Because of the early return, a PreToolUse guard declared `onFailure: "block"` lets the tool call run as soon as it writes more than 64 KB to stderr or 1 MB to stdout.
+**File:** `extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts:406-419` (with `handleOverflow` at 331-362)
+**Issue:** The iteration-1 fix sends the overflow path through `onFailureBlock` only. `parseHookStdout` never runs there. `onFailureBlock` returns `undefined` when the hook sets no `onFailure: "block"` (the default), and also when the exit code is 2, because `isFailure` treats exit 2 as no failure (`on-failure.ts:59-61`). Either way the result is `{ kind: "noop" }`.
 
-The stdin payload is capped at 256 KB (`spawn-helpers.ts:119`), so the model can pass a tool input larger than the 64 KB stderr cap. A guard that logs its input to stderr (a common debug pattern) then overflows on input the model controls. This defeats the only purpose of `onFailure: "block"`.
-**Fix:** Run the onFailure check on the overflow path too. Treat it as a kill that the bridge caused:
+So a PreToolUse guard that denies with the usual exit-2 pattern fails open as soon as it writes more than 64 KB to stderr or 1 MB to stdout:
+
+```sh
+printf 'denied: %s\n' "$(cat)" >&2; exit 2   # echoes the tool input as the reason
+```
+
+The model controls the tool input, and the stdin cap is 256 KB (`spawn-helpers.ts`). A `Write` of a file over 64 KB is routine, so this happens in normal use. There are two cases, and both give noop:
+- The bridge's synchronous SIGTERM (line 351) kills the guard before it reaches `exit 2`. `code` is `null`, and with the default `onFailure` that is noop.
+- The guard has already exited 2 when the overflowing chunk arrives (the pipe buffer is about 64 KB, so the tail can land after exit). `code` is `2`, `isFailure` returns false, and the result is noop.
+
+The iteration-1 CR-01 named this exact threat ("a guard that logs its input to stderr ... overflows on input the model controls"). The fix closed only the `onFailure: "block"` part of it. An exit-2 deny is the main way a hook blocks a tool call, so this is the same severity. The overflow kill predates the phase, but this file is in scope and the behavior is a security fail-open.
+**Fix:** Do not kill on a stderr overflow. Stop accumulating, keep draining and discarding, and let the process exit (the timeout ladder is still the backstop). Then parse with the truncated text, so an exit 2 still blocks:
 ```ts
+// accumulateStream: on overflow, mark truncated and drop further chunks,
+// but keep the 'data' listener so the pipe drains and the child can exit.
 child.once("close", (code) => {
   if (overflowed) {
-    const failure = onFailureBlock(entry, {
-      startFailed: false,
-      timedOut: false,
-      exitCode: code ?? null, // null after the SIGTERM: a failure under E6
-      stdout: "",
-      stderr: stderr.slice(0, STDERR_MAX_BYTES),
-    });
-    settle(failure ?? { kind: "noop" });
+    const failure = onFailureBlock(entry, { startFailed: false, timedOut: ladder.fired(), exitCode: code, stdout: "", stderr });
+    // Exit 2 blocks whatever the output size. Stdout is truncated, so it is not parsed as JSON.
+    settle(failure ?? (code === 2 ? parseHookStdout(2, "", stderr, entry.claudeEvent) : { kind: "noop" }));
     return;
   }
   ...
 ```
-Add a unit case in `test/bridges/hooks/dispatch-exec*.test.ts` for a stderr overflow with `onFailure: "block"`. Add a scenario if one is in scope (AGENTS.md "Behavioral tests").
-
-### CR-02: A blocking or stopping SessionStart hook drops every other hook's `additionalContext`
-
-**File:** `extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:423-427, 446-450` (with `dispatch.ts:380-391`)
-**Issue:** `foldOutcomes` joins the context of every hook into the decisive arm (`withContext(decisive.result, context)`). But `adaptObservationResultForEvent` buffers SessionStart context only in the `mutate` arm. Its `block` and `stop` arms only debug-log. So if one SessionStart hook exits 2, or fails under `onFailure: "block"` (which D-CF5-18 says is only "reported as the event's error" on SessionStart), the context of every other SessionStart hook in every other plugin is dropped silently. Upstream, exit 2 on SessionStart only shows stderr to the user, and the other hooks' context still reaches the model (E13).
-
-This breaks D-CF5-09 ("every hook's `additionalContext` ... kept") and D-CF5-13. It also lets one plugin's failing hook take the context away from an unrelated plugin.
-**Fix:** On SessionStart, buffer the joined context whatever the arm is:
-```ts
-export function adaptObservationResultForEvent(result, claudeEvent, context): undefined {
-  if (
-    claudeEvent === "SessionStart" &&
-    typeof result.additionalContext === "string" &&
-    result.additionalContext !== ""
-  ) {
-    context.runtime.appendPendingSessionStartContext(
-      bufferedContext(result.additionalContext, context),
-    );
-  }
-  switch (result.kind) { /* block/stop: debug-log only; mutate/noop: nothing more */ }
-}
-```
-Add a scenario in which hook A exits 2 and hook B prints context on SessionStart, and the model still receives B's context.
+If the kill-on-overflow policy must stay for stdout, at least honor `code === 2` as shown, and record the remaining kill-race divergence with a decision ID. Add a unit case for "stderr overflow + exit 2 + default onFailure gives block", and a scenario variant of the existing tool-use overflow scenario without `onFailure`.
 
 ## Warnings
 
-### WR-01: The input rewrite is the last one in routing order, not the rewrite of the winning decision
+### WR-01: A `continue:false` from one PreCompact hook cancels another hook's block, so the compaction runs and nothing is shown
 
-**File:** `extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts:315-323, 355-359`
-**Issue:** D-CF5-09 says: "the input rewrite of the winning decision, ties to the last hook in routing order". `foldMutations` takes `lastSet(mutations, "updatedInput")` over all mutations, whatever each one decided. Example: hook A answers `ask` with `updatedInput: X`, and hook B answers `allow` with `updatedInput: Y`. The fold asks, attributed to A. If the user allows the call in `tui`, `adaptToolCallMutation` applies B's `Y`, an input that the asking hook never proposed and the user never saw.
-**Fix:** Take the rewrite from the mutations that carry the winning decision:
+**File:** `extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts:383-397` (`foldOutcomes`), `dispatch.ts:491` (`blockNotices`), `extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:354-367` (`adaptPreCompactResult`)
+**Issue:** `foldOutcomes` lets any `stop` beat any `block`. The WR-04 fix keys both the cancel and the notice on the folded arm: `adaptPreCompactResult` returns `{ cancel: true }` only for `block`, and `blockNotices` shows the notice only when `folded.result.kind === "block"`. Take two PreCompact hooks in different plugins, where A prints `{"continue":false}` and B exits 2. The fold is `stop`. `adaptPreCompactResult` only writes a debug line, the compaction proceeds, and B's block shows nothing.
+
+That breaks the WR-04 contract and the phase's "never silent" rule. Upstream does not fold this way. Its PreCompact runner (2.1.316) builds `blockedBy` from every hook with `Se.blocked`: `q=w.filter((Se)=>Se.blocked),Z=q.length>0?q.map(...)`. That list does not depend on any other hook's `continue` value, so B's block still stops the compaction. A third-party hook that happens to print `continue:false` can turn off another plugin's compaction guard.
+**Fix:** On PreCompact, decide from the outcomes, not from the folded arm:
 ```ts
-const permission = foldedPermission(mutations);
-const winners = permission.permissionDecision === undefined
-  ? mutations
-  : mutations.filter(({ result }) => result.permissionDecision === permission.permissionDecision);
-const updatedInput = lastSet(winners, "updatedInput") ?? lastSet(mutations, "updatedInput");
+case "PreCompact":
+  return blocks(folded.outcomes).length > 0 ? [compactionBlockedText(blocks(folded.outcomes))] : [];
 ```
-If the fallback to a decision-less rewrite is not what D-CF5-09 means, drop it. Pin the behavior with a unit case.
+and pass the outcomes, or a precomputed `blocked: boolean`, to the PreCompact adapter, so that any `block` outcome returns `{ cancel: true }`. Add a unit case in `dispatch.test.ts` for stop plus block on PreCompact.
 
-### WR-02: UserPromptSubmit context can attach to a later prompt's turn
+### WR-02: A follow-up prompt's context reaches the model on the running prompt's turn, before the follow-up
 
-**File:** `extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:361-366`, `extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:225-229`
-**Issue:** The `input` adapter appends to `pendingPromptContext`, and only `before_agent_start` drains it. Pi emits `input` in several cases that start no run, so `before_agent_start` does not fire for that prompt (`agent-session.js:1651-1693`):
-- A steer or follow-up typed while the agent streams is queued into the running loop.
-- Another extension's `input` handler returns `handled`.
-- The model or auth check throws after the input handlers ran.
+**File:** `extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:387-404, 432-438`; `docs/hooks-compatibility.md:279`
+**Issue:** `sendQueuedPromptContext` sends with `{ triggerTurn: false }` for both `steer` and `followUp`. While Pi streams, that option pushes the message to `_pendingCustomMessages`, which Pi flushes at the next `turn_end` (`agent-session.js:795-797`, 1872-1877). So the next model call of the run that is still going sees it. A steer is also delivered before that next call, so the steer case works, and the new scenario covers only the steer. A follow-up is different: Pi delivers it only when the agent would otherwise stop (`_queueFollowUp`). Its `UserPromptSubmit hook additional context` therefore reaches the model one or more turns early, while the model is still working on the earlier prompt. This is the "context on the wrong turn" defect that iteration-1 WR-02 described, and `docs/hooks-compatibility.md:279` says the opposite ("its context goes in a hidden message on the turn that reads the prompt").
 
-In each case the context stays buffered and is attached to the next prompt that does start a run, labeled as that prompt's context. Upstream attaches the context to the prompt that produced it (E13). Nothing drains the buffer on a later `input`: `recordUserInput` resets only the Stop state.
-**Fix:** At minimum, drain stale prompt context when a new `input` arrives, before the UserPromptSubmit fold appends. For example, in the second `input` subscription (`inputResetHandlerFor`), or at the start of the UserPromptSubmit composite. For a queued steer or follow-up (`event.streamingBehavior !== undefined`), deliver the context with `pi.sendMessage(..., { triggerTurn: false })`, as tool context does. Do not buffer it for `before_agent_start`.
-
-### WR-03: Hook notices reach the user verbatim and unbounded (audit lead 3)
-
-**File:** `extensions/pi-claude-marketplace/shared/notification-grammar.ts:1390-1394`, `extensions/pi-claude-marketplace/shared/notification-dispatch.ts:486-495`, `extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts:448-505`
-**Issue:** The `hook-notice` text has three sources: a hook's `systemMessage`, exit-2 stderr on SessionStart, SessionEnd, and PostCompact, and the onFailure reason, which includes up to 64 KB of stderr. It passes to `ctx.ui.notify` and to the JSON entry with no control-character filter and no length bound. A hook that echoes untrusted data (tool input, the prompt, file content) into `systemMessage` or stderr can put ANSI or OSC sequences on the user's terminal, such as a title change, an OSC 52 clipboard write, or a spoofed hyperlink. It can also put a 64 KB notice on the screen.
-
-The hook already runs as the user, so the risk is the echoed data, not the hook. Still, the project already strips such output from another subprocess (`orchestrators/plugin/package-install.ts:404-416`, `stripVTControlCharacters` plus `\p{Cc}`), and this new surface does not.
-**Fix:** In `notifyHookNotice`, or where `dispatch.ts`/`settle.ts` compose the notice, apply `stripVTControlCharacters` from `node:util` and replace the remaining `\p{Cc}` other than `\n` and `\t`. Cap the text at a documented length with an ellipsis. Update the `hook-notice` block in `docs/output-catalog.md` and the architecture byte-lock test to match.
-
-### WR-04: A PreCompact block (exit 2 or `onFailure: "block"`) does nothing and shows nothing, although Pi can cancel
-
-**File:** `extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:423-427`, `extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts:499-503`
-**Issue:** On PreCompact, a block only goes to `hookDebugLog`: no `cancel`, no notice. D-CF5-18 lists SessionStart, SessionEnd, and PostCompact as the events "with no block". PreCompact is not on that list, so the decision expects a PreCompact block to act. Pi supports one: `SessionBeforeCompactResult.cancel` (`pi-coding-agent/dist/core/extensions/types.d.ts:1137-1140`). So this is not a Pi gap. `docs/hooks-compatibility.md:18` marks the divergence with a warning sign (⚠) but cites no decision ID that licenses it (AGENTS.md "Upstream parity"). As a result, an `onFailure: "block"` hook on PreCompact fails without any visible effect, which goes against "never silent".
-**Fix:** Check upstream 2.1.316 PreCompact exit-2 behavior with `claude-code-compat-research`. If upstream blocks the compaction, return `{ cancel: true }` from the `session_before_compact` composite on a folded block, and notice the reason. If upstream does not block, record a D-CF5 ID for the divergence and show the block as the event's hook error, as SessionStart, SessionEnd, and PostCompact do.
-
-### WR-05: The reload scenario's "no runs" check depends on a one-second quiet window
-
-**File:** `features/step_definitions/hook/session.steps.ts:69-72, 251-262` (used by `features/hook/session.feature:201`)
-**Issue:** "the user reloads pi in the terminal" reads the hook log after the terminal output has stayed unchanged for `TERMINAL_QUIET_MS` (1 s). A hook run prints nothing to the terminal, so the quiet window says nothing about hook processes. A wrongly dispatched SessionStart or SessionEnd hook that starts Node and appends its line after the window (likely on a loaded CI runner) is missed, and `Then the hooks record no runs` passes. The test cannot reliably fail without the D-CF5-03 change, which is the bar AGENTS.md sets for a behavioral scenario.
-**Fix:** After the reload, run a positive marker that the hooks bridge must dispatch through the same lifecycle, then assert that no SessionStart or SessionEnd run came before it. For example, send a prompt in the terminal with a `UserPromptSubmit` recorder and wait for that run. Or wait on the bridge's own completion signal instead of terminal output.
+Pi already has a carrier that puts the message in the same queue as the prompt. With `deliverAs` and no `triggerTurn: false`, `sendCustomMessage` calls `agent.followUp(appMessage)` or `agent.steer(appMessage)` while streaming (`agent-session.js:1857-1863`). The input handler runs before `_queueFollowUp`/`_queueSteer`, so the context lands just before its prompt. When the agent is not streaming, the same call falls through to `_appendCustomMessage` (`triggerTurn` is undefined), as today.
+**Fix:**
+```ts
+function sendQueuedPromptContext(pi, text, behavior: "steer" | "followUp"): void {
+  ...
+  pi.sendMessage({ customType: HOOK_CONTEXT_MESSAGE_TYPE, content: [...], display: false },
+                 { deliverAs: behavior });
+}
+// caller: sendQueuedPromptContext(context.pi, result.additionalContext, event.streamingBehavior)
+```
+Add a follow-up scenario next to the steer one (prompt, follow-up while the tool runs, a script with at least two model calls before the follow-up is read). It must fail with today's carrier.
 
 ## Info
 
-### IN-01: A generation change discards the folded decision, including a deny (audit lead 2, refuted)
+### IN-01: The PreCompact notice text differs from upstream's `[cmd]` / `[cmd]: output` form
 
-**File:** `extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts:222-232, 397-411`
-**Issue:** `runHooks` returns `undefined`, so `NOOP_FOLD`, when the generation changed while the hooks ran. A PreToolUse deny computed across that window is lost, and the tool runs. This is the DISP-03 stale-closure pattern, and it was already in the sequential `reduceBucket` (base `dispatch.ts:198-200`). `advanceGeneration` is called only from `registerHooksBridgeWith` (`event-router.ts:981`), which means an extension reload. So this is intended behavior, not a defect introduced here.
-**Fix (optional):** Fail closed for a stale fold on PreToolUse. If any outcome is `block` or `stop`, keep it rather than fold to noop, so a reload during a guarded call never turns a deny into an allow.
+**File:** `extensions/pi-claude-marketplace/bridges/hooks/hook-labels.ts:48-55, 83-88`
+**Issue:** Upstream writes each blocked hook as `` `[${Se.command}]${ke?`: ${ke}`:""}` ``: always the bracketed command, and a `: <output>` part only when there is output. `compactionBlockedText` reuses `blockMessage`, which gives two different texts. An exit 2 with empty stderr gives `[cmd]: No stderr output` (upstream: `[cmd]`). A JSON `decision: "block"` gives the bare reason with no command (upstream: `[cmd]: ...`). The fix report and the doc comment say "as upstream does".
+**Fix:** Give `compactionBlockedText` its own formatter, `[${command}]` plus `: ${reason}` when the reason is non-empty, and pin it in `hook-labels.test.ts`. Otherwise record the wording divergence.
 
-### IN-02: Dead generation checks
+### IN-02: Stale section header after PreCompact moved out of the observation adapter
 
-**File:** `extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:1109-1111, 1203-1205`
-**Issue:** `if (!generationIsCurrent()) { return; }` is the last statement of its function, so it has no effect.
-**Fix:** Delete both blocks.
+**File:** `extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:452-453`
+**Issue:** The banner still reads `adaptObservationResultForEvent -- SessionStart / SessionEnd / PreCompact / PostCompact`. PreCompact now has its own adapter.
+**Fix:** Drop `PreCompact` from the banner.
 
-### IN-03: `PendingPromptContext` duplicates `PendingSessionStartContext`
+### IN-03: Context of a steer or follow-up queued while Pi is idle is silently lost
 
-**File:** `extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts` (the two interfaces)
-**Issue:** The two interfaces have the same fields. `bufferedContext` in `event-adapters.ts:101` already returns one type for both buffers.
-**Fix:** Declare one `PendingHookContext` and alias it, or use it for both buffers.
+**File:** `extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:432-438`, `extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts:655-660, 693-695`
+**Issue:** Pi's `steer()`/`followUp()` (`_queueUserInput`, `agent-session.js:1752-1768`) pass `streamingBehavior: undefined` to `input` handlers when the agent is idle, but they still queue the prompt and start no run. The adapter buffers the context for `before_agent_start`, and the next prompt's `dropStalePromptContext` throws it away, even though the queued prompt is read later. The only trace is a debug line. This is an edge case (RPC `steer`/`follow_up` sent while idle).
+**Fix:** Optional. Document it in `docs/hooks-compatibility.md`, or deliver idle-queued context with `deliverAs: "followUp"`.
 
-### IN-04: `onFailure` that is ignored on Stop and async hooks is only debug-logged
+### IN-04: A generation change discards the folded decision, a deny included (carried over from iteration-1 IN-01)
+
+**File:** `extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts:222-232, 399-411`
+**Issue:** Unchanged. This is the established DISP-03 stale-closure pattern, and the generation advances only on an extension reload.
+**Fix (optional):** On PreToolUse, keep a `block`/`stop` outcome from a stale fold.
+
+### IN-05: Dead generation checks (carried over from iteration-1 IN-02)
+
+**File:** `extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:1107-1109, 1203-1205`
+**Issue:** `if (!generationIsCurrent()) { return; }` is the last statement of its block, so it does nothing.
+**Fix:** Delete both.
+
+### IN-06: `PendingPromptContext` duplicates `PendingSessionStartContext` (carried over from iteration-1 IN-03)
+
+**File:** `extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts:137-156`
+**Issue:** The two interfaces have the same fields. `bufferedContext` (`event-adapters.ts:101`) already returns one type for both buffers.
+**Fix:** Declare one `PendingHookContext`.
+
+### IN-07: An `onFailure` that Stop and async hooks ignore is only debug-logged (carried over from iteration-1 IN-04)
 
 **File:** `extensions/pi-claude-marketplace/bridges/hooks/on-failure.ts:91-97`
-**Issue:** E6 says upstream ignores `onFailure: "block"` on Stop "with a warning". Here the only trace is `hookDebugLog` at dispatch time, so a plugin author gets no visible signal.
-**Fix:** Name the ignored field in `info` or as a resolution note, or record the divergence in `docs/hooks-compatibility.md`.
+**Issue:** Upstream warns. Here the only trace is `hookDebugLog`.
+**Fix:** Surface it in `info`, or document the divergence.
 
-### IN-05: An empty inline `hooks: {}` makes a plugin partial
+### IN-08: An empty inline `hooks: {}` makes a plugin partial (carried over from iteration-1 IN-05)
 
-**File:** `extensions/pi-claude-marketplace/domain/hooks-resolution.ts:129-131, 180-189`
-**Issue:** `declaresHooksValue({})` is `true`, so an empty inline map in a manifest or marketplace entry adds `unsupported hooks`, and install then needs `--partial`, although no hook would load.
-**Fix:** Treat an empty plain object, like an empty array, as declaring nothing.
+**File:** `extensions/pi-claude-marketplace/domain/hooks-resolution.ts:129-131, 180-181`
+**Issue:** `declaresHooksValue({})` is `true`, so install needs `--partial` although no hook would load.
+**Fix:** Treat an empty plain object as declaring nothing.
 
-### IN-06: A Stop exit 2 with empty stderr sends an empty feedback paragraph
+### IN-09: A Stop exit 2 with empty stderr sends an empty feedback paragraph (carried over from iteration-1 IN-06)
 
-**File:** `extensions/pi-claude-marketplace/bridges/hooks/settle.ts:226-230`
-**Issue:** `feedbackTexts` uses `result.reason ?? ""`, so the re-entry reads `Stop hook feedback:\n` with no text. Every other block path falls back to Claude Code's `No stderr output` or `Blocked by hook` (`hook-labels.ts:356-357`).
-**Fix:** Reuse the `hook-labels.ts` defaults, for example by exporting a `blockReasonText(reason, fromStderr)` helper.
+**File:** `extensions/pi-claude-marketplace/bridges/hooks/settle.ts:226-227`
+**Issue:** `result.reason ?? ""` gives `Stop hook feedback:\n` with no text. The other paths fall back to `No stderr output` or `Blocked by hook`.
+**Fix:** Reuse the `hook-labels.ts` defaults.
 
 ---
 
-_Reviewed: 2026-11-01T20:30:48Z_
+_Reviewed: 2026-11-01T21:27:21Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
