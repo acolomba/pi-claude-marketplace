@@ -698,9 +698,9 @@ this project.
 Indented `---` fence; record-key spellings; stale staged file falling through to Pi's expansion; untrusted project running `!`.
 
 #### Code review round 2 fixes (CR-01, WR-01..03)
-1. **The provenance ledger is written without a lock.** The skills bridge cannot import `transaction/`. Two concurrent project installs in different projects can lose one update; the failure is closed (that project's skills abort and ask for a reinstall).
+1. **The provenance ledger is written without a lock.** (Superseded: DC-30 item 4 moved it to one file per project, written under the project's state lock.) The skills bridge cannot import `transaction/`. Two concurrent project installs in different projects can lose one update; the failure is closed (that project's skills abort and ask for a reinstall).
 2. **Discovery still lists a project skill with no ledger entry** in a project Pi trusts, so the abort message can name it. The model can still read its description and body, which upstream `not_installed_here` would hide. Same prompt-injection exposure as `AGENTS.md`.
-3. **Existing project installs lose their skills until reinstalled.** A project-scope skill staged before this change has no ledger entry. Plain `apply` does not re-stage it. Needs a CHANGELOG line.
+3. **Existing project installs lose their skills until reinstalled.** A project-scope skill staged before this change has no ledger entry. Plain `apply` does not re-stage it; the user runs `/claude:plugin reinstall <plugin>@<marketplace> --scope project`. The CHANGELOG records this.
 4. The provenance scenario models a clone by deleting the user ledger rather than forging `state.json`.
 5. After WR-01 (discovery gated on `ctx.isProjectTrusted()`), the "Pi does not trust" abort is reachable only after a trust change within a session; unit tests cover it, no scenario. `features/skill/project-trust.feature` was rewritten because the behavior changed.
 6. `topLevelNodeIndex` falls back to the plain `<key>:` spelling for a node that does not parse alone; as a side effect a record key written as a YAML alias is now replaced instead of failing the install.
@@ -731,3 +731,13 @@ Indented `---` fence; record-key spellings; stale staged file falling through to
 3. Reused the parent's gate log (3bfaab5, exit 0) by timestamp.
 4. Edits outside Phase 2's ownership list (`load.ts`, `uninstall.ts`, `enable-disable.ts`, `marketplace/{remove,shared}.ts`, `features/plugin/autoapply.feature`, `index.ts`) rated Info; re-verify after the Phase 3 and 5 merges. `index.ts` also withholds project prompt paths in an untrusted project, which affects Phase 3 (told).
 5. `02-SECURITY.md` predates the review rounds: no entry for the ledger, D-CF2-14, or the WR-03 residual.
+
+#### Parent lines (docs, decisions, scenarios)
+1. Stale clone markers removed in the commands bridge too (Phase 3 files), since the merged tree confirms them; expect small conflicts when Phase 3 merges.
+2. CHANGELOG adds a line no parent line asked for (untrusted-project discovery also leaves out prompt templates); the autoapply and reinstall lines are reworded.
+3. PROJECT.md rows for D-CF2-01..14 are shortened; measured residuals stay in 02-07-SUMMARY and 02-CONTEXT. D-CF2-13/14 use a new outcome value, "Pending (user review)".
+4. Threat IDs T-02-21..23 continue the register; T-02-23 is accepted as AR-02-05. T-02-17's row was not widened to match the code's use.
+5. `docs/json-output.md` lists all three skill abort causes (untrusted project, unreadable file, missing install record).
+6. README tables applied with the invented `name: baz` example from 02-07. No `docs/output-catalog.md` entry: the catalog lists no staging diagnostic headers.
+7. CONVENTIONS marker listing corrected for pre-existing markers too (42 total, 24 `code-duplication`).
+- Gate after these commits (7e5240e): `npm run check` exit 0, cucumber 1254/1254 (seed 311675).

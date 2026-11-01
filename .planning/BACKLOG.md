@@ -4541,3 +4541,15 @@ Added 2026-10-31. Pi's RPC `new_session`, `switch_session`, `fork`, and `clone` 
 The hooks bridge now drops a repeat of the last `session_start` with the same session id and reason in one registration (`bridges/hooks/event-router.ts`), so a plugin's `SessionStart` hook runs once per session, as in Claude Code. `features/plugin/session-start-hooks.feature` covers it.
 
 Trigger: a Pi release that closes #10470. Users on an older Pi still need the dedupe, so delete it only when the `@earendil-works/pi-coding-agent` peer floor (now `>=1.0.0`) rises to that release. Then delete the dedupe and its two `SessionStart runs ...` cases in `test/bridges/hooks/event-router.test.ts`, keep the feature (it must still pass), and settle DBLEMIT-01's doubled rows.
+
+## SKILLNAME-01: Claude Code's skill display name in Pi
+
+Deferred by component-features Phase 2 (D-CF2-02). Claude Code shows a skill with a frontmatter `name` as `<plugin>:<name>` in its `/` menu and as `(<plugin>:<name>)` in the model's skill list. Pi has no display-name field, so Pi lists only `/skill:<plugin>-<folder>`. Trigger: Pi adds a skill display name or alias field (the D-CF2-10 report asks for one).
+
+## SKILLALIAS-02: unprobed alias rules across plugins
+
+Deferred by component-features Phase 2 (D-CF2-02, DC-25). Upstream's order for a bare alias that two plugins claim, and whether upstream matches slash names case-insensitively, were not probed. The alias table uses loader order (user root, then project root, then state order) and exact case. Probe Claude Code 2.1.316 or later before changing either.
+
+## SKILLMODEL-01: arguments and context commands for model-invoked skills
+
+Deferred by component-features Phase 1 and Phase 2 (D-CF1-03). When the model loads a skill on its own, Pi gives it the raw file, so arguments, `${CLAUDE_*}` variables, and `!` commands stay literal. Trigger: Pi adds an extension hook on the model's skill path (the D-CF2-10 report asks for one).
