@@ -7,8 +7,16 @@
 // every `${NAME}` and `${NAME:-default}` in the result in one scan. This module
 // returns that scan as segments: literal text, and references kept for
 // pi-mcp-adapter to expand when it connects. A reference carries only a
-// variable's name, so no environment value leaves this module. The caller
-// supplies the environment.
+// variable's name and, for `${NAME:-default}`, the plugin's default text, so no
+// environment value leaves this module. The caller supplies the environment.
+//
+// D-CF1-13: pi-mcp-adapter 7.x expands `${NAME:-default}` as Claude does for
+// an unset, empty, or set variable, so a reference with a default stays a
+// reference with its default, and a variable set after install takes effect at
+// the next connect. Two cases keep the install-time decision. The adapter runs
+// its `$env:` and `{env:` passes over the default it inserted, which Claude
+// never does, so a default that holds `$env:` or `{env:` text is resolved here.
+// A deny-listed name is decided here too (AVAR-05).
 //
 // AVAR-05: Claude withholds deny-listed variables
 // (`domain/claude-credential-denylist.ts`). The decision is made here, at
@@ -32,11 +40,13 @@ export type ClaudeEnv = Readonly<Record<string, string | undefined>>;
 
 /**
  * One piece of an expanded value: literal text, or a `${NAME}` reference kept
- * for the adapter's runtime expansion.
+ * for the adapter's runtime expansion. A reference with a `fallback` is
+ * `${NAME:-fallback}`, whose default the adapter uses when `NAME` is unset at
+ * connect time (D-CF1-13).
  */
 export type Segment =
   | { readonly kind: "text"; readonly text: string }
-  | { readonly kind: "ref"; readonly name: string };
+  | { readonly kind: "ref"; readonly name: string; readonly fallback?: string };
 
 /**
  * The builtin paths. `projectDir` is the project root at project scope and
@@ -140,6 +150,12 @@ function deniedSegment(
   return { kind: "text", text: `\${${name}}` };
 }
 
+// D-CF1-13: pi-mcp-adapter expands `$env:` and `{env:` again in the default
+// its first pass inserted, so such a default is never left to the adapter.
+function holdsAdapterMarker(defaultText: string): boolean {
+  return defaultText.includes("$env:") || defaultText.includes("{env:");
+}
+
 function segmentFor(inner: string, state: ScanState): Segment {
   const separator = inner.indexOf(DEFAULT_SEPARATOR);
   const name = separator === -1 ? inner : inner.slice(0, separator);
@@ -159,6 +175,10 @@ function segmentFor(inner: string, state: ScanState): Segment {
     return deniedSegment(name, defaultText, value, state);
   }
 
+  if (defaultText !== undefined && !holdsAdapterMarker(defaultText)) {
+    return { kind: "ref", name, fallback: defaultText };
+  }
+
   if (value !== undefined) {
     return ref;
   }
@@ -173,9 +193,12 @@ function segmentFor(inner: string, state: ScanState): Segment {
 
 /**
  * Expands one field value by Claude's rule. A set variable, the empty string
- * included, stays a reference. An unset variable with a `:-` default becomes
- * the default text, which is never scanned again. An unset variable with no
- * default stays a reference and is reported missing. At user scope
+ * included, stays a reference. A `:-` default stays with its reference, set or
+ * not, for the adapter to use when the variable is unset at connect time
+ * (D-CF1-13). A default holding `$env:` or `{env:` text keeps the install-time
+ * rule instead: an unset variable becomes the default text, which is never
+ * scanned again. An unset variable with no default stays a reference and is
+ * reported missing. At user scope
  * `${CLAUDE_PROJECT_DIR}` stays a reference and is never reported missing. A
  * deny-listed reference follows Claude's deny arm for `fieldClass` (AVAR-05)
  * and is listed in `withheld` whenever it is written as `""`.
