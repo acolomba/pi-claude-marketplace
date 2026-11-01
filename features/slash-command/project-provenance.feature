@@ -153,6 +153,36 @@ Feature: Slash command project provenance
       """
     Then the project scope has no installed plugins
 
+  Scenario: Updating a project command's plugin while the user's record of project installs holds content pi cannot update leaves no command that record does not list
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {
+        "name": "fixtures",
+        "owner": { "name": "features" },
+        "plugins": [{ "name": "solo", "source": "./plugins/solo", "version": "1.1.0" }]
+      }
+      """
+    Given the published plugin "solo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      { "name": "solo", "version": "1.1.0" }
+      """
+    Given the published plugin "solo" of the marketplace "fixtures" has the slash command "check" with this command file:
+      """
+      ---
+      description: Checks the status.
+      ---
+
+      Check: !`printf ran`
+      """
+    Given the user's record of project skill installs was replaced with this text:
+      """
+      { "version": 2, "projects": {} }
+      """
+    Given the user has run "/claude:plugin update solo@fixtures --scope project", which failed
+    Given the user has started a new pi session
+    When the user lists the slash commands pi offers
+    Then pi offers no slash commands from prompt templates
+
   Scenario Outline: Removing a project command while the user's record of project installs holds content pi cannot update removes it and warns
     Given the user's record of project skill installs was replaced with this text:
       """

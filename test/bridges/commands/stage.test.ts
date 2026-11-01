@@ -1243,6 +1243,83 @@ test("D-CF3-07 a failed project ledger write fails the commit after removing the
   assert.strictEqual(await pathIsPresent(prepared.stagingRoot), false);
 });
 
+test("WR-01 a failed project ledger write removes the renamed commands and the replaced ones", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-ledger-unrecorded-");
+  await mkdir(locations.promptsTargetDir, { recursive: true });
+  await writeFile(path.join(locations.promptsTargetDir, "acme:old.md"), "Old.\n");
+  const { prepared } = await prepareGreetAndWeb(t, locations, ["acme:old"]);
+  const ledgerError = new Error("the project ledger cannot be written");
+  const ledger = {
+    update: () => Promise.reject(ledgerError),
+  } satisfies ProjectCommandLedger;
+
+  // act
+  const error = await commitPreparedCommands(createRemovalOps(), prepared, ledger).then(
+    () => undefined,
+    (reason: unknown) => reason,
+  );
+
+  // assert
+  assert.strictEqual(error, ledgerError);
+  assert.deepStrictEqual(await readdir(locations.promptsTargetDir), []);
+});
+
+test("WR-01 a failed project ledger write tolerates a renamed command that is already gone", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-ledger-gone-");
+  const { prepared } = await prepareGreetAndWeb(t, locations, []);
+  const ledgerError = new Error("the project ledger cannot be written");
+  const ledger = {
+    update: async () => {
+      await rm(path.join(locations.promptsTargetDir, "acme:greet.md"));
+      throw ledgerError;
+    },
+  } satisfies ProjectCommandLedger;
+
+  // act
+  const error = await commitPreparedCommands(createRemovalOps(), prepared, ledger).then(
+    () => undefined,
+    (reason: unknown) => reason,
+  );
+
+  // assert
+  assert.strictEqual(error, ledgerError);
+  assert.deepStrictEqual(await readdir(locations.promptsTargetDir), []);
+});
+
+test("WR-01 a failed project ledger write carries a renamed command it cannot remove", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-ledger-stuck-");
+  const { prepared } = await prepareGreetAndWeb(t, locations, []);
+  const greetTarget = path.join(locations.promptsTargetDir, "acme:greet.md");
+  const ledgerError = new Error("the project ledger cannot be written");
+  const ledger = {
+    update: async () => {
+      await rm(greetTarget);
+      await mkdir(greetTarget);
+      throw ledgerError;
+    },
+  } satisfies ProjectCommandLedger;
+
+  // act
+  const error = await commitPreparedCommands(createRemovalOps(), prepared, ledger).then(
+    () => undefined,
+    (reason: unknown) => reason,
+  );
+
+  // assert
+  assert.ok(error instanceof CleanupLeakError);
+  assert.deepStrictEqual(
+    { message: error.message, cause: error.cause },
+    {
+      message: `the project ledger cannot be written (additionally: failed to remove unrecorded command ${greetTarget}: EISDIR: illegal operation on a directory, unlink '${greetTarget}')`,
+      cause: ledgerError,
+    },
+  );
+  assert.deepStrictEqual(await readdir(locations.promptsTargetDir), ["acme:greet.md"]);
+});
+
 test("D-CF3-07 a failed project ledger write carries the staging cleanup leak", async (t) => {
   // arrange
   const locations = await createProjectLocations(t, "commands-ledger-leak-");

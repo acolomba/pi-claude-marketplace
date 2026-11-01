@@ -264,6 +264,29 @@ async function recordCommittedCommands(
 }
 
 /**
+ * WR-01: removes the renamed commands of a commit whose project ledger write
+ * failed. The update runner has no undo, so a commit that throws must leave
+ * no command on disk that the ledger and the state record do not list. A
+ * file that is already gone needs no removal. Any other failure becomes a
+ * leak message, in rename order.
+ */
+async function removeUnrecordedCommands(
+  prepared: PreparedCommandsStaged,
+): Promise<(string | undefined)[]> {
+  return Promise.all(
+    prepared._renamePairs.map(async ({ to }) =>
+      unlink(to).then(
+        () => undefined,
+        (err: unknown) =>
+          (err as NodeJS.ErrnoException).code === "ENOENT"
+            ? undefined
+            : `failed to remove unrecorded command ${to}: ${errorMessage(err)}`,
+      ),
+    ),
+  );
+}
+
+/**
  * Commit a prepared staging into the target dir. Removes any
  * previously-named target files (re-stage path -- ENOENT-tolerant), then
  * issues the per-file `rename(stagedFile, targetFile)` calls. Then it
@@ -271,8 +294,10 @@ async function recordCommittedCommands(
  * string so the caller can surface it via `appendLeakToError` without
  * losing the install's success state. Last, at project scope, it lists the
  * committed commands in the user's project ledger (D-CF3-07). IN-02: the
- * cleanup runs first, and a failed ledger write throws with any cleanup leak
- * appended, so the caller's undo removes commands that could never run.
+ * cleanup runs first. WR-01: a failed ledger write removes the renamed
+ * commands, then throws with any cleanup leak and removal leak appended. So
+ * a throw means no new command was committed, for the install ledger and
+ * for the update runner, which has no undo.
  *
  * Returns `undefined` on a successful commit (or for a noop). Returns the
  * leak message when staging cleanup fails.
@@ -342,9 +367,12 @@ export async function commitPreparedCommands(
   }
 
   const leak = await cleanupStaging(ops, prepared.stagingRoot, "commands staging directory");
-  await recordCommittedCommands(ledger, prepared).catch((err: unknown) => {
-    throw appendLeakToError(err, leak);
-  });
+  try {
+    await recordCommittedCommands(ledger, prepared);
+  } catch (err) {
+    throw appendLeaks(err, [leak, ...(await removeUnrecordedCommands(prepared))]);
+  }
+
   return leak;
 }
 
