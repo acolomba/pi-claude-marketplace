@@ -3664,16 +3664,24 @@ test("ANAME-07: a server Claude Code's schema rejects makes the plugin unavailab
     try {
       // arrange
       const locations = locationsFor("project", cwd);
-      await seedPathMarketplaceWithPlugin({
+      const { pluginRoot } = await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         pluginName: "hello",
-        mcpServers: {
-          db: { command: "node", timeout: 1.5 },
-          live: { type: "ws", url: "wss://mcp.example.com/ws" },
-        },
       });
+      // D-CF6-02: only a server written inline in plugin.json refuses the plugin.
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({
+          name: "hello",
+          version: "0.0.1",
+          mcpServers: {
+            db: { command: "node", timeout: 1.5 },
+            live: { type: "ws", url: "wss://mcp.example.com/ws" },
+          },
+        }),
+      );
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -17797,8 +17805,9 @@ test("WLIF-01: an undo before the workflows phase ran removes nothing and does n
     const cwd = await mkdtemp(path.join(tmpdir(), "install-workflows-undo-noop-"));
     try {
       // arrange -- the mcp phase runs BEFORE the workflows phase, so a
-      // malformed `.mcp.json` fails the install with `workflowsPrep` still
-      // undefined and the workflows undo reaching its early return.
+      // malformed server written inline in plugin.json (D-CF6-02) fails the
+      // install with `workflowsPrep` still undefined and the workflows undo
+      // reaching its early return.
       const locations = locationsFor("project", cwd);
       const { pluginRoot } = await seedPathMarketplaceWithPlugin({
         cwd,
@@ -17808,7 +17817,10 @@ test("WLIF-01: an undo before the workflows phase ran removes nothing and does n
         mcpServers: { srv: { command: "node" } },
         workflows: [{ sourceName: "greet" }],
       });
-      await writeFile(path.join(pluginRoot, ".mcp.json"), "{ not json");
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "hello", version: "0.0.1", mcpServers: { srv: { command: 42 } } }),
+      );
       const { ctx, run } = makeCtx();
 
       // act
