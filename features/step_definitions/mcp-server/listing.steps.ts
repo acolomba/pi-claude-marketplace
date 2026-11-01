@@ -153,7 +153,9 @@ Given(
 
 // D-CF6-06: every member of the doc string whose value is `{"stub": {...}}`
 // becomes a stub server named after the member; every other value is
-// written as it is, so a scenario can also write a malformed server.
+// written as it is, so a scenario can also write a malformed server. A
+// wrapped map whose only server is named `stub` reads as such a marker, so
+// this step cannot write it (see `withStubServers`).
 Given(
   "the published plugin {string} of the marketplace {string} has the file {string} with these stub mcp servers:",
   async function (this: ScenarioWorld, plugin: string, name: string, file: string, text: string) {

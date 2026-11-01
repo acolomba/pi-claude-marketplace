@@ -12,9 +12,7 @@
  * when pi-mcp-adapter connects to it.
  *
  * Each MCP server feature has its own step module, and every such module
- * writes its fixtures through this file. An export tagged `@public` is one of
- * those writers, kept for the step modules that call it even while none
- * imports it, because fallow would otherwise report it as unused.
+ * writes its fixtures through this file.
  */
 
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -51,20 +49,16 @@ export interface StubMcpServer {
 /**
  * What a stub server entry may change (D-CF6-06): the plugin argument the
  * stub logs, which defaults to the plugin's name, and the `env` it declares.
- *
- * @public
  */
-export interface StubServerOptions {
+interface StubServerOptions {
   readonly plugin?: string;
   readonly env?: Readonly<Record<string, string>>;
 }
 
 /**
  * The stdio server entry of a stub server, as a plugin's MCP file holds it.
- *
- * @public
  */
-export interface StubServerEntry {
+interface StubServerEntry {
   readonly command: string;
   readonly args: readonly string[];
   readonly env?: Readonly<Record<string, string>>;
@@ -75,10 +69,8 @@ export interface StubServerEntry {
  * plugin `plugin` (D-CF6-06). The stub logs `options.plugin` in place of the
  * plugin's name when it is given, such as `${CLAUDE_PLUGIN_ROOT}`, which the
  * server is started with expanded. The entry holds `env` only when given.
- *
- * @public
  */
-export function stubServerEntry(
+function stubServerEntry(
   plugin: string,
   server: string,
   options: StubServerOptions = {},
@@ -154,7 +146,10 @@ function stubMarkerOptions(member: string, value: unknown): StubServerOptions | 
  * server, a file reference, or an array. Objects are built with
  * `Object.fromEntries`, so a member named `__proto__` stays an own member.
  *
- * @public
+ * A marker is read wherever it sits, so a document cannot hold a wrapped map
+ * whose only server is named `stub`: in `{"mcpServers": {"stub": {...}}}`,
+ * the value of `mcpServers` is itself a marker, and it becomes a stub server
+ * named `mcpServers`.
  */
 export function withStubServers(plugin: string, document: unknown): unknown {
   if (Array.isArray(document)) {
@@ -202,8 +197,6 @@ export async function publishStubServersFile(
  * `mcpServers`, as written, and rewrites the published manifest (D-CF6-01).
  * The caller expands any stub markers first. Fails when the manifest offers
  * no plugin of that name.
- *
- * @public
  */
 export async function setPublishedEntryMcpServers(
   published: PublishedMarketplace,
@@ -235,8 +228,6 @@ export async function setPublishedEntryMcpServers(
  * which must exist, and returns its path (D-CF6-01). The marketplace entry
  * then acts as the plugin's manifest. Only a `dir` or `file` publication can
  * lose the file, because a git or hosted one would need a new revision.
- *
- * @public
  */
 export async function removePublishedPluginManifest(
   published: PublishedMarketplace,
@@ -262,8 +253,6 @@ export async function removePublishedPluginManifest(
  * line holds `tools` when given and is absent otherwise, and returns the
  * path of its file (D-CF6-07). A `tools:` entry can name a plugin MCP tool
  * by its Claude Code name, such as `mcp__plugin_demo_stub__echo`.
- *
- * @public
  */
 export async function publishMcpServerAgent(
   published: PublishedMarketplace,
@@ -291,8 +280,6 @@ export async function publishMcpServerAgent(
  * it. With no entry, it holds only `fields`, which is the override a user
  * writes before an install, with no `command` and no `url`. The file and its
  * directory are created when missing.
- *
- * @public
  */
 export async function writeMcpAdapterOverride(
   file: string,
