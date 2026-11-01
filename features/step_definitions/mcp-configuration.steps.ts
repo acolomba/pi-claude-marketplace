@@ -1,7 +1,8 @@
 /**
  * @fileoverview Steps about MCP configuration: the MCP servers published
- * plugins declare, and the `mcp-adapter.json` a user keeps in a scope, which
- * a step can also block with a directory of the same name.
+ * plugins declare, the `mcp-adapter.json` a user keeps in a scope, which a
+ * step can also block with a directory of the same name, and the user's
+ * approval of project MCP servers.
  */
 
 import assert from "node:assert/strict";
@@ -10,7 +11,12 @@ import path from "node:path";
 
 import { Given } from "@cucumber/cucumber";
 
-import { declarePublishedMcpServer, writeCommentedMcpConfig } from "../lib/mcp-configuration.ts";
+import {
+  declarePublishedMcpServer,
+  PROJECT_SERVERS_ALLOWED_CONFIG,
+  writeCommentedMcpConfig,
+  writeProjectServersAllowedConfig,
+} from "../lib/mcp-configuration.ts";
 
 import type { ScenarioWorld } from "../support/world.ts";
 
@@ -32,6 +38,20 @@ Given(
     await writeCommentedMcpConfig(file);
     this.onRelease(() => rm(file, { force: true }));
     assert.match(await readFile(file, "utf8"), /^\/\/ /u);
+  },
+);
+
+// D-CF1-07: approving project MCP servers is a precondition of its own,
+// never part of the default profile. pi-mcp-adapter reads the setting from
+// the user-global `<agent dir>/mcp-adapter.json` when a session starts, so
+// the step comes before the profile Pi starts.
+Given(
+  "pi-mcp-adapter allows project mcp servers for the user",
+  async function (this: ScenarioWorld) {
+    const file = mcpAdapterFile(this, "user");
+    await writeProjectServersAllowedConfig(file);
+    this.onRelease(() => rm(file, { force: true }));
+    assert.strictEqual(await readFile(file, "utf8"), PROJECT_SERVERS_ALLOWED_CONFIG);
   },
 );
 
