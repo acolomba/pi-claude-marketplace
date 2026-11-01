@@ -45,6 +45,30 @@ test("D-CF3-08 describes a command with no frontmatter by its first body line", 
   });
 });
 
+test("D-CF3-08 describes a command by the first non-blank line after leading blank lines", async (t) => {
+  // arrange
+  const command = await commandWithSource(t, "\n\nRun after two blank lines.\n");
+
+  // act
+  const staged = await buildStagedCommand(command, context);
+
+  // assert
+  assert.deepStrictEqual(staged, {
+    text: '---\n"description": "Run after two blank lines."\n---\n\n\nRun after two blank lines.\n',
+  });
+});
+
+test("D-CF3-08 describes a command whose body has no non-blank line as Plugin command", async (t) => {
+  // arrange
+  const command = await commandWithSource(t, "\n  \n");
+
+  // act
+  const staged = await buildStagedCommand(command, context);
+
+  // assert
+  assert.deepStrictEqual(staged, { text: '---\n"description": "Plugin command"\n---\n\n  \n' });
+});
+
 test("D-CF3-08 keeps a non-empty declared description", async (t) => {
   // arrange
   const command = await commandWithSource(t, "---\ndescription: Deploys.\n---\nShip it.\n");

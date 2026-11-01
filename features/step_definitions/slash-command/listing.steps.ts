@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-import { Given } from "@cucumber/cucumber";
+import { Given, Then } from "@cucumber/cucumber";
 
 import {
   publishSlashCommand,
@@ -55,3 +55,15 @@ Given(
     assert.strictEqual(await readFile(written, "utf8"), text);
   },
 );
+
+// The names of every command Pi built from a prompt template must be none, so
+// no command file of any installed plugin became a slash command.
+Then("pi offers no slash commands from prompt templates", function (this: ScenarioWorld) {
+  const listed = this.registrySnapshot?.commands;
+  if (listed === undefined) {
+    assert.fail("no step listed the slash commands pi offers");
+  }
+
+  const promptNames = listed.flatMap((entry) => (entry.source === "prompt" ? [entry.name] : []));
+  assert.deepStrictEqual(promptNames, []);
+});
