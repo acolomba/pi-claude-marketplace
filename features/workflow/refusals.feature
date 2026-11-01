@@ -20,7 +20,9 @@ Feature: Workflow refusals
       <script>
       """
     Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user", which reported notes on workflow scripts of the plugin
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which reported these notes on workflow scripts:
+      | script | disposition                                         |
+      | <file> | was installed but the engine will refuse to load it |
     Given the user has started a new pi session
     When the user runs the workflow command "<command>", which starts no run
     Then the workflow engine shows these notices:
@@ -172,7 +174,15 @@ Feature: Workflow refusals
       """
     Given the published plugin "demo" of the marketplace "fixtures" has the workflow "hello" described as "Says hello." that returns "Hello from demo."
     Given the marketplace "fixtures" is added to the user scope
-    Given the user has run "/claude:plugin install demo@fixtures --scope user", which reported notes on workflow scripts of the plugin
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which reported these notes on workflow scripts:
+      | script      | disposition                                         |
+      | broken.js   | was refused                                         |
+      | clock.js    | was refused                                         |
+      | dyn.js      | was not installed                                   |
+      | helper.js   | was not installed                                   |
+      | late.js     | was installed but the engine will refuse to load it |
+      | nodesc.js   | was installed but the engine will refuse to load it |
+      | reserved.js | was installed but the engine will refuse to load it |
     Given the user has started a new pi session
     When the user lists the slash commands pi offers
     Then pi offers these workflow commands:
