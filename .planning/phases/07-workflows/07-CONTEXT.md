@@ -71,11 +71,13 @@ parent line).
   `=` after the first character) becomes `args[key] = value`; the other tokens
   joined by one space become `args._`; the trimmed text becomes `args._raw`;
   `parameters` defaults fill missing keys (engine 3.15.0
-  `src/saved-commands.ts::parseCommandArgs`). Upstream documents `args` only
-  as the Workflow tool's input passed "verbatim" (2.1.316 binary prose) and
-  states no rule for text typed after `/<plugin>:<name>`, so there is no
-  upstream position to diverge from; the shape is recorded as an engine-owned
-  behavior with an ID, not a divergence.
+  `src/saved-commands.ts::parseCommandArgs`). **Revised after research:** in
+  the 2.1.316 binary a plugin workflow command is a prompt command that tells
+  the model `Invoke: Workflow({ name, args: "<typed text>" })`, so upstream
+  `args` is the typed text as one string (or `undefined` when nothing is
+  typed; MEDIUM, the model makes the call). D-CF7-02 is therefore a
+  **divergence licensed by a Pi-side gap**: the engine owns the slash handler
+  and its argument parsing, and the bridge has no hook on it.
 - **Observation:** a fixture script returns `JSON.stringify(args)`. The engine's
   progress entry carries a text result whole up to 2,000 characters
   (`src/workflow-progress.ts`, `PREVIEW_CHARS`), so the scenario compares the
@@ -117,8 +119,22 @@ parent line).
   about instead of refusing (`meta-not-first-export`, `meta-not-const-export`,
   `meta-not-sole-declarator`, `meta-not-named-meta`, `meta-not-pure-literal`,
   `meta-fields-invalid`) install with a warning and fail at the engine on the
-  first run. This is the documented admit-versus-run divergence; it gets the ID
-  D-CF7-04 so the scenarios and the doc can cite it.
+  first run. **Revised after research:** Claude Code's loader skips such
+  scripts at load ("has invalid meta … skipping"), so the divergence is
+  "admitted with a warning here, skipped at load upstream"; it gets the ID
+  D-CF7-04 (licensed by the existing WGATE decisions) and the doc gains the
+  Claude Code side. Behavior is kept: turning six checks into skips would
+  break tests outside this phase.
+- **Refused-at-run observation (research):** the engine parses the script
+  before it creates a run, so a refused script writes no progress entry; the
+  handler shows the error notice `/<cmd> failed: <message>`. Wave 1 adds a
+  sibling `When`/`Then` that reads Pi's notice records instead of waiting for a
+  terminal progress entry. The refusal-fixture install reports an info cascade
+  plus a warning diagnostic, so it is read with a `When`, not a `Given`.
+- The install warning text "the engine will refuse to load it" is inaccurate
+  (the engine registers the command and refuses at run) but is pinned by tests
+  and the output catalog outside this phase: pin it as is and list a backlog
+  parent line.
 - Fixture workflows are never named after Pi reserved commands (`new`,
   `compact`, ...), and every fixture script is a statement body ending in a
   `return`, never `export default` (ROADMAP Phase 7 note).
@@ -129,15 +145,15 @@ parent line).
   engine reports the plugin row with `{requires pi-dynamic-workflows}` at
   `warning`; `list` reports the same marker at `info`. Pin both values as
   literals. No new ID.
-- **Recovery:** after the install without the engine, a Pi that loads the
-  engine offers `/<plugin>:<name>` with no reinstall, because the engine
-  registers saved envelopes on `session_start`. If the frozen harness can load
-  the engine into a running Pi and `/reload` it, the scenario does that; if it
-  can only start a new Pi with the engine (Pi loads extensions at start, the
-  same thing `/reload` does after `pi install`), the scenario starts the
-  engine Pi and the plan records the substitution as a dubious choice. The
-  researcher checks which one the frozen `companion.steps.ts` and
-  `features/lib/companions.ts` support.
+- **Recovery (revised after research):** `/reload` over RPC goes to the model,
+  and a scenario can start only one profile Pi. The scenario therefore adds
+  the engine to Pi's `<agentDir>/settings.json` `packages` through a
+  Phase-7-owned `Given` (with cleanup), then starts a new session (the frozen
+  `the user has started a new pi session`): a new session re-reads settings as
+  `/reload` does, and the engine registers saved envelopes on every session
+  start. Verified live: the command appears and runs with no reinstall.
+  Recorded as a dubious choice (the session starts with reason `new`, not
+  `reload`).
 - `shared/concerns/soft-dep.ts` is edited only in the engine's arm, and only if
   a scenario exposes a bug there.
 
@@ -150,10 +166,13 @@ parent line).
   `src/saved-commands.ts`); a new session no longer offers it.
 - **Disable and enable:** disable retires the command as uninstall does (the
   WLIF-06 verbs); enable brings it back in a new session and it runs.
-- **Update:** an update to a new plugin version whose script returns a new
-  value runs the new script in a new session (the engine reloads the envelope
-  at invocation, so the researcher checks whether the same session already
-  runs the new script and the scenario pins what the engine does).
+- **Update (measured):** an update that keeps the name runs the new script in
+  the same session (the engine re-reads the envelope at invocation), while the
+  listing keeps the old description until a new session; an update that
+  renames the workflow reports `{stale workflow command}`. Pin both.
+- Engine notices contain U+2014; the commit hook rewrites it to `--` outside
+  `.planning/`, so steps normalize U+2014 to `--` before comparing and write it
+  as an escape in TypeScript.
 - Each scenario observes Pi (`get_commands`, the run's progress entries, the
   `/claude:plugin` result), never the envelope files.
 

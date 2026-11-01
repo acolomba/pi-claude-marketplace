@@ -79,3 +79,37 @@ theirs under `## Dubious Choices` and the orchestrator copies them here.
 - **Why dubious:** The brief says "exactly". The child's link is the one that
   leads to the transcript that made the commit.
 - **Recorded in:** this file only.
+
+### P7-DC-06: Phase 7 research choices (accepted by the orchestrator)
+
+- **Phase / source:** Phase 7 research (`07-RESEARCH.md`); CONTEXT revised to match.
+- **Severity:** Medium. **Status:** open.
+- **Choices:**
+  1. **Engine-later recovery uses a settings `packages` entry plus a new
+     session, not a literal `/reload`.** Over RPC `/reload` goes to the model,
+     and a scenario can start only one profile Pi. A new session re-reads Pi's
+     settings as `/reload` does; verified live. Alternatives: drive `/reload`
+     through the TUI driver, or edit frozen `world.ts` for a second profile Pi.
+     Dubious because the session starts with reason `new`, not `reload`.
+  2. **D-CF7-02 is now a divergence (supersedes P7-DC-02's "no upstream
+     position").** The 2.1.316 binary makes a plugin workflow command a prompt
+     command that tells the model `Workflow({ name, args: "<typed text>" })`,
+     so upstream `args` is one string; the engine passes an object. Kept,
+     licensed as a Pi-side gap (the engine owns the slash handler).
+  3. **D-CF7-04 reworded:** Claude Code skips scripts whose `meta` is not
+     first, has a reserved key, or lacks a description at load; the bridge
+     admits them with a warning and the engine refuses them at run. Kept
+     (WGATE decisions); switching to per-file skips would break tests outside
+     this phase.
+  4. **The install warning "the engine will refuse to load it" stays pinned**
+     although the engine registers the command and refuses only at run; tests
+     and the output catalog outside this phase pin it. Backlog parent line.
+  5. **The listing `Then` picks bridged commands by the engine path plus a `:`
+     in the name,** not by a hard-coded list of the engine's own commands.
+  6. **Engine notices are compared after converting U+2014 to `--`,** because
+     the commit hook rewrites em dashes outside `.planning/` and the hook
+     config is not Phase 7's.
+  7. **The refusal-fixture install is read with a `When`** (an info cascade
+     plus a warning diagnostic), replacing CONTEXT's implied "the install
+     shows a warning".
+- **Recorded in:** `07-RESEARCH.md`, `07-CONTEXT.md`.
