@@ -4553,3 +4553,33 @@ Deferred by component-features Phase 2 (D-CF2-02, DC-25). Upstream's order for a
 ## SKILLMODEL-01: arguments and context commands for model-invoked skills
 
 Deferred by component-features Phase 1 and Phase 2 (D-CF1-03). When the model loads a skill on its own, Pi gives it the raw file, so arguments, `${CLAUDE_*}` variables, and `!` commands stay literal. Trigger: Pi adds an extension hook on the model's skill path (the D-CF2-10 report asks for one).
+
+## WFLNOTE-01: the workflow install note says the engine will refuse to load the script
+
+Reported by component-features Phase 7 (07-02, P7-DC-10). The workflow install note `workflow script "<file>" in "workflows" was installed but the engine will refuse to load it: ...` is inaccurate: the engine registers (loads) the command and refuses the script only when it runs. The text lives in `extensions/pi-claude-marketplace/bridges/workflows/discover.ts`; rewording it also touches `test/orchestrators/plugin/{install-flow-ledger,reinstall-flow,info}.test.ts`, `docs/output-catalog.md` (and its closed-set counters), and `features/workflow/refusals.feature` (the scenario "Installing a plugin installs a script the engine will refuse with a note, where Claude Code skips it at load").
+
+## WFLPARITY-01: parity options for the workflow install-time dispositions
+
+Deferred by component-features Phase 7.
+
+- Parity option for D-CF7-04: skip the scripts the six warned checks name at install, as Claude Code 2.1.316 skips them at load, instead of installing them with a note. A product change in `domain/workflow-script.ts` and `bridges/workflows/discover.ts`, with fallout in non-Phase-7 orchestrator tests and `docs/output-catalog.md`; it would revisit WGATE-03.
+- Parity option for D-CF7-03: admit nondeterministic or unparseable scripts and let the engine refuse them when they run, as Claude Code registers them and fails them at run.
+
+## WFLENGINE-01: workflow engine requests
+
+Deferred by component-features Phase 7. Trigger: `@quintinshaw/pi-dynamic-workflows` ships either feature.
+
+- Engine request for D-CF7-01: a pre-run hook (or approval option) in `@quintinshaw/pi-dynamic-workflows` so a host can ask before a saved workflow runs.
+- Engine request for D-CF7-02: a raw-string `args` mode for the slash path, so a script written for Claude Code receives the typed text as one string, or `undefined` when nothing is typed.
+
+## WFLLIST-01: the workflow listing step assumes no engine built-in command name holds a colon
+
+Noted by component-features Phase 7. The workflow listing step in `features/step_definitions/workflow/listing.steps.ts` assumes no engine built-in command name holds a colon (RESEARCH assumption A3, verified for the eleven built-ins of engine 3.15.0); a later engine that adds one breaks the whole-table comparison loudly.
+
+## WFLHARNESS-01: harness follow-ups from the workflow code review
+
+Deferred by component-features Phase 7 (07-REVIEW.md). Both touch files that were frozen during the component phases.
+
+- IN-08: the `lines` column of `the command reports these results:` still joins a diagnostic's lines with `", "` (`features/lib/field-rows.ts`), so each workflow install scenario states every note twice: once joined, and once per line in `the workflow install diagnostic reports these lines:`. Render a diagnostic's `lines` without the ambiguous join, then let the per-line step replace the column. The projection is shared by every feature that states a `lines` column, so the change rewrites tables across the whole suite.
+- IN-06: the workflow notices step reads Pi's session id with a `get_state` RPC request inside a `Then`. Keep the session id of a recorded turn in the world (`features/support/world.ts`), so the step reads it from the turn.
+- IN-10 (optional): give the world one compared marker for each part of a workflow run (the notices and the run outcome), so each step marks only its own part and the world fails when either part goes unstated.

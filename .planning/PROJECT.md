@@ -864,6 +864,14 @@ the 36 json-output requirements in
 
 ### Validated
 
+- ✓ Plugin workflows have behavioral tests: the engine lists each bridged
+  workflow as `/<plugin>:<meta.name>` with its description, a run records the
+  engine's argument object and the script's result, refused scripts are
+  reported as upstream or a recorded divergence, a missing engine is reported
+  and loading it later needs no reinstall, and disable, uninstall, and update
+  remove or replace the command; the divergences are D-CF7-01..04 --
+  component-features Phase 7, 2026-11-01 (WFL-01..05).
+
 - ✓ The behavioral harness and the version raise are in place: Pi 1.4.0 and
   the three companions at their latest releases with the declared floors
   raised (pi-mcp-adapter 7.x, pi-subagents 0.84, pi-dynamic-workflows 3.15 as
@@ -1728,6 +1736,10 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 | **D-CF2-12 (component-features, Phase 2, settled autonomously, DUBIOUS-CHOICES DC-24, DC-26): Phase 2 also owned `orchestrators/skill-alias-state.ts` and added optional profile fields to `features/lib/pi-tui.ts`**. | Only skills use the alias loader, and the TUI alias scenario needs the scripted model. | ✓ Good |
 | **D-CF2-13 (component-features, Phase 2, taken by the parent without the user, pending user review, DUBIOUS-CHOICES DC-29, DC-30): a project-scope skill runs its `!` commands and claims an alias only when a user-scope ledger lists it with a digest of its staged directory**. The ledger is `<agentDir>/pi-claude-marketplace/project-installs/<sha256(project path)>/skills.json`, written under the project's state lock. Otherwise the invocation aborts and names `/claude:plugin reinstall <plugin>@<marketplace> --scope project`. | Upstream parity: Claude Code records installs in the user-owned `installed_plugins.json` and skips another path's project plugin as `not_installed_here`. A cloned repository can ship its own staged skills and `state.json`. Residual AR-02-05: plugin-root files and link targets are not hashed. | -- Pending (user review) |
 | **D-CF2-14 (component-features, Phase 2, taken by the parent without the user, pending user review, DUBIOUS-CHOICES DC-30): a load with `autoapply` on applies only the user scope**. The project scope gets the read-only pending block, and an explicit `/claude:plugin apply` still applies both scopes. Changes AAP-01 for the project scope. | Upstream parity: Claude Code reads repository-declared plugins only after the trust dialog and asks before it installs them. Pi 1.4.0 exposes only `isProjectTrusted()`, which is also true for an auto-trusted project. | -- Pending (user review) |
+| **D-CF7-01 (component-features, Phase 7, settled autonomously, DUBIOUS-CHOICES P7-DC-03, P7-DC-08): Pi asks no approval before a bridged plugin workflow runs**. The engine owns the command, and Pi gives this extension no hook before its handler. Pinned by `features/workflow/run.feature`. | Claude Code asks before a workflow runs, through the Workflow tool's permission path (documented upstream; read from the 2.1.316 binary). Licensed by a Pi capability gap; a pre-run hook is an engine request (BACKLOG). | -- Locked |
+| **D-CF7-02 (component-features, Phase 7, settled autonomously, DUBIOUS-CHOICES P7-DC-02, P7-DC-06): text typed after a bridged workflow command reaches the script as the engine's argument object**: `key=value` tokens as keys, the rest as `_`, and the trimmed text as `_raw`. Pinned by `features/workflow/run.feature`. | Claude Code passes the trimmed text as one string, or nothing (read from the 2.1.316 binary). The engine owns the parsing. Licensed by a Pi-side gap; a raw-string `args` mode is an engine request (BACKLOG). | -- Locked |
+| **D-CF7-03 (component-features, Phase 7, settled autonomously, DUBIOUS-CHOICES P7-DC-04): a nondeterministic or unparseable workflow script is refused at install with a warning, and the rest of the plugin installs**. Pinned by `features/workflow/refusals.feature`. | Claude Code reads only `meta` at load and fails these scripts at run (read from the 2.1.316 binary). A project decision: the engine refuses both before any run, so only the timing differs. The parity option is in BACKLOG. | -- Locked |
+| **D-CF7-04 (component-features, Phase 7, settled autonomously, DUBIOUS-CHOICES P7-DC-06): a workflow script that Claude Code skips at load installs with a note, and the engine refuses it at run**. Covers the six warned `meta` checks. Pinned by `features/workflow/refusals.feature`. | Claude Code 2.1.316 skips these scripts with `has invalid meta ... skipping` and registers no command (read from the binary). Licensed by WGATE-03: a gate warning never refuses a script. Skipping them at install is a BACKLOG option. | -- Locked |
 
 ## Evolution
 
@@ -1985,3 +1997,5 @@ _Last updated: 2026-10-29 after the plugin-lifecycle milestone was completed. 64
 _Last updated: 2026-11-01 after component-features Phase 1 (Harness and Version Raise). 17/17 phase requirements validated; D-CF1-06..08 and D-CF1-13..17 shipped in the phase and are marked Good; D-CF1-01..05 and D-CF1-09..12 stay Locked until the component phases wire them._
 
 _Last updated: 2026-11-01 after component-features Phase 2 (Skills) was verified. SKL-01..06 pass their scenarios; D-CF2-01..14 are recorded, D-CF2-13 and D-CF2-14 wait for user review, and the phase closes when the user files the Pi gap report (D-CF2-10)._
+
+_Last updated: 2026-11-01 after component-features Phase 7 (Workflows) was merged. WFL-01..05 validated; D-CF7-01..04 recorded as Locked divergences, documented in `docs/workflows-compatibility.md`._

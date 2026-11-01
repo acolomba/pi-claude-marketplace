@@ -129,7 +129,12 @@ Step module paths are relative to `features/step_definitions/`, lib paths to
 `features/lib/`, and product paths to `extensions/pi-claude-marketplace/`
 (except `docs/` and `test/`). Each component phase also owns its kind's unit
 tests (`test/bridges/<kind>/**`) and integration tests
-(`test/integration/<kind>-*`).
+(`test/integration/<kind>-*`). Phase 7 also owns
+`test/integration/workflow-kind-inversion.test.ts`, which the
+`test/integration/<kind>-*` rule (`workflows-*`) does not match, and the unit
+pairs `test/domain/workflow-script.test.ts`,
+`test/domain/workflow-project-key.test.ts`, and
+`test/platform/workflow-home.test.ts`.
 
 #### Milestone rules
 
