@@ -199,7 +199,7 @@ pairs `test/domain/workflow-script.test.ts`,
 
 - [x] **Phase 1: Harness and Version Raise** - Pi and the three companions at their latest releases, a profile Pi with a scripted model and stand-ins, and a seed scenario per kind, with the pre-fan-out decisions settled (completed 2026-11-01)
 - [ ] **Phase 2: Skills** - Bridged skills list, carry their frontmatter, reach the model, resolve name clashes, and follow the plugin lifecycle as upstream
-- [ ] **Phase 3: Slash Commands** - Bridged commands list as prompt templates, expand their arguments as decided, and follow the plugin lifecycle
+- [x] **Phase 3: Slash Commands** - Bridged commands list as prompt templates, expand their arguments as decided, and follow the plugin lifecycle (completed 2026-11-01)
 - [x] **Phase 4: Agents** - pi-subagents lists and runs bridged agents with converted fields, preloaded skills, and companion-missing recovery (completed 2026-11-01)
 - [ ] **Phase 5: Hooks** - Hooks fire on Pi's session, tool, prompt, and stop events with Claude's stdin and environment, including the `clear`, `compact`, and `fork` parity fixes
 - [ ] **Phase 6: MCP Servers** - pi-mcp-adapter 7.x connects bridged servers under Claude's tool names, with configuration variants, project scope, and companion-missing recovery
@@ -326,7 +326,7 @@ Plans:
 - Wave 3: decision IDs, SUMMARY lines for the parent, and the phase gate.
 - Owns: `features/slash-command/**`, `features/step_definitions/slash-command/**`, `features/lib/slash-command-files.ts`, `bridges/commands/**`, `test/bridges/commands/**`, `test/integration/commands-*`. If FG-13 adds the object-map form, the resolver change stays inside the commands arm.
 
-**Plans:** 9/9 plans executed in 5 waves (the template's wave 2 holds its four plans; the D-CF3-07 project-command ledger adds a wave 3 writer and a wave 4 check, and the D-CF3-03 object map runs in wave 4 because it extends the files the wave 2 and wave 3 plans change; the phase gate is wave 5)
+**Plans:** 9/9 plans complete in 5 waves (the template's wave 2 holds its four plans; the D-CF3-07 project-command ledger adds a wave 3 writer and a wave 4 check, and the D-CF3-03 object map runs in wave 4 because it extends the files the wave 2 and wave 3 plans change; the phase gate is wave 5)
 
 Plans:
 **Wave 1**
@@ -496,7 +496,7 @@ Plans:
 | --- | --- | --- | --- |
 | 1. Harness and Version Raise | 15/15 | Complete    | 2026-11-01 |
 | 2. Skills | 7/7 | In Progress | - |
-| 3. Slash Commands | 9/9 | In Progress | - |
+| 3. Slash Commands | 9/9 | Complete    | 2026-11-01 |
 | 4. Agents | 6/6 | Complete    | 2026-11-01 |
 | 5. Hooks | 0/TBD | Not started | - |
 | 6. MCP Servers | 9/9 | In Progress | - |
