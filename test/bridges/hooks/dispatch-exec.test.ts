@@ -514,6 +514,7 @@ function makeEntry(
     readonly shell?: string;
     readonly timeout?: number;
     readonly asyncRewake?: boolean;
+    readonly onFailure?: string;
   } = {},
 ): RoutingEntry {
   const handlerDecl = {
@@ -523,6 +524,7 @@ function makeEntry(
     ...(input.shell === undefined ? {} : { shell: input.shell }),
     ...(input.timeout === undefined ? {} : { timeout: input.timeout }),
     ...(input.asyncRewake === undefined ? {} : { asyncRewake: input.asyncRewake }),
+    ...(input.onFailure === undefined ? {} : { onFailure: input.onFailure }),
   } satisfies RoutingEntry["handlerDecl"];
 
   return {
@@ -1642,6 +1644,124 @@ test("spawns an exec-form hook with Claude's path variables filled in", async (t
       shell: false,
     },
   );
+});
+
+/**
+ * Dispatches one PreToolUse hook whose declaration `input` describes, lets
+ * `drive` act as its child, and returns the outcome.
+ */
+async function dispatchDriven(
+  t: import("node:test").TestContext,
+  input: Parameters<typeof makeEntry>[1],
+  drive: (child: InjectedChild) => Promise<void>,
+): Promise<HookExecResult> {
+  const caseRoot = await makeCaseRoot(t, "dispatch-on-failure-");
+  const processChild = makeInjectedChild(t);
+  const processBoundary = observeSpawn(t, processChild);
+  const pendingOutcome = dispatchHookExec(
+    makeEntry(caseRoot, input),
+    { toolName: "bash", input: {} },
+    makeContext(caseRoot),
+    undefined,
+    createHooksRuntime(),
+    { spawnImpl: processBoundary.spawnImpl },
+  );
+  await processBoundary.spawned;
+  await drive(processChild);
+  return pendingOutcome;
+}
+
+const ON_FAILURE_HEAD = '[guard]: failed; blocking because onFailure is "block"';
+
+test("blocks a hook that cannot start when onFailure is block", async (t) => {
+  // act
+  const hookOutcome = await dispatchDriven(t, { command: "guard", onFailure: "block" }, (child) => {
+    child.emitError(new Error("spawn guard ENOENT"));
+    return Promise.resolve();
+  });
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: ON_FAILURE_HEAD });
+});
+
+test("blocks a hook that exits 1 when onFailure is block", async (t) => {
+  // act
+  const hookOutcome = await dispatchDriven(
+    t,
+    { command: "guard", onFailure: "block" },
+    async (child) => {
+      child.stderr?.write("boom\n");
+      await child.close(1);
+    },
+  );
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: `${ON_FAILURE_HEAD}\nboom` });
+});
+
+test("blocks a hook whose stdout starts a JSON object that does not parse", async (t) => {
+  // act
+  const hookOutcome = await dispatchDriven(
+    t,
+    { command: "guard", onFailure: "block" },
+    async (child) => {
+      child.stdout?.write("{not json");
+      await child.close(0);
+    },
+  );
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: ON_FAILURE_HEAD });
+});
+
+test("blocks a hook its timeout killed with the timed out message", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let signals: readonly NodeJS.Signals[] = [];
+
+  // act
+  const hookOutcome = await dispatchDriven(
+    t,
+    { command: "guard", onFailure: "block", timeout: 1 },
+    async (child) => {
+      t.mock.timers.tick(1_000);
+      signals = [...child.killSignals];
+      await child.close(null, "SIGTERM");
+    },
+  );
+
+  // assert
+  assert.deepStrictEqual(signals, ["SIGTERM"]);
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: '[guard]: timed out; blocking because onFailure is "block"',
+  });
+});
+
+test("keeps a failing hook without onFailure a noop", async (t) => {
+  // act
+  const hookOutcome = await dispatchDriven(t, { command: "guard" }, async (child) => {
+    child.stderr?.write("boom\n");
+    await child.close(1);
+  });
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+});
+
+test("keeps the exit-2 block of a hook with onFailure block", async (t) => {
+  // act
+  const hookOutcome = await dispatchDriven(
+    t,
+    { command: "guard", onFailure: "block" },
+    async (child) => {
+      child.stderr?.write("denied\n");
+      await child.close(2);
+    },
+  );
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: "denied" });
 });
 
 test("contains an EPIPE from stdin after registering its error listener", async (t) => {

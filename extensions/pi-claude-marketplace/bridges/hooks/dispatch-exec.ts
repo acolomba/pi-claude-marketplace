@@ -34,10 +34,12 @@
 //      cannot escape as an unhandled exception.
 //   8. On `close`, route stderr through `hookDebugLog` (EXEC-03 sole sink;
 //      NO `ctx.ui.notify`) then return `parseHookStdout(code, stdout,
-//      stderr)`.
+//      stderr)`, unless the hook failed and sets `onFailure: "block"`
+//      (D-CF5-18, `./on-failure.ts`): then a start failure (`error`), an exit
+//      other than 0 and 2, a timeout, or broken JSON stdout is a block.
 //
 // Never-throws contract: every error path resolves to `{ kind: "noop" }` +
-// `hookDebugLog`. The outer `try/catch` wraps spawn-time errors (ENOENT,
+// `hookDebugLog`, or to the onFailure block when the hook asks for one. The outer `try/catch` wraps spawn-time errors (ENOENT,
 // containment violation, etc.) so the composite handler reducer never
 // crashes against malformed configs.
 //
@@ -60,6 +62,7 @@ import { errorMessage } from "../../shared/errors.ts";
 import { spawnAndRegister } from "./async-rewake/registry.ts";
 import { installTimerLadder } from "./exec-timer.ts";
 import { hookPathVars, prepareHookEnv } from "./hook-env.ts";
+import { onFailureBlock } from "./on-failure.ts";
 import { translatePostCompact } from "./payloads/post-compact.ts";
 import { translatePostToolUseFailure } from "./payloads/post-tool-use-failure.ts";
 import { translatePostToolUse } from "./payloads/post-tool-use.ts";
@@ -133,7 +136,9 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
  * EXEC-01..04 + PAYL-01 + HOOK-05 + D-60-01 + D-60-06 execution layer.
  *
  * NEVER throws. Every error / overflow / timeout / parse failure path
- * resolves to `{ kind: "noop" }` + `hookDebugLog`. The composite handler
+ * resolves to `{ kind: "noop" }` + `hookDebugLog`, except that a hook with
+ * `onFailure: "block"` turns a start failure, an unexpected exit, a timeout,
+ * or broken JSON stdout into a block (D-CF5-18). The composite handler
  * reducer folds the returned arms across the bucket and dispatches to the
  * per-Pi-event adapter (D-60-03).
  *
@@ -387,7 +392,15 @@ async function spawnAndCollect(
       hookDebugLog(
         `exec: spawn error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
       );
-      settle({ kind: "noop" });
+      // D-CF5-18: a hook that cannot start blocks when it sets onFailure "block".
+      const failure = onFailureBlock(entry, {
+        startFailed: true,
+        timedOut: false,
+        exitCode: null,
+        stdout: "",
+        stderr,
+      });
+      settle(failure ?? { kind: "noop" });
     });
 
     child.once("close", (code) => {
@@ -401,8 +414,17 @@ async function spawnAndCollect(
         hookDebugLog(`exec: stderr (${entry.pluginId}/${entry.claudeEvent}): ${stderr.trim()}`);
       }
 
+      // D-CF5-18: the onFailure check runs before the parse, so a failed hook
+      // that sets onFailure "block" blocks whatever its stdout says.
+      const failure = onFailureBlock(entry, {
+        startFailed: false,
+        timedOut: ladder.fired(),
+        exitCode: code,
+        stdout,
+        stderr,
+      });
       // fallow-ignore-next-line code-duplication -- reviewed: the async-rewake and synchronous dispatch paths each own their child's stdin wiring; the shared part is a short EPIPE guard
-      settle(parseHookStdout(code, stdout, stderr));
+      settle(failure ?? parseHookStdout(code, stdout, stderr));
     });
 
     // EPIPE defense: attach the error listener BEFORE write so a child
