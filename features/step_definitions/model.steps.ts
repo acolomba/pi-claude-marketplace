@@ -21,7 +21,18 @@ import {
   writeModelScript,
 } from "../lib/scripted-model/script.ts";
 
+import type { RunTokens } from "../lib/run-tokens.ts";
 import type { ScenarioWorld } from "../support/world.ts";
+
+// A companion stamps some texts with an id it draws for each run, such as the
+// mission id pi-subagents appends to a subagent result.
+const UUID_PATTERN = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gu;
+
+// A text Pi sent the model, with the run tokens projected and each UUID read
+// as `{uuid}`, so a scenario states a per-run id without knowing its value.
+function projectCallText(text: string, tokens: RunTokens): string {
+  return projectTokens("text", text, tokens).replaceAll(UUID_PATTERN, "{uuid}");
+}
 
 // HAR-01: a profile Pi started with no companion loads none, so no command
 // comes from the optional peer cache.
@@ -53,8 +64,24 @@ Then("the model receives these calls:", function (this: ScenarioWorld, table: Da
   const rows = callMessageRows(modelCallsOf(this.requireTurn().logs)).map(([call, role, text]) => [
     call,
     role,
-    projectTokens("text", text, this.tokens),
+    projectCallText(text, this.tokens),
   ]);
   assert.deepStrictEqual([["call", "role", "text"], ...rows], table.raw());
   this.markTurnCompared();
 });
+
+// The whole system prompt of one call of the last turn, numbered from 1 as
+// the calls step numbers them, with the run tokens projected. A child agent's
+// call is one of the turn's calls, so this states the prompt the child ran on.
+Then(
+  "the model call {int} receives this system prompt:",
+  function (this: ScenarioWorld, number: number, expected: string) {
+    const call = modelCallsOf(this.requireTurn().logs).find(({ index }) => index + 1 === number);
+    if (call === undefined) {
+      assert.fail(`the last turn has no model call ${number}`);
+    }
+
+    assert.strictEqual(projectCallText(call.systemPrompt, this.tokens), expected);
+    this.markTurnCompared();
+  },
+);
