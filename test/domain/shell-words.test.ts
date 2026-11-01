@@ -127,6 +127,18 @@ const UPSTREAM_ROWS: readonly TokenRow[] = [
   { text: "for x in y; do a b; done", tokens: ["a", "b"] },
   { text: "((a)) b c", tokens: ["b", "c"] },
   { text: "# c\nfoo bar", tokens: ["foo", "bar"] },
+  { text: '"a"\\$ b', tokens: ["a", "b"] },
+  { text: '"cost"\\$ 5 now', tokens: ["cost", "5", "now"] },
+  { text: "$X\\$ b", tokens: ["$X", "b"] },
+  { text: '"a"\\$"b" c', tokens: ["a", "b", "c"] },
+  { text: 'x "a"\\$5 y', tokens: ["x", "a", "$5", "y"] },
+  { text: "x 'a'\\$ y", tokens: ["x", "a", "y"] },
+  { text: 'x "a"\\$', tokens: ["x", "a"] },
+  { text: 'x "a"\\$\n b', tokens: ["x", "a"] },
+  { text: "x $\\$ b", tokens: ["x", "$", "b"] },
+  { text: 'x "s"\\\\$\\$ b', tokens: ["x", "s\\$", "$", "b"] },
+  { text: 'x <<< "a"\\$ b', tokens: ["x", "b"] },
+  { text: '> "a"\\$ b', tokens: ["$", "b"] },
 ];
 
 // D-CF1-01 licensed residual: tree-sitter-bash error recovery and expansion
@@ -135,7 +147,8 @@ const UPSTREAM_ROWS: readonly TokenRow[] = [
 const RESIDUAL_ROWS: readonly ResidualRow[] = [
   { text: "a ${b c", tokens: ["a"], upstream: ["a", "c"] },
   { text: "_=1 b", tokens: ["b"], upstream: ["_=1", "b"] },
-  { text: "x 'a'\\$ y", tokens: ["x", "a", "$", "y"], upstream: ["x", "a", "y"] },
+  { text: '"a"\\$(b) c', tokens: ["a", "$"], upstream: ["a"] },
+  { text: 'x "a"\\$)b c', tokens: ["x", "a", "$", "b", "c"], upstream: ["x", "a", "$)b", "c"] },
   { text: "!{ b", tokens: ["!{", "b"], upstream: ["{", "b"] },
   { text: ") a b", tokens: ["a", "b"], upstream: ["b"] },
   { text: "[ ( ]; b c", tokens: ["b", "c"], upstream: ["]"] },

@@ -23,6 +23,7 @@ const COMMAND_ENDS = new Set(["", "\n", ";", "&", "|", "(", ")", "#"]);
 const STATEMENT_SEPARATORS = new Set(["\n", ";", "&", "|", ")"]);
 const UNQUOTED_STOPS = new Set([...WORD_ENDS, ...BLANKS, "'", '"', "`", "$"]);
 const GLUING_ESCAPES = new Set(["\\", '"', "'"]);
+const BARE_DOLLAR_ENDS = new Set([...BLANKS, "\n", '"', ""]);
 // A keyword glued to one of these still reads as the keyword.
 const GLUED_STARTS = new Set(["'", '"', "$"]);
 
@@ -315,6 +316,24 @@ function readWord(cursor: Cursor): Word {
   return { pieces, raw, bare };
 }
 
+// In a command's words, where the next word after a quoted piece or an
+// expansion would start with `\$` before a blank, a double quote, a newline, or
+// the end of the text, tree-sitter-bash reads the `\$` as a bare `$` token,
+// which `Vst` drops; a quoted piece after it is a word of its own. A lone `$`
+// before it reads as word text, so the `\$` stays a word there.
+function skipBareDollar(cursor: Cursor, word: Word): void {
+  const last = word.pieces.at(-1);
+  if (
+    last !== undefined &&
+    last.kind !== "word" &&
+    last.text !== "$" &&
+    cursor.text.startsWith("\\$", cursor.pos) &&
+    BARE_DOLLAR_ENDS.has(charAt(cursor, 2))
+  ) {
+    cursor.pos += 2;
+  }
+}
+
 // `pe`: an unquoted word drops each escaping backslash, a quoted string drops
 // its quotes, and an expansion or substitution stays verbatim.
 function pieceValue(piece: Piece): string {
@@ -403,7 +422,11 @@ function readRedirect(cursor: Cursor, command: Command): boolean {
 
   cursor.pos += match[0].length;
   skipBlanks(cursor);
-  readWord(cursor);
+  const target = readWord(cursor);
+  if (command.named) {
+    skipBareDollar(cursor, target);
+  }
+
   return true;
 }
 
@@ -424,6 +447,7 @@ function readCommandItem(cursor: Cursor, command: Command): void {
   }
 
   const word = readWord(cursor);
+  skipBareDollar(cursor, word);
   if (word.pieces.length > 0) {
     addWord(cursor, command, word);
   }
