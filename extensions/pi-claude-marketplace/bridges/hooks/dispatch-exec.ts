@@ -27,8 +27,9 @@
 //      "close", ...)` and `child.once("error", ...)` call, to close the
 //      TOCTOU window against the timer firing on a recycled pid.
 //   6. Stream stdout / stderr with manual caps (1 MB / 64 KB) -- maxBuffer
-//      does NOT apply to `spawn`, so on overflow the dispatcher kills the
-//      child and falls back to `{ kind: "noop" }`.
+//      does NOT apply to `spawn`, so past a cap the dispatcher drops the
+//      rest of that stream and lets the child run to its exit, whose code
+//      still decides (an exit 2 blocks). Stdout cut at its cap is not read.
 //   7. Stream stdin: attach `child.stdin.on("error", hookDebugLog)` BEFORE
 //      `child.stdin.end(payload)` so an EPIPE from a fast-exiting child
 //      cannot escape as an unhandled exception.
@@ -97,10 +98,15 @@ import type { ClaudePluginVars } from "../../shared/vars.ts";
 // truth keeps the two execution paths from drifting. The cap itself
 // (`STDIN_TRUNCATION_BYTES`) is module-private to spawn-helpers.ts, applied
 // only inside `serializeWithTruncation`; neither execution site names it.
-/** EXEC-02: hard stdout buffer cap; overflow kills + noop. */
+/** EXEC-02: hard stdout buffer cap; past it the rest is dropped and stdout is not read. */
 const STDOUT_MAX_BYTES = 1024 * 1024;
-/** EXEC-02: hard stderr buffer cap; overflow kills + noop. */
+/** EXEC-02: hard stderr buffer cap; past it the rest is dropped. */
 const STDERR_MAX_BYTES = 64 * 1024;
+
+/** Whether a collected stream passed its cap and lost text. */
+interface StreamCap {
+  readonly cut: () => boolean;
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // Translator dispatch table (PAYL-01 / D-60-04)
@@ -304,10 +310,9 @@ async function spawnAndCollect(
   return await new Promise<HookExecResult>((resolve) => {
     let stdout = "";
     let stderr = "";
-    let overflowed = false;
     let settled = false;
 
-    let ladder = installTimerLadder(child, timeoutSeconds, ladderLabel);
+    const ladder = installTimerLadder(child, timeoutSeconds, ladderLabel);
 
     const settle = (result: HookExecResult): void => {
       if (settled) {
@@ -319,57 +324,11 @@ async function spawnAndCollect(
       resolve(result);
     };
 
-    // WR-01 / WR-07: when overflow fires, detach the stream `data`
-    // listeners so a child that keeps writing cannot keep growing the
-    // accumulator (unbounded heap growth + GC pressure until the SIGKILL
-    // tail of the original ladder fires). Also cancel the original
-    // SIGTERM/SIGKILL ladder and arm a tight escalation -- the child
-    // has demonstrated misbehavior, so SIGTERM fires synchronously and
-    // SIGKILL fires after the 5s grace rather than waiting up to
-    // `timeoutSeconds + 5s` (605 s on most events, less on the ones
-    // `./timeout.ts` lowers) for the original ladder to escalate.
-    const handleOverflow = (which: "stdout" | "stderr"): void => {
-      if (overflowed) {
-        return;
-      }
-
-      overflowed = true;
-      hookDebugLog(
-        `exec: ${which} overflow (${entry.pluginId}/${entry.claudeEvent}); killing child`,
-      );
-      child.stdout.removeAllListeners("data");
-      child.stdout.removeAllListeners("end");
-      child.stderr.removeAllListeners("data");
-      child.stderr.removeAllListeners("end");
-      ladder.cancel();
-      // SIGTERM synchronously so observers (and the architecture-test
-      // spawn-spy assertion) see the kill request even when the child
-      // exits before the next macrotask tick. The fresh ladder still
-      // arms the SIGKILL escalation 5s out for a child that ignores
-      // SIGTERM.
-      if (!child.killed) {
-        const sent = child.kill("SIGTERM");
-        if (!sent) {
-          hookDebugLog(
-            `exec: SIGTERM kill() returned false (${entry.pluginId}/${entry.claudeEvent})`,
-          );
-        }
-      }
-
-      // 0 seconds: SIGTERM already went out synchronously above. The fresh
-      // ladder re-sends it immediately (harmless) and, five seconds later,
-      // escalates to SIGKILL for a child that ignored it.
-      ladder = installTimerLadder(child, 0, ladderLabel);
-    };
-
-    accumulateStream(
+    const stdoutCap = accumulateStream(
       child.stdout,
       STDOUT_MAX_BYTES,
       (chunk) => {
         stdout += chunk;
-      },
-      () => {
-        handleOverflow("stdout");
       },
       "stdout",
       ladderLabel,
@@ -380,9 +339,6 @@ async function spawnAndCollect(
       STDERR_MAX_BYTES,
       (chunk) => {
         stderr += chunk;
-      },
-      () => {
-        handleOverflow("stderr");
       },
       "stderr",
       ladderLabel,
@@ -404,37 +360,25 @@ async function spawnAndCollect(
     });
 
     child.once("close", (code) => {
-      if (overflowed) {
-        // D-CF5-18: the overflow kill is a failure (a signal leaves `code`
-        // null), so an onFailure "block" guard stays closed. The truncated
-        // stdout is not parsed.
-        const failure = onFailureBlock(entry, {
-          startFailed: false,
-          timedOut: false,
-          exitCode: code,
-          stdout: "",
-          stderr,
-        });
-        settle(failure ?? { kind: "noop" });
-        return;
-      }
-
       // EXEC-03: stderr sole-sink through hookDebugLog. NO ctx.ui.notify.
       if (stderr.length > 0) {
         hookDebugLog(`exec: stderr (${entry.pluginId}/${entry.claudeEvent}): ${stderr.trim()}`);
       }
 
+      // EXEC-02: stdout cut at its cap is a part of the hook's answer, so it
+      // is not read. The exit code still decides, so an exit 2 blocks with the
+      // stderr the bridge kept.
+      const answer = stdoutCap.cut() ? "" : stdout;
       // D-CF5-18: the onFailure check runs before the parse, so a failed hook
       // that sets onFailure "block" blocks whatever its stdout says.
       const failure = onFailureBlock(entry, {
         startFailed: false,
         timedOut: ladder.fired(),
         exitCode: code,
-        stdout,
+        stdout: answer,
         stderr,
       });
-      // fallow-ignore-next-line code-duplication -- reviewed: the async-rewake and synchronous dispatch paths each own their child's stdin wiring; the shared part is a short EPIPE guard
-      settle(failure ?? parseHookStdout(code, stdout, stderr, entry.claudeEvent));
+      settle(failure ?? parseHookStdout(code, answer, stderr, entry.claudeEvent));
     });
 
     // EPIPE defense: attach the error listener BEFORE write so a child
@@ -465,18 +409,26 @@ async function spawnAndCollect(
  * "utf8")`), not UTF-16 code units (`String.prototype.length`), so the
  * documented "stdout 1 MB / stderr 64 KB" guarantees hold for multi-byte
  * payloads.
+ *
+ * EXEC-02: the chunk that crosses the cap and every later chunk are
+ * dropped, but the `data` listener stays, so the pipe keeps draining and
+ * the child runs to its own exit. Claude Code 2.1.316 never stops a hook
+ * for its output and reads its exit code, so an exit 2 still blocks; the
+ * timeout ladder stops a child that never exits. The returned `cut()`
+ * reports whether the stream lost text.
  */
 function accumulateStream(
   stream: NodeJS.ReadableStream | null,
   cap: number,
   onChunk: (chunk: string) => void,
-  onOverflow: () => void,
   which: "stdout" | "stderr",
   label: string,
-): void {
+): StreamCap {
   if (stream === null) {
-    return;
+    return { cut: () => false };
   }
+
+  let cut = false;
 
   const decoder = new StringDecoder("utf8");
   let accumulated = 0;
@@ -488,10 +440,15 @@ function accumulateStream(
     hookDebugLog(`exec: ${which} error (${label}): ${errorMessage(err)}`);
   });
   stream.on("data", (chunk: Buffer | string) => {
+    if (cut) {
+      return;
+    }
+
     const text = typeof chunk === "string" ? chunk : decoder.write(chunk);
     accumulated += Buffer.byteLength(text, "utf8");
     if (accumulated > cap) {
-      onOverflow();
+      cut = true;
+      hookDebugLog(`exec: ${which} overflow (${label}); dropping the rest of the output`);
       return;
     }
 
@@ -499,8 +456,9 @@ function accumulateStream(
   });
   stream.on("end", () => {
     const tail = decoder.end();
-    if (tail !== "") {
+    if (!cut && tail !== "") {
       onChunk(tail);
     }
   });
+  return { cut: () => cut };
 }

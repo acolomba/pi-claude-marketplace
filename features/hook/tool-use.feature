@@ -112,15 +112,15 @@ Feature: Hook tool use
       | 2    | assistant   | tool call bash {"command":"echo from-model"}                                                                                         |
       | 2    | tool result | bash failed: PreToolUse:Bash hook error: [${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: failed; blocking because onFailure is "block"\nboom |
 
-  Scenario: A PreToolUse hook with onFailure block that overflows its output blocks the tool call
+  Scenario: A PreToolUse hook with onFailure block that fails after overflowing its output blocks the tool call
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
-      | name  | event      | matcher | form   | output bytes | sleep | on failure |
-      | guard | PreToolUse | Bash    | script | 1048577      | 3     | block      |
+      | name  | event      | matcher | form   | output bytes | exit code | on failure |
+      | guard | PreToolUse | Bash    | script | 1048577      | 1         | block      |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has started a new pi session
@@ -138,6 +138,33 @@ Feature: Hook tool use
       | 2    | user        | run the echo                                                                                                                   |
       | 2    | assistant   | tool call bash {"command":"echo from-model"}                                                                                   |
       | 2    | tool result | bash failed: PreToolUse:Bash hook error: [${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: failed; blocking because onFailure is "block" |
+
+  Scenario: A PreToolUse hook that exits 2 after overflowing its output blocks the tool call with its stderr
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event      | matcher | form   | stderr            | output bytes | exit code |
+      | guard | PreToolUse | Bash    | script | blocked by policy | 1048577      | 2         |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      | Done. |      |                                |
+    When the user prompts "run the echo"
+    Then the hooks record these runs:
+      | event      | session | tool name | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {"command":"echo from-model"} | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role        | text                                                                                               |
+      | 1    | user        | run the echo                                                                                       |
+      | 2    | user        | run the echo                                                                                       |
+      | 2    | assistant   | tool call bash {"command":"echo from-model"}                                                       |
+      | 2    | tool result | bash failed: PreToolUse:Bash hook error: [${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: blocked by policy |
 
   Scenario: Matching PreToolUse hooks run in parallel
     Given pi runs with the scripted model

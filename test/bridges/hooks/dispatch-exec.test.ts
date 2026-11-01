@@ -1750,7 +1750,7 @@ test("keeps the exit-2 block of a hook with onFailure block", async (t) => {
   assert.deepStrictEqual(hookOutcome, { kind: "block", reason: "denied", fromStderr: true });
 });
 
-test("blocks a hook its stderr overflow killed when onFailure is block", async (t) => {
+test("blocks a hook that exits 1 after its stderr overflow when onFailure is block", async (t) => {
   // arrange
   t.mock.timers.enable({ apis: ["setTimeout"] });
 
@@ -1761,12 +1761,70 @@ test("blocks a hook its stderr overflow killed when onFailure is block", async (
     async (child) => {
       child.stderr?.write("boom\n");
       child.stderr?.write(Buffer.alloc(64 * 1024, 0x65));
-      await child.close(null, "SIGTERM");
+      await child.close(1);
     },
   );
 
   // assert
   assert.deepStrictEqual(hookOutcome, { kind: "block", reason: `${ON_FAILURE_HEAD}\nboom` });
+});
+
+test("blocks a hook that exits 2 after its stderr overflow with the stderr it kept", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let signals: readonly NodeJS.Signals[] = [];
+
+  // act
+  const hookOutcome = await dispatchDriven(t, { command: "guard" }, async (child) => {
+    child.stderr?.write("denied\n");
+    child.stderr?.write(Buffer.alloc(64 * 1024, 0x65));
+    signals = [...child.killSignals];
+    await child.close(2);
+  });
+
+  // assert
+  assert.deepStrictEqual(signals, []);
+  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: "denied", fromStderr: true });
+});
+
+test("blocks a hook that exits 2 after its stdout overflow with its stderr", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let signals: readonly NodeJS.Signals[] = [];
+
+  // act
+  const hookOutcome = await dispatchDriven(t, { command: "guard" }, async (child) => {
+    child.stderr?.write("denied\n");
+    child.stdout?.write(Buffer.alloc(1024 * 1024 + 1, 0x78));
+    signals = [...child.killSignals];
+    await child.close(2);
+  });
+
+  // assert
+  assert.deepStrictEqual(signals, []);
+  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: "denied", fromStderr: true });
+});
+
+test("applies the stdout deny of a hook whose stderr alone overflows", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const deny = JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: "no echo",
+    },
+  });
+
+  // act
+  const hookOutcome = await dispatchDriven(t, { command: "guard" }, async (child) => {
+    child.stdout?.write(deny);
+    child.stderr?.write(Buffer.alloc(64 * 1024 + 1, 0x65));
+    await child.close(0);
+  });
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: "no echo" });
 });
 
 test("keeps a hook that exits 0 after its stdout overflow a noop when onFailure is block", async (t) => {
@@ -1979,15 +2037,14 @@ test("accepts the exact independent stdout and stderr byte caps", async (t) => {
   assert.strictEqual(stderr.byteLength, 64 * 1024);
 });
 
-test("removes listeners and immediately escalates one-byte stdout overflow", async (t) => {
+test("discards stdout past its cap and lets the hook run to its timeout", async (t) => {
   // arrange
   const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-stdout-overflow-");
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const processChild = makeInjectedChild(t);
   const processBoundary = observeSpawn(t, processChild);
-  const entry = makeEntry(caseRoot, { timeout: 60 });
-  const stdout = Buffer.alloc(1024 * 1024 + 1, 0x78);
+  const entry = makeEntry(caseRoot, { command: "guard", timeout: 60, onFailure: "block" });
 
   // act
   const pendingOutcome = dispatchHookExec(
@@ -1999,162 +2056,37 @@ test("removes listeners and immediately escalates one-byte stdout overflow", asy
     { spawnImpl: processBoundary.spawnImpl },
   );
   await processBoundary.spawned;
-  processChild.stdout?.write(stdout);
-  const listenersAfterOverflow = {
-    stderrData: processChild.stderr?.listenerCount("data"),
-    stderrEnd: processChild.stderr?.listenerCount("end"),
-    stdoutData: processChild.stdout?.listenerCount("data"),
-    stdoutEnd: processChild.stdout?.listenerCount("end"),
-  };
-  const immediateSignals = [...processChild.killSignals];
-  t.mock.timers.tick(0);
-  const zeroDeadlineSignals = [...processChild.killSignals];
-  t.mock.timers.tick(4_999);
-  const beforeKillSignals = [...processChild.killSignals];
+  processChild.stdout?.write(Buffer.alloc(1024 * 1024 + 1, 0x78));
+  processChild.stdout?.write("{");
+  t.mock.timers.tick(59_999);
+  const beforeTimeoutSignals = [...processChild.killSignals];
   t.mock.timers.tick(1);
-  const killDeadlineSignals = [...processChild.killSignals];
-  await processChild.close(null, "SIGKILL");
-  const hookOutcome = await pendingOutcome;
-  t.mock.timers.tick(60_000);
-
-  // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
-  assert.deepStrictEqual(listenersAfterOverflow, {
-    stderrData: 0,
-    stderrEnd: 0,
-    stdoutData: 0,
-    stdoutEnd: 0,
-  });
-  assert.deepStrictEqual(immediateSignals, ["SIGTERM"]);
-  assert.deepStrictEqual(zeroDeadlineSignals, ["SIGTERM", "SIGTERM"]);
-  assert.deepStrictEqual(beforeKillSignals, ["SIGTERM", "SIGTERM"]);
-  assert.deepStrictEqual(killDeadlineSignals, ["SIGTERM", "SIGTERM", "SIGKILL"]);
-  assert.deepStrictEqual(processChild.killSignals, ["SIGTERM", "SIGTERM", "SIGKILL"]);
-  assert.strictEqual(stdout.byteLength, 1024 * 1024 + 1);
-});
-
-test("logs a failed SIGTERM kill() during stdout overflow cleanup", async (t) => {
-  // arrange
-  const runtime = createHooksRuntime();
-  const caseRoot = await makeCaseRoot(t, "dispatch-stdout-overflow-kill-false-");
-  const errorSpy = observeDebug(t);
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  const processChild = makeInjectedChild(t, { killReturnsFalse: true });
-  const processBoundary = observeSpawn(t, processChild);
-  const entry = makeEntry(caseRoot, { timeout: 60 });
-  const stdout = Buffer.alloc(1024 * 1024 + 1, 0x78);
-
-  // act
-  const pendingOutcome = dispatchHookExec(
-    entry,
-    { toolName: "bash", input: {} },
-    makeContext(caseRoot),
-    undefined,
-    runtime,
-    { spawnImpl: processBoundary.spawnImpl },
-  );
-  await processBoundary.spawned;
-  processChild.stdout?.write(stdout);
-  await processChild.close(null, "SIGKILL");
-  const hookOutcome = await pendingOutcome;
-  t.mock.timers.tick(60_000);
-  const lines = debugLines(errorSpy);
-
-  // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
-  assert.deepStrictEqual(processChild.killSignals, ["SIGTERM"]);
-  assert.strictEqual(
-    lines.some(
-      (line) =>
-        line.includes("exec: SIGTERM kill() returned false") &&
-        line.includes("dispatch-plugin/PreToolUse"),
-    ),
-    true,
-  );
-});
-
-test("contains one-byte stderr overflow when the child is already marked killed", async (t) => {
-  // arrange
-  const runtime = createHooksRuntime();
-  const caseRoot = await makeCaseRoot(t, "dispatch-stderr-overflow-");
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  const processChild = makeInjectedChild(t, { initiallyKilled: true });
-  const processBoundary = observeSpawn(t, processChild);
-  const entry = makeEntry(caseRoot);
-  const stderr = Buffer.alloc(64 * 1024 + 1, 0x65);
-
-  // act
-  const pendingOutcome = dispatchHookExec(
-    entry,
-    { toolName: "bash", input: {} },
-    makeContext(caseRoot),
-    undefined,
-    runtime,
-    { spawnImpl: processBoundary.spawnImpl },
-  );
-  await processBoundary.spawned;
-  processChild.stderr?.write(stderr);
-  const listenersAfterOverflow = {
-    stderrData: processChild.stderr?.listenerCount("data"),
-    stderrEnd: processChild.stderr?.listenerCount("end"),
-    stdoutData: processChild.stdout?.listenerCount("data"),
-    stdoutEnd: processChild.stdout?.listenerCount("end"),
-  };
+  const timeoutSignals = [...processChild.killSignals];
   await processChild.close(null, "SIGTERM");
   const hookOutcome = await pendingOutcome;
-  t.mock.timers.tick(5_000);
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
-  assert.deepStrictEqual(listenersAfterOverflow, {
-    stderrData: 0,
-    stderrEnd: 0,
-    stdoutData: 0,
-    stdoutEnd: 0,
+  assert.deepStrictEqual(beforeTimeoutSignals, []);
+  assert.deepStrictEqual(timeoutSignals, ["SIGTERM"]);
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: '[guard]: timed out; blocking because onFailure is "block"',
   });
-  assert.deepStrictEqual(processChild.killSignals, []);
-  assert.strictEqual(stderr.byteLength, 64 * 1024 + 1);
 });
 
-test("ignores a second overflow after the first lane starts cleanup", async (t) => {
+test("blocks on the exit code of a hook whose two streams overflow", async (t) => {
   // arrange
-  const runtime = createHooksRuntime();
-  const caseRoot = await makeCaseRoot(t, "dispatch-duplicate-overflow-");
   t.mock.timers.enable({ apis: ["setTimeout"] });
-  const stdout = new PassThrough();
-  const stderr = new PassThrough();
-  const retainListeners = (stream: PassThrough): void => {
-    const removeAllListeners = stream.removeAllListeners.bind(stream);
-    Object.defineProperty(stream, "removeAllListeners", {
-      configurable: true,
-      value: (event?: string | symbol): PassThrough =>
-        event === "data" || event === "end" ? stream : removeAllListeners(event),
-    });
-  };
-
-  retainListeners(stdout);
-  retainListeners(stderr);
-  const processChild = makeInjectedChild(t, { stdout, stderr });
-  const processBoundary = observeSpawn(t, processChild);
-  const entry = makeEntry(caseRoot);
 
   // act
-  const pendingOutcome = dispatchHookExec(
-    entry,
-    { toolName: "bash", input: {} },
-    makeContext(caseRoot),
-    undefined,
-    runtime,
-    { spawnImpl: processBoundary.spawnImpl },
-  );
-  await processBoundary.spawned;
-  stdout.write(Buffer.alloc(1024 * 1024 + 1, 0x78));
-  stderr.write(Buffer.alloc(64 * 1024 + 1, 0x65));
-  await processChild.close(null, "SIGTERM");
-  const hookOutcome = await pendingOutcome;
-  t.mock.timers.tick(5_000);
+  const hookOutcome = await dispatchDriven(t, { command: "guard" }, async (child) => {
+    child.stderr?.write("denied\n");
+    child.stdout?.write(Buffer.alloc(1024 * 1024 + 1, 0x78));
+    child.stderr?.write(Buffer.alloc(64 * 1024, 0x65));
+    child.stderr?.write("more\n");
+    await child.close(2);
+  });
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
-  assert.deepStrictEqual(processChild.killSignals, ["SIGTERM"]);
+  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: "denied", fromStderr: true });
 });
