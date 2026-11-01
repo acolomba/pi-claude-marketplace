@@ -14,7 +14,7 @@ Feature: Plugin session start hooks
     When the user starts a new pi session
     Then the project file "session-starts.log" records these session start hook runs:
       | session | source |
-      | first   | new    |
+      | first   | clear  |
 
   Scenario: Each later session runs the session start hook again
     Given the marketplace "tools" is published as a dir source
@@ -28,5 +28,5 @@ Feature: Plugin session start hooks
     When the user starts a new pi session
     Then the project file "session-starts.log" records these session start hook runs:
       | session | source |
-      | first   | new    |
-      | second  | new    |
+      | first   | clear  |
+      | second  | clear  |

@@ -148,8 +148,8 @@ type NonToolEvent = Exclude<BucketAEvent, ToolEvent>;
  *
  * | Claude event       | Claude field   | Pi peer-dep field                      |
  * | ------------------ | -------------- | -------------------------------------- |
- * | SessionStart       | `source`       | `SessionStartEvent.reason`             |
- * | SessionEnd         | `reason`       | `SessionShutdownEvent.reason`          |
+ * | SessionStart       | `source`       | `SessionStartEvent.reason`, mapped     |
+ * | SessionEnd         | `reason`       | `SessionShutdownEvent.reason`, mapped  |
  * | PreCompact         | `trigger`      | (none -- SessionBeforeCompactEvent)    |
  * | PostCompact        | `trigger`      | (none -- SessionCompactEvent)          |
  * | UserPromptSubmit   | (none -- null) | (none -- no upstream matcher support)  |
@@ -210,26 +210,52 @@ const STOP_FAILURE_ERROR_TYPES = [
 export type StopFailureErrorType = (typeof STOP_FAILURE_ERROR_TYPES)[number];
 
 /**
+ * The SessionStart `source` vocabulary of Claude Code (D-CF5-01, D-CF1-10,
+ * D-CF1-11, D-CF1-12). Single source of truth: the matcher closed set below is
+ * built from this tuple, and the bridge's one mapping site
+ * (`claudeSessionStartSource` in `bridges/hooks/payloads/session-start.ts`)
+ * returns `SessionStartSource`, so the value a hook receives and the value its
+ * matcher is compared with cannot drift apart without a compile error.
+ */
+const SESSION_START_SOURCES = ["startup", "resume", "clear", "compact", "fork"] as const;
+
+/** Literal union of SessionStart `source` values, derived from the tuple above. */
+export type SessionStartSource = (typeof SESSION_START_SOURCES)[number];
+
+/**
+ * The SessionEnd `reason` vocabulary of Claude Code (D-CF5-02, D-CF1-10).
+ * Single source of truth, as for SessionStart: the matcher closed set below
+ * is built from it, and `claudeSessionEndReason` in
+ * `bridges/hooks/payloads/session-end.ts` returns `SessionEndReason`.
+ * `logout` is admitted though no Pi event maps to it, as upstream admits it
+ * and never sends it from a plugin's session.
+ */
+const SESSION_END_REASONS = ["clear", "resume", "logout", "prompt_input_exit", "other"] as const;
+
+/** Literal union of SessionEnd `reason` values, derived from the tuple above. */
+export type SessionEndReason = (typeof SESSION_END_REASONS)[number];
+
+/**
  * Closed set of Claude-side matcher values admissible per non-tool
  * bucket-A event. A value not in the set (or an entry not
  * present here at all) trips TOOL-02 at parse time per D-58-06.
  *
  * Per-event derivation:
  *
- *   - **SessionStart**: Claude values `startup | resume | clear | compact`.
- *     Pi `SessionStartEvent.reason` is `startup | reload | new | resume |
- *     fork`. The two-value overlap (`startup`, `resume`) is admissible;
- *     `clear` and `compact` have no Pi analog and trip TOOL-02 per
- *     strict-supportability stance.
+ *   - **SessionStart** (D-CF5-01, D-CF1-10..12): Claude values `startup |
+ *     resume | clear | compact | fork`, all admitted. The bridge maps Pi's
+ *     `SessionStartEvent.reason` once: `startup` and `resume` keep their
+ *     name, `new` is `clear`, `fork` is `fork`, and Pi `reload` runs no
+ *     SessionStart (D-CF5-03). `compact` comes from the compaction handler
+ *     (D-CF5-04). Dispatch compares a matcher with the mapped value.
  *
- *   - **SessionEnd**: Claude values `clear | resume | logout |
- *     prompt_input_exit | bypass_permissions_disabled | other`. Pi
- *     `SessionShutdownEvent.reason` is `quit | reload | new | resume |
- *     fork`. The only literal overlap is `resume`, but the Pi semantic
- *     ("session resumed elsewhere") vs the Claude semantic ("user resumed
- *     prior conversation") diverge enough that admitting it would silently
- *     mis-fire. Empty closed set -- every non-empty SessionEnd matcher
- *     trips TOOL-02; may relax if Pi exposes a matching value vocabulary.
+ *   - **SessionEnd** (D-CF5-02, D-CF1-10): Claude values `clear | resume |
+ *     logout | prompt_input_exit | other`, all admitted. The bridge maps Pi's
+ *     `SessionShutdownEvent.reason` once, with the session's mode: `new` is
+ *     `clear`, `resume` and `fork` are `resume`, `quit` is
+ *     `prompt_input_exit` in the terminal and `other` elsewhere, and Pi
+ *     `reload` runs no SessionEnd (D-CF5-03). `logout` never fires, as
+ *     upstream. Dispatch compares a matcher with the mapped value.
  *
  *   - **PreCompact** / **PostCompact**: Claude values `manual | auto`.
  *     Pi `SessionBeforeCompactEvent` / `SessionCompactEvent` carry NO
@@ -256,14 +282,12 @@ export type StopFailureErrorType = (typeof STOP_FAILURE_ERROR_TYPES)[number];
  *     SessionStart (D-58-06).
  */
 export const NON_TOOL_EVENT_CLOSED_SETS = {
-  // D-58-06: Pi `SessionStartEvent.reason` exposes `startup` and `resume`
-  // among the Claude SessionStart source values; `clear` and `compact`
-  // are unmappable and trip TOOL-02.
-  SessionStart: new Set(["startup", "resume"]),
-  // D-58-06: Pi `SessionShutdownEvent.reason` shares no semantically
-  // safe value with the Claude SessionEnd reason vocabulary.
-  // Empty set -- every non-empty matcher trips TOOL-02.
-  SessionEnd: new Set<string>([]),
+  // D-CF5-01 / D-CF1-10..12: Claude Code's whole SessionStart `source`
+  // vocabulary, built from the `SESSION_START_SOURCES` single source of truth.
+  SessionStart: new Set<string>(SESSION_START_SOURCES),
+  // D-CF5-02 / D-CF1-10: Claude Code's whole SessionEnd `reason` vocabulary,
+  // built from the `SESSION_END_REASONS` single source of truth.
+  SessionEnd: new Set<string>(SESSION_END_REASONS),
   // D-58-06 / PDEF-08: Pi compact reasons project onto Claude's complete
   // trigger vocabulary: `manual` remains manual, while threshold and overflow
   // both project to `auto`.

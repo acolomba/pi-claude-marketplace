@@ -58,6 +58,7 @@ import type {
   BeforeAgentStartEvent,
   ExtensionAPI,
   ExtensionContext,
+  SessionCompactEvent,
   ToolCallEvent,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
@@ -2570,7 +2571,7 @@ test("SessionStart contains a dispatch failure after preparing both directories"
   assert.deepStrictEqual(messages, []);
 });
 
-test("SessionStart runs once when Pi repeats the same session start", async (t) => {
+test("SessionStart runs once when Pi repeats the same session start (SSDEDUP-01)", async (t) => {
   // arrange
   const { root, projectRoot } = await makeSessionStartFixture(t);
   const { pi, registrations } = makeRecordingPi();
@@ -2579,8 +2580,9 @@ test("SessionStart runs once when Pi repeats the same session start", async (t) 
   await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
     cwd: projectRoot,
     executor: (entry, event, ctx) => {
-      const { reason } = event as { reason: string };
-      dispatched.push(`${ctx.sessionManager.getSessionId()} ${reason} ${entry.scope}`);
+      dispatched.push(
+        `${ctx.sessionManager.getSessionId()} ${JSON.stringify(event)} ${entry.scope}`,
+      );
       return Promise.resolve({ kind: "noop" });
     },
   });
@@ -2598,18 +2600,166 @@ test("SessionStart runs once when Pi repeats the same session start", async (t) 
   // act
   await sessionStart({ type: "session_start", reason: "new" }, context);
   await sessionStart({ type: "session_start", reason: "new" }, context);
-  await sessionStart({ type: "session_start", reason: "reload" }, context);
-  await sessionStart({ type: "session_start", reason: "reload" }, otherSession);
+  await sessionStart({ type: "session_start", reason: "fork" }, context);
+  await sessionStart({ type: "session_start", reason: "fork" }, otherSession);
 
   // assert
   assert.deepStrictEqual(dispatched, [
-    `${sessionId} new project`,
-    `${sessionId} new user`,
-    `${sessionId} reload project`,
-    `${sessionId} reload user`,
-    "router-other-session reload project",
-    "router-other-session reload user",
+    `${sessionId} {"source":"clear"} project`,
+    `${sessionId} {"source":"clear"} user`,
+    `${sessionId} {"source":"fork"} project`,
+    `${sessionId} {"source":"fork"} user`,
+    'router-other-session {"source":"fork"} project',
+    'router-other-session {"source":"fork"} user',
   ]);
+});
+
+for (const { reason, source } of [
+  { reason: "startup", source: "startup" },
+  { reason: "new", source: "clear" },
+  { reason: "resume", source: "resume" },
+  { reason: "fork", source: "fork" },
+] as const) {
+  test(`session_start dispatches SessionStart with source ${source} for Pi ${reason} (D-CF5-01)`, async (t) => {
+    // arrange
+    const { root, projectRoot } = await makeSessionStartFixture(t);
+    const { pi, registrations } = makeRecordingPi();
+    const runtime = createHooksRuntime();
+    const dispatched: unknown[] = [];
+    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+      cwd: projectRoot,
+      executor: (entry, event) => {
+        dispatched.push({ scope: entry.scope, event });
+        return Promise.resolve({ kind: "noop" });
+      },
+    });
+
+    // act
+    await registeredHandler(registrations, "session_start")(
+      { type: "session_start", reason },
+      makeContext(projectRoot, root),
+    );
+
+    // assert
+    assert.deepStrictEqual(dispatched, [
+      { scope: "project", event: { source } },
+      { scope: "user", event: { source } },
+    ]);
+  });
+}
+
+test("session_start on Pi reload prepares the shared directories and runs no SessionStart (D-CF5-03)", async (t) => {
+  // arrange
+  const { root, projectRoot, sharedPaths } = await makeSessionStartFixture(t);
+  const { pi, registrations, messages } = makeRecordingPi();
+  const runtime = createHooksRuntime();
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    cwd: projectRoot,
+    executor: (entry) => {
+      dispatched.push(entry.scope);
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+
+  // act
+  const update = await registeredHandler(registrations, "session_start")(
+    { type: "session_start", reason: "reload" },
+    makeContext(projectRoot, root),
+  );
+
+  // assert
+  assert.strictEqual(update, undefined);
+  assert.deepStrictEqual(sharedPaths.map(fs.existsSync), [true, true]);
+  assert.deepStrictEqual(
+    runtime.getRoutingBucket("SessionStart").map((entry) => entry.scope),
+    ["project", "user"],
+  );
+  assert.deepStrictEqual(dispatched, []);
+  assert.deepStrictEqual(messages, []);
+});
+
+for (const { reason, mode, expectedReason } of [
+  { reason: "new", mode: "print", expectedReason: "clear" },
+  { reason: "resume", mode: "rpc", expectedReason: "resume" },
+  { reason: "fork", mode: "json", expectedReason: "resume" },
+  { reason: "quit", mode: "tui", expectedReason: "prompt_input_exit" },
+  { reason: "quit", mode: "rpc", expectedReason: "other" },
+] as const) {
+  test(`session_shutdown dispatches SessionEnd with reason ${expectedReason} for Pi ${reason} in ${mode} mode (D-CF5-02)`, async (t) => {
+    // arrange
+    const { root } = await createHermeticEnvironment(t, "hooks-router-session-end-");
+    const runtime = createHooksRuntime();
+    const { pi, registrations, messages } = makeRecordingPi();
+    const dispatched: unknown[] = [];
+    await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+      cwd: root,
+      executor: (entry, event) => {
+        dispatched.push({ pluginId: entry.pluginId, event });
+        return Promise.resolve({ kind: "noop" });
+      },
+    });
+    runtime.setRoutingBucket("SessionEnd", [
+      {
+        ...preToolUseEntry("session-end-plugin", root),
+        claudeEvent: "SessionEnd",
+        matcher: parseMatcher(""),
+        rawMatcher: "",
+      },
+    ]);
+    const context = new Proxy(makeContext(root, root), {
+      get(target, property, receiver): unknown {
+        return property === "mode" ? mode : Reflect.get(target, property, receiver);
+      },
+    });
+
+    // act
+    const update = await registeredHandler(registrations, "session_shutdown")(
+      { type: "session_shutdown", reason },
+      context,
+    );
+
+    // assert
+    assert.strictEqual(update, undefined);
+    assert.deepStrictEqual(dispatched, [
+      { pluginId: "session-end-plugin", event: { reason: expectedReason } },
+    ]);
+    assert.deepStrictEqual(messages, []);
+  });
+}
+
+test("session_shutdown on Pi reload runs no SessionEnd (D-CF5-03)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-session-end-reload-");
+  const runtime = createHooksRuntime();
+  const { pi, registrations, messages } = makeRecordingPi();
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: (entry) => {
+      dispatched.push(entry.pluginId);
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+  runtime.setRoutingBucket("SessionEnd", [
+    {
+      ...preToolUseEntry("session-end-plugin", root),
+      claudeEvent: "SessionEnd",
+      matcher: parseMatcher(""),
+      rawMatcher: "",
+    },
+  ]);
+
+  // act
+  const update = await registeredHandler(registrations, "session_shutdown")(
+    { type: "session_shutdown", reason: "reload" },
+    makeContext(root, root),
+  );
+
+  // assert
+  assert.strictEqual(update, undefined);
+  assert.deepStrictEqual(dispatched, []);
+  assert.deepStrictEqual(messages, []);
 });
 
 test("SessionStart runs a repeat whose first event was skipped for its mode", async (t) => {
@@ -2784,6 +2934,210 @@ test("session_start contains a lazy project cwd failure and still delegates safe
   assert.strictEqual(registrations.length, 11);
 });
 
+/** A manual compaction event whose entry carries `summary`. */
+function compactionEvent(summary: string): SessionCompactEvent {
+  return {
+    type: "session_compact",
+    compactionEntry: {
+      type: "compaction",
+      id: "router-compaction",
+      parentId: "router-parent",
+      timestamp: "2026-11-01T10:00:00.000Z",
+      summary,
+      firstKeptEntryId: "router-kept",
+      tokensBefore: 128,
+    },
+    fromExtension: false,
+    reason: "manual",
+    willRetry: false,
+  };
+}
+
+/** Routes one SessionStart and one PostCompact entry of the project scope. */
+function routeCompactionHooks(runtime: HooksRuntime, cwd: string): void {
+  for (const claudeEvent of ["SessionStart", "PostCompact"] as const) {
+    runtime.setRoutingBucket(claudeEvent, [
+      {
+        ...preToolUseEntry(`${claudeEvent.toLowerCase()}-plugin`, cwd),
+        claudeEvent,
+        matcher: parseMatcher(""),
+        rawMatcher: "",
+      },
+    ]);
+  }
+}
+
+test("session_compact runs SessionStart with source compact to completion, then PostCompact (D-CF5-04)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-");
+  const runtime = createHooksRuntime();
+  const { pi, registrations, messages } = makeRecordingPi();
+  const log: unknown[] = [];
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: async (entry, event) => {
+      log.push({ start: entry.claudeEvent, event });
+      await new Promise((resolve) => setImmediate(resolve));
+      log.push({ end: entry.claudeEvent });
+      return { kind: "noop" };
+    },
+  });
+  routeCompactionHooks(runtime, root);
+  const event = compactionEvent("router summary");
+
+  // act
+  const update = await registeredHandler(registrations, "session_compact")(
+    event,
+    makeContext(root, root),
+  );
+
+  // assert
+  assert.strictEqual(update, undefined);
+  assert.deepStrictEqual(log, [
+    { start: "SessionStart", event: { source: "compact" } },
+    { end: "SessionStart" },
+    { start: "PostCompact", event },
+    { end: "PostCompact" },
+  ]);
+  assert.strictEqual(
+    fs.existsSync(path.join(locationsFor("project", root).dataRoot, "_shared")),
+    true,
+  );
+  assert.deepStrictEqual(messages, []);
+});
+
+test("a second session_compact in one session runs SessionStart compact again (D-CF5-05)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-repeat-");
+  const runtime = createHooksRuntime();
+  const { pi, registrations } = makeRecordingPi();
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: (entry) => {
+      dispatched.push(entry.claudeEvent);
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+  routeCompactionHooks(runtime, root);
+  const sessionCompact = registeredHandler(registrations, "session_compact");
+  const context = makeContext(root, root);
+
+  // act
+  await sessionCompact(compactionEvent("first summary"), context);
+  await sessionCompact(compactionEvent("second summary"), context);
+
+  // assert
+  assert.deepStrictEqual(dispatched, [
+    "SessionStart",
+    "PostCompact",
+    "SessionStart",
+    "PostCompact",
+  ]);
+});
+
+test("session_compact debug-logs a failed SessionStart and still runs PostCompact (NFR-2)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-failure-");
+  const readDiagnostics = observeRouterDebug(t);
+  const runtime = createHooksRuntime();
+  const { pi, registrations, messages } = makeRecordingPi();
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: (entry) => {
+      dispatched.push(entry.claudeEvent);
+      return entry.claudeEvent === "SessionStart"
+        ? Promise.reject(new Error("session start capability lost"))
+        : Promise.resolve({ kind: "noop" });
+    },
+  });
+  routeCompactionHooks(runtime, root);
+
+  // act
+  const update = await registeredHandler(registrations, "session_compact")(
+    compactionEvent("failure summary"),
+    makeContext(root, root),
+  );
+
+  // assert
+  assert.strictEqual(update, undefined);
+  assert.deepStrictEqual(dispatched, ["SessionStart", "PostCompact"]);
+  assert.deepStrictEqual(
+    readDiagnostics().filter((line) => line.includes("session_compact")),
+    ["[hooks] session_compact SessionStart skipped: session start capability lost"],
+  );
+  assert.deepStrictEqual(messages, []);
+});
+
+test("session_compact runs no PostCompact once the compaction SessionStart went stale", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-stale-");
+  const runtime = createHooksRuntime();
+  const { pi, registrations } = makeRecordingPi();
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: (entry) => {
+      dispatched.push(entry.claudeEvent);
+      runtime.advanceGeneration();
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+  routeCompactionHooks(runtime, root);
+
+  // act
+  await registeredHandler(registrations, "session_compact")(
+    compactionEvent("stale summary"),
+    makeContext(root, root),
+  );
+
+  // assert
+  assert.deepStrictEqual(dispatched, ["SessionStart"]);
+});
+
+test("session_compact dispatches nothing when the generation goes stale while it prepares the shared directory", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-prepare-");
+  const runtime = createHooksRuntime();
+  const { pi, registrations } = makeRecordingPi();
+  const dispatched: string[] = [];
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: (entry) => {
+      dispatched.push(entry.claudeEvent);
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+  routeCompactionHooks(runtime, root);
+  let modeReads = 0;
+  const context = new Proxy(makeContext(root, root), {
+    get(target, property, receiver): unknown {
+      if (property === "mode") {
+        modeReads += 1;
+        if (modeReads === 2) {
+          runtime.advanceGeneration();
+        }
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+  });
+
+  // act
+  await registeredHandler(registrations, "session_compact")(
+    compactionEvent("prepare summary"),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(dispatched, []);
+  assert.strictEqual(
+    fs.existsSync(path.join(locationsFor("project", root).dataRoot, "_shared")),
+    true,
+  );
+});
+
 /** Collects the OBS-01 debug lines a case emits, restoring the flag afterwards. */
 function observeRouterDebug(t: TestContext): () => string[] {
   const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
@@ -2803,9 +3157,9 @@ function observeRouterDebug(t: TestContext): () => string[] {
 }
 
 for (const { claudeEvent, event } of [
-  { claudeEvent: "SessionEnd", event: { type: "session_shutdown" } },
-  { claudeEvent: "PreCompact", event: { type: "session_before_compact", trigger: "manual" } },
-  { claudeEvent: "PostCompact", event: { type: "session_compact", trigger: "manual" } },
+  { claudeEvent: "SessionEnd", event: { type: "session_shutdown", reason: "quit" } },
+  { claudeEvent: "PreCompact", event: { type: "session_before_compact", reason: "manual" } },
+  { claudeEvent: "PostCompact", event: { type: "session_compact", reason: "manual" } },
   {
     claudeEvent: "UserPromptSubmit",
     event: { type: "input", text: "hello", source: "interactive" },

@@ -51,8 +51,11 @@ import {
   applyMutationInPlace,
 } from "./event-adapters.ts";
 import { ifFires } from "./if-field/index.ts";
+import { compactTrigger } from "./payloads/compact-trigger.ts";
 
 import type { HookExecResult } from "./exec-result.ts";
+import type { ClaudeSessionEndEvent } from "./payloads/session-end.ts";
+import type { ClaudeSessionStartEvent } from "./payloads/session-start.ts";
 import type { RoutingEntry } from "./routing-state.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type { BucketAEvent, DispatchableEvent } from "../../domain/components/hook-events.ts";
@@ -64,8 +67,6 @@ import type {
   InputEventResult,
   SessionBeforeCompactEvent,
   SessionCompactEvent,
-  SessionShutdownEvent,
-  SessionStartEvent,
   ToolCallEvent,
   ToolCallEventResult,
   ToolResultEvent,
@@ -127,12 +128,13 @@ function matcherFiresOnToolEvent(matcher: ParsedMatcher, toolName: string): bool
 }
 
 /**
- * Closed-set matcher-fires predicate shared by the SessionStart composite
- * path and the settle-time StopFailure path. The parser admits only
- * match-all (`""` / `"*"`) and exact members of the per-event closed set at
- * parse time, so dispatch-time filtering is literal equality against the
- * event's runtime value (the SessionStart `reason`; the classified
- * StopFailure error type).
+ * Closed-set matcher-fires predicate shared by the session and compaction
+ * composite paths and the settle-time StopFailure path. The parser admits
+ * only match-all (`""` / `"*"`) and exact members of the per-event closed
+ * set at parse time, so dispatch-time filtering is literal equality against
+ * the event's Claude-side value (the mapped SessionStart `source` and
+ * SessionEnd `reason`, D-CF5-01 / D-CF5-02; the PreCompact and PostCompact
+ * `trigger`, D-CF5-04; the classified StopFailure error type).
  */
 export function matcherFiresOnClosedSetValue(entry: RoutingEntry, value: string): boolean {
   const raw = entry.rawMatcher;
@@ -449,16 +451,17 @@ function adaptForEvent(
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * Type bridge: each non-tool-result Claude event maps to its Pi payload
- * shape so the composite-handler factory's closure signature narrows
- * appropriately. Tool-call and SessionStart carry shape-specific fields the
- * filter logic accesses; the other four are typed as their own Pi
- * interfaces for forward-compat.
+ * Type bridge: each non-tool-result Claude event maps to the event shape its
+ * composite handler receives, so the factory's closure signature narrows
+ * appropriately. SessionStart and SessionEnd receive the Claude-side event
+ * the router maps from Pi's reason once (D-CF5-01 / D-CF5-02), so the filter
+ * and the translator read one value; the other events receive their Pi
+ * event.
  */
 export type CompositeEventFor<E extends BucketAEvent> = E extends "SessionStart"
-  ? SessionStartEvent
+  ? ClaudeSessionStartEvent
   : E extends "SessionEnd"
-    ? SessionShutdownEvent
+    ? ClaudeSessionEndEvent
     : E extends "PreCompact"
       ? SessionBeforeCompactEvent
       : E extends "PostCompact"
@@ -484,9 +487,11 @@ export type CompositeReturnFor<E extends BucketAEvent> = E extends "PreToolUse"
 
 /**
  * Per-event filter dispatch. Routes to the per-event matcher-fires
- * predicate; the four no-filter events (UserPromptSubmit, SessionEnd,
- * PreCompact, PostCompact) fire unconditionally because the parser
- * already rejects non-empty matchers on those events at parse time.
+ * predicate: SessionStart compares the mapped `source`, SessionEnd the
+ * mapped `reason` (D-CF5-01 / D-CF5-02), and PreCompact and PostCompact the
+ * Claude `trigger` the translators also send (D-CF5-04). UserPromptSubmit
+ * fires unconditionally because the parser rejects a non-empty matcher on
+ * it.
  */
 function entryFires(
   claudeEvent: CompositeDispatchEvent,
@@ -494,19 +499,29 @@ function entryFires(
   event: unknown,
 ): boolean {
   switch (claudeEvent) {
-    case "SessionStart": {
-      const reason = (event as SessionStartEvent).reason;
-      return matcherFiresOnClosedSetValue(entry, reason);
-    }
+    case "SessionStart":
+      return matcherFiresOnClosedSetValue(entry, (event as ClaudeSessionStartEvent).source);
+
+    case "SessionEnd":
+      return matcherFiresOnClosedSetValue(entry, (event as ClaudeSessionEndEvent).reason);
 
     case "PreToolUse": {
       const toolName = (event as ToolCallEvent).toolName;
       return matcherFiresOnToolEvent(entry.matcher, toolName);
     }
 
-    case "SessionEnd":
     case "PreCompact":
+      return matcherFiresOnClosedSetValue(
+        entry,
+        compactTrigger((event as SessionBeforeCompactEvent).reason),
+      );
+
     case "PostCompact":
+      return matcherFiresOnClosedSetValue(
+        entry,
+        compactTrigger((event as SessionCompactEvent).reason),
+      );
+
     case "UserPromptSubmit":
       return true;
   }
