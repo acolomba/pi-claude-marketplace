@@ -28,13 +28,10 @@
 // the unlink is a no-op.
 
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
-import { rewriteMarkdownReferences } from "../../domain/skill-tokens.ts";
-import { parseFrontmatter } from "../../platform/pi-api.ts";
-import { stripBom } from "../../shared/bom.ts";
 import { BridgeStagingError } from "../../shared/errors-bridges.ts";
 import {
   appendLeakToError,
@@ -45,10 +42,11 @@ import {
 import { cleanupStaging } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { discoveryWarning } from "../../shared/staging-warnings.ts";
-import { substituteClaudeVars } from "../../shared/vars.ts";
 
 import { discoverPluginCommands } from "./discover.ts";
+import { buildStagedCommand } from "./staged-command.ts";
 
+import type { StagedCommandContext } from "./staged-command.ts";
 import type {
   CommandDegradeRecord,
   PreparedCommandsStaging,
@@ -56,62 +54,6 @@ import type {
   StagedCommandRecord,
 } from "./types.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
-
-/**
- * CMD-01 / D-86-07: neutralize an unparseable command source by stripping the
- * ENTIRE malformed frontmatter block -- the opening `---` line through the
- * matching closing `---` line -- leaving the real body. A re-parse of the
- * result RETURNS: usually empty, so Pi's command loader falls back to
- * name-from-filename + description-from-first-body-line (NOT delimiter-only
- * stripping, which would leave ex-frontmatter junk as the first body line);
- * see the third paragraph below for the case where a clean frontmatter block
- * remains instead. Called ONLY on the gate-1 throw arm, where a closed
- * `---`...`---` block is present by construction.
- *
- * Newlines are first normalized (CR/CRLF -> LF) with the SAME two-step replace
- * `parseFrontmatter` applies before its own `\n---` close search, so this scan
- * agrees with the parser for every line-ending style -- including lone-CR
- * sources, which would otherwise hide the close from a raw `\n---` search and
- * turn a graceful degrade into a gate-2 hard-fail. The body is emitted with LF
- * line endings (what Pi's loader normalizes the staged file to on read anyway).
- *
- * Successive leading malformed blocks are stripped until the remainder PARSES
- * (RETURNS) under Pi's loader: a source whose body itself opens with a second
- * malformed `---`...`---` block would otherwise re-throw at the PARSE-02 backstop
- * and turn a graceful degrade into a hard-fail. A leading block that parses
- * cleanly, or a remainder with no opening `---`, is Pi-acceptable and kept
- * verbatim (matching what Pi's own loader would do). Each pass removes at least
- * the opening delimiter, so the loop terminates.
- */
-function neutralizeCommandFrontmatter(content: string): string {
-  let normalized = content.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
-
-  for (;;) {
-    if (!normalized.startsWith("---")) {
-      // No opening fence: parseFrontmatter RETURNS the body as-is, nothing to strip.
-      return normalized;
-    }
-
-    const closeIdx = normalized.indexOf("\n---", 3);
-    if (closeIdx === -1) {
-      // Opening `---` but no close: parseFrontmatter RETURNS, leave unchanged.
-      return normalized;
-    }
-
-    const afterClose = normalized.indexOf("\n", closeIdx + 1);
-    const stripped = afterClose === -1 ? "" : normalized.slice(afterClose + 1);
-
-    try {
-      // A clean parse (empty or valid frontmatter, or no opening fence) means the
-      // remainder is Pi-acceptable -- stop here.
-      parseFrontmatter(stripped);
-      return stripped;
-    } catch {
-      // The remainder still opens with a malformed block; strip it too.
-      normalized = stripped;
-    }
-  }
-}
 
 /**
  * Give a filesystem failure during staging the two facts it is missing.
@@ -138,10 +80,10 @@ function contextualStagingError(pluginName: string, generatedName: string, err: 
 }
 
 /**
- * Stage commands into a fresh `<commandsStagingDir>/<uuid>/` tree. Reads
- * each source `.md`, substitutes `${CLAUDE_PLUGIN_ROOT}` /
- * `${CLAUDE_PLUGIN_DATA}` (CM-3), and writes the substituted body to a
- * staging file. Per-file rename to the target dir is deferred to
+ * Stage commands into a fresh `<commandsStagingDir>/<uuid>/` tree. Builds
+ * each source `.md` into its staged text through `buildStagedCommand`
+ * (substitution, reference rewrite, rebuilt frontmatter with the D-CF3-08
+ * description) and writes it to a staging file. Per-file rename to the target dir is deferred to
  * `commitPreparedCommands`.
  *
  * Returns a `kind: "noop"` short-circuit when `discovered.length === 0 &&
@@ -186,6 +128,17 @@ export async function prepareStageCommands(
     workflows: [],
   };
 
+  // SUB-02: ${CLAUDE_PROJECT_DIR} resolves to the install cwd only for project
+  // scope; user scope leaves the token literal. Commands are not skill-scoped,
+  // so ${CLAUDE_SKILL_DIR} stays literal.
+  const context: StagedCommandContext = {
+    pluginName,
+    pluginRoot,
+    pluginDataDir,
+    projectDir: locations.scope === "project" ? cwd : undefined,
+    referenceNames,
+  };
+
   const stagingRoot = path.join(locations.commandsStagingDir, randomUUID());
   await mkdir(stagingRoot, { recursive: true });
   await assertPathInside(locations.commandsStagingDir, stagingRoot, "commands staging root");
@@ -207,52 +160,16 @@ export async function prepareStageCommands(
         // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
         await assertPathInside(locations.promptsTargetDir, targetFile, "target command file");
 
-        // FMBOM-01: a leading U+FEFF produces no gate-1 throw, so no CMD-01
-        // degrade fires and the marker rides `content` straight into the
-        // staged artifact below -- where Pi's loader drops
-        // the whole frontmatter block at load time.
         // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
-        let content = stripBom(await readFile(command.commandFile, "utf8"));
-
-        // PARSE-01: parse the SOURCE frontmatter BEFORE substitution to establish
-        // attribution ground truth + the degrade trigger. A THROW means a closed
-        // `---` block whose inner YAML is malformed (an author defect); a RETURN
-        // (including absent/empty frontmatter) is the byte-identical passthrough
-        // (NREG-01). The parse is READ-ONLY -- validate, never eval (T-03-17).
-        try {
-          parseFrontmatter(content);
-        } catch (parseErr) {
-          // CMD-01 / D-86-07: neutralize by stripping the entire malformed
-          // frontmatter block, leaving the real body, so Pi's command loader
-          // takes name-from-filename + description-from-first-body-line. No
-          // synthesized placeholder and no disable flag -- Pi's command loader
-          // has no non-empty-description gate.
-          content = neutralizeCommandFrontmatter(content);
-          degraded.push({
-            generatedName: command.generatedName,
-            parseError: errorMessage(parseErr),
-          });
+        const staged = await buildStagedCommand(command, context);
+        if (staged.parseError !== undefined) {
+          // CMD-01 / D-86-07: the source frontmatter did not parse and was
+          // neutralized; the install maps this to `{malformed command}`.
+          degraded.push({ generatedName: command.generatedName, parseError: staged.parseError });
         }
 
-        // SUB-02: ${CLAUDE_PROJECT_DIR} resolves to the install cwd only for
-        // project scope; user scope leaves the token literal (undefined ->
-        // pass-through). Commands are not skill-scoped, so no skillDir is
-        // supplied and ${CLAUDE_SKILL_DIR} stays literal.
-        content = substituteClaudeVars(content, {
-          pluginRoot,
-          pluginData: pluginDataDir,
-          projectDir: locations.scope === "project" ? cwd : undefined,
-        });
-        content = rewriteMarkdownReferences(content, pluginName, referenceNames);
         // eslint-disable-next-line no-await-in-loop -- staging cleanup in the catch needs no write in flight
-        await writeFile(stagedFile, content, "utf8");
-
-        // PARSE-02 / D-86-04: re-parse the STAGED bytes as a Pi-acceptability
-        // backstop. The neutralized output is designed to RETURN, so a THROW here
-        // is OUR self-inflicted defect (substitution produced bytes Pi rejects) --
-        // throw loudly so it rides the cleanup catch below; never mask it as
-        // author degradation.
-        parseFrontmatter(content);
+        await writeFile(stagedFile, staged.text, "utf8");
 
         renamePairs.push({ from: stagedFile, to: targetFile });
         stagedNames.push(command.generatedName);
@@ -273,7 +190,6 @@ export async function prepareStageCommands(
     targetPath: path.join(locations.promptsTargetDir, command.generatedName + ".md"),
   }));
 
-  // fallow-ignore-next-line code-duplication -- reviewed: the commands and skills bridges keep the same shape on purpose, and the fallow boundary zones forbid one bridge from importing the other
   return {
     kind: "staged",
     locations,
