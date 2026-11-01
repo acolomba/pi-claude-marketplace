@@ -293,3 +293,12 @@ tooling. Status stays `open` until the user reviews it.
   5. WR-06: a bad POST to the HTTP stand-in is answered 400 and logged but does not fail the release; an append or answer failure does.
   6. The orchestrator scoped the fix to warnings plus IN-06 and wrote `06-REVIEW-DISPOSITION.md` by hand (the other info items `deferred`) instead of running the disposition script.
 - **Recorded in:** `06-REVIEW-FIX.md`, `06-REVIEW-DISPOSITION.md`.
+
+### P6-DC-22: Phase 6 stops at human verification, not transitioned
+
+- **Phase / source:** Phase 6 verifier (`06-VERIFICATION.md`, status `human_needed`, 4/5 success criteria verified).
+- **Severity:** High. **Status:** open.
+- **Choice:** The orchestrator persisted the one human item as `06-UAT.md` and did not run the phase transition (`phase.complete`, ROADMAP/STATE/REQUIREMENTS marks). The item is whether the D-CF6-10 gap pin (pi-subagents 0.84.0 refuses a foreground agent's plugin MCP tool; the refusal is pinned whole) satisfies MCP-07 and ROADMAP success criterion 4, whose literal wording asks for a working agent call. D-CF6-10 was settled autonomously, so recording an override with an `accepted_by` name would claim a user acceptance that does not exist.
+- **Alternatives:** Treat the user's standing "make decisions as you see fit" instruction as acceptance and write the override, then transition; or open a gap plan for a working agent call (needs a harness whose background children load the companions and the scripted model, BACKLOG MCPBG-01, and a pi-subagents change).
+- **Why dubious:** The brief asks the child to carry the phase through the transition; stopping leaves the parent one decision to make before merging. Every other success criterion passes.
+- **Recorded in:** `06-UAT.md`, `06-VERIFICATION.md`.
