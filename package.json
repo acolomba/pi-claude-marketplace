@@ -16,8 +16,9 @@
   "description": "Access Claude plugin marketplaces from Pi Coding Agent. Supports Claude commands, skills, agents, hooks, MCP servers, and workflows.",
   "devDependencies": {
     "@cucumber/cucumber": "^13.3.0",
-    "@earendil-works/pi-coding-agent": "^1.0.0",
-    "@earendil-works/pi-tui": "^1.0.0",
+    "@earendil-works/pi-ai": "1.4.0",
+    "@earendil-works/pi-coding-agent": "^1.4.0",
+    "@earendil-works/pi-tui": "^1.4.0",
     "@eslint/js": "^10.0.1",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/proper-lockfile": "^4.1.4",
@@ -58,13 +59,17 @@
   "license": "MIT",
   "name": "pi-claude-marketplace",
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": ">=1.0.0",
+    "@earendil-works/pi-coding-agent": ">=1.4.0",
     "@earendil-works/pi-tui": "*",
-    "pi-mcp-adapter": ">=5.2.0 <6",
-    "pi-subagents": ">=0.74.0",
+    "@quintinshaw/pi-dynamic-workflows": ">=3.15.0 <4",
+    "pi-mcp-adapter": ">=7.0.0 <8",
+    "pi-subagents": ">=0.84.0",
     "typebox": "*"
   },
   "peerDependenciesMeta": {
+    "@quintinshaw/pi-dynamic-workflows": {
+      "optional": true
+    },
     "pi-mcp-adapter": {
       "optional": true
     },
@@ -103,7 +108,7 @@
     "test:coverage:direct:commit": "node scripts/test-coverage-direct.mjs --staged",
     "test:coverage:e2e": "PI_CM_E2E_REF=pinned node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} --experimental-test-coverage --test-reporter=./scripts/test-reporter.mjs --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/e2e.lcov \"test/e2e/**/*.test.ts\"",
     "test:coverage:integration": "node scripts/install-test-peers.mjs && node --test ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} --experimental-test-coverage --test-reporter=./scripts/test-reporter.mjs --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/integration.lcov \"test/integration/**/*.test.ts\"",
-    "test:cucumber": "cucumber-js",
+    "test:cucumber": "node scripts/install-test-peers.mjs && cucumber-js",
     "test:e2e": "PI_CM_E2E_REF=pinned node --test --test-reporter=./scripts/test-reporter.mjs ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} \"test/e2e/**/*.test.ts\"",
     "test:e2e:nightly": "PI_CM_E2E_REF=main node --test --test-reporter=./scripts/test-reporter.mjs ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} \"test/e2e/**/*.test.ts\"",
     "test:integration": "node scripts/install-test-peers.mjs && node --test --test-reporter=./scripts/test-reporter.mjs ${TEST_CONCURRENCY:+--test-concurrency=$TEST_CONCURRENCY} \"test/integration/**/*.test.ts\"",

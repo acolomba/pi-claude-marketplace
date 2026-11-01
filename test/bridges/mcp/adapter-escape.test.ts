@@ -197,4 +197,53 @@ describe("serializeLiteral", () => {
     // assert
     assert.strictEqual(writtenValue, expectedWritten);
   });
+
+  for (const { title, literal, written } of [
+    {
+      title: "VER-04: splits a literal ${A:-x}",
+      literal: "${A:-x}",
+      written: `$${SPLIT}{A:-x}`,
+    },
+    {
+      title: "VER-04: splits a literal ${A:-} with an empty default",
+      literal: "${A:-}",
+      written: `$${SPLIT}{A:-}`,
+    },
+    {
+      title: "VER-04: splits the adapter-only literal ${1A:-x}",
+      literal: "${1A:-x}",
+      written: `$${SPLIT}{1A:-x}`,
+    },
+    {
+      title: "VER-04: still splits a literal ${A}",
+      literal: "${A}",
+      written: `$${SPLIT}{A}`,
+    },
+    {
+      title: "VER-04: leaves ${É} unchanged, a reference in neither grammar",
+      literal: "${É}",
+      written: "${É}",
+    },
+    {
+      title: "VER-04: leaves ${A:x} unchanged, a default without its dash",
+      literal: "${A:x}",
+      written: "${A:x}",
+    },
+    {
+      title: "VER-04: writes an empty literal as the empty string",
+      literal: "",
+      written: "",
+    },
+  ]) {
+    test(title, () => {
+      // arrange
+      const expectedWritten = written;
+
+      // act
+      const writtenValue = serializeLiteral(literal, false);
+
+      // assert
+      assert.strictEqual(writtenValue, expectedWritten);
+    });
+  }
 });

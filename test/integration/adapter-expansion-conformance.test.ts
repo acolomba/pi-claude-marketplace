@@ -24,7 +24,10 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { serializeSegments } from "../../extensions/pi-claude-marketplace/bridges/mcp/adapter-escape.ts";
+import {
+  serializeLiteral,
+  serializeSegments,
+} from "../../extensions/pi-claude-marketplace/bridges/mcp/adapter-escape.ts";
 import { substituteAndInject } from "../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
 import { expandClaudeValue } from "../../extensions/pi-claude-marketplace/domain/claude-mcp-variables.ts";
 import { applyMcpAdapterEnv } from "../../extensions/pi-claude-marketplace/shared/session-env.ts";
@@ -196,6 +199,9 @@ interface AdversarialAlphabet {
 
 // The alphabets of the research probe: single trigger characters plus kept
 // references, then trigger fragments and `:-` defaults that end in a trigger.
+// The third nests `:-` defaults, so Claude's install-time expansion leaves
+// literal `${NAME:-default}` text, which pi-mcp-adapter 7.x expands (VER-04).
+// Its `É` is a name character in neither grammar.
 const ADVERSARIAL_ALPHABETS: readonly AdversarialAlphabet[] = [
   { tokens: ["$", "{", "}", "e", "n", "v", ":", "-", "K", "${R}", "${K}"], maxLength: 5 },
   {
@@ -218,14 +224,19 @@ const ADVERSARIAL_ALPHABETS: readonly AdversarialAlphabet[] = [
     ],
     maxLength: 4,
   },
+  {
+    tokens: ["${B:-", "${A:-", "x", "}", "$", "{", ":-", "K", "${R}", "{env", "$env:", "É"],
+    maxLength: 5,
+  },
 ];
 
 // A kept reference is "" or "x" when the adapter connects.
 const RUNTIME_VARIANTS = ["", "x"];
 
-// (11 + 11^2 + ... + 11^5 + 15 + 15^2 + 15^3 + 15^4) values, two variants
-// each; the research probe checked the same 462,790.
-const EXPECTED_CHECKED_VALUES = 462_790;
+// ((11 + 11^2 + ... + 11^5) + (15 + 15^2 + 15^3 + 15^4) + (12 + 12^2 + ... +
+// 12^5)) values, two variants each, through both the expanded and the literal
+// path: (177,155 + 54,240 + 271,452) x 2 x 2.
+const EXPECTED_CHECKED_VALUES = 2_011_388;
 
 const PROPERTY_INSTALL_ENV: Environment = { R: "r", K: "S" };
 
@@ -299,6 +310,22 @@ function mismatchFor(utils: PiMcpAdapterUtils, raw: string, variant: string): Mi
   return got === want ? undefined : { raw, variant, written, got, want };
 }
 
+// A field Claude leaves unexpanded (an `oauth` value, for one) keeps `raw` as
+// its value. Every name the alphabets use is set at connect time, so a literal
+// reference that leaks shows as the variant or as `S`.
+function literalMismatchFor(
+  utils: PiMcpAdapterUtils,
+  raw: string,
+  variant: string,
+): Mismatch | undefined {
+  const written = serializeLiteral(raw, false);
+  const runtime = { A: variant, B: variant, R: variant, K: "S" };
+  const got = utils.interpolateEnvVars(written, { [EMPTY_ENV_NAME]: "", ...runtime });
+  return got === raw ? undefined : { raw, variant, written, got, want: raw };
+}
+
+const PROPERTY_PATHS = [mismatchFor, literalMismatchFor];
+
 function tallyCheck(tally: PropertyTally, mismatch: Mismatch | undefined): void {
   tally.checked += 1;
   if (mismatch !== undefined) {
@@ -311,7 +338,9 @@ function tallyCheck(tally: PropertyTally, mismatch: Mismatch | undefined): void 
 
 function tallyValue(tally: PropertyTally, utils: PiMcpAdapterUtils, raw: string): void {
   for (const variant of RUNTIME_VARIANTS) {
-    tallyCheck(tally, mismatchFor(utils, raw, variant));
+    for (const pathMismatchFor of PROPERTY_PATHS) {
+      tallyCheck(tally, pathMismatchFor(utils, raw, variant));
+    }
   }
 }
 
@@ -582,7 +611,7 @@ const SERVER_MANAGER_CALL_SITES = [
 ];
 
 const INTERPOLATION_PASSES = [
-  String.raw`.replace(/\$\{(\w+)\}/g,`,
+  String.raw`.replace(/\$\{(\w+)(?::-([^}]*))?\}/g,`,
   String.raw`.replace(/\$env:(\w+)/g,`,
   String.raw`.replace(/\{env:(\w+)\}/g,`,
 ];

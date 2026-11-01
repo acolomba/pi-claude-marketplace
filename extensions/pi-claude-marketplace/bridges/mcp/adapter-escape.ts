@@ -1,12 +1,14 @@
 // bridges/mcp/adapter-escape.ts
 //
 // Writes Claude's expansion of one MCP field in pi-mcp-adapter's encoding
-// (AVAR-03). At connect time the adapter expands `${NAME}`, then `$env:NAME`,
+// (AVAR-03). At connect time the adapter expands `${NAME}` and, since
+// pi-mcp-adapter 7.0.0, `${NAME:-default}` in its first pass, then `$env:NAME`,
 // then `{env:NAME}`, in three global passes. Each pass reads the previous
 // pass's output but never its own. The adapter also runs a leading `!` in an
-// `env` or `headers` value as a shell command. Literal text that Claude keeps
-// must therefore reach the server unchanged through all of that. The split
-// token `{env:PI_CLAUDE_MARKETPLACE_EMPTY}` breaks each trigger: the third pass
+// `env` or `headers` value as a shell command. Literal text that Claude keeps,
+// including literal `${NAME:-default}` text (VER-04), must therefore reach the
+// server unchanged through all of that. The split token
+// `{env:PI_CLAUDE_MARKETPLACE_EMPTY}` breaks each trigger: the third pass
 // expands it to the empty string after the first two passes have read past
 // the broken trigger, and its own output is never read again.
 
@@ -16,9 +18,9 @@ import type { Segment } from "../../domain/claude-mcp-variables.ts";
 
 const SPLIT_TOKEN = `{env:${ADAPTER_EMPTY_ENV}}`;
 
-// The adapter's three triggers in literal text. One pass, so an inserted split
-// token is never escaped again.
-const TRIGGER = /\$env:|\{env:|\$(?=\{\w+\})/g;
+// The adapter's three triggers in literal text; the first also covers a `:-`
+// default (VER-04). One pass, so an inserted split token is never escaped again.
+const TRIGGER = /\$env:|\{env:|\$(?=\{\w+(?:\}|:-))/g;
 
 // A literal tail that a kept reference expanding to the empty string at runtime
 // could complete into `$env:NAME` or `{env:NAME}`.
