@@ -41,6 +41,9 @@
 // generation changed while its hooks ran folds to noop.
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
+import { errorMessage } from "../../shared/errors.ts";
+import { notifyHookNotice } from "../../shared/notification-dispatch.ts";
+import { openNotificationRun } from "../../shared/notification-run.ts";
 
 import { dispatchHookExec } from "./dispatch-exec.ts";
 import {
@@ -49,6 +52,7 @@ import {
   adaptToolCallResult,
   adaptToolResultResult,
 } from "./event-adapters.ts";
+import { hookSaysText } from "./hook-labels.ts";
 import { ifFires } from "./if-field/index.ts";
 import { compactTrigger } from "./payloads/compact-trigger.ts";
 
@@ -398,6 +402,48 @@ async function runAndFold(
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// Hook notices (HOOK-05 / D-CF5-14 / D-CF5-24)
+// ──────────────────────────────────────────────────────────────────────────
+
+// D-CF5-14: every hook's non-empty `systemMessage`, in routing order.
+function systemMessages(outcomes: readonly BucketOutcome[]): string[] {
+  return outcomes.flatMap(({ result }) =>
+    result.systemMessage === undefined || result.systemMessage === "" ? [] : [result.systemMessage],
+  );
+}
+
+/**
+ * HOOK-05 / D-CF5-14: show the user each notice, in order, through one
+ * hook-origin notification run. A notice goes only to the notify chokepoint,
+ * never to the model. With no Pi API there is no run to open, so the notices
+ * are dropped with a debug line; a notice that fails to show is debug-logged
+ * and never fails the event.
+ */
+function showHookNotices(
+  ctx: ExtensionContext,
+  pi: ExtensionAPI | undefined,
+  notices: readonly string[],
+): void {
+  if (notices.length === 0) {
+    return;
+  }
+
+  if (pi === undefined) {
+    hookDebugLog(`dispatch: no Pi API to show ${notices.length} hook notice(s)`);
+    return;
+  }
+
+  try {
+    const run = openNotificationRun(pi, { kind: "hook" });
+    for (const notice of notices) {
+      notifyHookNotice(ctx, run, notice);
+    }
+  } catch (error: unknown) {
+    hookDebugLog(`dispatch: hook notice failed: ${errorMessage(error)}`);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // pi-mcp-adapter's proxy (D-CF5-12)
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -481,6 +527,13 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
     const folded = await runAndFold(runtime, bucket, event, ctx, pi, executor, (entry) =>
       entryFires(claudeEvent, entry, event),
     );
+    if (claudeEvent === "UserPromptSubmit") {
+      showHookNotices(
+        ctx,
+        pi,
+        systemMessages(folded.outcomes).map((message) => hookSaysText(claudeEvent, message)),
+      );
+    }
 
     const context = { runtime, ctx, pi, attributedTo: folded.attributedTo };
     return (await adaptForEvent(

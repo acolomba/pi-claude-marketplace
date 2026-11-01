@@ -436,6 +436,50 @@ test("rejects an async-rewake-summary payload that carries summary", () => {
   assert.strictEqual(valid, false);
 });
 
+const HOOK_NOTICE_MEMBER = NOTIFICATION_PAYLOAD_SCHEMA.anyOf[22];
+
+function hookNoticePayload(): Record<string, unknown> {
+  return {
+    schemaVersion: 1,
+    origin: { kind: "hook" },
+    kind: "hook-notice",
+    severity: "info",
+    needsReload: false,
+    text: "UserPromptSubmit says: remember the tests",
+  };
+}
+
+test("D-CF5-14: accepts a hook-origin hook-notice payload", () => {
+  // arrange
+  const payload = hookNoticePayload();
+
+  // act
+  const errors = leafErrors(HOOK_NOTICE_MEMBER, payload);
+  const valid = Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload);
+
+  // assert
+  assert.deepStrictEqual(errors, []);
+  assert.strictEqual(valid, true);
+});
+
+test("D-CF5-14: rejects a hook-notice payload that carries summary in place of text", () => {
+  // arrange
+  const { text, ...rest } = hookNoticePayload();
+  const payload = { ...rest, summary: text };
+
+  // act
+  const errors = leafErrors(HOOK_NOTICE_MEMBER, payload);
+  const valid = Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload);
+
+  // assert
+  assert.deepStrictEqual(errors, [
+    { keyword: "required", instancePath: "" },
+    { keyword: "boolean", instancePath: "/summary" },
+    { keyword: "additionalProperties", instancePath: "" },
+  ]);
+  assert.strictEqual(valid, false);
+});
+
 function mcpConfigNoticesPayload(notices: readonly unknown[]): Record<string, unknown> {
   return {
     schemaVersion: 1,

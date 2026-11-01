@@ -14,6 +14,7 @@ import {
   notify,
   notifyCommandError,
   notifyAsyncRewakeSummary,
+  notifyHookNotice,
   notifyBackgroundUpdate,
   notifyDeviceFlowPrompt,
   notifyDiagnostic,
@@ -606,6 +607,13 @@ for (const { kind, outcome, emit } of [
       notifyBackgroundUpdate(ctx, run, [
         { name: "alpha", marketplace: "tools", scope: "user", toVersion: "1.1.0" },
       ]);
+    },
+  },
+  {
+    kind: "hook-notice",
+    outcome: false,
+    emit: (ctx, run) => {
+      notifyHookNotice(ctx, run, "UserPromptSubmit says: hi");
     },
   },
 ] satisfies Array<{
@@ -7081,6 +7089,80 @@ test("empty rewake does not read mode or sink", () => {
 
   // act
   notifyAsyncRewakeSummary(ctx, run, "");
+
+  // assert
+  assert.deepStrictEqual(capture.entries, []);
+  capture.assertValid();
+});
+
+test("HOOK-05 / D-CF5-14: hook notice dispatch shows each text verbatim at info and skips an empty one", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyHookNotice(ctx, runWithNothingLoaded(), "UserPromptSubmit says: hi");
+  notifyHookNotice(ctx, runWithNothingLoaded(), "");
+  notifyHookNotice(ctx, runWithNothingLoaded(), "UserPromptSubmit operation blocked by hook:\nno");
+
+  // assert
+  assert.deepStrictEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      ["UserPromptSubmit says: hi", "info"],
+      ["UserPromptSubmit operation blocked by hook:\nno", "info"],
+    ],
+  );
+});
+
+for (const mode of ["json", "rpc"]) {
+  test(`HOOK-05 / D-CF5-14: hook notice dispatch appends the hook-notice payload in ${mode}`, () => {
+    // arrange
+    const capture = createJsonCapture();
+    const ctx = {
+      mode,
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+    // act
+    notifyHookNotice(ctx, run, "");
+    notifyHookNotice(ctx, run, "PreToolUse:Bash says: checked");
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+          kind: "hook-notice",
+          severity: "info",
+          needsReload: false,
+          text: "PreToolUse:Bash says: checked",
+        },
+      },
+    ]);
+    capture.assertValid();
+  });
+}
+
+test("an empty hook notice does not read mode or sink", () => {
+  // arrange
+  const capture = createJsonCapture();
+  const ctx = {
+    get mode(): string {
+      throw new Error("stale mode");
+    },
+    get ui() {
+      return capture.ui;
+    },
+  };
+  const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+  // act
+  notifyHookNotice(ctx, run, "");
 
   // assert
   assert.deepStrictEqual(capture.entries, []);

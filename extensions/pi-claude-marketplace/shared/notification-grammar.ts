@@ -1332,8 +1332,8 @@ function composeBackgroundUpdateText(plugins: readonly BackgroundUpdatePlugin[])
  * yields two arguments.
  * `undefined` means nothing is emitted. The diagnostic arm reads the line count
  * and the async-rewake arm reads the summary length, so only a zero-length line
- * list or summary is a no-op (D-05, D-08). Producer strings pass through
- * verbatim.
+ * list or summary is a no-op (D-05, D-08); the hook-notice arm reads its text
+ * length the same way (D-CF5-14). Producer strings pass through verbatim.
  */
 export function formatRawSurface(surface: ResolvedRawSurface): NotifyArguments | undefined {
   switch (surface.kind) {
@@ -1387,5 +1387,10 @@ export function formatRawSurface(surface: ResolvedRawSurface): NotifyArguments |
 
     case "background-update":
       return [composeBackgroundUpdateText(surface.plugins), RAW_SURFACE_SEVERITY[surface.kind]];
+    case "hook-notice":
+      // D-CF5-14: the hooks bridge composed the notice; it passes through verbatim.
+      return surface.text.length === 0
+        ? undefined
+        : [surface.text, RAW_SURFACE_SEVERITY[surface.kind]];
   }
 }

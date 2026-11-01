@@ -12,6 +12,7 @@ import {
   type DeviceFlowPrompt,
   type DeviceFlowPromptSurface,
   type DiagnosticSurface,
+  type HookNoticeSurface,
   type HookSurface,
   type LoadSurface,
   type MarketplaceNotificationMessage,
@@ -426,6 +427,12 @@ void ({
 void ({ kind: "stop-override-cap", pluginId: "official:guard", cap: 8 } satisfies HookSurface);
 // @ts-expect-error D-14: a hook surface is not a load surface
 void ({ kind: "async-rewake-summary", summary: "ready" } satisfies LoadSurface);
+void ({ kind: "hook-notice", text: "UserPromptSubmit says: hi" } satisfies HookNoticeSurface);
+void ({ kind: "hook-notice", text: "UserPromptSubmit says: hi" } satisfies HookSurface);
+// @ts-expect-error D-CF5-14: the bridge composes the notice; the kind carries its text only
+void ({ kind: "hook-notice", text: "hi", label: "UserPromptSubmit" } satisfies HookNoticeSurface);
+// @ts-expect-error D-14: a hook notice is not a load surface
+void ({ kind: "hook-notice", text: "UserPromptSubmit says: hi" } satisfies LoadSurface);
 void ({
   kind: "stop-override-cap",
   pluginId: "official:guard",

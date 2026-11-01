@@ -16,6 +16,7 @@ import {
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 
 import type {
   CompositeDispatchEvent,
@@ -3252,5 +3253,142 @@ describe("PreToolUse decisions (D-CF5-11)", () => {
     // assert
     assert.deepStrictEqual(output, { block: true, reason: "please confirm" });
     assert.deepStrictEqual(event, createToolCallEvent());
+  });
+});
+
+/** A JSON-mode context and Pi API that capture the hook notices a dispatch appends. */
+function createNoticeHost(cwd: string): {
+  readonly context: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  readonly capture: ReturnType<typeof createJsonCapture>;
+} {
+  const capture = createJsonCapture();
+  const context = Object.defineProperties(createExtensionContext(cwd), {
+    mode: { value: "json" },
+    ui: { get: () => capture.ui },
+  });
+  const pi = {
+    getAllTools: () => [],
+    appendEntry: capture.entrySink.appendEntry,
+  } as unknown as ExtensionAPI;
+  return { context, pi, capture };
+}
+
+/** The `claude-plugin` entry of one hook notice. */
+function hookNoticeEntry(text: string): {
+  readonly customType: string;
+  readonly payload: Record<string, unknown>;
+} {
+  return {
+    customType: "claude-plugin",
+    payload: {
+      schemaVersion: 1,
+      origin: { kind: "hook" },
+      kind: "hook-notice",
+      severity: "info",
+      needsReload: false,
+      text,
+    },
+  };
+}
+
+function promptEntries(pluginIds: readonly string[]): RoutingEntry[] {
+  return pluginIds.map((pluginId, declarationIndex) =>
+    createRoutingEntry({
+      pluginId,
+      claudeEvent: "UserPromptSubmit",
+      rawMatcher: "",
+      declarationIndex,
+    }),
+  );
+}
+
+const PROMPT_EVENT = { type: "input", text: "hello", source: "interactive" } as InputEvent;
+
+describe("hook notices (HOOK-05 / D-CF5-14)", () => {
+  test("shows each prompt hook's non-empty system message in routing order whatever order the hooks finish in", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptSubmit", promptEntries(["first", "quiet", "third"]));
+    const host = createNoticeHost("/workspace/notices");
+    const held = createHeldExecutor([]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      host.pi,
+      held.executor,
+    );
+
+    // act
+    const pending = handler(PROMPT_EVENT, host.context);
+    await settleStartedHooks();
+    held.finish("third", { kind: "noop", systemMessage: "three" });
+    held.finish("quiet", { kind: "noop", systemMessage: "" });
+    held.finish("first", { kind: "noop", systemMessage: "one" });
+    await pending;
+
+    // assert
+    assert.deepStrictEqual(host.capture.entries, [
+      hookNoticeEntry("UserPromptSubmit says: one"),
+      hookNoticeEntry("UserPromptSubmit says: three"),
+    ]);
+    host.capture.assertValid();
+  });
+
+  test("drops a prompt hook's system message with a debug line when no Pi API is given", async (t) => {
+    // arrange
+    const debugLines = observeHookDebug(t);
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptSubmit", promptEntries(["speaker"]));
+    const executor = createRecordingExecutor(
+      { speaker: { kind: "noop", systemMessage: "hi" } },
+      [],
+    );
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    await handler(PROMPT_EVENT, createExtensionContext("/workspace/no-pi"));
+
+    // assert
+    assert.deepStrictEqual(debugLines(), ["[hooks] dispatch: no Pi API to show 1 hook notice(s)"]);
+  });
+
+  test("debug-logs a hook notice that fails to show and still stops a blocked prompt", async (t) => {
+    // arrange
+    const debugLines = observeHookDebug(t);
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptSubmit", promptEntries(["speaker"]));
+    const executor = createRecordingExecutor(
+      { speaker: { kind: "block", reason: "no", systemMessage: "hi" } },
+      [],
+    );
+    // The print-mode context's `ui` throws, so the notice cannot be shown.
+    const pi = { getAllTools: () => [] } as unknown as ExtensionAPI;
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      pi,
+      executor,
+    );
+
+    // act
+    const output = await handler(PROMPT_EVENT, createExtensionContext("/workspace/stale"));
+
+    // assert
+    assert.deepStrictEqual(output, { action: "handled" });
+    assert.deepStrictEqual(debugLines(), [
+      "[hooks] dispatch: hook notice failed: composite dispatch must not read ui",
+    ]);
   });
 });

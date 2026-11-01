@@ -98,6 +98,7 @@ function isRawOutcome(presentation: ResolvedRawSurface | CommandErrorPresentatio
     case "mcp-config-notices":
     case "mcp-migration":
     case "background-update":
+    case "hook-notice":
       return false;
   }
 }
@@ -468,6 +469,29 @@ export function notifyStopHookOverrideCap(
   cap: number,
 ): void {
   emitHookSurface(ctx, run, { kind: "stop-override-cap", pluginId, cap });
+}
+
+/**
+ * HOOK-05 / D-CF5-14 / D-CF5-24 IL-2 bridge seam: shows the user one notice a
+ * plugin's hook gave, built as the `hook-notice` hook kind. The hooks bridge
+ * (`bridges/hooks/dispatch.ts`) composes `text`, such as `<Event>[:<Tool>]
+ * says: <text>` for a `systemMessage`, and calls this once per notice, in
+ * routing order. The text strategy renders it verbatim at `"info"` severity,
+ * and the JSON strategy appends it as `text`; it never reaches the model. A
+ * zero-length text emits nothing. The byte form is locked by
+ * `test/architecture/hooks-notice-notify.test.ts` against the `hook-notice`
+ * block in `docs/output-catalog.md`.
+ */
+export function notifyHookNotice(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  text: string,
+): void {
+  if (text.length === 0) {
+    return;
+  }
+
+  emitHookSurface(ctx, run, { kind: "hook-notice", text });
 }
 
 /**

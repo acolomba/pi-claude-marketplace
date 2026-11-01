@@ -1853,6 +1853,7 @@ describe("resolveRawSurface", () => {
     },
     { kind: "async-rewake-summary", summary: "rewake with Bearer abc" },
     { kind: "stop-override-cap", pluginId: "alpha@official", cap: 8 },
+    { kind: "hook-notice", text: "UserPromptSubmit says: token Bearer abc" },
   ] as const) {
     test(`returns a ${surface.kind} surface as the same object`, () => {
       // arrange

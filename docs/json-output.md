@@ -171,13 +171,13 @@ Every kind includes these fields. The `internal-error` kind narrows origin and s
 
 <!-- fields: common-fields -->
 
-| Field path      | Type              | Presence | Meaning                                                 |
-| --------------- | ----------------- | -------- | ------------------------------------------------------- |
-| `schemaVersion` | integer `1`       | required | Payload compatibility version.                          |
-| `kind`          | string            | required | Payload kind from the twenty-three kind sections below. |
-| `origin`        | [Origin](#origin) | required | Source of this notification.                            |
-| `severity`      | string            | required | `info`, `warning`, or `error`, in increasing order.     |
-| `needsReload`   | boolean           | required | Whether completed changes need `/reload`.               |
+| Field path      | Type              | Presence | Meaning                                                |
+| --------------- | ----------------- | -------- | ------------------------------------------------------ |
+| `schemaVersion` | integer `1`       | required | Payload compatibility version.                         |
+| `kind`          | string            | required | Payload kind from the twenty-four kind sections below. |
+| `origin`        | [Origin](#origin) | required | Source of this notification.                           |
+| `severity`      | string            | required | `info`, `warning`, or `error`, in increasing order.    |
+| `needsReload`   | boolean           | required | Whether completed changes need `/reload`.              |
 
 <!-- /fields -->
 
@@ -570,6 +570,20 @@ The one notice of a background update, which runs after the first message of a s
 | ------------- | ------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
 | `needsReload` | boolean                                                 | required | Always `true`.                                                                                            |
 | `plugins`     | [Background update plugin](#background-update-plugin)[] | required | At least one row, one per updated install, in update order. A plugin updated in both scopes has two rows. |
+
+<!-- /fields -->
+
+#### hook-notice
+
+One notice that a plugin's hook shows the user: a hook's `systemMessage` as `<Event>[:<Tool>] says: <text>`, a blocked prompt, or a block on an event that cannot block. Its origin is `hook`, severity is always `info`, and `needsReload` is always `false`. A hook's text never reaches the model. A notice with empty text emits nothing.
+
+<!-- fields: kind:hook-notice -->
+
+<!-- use: common-fields -->
+
+| Field path | Type   | Presence | Meaning                                                                     |
+| ---------- | ------ | -------- | --------------------------------------------------------------------------- |
+| `text`     | string | required | Notice text, kept verbatim. This is distinct from the envelope's `summary`. |
 
 <!-- /fields -->
 

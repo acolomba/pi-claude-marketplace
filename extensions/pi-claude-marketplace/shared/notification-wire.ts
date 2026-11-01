@@ -878,6 +878,16 @@ const BACKGROUND_UPDATE_PAYLOAD = Type.Object(
 );
 
 /**
+ * D-CF5-14 / D-CF5-24: one notice a plugin's hook shows the user, verbatim, as
+ * `text`, as the rewake summary is: D-01 reserves `summary` for the warning
+ * and error summary line.
+ */
+const HOOK_NOTICE_PAYLOAD = Type.Object(
+  { ...RAW_ENVELOPE_FIELDS, kind: Type.Literal("hook-notice"), text: Type.String() },
+  { additionalProperties: false },
+);
+
+/**
  * WIRE-01 / D-01..D-03: the one payload union, keyed by `kind`. Kinds appear
  * in their declared order. D-12: production reads only its static type.
  */
@@ -904,6 +914,7 @@ export const NOTIFICATION_PAYLOAD_SCHEMA = Type.Union([
   MCP_CONFIG_NOTICES_PAYLOAD,
   MCP_MIGRATION_PAYLOAD,
   BACKGROUND_UPDATE_PAYLOAD,
+  HOOK_NOTICE_PAYLOAD,
   Type.Object(
     {
       schemaVersion: Type.Literal(1),

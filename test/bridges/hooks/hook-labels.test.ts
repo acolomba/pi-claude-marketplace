@@ -5,6 +5,7 @@ import {
   hookBlockingErrorText,
   hookErrorText,
   hookEventLabel,
+  hookSaysText,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/hook-labels.ts";
 
 const GUARD_COMMAND = "$" + "{CLAUDE_PLUGIN_ROOT}/hooks/guard.sh";
@@ -103,6 +104,31 @@ describe("hookBlockingErrorText", () => {
 
       // assert
       assert.strictEqual(feedback, text);
+    });
+  }
+});
+
+describe("hookSaysText", () => {
+  for (const { name, label, message, text } of [
+    {
+      name: "a prompt hook's system message after its event",
+      label: "UserPromptSubmit",
+      message: "hi",
+      text: "UserPromptSubmit says: hi",
+    },
+    {
+      name: "a tool hook's system message after its event and tool",
+      label: "PreToolUse:Bash",
+      message: "checked",
+      text: "PreToolUse:Bash says: checked",
+    },
+  ]) {
+    test(`writes ${name} (D-CF5-14)`, () => {
+      // act
+      const notice = hookSaysText(label, message);
+
+      // assert
+      assert.strictEqual(notice, text);
     });
   }
 });

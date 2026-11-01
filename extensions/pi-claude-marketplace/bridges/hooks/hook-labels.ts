@@ -6,6 +6,7 @@
 // `PreToolUse:Bash hook error: <reason>`; an exit-2 block as
 // `PreToolUse:Bash hook error: [<command>]: <stderr>`; a PostToolUse block as
 // `PostToolUse:Bash hook blocking error from command: "<command>": <reason>`.
+// A hook's `systemMessage` reaches the user as `<label> says: <text>`.
 //
 // A leaf: no Pi and no runtime imports, so every adapter and every output
 // carrier can share one wording.
@@ -50,6 +51,14 @@ export function hookBlockingErrorText(
   fromStderr: boolean,
 ): string {
   return `${label} hook blocking error from command: "${command}": ${blockMessage(reason, command, fromStderr)}`;
+}
+
+/**
+ * D-CF5-14: the notice Claude Code shows the user for a hook's
+ * `systemMessage`, `<label> says: <text>`.
+ */
+export function hookSaysText(label: string, text: string): string {
+  return `${label} says: ${text}`;
 }
 
 /**
