@@ -84,3 +84,13 @@ tooling. Status stays `open` until the user reviews it.
 - **Why dubious:** The brief says "exactly"; the trailer is meant to point at
   the session that made the commit, which is this one.
 - **Recorded in:** this file; every Phase 6 commit.
+
+### P6-DC-06: AI-integration planning step skipped on a keyword match
+
+- **Phase / source:** Phase 6 plan-phase, plan:pre `ai-integration` hook.
+- **Severity:** Low. **Status:** open.
+- **Choice:** The hook fires because the phase goal says "agents"; the
+  phase tests MCP tool calls with a scripted model and builds no AI system,
+  so no AI-SPEC.md is generated (as DC-11 did for the UI contract).
+- **Alternatives:** Run `/gsd-ai-integration-phase 6`.
+- **Recorded in:** this file.
