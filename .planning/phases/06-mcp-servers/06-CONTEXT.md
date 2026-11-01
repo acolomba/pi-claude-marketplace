@@ -149,6 +149,46 @@ MCP OAuth end to end. Fixtures avoid `protocolVersion: "auto"`, `npx`, and
   across update and disable (D-08-01/02, AFILE-06) are observed through what
   the adapter does with them, not the file.
 
+### Amendments after research (06-RESEARCH.md, settled autonomously)
+
+- **D-CF6-01 amended (measured order):** `.mcp.json` first, then the
+  manifest `mcpServers` (object, `./` path, or array read in order); a later
+  same-name server replaces the earlier. The marketplace entry's
+  `mcpServers` counts only when the plugin has no `plugin.json` (the entry
+  then acts as the manifest, whatever `strict` says); with a `plugin.json`
+  the entry's servers are ignored and raise no `strict: false` conflict. A
+  referenced file may hold the server map with or without the `mcpServers`
+  wrapper. `.mcpb`/`.dxt` bundles make the plugin `(partially-available)
+  {unsupported mcp}` through the existing unsupported channel (no new
+  closed-set value). Residual divergence kept under this ID: a reference
+  without `./` (e.g. `"x.mcp.json"`) still installs, where upstream refuses
+  the manifest, so plugins that install today keep installing.
+- **D-CF6-02 amended (silent skip):** A malformed server inside a referenced
+  or root file, an unparseable, missing, or unreadable file (permission
+  denied included), is dropped silently and the rest of the plugin installs,
+  as upstream's loader does (it reports only in `claude plugin validate`).
+  The "install warning" of the original text is withdrawn: upstream shows
+  none, and the warning would need edits outside Phase 6 ownership. A bad
+  server written inline in `plugin.json` or the marketplace entry, or a path
+  that is absolute or uses `..`, still makes the plugin `(unavailable)
+  {malformed mcp}`, as upstream fails that install. AMIG-01 inherits the
+  rule through `resolveStrict` with no edit. Tests outside ownership that pin
+  the old behavior (`test/domain/plugin-resolver.test.ts` MCPR-03, WR-03,
+  entry-wins, MM-5) are updated in the same plan, limited by a `git diff`
+  criterion.
+- **D-CF6-10 (MCP-07 companion gap):** pi-subagents 0.84.0 gives MCP tools
+  only to background children, and a foreground agent with `tools:
+  mcp__plugin_<p>_<s>__<tool>` gets `Unresolved MCP direct-tool selectors:
+  ...` and never runs; background children in the harness do not load the
+  profile's companions or scripted model (Phase 1 finding). MCP-07 is met as
+  a recorded Pi/companion capability gap: a scenario pins the foreground
+  result as a whole literal, the docs record the gap, and the SUMMARY lists a
+  ready-to-file report for pi-subagents. Root cause beyond that text is not
+  claimed.
+- **D-CF6-11 (reload equivalence):** For MCP-06 and MCP-08, a fresh profile
+  Pi started after the change stands in for `/reload` where the harness has
+  no reload step; where `/reload` is reachable over RPC, use it.
+
 ### Claude's Discretion
 
 - The plan split and wave placement inside the ROADMAP template (wave 1
