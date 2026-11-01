@@ -233,7 +233,24 @@ tests (`test/bridges/<kind>/**`) and integration tests
 
 01-01 finishes before 01-03: the faux import needs `pi-ai` in `package.json`, and the companion profile needs the engine in the peer cache. Wave 3 works only because wave 2 put every shared registration in place. If 01-01 grows because adapter 7.x needs larger `bridges/mcp` work, split it into a wave-1 raise plus file-disjoint per-companion fix plans. Once Phase 1 merges, each seed feature file belongs to its kind's phase.
 
-**Plans:** TBD
+**Plans:** 15 plans in 4 waves (the nine above, split and extended at planning: 01-15 carries the file-disjoint half of the version raise, 01-10/12/13 build the invocation cores, 01-11 the component-directory rule in wave 2, 01-14 the `:-` delegation)
+
+Plans:
+- [ ] 01-01-PLAN.md — Wave 1: raise the declared floors and keep MCP literals literal under pi-mcp-adapter 7.x (VER-01..05, D-CF1-14)
+- [ ] 01-02-PLAN.md — Wave 1: cucumber ownership rules and the D-CF1 decision records (HAR-08, DEC-01, DEC-02)
+- [ ] 01-10-PLAN.md — Wave 1: command invocation seed in index.ts, fallow registration of the cores, description fallback and dropped-field cores (D-CF1-01/02/04/05)
+- [ ] 01-15-PLAN.md — Wave 1: Pi 1.4.0 e2e floor fixture, Pi API types, and the version docs (VER-01, VER-03, VER-06)
+- [ ] 01-03-PLAN.md — Wave 2: tracer, profile Pi with the scripted model and companions, skill seed (HAR-01/02/03/05/07)
+- [ ] 01-11-PLAN.md — Wave 2: declared component paths replace the folder for commands, agents, workflows, with the shadowed-folder warning (D-CF1-06)
+- [ ] 01-12-PLAN.md — Wave 2: argument substitution core, the T2e and tokenizer ports (D-CF1-01)
+- [ ] 01-13-PLAN.md — Wave 2: context injection core and the prompt shell spawn site (D-CF1-02)
+- [ ] 01-14-PLAN.md — Wave 2: `${NAME:-default}` left to the adapter where safe (D-CF1-13, VER-05)
+- [ ] 01-04-PLAN.md — Wave 3: registry probe in every profile, slash-command seed (HAR-04, HAR-07)
+- [ ] 01-05-PLAN.md — Wave 3: hook recorder, hook seed (HAR-04, HAR-07)
+- [ ] 01-06-PLAN.md — Wave 3: MCP stub, MCP seed, project-server approval Given (HAR-04, HAR-06, HAR-07)
+- [ ] 01-07-PLAN.md — Wave 3: agent seed and the trusted and untrusted pair (HAR-06, HAR-07)
+- [ ] 01-08-PLAN.md — Wave 3: workflow seed (HAR-07)
+- [ ] 01-09-PLAN.md — Wave 4: CI shards with measured timeouts, handed-over records, phase gate (CI-01)
 
 ### Phase 2: Skills
 
