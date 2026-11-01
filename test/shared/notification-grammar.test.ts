@@ -2064,6 +2064,10 @@ const RAW_SURFACE_ROWS: {
     },
     expectedArguments: ["Plugin updated: demo · Run /reload to apply", "info"],
   },
+  "hook-notice": {
+    surface: { kind: "hook-notice", text: "UserPromptSubmit says: remember the tests" },
+    expectedArguments: ["UserPromptSubmit says: remember the tests", "info"],
+  },
 };
 
 for (const [kind, { surface, expectedArguments }] of Object.entries(RAW_SURFACE_ROWS)) {
@@ -2236,6 +2240,16 @@ for (const { title, surface, expectedArguments } of [
     title: "returns a whitespace-padded async-rewake summary verbatim",
     surface: { kind: "async-rewake-summary", summary: "  ready  " },
     expectedArguments: ["  ready  ", "info"],
+  },
+  {
+    title: "emits nothing for an empty hook notice (D-CF5-14)",
+    surface: { kind: "hook-notice", text: "" },
+    expectedArguments: undefined,
+  },
+  {
+    title: "returns a padded multi-line hook notice verbatim (D-CF5-24)",
+    surface: { kind: "hook-notice", text: " UserPromptSubmit operation blocked by hook:\nno " },
+    expectedArguments: [" UserPromptSubmit operation blocked by hook:\nno ", "info"],
   },
   {
     title: "states the stop-override cap it is given",

@@ -12,6 +12,7 @@ import {
   resolveRawSurface,
   resolveRows,
   resolveUpdateNoOpEnvelope,
+  terminalSafeHookNotice,
 } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 import type { SoftDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -1853,6 +1854,7 @@ describe("resolveRawSurface", () => {
     },
     { kind: "async-rewake-summary", summary: "rewake with Bearer abc" },
     { kind: "stop-override-cap", pluginId: "alpha@official", cap: 8 },
+    { kind: "hook-notice", text: "UserPromptSubmit says: token Bearer abc" },
   ] as const) {
     test(`returns a ${surface.kind} surface as the same object`, () => {
       // arrange
@@ -3136,4 +3138,45 @@ test("pending policies produce identical complete rows under opposite snapshots"
     "● official [user]\n  ● alpha [project] (will partially install)\n  ○ beta (will uninstall)\n  ● gamma (will enable)\n  ◍ delta (will disable)\n  ● epsilon v1.0.0 → v1.1.0 (will update)";
   assert.equal(composeReconcileAppliedBody([loaded[0]!]), expectedText);
   assert.equal(composeReconcileAppliedBody([absent[0]!]), expectedText);
+});
+
+describe("terminalSafeHookNotice", () => {
+  test("strips escape sequences and turns other control characters into spaces", () => {
+    // act
+    const notice = terminalSafeHookNotice(
+      "Stop says: \u001b[31mred\u001b[0m\u001b]8;;https://x\u0007link\u001b]8;;\u0007 a\rb\u0000c\u007fd",
+    );
+
+    // assert
+    assert.strictEqual(notice, "Stop says: redlink a b c d");
+  });
+
+  test("keeps line breaks and tabs", () => {
+    // act
+    const notice = terminalSafeHookNotice("SessionStart:clear hook error:\n\tboom");
+
+    // assert
+    assert.strictEqual(notice, "SessionStart:clear hook error:\n\tboom");
+  });
+
+  test("keeps a notice of exactly 2000 characters whole", () => {
+    // arrange
+    const text = `${"a".repeat(1_999)}\u{1F44D}\u{1F3FD}`;
+
+    // act
+    const notice = terminalSafeHookNotice(text);
+
+    // assert
+    assert.strictEqual(notice, text);
+  });
+
+  test("cuts a notice past 2000 characters without splitting a character and counts what it dropped", () => {
+    // act
+    const notice = terminalSafeHookNotice(
+      `${"a".repeat(1_999)}\u{1F44D}\u{1F3FD}${"b".repeat(10)}`,
+    );
+
+    // assert
+    assert.strictEqual(notice, `${"a".repeat(1_999)}\u{1F44D}\u{1F3FD}… (+10 chars)`);
+  });
 });

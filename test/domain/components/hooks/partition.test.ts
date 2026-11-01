@@ -180,7 +180,7 @@ describe("partitionHooks", () => {
     const config = {
       SessionStart: [
         { matcher: "startup", hooks: [{ type: "command", command: "start" }] },
-        { matcher: "clear", hooks: [{ type: "command", command: "clear" }] },
+        { matcher: "bogus", hooks: [{ type: "command", command: "bogus" }] },
       ],
       StopFailure: [
         { matcher: "rate_limit", hooks: [{ type: "command", command: "rate" }] },
@@ -201,7 +201,7 @@ describe("partitionHooks", () => {
         StopFailure: [{ matcher: "rate_limit", hooks: [{ type: "command", command: "rate" }] }],
       },
       dropped: [
-        { kind: "group", event: "SessionStart", matcher: "clear", cond: "closed-set" },
+        { kind: "group", event: "SessionStart", matcher: "bogus", cond: "closed-set" },
         {
           kind: "group",
           event: "StopFailure",
@@ -325,7 +325,7 @@ describe("partitionHooks", () => {
         },
         { matcher: "Edit.*", hooks: [{ type: "command", command: "regex" }] },
       ],
-      SessionStart: [{ matcher: "clear", hooks: [{ type: "command", command: "clear" }] }],
+      SessionStart: [{ matcher: "bogus", hooks: [{ type: "command", command: "bogus" }] }],
     };
 
     // act
@@ -346,7 +346,7 @@ describe("partitionHooks", () => {
         { kind: "handler", event: "PreToolUse", matcher: "Edit", handlerType: "http" },
         { kind: "handler", event: "PreToolUse", matcher: "Edit", handlerType: "prompt" },
         { kind: "group", event: "PreToolUse", matcher: "Edit.*", cond: "regex" },
-        { kind: "group", event: "SessionStart", matcher: "clear", cond: "closed-set" },
+        { kind: "group", event: "SessionStart", matcher: "bogus", cond: "closed-set" },
       ],
     });
   });

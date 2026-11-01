@@ -403,7 +403,7 @@ test("records a module declared by a hooks file the manifest names", async () =>
   assert.strictEqual(dirty, false);
   assert.deepStrictEqual(resolution, {
     supported: [],
-    unsupported: [],
+    unsupported: ["hooks"],
     notes: [],
     declaresHookModule: true,
   });
@@ -435,7 +435,7 @@ test("adopts no command hooks from a hooks file the entry names", async () => {
 
   // assert
   assert.strictEqual(dirty, false);
-  assert.deepStrictEqual(resolution, { supported: [], unsupported: [], notes: [] });
+  assert.deepStrictEqual(resolution, { supported: [], unsupported: ["hooks"], notes: [] });
   assert.deepStrictEqual(files.reads, [extraPath]);
 });
 
@@ -458,7 +458,7 @@ for (const { description, reference } of [
 
     // assert
     assert.strictEqual(dirty, false);
-    assert.deepStrictEqual(resolution, { supported: [], unsupported: [], notes: [] });
+    assert.deepStrictEqual(resolution, { supported: [], unsupported: ["hooks"], notes: [] });
     assert.deepStrictEqual(files.reads, []);
   });
 }
@@ -492,7 +492,7 @@ test("reads every file of a manifest hooks array until one declares a module", a
   assert.strictEqual(dirty, false);
   assert.deepStrictEqual(resolution, {
     supported: [],
-    unsupported: [],
+    unsupported: ["hooks"],
     notes: [],
     declaresHookModule: true,
   });
@@ -553,7 +553,7 @@ test("reads a hooks file once when the entry and the manifest both name it", asy
 
   // assert
   assert.strictEqual(dirty, false);
-  assert.deepStrictEqual(resolution, { supported: [], unsupported: [], notes: [] });
+  assert.deepStrictEqual(resolution, { supported: [], unsupported: ["hooks"], notes: [] });
   assert.deepStrictEqual(files.reads, [extraPath]);
 });
 
@@ -588,7 +588,7 @@ for (const { description, nodes, expectedReads } of [
 
     // assert
     assert.strictEqual(dirty, false);
-    assert.deepStrictEqual(resolution, { supported: [], unsupported: [], notes: [] });
+    assert.deepStrictEqual(resolution, { supported: [], unsupported: ["hooks"], notes: [] });
     assert.deepStrictEqual(files.reads, expectedReads);
   });
 }
@@ -613,7 +613,7 @@ test("reads no referenced hooks file when the convention file declares a module"
   assert.strictEqual(dirty, false);
   assert.deepStrictEqual(resolution, {
     supported: [],
-    unsupported: [],
+    unsupported: ["hooks"],
     notes: [],
     declaresHookModule: true,
   });
@@ -637,4 +637,151 @@ test("propagates a referenced hooks file read failure unchanged", async () => {
     (error: unknown) => error === readError,
   );
   assert.deepStrictEqual(resolution, { supported: [], unsupported: [], notes: [] });
+});
+
+const CONVENTION_PRE_TOOL_USE = JSON.stringify({
+  PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo kept" }] }],
+});
+
+const INLINE_HOOKS = {
+  PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo x" }] }],
+};
+
+for (const { form, hooks } of [
+  { form: "a path to another file", hooks: "./extra/hooks.json" },
+  { form: "an array naming another file", hooks: ["./extra/hooks.json"] },
+  {
+    form: "an array naming the convention file and another file",
+    hooks: ["./hooks/hooks.json", "./extra/hooks.json"],
+  },
+  { form: "an inline hooks object", hooks: INLINE_HOOKS },
+  { form: "an escaping path", hooks: "../outside.json" },
+  { form: "an absolute path", hooks: "/plugins/outside.json" },
+]) {
+  test(`reports unsupported hooks beside the convention hooks for a manifest hooks field of ${form}`, async () => {
+    // arrange
+    const { resolveHooks } =
+      await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
+    const resolution = emptyResolution();
+    const files = fileTree({ [DEFAULT_HOOKS_PATH]: CONVENTION_PRE_TOOL_USE });
+
+    // act
+    const dirty = await resolveHooks(
+      { pluginRoot: "/plugins/alpha", entry: {}, manifest: { hooks }, resolution },
+      files,
+    );
+
+    // assert
+    assert.strictEqual(dirty, false);
+    assert.deepStrictEqual(resolution, {
+      supported: ["hooks"],
+      unsupported: ["hooks"],
+      notes: [],
+      hooksConfigPath: path.join("hooks", "hooks.json"),
+    });
+  });
+}
+
+for (const hooks of ["./hooks/hooks.json", "hooks/hooks.json", ["./hooks/hooks.json"]]) {
+  test(`keeps the plugin fully supported for a manifest hooks field of ${JSON.stringify(hooks)}`, async () => {
+    // arrange
+    const { resolveHooks } =
+      await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
+    const resolution = emptyResolution();
+    const files = fileTree({ [DEFAULT_HOOKS_PATH]: CONVENTION_PRE_TOOL_USE });
+
+    // act
+    const dirty = await resolveHooks(
+      { pluginRoot: "/plugins/alpha", entry: {}, manifest: { hooks }, resolution },
+      files,
+    );
+
+    // assert
+    assert.strictEqual(dirty, false);
+    assert.deepStrictEqual(resolution, {
+      supported: ["hooks"],
+      unsupported: [],
+      notes: [],
+      hooksConfigPath: path.join("hooks", "hooks.json"),
+    });
+  });
+}
+
+for (const hooks of ["", null, [], [""]]) {
+  test(`declares no hooks for a manifest hooks field of ${JSON.stringify(hooks)}`, async () => {
+    // arrange
+    const { resolveHooks } =
+      await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
+    const resolution = emptyResolution();
+
+    // act
+    const dirty = await resolveHooks(
+      { pluginRoot: "/plugins/alpha", entry: {}, manifest: { hooks }, resolution },
+      fileTree({}),
+    );
+
+    // assert
+    assert.strictEqual(dirty, false);
+    assert.deepStrictEqual(resolution, { supported: [], unsupported: [], notes: [] });
+  });
+}
+
+for (const { form, hooks } of [
+  { form: "an inline hooks object", hooks: INLINE_HOOKS },
+  { form: "the convention path", hooks: "./hooks/hooks.json" },
+]) {
+  test(`reports unsupported hooks for a marketplace entry hooks field of ${form}`, async () => {
+    // arrange
+    const { resolveHooks } =
+      await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
+    const resolution = emptyResolution();
+    const files = fileTree({ [DEFAULT_HOOKS_PATH]: CONVENTION_PRE_TOOL_USE });
+
+    // act
+    const dirty = await resolveHooks(
+      { pluginRoot: "/plugins/alpha", entry: { hooks }, manifest: null, resolution },
+      files,
+    );
+
+    // assert
+    assert.strictEqual(dirty, false);
+    assert.deepStrictEqual(resolution, {
+      supported: ["hooks"],
+      unsupported: ["hooks"],
+      notes: [],
+      hooksConfigPath: path.join("hooks", "hooks.json"),
+    });
+  });
+}
+
+test("reports unsupported hooks once when the convention file drops an event and the manifest declares hooks", async () => {
+  // arrange
+  const { resolveHooks } =
+    await import("../../extensions/pi-claude-marketplace/domain/hooks-resolution.ts");
+  const resolution = emptyResolution();
+  const files = fileTree({
+    [DEFAULT_HOOKS_PATH]: JSON.stringify({
+      Notification: [{ hooks: [{ type: "command", command: "echo ignored" }] }],
+    }),
+  });
+
+  // act
+  const dirty = await resolveHooks(
+    {
+      pluginRoot: "/plugins/alpha",
+      entry: {},
+      manifest: { hooks: "./extra/hooks.json" },
+      resolution,
+    },
+    files,
+  );
+
+  // assert
+  assert.strictEqual(dirty, false);
+  assert.deepStrictEqual(resolution, {
+    supported: [],
+    unsupported: ["hooks"],
+    notes: [],
+    droppedHooks: [{ kind: "event", event: "Notification" }],
+  });
 });

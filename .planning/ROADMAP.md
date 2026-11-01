@@ -201,7 +201,7 @@ pairs `test/domain/workflow-script.test.ts`,
 - [ ] **Phase 2: Skills** - Bridged skills list, carry their frontmatter, reach the model, resolve name clashes, and follow the plugin lifecycle as upstream
 - [x] **Phase 3: Slash Commands** - Bridged commands list as prompt templates, expand their arguments as decided, and follow the plugin lifecycle (completed 2026-11-01)
 - [x] **Phase 4: Agents** - pi-subagents lists and runs bridged agents with converted fields, preloaded skills, and companion-missing recovery (completed 2026-11-01)
-- [ ] **Phase 5: Hooks** - Hooks fire on Pi's session, tool, prompt, and stop events with Claude's stdin and environment, including the `clear`, `compact`, and `fork` parity fixes
+- [x] **Phase 5: Hooks** - Hooks fire on Pi's session, tool, prompt, and stop events with Claude's stdin and environment, including the `clear`, `compact`, and `fork` parity fixes (completed 2026-11-01)
 - [ ] **Phase 6: MCP Servers** - pi-mcp-adapter 7.x connects bridged servers under Claude's tool names, with configuration variants, project scope, and companion-missing recovery
 - [x] **Phase 7: Workflows** - The workflow engine registers and runs bridged workflows, reports refused scripts, and recovers when the engine is loaded later (completed 2026-11-01)
 
@@ -409,7 +409,16 @@ Plans:
 - Wave 3: decision IDs, `docs/hooks-compatibility.md` and the `hook-events.ts` header (FG-25), the CHANGELOG line about stale `clear`/`compact`/`fork` hooks in existing installs, SUMMARY lines for the parent, and the phase gate.
 - Owns: `features/hook/**`, `features/plugin/session-start-hooks.feature`, `features/step_definitions/hook/**`, `features/step_definitions/plugin/session-start-hooks.steps.ts`, `features/lib/hook-files.ts`, `bridges/hooks/**`, `domain/components/hook-*.ts` and `hooks*`, `test/architecture/hooks-*.test.ts`, `docs/hooks-compatibility.md`, `test/bridges/hooks/**`, `test/integration/hooks-*`. HOOK-08 uses Phase 1's MCP stub and hook recorder, never a Phase 6 file.
 
-**Plans:** TBD
+**Plans:** 9/9 plans complete
+- [x] 05-01-PLAN.md
+- [x] 05-02-PLAN.md
+- [x] 05-03-PLAN.md
+- [x] 05-04-PLAN.md
+- [x] 05-05-PLAN.md
+- [x] 05-06-PLAN.md
+- [x] 05-07-PLAN.md
+- [x] 05-08-PLAN.md
+- [x] 05-09-PLAN.md
 
 ### Phase 6: MCP Servers
 
@@ -498,7 +507,7 @@ Plans:
 | 2. Skills | 7/7 | In Progress | - |
 | 3. Slash Commands | 9/9 | Complete    | 2026-11-01 |
 | 4. Agents | 6/6 | Complete    | 2026-11-01 |
-| 5. Hooks | 0/TBD | Not started | - |
+| 5. Hooks | 9/9 | Complete    | 2026-11-01 |
 | 6. MCP Servers | 9/9 | In Progress | - |
 | 7. Workflows | 6/6 | Complete    | 2026-11-01 |
 

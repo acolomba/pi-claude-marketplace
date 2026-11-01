@@ -5,17 +5,17 @@ milestone_name: Component Behavioral Tests
 current_phase: 02
 current_phase_name: Skills
 status: verifying
-stopped_at: Phases 3, 4, 6 and 7 merged; Phases 2 and 6 await user verification items
+stopped_at: All component phases merged; hooks provenance follow-up next; Phases 2 and 6 await user verification items
 last_updated: "2026-11-01T22:20:42.859Z"
 last_activity: 2026-11-01
-last_activity_desc: Phase 3 (Slash Commands) merged into the milestone branch
+last_activity_desc: Phase 5 (Hooks) merged into the milestone branch
 state_head: 25890c384e598d83e7c808da4cd82f24ea88e81f
 progress:
   total_phases: 7
-  completed_phases: 4
-  total_plans: 52
-  completed_plans: 52
-  percent: 57
+  completed_phases: 5
+  total_plans: 61
+  completed_plans: 61
+  percent: 71
 ---
 
 # Project State
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-11-01 after Phase 1)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 02 — Skills (verification deferred to the user); Phase 5 merging next
+**Current focus:** Phase 02 — Skills (verification deferred to the user); all component phases merged
 
 ## Current Position
 
 Phase: 02 (Skills) — 7/7 plans done, verification_deferred_human (see Deferred Verification)
 Plan: 7 of 7
-Status: Phases 3, 4 and 7 complete and merged; Phase 6 merged with verification deferred; Phase 5 complete on its branch, merge next
-Last activity: 2026-11-01 — Phase 3 (Slash Commands) merged into the milestone branch
+Status: Phases 3, 4, 5 and 7 complete and merged; Phase 6 merged with verification deferred; hooks provenance follow-up (D-CF2-13 for project hooks) next
+Last activity: 2026-11-01 — Phase 5 (Hooks) merged into the milestone branch
 
-Progress: [██████░░░░] 57% (4/7 phases complete: 1, 3, 4 and 7; Phases 2 and 6 await the user's verification items)
+Progress: [███████░░░] 71% (5/7 phases complete: 1, 3, 4, 5 and 7; Phases 2 and 6 await the user's verification items)
 
 Phase 1 is the only prerequisite. After it merges to `claude/quirky-planck-hhm592`,
 Phases 2-7 (Skills, Slash Commands, Agents, Hooks, MCP Servers, Workflows) run

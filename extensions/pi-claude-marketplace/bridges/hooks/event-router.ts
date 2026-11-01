@@ -28,11 +28,11 @@
 //     pluginId); within-plugin entries preserve declaration order via the
 //     monotonic `declarationIndex` carried on RoutingEntry (DISP-04).
 //
-//   - `pendingSessionStartContext`: the one-shot buffer holding each
-//     SessionStart handler's `additionalContext` until the
-//     `before_agent_start` closure drains it into the turn's system prompt.
+//   - the pending context buffers: each SessionStart and UserPromptSubmit
+//     hook's `additionalContext` waits there until the `before_agent_start`
+//     closure drains both into one message after the prompt (D-CF5-13).
 //     Cleared at every factory entry so a `/reload` cannot leak the prior
-//     session's primer.
+//     session's context.
 //
 // DISP-01 / DISP-02 / DISP-03 / DISP-04 / OBS-01 anchor the contracts this
 // module enforces; D-59-01 / D-59-02 / D-59-03 anchor the decisions.
@@ -59,7 +59,10 @@ import { SCOPES } from "../../shared/types.ts";
 
 import { reapOrphans, shutdownInMemoryChildren } from "./async-rewake/registry.ts";
 import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
+import { HOOK_CONTEXT_MESSAGE_TYPE, sendDueFollowUpContext } from "./event-adapters.ts";
 import { compileIfPredicate, MATCH_ALL_IF } from "./if-field/index.ts";
+import { claudeSessionEndReason } from "./payloads/session-end.ts";
+import { claudeSessionStartSource } from "./payloads/session-start.ts";
 import {
   createRoutingStateOperations,
   type CacheEntry,
@@ -73,13 +76,22 @@ import {
   settleHandlerFor,
 } from "./settle.ts";
 
-import type { HookExecutor } from "./dispatch.ts";
+import type {
+  CompositeDispatchEvent,
+  CompositeEventFor,
+  CompositeReturnFor,
+  HookExecutor,
+} from "./dispatch.ts";
+import type { FollowUpTurnEnd } from "./event-adapters.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type {
   BeforeAgentStartEvent,
   BeforeAgentStartEventResult,
   ExtensionAPI,
   ExtensionContext,
+  ExtensionMode,
+  SessionCompactEvent,
+  SessionShutdownEvent,
 } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -166,29 +178,42 @@ async function readAndCachePluginHooksWith(
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// SessionStart additionalContext bridge
+// Hook additionalContext bridge (D-CF5-13)
 // ──────────────────────────────────────────────────────────────────────────
+
+// HOOK-05: one `<Event> hook additional context: <values>` text part, the
+// values joined by `\n` in buffer order, as Claude Code 2.1.316 words it. A
+// value that is empty or only whitespace adds nothing, so a buffer without
+// text gives no part.
+function contextPart(
+  claudeEvent: "SessionStart" | "UserPromptSubmit",
+  entries: readonly { readonly context: string }[],
+): { readonly type: "text"; readonly text: string } | undefined {
+  const values = entries.map((entry) => entry.context).filter((text) => text.trim().length > 0);
+  if (values.length === 0) {
+    return undefined;
+  }
+
+  return { type: "text", text: `${claudeEvent} hook additional context: ${values.join("\n")}` };
+}
 
 /**
  * Factory: build the `before_agent_start` handler closure registered on
  * Pi at `registerHooksBridge` time. The registration wrapper checks its
  * captured generation and live mode before invoking this closure. A stale
- * registration or rejected mode leaves the live context buffer intact.
+ * registration or rejected mode leaves the live context buffers intact.
  *
- * Drain semantics:
- *   - empty buffer -> returns undefined (no systemPrompt mutation, no
- *     `messages` push). Pi's runner emits `before_agent_start` on every
- *     agent turn, not just the first one, so a noop return after the
- *     first drain is the correct path for all subsequent turns.
- *   - non-empty buffer -> joins entries with `"\n\n"` separators between
- *     each entry AND between `event.systemPrompt` and the buffered
- *     block. Returns `{ systemPrompt: <joined> }` and clears the buffer
- *     in the same call (one-shot drain).
+ * D-CF5-13: the handler drains both context buffers into one custom message
+ * with a text part per event, `SessionStart hook additional context: <values>`
+ * first, then `UserPromptSubmit hook additional context: <values>`. Pi places the message after the prompt, persists
+ * it in the session, and sends it to the model as a user message, so the
+ * SessionStart context stays in the history of every later turn, as Claude
+ * Code's does. The prompt and the system prompt are not changed.
+ * `display: false` keeps the message out of the transcript the user reads.
  *
- * Each plugin's additionalContext is a one-shot turn primer, not a
- * permanent system-prompt addition; the drain pattern matches upstream
- * Claude Code's SessionStart semantics where the injected text is added
- * to the session prompt once at session boot.
+ * With nothing to send, the handler returns undefined. Pi's runner emits
+ * `before_agent_start` on every agent turn, so that is the path for every
+ * turn after the drain.
  */
 function createBeforeAgentStartHandler(
   runtime: HooksRuntime,
@@ -196,14 +221,18 @@ function createBeforeAgentStartHandler(
   event: BeforeAgentStartEvent,
   ctx: ExtensionContext,
 ) => Promise<BeforeAgentStartEventResult | undefined> {
-  return (event) => {
-    const pendingContext = runtime.drainPendingSessionStartContext();
-    if (pendingContext.length === 0) {
+  return () => {
+    const content = [
+      contextPart("SessionStart", runtime.drainPendingSessionStartContext()),
+      contextPart("UserPromptSubmit", runtime.drainPendingPromptContext()),
+    ].filter((part) => part !== undefined);
+    if (content.length === 0) {
       return Promise.resolve(undefined);
     }
 
-    const buffered = pendingContext.map((entry) => entry.context).join("\n\n");
-    return Promise.resolve({ systemPrompt: `${event.systemPrompt}\n\n${buffered}` });
+    return Promise.resolve({
+      message: { customType: HOOK_CONTEXT_MESSAGE_TYPE, content, display: false },
+    });
   };
 }
 
@@ -776,6 +805,134 @@ async function ensureSharedDataDir(loc: ScopedLocations): Promise<void> {
   }
 }
 
+/** The closure `compositeHandlerFor` returns for one Claude event. */
+type CompositeHandler<E extends CompositeDispatchEvent> = (
+  event: CompositeEventFor<E>,
+  ctx: ExtensionContext,
+) => Promise<CompositeReturnFor<E>>;
+
+/**
+ * D-60-06: prepares the `_shared` data directory of every scope that has
+ * SessionStart entries before a SessionStart dispatch, so `CLAUDE_ENV_FILE`'s
+ * directory exists. Scopes are prepared one after the other and each failure
+ * stays independent. Returns `false` once the generation goes stale, so the
+ * caller dispatches nothing.
+ */
+async function prepareSessionStartDataDirs(
+  routingState: EventRouterRoutingState,
+  ctx: ExtensionContext,
+  generationIsCurrent: GenerationGuard,
+): Promise<boolean> {
+  const entries = routingState.getRoutingBucket("SessionStart");
+  for (const scope of SCOPES) {
+    if (entries.some((entry) => entry.scope === scope)) {
+      requireNotificationMode(ctx.mode);
+      // eslint-disable-next-line no-await-in-loop -- at most two independent scope directories
+      await ensureSharedDataDir(locationsFor(scope, ctx.cwd));
+      if (!generationIsCurrent()) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+/**
+ * The `session_shutdown` callback: it maps Pi's reason once, with the live
+ * session mode, and dispatches the Claude-side SessionEnd event (D-CF5-02).
+ * Pi `reload` keeps the session, so it runs no SessionEnd and a cleanup hook
+ * never tears down state of a session that continues (D-CF5-03). A context
+ * whose mode is not a notification mode is skipped with a debug line before
+ * the event is read.
+ */
+function sessionShutdownCallback(
+  sessionEndHandler: CompositeHandler<"SessionEnd">,
+): (event: SessionShutdownEvent, ctx: ExtensionContext) => Promise<undefined> | undefined {
+  return (event, ctx) => {
+    let mode: ExtensionMode;
+    try {
+      mode = requireNotificationMode(ctx.mode);
+    } catch (error: unknown) {
+      hookDebugLog(`hook callback skipped: ${errorMessage(error)}`);
+      return undefined;
+    }
+
+    if (event.reason === "reload") {
+      return undefined;
+    }
+
+    return sessionEndHandler({ reason: claudeSessionEndReason(event.reason, mode) }, ctx);
+  };
+}
+
+/**
+ * The SessionStart leg of a compaction (D-CF5-04): it prepares the shared
+ * data directories, as the `session_start` path does, so the compaction
+ * SessionStart gets its `CLAUDE_ENV_FILE` too, then runs the SessionStart
+ * composite with `source: "compact"` to completion. A failure is debug-logged
+ * and never thrown out of Pi's event (NFR-2). Returns whether the generation
+ * is still current, so a stale one stops the compaction's dispatch.
+ */
+async function runCompactionSessionStart(
+  sessionStartHandler: CompositeHandler<"SessionStart">,
+  routingState: EventRouterRoutingState,
+  ctx: ExtensionContext,
+  generationIsCurrent: GenerationGuard,
+): Promise<boolean> {
+  try {
+    if (!(await prepareSessionStartDataDirs(routingState, ctx, generationIsCurrent))) {
+      return false;
+    }
+
+    requireNotificationMode(ctx.mode);
+    await sessionStartHandler({ source: "compact" }, ctx);
+  } catch (err) {
+    hookDebugLog(`session_compact SessionStart skipped: ${errorMessage(err)}`);
+  }
+
+  return generationIsCurrent();
+}
+
+/**
+ * The `session_compact` callback (D-CF5-04, D-CF5-05): one compaction runs
+ * SessionStart with `source: "compact"` to completion and then PostCompact,
+ * as upstream. The compaction SessionStart never passes the SSDEDUP-01 guard
+ * of `session_start`, so each compaction runs it again. A context whose mode
+ * is not a notification mode is skipped with a debug line before the event
+ * is read.
+ */
+function sessionCompactCallback(
+  handlers: {
+    readonly sessionStart: CompositeHandler<"SessionStart">;
+    readonly postCompact: CompositeHandler<"PostCompact">;
+  },
+  routingState: EventRouterRoutingState,
+  generationIsCurrent: GenerationGuard,
+): (event: SessionCompactEvent, ctx: ExtensionContext) => Promise<undefined> {
+  return async (event, ctx) => {
+    try {
+      requireNotificationMode(ctx.mode);
+    } catch (error: unknown) {
+      hookDebugLog(`hook callback skipped: ${errorMessage(error)}`);
+      return undefined;
+    }
+
+    if (
+      !(await runCompactionSessionStart(
+        handlers.sessionStart,
+        routingState,
+        ctx,
+        generationIsCurrent,
+      ))
+    ) {
+      return undefined;
+    }
+
+    return handlers.postCompact(event, ctx);
+  };
+}
+
 /**
  * D-59-03 / DISP-01 / DISP-02 / DISP-03 hooks-bridge factory.
  *
@@ -849,11 +1006,11 @@ async function registerHooksBridgeWith(
     });
   }
 
-  // /reload re-enters this factory and must not leak a stale SessionStart
-  // additionalContext entry from the prior session into the new buffer.
+  // /reload re-enters this factory and must not leak a stale
+  // additionalContext entry from the prior session into the new buffers.
   // Clearing here makes the invariant explicit: each bridge load starts
-  // with an empty pending buffer, which only `adaptObservationResultForEvent`
-  // (via `appendPendingSessionStartContext`) can subsequently populate.
+  // with both pending buffers empty, which only the SessionStart and
+  // UserPromptSubmit adapters can subsequently populate (D-CF5-13).
   runtime.preparePendingContextForRegistration();
 
   // Same epoch hygiene for the settle dispatcher's cached last-assistant
@@ -911,7 +1068,9 @@ async function registerHooksBridgeWith(
       // clone) binds extensions twice, so this registration sees the same
       // session_start twice (earendil-works/pi#10470). Claude Code runs
       // SessionStart once per session, so a repeat of the last event for the
-      // same session id is dropped.
+      // same session id and Pi reason is dropped (SSDEDUP-01). The key keeps
+      // Pi's raw reason, and the compaction SessionStart never passes here
+      // (D-CF5-05).
       let lastSessionStart: string | undefined = undefined;
       return async (event, ctx) => {
         try {
@@ -933,20 +1092,19 @@ async function registerHooksBridgeWith(
           }
 
           rebuildRoutingTablesWith(routingState);
-          const entries = routingState.getRoutingBucket("SessionStart");
-          for (const scope of SCOPES) {
-            if (entries.some((entry) => entry.scope === scope)) {
-              requireNotificationMode(ctx.mode);
-              // eslint-disable-next-line no-await-in-loop -- at most two independent scope directories
-              await ensureSharedDataDir(locationsFor(scope, ctx.cwd));
-              if (!generationIsCurrent()) {
-                return;
-              }
-            }
+          if (!(await prepareSessionStartDataDirs(routingState, ctx, generationIsCurrent))) {
+            return;
+          }
+
+          // D-CF5-03: Pi `/reload` keeps the session, as upstream
+          // `/reload-plugins`, so it runs no SessionStart; the hydrate, the
+          // rebuild, and the shared data directories above still run.
+          if (event.reason === "reload") {
+            return;
           }
 
           requireNotificationMode(ctx.mode);
-          await sessionStartHandler(event, ctx);
+          await sessionStartHandler({ source: claudeSessionStartSource(event.reason) }, ctx);
           if (!generationIsCurrent()) {
             return;
           }
@@ -958,8 +1116,10 @@ async function registerHooksBridgeWith(
   );
   pi.on(
     "session_shutdown",
-    bindWithMode((generation) =>
-      compositeHandlerFor(runtime, "SessionEnd", generation, pi, opts.executor),
+    bind((generation) =>
+      sessionShutdownCallback(
+        compositeHandlerFor(runtime, "SessionEnd", generation, pi, opts.executor),
+      ),
     ),
   );
   pi.on(
@@ -970,8 +1130,15 @@ async function registerHooksBridgeWith(
   );
   pi.on(
     "session_compact",
-    bindWithMode((generation) =>
-      compositeHandlerFor(runtime, "PostCompact", generation, pi, opts.executor),
+    bind((generation) =>
+      sessionCompactCallback(
+        {
+          sessionStart: compositeHandlerFor(runtime, "SessionStart", generation, pi, opts.executor),
+          postCompact: compositeHandlerFor(runtime, "PostCompact", generation, pi, opts.executor),
+        },
+        routingState,
+        generationIsCurrent,
+      ),
     ),
   );
   pi.on(
@@ -992,13 +1159,21 @@ async function registerHooksBridgeWith(
       toolResultCompositeHandler(runtime, generation, pi, opts.executor),
     ),
   );
-  // SessionStart additionalContext drain: every agent turn fires
-  // before_agent_start; the handler returns early when the pending
-  // buffer is empty so the no-context path is a single Map lookup per
-  // turn.
+  // Hook additionalContext drain (D-CF5-13): every agent turn fires
+  // before_agent_start; the handler returns early when both pending
+  // buffers are empty.
   pi.on(
     "before_agent_start",
     bindWithMode(() => createBeforeAgentStartHandler(runtime)),
+  );
+  // The context of a queued follow-up goes out at the turn end after which
+  // the agent reads that follow-up (D-CF5-13).
+  pi.on(
+    "turn_end",
+    bindWithMode(() => (event: FollowUpTurnEnd) => {
+      sendDueFollowUpContext(event, runtime, pi);
+      return Promise.resolve(undefined);
+    }),
   );
   // Settle-time turn-boundary dispatch: agent_end caches the run's
   // last-assistant message; agent_settled reads it and gates on stopReason

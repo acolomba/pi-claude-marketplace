@@ -85,6 +85,7 @@ import type {
   ToolCallEventResult,
   ToolResultEvent,
 } from "../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { TurnEndEvent } from "@earendil-works/pi-coding-agent";
 
 /**
  * The listener shape every `on` overload accepts. Each overload declares
@@ -407,6 +408,11 @@ async function loadExtension(
       "before_agent_start",
       It.willCapture<EventListener<BeforeAgentStartEvent>>("before agent start"),
     );
+  })
+    .thenReturn()
+    .times(1);
+  when(() => {
+    pi.on("turn_end", It.willCapture<EventListener<TurnEndEvent>>("turn end"));
   })
     .thenReturn()
     .times(1);
@@ -1607,7 +1613,10 @@ test("keeps hook routing and command completion state inside each extension-load
   const ownerHookAfterPeerLoad = await owner.toolCall(structuredClone(toolEvent), ownerHookContext);
 
   // assert
-  assert.deepStrictEqual(ownerHookBeforeMutation, { block: true, reason: "owned hook" });
+  assert.deepStrictEqual(ownerHookBeforeMutation, {
+    block: true,
+    reason: "PreToolUse:Bash hook error: owned hook",
+  });
   assert.strictEqual(peerHookResult, undefined);
   assert.deepStrictEqual(ownerCandidates, [
     {
@@ -1616,7 +1625,10 @@ test("keeps hook routing and command completion state inside each extension-load
     },
   ]);
   assert.deepStrictEqual(peerCandidates, []);
-  assert.deepStrictEqual(ownerHookAfterPeerLoad, { block: true, reason: "owned hook" });
+  assert.deepStrictEqual(ownerHookAfterPeerLoad, {
+    block: true,
+    reason: "PreToolUse:Bash hook error: owned hook",
+  });
   assert.deepStrictEqual(owner.notifications, [{ message: "● owned-rows [project] (added)" }]);
   owner.verifyBoundary();
   peer.verifyBoundary();

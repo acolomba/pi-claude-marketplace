@@ -22,7 +22,11 @@ import {
   presentReconcileApplied,
   presentUpdateNoOp,
 } from "./notification-present.ts";
-import { mcpConfigNoticeSurfaces, resolveRawSurface } from "./notification-resolve.ts";
+import {
+  mcpConfigNoticeSurfaces,
+  resolveRawSurface,
+  terminalSafeHookNotice,
+} from "./notification-resolve.ts";
 import { COMMAND_DELIVERY, requireNotificationMode } from "./notification-run.ts";
 import { composeRetainedWorkflowsAdvisories } from "./notification-summary.ts";
 
@@ -98,6 +102,7 @@ function isRawOutcome(presentation: ResolvedRawSurface | CommandErrorPresentatio
     case "mcp-config-notices":
     case "mcp-migration":
     case "background-update":
+    case "hook-notice":
       return false;
   }
 }
@@ -468,6 +473,32 @@ export function notifyStopHookOverrideCap(
   cap: number,
 ): void {
   emitHookSurface(ctx, run, { kind: "stop-override-cap", pluginId, cap });
+}
+
+/**
+ * HOOK-05 / D-CF5-14 / D-CF5-24 IL-2 bridge seam: shows the user one notice a
+ * plugin's hook gave, built as the `hook-notice` hook kind. The hooks bridge
+ * (`bridges/hooks/dispatch.ts`) composes `text`, such as `<Event>[:<Tool>]
+ * says: <text>` for a `systemMessage`, and calls this once per notice, in
+ * routing order. The seam strips terminal escapes and control characters and
+ * bounds the length (`terminalSafeHookNotice`); the text strategy renders the
+ * result at `"info"` severity, and the JSON strategy appends it as `text`; it
+ * never reaches the model. A text that is empty, or that holds nothing but
+ * escapes, emits nothing. The byte form is locked by
+ * `test/architecture/hooks-notice-notify.test.ts` against the `hook-notice`
+ * block in `docs/output-catalog.md`.
+ */
+export function notifyHookNotice(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  text: string,
+): void {
+  const notice = terminalSafeHookNotice(text);
+  if (notice.length === 0) {
+    return;
+  }
+
+  emitHookSurface(ctx, run, { kind: "hook-notice", text: notice });
 }
 
 /**

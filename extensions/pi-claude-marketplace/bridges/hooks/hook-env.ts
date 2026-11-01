@@ -16,11 +16,31 @@ import { claudeSessionEnvFor } from "../../shared/session-env.ts";
 
 import type { RoutingEntry } from "./routing-state.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { ClaudePluginVars } from "../../shared/vars.ts";
 
 /** The dispatch facts the env contract reads. */
 export interface HookEnvContext {
   readonly cwd: string;
   readonly sessionId: string;
+}
+
+/**
+ * The three path values a hook handler sees: `CLAUDE_PLUGIN_ROOT`,
+ * `CLAUDE_PLUGIN_DATA`, and `CLAUDE_PROJECT_DIR`. `prepareHookEnv` exports
+ * them, and an exec-form handler gets them substituted into its `command` and
+ * `args` (D-CF5-15, FG-19), so the environment and the arguments always agree.
+ * It leaves `skillDir` unset, so `${CLAUDE_SKILL_DIR}` stays literal.
+ */
+export function hookPathVars(
+  entry: RoutingEntry,
+  transCtx: HookEnvContext,
+  loc: ScopedLocations,
+): ClaudePluginVars {
+  return {
+    pluginRoot: entry.resolvedSource,
+    pluginData: path.join(loc.dataRoot, entry.pluginId),
+    projectDir: transCtx.cwd,
+  };
 }
 
 /**
@@ -55,14 +75,14 @@ export async function prepareHookEnv(
   loc: ScopedLocations,
   extra?: NodeJS.ProcessEnv,
 ): Promise<NodeJS.ProcessEnv> {
-  const pluginData = path.join(loc.dataRoot, entry.pluginId);
-  await assertPathInside(loc.dataRoot, pluginData, "CLAUDE_PLUGIN_DATA");
+  const vars = hookPathVars(entry, transCtx, loc);
+  await assertPathInside(loc.dataRoot, vars.pluginData, "CLAUDE_PLUGIN_DATA");
 
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    CLAUDE_PROJECT_DIR: transCtx.cwd,
-    CLAUDE_PLUGIN_ROOT: entry.resolvedSource,
-    CLAUDE_PLUGIN_DATA: pluginData,
+    CLAUDE_PROJECT_DIR: vars.projectDir,
+    CLAUDE_PLUGIN_ROOT: vars.pluginRoot,
+    CLAUDE_PLUGIN_DATA: vars.pluginData,
     ...extra,
     // D-91-02: the session env spreads LAST so the authoritative per-dispatch
     // snapshot wins over both the live `process.env` and any per-lane `extra`.

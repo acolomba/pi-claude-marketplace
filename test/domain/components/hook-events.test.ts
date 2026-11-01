@@ -122,8 +122,8 @@ describe("NON_TOOL_EVENT_CLOSED_SETS", () => {
   test("publishes every closed matcher vocabulary", () => {
     // arrange
     const expectedClosedSets = {
-      SessionStart: new Set(["startup", "resume"]),
-      SessionEnd: new Set(),
+      SessionStart: new Set(["startup", "resume", "clear", "compact", "fork"]),
+      SessionEnd: new Set(["clear", "resume", "logout", "prompt_input_exit", "other"]),
       PreCompact: new Set(["manual", "auto"]),
       PostCompact: new Set(["manual", "auto"]),
       StopFailure: new Set([

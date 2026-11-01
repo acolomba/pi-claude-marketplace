@@ -1018,6 +1018,56 @@ test("registers a child whose optional stdin pipe is absent", { concurrency: fal
   }
 });
 
+test("spawns an async-rewake hook with Claude's path variables filled in", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const root = await mkdtemp(path.join(tmpdir(), "async-registry-substitution-"));
+  shutdownInMemoryChildren(runtime);
+  const locations = locationsFor("project", root);
+  const entry = createEntry(root, {
+    handlerDecl: {
+      type: "command",
+      command: "${CLAUDE_PLUGIN_ROOT}/bin/scan",
+      args: ["--data=${CLAUDE_PLUGIN_DATA}", "${CLAUDE_PROJECT_DIR}", "${HOME}"],
+      asyncRewake: true,
+    },
+  });
+  const context = createContext(root, "session-substitution", true);
+  const pi = createPi();
+  const spawnCalls: Array<{ command: string; args: readonly string[] }> = [];
+  const spawnImpl = ((
+    command: string,
+    args: readonly string[],
+    _options: SpawnOptions,
+  ): ChildProcess => {
+    spawnCalls.push({ command, args: [...args] });
+    throw new Error("the case stops at the spawn boundary");
+  }) as NonNullable<SpawnDeps["spawnImpl"]>;
+
+  try {
+    // act
+    await spawnAndRegister(runtime, entry, {}, context.context, pi.pi, locations, {
+      spawnImpl,
+      dispatchId: () => "dispatch-substitution",
+    });
+
+    // assert
+    assert.deepStrictEqual(spawnCalls, [
+      {
+        command: path.join(root, "plugin-source", "bin", "scan"),
+        args: [
+          `--data=${path.join(root, ".pi", "pi-claude-marketplace", "data", "plugin-lifecycle")}`,
+          root,
+          "${HOME}",
+        ],
+      },
+    ]);
+  } finally {
+    shutdownInMemoryChildren(runtime);
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
 test("contains a synchronous spawn failure with semantic diagnostics", async (t) => {
   // arrange
   const runtime = createHooksRuntime();

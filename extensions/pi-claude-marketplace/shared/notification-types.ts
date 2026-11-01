@@ -1714,10 +1714,21 @@ export interface StopOverrideCapSurface {
 }
 
 /**
+ * D-CF5-14 / D-CF5-24: one notice a plugin's hook shows the user, composed by
+ * the hooks bridge and kept verbatim: a hook's `systemMessage`
+ * (`<Event>[:<Tool>] says: <text>`), a blocked prompt, or a block on an event
+ * that cannot block. It never reaches the model.
+ */
+export interface HookNoticeSurface {
+  readonly kind: "hook-notice";
+  readonly text: string;
+}
+
+/**
  * D-14: the hook-origin group of raw output surfaces. Hook callbacks get no run
  * object.
  */
-export type HookSurface = AsyncRewakeSummarySurface | StopOverrideCapSurface;
+export type HookSurface = AsyncRewakeSummarySurface | StopOverrideCapSurface | HookNoticeSurface;
 
 /**
  * D-10 / AUTH-03: the device-flow values a user needs to authorize this

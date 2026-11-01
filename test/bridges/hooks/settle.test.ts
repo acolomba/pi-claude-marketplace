@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import { type RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
@@ -133,6 +133,11 @@ function failureEnd(
   } as unknown as AgentEndEvent;
 }
 
+/** The content of a Stop re-entry: one `Stop hook feedback:` part per text (D-CF5-25). */
+function feedbackContent(...texts: readonly string[]): unknown[] {
+  return texts.map((text) => ({ type: "text", text: `Stop hook feedback:\n${text}` }));
+}
+
 async function runStop(
   runtime: HooksRuntime,
   pi: ExtensionAPI,
@@ -219,10 +224,10 @@ for (const scenario of [
         "continue",
         "more context",
         "continue",
-      ].map((content) => ({
+      ].map((text) => ({
         message: {
           customType: "claude-hook-stop-block",
-          content,
+          content: feedbackContent(text),
           display: false,
           details: { pluginId: "alpha" },
         },
@@ -378,7 +383,7 @@ test("uses only the supplied runtime for Stop re-entry", async () => {
     [
       {
         customType: "claude-hook-stop-block",
-        content: "continue",
+        content: feedbackContent("continue"),
         display: false,
         details: { pluginId: "owner" },
       },
@@ -435,13 +440,13 @@ test("cache miss, one-shot hit, and stale epoch are visible at public boundaries
     [
       {
         customType: "claude-hook-stop-block",
-        content: "continue",
+        content: feedbackContent("continue"),
         display: false,
         details: { pluginId: "alpha" },
       },
       {
         customType: "claude-hook-stop-block",
-        content: "continue",
+        content: feedbackContent("continue"),
         display: false,
         details: { pluginId: "alpha" },
       },
@@ -652,7 +657,7 @@ test("an empty Stop bucket has no public effect", async () => {
   assert.deepStrictEqual(sent, []);
 });
 
-test("a block re-enters with the complete follow-up message", async () => {
+test("a block re-enters with its reason as stop hook feedback (STOP-03 / D-CF5-25)", async () => {
   // arrange
   const runtime = createHooksRuntime();
   runtime.advanceGeneration();
@@ -669,7 +674,7 @@ test("a block re-enters with the complete follow-up message", async () => {
     {
       message: {
         customType: "claude-hook-stop-block",
-        content: "continue",
+        content: feedbackContent("continue"),
         display: false,
         details: { pluginId: "alpha" },
       },
@@ -678,7 +683,7 @@ test("a block re-enters with the complete follow-up message", async () => {
   ]);
 });
 
-test("a reasonless block re-enters with empty content", async () => {
+test("a reasonless block re-enters with an empty feedback reason", async () => {
   // arrange
   const runtime = createHooksRuntime();
   runtime.advanceGeneration();
@@ -690,8 +695,137 @@ test("a reasonless block re-enters with empty content", async () => {
   await runStop(runtime, pi, emptyContext, executor);
 
   // assert
-  assert.strictEqual(sent[0]?.message["content"], "");
-  assert.strictEqual(sent.length, 1);
+  assert.deepStrictEqual(
+    sent.map((call) => call.message["content"]),
+    [feedbackContent("")],
+  );
+});
+
+test("sends every reason and context back in one re-entry in routing order whatever order the hooks finish in (D-CF5-25)", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  const pending = new Map<string, (result: HookExecResult) => void>();
+  const executor: HookExecutor = (entry) =>
+    new Promise((resolve) => {
+      pending.set(entry.pluginId, resolve);
+    });
+  runtime.setRoutingBucket("Stop", [
+    stopEntry("first"),
+    stopEntry("quiet"),
+    stopEntry("advisor"),
+    stopEntry("last"),
+  ]);
+  const { pi, sent } = makePi();
+
+  // act
+  const settling = runStop(runtime, pi, emptyContext, executor);
+  await new Promise<void>((resolve) => {
+    setImmediate(resolve);
+  });
+  pending.get("last")?.({ kind: "block", reason: "r2", additionalContext: "c2" });
+  pending.get("advisor")?.({ kind: "mutate", additionalContext: "c" });
+  pending.get("quiet")?.({ kind: "mutate", additionalContext: "" });
+  pending.get("first")?.({ kind: "block", reason: "r1" });
+  await settling;
+
+  // assert
+  assert.deepStrictEqual(sent, [
+    {
+      message: {
+        customType: "claude-hook-stop-block",
+        content: feedbackContent("r1", "c", "r2", "c2"),
+        display: false,
+        details: { pluginId: "first" },
+      },
+      options: { deliverAs: "followUp", triggerTurn: true },
+    },
+  ]);
+});
+
+test("counts a re-entry that carries several hooks' feedback once toward the cap (STOP-07)", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  const executor: HookExecutor = (entry): Promise<HookExecResult> =>
+    Promise.resolve(
+      entry.pluginId === "advisor"
+        ? { kind: "mutate", additionalContext: "c" }
+        : { kind: "block", reason: entry.pluginId },
+    );
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha"), stopEntry("advisor"), stopEntry("beta")]);
+  const { pi, sent } = makePi();
+  const { ctx, notified } = makeContext();
+
+  // act
+  for (let index = 0; index < 8; index += 1) {
+    await runStop(runtime, pi, ctx, executor);
+  }
+
+  // assert
+  assert.strictEqual(sent.length, 7);
+  assert.deepStrictEqual(notified, [
+    {
+      text: "Stop hook override cap reached.\n\n`alpha`'s Stop hook blocked 8 times in a row; the turn ended despite its active block.",
+      severity: "warning",
+    },
+  ]);
+});
+
+test("a stop suppresses the re-entry of every other hook's reason and context (STOP-06)", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  const executor: HookExecutor = (entry): Promise<HookExecResult> =>
+    Promise.resolve(
+      entry.pluginId === "stopper"
+        ? { kind: "stop" }
+        : { kind: "block", reason: "continue", additionalContext: "c" },
+    );
+  runtime.setRoutingBucket("Stop", [stopEntry("blocker"), stopEntry("stopper")]);
+  const { pi, sent } = makePi();
+
+  // act
+  await runStop(runtime, pi, emptyContext, executor);
+
+  // assert
+  assert.deepStrictEqual(sent, []);
+});
+
+test("hooks that neither block nor add context send nothing and reset the cap (HOOK-05 / D-88-08)", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  let quiet = false;
+  const executor: HookExecutor = (entry): Promise<HookExecResult> => {
+    if (!quiet) {
+      return Promise.resolve({ kind: "block", reason: "continue" });
+    }
+
+    return Promise.resolve(
+      entry.pluginId === "alpha" ? { kind: "noop" } : { kind: "mutate", additionalContext: "" },
+    );
+  };
+
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha"), stopEntry("beta")]);
+  const { pi, sent } = makePi();
+  const { ctx, notified } = makeContext();
+
+  // act
+  for (let index = 0; index < 7; index += 1) {
+    await runStop(runtime, pi, ctx, executor);
+  }
+
+  quiet = true;
+  await runStop(runtime, pi, ctx, executor);
+  const afterQuiet = sent.length;
+  quiet = false;
+  await runStop(runtime, pi, ctx, executor);
+
+  // assert
+  assert.strictEqual(afterQuiet, 7);
+  assert.strictEqual(sent.length, 8);
+  assert.deepStrictEqual(notified, []);
 });
 
 test("additional context re-enters through the block lane", async () => {
@@ -711,7 +845,7 @@ test("additional context re-enters through the block lane", async () => {
     {
       message: {
         customType: "claude-hook-stop-block",
-        content: "more context",
+        content: feedbackContent("more context"),
         display: false,
         details: { pluginId: "alpha" },
       },
@@ -873,7 +1007,7 @@ test("a reload during awaited Stop work discards every stale effect", async () =
   assert.deepStrictEqual(liveEvents, [{ last_assistant_message: "done", stop_hook_active: false }]);
   assert.deepStrictEqual(
     sent.map((call) => call.message.content),
-    ["fresh"],
+    [feedbackContent("fresh")],
   );
 });
 
@@ -941,7 +1075,7 @@ test("block and additional-context re-entries share one cap", async () => {
       "continue",
       "more context",
       "continue",
-    ],
+    ].map((text) => feedbackContent(text)),
   );
   assert.strictEqual(notified.length, 1);
 });
@@ -1113,7 +1247,7 @@ test("a send failure is contained and a later input starts a clean run", async (
   assert.strictEqual(settleError, undefined);
   assert.deepStrictEqual(
     healthy.sent.map((call) => call.message["content"]),
-    ["continue"],
+    [feedbackContent("continue")],
   );
 });
 
@@ -1329,7 +1463,7 @@ test("all failure outcomes run in order and are then discarded", async () => {
   assert.deepStrictEqual(stopEvents, [{ last_assistant_message: "done", stop_hook_active: false }]);
   assert.deepStrictEqual(
     sent.map((call) => call.message["content"]),
-    ["fresh"],
+    [feedbackContent("fresh")],
   );
 });
 
@@ -1354,4 +1488,167 @@ test("an empty failure bucket has no public effect", async () => {
   // assert
   assert.deepStrictEqual(fired, []);
   assert.deepStrictEqual(sent, []);
+});
+
+/** Collects the OBS-01 debug lines a case emits, restoring the flag after. */
+function observeHookDebug(t: TestContext): () => string[] {
+  const previous = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (previous === undefined) {
+      Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_DEBUG");
+    } else {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previous;
+    }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  const diagnostics: string[] = [];
+  t.mock.method(console, "error", (diagnostic: unknown) => {
+    diagnostics.push(String(diagnostic));
+  });
+  return () => [...diagnostics];
+}
+
+/** A JSON-mode context and Pi API that capture the notices and messages a settle sends. */
+function makeNoticeHost(): {
+  readonly ctx: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  readonly sent: SendCall[];
+  readonly capture: ReturnType<typeof createJsonCapture>;
+} {
+  const capture = createJsonCapture();
+  const host = makePi();
+  const pi = { ...host.pi, appendEntry: capture.entrySink.appendEntry };
+  const ctx = {
+    mode: "json",
+    get ui() {
+      return capture.ui;
+    },
+  } as unknown as ExtensionContext;
+  return { ctx, pi, sent: host.sent, capture };
+}
+
+/** The `claude-plugin` entry of one hook notice. */
+function hookNoticeEntry(text: string): Record<string, unknown> {
+  return {
+    customType: "claude-plugin",
+    payload: {
+      schemaVersion: 1,
+      origin: { kind: "hook" },
+      kind: "hook-notice",
+      severity: "info",
+      needsReload: false,
+      text,
+    },
+  };
+}
+
+test("shows each Stop hook's system message in routing order and never sends it to the model (D-CF5-14)", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  const pending = new Map<string, (result: HookExecResult) => void>();
+  const executor: HookExecutor = (entry) =>
+    new Promise((resolve) => {
+      pending.set(entry.pluginId, resolve);
+    });
+  runtime.setRoutingBucket("Stop", [stopEntry("first"), stopEntry("quiet"), stopEntry("last")]);
+  const host = makeNoticeHost();
+
+  // act
+  const settling = runStop(runtime, host.pi, host.ctx, executor);
+  await new Promise<void>((resolve) => {
+    setImmediate(resolve);
+  });
+  pending.get("last")?.({ kind: "noop", systemMessage: "two" });
+  pending.get("quiet")?.({ kind: "block", reason: "keep going", systemMessage: "" });
+  pending.get("first")?.({ kind: "noop", systemMessage: "one" });
+  await settling;
+
+  // assert
+  assert.deepStrictEqual(host.capture.entries, [
+    hookNoticeEntry("Stop says: one"),
+    hookNoticeEntry("Stop says: two"),
+  ]);
+  assert.deepStrictEqual(
+    host.sent.map((call) => call.message["content"]),
+    [feedbackContent("keep going")],
+  );
+  host.capture.assertValid();
+});
+
+test("shows a Stop system message when a stop suppresses the re-entry (STOP-06 / D-CF5-14)", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  const executor: HookExecutor = (): Promise<HookExecResult> =>
+    Promise.resolve({ kind: "stop", systemMessage: "halted" });
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
+  const host = makeNoticeHost();
+
+  // act
+  await runStop(runtime, host.pi, host.ctx, executor);
+
+  // assert
+  assert.deepStrictEqual(host.capture.entries, [hookNoticeEntry("Stop says: halted")]);
+  assert.deepStrictEqual(host.sent, []);
+});
+
+test("debug-logs a Stop notice that fails to show and still re-enters", async (t) => {
+  // arrange
+  const debugLines = observeHookDebug(t);
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  const executor: HookExecutor = (): Promise<HookExecResult> =>
+    Promise.resolve({ kind: "block", reason: "continue", systemMessage: "hi" });
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
+  const { pi, sent } = makePi();
+  // The print-mode context has no `ui`, so the notice cannot be shown.
+  const ctx = {
+    mode: "print",
+    get ui(): never {
+      throw new Error("no ui");
+    },
+  } as unknown as ExtensionContext;
+
+  // act
+  await runStop(runtime, pi, ctx, executor);
+
+  // assert
+  assert.deepStrictEqual(debugLines(), ["[hooks] settle: Stop notice failed: no ui"]);
+  assert.deepStrictEqual(
+    sent.map((call) => call.message["content"]),
+    [feedbackContent("continue")],
+  );
+});
+
+test("drops a StopFailure system message with a debug line (D-CF5-14)", async (t) => {
+  // arrange
+  const debugLines = observeHookDebug(t);
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  const executor: HookExecutor = (entry): Promise<HookExecResult> =>
+    Promise.resolve(
+      entry.pluginId === "quiet"
+        ? { kind: "noop", systemMessage: "" }
+        : { kind: "noop", systemMessage: "failed loudly" },
+    );
+  runtime.setRoutingBucket("StopFailure", [
+    failureEntry("loud"),
+    failureEntry("quiet"),
+    failureEntry("louder"),
+  ]);
+  const host = makeNoticeHost();
+  const epoch = runtime.currentGeneration();
+
+  // act
+  agentEndCacheHandler(runtime, epoch)(failureEnd("error", "provider failed"));
+  await settleHandlerFor(runtime, epoch, host.pi, executor)(settledEvent, host.ctx);
+
+  // assert
+  assert.deepStrictEqual(host.capture.entries, []);
+  assert.deepStrictEqual(host.sent, []);
+  assert.deepStrictEqual(debugLines(), [
+    '[hooks] settle: unrecognized StopFailure errorMessage: "provider failed"',
+    "[hooks] settle: 2 systemMessage(s) dropped on StopFailure",
+  ]);
 });

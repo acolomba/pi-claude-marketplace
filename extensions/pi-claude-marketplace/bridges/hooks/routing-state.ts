@@ -35,9 +35,9 @@ import { type HooksRuntime } from "./runtime.ts";
 
 /**
  * Flattened (event, group, handler) routing slot. The dispatch core walks
- * the per-event bucket and fires `dispatchHookExec(entry, event, ctx)`
- * sequentially against each entry whose matcher fires for the incoming Pi
- * event (DISP-04 sequential awaited fan-out).
+ * the per-event bucket, runs `dispatchHookExec(entry, event, ctx)` in
+ * parallel for every entry whose matcher fires for the incoming Pi event,
+ * and folds the results in bucket order (D-CF5-09).
  *
  * `rawMatcher` carries the pre-parse string verbatim so dispatch-time
  * filtering against non-tool events (SessionStart filters on
@@ -114,16 +114,17 @@ export interface CacheEntry {
  *
  * Pi splits the upstream Claude Code SessionStart-hook protocol across two
  * surfaces: `session_start` returns void (no slot to thread context
- * through), and `before_agent_start` carries the `systemPrompt` chain Pi
- * uses for extension-supplied context injection. The hooks bridge captures
- * a SessionStart hook's `additionalContext` payload into this buffer at
- * the `event-adapters.ts` mutate arm, then drains it on the next
- * `before_agent_start` event so the model's first agent turn sees the
- * injected text.
+ * through), and `before_agent_start` can add a message to the next turn.
+ * The hooks bridge captures a SessionStart hook's `additionalContext`
+ * payload into this buffer at the `event-adapters.ts` mutate arm, then
+ * drains it on the next `before_agent_start` event into a persisted message
+ * after that turn's prompt, so the first turn and every later one see it
+ * (D-CF5-13).
  *
  * Concat semantics: multiple SessionStart-bearing plugins fold into the
- * buffer in declaration order. Drain joins with `"\n\n"` separators and
- * clears the buffer (one-shot drain). The buffer also resets on every
+ * buffer in routing order. The drain joins the values with `"\n"` into one
+ * `SessionStart hook additional context: <values>` text part and clears the
+ * buffer (one-shot drain). The buffer also resets on every
  * `registerHooksBridge` entry so `/reload` cannot leak stale context from
  * the prior session.
  *
@@ -131,13 +132,37 @@ export interface CacheEntry {
  * (scope/marketplace/pluginId) so OBS-01 debug telemetry can attribute
  * leaks back to the contributing plugin without re-deriving from a flat
  * string. Provenance is dropped at drain time -- only the joined text
- * reaches `before_agent_start.systemPrompt`.
+ * reaches the message.
  */
 export interface PendingSessionStartContext {
   readonly context: string;
   readonly pluginId: string;
   readonly marketplace: string;
   readonly scope: Scope;
+}
+
+/**
+ * D-CF5-13: a UserPromptSubmit hook's folded `additionalContext`, buffered by
+ * the `input` adapter and drained by the `before_agent_start` handler of the
+ * same prompt's turn into a message after the prompt. The prompt itself
+ * reaches the model unchanged. Provenance is the entry the fold attributes
+ * the context to, as for `PendingSessionStartContext`.
+ */
+export interface PendingPromptContext {
+  readonly context: string;
+  readonly pluginId: string;
+  readonly marketplace: string;
+  readonly scope: Scope;
+}
+
+/**
+ * D-CF5-13: the context of a follow-up that Pi queued into the running agent,
+ * with the follow-up's text. Pi reads a follow-up only when the agent would
+ * otherwise stop, so the context waits for the turn end after which the agent
+ * reads that text, and goes out then, just before the follow-up.
+ */
+export interface PendingFollowUpContext extends PendingPromptContext {
+  readonly prompt: string;
 }
 
 // ──────────────────────────────────────────────────────────────────────────

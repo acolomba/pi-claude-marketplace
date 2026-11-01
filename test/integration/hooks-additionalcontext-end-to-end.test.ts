@@ -3,18 +3,17 @@
 // End-to-end regression test for the SessionStart additionalContext
 // drain pipeline: the contract that "a SessionStart hook emitting
 // `{hookSpecificOutput: {additionalContext: <text>}}` on stdout reaches
-// Pi's next agent turn through the `before_agent_start` handler's
-// `systemPrompt` slot".
+// Pi's next agent turn as a persisted message that the `before_agent_start`
+// handler returns" (D-CF5-13).
 //
 // Distinct from the unit-level coverage that calls those two functions
 // directly -- `adaptObservationResultForEvent` in
-// `test/bridges/hooks/event-adapters.test.ts` and `beforeAgentStartHandlerFor`
-// in `test/bridges/hooks/event-router.test.ts` -- this one runs the production
+// `test/bridges/hooks/event-adapters.test.ts` and the `before_agent_start`
+// handler in `test/bridges/hooks/event-router.test.ts` -- this one runs the production
 // executor (`dispatchHookExec`) through a real `spawn(bash, [...])`
 // invocation whose handler writes the additionalContext envelope, the
 // bridge's stdout parser fold lands in the pending buffer, and the
-// before_agent_start handler then drains it onto a synthesized
-// `event.systemPrompt`.
+// before_agent_start handler then drains it into a context message.
 //
 // Pins the cross-event plumbing the hooks bridge was missing:
 // without the fix, the bridge silently dropped the additionalContext at
@@ -125,7 +124,7 @@ function makeBeforeAgentStartEvent(systemPrompt: string): BeforeAgentStartEvent 
   } as unknown as BeforeAgentStartEvent;
 }
 
-test("HOOK-E2E-03: SessionStart hook stdout additionalContext reaches before_agent_start.systemPrompt end-to-end", async () => {
+test("HOOK-E2E-03: SessionStart hook stdout additionalContext reaches the before_agent_start message end-to-end", async () => {
   const runtime = createHooksRuntime();
   const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
 
@@ -220,9 +219,9 @@ JSON
       "wire-protocol.ts must parse the additionalContext envelope and adaptObservationResultForEvent must append into the buffer",
     );
 
-    // Fire before_agent_start with a synthesized base systemPrompt. The
-    // bridge's drain handler joins base + buffered text with "\n\n" and
-    // clears the buffer.
+    // Fire before_agent_start. The bridge's drain handler returns the
+    // buffered text as one context message, leaves the system prompt
+    // alone, and clears the buffer (D-CF5-13).
     const beforeAgentResult = await beforeAgentStartReg.handler(
       makeBeforeAgentStartEvent("BASE-SYSTEM-PROMPT"),
       placeholderCtx,
@@ -230,8 +229,16 @@ JSON
 
     assert.deepStrictEqual(
       beforeAgentResult,
-      { systemPrompt: "BASE-SYSTEM-PROMPT\n\nLEARN-MODE-MARK" },
-      "before_agent_start handler must surface the joined systemPrompt to Pi's chain",
+      {
+        message: {
+          customType: "claude-hook-additional-context",
+          content: [
+            { type: "text", text: "SessionStart hook additional context: LEARN-MODE-MARK" },
+          ],
+          display: false,
+        },
+      },
+      "before_agent_start handler must return the context message to Pi's chain",
     );
     assert.deepStrictEqual(
       runtime.pendingSessionStartContextEntries(),
@@ -239,9 +246,9 @@ JSON
       "drain semantics: pending buffer cleared after the first before_agent_start",
     );
 
-    // Second before_agent_start (subsequent agent turn) returns undefined
-    // -- the additionalContext is a one-shot turn primer, not a permanent
-    // system-prompt addition.
+    // Second before_agent_start (subsequent agent turn) returns undefined:
+    // the message sent on the first turn stays in the session history, so
+    // no later turn sends it again.
     const secondTurnResult = await beforeAgentStartReg.handler(
       makeBeforeAgentStartEvent("BASE-SYSTEM-PROMPT-NEXT"),
       placeholderCtx,

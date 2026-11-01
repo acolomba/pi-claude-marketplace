@@ -296,14 +296,13 @@ test("PR-2(4) malformed plugin.json -> notInstallable", async () => {
   );
 });
 
-// HOOK-01: hooks is a supported kind. A plugin declaring `hooks` at the entry
-// level with NO hooks/hooks.json on disk is not rejected with "contains
-// hooks" -- for command hooks the resolver only owns convention-file
-// discovery; entry/manifest-level hooks-field semantics are deferred to future
-// dispatch work.
-test("HOOK-01: entry declares hooks field but no hooks/hooks.json on disk -> installable WITHOUT hooks in supported", async () => {
+// HOOK-01 / D-CF5-20: the convention file is the only source of command
+// hooks. Hooks that the entry declares are not loaded, so a plugin whose entry
+// declares a `hooks` field resolves partially available with `hooks` unsupported.
+test("D-CF5-20: entry declares hooks field but no hooks/hooks.json on disk -> partially available with hooks unsupported", async () => {
   // arrange
-  const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
 
   // act
   const resolvedPlugin = await resolveStrict(
@@ -312,19 +311,18 @@ test("HOOK-01: entry declares hooks field but no hooks/hooks.json on disk -> ins
   );
 
   // assert
-  assert.strictEqual(
-    resolvedPlugin.state,
-    "installable",
-    `notes if not installable: ${resolvedPlugin.notes.join(" / ")}`,
-  );
-
-  if (resolvedPlugin.state === "installable") {
-    assert.ok(!resolvedPlugin.supported.includes("hooks"));
-    assert.ok(
-      !resolvedPlugin.notes.some((n) => n.includes("contains hooks")),
-      `notes must no longer contain "contains hooks": ${resolvedPlugin.notes.join(" / ")}`,
-    );
-  }
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "partially-available",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: ["hooks"],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  });
 });
 
 // HOOK-01 / D-57-04: a parseable hooks/hooks.json on disk admits the plugin
@@ -446,7 +444,7 @@ test("a hooks module in a hooks file plugin.json names resolves partially availa
     name: "p1",
     pluginRoot: localRoot,
     supported: [],
-    unsupported: ["mod"],
+    unsupported: ["hooks", "mod"],
     notes: ["contains mod"],
     componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},
@@ -480,7 +478,7 @@ test("a hooks module in a hooks file the entry names resolves partially availabl
     name: "p1",
     pluginRoot: localRoot,
     supported: [],
-    unsupported: ["mod"],
+    unsupported: ["hooks", "mod"],
     notes: ["contains mod"],
     componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
     mcpServers: {},

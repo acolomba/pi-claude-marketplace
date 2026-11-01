@@ -37,6 +37,7 @@ import {
   notifyCommandError,
   notifyDeviceFlowPrompt,
   notifyDiagnostic,
+  notifyHookNotice,
   notifyMcpConfigNotices,
   notifyMcpMigration,
   notifyPluginPathSkipped,
@@ -180,6 +181,7 @@ const RAW_ORIGINS: Readonly<Record<RawSurface["kind"], NotificationOrigin>> = {
   },
   "mcp-migration": { kind: "load" },
   "background-update": { kind: "load" },
+  "hook-notice": { kind: "hook" },
 };
 
 /**
@@ -266,6 +268,7 @@ const RAW_SAMPLES: { readonly [K in RawSurface["kind"]]: Extract<RawSurface, { k
       },
     ],
   },
+  "hook-notice": { kind: "hook-notice", text: "UserPromptSubmit says: remember the tests" },
 };
 
 /** The message the byte contract notifies for `fixture`, with the list label it injects. */
@@ -349,6 +352,9 @@ function emitRawSample(ctx: NotificationContext, run: NotificationRun, surface: 
       return;
     case "background-update":
       notifyBackgroundUpdate(ctx, run, surface.plugins);
+      return;
+    case "hook-notice":
+      notifyHookNotice(ctx, run, surface.text);
       return;
   }
 }
@@ -494,7 +500,7 @@ function realPayloads(): {
   }));
 }
 
-test("WIRE-02: the retained inventory and separate command error cover all 23 kinds", () => {
+test("WIRE-02: the retained inventory and separate command error cover all 24 kinds", () => {
   // arrange
   const error = resolveCommandError(new Error("operation failed"), false);
   const origin = {
@@ -514,6 +520,7 @@ test("WIRE-02: the retained inventory and separate command error cover all 23 ki
     "cascade",
     "device-flow-prompt",
     "diagnostic",
+    "hook-notice",
     "internal-error",
     "marketplace-info",
     "marketplace-info-cascade",
@@ -532,7 +539,7 @@ test("WIRE-02: the retained inventory and separate command error cover all 23 ki
     "usage-error",
     "usage-info",
   ]);
-  assert.strictEqual(PRESENTED.length, 336);
+  assert.strictEqual(PRESENTED.length, 337);
 
   for (const payload of payloads) {
     assert.ok(PAYLOAD_VALIDATOR.Check(payload));

@@ -16,6 +16,7 @@ import {
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 
 import type {
   CompositeDispatchEvent,
@@ -23,6 +24,8 @@ import type {
   HookExecutor,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
+import type { ClaudeSessionEndEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts";
+import type { ClaudeSessionStartEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts";
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { BucketAEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type {
@@ -31,8 +34,6 @@ import type {
   InputEvent,
   SessionBeforeCompactEvent,
   SessionCompactEvent,
-  SessionShutdownEvent,
-  SessionStartEvent,
   ToolCallEvent,
   ToolResultEvent,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -269,7 +270,7 @@ describe("compositeHandlerFor", () => {
     );
 
     // act
-    await handler({ type: "session_start", reason: "startup" }, context);
+    await handler({ source: "startup" }, context);
 
     // assert
     assert.deepStrictEqual(owningRuntime.pendingSessionStartContextEntries(), [
@@ -284,12 +285,12 @@ describe("compositeHandlerFor", () => {
     assert.deepStrictEqual(executorCalls, [
       {
         pluginId: "session-owner",
-        event: { type: "session_start", reason: "startup" },
+        event: { source: "startup" },
       },
     ]);
   });
 
-  test("requires matcher and if agreement before composing mutations in declaration order", async () => {
+  test("requires matcher and if agreement, then runs both mutations on one snapshot (D-CF5-09)", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -470,12 +471,7 @@ describe("compositeHandlerFor", () => {
           type: "tool_call",
           toolCallId: "dispatch-call",
           toolName: "bash",
-          input: {
-            command: "git status",
-            original: "kept",
-            firstMutation: "visible",
-            shared: "first",
-          },
+          input: { command: "git status", original: "kept" },
         },
         context,
         pi: undefined,
@@ -489,13 +485,7 @@ describe("compositeHandlerFor", () => {
       type: "tool_call",
       toolCallId: "dispatch-call",
       toolName: "bash",
-      input: {
-        command: "git status",
-        original: "kept",
-        firstMutation: "visible",
-        secondMutation: "composed",
-        shared: "second",
-      },
+      input: { secondMutation: "composed", shared: "second" },
     } satisfies ToolCallEvent;
     const expectedAdaptedOutput: CompositeReturnFor<"PreToolUse"> = undefined;
 
@@ -698,7 +688,7 @@ describe("collectBucketOutcomes", () => {
     assert.deepStrictEqual(outcomes, expectedOutcomes);
   });
 
-  test("stops the bucket before a later executor when the generation changes during await", async () => {
+  test("returns no outcome when the generation changes while its hooks run", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -711,7 +701,7 @@ describe("collectBucketOutcomes", () => {
         declarationIndex: 0,
       }),
       createRoutingEntry({
-        pluginId: "must-not-start",
+        pluginId: "parallel-peer",
         claudeEvent: "PreToolUse",
         rawMatcher: "Bash",
         declarationIndex: 1,
@@ -721,7 +711,7 @@ describe("collectBucketOutcomes", () => {
     let finishExecution: ((result: HookExecResult) => void) | undefined;
     const executor: HookExecutor = (entry) => {
       calls.push(entry.pluginId);
-      if (entry.pluginId === "must-not-start") {
+      if (entry.pluginId === "parallel-peer") {
         return Promise.resolve({ kind: "noop" });
       }
 
@@ -747,7 +737,7 @@ describe("collectBucketOutcomes", () => {
 
     // assert
     assert.deepStrictEqual(outcomes, []);
-    assert.deepStrictEqual(calls, ["awaited"]);
+    assert.deepStrictEqual(calls, ["awaited", "parallel-peer"]);
   });
 });
 
@@ -809,7 +799,7 @@ describe("composite dispatch reduction", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("returns the first block and skips every later entry", async () => {
+  test("blocks with the first block in routing order after running every hook", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -851,10 +841,11 @@ describe("composite dispatch reduction", () => {
       undefined,
       executor,
     );
-    const expectedOutput = { block: true, reason: "first denial" };
+    const expectedOutput = { block: true, reason: "PreToolUse:Bash hook error: first denial" };
     const expectedCalls: RecordedCall[] = [
       { pluginId: "leading-noop", event: createToolCallEvent() },
       { pluginId: "first-block", event: createToolCallEvent() },
+      { pluginId: "later-block", event: createToolCallEvent() },
     ];
 
     // act
@@ -865,7 +856,7 @@ describe("composite dispatch reduction", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("returns on the first stop and skips every later entry", async () => {
+  test("folds a stop over a later block after running every hook", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -878,7 +869,7 @@ describe("composite dispatch reduction", () => {
         declarationIndex: 0,
       }),
       createRoutingEntry({
-        pluginId: "later-noop",
+        pluginId: "later-block",
         claudeEvent: "PreToolUse",
         rawMatcher: "Bash",
         declarationIndex: 1,
@@ -888,7 +879,7 @@ describe("composite dispatch reduction", () => {
     const executor = createRecordingExecutor(
       {
         "first-stop": { kind: "stop", stopReason: "stop now" },
-        "later-noop": { kind: "noop" },
+        "later-block": { kind: "block", reason: "later denial" },
       },
       executorCalls,
     );
@@ -900,9 +891,14 @@ describe("composite dispatch reduction", () => {
       undefined,
       executor,
     );
-    const expectedOutput: CompositeReturnFor<"PreToolUse"> = undefined;
+    const expectedOutput: CompositeReturnFor<"PreToolUse"> = {
+      block: true,
+      reason: "stop now",
+      terminate: true,
+    };
     const expectedCalls: RecordedCall[] = [
       { pluginId: "first-stop", event: createToolCallEvent() },
+      { pluginId: "later-block", event: createToolCallEvent() },
     ];
 
     // act
@@ -913,7 +909,7 @@ describe("composite dispatch reduction", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("composes multiple mutations from left to right", async () => {
+  test("applies the last input rewrite in routing order to the snapshot both hooks read", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -949,13 +945,7 @@ describe("composite dispatch reduction", () => {
       undefined,
       executor,
     );
-    const expectedEvent = createToolCallEvent("bash", {
-      command: "git status",
-      preserved: true,
-      first: 1,
-      second: 2,
-      shared: "second",
-    });
+    const expectedEvent = createToolCallEvent("bash", { second: 2, shared: "second" });
     const expectedOutput: CompositeReturnFor<"PreToolUse"> = undefined;
     const expectedCalls: RecordedCall[] = [
       {
@@ -964,12 +954,7 @@ describe("composite dispatch reduction", () => {
       },
       {
         pluginId: "mutation-b",
-        event: createToolCallEvent("bash", {
-          command: "git status",
-          preserved: true,
-          first: 1,
-          shared: "first",
-        }),
+        event: createToolCallEvent("bash", { command: "git status", preserved: true }),
       },
     ];
 
@@ -1071,7 +1056,7 @@ describe("composite dispatch closure partitions", () => {
       undefined,
       executor,
     );
-    const pending = handler({ type: "session_start", reason: "startup" }, context);
+    const pending = handler({ source: "startup" }, context);
     runtime.advanceGeneration();
 
     // act
@@ -1350,7 +1335,7 @@ describe("composite dispatch closure partitions", () => {
         declarationIndex: 3,
       }),
     ];
-    const event = { type: "session_start", reason: "resume" } satisfies SessionStartEvent;
+    const event = { source: "resume" } satisfies ClaudeSessionStartEvent;
     const executorCalls: RecordedCall[] = [];
     const executor = createRecordingExecutor(
       {
@@ -1369,9 +1354,9 @@ describe("composite dispatch closure partitions", () => {
       executor,
     );
     const expectedCalls: RecordedCall[] = [
-      { pluginId: "session-empty", event: { type: "session_start", reason: "resume" } },
-      { pluginId: "session-star", event: { type: "session_start", reason: "resume" } },
-      { pluginId: "session-exact", event: { type: "session_start", reason: "resume" } },
+      { pluginId: "session-empty", event: { source: "resume" } },
+      { pluginId: "session-star", event: { source: "resume" } },
+      { pluginId: "session-exact", event: { source: "resume" } },
     ];
     const expectedPendingContext: readonly [] = [];
 
@@ -1382,6 +1367,120 @@ describe("composite dispatch closure partitions", () => {
     assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), expectedPendingContext);
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
+
+  for (const { source, expectedPluginIds } of [
+    { source: "clear", expectedPluginIds: ["session-any", "session-clear"] },
+    { source: "startup", expectedPluginIds: ["session-any", "session-startup"] },
+  ] as const) {
+    test(`filters SessionStart matchers on the Claude-side source ${source} (D-CF5-01)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const context = createExtensionContext("/workspace/dispatch-session-source");
+      runtime.setRoutingBucket("SessionStart", [
+        createRoutingEntry({
+          pluginId: "session-any",
+          claudeEvent: "SessionStart",
+          rawMatcher: "*",
+          declarationIndex: 0,
+        }),
+        createRoutingEntry({
+          pluginId: "session-clear",
+          claudeEvent: "SessionStart",
+          rawMatcher: "clear",
+          declarationIndex: 1,
+        }),
+        createRoutingEntry({
+          pluginId: "session-startup",
+          claudeEvent: "SessionStart",
+          rawMatcher: "startup",
+          declarationIndex: 2,
+        }),
+      ]);
+      const executorCalls: RecordedCall[] = [];
+      const executor = createRecordingExecutor(
+        {
+          "session-any": { kind: "noop" },
+          "session-clear": { kind: "noop" },
+          "session-startup": { kind: "noop" },
+        },
+        executorCalls,
+      );
+      const handler = compositeHandlerFor(
+        runtime,
+        "SessionStart",
+        runtime.currentGeneration(),
+        undefined,
+        executor,
+      );
+
+      // act
+      await handler({ source }, context);
+
+      // assert
+      assert.deepStrictEqual(
+        executorCalls,
+        expectedPluginIds.map((pluginId) => ({ pluginId, event: { source } })),
+      );
+    });
+  }
+
+  for (const { reason, expectedPluginIds } of [
+    { reason: "other", expectedPluginIds: ["session-end-empty", "session-end-other"] },
+    { reason: "clear", expectedPluginIds: ["session-end-empty", "session-end-clear"] },
+  ] as const) {
+    test(`filters SessionEnd matchers on the Claude-side reason ${reason} (D-CF5-02)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const context = createExtensionContext("/workspace/dispatch-session-reason");
+      runtime.setRoutingBucket("SessionEnd", [
+        createRoutingEntry({
+          pluginId: "session-end-empty",
+          claudeEvent: "SessionEnd",
+          rawMatcher: "",
+          declarationIndex: 0,
+        }),
+        createRoutingEntry({
+          pluginId: "session-end-other",
+          claudeEvent: "SessionEnd",
+          rawMatcher: "other",
+          declarationIndex: 1,
+        }),
+        createRoutingEntry({
+          pluginId: "session-end-clear",
+          claudeEvent: "SessionEnd",
+          rawMatcher: "clear",
+          declarationIndex: 2,
+        }),
+      ]);
+      const executorCalls: RecordedCall[] = [];
+      const executor = createRecordingExecutor(
+        {
+          "session-end-empty": { kind: "noop" },
+          "session-end-other": { kind: "noop" },
+          "session-end-clear": { kind: "noop" },
+        },
+        executorCalls,
+      );
+      const handler = compositeHandlerFor(
+        runtime,
+        "SessionEnd",
+        runtime.currentGeneration(),
+        undefined,
+        executor,
+      );
+
+      // act
+      await handler({ reason }, context);
+
+      // assert
+      assert.deepStrictEqual(
+        executorCalls,
+        expectedPluginIds.map((pluginId) => ({ pluginId, event: { reason } })),
+      );
+    });
+  }
 });
 
 describe("toolResultCompositeHandler", () => {
@@ -1551,7 +1650,7 @@ describe("toolResultCompositeHandler", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("adapts a block without a reason to an error result", async () => {
+  test("adapts a block without a reason to the tool output and the default feedback", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -1571,7 +1670,15 @@ describe("toolResultCompositeHandler", () => {
       undefined,
       executor,
     );
-    const expectedOutput = { isError: true };
+    const expectedOutput = {
+      content: [
+        { type: "text", text: "original output" },
+        {
+          type: "text",
+          text: 'PostToolUse:Bash hook blocking error from command: "printf block-empty": Blocked by hook',
+        },
+      ],
+    };
     const expectedCalls: RecordedCall[] = [
       { pluginId: "block-empty", event: createToolResultEvent(false) },
     ];
@@ -1584,7 +1691,7 @@ describe("toolResultCompositeHandler", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("adapts the first reasoned block and skips the later tool-result entry", async () => {
+  test("adapts the first reasoned block after running every tool-result entry", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -1617,11 +1724,17 @@ describe("toolResultCompositeHandler", () => {
       executor,
     );
     const expectedOutput = {
-      isError: true,
-      content: [{ type: "text", text: "tool denied" }],
+      content: [
+        { type: "text", text: "original output" },
+        {
+          type: "text",
+          text: 'PostToolUse:Bash hook blocking error from command: "printf block-first": tool denied',
+        },
+      ],
     };
     const expectedCalls: RecordedCall[] = [
       { pluginId: "block-first", event: createToolResultEvent(false) },
+      { pluginId: "block-later", event: createToolResultEvent(false) },
     ];
 
     // act
@@ -1665,16 +1778,11 @@ describe("toolResultCompositeHandler", () => {
       undefined,
       executor,
     );
-    const expectedOutput = undefined;
-    const expectedEvent: ToolResultEvent = {
-      type: "tool_result",
-      toolCallId: "dispatch-call",
-      toolName: "bash",
-      input: { command: "git status" },
+    const expectedOutput = {
       content: [{ type: "text", text: "patched output" }],
       isError: true,
-      details: undefined,
     };
+    const expectedEvent: ToolResultEvent = createToolResultEvent(false);
     const expectedCalls: RecordedCall[] = [
       { pluginId: "result-mutation", event: createToolResultEvent(false) },
     ];
@@ -1726,7 +1834,7 @@ describe("toolResultCompositeHandler", () => {
 });
 
 describe("composite per-event adapters", () => {
-  test("adapts a PreToolUse block without a reason", async () => {
+  test("adapts a PreToolUse block without a reason to Claude Code's default hook error", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -1750,7 +1858,7 @@ describe("composite per-event adapters", () => {
       undefined,
       executor,
     );
-    const expectedOutput = { block: true };
+    const expectedOutput = { block: true, reason: "PreToolUse:Bash hook error: Blocked by hook" };
     const expectedCalls: RecordedCall[] = [
       { pluginId: "pre-tool-block-empty", event: createToolCallEvent() },
     ];
@@ -1761,6 +1869,52 @@ describe("composite per-event adapters", () => {
     // assert
     assert.deepStrictEqual(output, expectedOutput);
     assert.deepStrictEqual(executorCalls, expectedCalls);
+  });
+
+  test("names the blocking hook's command before an exit-2 stderr reason (D-CF5-11)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const context = createExtensionContext("/workspace/pre-tool-block-stderr");
+    const entries = [
+      createRoutingEntry({
+        pluginId: "quiet-observer",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 0,
+      }),
+      createRoutingEntry({
+        pluginId: "stderr-guard",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 1,
+      }),
+    ];
+    const executorCalls: RecordedCall[] = [];
+    const executor = createRecordingExecutor(
+      {
+        "quiet-observer": { kind: "noop" },
+        "stderr-guard": { kind: "block", reason: "blocked by policy", fromStderr: true },
+      },
+      executorCalls,
+    );
+    runtime.setRoutingBucket("PreToolUse", entries);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    const output = await handler(createToolCallEvent(), context);
+
+    // assert
+    assert.deepStrictEqual(output, {
+      block: true,
+      reason: "PreToolUse:Bash hook error: [printf stderr-guard]: blocked by policy",
+    });
   });
 
   test("adapts a UserPromptSubmit block to handled", async () => {
@@ -1797,51 +1951,6 @@ describe("composite per-event adapters", () => {
       {
         pluginId: "input-block",
         event: { type: "input", text: "review hooks", source: "interactive" },
-      },
-    ];
-
-    // act
-    const output = await handler(event, context);
-
-    // assert
-    assert.deepStrictEqual(output, expectedOutput);
-    assert.deepStrictEqual(executorCalls, expectedCalls);
-  });
-
-  test("adapts UserPromptSubmit additional context to transformed text", async () => {
-    // arrange
-    const runtime = createHooksRuntime();
-    runtime.advanceGeneration();
-    const context = createExtensionContext("/workspace/input-transform");
-    const entry = createRoutingEntry({
-      pluginId: "input-transform",
-      claudeEvent: "UserPromptSubmit",
-      rawMatcher: "",
-      declarationIndex: 0,
-    });
-    const event = {
-      type: "input",
-      text: "review hooks",
-      source: "rpc",
-    } satisfies InputEvent;
-    const executorCalls: RecordedCall[] = [];
-    const executor = createRecordingExecutor(
-      { "input-transform": { kind: "mutate", additionalContext: "dispatch context" } },
-      executorCalls,
-    );
-    runtime.setRoutingBucket("UserPromptSubmit", [entry]);
-    const handler = compositeHandlerFor(
-      runtime,
-      "UserPromptSubmit",
-      runtime.currentGeneration(),
-      undefined,
-      executor,
-    );
-    const expectedOutput = { action: "transform", text: "dispatch context" };
-    const expectedCalls: RecordedCall[] = [
-      {
-        pluginId: "input-transform",
-        event: { type: "input", text: "review hooks", source: "rpc" },
       },
     ];
 
@@ -1898,7 +2007,7 @@ describe("composite per-event adapters", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("drops a UserPromptSubmit stop after terminating the bucket", async () => {
+  test("stops the prompt on a UserPromptSubmit continue false (D-CF5-11)", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -1927,7 +2036,7 @@ describe("composite per-event adapters", () => {
       undefined,
       executor,
     );
-    const expectedOutput = undefined;
+    const expectedOutput = { action: "handled" };
     const expectedCalls: RecordedCall[] = [
       {
         pluginId: "input-stop",
@@ -1942,6 +2051,131 @@ describe("composite per-event adapters", () => {
     assert.deepStrictEqual(output, expectedOutput);
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
+
+  test("drops prompt context an earlier input left before the prompt's hooks buffer theirs (D-CF5-13)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.appendPendingPromptContext({
+      context: "stale context",
+      scope: "user",
+      marketplace: "stale-marketplace",
+      pluginId: "stale-plugin",
+    });
+    const entry = createRoutingEntry({
+      pluginId: "input-context",
+      claudeEvent: "UserPromptSubmit",
+      rawMatcher: "",
+      declarationIndex: 0,
+    });
+    runtime.setRoutingBucket("UserPromptSubmit", [entry]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor(
+        { "input-context": { kind: "mutate", additionalContext: "fresh context" } },
+        [],
+      ),
+    );
+
+    // act
+    await handler(
+      { type: "input", text: "review hooks", source: "interactive" },
+      createExtensionContext("/workspace/input-context"),
+    );
+
+    // assert
+    assert.deepStrictEqual(runtime.pendingPromptContextEntries(), [
+      {
+        context: "fresh context",
+        scope: entry.scope,
+        marketplace: entry.marketplace,
+        pluginId: "input-context",
+      },
+    ]);
+  });
+
+  test("drops prompt context an earlier input left when no UserPromptSubmit hook is routed", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.appendPendingPromptContext({
+      context: "stale context",
+      scope: "project",
+      marketplace: "stale-marketplace",
+      pluginId: "stale-plugin",
+    });
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor({}, []),
+    );
+
+    // act
+    const output = await handler(
+      { type: "input", text: "review hooks", source: "interactive" },
+      createExtensionContext("/workspace/input-stale"),
+    );
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
+  });
+
+  for (const { name, streamingBehavior, left } of [
+    { name: "drops", streamingBehavior: undefined, left: [] },
+    {
+      name: "keeps",
+      streamingBehavior: "followUp",
+      left: [
+        {
+          context: "unread context",
+          scope: "project",
+          marketplace: "stale-marketplace",
+          pluginId: "stale-plugin",
+          prompt: "an earlier follow-up",
+        },
+      ],
+    },
+  ] as const) {
+    test(`${name} the follow-up context Pi has not read when a prompt arrives with streaming behavior ${String(streamingBehavior)} (D-CF5-13)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.queueFollowUpContext({
+        context: "unread context",
+        scope: "project",
+        marketplace: "stale-marketplace",
+        pluginId: "stale-plugin",
+        prompt: "an earlier follow-up",
+      });
+      const handler = compositeHandlerFor(
+        runtime,
+        "UserPromptSubmit",
+        runtime.currentGeneration(),
+        undefined,
+        createRecordingExecutor({}, []),
+      );
+
+      // act
+      await handler(
+        {
+          type: "input",
+          text: "review hooks",
+          source: "rpc",
+          ...(streamingBehavior === undefined ? {} : { streamingBehavior }),
+        },
+        createExtensionContext("/workspace/follow-up-stale"),
+      );
+
+      // assert
+      assert.deepStrictEqual(runtime.drainFollowUpContext(), left);
+    });
+  }
 
   test("passes a UserPromptSubmit noop through as undefined", async () => {
     // arrange
@@ -1998,7 +2232,7 @@ describe("composite per-event adapters", () => {
       scope: "project",
       marketplace: "project-hooks",
     });
-    const event = { type: "session_start", reason: "startup" } satisfies SessionStartEvent;
+    const event = { source: "startup" } satisfies ClaudeSessionStartEvent;
     const executorCalls: RecordedCall[] = [];
     const executor = createRecordingExecutor(
       { "session-context": { kind: "mutate", additionalContext: "project guidance" } },
@@ -2023,7 +2257,7 @@ describe("composite per-event adapters", () => {
     const expectedCalls: RecordedCall[] = [
       {
         pluginId: "session-context",
-        event: { type: "session_start", reason: "startup" },
+        event: { source: "startup" },
       },
     ];
 
@@ -2046,7 +2280,7 @@ describe("composite per-event adapters", () => {
       rawMatcher: "",
       declarationIndex: 0,
     });
-    const event = { type: "session_shutdown", reason: "reload" } satisfies SessionShutdownEvent;
+    const event = { reason: "other" } satisfies ClaudeSessionEndEvent;
     const executorCalls: RecordedCall[] = [];
     const executor = createRecordingExecutor(
       { "session-end-block": { kind: "block", reason: "ignored block" } },
@@ -2063,7 +2297,7 @@ describe("composite per-event adapters", () => {
     const expectedCalls: RecordedCall[] = [
       {
         pluginId: "session-end-block",
-        event: { type: "session_shutdown", reason: "reload" },
+        event: { reason: "other" },
       },
     ];
 
@@ -2073,6 +2307,139 @@ describe("composite per-event adapters", () => {
     // assert
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
+
+  for (const { reason, expectedPluginIds } of [
+    { reason: "manual", expectedPluginIds: ["pre-any", "pre-manual"] },
+    { reason: "threshold", expectedPluginIds: ["pre-any", "pre-auto"] },
+    { reason: "overflow", expectedPluginIds: ["pre-any", "pre-auto"] },
+  ] as const) {
+    test(`filters PreCompact matchers on the trigger of a ${reason} compaction (D-CF5-04)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const context = createExtensionContext("/workspace/pre-compact-trigger");
+      runtime.setRoutingBucket(
+        "PreCompact",
+        ["pre-any", "pre-manual", "pre-auto"].map((pluginId, declarationIndex) =>
+          createRoutingEntry({
+            pluginId,
+            claudeEvent: "PreCompact",
+            rawMatcher: ["*", "manual", "auto"][declarationIndex] ?? "",
+            declarationIndex,
+          }),
+        ),
+      );
+      const event = {
+        type: "session_before_compact",
+        preparation: {
+          firstKeptEntryId: "kept-entry",
+          messagesToSummarize: [],
+          turnPrefixMessages: [],
+          isSplitTurn: false,
+          tokensBefore: 256,
+          fileOps: {
+            read: new Set<string>(),
+            written: new Set<string>(),
+            edited: new Set<string>(),
+          },
+          settings: { enabled: true, reserveTokens: 100, keepRecentTokens: 50 },
+        },
+        branchEntries: [],
+        reason,
+        willRetry: false,
+        signal: new AbortController().signal,
+      } satisfies SessionBeforeCompactEvent;
+      const executorCalls: RecordedCall[] = [];
+      const executor = createRecordingExecutor(
+        {
+          "pre-any": { kind: "noop" },
+          "pre-manual": { kind: "noop" },
+          "pre-auto": { kind: "noop" },
+        },
+        executorCalls,
+      );
+      const handler = compositeHandlerFor(
+        runtime,
+        "PreCompact",
+        runtime.currentGeneration(),
+        undefined,
+        executor,
+      );
+
+      // act
+      await handler(event, context);
+
+      // assert
+      assert.deepStrictEqual(
+        executorCalls,
+        expectedPluginIds.map((pluginId) => ({ pluginId, event: structuredClone(event) })),
+      );
+    });
+  }
+
+  for (const { reason, expectedPluginIds } of [
+    { reason: "manual", expectedPluginIds: ["post-any", "post-manual"] },
+    { reason: "threshold", expectedPluginIds: ["post-any", "post-auto"] },
+    { reason: "overflow", expectedPluginIds: ["post-any", "post-auto"] },
+  ] as const) {
+    test(`filters PostCompact matchers on the trigger of a ${reason} compaction (D-CF5-04)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const context = createExtensionContext("/workspace/post-compact-trigger");
+      runtime.setRoutingBucket(
+        "PostCompact",
+        ["post-any", "post-manual", "post-auto"].map((pluginId, declarationIndex) =>
+          createRoutingEntry({
+            pluginId,
+            claudeEvent: "PostCompact",
+            rawMatcher: ["", "manual", "auto"][declarationIndex] ?? "",
+            declarationIndex,
+          }),
+        ),
+      );
+      const event = {
+        type: "session_compact",
+        compactionEntry: {
+          type: "compaction",
+          id: "compaction-trigger",
+          parentId: "parent-entry",
+          timestamp: "2026-08-31T12:00:00.000Z",
+          summary: "trigger summary",
+          firstKeptEntryId: "kept-entry",
+          tokensBefore: 256,
+        },
+        fromExtension: false,
+        reason,
+        willRetry: false,
+      } satisfies SessionCompactEvent;
+      const executorCalls: RecordedCall[] = [];
+      const executor = createRecordingExecutor(
+        {
+          "post-any": { kind: "noop" },
+          "post-manual": { kind: "noop" },
+          "post-auto": { kind: "noop" },
+        },
+        executorCalls,
+      );
+      const handler = compositeHandlerFor(
+        runtime,
+        "PostCompact",
+        runtime.currentGeneration(),
+        undefined,
+        executor,
+      );
+
+      // act
+      await handler(event, context);
+
+      // assert
+      assert.deepStrictEqual(
+        executorCalls,
+        expectedPluginIds.map((pluginId) => ({ pluginId, event: structuredClone(event) })),
+      );
+    });
+  }
 
   test("drops a PreCompact stop after observing it", async () => {
     // arrange
@@ -2121,10 +2488,63 @@ describe("composite per-event adapters", () => {
     ];
 
     // act
-    await handler(event, context);
+    const output = await handler(event, context);
 
     // assert
+    assert.strictEqual(output, undefined);
     assert.deepStrictEqual(executorCalls, expectedCalls);
+  });
+
+  test("cancels the compaction on a PreCompact block, as Claude Code does", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreCompact", routedEntries("PreCompact", ["quiet", "keeper"]));
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreCompact",
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor(
+        { quiet: { kind: "noop" }, keeper: { kind: "block", reason: "keep", fromStderr: true } },
+        [],
+      ),
+    );
+
+    // act
+    const output = await handler(
+      { reason: "threshold" } as SessionBeforeCompactEvent,
+      createExtensionContext("/workspace/pre-compact-block"),
+    );
+
+    // assert
+    assert.deepStrictEqual(output, { cancel: true });
+  });
+
+  test("cancels the compaction on a PreCompact block that follows another hook's stop", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreCompact", routedEntries("PreCompact", ["stopper", "keeper"]));
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreCompact",
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor(
+        { stopper: { kind: "stop" }, keeper: { kind: "block", reason: "keep", fromStderr: true } },
+        [],
+      ),
+    );
+
+    // act
+    const output = await handler(
+      { reason: "manual" } as SessionBeforeCompactEvent,
+      createExtensionContext("/workspace/pre-compact-stop-and-block"),
+    );
+
+    // assert
+    assert.deepStrictEqual(output, { cancel: true });
   });
 
   test("passes a PostCompact noop through after observing it", async () => {
@@ -2416,5 +2836,1182 @@ describe("optional Pi inventory collaborator", () => {
     await assert.rejects(handler(createToolCallEvent(), context), {
       message: "injected executor refused",
     });
+  });
+});
+
+// Starts every hook and holds its result until the case finishes it, so a
+// case decides the order the hooks finish in.
+function createHeldExecutor(started: string[]): {
+  readonly executor: HookExecutor;
+  readonly finish: (pluginId: string, result: HookExecResult) => void;
+} {
+  const pending = new Map<string, (result: HookExecResult) => void>();
+  return {
+    executor: (entry) => {
+      started.push(entry.pluginId);
+      return new Promise((resolve) => {
+        pending.set(entry.pluginId, resolve);
+      });
+    },
+    finish: (pluginId, result) => {
+      finishDeferredExecution(pending.get(pluginId), result);
+    },
+  };
+}
+
+// Lets the started executors reach their held promises.
+async function settleStartedHooks(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setImmediate(resolve);
+  });
+}
+
+function preToolUseEntries(pluginIds: readonly string[]): RoutingEntry[] {
+  return pluginIds.map((pluginId, declarationIndex) =>
+    createRoutingEntry({
+      pluginId,
+      claudeEvent: "PreToolUse",
+      rawMatcher: "Bash",
+      declarationIndex,
+    }),
+  );
+}
+
+describe("parallel run and routing-order fold", () => {
+  test(
+    "starts every matching hook before any finishes (D-CF5-09)",
+    { timeout: 5_000 },
+    async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket("PreToolUse", preToolUseEntries(["left", "right"]));
+      const gates = new Map<string, () => void>();
+      const met = (pluginId: string): Promise<void> =>
+        new Promise((resolve) => {
+          gates.set(pluginId, resolve);
+        });
+      const leftMet = met("left");
+      const rightMet = met("right");
+      const executor: HookExecutor = async (entry) => {
+        const [own, other] = entry.pluginId === "left" ? ["left", rightMet] : ["right", leftMet];
+        gates.get(own)?.();
+        await other;
+        return { kind: "noop" };
+      };
+
+      const handler = compositeHandlerFor(
+        runtime,
+        "PreToolUse",
+        runtime.currentGeneration(),
+        undefined,
+        executor,
+      );
+
+      // act
+      const output = await handler(
+        createToolCallEvent(),
+        createExtensionContext("/workspace/meet"),
+      );
+
+      // assert
+      assert.strictEqual(output, undefined);
+    },
+  );
+
+  test("blocks with the first block in routing order whatever order the hooks finish in", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", preToolUseEntries(["quiet", "first", "second"]));
+    const started: string[] = [];
+    const held = createHeldExecutor(started);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      held.executor,
+    );
+
+    // act
+    const pending = handler(createToolCallEvent(), createExtensionContext("/workspace/reverse"));
+    await settleStartedHooks();
+    held.finish("second", { kind: "block", reason: "r2", fromStderr: true });
+    held.finish("first", { kind: "block", reason: "r1", fromStderr: true });
+    held.finish("quiet", { kind: "noop" });
+    const output = await pending;
+
+    // assert
+    assert.deepStrictEqual(started, ["quiet", "first", "second"]);
+    assert.deepStrictEqual(output, {
+      block: true,
+      reason: "PreToolUse:Bash hook error: [printf first]: r1",
+    });
+  });
+
+  test("lets a block win over an earlier ask (D-CF5-09)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", preToolUseEntries(["asker", "denier"]));
+    const executor = createRecordingExecutor(
+      {
+        asker: { kind: "mutate", permissionDecision: "ask", permissionDecisionReason: "sure?" },
+        denier: { kind: "block", reason: "no" },
+      },
+      [],
+    );
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    const output = await handler(createToolCallEvent(), createExtensionContext("/workspace/ask"));
+
+    // assert
+    assert.deepStrictEqual(output, { block: true, reason: "PreToolUse:Bash hook error: no" });
+  });
+
+  test("lets a block win over a mutation that adds context", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const entries = ["context", "blocker"].map((pluginId, declarationIndex) =>
+      createRoutingEntry({
+        pluginId,
+        claudeEvent: "UserPromptSubmit",
+        rawMatcher: "",
+        declarationIndex,
+      }),
+    );
+    runtime.setRoutingBucket("UserPromptSubmit", entries);
+    const executor = createRecordingExecutor(
+      {
+        context: { kind: "mutate", additionalContext: "a" },
+        blocker: { kind: "block", reason: "no", additionalContext: "b" },
+      },
+      [],
+    );
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    const output = await handler(
+      { type: "input", text: "hello", source: "interactive" },
+      createExtensionContext("/workspace/context-block"),
+    );
+
+    // assert
+    assert.deepStrictEqual(output, { action: "handled" });
+  });
+
+  test("joins every hook's context in routing order whatever order they finish in", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const generation = runtime.advanceGeneration();
+    const entries = ["early", "silent", "late"].map((pluginId, declarationIndex) =>
+      createRoutingEntry({
+        pluginId,
+        claudeEvent: "SessionStart",
+        rawMatcher: "",
+        declarationIndex,
+        scope: "project",
+      }),
+    );
+    runtime.setRoutingBucket("SessionStart", entries);
+    const held = createHeldExecutor([]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "SessionStart",
+      generation,
+      undefined,
+      held.executor,
+    );
+
+    // act
+    const pending = handler({ source: "startup" }, createExtensionContext("/workspace/contexts"));
+    await settleStartedHooks();
+    held.finish("late", { kind: "mutate", additionalContext: "b" });
+    held.finish("silent", { kind: "mutate", additionalContext: "" });
+    held.finish("early", { kind: "mutate", additionalContext: "a" });
+    await pending;
+
+    // assert
+    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [
+      { context: "a\nb", scope: "project", marketplace: "dispatch-catalog", pluginId: "late" },
+    ]);
+  });
+
+  test("keeps every outcome with its system message in routing order", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const entries = preToolUseEntries(["first", "second"]);
+    const held = createHeldExecutor([]);
+
+    // act
+    const pending = collectBucketOutcomes(
+      runtime,
+      entries,
+      createToolCallEvent(),
+      createExtensionContext("/workspace/outcomes"),
+      undefined,
+      () => true,
+      held.executor,
+    );
+    await settleStartedHooks();
+    held.finish("second", { kind: "noop", systemMessage: "two" });
+    held.finish("first", { kind: "block", reason: "r", systemMessage: "one" });
+    const outcomes = await pending;
+
+    // assert
+    assert.deepStrictEqual(
+      outcomes.map(({ entry, result }) => [entry.pluginId, result]),
+      [
+        ["first", { kind: "block", reason: "r", systemMessage: "one" }],
+        ["second", { kind: "noop", systemMessage: "two" }],
+      ],
+    );
+  });
+});
+
+describe("hook dedupe (D-CF5-10)", () => {
+  function hookEntry(input: {
+    readonly pluginId: string;
+    readonly rawMatcher: string;
+    readonly declarationIndex: number;
+    readonly timeout: number;
+  }): RoutingEntry {
+    return {
+      ...createRoutingEntry({ ...input, claudeEvent: "PreToolUse" }),
+      handlerDecl: { type: "command", command: "guard", timeout: input.timeout },
+    };
+  }
+
+  test("runs a hook one plugin declares twice once, at the first position with the last copy's fields", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", [
+      hookEntry({ pluginId: "demo", rawMatcher: "Bash", declarationIndex: 0, timeout: 5 }),
+      hookEntry({ pluginId: "other", rawMatcher: "Bash", declarationIndex: 1, timeout: 6 }),
+      hookEntry({ pluginId: "demo", rawMatcher: "*", declarationIndex: 2, timeout: 7 }),
+    ]);
+    const ran: Array<{ pluginId: string; rawMatcher: string; timeout: unknown }> = [];
+    const executor: HookExecutor = (entry) => {
+      ran.push({
+        pluginId: entry.pluginId,
+        rawMatcher: entry.rawMatcher,
+        timeout: entry.handlerDecl.timeout,
+      });
+      return Promise.resolve({ kind: "noop" });
+    };
+
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    await handler(createToolCallEvent(), createExtensionContext("/workspace/dedupe"));
+
+    // assert
+    assert.deepStrictEqual(ran, [
+      { pluginId: "demo", rawMatcher: "Bash", timeout: 7 },
+      { pluginId: "other", rawMatcher: "Bash", timeout: 6 },
+    ]);
+  });
+
+  test("keeps hooks that differ in shell, arguments, or if as separate hooks", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const base = hookEntry({
+      pluginId: "demo",
+      rawMatcher: "Bash",
+      declarationIndex: 0,
+      timeout: 1,
+    });
+    const bucket: RoutingEntry[] = [
+      base,
+      { ...base, handlerDecl: { ...base.handlerDecl, shell: "powershell" } },
+      { ...base, handlerDecl: { ...base.handlerDecl, args: ["x"] } },
+      { ...base, handlerDecl: { type: "command", command: "guard", if: "Bash(git *)" } },
+    ];
+    const ran: unknown[] = [];
+
+    // act
+    const outcomes = await collectBucketOutcomes(
+      runtime,
+      bucket,
+      createToolCallEvent(),
+      createExtensionContext("/workspace/distinct"),
+      undefined,
+      () => true,
+      (entry) => {
+        ran.push(entry.handlerDecl);
+        return Promise.resolve({ kind: "noop" });
+      },
+    );
+
+    // assert
+    assert.strictEqual(outcomes.length, 4);
+    assert.deepStrictEqual(
+      ran,
+      bucket.map((entry) => entry.handlerDecl),
+    );
+  });
+});
+
+describe("mcp proxy calls (D-CF5-12)", () => {
+  const PROXY_CASES = [
+    {
+      name: "a call through the mcp proxy",
+      toolName: "mcp",
+      input: { tool: "mcp__plugin_demo_stub__echo", args: { text: "ping" } },
+      runs: false,
+    },
+    {
+      name: "a call through a namespace proxy",
+      toolName: "mcp__stub",
+      input: { tool: "echo", args: { text: "ping" } },
+      runs: false,
+    },
+    { name: "an mcp proxy search", toolName: "mcp", input: { search: "x" }, runs: true },
+    {
+      name: "an mcp proxy describe action",
+      toolName: "mcp",
+      input: { tool: "mcp__plugin_demo_stub__echo", action: "describe" },
+      runs: true,
+    },
+    {
+      name: "a real mcp tool whose input names a tool",
+      toolName: "mcp__plugin_demo_stub__echo",
+      input: { tool: "echo" },
+      runs: true,
+    },
+  ] as const;
+
+  for (const { name, toolName, input, runs } of PROXY_CASES) {
+    test(`${runs ? "runs" : "runs no"} PreToolUse hook for ${name}`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket("PreToolUse", [
+        createRoutingEntry({
+          pluginId: "any",
+          claudeEvent: "PreToolUse",
+          rawMatcher: "*",
+          declarationIndex: 0,
+        }),
+      ]);
+      const calls: RecordedCall[] = [];
+      const handler = compositeHandlerFor(
+        runtime,
+        "PreToolUse",
+        runtime.currentGeneration(),
+        undefined,
+        createRecordingExecutor({ any: { kind: "noop" } }, calls),
+      );
+
+      // act
+      const output = await handler(
+        createToolCallEvent(toolName, { ...input }),
+        createExtensionContext("/workspace/proxy"),
+      );
+
+      // assert
+      assert.strictEqual(output, undefined);
+      assert.deepStrictEqual(
+        calls.map(({ pluginId }) => pluginId),
+        runs ? ["any"] : [],
+      );
+    });
+
+    test(`${runs ? "runs" : "runs no"} PostToolUse hook for ${name}`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket("PostToolUse", [
+        createRoutingEntry({
+          pluginId: "after",
+          claudeEvent: "PostToolUse",
+          rawMatcher: "*",
+          declarationIndex: 0,
+        }),
+      ]);
+      const calls: RecordedCall[] = [];
+      const handler = toolResultCompositeHandler(
+        runtime,
+        runtime.currentGeneration(),
+        undefined,
+        createRecordingExecutor({ after: { kind: "noop" } }, calls),
+      );
+
+      // act
+      const output = await handler(
+        { ...createToolResultEvent(false, toolName), input: { ...input } },
+        createExtensionContext("/workspace/proxy-result"),
+      );
+
+      // assert
+      assert.strictEqual(output, undefined);
+      assert.deepStrictEqual(
+        calls.map(({ pluginId }) => pluginId),
+        runs ? ["after"] : [],
+      );
+    });
+  }
+});
+
+describe("routing-order fold of mutations", () => {
+  test("allows with the last input rewrite in routing order", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", preToolUseEntries(["approver", "rewriter", "quiet"]));
+    const held = createHeldExecutor([]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      held.executor,
+    );
+    const event = createToolCallEvent("bash", { command: "echo from-model" });
+
+    // act
+    const pending = handler(event, createExtensionContext("/workspace/allow"));
+    await settleStartedHooks();
+    held.finish("quiet", { kind: "noop" });
+    held.finish("rewriter", { kind: "mutate", updatedInput: { command: "echo rewritten" } });
+    held.finish("approver", {
+      kind: "mutate",
+      permissionDecision: "allow",
+      updatedInput: { command: "echo approved" },
+    });
+    const output = await pending;
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(event, createToolCallEvent("bash", { command: "echo rewritten" }));
+  });
+
+  for (const { name, ask } of [
+    {
+      name: "with its reason",
+      ask: { kind: "mutate", permissionDecision: "ask", permissionDecisionReason: "sure?" },
+    },
+    { name: "without a reason", ask: { kind: "mutate", permissionDecision: "ask" } },
+  ] as const) {
+    test(`attributes a fold to its first ask ${name}, not to the last mutation`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      const generation = runtime.advanceGeneration();
+      const entries = ["asker", "second-asker", "later"].map((pluginId, declarationIndex) =>
+        createRoutingEntry({
+          pluginId,
+          claudeEvent: "SessionStart",
+          rawMatcher: "",
+          declarationIndex,
+          scope: "project",
+        }),
+      );
+      runtime.setRoutingBucket("SessionStart", entries);
+      const executor = createRecordingExecutor(
+        {
+          asker: { ...ask, additionalContext: "a" },
+          "second-asker": {
+            kind: "mutate",
+            permissionDecision: "ask",
+            permissionDecisionReason: "b?",
+          },
+          later: { kind: "mutate", additionalContext: "b" },
+        },
+        [],
+      );
+      const handler = compositeHandlerFor(runtime, "SessionStart", generation, undefined, executor);
+
+      // act
+      await handler({ source: "startup" }, createExtensionContext("/workspace/ask-attribution"));
+
+      // assert
+      assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [
+        { context: "a\nb", scope: "project", marketplace: "dispatch-catalog", pluginId: "asker" },
+      ]);
+    });
+  }
+
+  test("applies the last tool-output rewrite in routing order", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket(
+      "PostToolUse",
+      ["first", "second"].map((pluginId, declarationIndex) =>
+        createRoutingEntry({
+          pluginId,
+          claudeEvent: "PostToolUse",
+          rawMatcher: "Bash",
+          declarationIndex,
+        }),
+      ),
+    );
+    const executor = createRecordingExecutor(
+      {
+        first: { kind: "mutate", updatedToolOutput: { content: [{ type: "text", text: "one" }] } },
+        second: { kind: "mutate", updatedToolOutput: { content: [{ type: "text", text: "two" }] } },
+      },
+      [],
+    );
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+    const event = createToolResultEvent(false);
+
+    // act
+    const output = await handler(event, createExtensionContext("/workspace/outputs"));
+
+    // assert
+    assert.deepStrictEqual(output, { content: [{ type: "text", text: "two" }] });
+  });
+});
+
+describe("PreToolUse decisions (D-CF5-11)", () => {
+  test("blocks a folded ask with its reason in print mode without opening a dialog", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", preToolUseEntries(["rewriter", "asker"]));
+    const executor = createRecordingExecutor(
+      {
+        rewriter: { kind: "mutate", permissionDecision: "allow", updatedInput: { command: "x" } },
+        asker: {
+          kind: "mutate",
+          permissionDecision: "ask",
+          permissionDecisionReason: "please confirm",
+        },
+      },
+      [],
+    );
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+    const event = createToolCallEvent();
+
+    // act
+    const output = await handler(event, createExtensionContext("/workspace/ask-print"));
+
+    // assert
+    assert.deepStrictEqual(output, { block: true, reason: "please confirm" });
+    assert.deepStrictEqual(event, createToolCallEvent());
+  });
+});
+
+/** A JSON-mode context and Pi API that capture the hook notices a dispatch appends. */
+function createNoticeHost(cwd: string): {
+  readonly context: ExtensionContext;
+  readonly pi: ExtensionAPI;
+  readonly capture: ReturnType<typeof createJsonCapture>;
+} {
+  const capture = createJsonCapture();
+  const context = Object.defineProperties(createExtensionContext(cwd), {
+    mode: { value: "json" },
+    ui: { get: () => capture.ui },
+  });
+  const pi = {
+    getAllTools: () => [],
+    appendEntry: capture.entrySink.appendEntry,
+  } as unknown as ExtensionAPI;
+  return { context, pi, capture };
+}
+
+/** The `claude-plugin` entry of one hook notice. */
+function hookNoticeEntry(text: string): {
+  readonly customType: string;
+  readonly payload: Record<string, unknown>;
+} {
+  return {
+    customType: "claude-plugin",
+    payload: {
+      schemaVersion: 1,
+      origin: { kind: "hook" },
+      kind: "hook-notice",
+      severity: "info",
+      needsReload: false,
+      text,
+    },
+  };
+}
+
+function promptEntries(pluginIds: readonly string[]): RoutingEntry[] {
+  return pluginIds.map((pluginId, declarationIndex) =>
+    createRoutingEntry({
+      pluginId,
+      claudeEvent: "UserPromptSubmit",
+      rawMatcher: "",
+      declarationIndex,
+    }),
+  );
+}
+
+const PROMPT_EVENT = { type: "input", text: "hello", source: "interactive" } as InputEvent;
+
+describe("hook notices (HOOK-05 / D-CF5-14)", () => {
+  test("shows each prompt hook's non-empty system message in routing order whatever order the hooks finish in", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptSubmit", promptEntries(["first", "quiet", "third"]));
+    const host = createNoticeHost("/workspace/notices");
+    const held = createHeldExecutor([]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      host.pi,
+      held.executor,
+    );
+
+    // act
+    const pending = handler(PROMPT_EVENT, host.context);
+    await settleStartedHooks();
+    held.finish("third", { kind: "noop", systemMessage: "three" });
+    held.finish("quiet", { kind: "noop", systemMessage: "" });
+    held.finish("first", { kind: "noop", systemMessage: "one" });
+    await pending;
+
+    // assert
+    assert.deepStrictEqual(host.capture.entries, [
+      hookNoticeEntry("UserPromptSubmit says: one"),
+      hookNoticeEntry("UserPromptSubmit says: three"),
+    ]);
+    host.capture.assertValid();
+  });
+
+  test("drops a prompt hook's system message with a debug line when no Pi API is given", async (t) => {
+    // arrange
+    const debugLines = observeHookDebug(t);
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptSubmit", promptEntries(["speaker"]));
+    const executor = createRecordingExecutor(
+      { speaker: { kind: "noop", systemMessage: "hi" } },
+      [],
+    );
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    await handler(PROMPT_EVENT, createExtensionContext("/workspace/no-pi"));
+
+    // assert
+    assert.deepStrictEqual(debugLines(), ["[hooks] dispatch: no Pi API to show 1 hook notice(s)"]);
+  });
+
+  test("debug-logs a hook notice that fails to show and still stops a blocked prompt", async (t) => {
+    // arrange
+    const debugLines = observeHookDebug(t);
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptSubmit", promptEntries(["speaker"]));
+    const executor = createRecordingExecutor(
+      { speaker: { kind: "block", reason: "no", systemMessage: "hi" } },
+      [],
+    );
+    // The print-mode context's `ui` throws, so the notice cannot be shown.
+    const pi = { getAllTools: () => [] } as unknown as ExtensionAPI;
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      pi,
+      executor,
+    );
+
+    // act
+    const output = await handler(PROMPT_EVENT, createExtensionContext("/workspace/stale"));
+
+    // assert
+    assert.deepStrictEqual(output, { action: "handled" });
+    assert.deepStrictEqual(debugLines(), [
+      "[hooks] dispatch: hook notice failed: composite dispatch must not read ui",
+    ]);
+  });
+
+  const SESSION_START = { source: "startup" } satisfies ClaudeSessionStartEvent;
+  const SESSION_END = { reason: "clear" } satisfies ClaudeSessionEndEvent;
+  const PRE_COMPACT = { reason: "manual" } as SessionBeforeCompactEvent;
+  const POST_COMPACT = { reason: "threshold" } as SessionCompactEvent;
+
+  for (const { name, claudeEvent, event, results, notices } of [
+    {
+      name: "a PreToolUse system message after the event and Claude's tool name",
+      claudeEvent: "PreToolUse",
+      event: createToolCallEvent(),
+      results: { checker: { kind: "noop", systemMessage: "checked" } },
+      notices: ["PreToolUse:Bash says: checked"],
+    },
+    {
+      name: "no notice for a PreToolUse block, which goes to the model",
+      claudeEvent: "PreToolUse",
+      event: createToolCallEvent(),
+      results: { guard: { kind: "block", reason: "no" } },
+      notices: [],
+    },
+    {
+      name: "a SessionStart system message after the event and its source",
+      claudeEvent: "SessionStart",
+      event: SESSION_START,
+      results: { greeter: { kind: "mutate", additionalContext: "ctx", systemMessage: "hello" } },
+      notices: ["SessionStart:startup says: hello"],
+    },
+    {
+      name: "the system messages, then the first block of a blocked prompt in routing order",
+      claudeEvent: "UserPromptSubmit",
+      event: PROMPT_EVENT,
+      results: {
+        speaker: { kind: "noop", systemMessage: "said" },
+        first: { kind: "block", reason: "r1", fromStderr: true },
+        second: { kind: "block", reason: "r2" },
+      },
+      notices: [
+        "UserPromptSubmit says: said",
+        "UserPromptSubmit operation blocked by hook:\n[printf first]: r1",
+      ],
+    },
+    {
+      name: "no blocked-prompt notice for a prompt a hook stops",
+      claudeEvent: "UserPromptSubmit",
+      event: PROMPT_EVENT,
+      results: {
+        stopper: { kind: "stop", stopReason: "enough" },
+        guard: { kind: "block", reason: "no" },
+      },
+      notices: [],
+    },
+    {
+      name: "a hook error for each SessionStart block in routing order",
+      claudeEvent: "SessionStart",
+      event: SESSION_START,
+      results: {
+        check: { kind: "block", reason: "startup check failed", fromStderr: true },
+        quiet: { kind: "noop" },
+        strict: {
+          kind: "block",
+          reason: '[printf strict]: failed; blocking because onFailure is "block"\nboom',
+        },
+      },
+      notices: [
+        "SessionStart:startup hook error: [printf check]: startup check failed",
+        'SessionStart:startup hook error: [printf strict]: failed; blocking because onFailure is "block"\nboom',
+      ],
+    },
+    {
+      name: "a hook error for a SessionEnd block after the event and its reason",
+      claudeEvent: "SessionEnd",
+      event: SESSION_END,
+      results: { ender: { kind: "block", reason: "bye", fromStderr: true } },
+      notices: ["SessionEnd:clear hook error: [printf ender]: bye"],
+    },
+    {
+      name: "a hook error for a PostCompact block after the event and its trigger",
+      claudeEvent: "PostCompact",
+      event: POST_COMPACT,
+      results: { compactor: { kind: "block" } },
+      notices: ["PostCompact:auto hook error: Blocked by hook"],
+    },
+    {
+      name: "one compaction-blocked notice for the PreCompact blocks in routing order",
+      claudeEvent: "PreCompact",
+      event: PRE_COMPACT,
+      results: {
+        compactor: { kind: "block", reason: "not now", fromStderr: true },
+        quiet: { kind: "noop" },
+        keeper: { kind: "block", reason: "keep the history" },
+      },
+      notices: [
+        "Compaction blocked by PreCompact hook: [printf compactor]: not now\nkeep the history",
+      ],
+    },
+    {
+      name: "the compaction-blocked notice of a PreCompact block that another hook's stop does not hide",
+      claudeEvent: "PreCompact",
+      event: PRE_COMPACT,
+      results: { stopper: { kind: "stop" }, keeper: { kind: "block", reason: "keep" } },
+      notices: ["Compaction blocked by PreCompact hook: keep"],
+    },
+    {
+      name: "no notice for a PreCompact hook that stops",
+      claudeEvent: "PreCompact",
+      event: PRE_COMPACT,
+      results: { stopper: { kind: "stop" }, quiet: { kind: "noop" } },
+      notices: [],
+    },
+  ] satisfies ReadonlyArray<{
+    readonly name: string;
+    readonly claudeEvent: CompositeDispatchEvent;
+    readonly event: unknown;
+    readonly results: Readonly<Record<string, HookExecResult>>;
+    readonly notices: readonly string[];
+  }>) {
+    test(`shows ${name} (D-CF5-14 / D-CF5-24)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket(claudeEvent, routedEntries(claudeEvent, Object.keys(results)));
+      const host = createNoticeHost("/workspace/event-notices");
+      const handler = compositeHandlerFor(
+        runtime,
+        claudeEvent,
+        runtime.currentGeneration(),
+        host.pi,
+        createRecordingExecutor(results, []),
+      );
+
+      // act
+      await handler(event, host.context);
+
+      // assert
+      assert.deepStrictEqual(
+        host.capture.entries,
+        notices.map((text) => hookNoticeEntry(text)),
+      );
+      host.capture.assertValid();
+    });
+  }
+
+  for (const { claudeEvent, event } of [
+    { claudeEvent: "SessionEnd", event: SESSION_END },
+    { claudeEvent: "PreCompact", event: PRE_COMPACT },
+    { claudeEvent: "PostCompact", event: POST_COMPACT },
+  ] satisfies ReadonlyArray<{
+    readonly claudeEvent: CompositeDispatchEvent;
+    readonly event: unknown;
+  }>) {
+    test(`drops a ${claudeEvent} system message with a debug line (D-CF5-14)`, async (t) => {
+      // arrange
+      const debugLines = observeHookDebug(t);
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket(claudeEvent, routedEntries(claudeEvent, ["first", "second"]));
+      const host = createNoticeHost("/workspace/dropped-notices");
+      const handler = compositeHandlerFor(
+        runtime,
+        claudeEvent,
+        runtime.currentGeneration(),
+        host.pi,
+        createRecordingExecutor(
+          {
+            first: { kind: "noop", systemMessage: "one" },
+            second: { kind: "noop", systemMessage: "two" },
+          },
+          [],
+        ),
+      );
+
+      // act
+      await handler(event, host.context);
+
+      // assert
+      assert.deepStrictEqual(host.capture.entries, []);
+      assert.deepStrictEqual(debugLines(), [
+        `[hooks] dispatch: 2 systemMessage(s) dropped on ${claudeEvent}`,
+      ]);
+      host.capture.assertValid();
+    });
+  }
+
+  test("names an empty command in the hook error of a hook that declares none (D-CF5-18)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const [entry] = routedEntries("SessionStart", ["bare"]);
+    assert.ok(entry !== undefined);
+    runtime.setRoutingBucket("SessionStart", [
+      { ...entry, handlerDecl: { type: "command", timeout: 1 } },
+    ]);
+    const host = createNoticeHost("/workspace/bare-notice");
+    const handler = compositeHandlerFor(
+      runtime,
+      "SessionStart",
+      runtime.currentGeneration(),
+      host.pi,
+      createRecordingExecutor({ bare: { kind: "block", reason: "boom", fromStderr: true } }, []),
+    );
+
+    // act
+    await handler(SESSION_START, host.context);
+
+    // assert
+    assert.deepStrictEqual(host.capture.entries, [
+      hookNoticeEntry("SessionStart:startup hook error: []: boom"),
+    ]);
+    host.capture.assertValid();
+  });
+
+  for (const { isError, notice } of [
+    { isError: false, notice: "PostToolUse:Bash says: looked" },
+    { isError: true, notice: "PostToolUseFailure:Bash says: looked" },
+  ]) {
+    test(`shows ${notice} from the tool-result composite (D-CF5-14)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const claudeEvent = isError ? "PostToolUseFailure" : "PostToolUse";
+      runtime.setRoutingBucket(claudeEvent, routedEntries(claudeEvent, ["looker", "guard"]));
+      const host = createNoticeHost("/workspace/tool-result-notices");
+      const handler = toolResultCompositeHandler(
+        runtime,
+        runtime.currentGeneration(),
+        host.pi,
+        createRecordingExecutor(
+          {
+            looker: { kind: "noop", systemMessage: "looked" },
+            guard: { kind: "block", reason: "check the output" },
+          },
+          [],
+        ),
+      );
+
+      // act
+      await handler(createToolResultEvent(isError), host.context);
+
+      // assert
+      assert.deepStrictEqual(host.capture.entries, [hookNoticeEntry(notice)]);
+      host.capture.assertValid();
+    });
+  }
+});
+
+// Entries of `claudeEvent` with a match-all matcher, in routing order.
+function routedEntries(claudeEvent: BucketAEvent, pluginIds: readonly string[]): RoutingEntry[] {
+  return pluginIds.map((pluginId, declarationIndex) =>
+    createRoutingEntry({ pluginId, claudeEvent, rawMatcher: "", declarationIndex }),
+  );
+}
+
+interface SentMessage {
+  readonly message: unknown;
+  readonly options: unknown;
+}
+
+/** A Pi API that records every message a dispatch sends, or throws `failure` on a send. */
+function createMessagePi(sent: SentMessage[], failure?: Error): ExtensionAPI {
+  return {
+    getAllTools: () => [],
+    sendMessage: (message: unknown, options: unknown): void => {
+      if (failure !== undefined) {
+        throw failure;
+      }
+
+      sent.push({ message, options });
+    },
+  } as unknown as ExtensionAPI;
+}
+
+/** The message that carries a tool hook's context to the model, as Pi receives it. */
+function toolContextMessage(content: string): SentMessage {
+  return {
+    message: { customType: "claude-hook-tool-context", content, display: false },
+    options: { triggerTurn: false },
+  };
+}
+
+describe("tool hook context (HOOK-04 / D-CF5-13)", () => {
+  test("sends a PreToolUse fold's joined context to the model after the tool result", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", preToolUseEntries(["first", "quiet", "second"]));
+    const sent: SentMessage[] = [];
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      createMessagePi(sent),
+      createRecordingExecutor(
+        {
+          first: { kind: "mutate", additionalContext: "a" },
+          quiet: { kind: "noop" },
+          second: { kind: "mutate", additionalContext: "b" },
+        },
+        [],
+      ),
+    );
+
+    // act
+    const output = await handler(createToolCallEvent(), createExtensionContext("/workspace/ctx"));
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(sent, [
+      toolContextMessage("PreToolUse:Bash hook additional context: a\nb"),
+    ]);
+  });
+
+  test("sends a denied call's context and still blocks the call", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", preToolUseEntries(["guard"]));
+    const sent: SentMessage[] = [];
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      createMessagePi(sent),
+      createRecordingExecutor(
+        { guard: { kind: "block", reason: "no echo", additionalContext: "denied" } },
+        [],
+      ),
+    );
+
+    // act
+    const output = await handler(createToolCallEvent(), createExtensionContext("/workspace/deny"));
+
+    // assert
+    assert.deepStrictEqual(output, { block: true, reason: "PreToolUse:Bash hook error: no echo" });
+    assert.deepStrictEqual(sent, [
+      toolContextMessage("PreToolUse:Bash hook additional context: denied"),
+    ]);
+  });
+
+  for (const { isError, label } of [
+    { isError: false, label: "PostToolUse:Bash" },
+    { isError: true, label: "PostToolUseFailure:Bash" },
+  ]) {
+    test(`sends a ${label} fold's context to the model with its own label`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const claudeEvent = isError ? "PostToolUseFailure" : "PostToolUse";
+      runtime.setRoutingBucket(claudeEvent, routedEntries(claudeEvent, ["looker"]));
+      const sent: SentMessage[] = [];
+      const handler = toolResultCompositeHandler(
+        runtime,
+        runtime.currentGeneration(),
+        createMessagePi(sent),
+        createRecordingExecutor({ looker: { kind: "mutate", additionalContext: "seen" } }, []),
+      );
+
+      // act
+      const output = await handler(
+        createToolResultEvent(isError),
+        createExtensionContext("/workspace/post"),
+      );
+
+      // assert
+      assert.strictEqual(output, undefined);
+      assert.deepStrictEqual(sent, [toolContextMessage(`${label} hook additional context: seen`)]);
+    });
+  }
+
+  for (const { name, result } of [
+    { name: "no context", result: { kind: "mutate" } },
+    { name: "an empty context", result: { kind: "block", reason: "r", additionalContext: "" } },
+  ] satisfies ReadonlyArray<{ readonly name: string; readonly result: HookExecResult }>) {
+    test(`sends nothing for a tool fold with ${name}`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket("PostToolUse", routedEntries("PostToolUse", ["looker"]));
+      const sent: SentMessage[] = [];
+      const handler = toolResultCompositeHandler(
+        runtime,
+        runtime.currentGeneration(),
+        createMessagePi(sent),
+        createRecordingExecutor({ looker: result }, []),
+      );
+
+      // act
+      await handler(createToolResultEvent(false), createExtensionContext("/workspace/empty"));
+
+      // assert
+      assert.deepStrictEqual(sent, []);
+    });
+  }
+
+  test("sends nothing and still adapts the call when no Pi API is given", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", preToolUseEntries(["guard"]));
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor(
+        { guard: { kind: "block", reason: "no", additionalContext: "lost" } },
+        [],
+      ),
+    );
+
+    // act
+    const output = await handler(createToolCallEvent(), createExtensionContext("/workspace/no-pi"));
+
+    // assert
+    assert.deepStrictEqual(output, { block: true, reason: "PreToolUse:Bash hook error: no" });
+  });
+
+  test("debug-logs a context send that throws and still returns the tool result", async (t) => {
+    // arrange
+    const debugLines = observeHookDebug(t);
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUse", routedEntries("PostToolUse", ["looker"]));
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      createMessagePi([], new Error("session closed")),
+      createRecordingExecutor(
+        {
+          looker: {
+            kind: "mutate",
+            additionalContext: "seen",
+            updatedToolOutput: { content: [{ type: "text", text: "kept" }] },
+          },
+        },
+        [],
+      ),
+    );
+
+    // act
+    const output = await handler(
+      createToolResultEvent(false),
+      createExtensionContext("/workspace/throws"),
+    );
+
+    // assert
+    assert.deepStrictEqual(output, { content: [{ type: "text", text: "kept" }] });
+    assert.deepStrictEqual(debugLines(), [
+      "[hooks] dispatch: tool hook context failed: session closed",
+    ]);
   });
 });

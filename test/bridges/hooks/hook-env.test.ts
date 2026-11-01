@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { test } from "node:test";
 
-import { prepareHookEnv } from "../../../extensions/pi-claude-marketplace/bridges/hooks/hook-env.ts";
+import {
+  hookPathVars,
+  prepareHookEnv,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/hook-env.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
@@ -303,5 +306,48 @@ test("restores exact process properties after containment failure", async (t) =>
       value: process.env[key],
     })),
     priorEnvironment,
+  );
+});
+
+test("gives the three path values that the hook environment exports", async () => {
+  // arrange
+  const entry = {
+    scope: "project",
+    marketplace: "catalog",
+    pluginId: "plugin-paths",
+    resolvedSource: asAbsolutePluginRoot("/plugins/plugin-paths"),
+    claudeEvent: "UserPromptSubmit",
+    matcher: { kind: "match-all" },
+    rawMatcher: "",
+    handlerDecl: { type: "command", command: "/bin/true", args: [] },
+    declarationIndex: 0,
+    ifPredicate: { kind: "match-all" },
+  } satisfies RoutingEntry;
+  const translationContext = { sessionId: "session-paths", cwd: "/work/project-paths" };
+  const locations = locationsFor("project", "/scope/project-paths");
+
+  // act
+  const vars = hookPathVars(entry, translationContext, locations);
+  const environment = await prepareHookEnv(entry, translationContext, locations);
+
+  // assert
+  assert.deepStrictEqual(vars, {
+    pluginRoot: "/plugins/plugin-paths",
+    pluginData: path.join(
+      "/scope/project-paths",
+      ".pi",
+      "pi-claude-marketplace",
+      "data",
+      "plugin-paths",
+    ),
+    projectDir: "/work/project-paths",
+  });
+  assert.deepStrictEqual(
+    {
+      pluginRoot: environment.CLAUDE_PLUGIN_ROOT,
+      pluginData: environment.CLAUDE_PLUGIN_DATA,
+      projectDir: environment.CLAUDE_PROJECT_DIR,
+    },
+    vars,
   );
 });
