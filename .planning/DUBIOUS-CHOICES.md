@@ -215,3 +215,38 @@ this project.
   user asked not to be interrupted, and the flag exists for unattended runs.
 - **Recorded in:** this file; the planner prompt says
   `REVERSIBILITY_GATES: false`.
+
+### DC-13: Phase 1 research choices (accepted by the parent)
+
+- **Phase / source:** Phase 1 researcher (`01-RESEARCH.md`); the parent
+  accepted each item below for planning.
+- **Severity:** Medium overall. **Status:** open.
+- **Items:**
+  1. **`:-` as a hybrid (D-CF1-13).** pi-mcp-adapter 7.0 runs its `$env:` and
+     `{env:}` passes over a filled-in default, which Claude never re-reads, so
+     `${A:-$env:HOME}` would leak. The adapter gets `${NAME:-default}` only
+     when the default holds no `$env:`/`{env:` text; otherwise the bridge
+     keeps install-time resolution. Alternative: all-or-nothing.
+  2. **`shell: powershell` on Linux and macOS** runs Bash unless
+     `CLAUDE_CODE_USE_POWERSHELL_TOOL` is set, as upstream (`Vv()`, `jd()`).
+     This refines D-CF1-02's wording.
+  3. **`${CLAUDE_EFFORT}`** comes from Pi's thinking level: `off` and
+     `minimal` become `low`; a frontmatter `effort` is ignored (D-CF1-05).
+     Upstream default is `high`.
+  4. **The component-directory plan runs in wave 3**, not wave 1: its scenario
+     needs 01-03's generic file step.
+  5. **The argument tokenizer port** treats tree-sitter-bash 0.25.1 output as
+     upstream's expected values; Claude's bundled grammar version is unknown,
+     and some rows are error-recovery quirks (`--flag=1 -v` gives `["-v"]`).
+  6. **Unwired cores and fallow.** Cores built now but wired by Phases 2 and 3
+     are listed in `.fallowrc.json` `dynamicallyLoaded` and `ignoreExports`.
+     The parent removes those entries after Phases 2 and 3 merge.
+  7. **Package legitimacy.** The audit marked all six new package versions
+     "suspicious" only because they are new releases. The recorded evidence
+     (same source repositories, no postinstall scripts) replaces the human
+     checkpoint the protocol asks for.
+  8. **HAR-06 observation.** The trusted and untrusted pair observes a
+     project-scope agent through pi-subagents (seed in `features/agent/`).
+     The untrusted `Given` must also write a trust-requiring file such as
+     `.pi/settings.json`, because Pi trusts a project without one.
+- **Recorded in:** `01-RESEARCH.md` (Q1-Q5, Pitfall A, Open Questions).
