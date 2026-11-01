@@ -20,3 +20,61 @@ Feature: Workflow listing
     Then pi offers these workflow commands:
       | command     | description |
       | /demo:hello | Says hello. |
+
+  Scenario: A workflow is named by its meta name, not by its file name
+    Given pi runs with the scripted model and these companions:
+      | companion            |
+      | pi-dynamic-workflows |
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/zzz.workflow.js" with this text:
+      """
+      export const meta = {name:"greet",description:"Greets."};
+
+      return "Hi.";
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    When the user lists the slash commands pi offers
+    Then pi offers these workflow commands:
+      | command     | description |
+      | /demo:greet | Greets.     |
+
+  Scenario: A workflow name that starts with its plugin name loses that prefix, by this extension's naming rule
+    Given pi runs with the scripted model and these companions:
+      | companion            |
+      | pi-dynamic-workflows |
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/audit.js" with this text:
+      """
+      export const meta = {name:"demo-audit",description:"Audits the code."};
+
+      return "Audited.";
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    When the user lists the slash commands pi offers
+    Then pi offers these workflow commands:
+      | command     | description      |
+      | /demo:audit | Audits the code. |
+
+  Scenario: A plugin with no workflow script adds no workflow command
+    Given pi runs with the scripted model and these companions:
+      | companion            |
+      | pi-dynamic-workflows |
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    When the user lists the slash commands pi offers
+    Then pi offers no workflow commands

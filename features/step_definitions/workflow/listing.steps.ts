@@ -69,6 +69,11 @@ Then(
   },
 );
 
+// A table holds at least one row, so an empty listing has its own step.
+Then("pi offers no workflow commands", async function (this: ScenarioWorld): Promise<void> {
+  assert.deepStrictEqual(await workflowCommandRows(this), []);
+});
+
 // Every notice of the last workflow command, in Pi's order.
 Then("the workflow engine shows these notices:", function (this: ScenarioWorld, table: DataTable) {
   const notices = this.requireTurn().records.filter(
