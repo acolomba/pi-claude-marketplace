@@ -113,3 +113,19 @@ theirs under `## Dubious Choices` and the orchestrator copies them here.
      plus a warning diagnostic), replacing CONTEXT's implied "the install
      shows a warning".
 - **Recorded in:** `07-RESEARCH.md`, `07-CONTEXT.md`.
+
+### P7-DC-07: Phase 7 pattern-map choices
+
+- **Phase / source:** Phase 7 pattern map (`07-PATTERNS.md`).
+- **Severity:** Low. **Status:** open.
+- **Choices:**
+  1. **Shared record-reading helpers live in `features/lib/workflow-files.ts`**
+     (documented as the fixture writer), because it is the only lib file
+     Phase 7 may edit (`layout.md` freezes the others). Alternative: a new
+     `features/lib/workflow-runs.ts`.
+  2. **The shared topic module keeps the name `listing.steps.ts`,** close to a
+     verb name, following the skill and slash-command precedent.
+  3. **The notices step names its kind** (`the workflow engine shows these
+     notices:`) instead of RESEARCH's `pi shows these notices:`, per
+     `layout.md`'s rule that a new step names its kind.
+- **Recorded in:** `07-PATTERNS.md`.
