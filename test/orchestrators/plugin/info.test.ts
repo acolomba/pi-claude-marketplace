@@ -9997,13 +9997,13 @@ test("WFLW-04: a manifest-absent record with an empty workflow inventory renders
   });
 });
 
-test("WFLW-04: the lenient component map carries the conventional workflows directory beside a declared one", async () => {
+test("WFLW-04 / D-CF1-06: the lenient component map lists only a declared workflows directory, not the conventional one beside it", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange -- a malformed hooks file makes the plugin structurally
     // unavailable, which is the arm that carries no `componentPaths` and so
     // re-derives them from the raw manifest strings. The declared `extra-flows`
-    // and the conventional `workflows` must BOTH be walked, so the row lists a
-    // script from each.
+    // replaces the conventional `workflows` (D-CF1-06), so the row lists the
+    // declared folder's script alone.
     const userRoot = path.join(home, ".pi", "agent");
     const mpRoot = await seedPathMarketplace({
       scope: "user",
@@ -10037,7 +10037,7 @@ test("WFLW-04: the lenient component map carries the conventional workflows dire
         message: [
           "● mp [user] <no autoupdate>",
           "  ⊘ alpha v1.0.0 (unavailable) {unsupported hooks}",
-          "    workflows: alpha:extra, alpha:zeta",
+          "    workflows: alpha:extra",
           "    requires: pi-dynamic-workflows (missing)",
         ].join("\n"),
       },
