@@ -30,6 +30,7 @@ import {
 } from "../../lib/pi-launch-environment.ts";
 import { projectTokens } from "../../lib/run-tokens.ts";
 import { modelCallsOf } from "../../lib/scripted-model/script.ts";
+import { PROFILE_PI_START_TIMEOUT_MS } from "../../support/world.ts";
 
 import type { StubRequest } from "../../lib/mcp-stub-server.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
@@ -105,6 +106,7 @@ Given(
 // never set in this worker's own environment.
 Given(
   "pi runs with the scripted model, pi-mcp-adapter, and the environment variable {string} set to {string}",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
   async function (this: ScenarioWorld, variable: string, value: string) {
     const file = await writeLaunchEnvironment(this.tokens.home, { [variable]: value });
     this.onRelease(() => rm(file, { force: true }));
