@@ -95,6 +95,7 @@ Feature: MCP server companion missing
       | companion      |
       | pi-mcp-adapter |
     Given pi-mcp-adapter has listed the tools of the stub mcp server "stub" of the plugin "demo"
+    Given pi-mcp-adapter has reported the mcp servers of the plugin "demo@fixtures" of the user scope
     When the user runs "/claude:plugin info demo@fixtures --scope user"
     Then the result has these fields:
       | kind                           | plugin-info                                                             |
