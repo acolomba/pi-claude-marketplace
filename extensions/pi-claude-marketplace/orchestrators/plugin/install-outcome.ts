@@ -445,6 +445,8 @@ interface InstallLedgerContext {
   hookEntries?: readonly HookSummaryEntry[];
   // Names captured for PluginInstallRecord.resources and reload-hint composition.
   stagedSkillNames: readonly string[];
+  // D-CF4-04: the skills phase's rows, which the agents phase reads preloads from.
+  stagedSkillRecords: PreparedSkillsStaging["result"]["recorded"];
   stagedCommandNames: readonly string[];
   stagedAgentNames: readonly string[];
   stagedMcpServerNames: readonly string[];
@@ -1189,6 +1191,7 @@ async function runInstallLedgerBody(
     pluginDataDir,
     hooksFileWritten: false,
     stagedSkillNames: [],
+    stagedSkillRecords: [],
     stagedCommandNames: [],
     stagedAgentNames: [],
     stagedMcpServerNames: [],
@@ -1227,6 +1230,7 @@ async function runInstallLedgerBody(
       // Set before commit so undo can remove any dirs that were placed if
       // commit fails mid-loop (partial rename success leaves K orphans).
       c.stagedSkillNames = prep.result.recorded.map((r) => r.generatedName);
+      c.stagedSkillRecords = prep.result.recorded;
       // SKILL-01 / WARN-01: collect per-skill frontmatter degrade records.
       for (const d of prep.result.degraded) {
         c.frontmatterDegradations.push({ kind: "skill", ...d });
@@ -1308,6 +1312,7 @@ async function runInstallLedgerBody(
         pluginDataDir: c.pluginDataDir,
         agentsDirs: c.agentsDirs,
         knownSkills: c.stagedSkillNames,
+        skillSources: c.stagedSkillRecords,
         referenceNames: generatedNames,
         // AG-7 opt-in: `--map-model` on /claude:plugin install threads
         // the flag down to here. When the user did not pass the flag
