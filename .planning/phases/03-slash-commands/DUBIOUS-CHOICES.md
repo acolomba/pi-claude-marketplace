@@ -406,3 +406,20 @@ entries into it. Severity and status follow the root file's rules.
   reviewed `code-duplication` marker.
 - **Why dubious:** The parent planned to merge; doing it here front-loads
   conflict resolution in tool-written files.
+
+### P3-DC-21: Security audit choices
+
+- **Phase / source:** Phase 3 security auditor and orchestrator (`03-SECURITY.md`).
+- **Severity:** Low. **Status:** open.
+- **Items:**
+  1. The 13 accept rows were closed on their plan-time acceptance; the
+     orchestrator wrote the accepted-risks log (AR-03-01..10) afterwards.
+  2. T-03-28 (gap report not posted) and T-03-03 (Pi sends no frontmatter)
+     rest on the SUMMARY text and on a Pi fact the repo cannot check.
+  3. `!` command output size stays uncapped (D-CF1-02 residual); not a new
+     decision.
+  4. Pre-existing, outside the register: `orchestrators/plugin/info.ts`
+     lists entry names of declared directories of an unavailable plugin
+     without containment (all kinds, names only). Parent line candidate.
+  5. The orchestrator skipped the workflow's own preliminary classification
+     and sent the whole register to the auditor.
