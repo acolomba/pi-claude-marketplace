@@ -1,8 +1,9 @@
 Feature: Skill invocation
 
   Invoking a bridged skill sends the model the skill's body in Pi's skill
-  block, followed by the typed arguments. A scripted model stands in for a
-  real one, and a local marketplace for a published one.
+  block, with the typed arguments filled in as Claude Code fills them. A
+  scripted model stands in for a real one, and a local marketplace for a
+  published one.
 
   Scenario: Invoking a skill sends the model its body in a skill block
     Given pi runs with the scripted model
@@ -22,8 +23,8 @@ Feature: Skill invocation
       | Hello, Ada. |
     When the user prompts "/skill:demo-greet Ada"
     Then the model receives these calls:
-      | call | role | text                                                                                                                                                                                                                                                       |
-      | 1    | user | <skill name="demo-greet" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-greet/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-greet.\n\nGreet the person named in the arguments.\n</skill>\n\nAda |
+      | call | role | text                                                                                                                                                                                                                                                                                       |
+      | 1    | user | <skill name="demo-greet" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-greet/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-greet.\n\nGreet the person named in the arguments.\n\nARGUMENTS: Ada\n</skill> |
 
   Scenario: Invoking a skill with the companions loaded sends the model the same skill block
     Given pi runs with the scripted model and these companions:
@@ -47,5 +48,5 @@ Feature: Skill invocation
       | Hello, Ada. |
     When the user prompts "/skill:demo-greet Ada"
     Then the model receives these calls:
-      | call | role | text                                                                                                                                                                                                                                                       |
-      | 1    | user | <skill name="demo-greet" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-greet/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-greet.\n\nGreet the person named in the arguments.\n</skill>\n\nAda |
+      | call | role | text                                                                                                                                                                                                                                                                                       |
+      | 1    | user | <skill name="demo-greet" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-greet/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-greet.\n\nGreet the person named in the arguments.\n\nARGUMENTS: Ada\n</skill> |
