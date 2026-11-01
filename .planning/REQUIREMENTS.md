@@ -73,11 +73,11 @@ the parent applies them at merge.
 
 ### Commands
 
-- [ ] **CMD-01**: A new session lists each bridged command as a prompt template `/<plugin>:<name>` (nested directories colon-joined) with its description
-- [ ] **CMD-02**: Invoking a command sends the model its body with `$ARGUMENTS`, positional arguments, and the appended-arguments rule handled as decided under FG-01..FG-03
-- [ ] **CMD-03**: Command frontmatter and content variants behave as upstream or as a recorded divergence: `argument-hint`, `description`, path variables, injection (FG-05), model invocation (FG-11), `user-invocable` (FG-12)
-- [ ] **CMD-04**: The object-map `commands` manifest form (FG-13) and custom command directories (FG-14) behave as decided
-- [ ] **CMD-05**: Disable, uninstall, and update remove or replace the command in a new session, and enable restores it
+- [x] **CMD-01**: A new session lists each bridged command as a prompt template `/<plugin>:<name>` (nested directories colon-joined) with its description
+- [x] **CMD-02**: Invoking a command sends the model its body with `$ARGUMENTS`, positional arguments, and the appended-arguments rule handled as decided under FG-01..FG-03
+- [x] **CMD-03**: Command frontmatter and content variants behave as upstream or as a recorded divergence: `argument-hint`, `description`, path variables, injection (FG-05), model invocation (FG-11), `user-invocable` (FG-12)
+- [x] **CMD-04**: The object-map `commands` manifest form (FG-13) and custom command directories (FG-14) behave as decided
+- [x] **CMD-05**: Disable, uninstall, and update remove or replace the command in a new session, and enable restores it
 
 ### Agents
 
@@ -171,11 +171,11 @@ Deferred to a milestone with a real model provider.
 | SKL-04 | Phase 2 | Pending |
 | SKL-05 | Phase 2 | Pending |
 | SKL-06 | Phase 2 | Pending |
-| CMD-01 | Phase 3 | Pending |
-| CMD-02 | Phase 3 | Pending |
-| CMD-03 | Phase 3 | Pending |
-| CMD-04 | Phase 3 | Pending |
-| CMD-05 | Phase 3 | Pending |
+| CMD-01 | Phase 3 | Complete |
+| CMD-02 | Phase 3 | Complete |
+| CMD-03 | Phase 3 | Complete |
+| CMD-04 | Phase 3 | Complete |
+| CMD-05 | Phase 3 | Complete |
 | AGT-01 | Phase 4 | Complete |
 | AGT-02 | Phase 4 | Complete |
 | AGT-03 | Phase 4 | Complete |

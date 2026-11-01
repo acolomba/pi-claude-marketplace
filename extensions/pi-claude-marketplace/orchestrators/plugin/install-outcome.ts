@@ -97,6 +97,7 @@ import {
   prepareStageSkills,
   unstagePluginSkills,
 } from "../../bridges/skills/index.ts";
+import { NODE_PROJECT_SKILL_LEDGER } from "../../bridges/skills/project-installs.ts";
 import {
   commitPreparedWorkflows,
   prepareStageWorkflows,
@@ -1284,7 +1285,8 @@ async function runInstallLedgerBody(
 
       collectStagingWarnings(c, prep.result.warnings);
 
-      const leak = await commitPreparedCommands(opts.removalOps, prep);
+      // D-CF3-07: the user's ledger records the committed project commands.
+      const leak = await commitPreparedCommands(opts.removalOps, prep, NODE_PROJECT_SKILL_LEDGER);
       if (leak !== undefined) {
         c.bridgeWarnings.push(hygieneWarning(leak));
       }
@@ -1297,6 +1299,7 @@ async function runInstallLedgerBody(
       await unstagePluginCommands({
         locations: c.locations,
         previousCommandNames: c.stagedCommandNames,
+        ledger: NODE_PROJECT_SKILL_LEDGER,
       });
     },
   };

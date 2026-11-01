@@ -199,7 +199,7 @@ pairs `test/domain/workflow-script.test.ts`,
 
 - [x] **Phase 1: Harness and Version Raise** - Pi and the three companions at their latest releases, a profile Pi with a scripted model and stand-ins, and a seed scenario per kind, with the pre-fan-out decisions settled (completed 2026-11-01)
 - [ ] **Phase 2: Skills** - Bridged skills list, carry their frontmatter, reach the model, resolve name clashes, and follow the plugin lifecycle as upstream
-- [ ] **Phase 3: Slash Commands** - Bridged commands list as prompt templates, expand their arguments as decided, and follow the plugin lifecycle
+- [x] **Phase 3: Slash Commands** - Bridged commands list as prompt templates, expand their arguments as decided, and follow the plugin lifecycle (completed 2026-11-01)
 - [x] **Phase 4: Agents** - pi-subagents lists and runs bridged agents with converted fields, preloaded skills, and companion-missing recovery (completed 2026-11-01)
 - [ ] **Phase 5: Hooks** - Hooks fire on Pi's session, tool, prompt, and stop events with Claude's stdin and environment, including the `clear`, `compact`, and `fork` parity fixes
 - [ ] **Phase 6: MCP Servers** - pi-mcp-adapter 7.x connects bridged servers under Claude's tool names, with configuration variants, project scope, and companion-missing recovery
@@ -326,7 +326,27 @@ Plans:
 - Wave 3: decision IDs, SUMMARY lines for the parent, and the phase gate.
 - Owns: `features/slash-command/**`, `features/step_definitions/slash-command/**`, `features/lib/slash-command-files.ts`, `bridges/commands/**`, `test/bridges/commands/**`, `test/integration/commands-*`. If FG-13 adds the object-map form, the resolver change stays inside the commands arm.
 
-**Plans:** TBD
+**Plans:** 9/9 plans complete in 5 waves (the template's wave 2 holds its four plans; the D-CF3-07 project-command ledger adds a wave 3 writer and a wave 4 check, and the D-CF3-03 object map runs in wave 4 because it extends the files the wave 2 and wave 3 plans change; the phase gate is wave 5)
+
+Plans:
+**Wave 1**
+- [x] 03-01-PLAN.md — Wave 1 tracer: listing with Claude Code's description fallback, the naming pins, the shared command steps, and the stored install-time record (CMD-01; D-CF3-08, D-CF3-12, D-CF3-06 install half)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 03-02-PLAN.md — Wave 2: frontmatter fields, the dropped-fields warning, `user-invocable`, model invocation, and the terminal argument hint (CMD-03; D-CF3-09, D-CF3-01, D-CF3-02, D-CF3-10)
+- [x] 03-03-PLAN.md — Wave 2: command invocation with argument substitution and context injection, interactive and RPC (CMD-02, CMD-03; D-CF3-06, D-CF3-10)
+- [x] 03-04-PLAN.md — Wave 2: declared command files, entry-declared directories, the replace pin, and the lenient info mirror (CMD-04; D-CF3-05, D-CF3-04)
+- [x] 03-05-PLAN.md — Wave 2: disable, uninstall, update, and enable in a new session (CMD-05; D-CF3-11)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 03-06-PLAN.md — Wave 3: the project-command ledger writer on install, update, removal, and its warnings (CMD-02, CMD-05; D-CF3-07)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 03-07-PLAN.md — Wave 4: the project-command check at invocation and the reinstall abort (CMD-02; D-CF3-07)
+- [x] 03-08-PLAN.md — Wave 4: the object-map `commands` form, inline content, and the manifest overrides (CMD-04; D-CF3-03, D-CF3-04)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [x] 03-09-PLAN.md — Wave 5: phase gate, the D-CF3 decision rows, the Pi gap report additions, and the parent lines
 
 ### Phase 4: Agents
 
@@ -476,7 +496,7 @@ Plans:
 | --- | --- | --- | --- |
 | 1. Harness and Version Raise | 15/15 | Complete    | 2026-11-01 |
 | 2. Skills | 7/7 | In Progress | - |
-| 3. Slash Commands | 0/TBD | Not started | - |
+| 3. Slash Commands | 9/9 | Complete    | 2026-11-01 |
 | 4. Agents | 6/6 | Complete    | 2026-11-01 |
 | 5. Hooks | 0/TBD | Not started | - |
 | 6. MCP Servers | 9/9 | In Progress | - |

@@ -10045,6 +10045,65 @@ test("WFLW-04 / D-CF1-06: the lenient component map lists only a declared workfl
   });
 });
 
+test("D-CF3-04: the lenient component map lists the commands folder beside an entry-declared commands path", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- a malformed hooks file makes the plugin structurally
+    // unavailable. The entry's `commands` adds to `commands/`, while its
+    // `agents` still replaces `agents/`, so the row lists both command
+    // folders and the declared agents folder alone.
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "alpha",
+            source: "./alpha",
+            version: "1.0.0",
+            commands: "./more",
+            agents: "./crew",
+          },
+        ],
+      },
+      installablePluginDirs: ["alpha"],
+    });
+    const pluginDir = path.join(mpRoot, "alpha");
+    for (const [relative, text] of [
+      ["commands/a.md", "Run a.\n"],
+      ["more/b.md", "Run b.\n"],
+      ["agents/old.md", "Old agent.\n"],
+      ["crew/new.md", "New agent.\n"],
+    ] as const) {
+      await mkdir(path.dirname(path.join(pluginDir, relative)), { recursive: true });
+      await writeFile(path.join(pluginDir, relative), text, "utf8");
+    }
+
+    await mkdir(path.join(pluginDir, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginDir, "hooks", "hooks.json"), "{ not valid json", "utf8");
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ⊘ alpha v1.0.0 (unavailable) {unsupported hooks}",
+          "    agents: new",
+          "    commands: a, b",
+          "    requires: pi-subagents (missing)",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // WR-09: the preview-tense advisories reach the user.
 //

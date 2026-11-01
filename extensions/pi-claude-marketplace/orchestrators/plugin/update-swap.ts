@@ -87,6 +87,7 @@ import {
   commitPreparedSkills,
   prepareStageSkills,
 } from "../../bridges/skills/index.ts";
+import { NODE_PROJECT_SKILL_LEDGER } from "../../bridges/skills/project-installs.ts";
 import {
   abortPreparedWorkflows,
   commitPreparedWorkflows,
@@ -1241,7 +1242,8 @@ async function commitUpdatePhase3a(
   }
 
   try {
-    const leak = await commitPreparedCommands(ops, handles.commands);
+    // D-CF3-07: the user's ledger records the committed project commands.
+    const leak = await commitPreparedCommands(ops, handles.commands, NODE_PROJECT_SKILL_LEDGER);
     if (leak !== undefined) {
       const cleanupFailure = commitCleanupFailure(
         "commands",

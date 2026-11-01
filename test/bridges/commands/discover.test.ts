@@ -3,24 +3,29 @@ import { createHook } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import { renameSync, symlinkSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
 import { discoverPluginCommands } from "../../../extensions/pi-claude-marketplace/bridges/commands/discover.ts";
 
-import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
+import type {
+  CommandMapEntry,
+  ResolvedPluginInstallable,
+} from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
 function resolvedPlugin(
   pluginRoot: string,
   commands: readonly string[],
+  commandMap?: readonly CommandMapEntry[],
 ): ResolvedPluginInstallable {
   return {
     installable: true,
     state: "installable",
     name: "acme",
     pluginRoot,
-    supported: commands.length === 0 ? [] : ["commands"],
+    supported: commands.length === 0 && commandMap === undefined ? [] : ["commands"],
     unsupported: [],
     notes: [],
     componentPaths: {
@@ -28,10 +33,15 @@ function resolvedPlugin(
       commands: [...commands],
       agents: [],
       workflows: [],
+      ...(commandMap !== undefined && { commandMap: [...commandMap] }),
     },
     mcpServers: {},
     defaultEnabled: true,
   };
+}
+
+function sourceEntry(key: string, source: string): CommandMapEntry {
+  return { key, source, origin: "manifest" };
 }
 
 test("discovers recursive commands in deterministic depth-first order with complete records", async (t) => {
@@ -51,16 +61,19 @@ test("discovers recursive commands in deterministic depth-first order with compl
   const expectedDiscovery = {
     discovered: [
       {
+        kind: "file",
         sourceName: "acme-build/deploy",
         generatedName: "acme:build:deploy",
         commandFile: deployPath,
       },
       {
+        kind: "file",
         sourceName: "acme-build/prod/rollout",
         generatedName: "acme:build:prod:rollout",
         commandFile: rolloutPath,
       },
       {
+        kind: "file",
         sourceName: "status",
         generatedName: "acme:status",
         commandFile: statusPath,
@@ -105,6 +118,7 @@ test("elides the plugin prefix from only the first command path segment", async 
   const expectedDiscovery = {
     discovered: [
       {
+        kind: "file",
         sourceName: "acme-tools/acme-lint",
         generatedName: "acme:tools:acme-lint",
         commandFile: commandPath,
@@ -135,8 +149,13 @@ test("preserves declared command-root order for absolute and relative roots", as
   const resolved = resolvedPlugin(directory, [absoluteDirectory, "relative"]);
   const expectedDiscovery = {
     discovered: [
-      { sourceName: "first", generatedName: "acme:first", commandFile: absolutePath },
-      { sourceName: "second", generatedName: "acme:second", commandFile: relativePath },
+      { kind: "file", sourceName: "first", generatedName: "acme:first", commandFile: absolutePath },
+      {
+        kind: "file",
+        sourceName: "second",
+        generatedName: "acme:second",
+        commandFile: relativePath,
+      },
     ],
     warnings: [],
   };
@@ -146,6 +165,192 @@ test("preserves declared command-root order for absolute and relative roots", as
 
   // assert
   assert.deepStrictEqual(discovery, expectedDiscovery);
+});
+
+test("D-CF3-05 names a declared command file and a nested declared file from their basenames", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-declared-file-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const filePath = path.join(directory, "cmds", "a.md");
+  const nestedPath = path.join(directory, "cmds", "sub", "x.md");
+  await mkdir(path.dirname(nestedPath), { recursive: true });
+  await writeFile(filePath, "a\n");
+  await writeFile(nestedPath, "x\n");
+  const resolved = resolvedPlugin(directory, ["cmds/a.md", "cmds/sub/x.md"]);
+  const expectedDiscovery = {
+    discovered: [
+      { kind: "file", sourceName: "a", generatedName: "acme:a", commandFile: filePath },
+      { kind: "file", sourceName: "x", generatedName: "acme:x", commandFile: nestedPath },
+    ],
+    warnings: [],
+  };
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
+});
+
+test("D-CF3-05 skips each declared path that is not a command file with a warning naming it", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-declared-skips-"));
+  const socketPath = path.join(directory, "cmds", "sock.md");
+  const server = createServer();
+  t.after(async () => {
+    await new Promise<void>((resolve) => {
+      server.close(() => {
+        resolve();
+      });
+    });
+    await rm(directory, { recursive: true, force: true, maxRetries: 3 });
+  });
+  const goodPath = path.join(directory, "cmds", "good.md");
+  await mkdir(path.join(directory, "cmds", "linked-dir-target"), { recursive: true });
+  await writeFile(path.join(directory, "cmds", "readme.txt"), "readme\n");
+  await writeFile(path.join(directory, "cmds", ".secret.md"), "secret\n");
+  await writeFile(path.join(directory, "cmds", "target.md"), "target\n");
+  await writeFile(goodPath, "good\n");
+  await symlink(path.join(directory, "cmds", "target.md"), path.join(directory, "cmds", "link.md"));
+  await symlink(
+    path.join(directory, "cmds", "linked-dir-target"),
+    path.join(directory, "cmds", "linked-dir"),
+  );
+  await new Promise<void>((resolve) => {
+    server.listen(socketPath, resolve);
+  });
+  const resolved = resolvedPlugin(directory, [
+    "cmds/readme.txt",
+    "cmds/.secret.md",
+    "cmds/link.md",
+    "cmds/linked-dir",
+    "cmds/sock.md",
+    "cmds/good.md",
+  ]);
+  const expectedDiscovery = {
+    discovered: [
+      { kind: "file", sourceName: "good", generatedName: "acme:good", commandFile: goodPath },
+    ],
+    warnings: [
+      `declared command path "cmds/readme.txt" in "${directory}" is not a markdown file; skipping path.`,
+      `declared command path "cmds/.secret.md" in "${directory}" is dotfile-prefixed; skipping path.`,
+      `declared command path "cmds/link.md" in "${directory}" is a symlink; skipping path.`,
+      `declared command path "cmds/linked-dir" in "${directory}" is a symlink; skipping path.`,
+      `declared command path "cmds/sock.md" in "${directory}" is not a regular file; skipping path.`,
+    ],
+  };
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
+});
+
+test("D-CF3-05 keeps one command for a declared file its declared directory also reaches", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-declared-overlap-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const filePath = path.join(directory, "cmds", "a.md");
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, "a\n");
+  const resolved = resolvedPlugin(directory, ["cmds", "cmds/a.md"]);
+  const expectedDiscovery = {
+    discovered: [{ kind: "file", sourceName: "a", generatedName: "acme:a", commandFile: filePath }],
+    warnings: [],
+  };
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
+});
+
+test("D-CF3-05 keeps the first of two declared files that name the same command", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-declared-collision-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const winningPath = path.join(directory, "cmds", "a.md");
+  const losingPath = path.join(directory, "other", "a.md");
+  await mkdir(path.dirname(winningPath), { recursive: true });
+  await mkdir(path.dirname(losingPath), { recursive: true });
+  await writeFile(winningPath, "winner\n");
+  await writeFile(losingPath, "duplicate\n");
+  const resolved = resolvedPlugin(directory, ["cmds/a.md", "other/a.md"]);
+  const expectedDiscovery = {
+    discovered: [
+      { kind: "file", sourceName: "a", generatedName: "acme:a", commandFile: winningPath },
+    ],
+    warnings: [
+      `command source "a" in "${losingPath}" elides to generated name "acme:a", already produced by command source "a"; ignoring duplicate.`,
+    ],
+  };
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
+});
+
+test("D-CF3-05 skips a declared command file whose name is unsafe and reports its cause chain", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-declared-bad-name-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const commandsDirectory = path.join(directory, "cmds");
+  const unsafeSourceName = "bad\u0001";
+  await mkdir(commandsDirectory, { recursive: true });
+  await writeFile(path.join(commandsDirectory, `${unsafeSourceName}.md`), "unsafe\n");
+  const resolved = resolvedPlugin(directory, [`cmds/${unsafeSourceName}.md`]);
+  const nameErrorMessage = `invalid command source "${unsafeSourceName}" in "${commandsDirectory}"`;
+  const expectedDiscovery = {
+    discovered: [],
+    warnings: [
+      `${nameErrorMessage} -- cause: ${nameErrorMessage} -> command path segment in "${unsafeSourceName}" "${unsafeSourceName}" must not contain ASCII control characters.; skipping file.`,
+    ],
+  };
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
+});
+
+test("D-CF3-05 propagates a non-tolerated error when a declared path cannot be classified", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-declared-loop-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const loopPath = path.join(directory, "loop");
+  const declaredPath = path.join(loopPath, "a.md");
+  await symlink(loopPath, loopPath);
+  const resolved = resolvedPlugin(directory, ["loop/a.md"]);
+
+  // act & assert
+  await assert.rejects(
+    () => discoverPluginCommands({ pluginName: "acme", resolved }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        {
+          name: error.name,
+          message: error.message,
+          code: (error as NodeJS.ErrnoException).code,
+          path: (error as NodeJS.ErrnoException).path,
+          syscall: (error as NodeJS.ErrnoException).syscall,
+        },
+        {
+          name: "Error",
+          message: `ELOOP: too many symbolic links encountered, lstat '${declaredPath}'`,
+          code: "ELOOP",
+          path: declaredPath,
+          syscall: "lstat",
+        },
+      );
+      return true;
+    },
+  );
 });
 
 test("returns an empty frozen inventory when the plugin declares no command roots", async (t) => {
@@ -201,7 +406,9 @@ test("skips dot entries and symlinks without following their targets", async (t)
   await symlink(outsideDirectory, path.join(commandsDirectory, "linked"));
   const resolved = resolvedPlugin(directory, ["commands"]);
   const expectedDiscovery = {
-    discovered: [{ sourceName: "good", generatedName: "acme:good", commandFile: goodPath }],
+    discovered: [
+      { kind: "file", sourceName: "good", generatedName: "acme:good", commandFile: goodPath },
+    ],
     warnings: [
       `command subdirectory ".hidden" in "${commandsDirectory}" is dotfile-prefixed; skipping subdirectory.`,
       `command subdirectory "linked" in "${commandsDirectory}" is a symlink; skipping subdirectory.`,
@@ -229,6 +436,7 @@ test("keeps the first command when plugin-prefix elision creates a duplicate nam
   const expectedDiscovery = {
     discovered: [
       {
+        kind: "file",
         sourceName: "acme-tools/lint",
         generatedName: "acme:tools:lint",
         commandFile: winningPath,
@@ -259,6 +467,7 @@ test("uses depth-first order as the first-wins tiebreak for flat and nested name
   const expectedDiscovery = {
     discovered: [
       {
+        kind: "file",
         sourceName: "build/web",
         generatedName: "acme:build:web",
         commandFile: winningPath,
@@ -288,6 +497,7 @@ test("keeps one source file reached through overlapping command roots without wa
   const expectedDiscovery = {
     discovered: [
       {
+        kind: "file",
         sourceName: "build/web",
         generatedName: "acme:build:web",
         commandFile: commandPath,
@@ -333,7 +543,7 @@ for (const { description, relativePath, sourceName, generatedName } of [
     await writeFile(commandPath, "command\n");
     const resolved = resolvedPlugin(directory, ["commands"]);
     const expectedDiscovery = {
-      discovered: [{ sourceName, generatedName, commandFile: commandPath }],
+      discovered: [{ kind: "file", sourceName, generatedName, commandFile: commandPath }],
       warnings: [],
     };
 
@@ -358,7 +568,9 @@ test("skips an unsafe command name and reports its complete cause chain", async 
   const resolved = resolvedPlugin(directory, ["commands"]);
   const nameErrorMessage = `invalid command source "${unsafeSourceName}" in "${commandsDirectory}"`;
   const expectedDiscovery = {
-    discovered: [{ sourceName: "good", generatedName: "acme:good", commandFile: goodPath }],
+    discovered: [
+      { kind: "file", sourceName: "good", generatedName: "acme:good", commandFile: goodPath },
+    ],
     warnings: [
       `${nameErrorMessage} -- cause: ${nameErrorMessage} -> command path segment in "${unsafeSourceName}" "${unsafeSourceName}" must not contain ASCII control characters.; skipping file.`,
     ],
@@ -387,7 +599,14 @@ test("skips an unreadable command subdirectory and reports the filesystem error"
   await chmod(lockedDirectory, 0o000);
   const resolved = resolvedPlugin(directory, ["commands"]);
   const expectedDiscovery = {
-    discovered: [{ sourceName: "readable", generatedName: "acme:readable", commandFile: goodPath }],
+    discovered: [
+      {
+        kind: "file",
+        sourceName: "readable",
+        generatedName: "acme:readable",
+        commandFile: goodPath,
+      },
+    ],
     warnings: [
       `command subdirectory "locked" in "${commandsDirectory}" cannot be read: EACCES: permission denied, scandir '${lockedDirectory}'; skipping subdirectory.`,
     ],
@@ -417,7 +636,14 @@ test("skips a command file whose metadata is unreadable and reports the filesyst
   await chmod(unreadableDirectory, 0o444);
   const resolved = resolvedPlugin(directory, ["commands"]);
   const expectedDiscovery = {
-    discovered: [{ sourceName: "readable", generatedName: "acme:readable", commandFile: goodPath }],
+    discovered: [
+      {
+        kind: "file",
+        sourceName: "readable",
+        generatedName: "acme:readable",
+        commandFile: goodPath,
+      },
+    ],
     warnings: [
       `command file "readable-only/hidden.md" in "${commandsDirectory}" cannot be read: EACCES: permission denied, lstat '${unreadablePath}'; skipping file.`,
     ],
@@ -492,7 +718,7 @@ test("propagates a non-tolerated error when a discovered subdirectory becomes a 
       }
 
       completedFilesystemRequests += 1;
-      if (completedFilesystemRequests === 1) {
+      if (completedFilesystemRequests === 2) {
         hook.disable();
         renameSync(volatileDirectory, displacedDirectory);
         symlinkSync(volatileDirectory, volatileDirectory, "dir");
@@ -553,7 +779,7 @@ test("propagates a non-tolerated error when a discovered file gains a looping pa
       }
 
       completedFilesystemRequests += 1;
-      if (completedFilesystemRequests === 2) {
+      if (completedFilesystemRequests === 3) {
         hook.disable();
         renameSync(volatileDirectory, displacedDirectory);
         symlinkSync(volatileDirectory, volatileDirectory, "dir");
@@ -587,4 +813,448 @@ test("propagates a non-tolerated error when a discovered file gains a looping pa
       return true;
     },
   );
+});
+
+test("D-CF3-03 names each command map source file after its key", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-map-names-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const cmds = path.join(directory, "cmds");
+  await mkdir(cmds, { recursive: true });
+  await writeFile(path.join(cmds, "alpha.md"), "alpha\n");
+  await writeFile(path.join(cmds, "web.md"), "web\n");
+  await writeFile(path.join(cmds, "deploy.md"), "deploy\n");
+  await writeFile(path.join(cmds, "lint.md"), "lint\n");
+  const resolved = resolvedPlugin(
+    directory,
+    [],
+    [
+      sourceEntry("alpha", "cmds/alpha.md"),
+      sourceEntry("build/web", "cmds/web.md"),
+      sourceEntry("Deploy", "cmds/deploy.md"),
+      sourceEntry("acme-lint", "cmds/lint.md"),
+    ],
+  );
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      {
+        kind: "file",
+        sourceName: "alpha",
+        generatedName: "acme:alpha",
+        commandFile: path.join(cmds, "alpha.md"),
+      },
+      {
+        kind: "file",
+        sourceName: "build/web",
+        generatedName: "acme:build:web",
+        commandFile: path.join(cmds, "web.md"),
+      },
+      {
+        kind: "file",
+        sourceName: "Deploy",
+        generatedName: "acme:Deploy",
+        commandFile: path.join(cmds, "deploy.md"),
+      },
+      {
+        kind: "file",
+        sourceName: "acme-lint",
+        generatedName: "acme:lint",
+        commandFile: path.join(cmds, "lint.md"),
+      },
+    ],
+    warnings: [],
+  });
+});
+
+for (const { key, shownKey, reason } of [
+  { key: "trail:", shownKey: "trail:", reason: 'ends with ":"' },
+  { key: "<angle>", shownKey: "<angle>", reason: 'holds "<" or ">"' },
+  { key: "right>", shownKey: "right>", reason: 'holds "<" or ">"' },
+  { key: "has space", shownKey: "has space", reason: "holds whitespace" },
+  { key: "tab\tkey", shownKey: String.raw`tab\u{9}key`, reason: "holds whitespace" },
+  {
+    key: `zero${String.fromCodePoint(0x200b)}width`,
+    shownKey: String.raw`zero\u{200B}width`,
+    reason: "holds a hidden or direction-changing character",
+  },
+  {
+    key: `bidi${String.fromCodePoint(0x202e)}flip`,
+    shownKey: String.raw`bidi\u{202E}flip`,
+    reason: "holds a hidden or direction-changing character",
+  },
+  {
+    key: "a/../b",
+    shownKey: "a/../b",
+    reason: 'cannot name a command (command path segment in "a/../b" must not be "." or "..")',
+  },
+  {
+    key: "bell\u0007",
+    shownKey: String.raw`bell\u{7}`,
+    reason: String.raw`cannot name a command (command path segment in "bell\u{7}" "bell\u{7}" must not contain ASCII control characters)`,
+  },
+]) {
+  test(`D-CF3-03 skips the command map key ${shownKey} with a warning`, async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(tmpdir(), "command-discover-map-key-"));
+    t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+    const commandPath = path.join(directory, "cmds", "a.md");
+    await mkdir(path.dirname(commandPath), { recursive: true });
+    await writeFile(commandPath, "a\n");
+    const resolved = resolvedPlugin(directory, [], [sourceEntry(key, "cmds/a.md")]);
+
+    // act
+    const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+    // assert
+    assert.deepStrictEqual(discovery, {
+      discovered: [],
+      warnings: [`command map entry "${shownKey}" ${reason}; skipping entry.`],
+    });
+  });
+}
+
+test("D-CF3-03 skips each command map source that is not a command file with a warning", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-map-source-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const cmds = path.join(directory, "cmds");
+  await mkdir(cmds, { recursive: true });
+  await writeFile(path.join(cmds, "notes.txt"), "notes\n");
+  await writeFile(path.join(cmds, ".hidden.md"), "hidden\n");
+  await writeFile(path.join(directory, "real.md"), "real\n");
+  await symlink(path.join(directory, "real.md"), path.join(cmds, "linked.md"));
+  const resolved = resolvedPlugin(
+    directory,
+    [],
+    [
+      sourceEntry("missing", "cmds/missing.md"),
+      sourceEntry("text", "cmds/notes.txt"),
+      sourceEntry("hidden", "cmds/.hidden.md"),
+      sourceEntry("linked", "cmds/linked.md"),
+      sourceEntry("under-file", "real.md/child.md"),
+    ],
+  );
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [],
+    warnings: [
+      `command map entry "missing" names "cmds/missing.md", which does not exist; skipping entry.`,
+      `command map entry "text" names "cmds/notes.txt", which is not a markdown file; skipping entry.`,
+      `command map entry "hidden" names "cmds/.hidden.md", which is dotfile-prefixed; skipping entry.`,
+      `command map entry "linked" names "cmds/linked.md", which is a symlink; skipping entry.`,
+      `command map entry "under-file" names "real.md/child.md", which does not exist; skipping entry.`,
+    ],
+  });
+});
+
+test("D-CF3-03 walks a command map directory source and ignores its key", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-map-dir-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const topPath = path.join(directory, "more", "b.md");
+  const nestedPath = path.join(directory, "more", "sub", "x.md");
+  await mkdir(path.dirname(nestedPath), { recursive: true });
+  await writeFile(topPath, "b\n");
+  await writeFile(nestedPath, "x\n");
+  const resolved = resolvedPlugin(directory, [], [sourceEntry("trail:", "more")]);
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      { kind: "file", sourceName: "b", generatedName: "acme:b", commandFile: topPath },
+      { kind: "file", sourceName: "sub/x", generatedName: "acme:sub:x", commandFile: nestedPath },
+    ],
+    warnings: [],
+  });
+});
+
+test("D-CF3-03 skips a second command map key on one file with a warning naming the first", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-map-same-file-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const commandPath = path.join(directory, "cmds", "a.md");
+  await mkdir(path.dirname(commandPath), { recursive: true });
+  await writeFile(commandPath, "a\n");
+  const resolved = resolvedPlugin(
+    directory,
+    [],
+    [sourceEntry("one", "cmds/a.md"), sourceEntry("two", "./cmds/a.md")],
+  );
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      { kind: "file", sourceName: "one", generatedName: "acme:one", commandFile: commandPath },
+    ],
+    warnings: [
+      `command map entry "two" names "cmds/a.md", already loaded as command source "one"; skipping entry.`,
+    ],
+  });
+});
+
+test("D-CF3-03 gives a declared path's command precedence over a command map key", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-map-order-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const folderPath = path.join(directory, "commands", "alpha.md");
+  const mappedPath = path.join(directory, "cmds", "other.md");
+  await mkdir(path.dirname(folderPath), { recursive: true });
+  await mkdir(path.dirname(mappedPath), { recursive: true });
+  await writeFile(folderPath, "alpha\n");
+  await writeFile(mappedPath, "other\n");
+  const resolved = resolvedPlugin(
+    directory,
+    ["commands"],
+    [sourceEntry("alpha", "cmds/other.md"), sourceEntry("again", "commands/alpha.md")],
+  );
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      { kind: "file", sourceName: "alpha", generatedName: "acme:alpha", commandFile: folderPath },
+    ],
+    warnings: [
+      `command map entry "alpha" elides to generated name "acme:alpha", already produced by command source "alpha"; skipping entry.`,
+      `command map entry "again" names "commands/alpha.md", already loaded as command source "alpha"; skipping entry.`,
+    ],
+  });
+});
+
+test("WR-02 names a command map key after a folder file whose elided name lost to another file", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-map-lost-name-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const commandsDirectory = path.join(directory, "commands");
+  const winningPath = path.join(commandsDirectory, "acme-lint.md");
+  const losingPath = path.join(commandsDirectory, "lint.md");
+  await mkdir(commandsDirectory, { recursive: true });
+  await writeFile(winningPath, "winner\n");
+  await writeFile(losingPath, "lint\n");
+  const resolved = resolvedPlugin(
+    directory,
+    ["commands"],
+    [{ key: "check", source: "commands/lint.md", origin: "entry" }],
+  );
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      {
+        kind: "file",
+        sourceName: "acme-lint",
+        generatedName: "acme:lint",
+        commandFile: winningPath,
+      },
+      { kind: "file", sourceName: "check", generatedName: "acme:check", commandFile: losingPath },
+    ],
+    warnings: [
+      `command source "lint" in "${commandsDirectory}" elides to generated name "acme:lint", already produced by command source "acme-lint"; ignoring duplicate.`,
+    ],
+  });
+});
+
+test("WR-02 loads a file under an overlapping command root after its name at the first root lost", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-overlap-lost-name-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const commandsDirectory = path.join(directory, "commands");
+  const winningPath = path.join(commandsDirectory, "acme-build", "web.md");
+  const losingPath = path.join(commandsDirectory, "build", "web.md");
+  await mkdir(path.dirname(winningPath), { recursive: true });
+  await mkdir(path.dirname(losingPath), { recursive: true });
+  await writeFile(winningPath, "winner\n");
+  await writeFile(losingPath, "web\n");
+  const resolved = resolvedPlugin(directory, ["commands", "commands/build"]);
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      {
+        kind: "file",
+        sourceName: "acme-build/web",
+        generatedName: "acme:build:web",
+        commandFile: winningPath,
+      },
+      { kind: "file", sourceName: "web", generatedName: "acme:web", commandFile: losingPath },
+    ],
+    warnings: [
+      `command source "build/web" in "${commandsDirectory}" elides to generated name "acme:build:web", already produced by command source "acme-build/web"; ignoring duplicate.`,
+    ],
+  });
+});
+
+test("D-CF3-03 discovers a plugin manifest's inline command map entry with its overrides", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-map-inline-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const commandPath = path.join(directory, "cmds", "alpha.md");
+  await mkdir(path.dirname(commandPath), { recursive: true });
+  await writeFile(commandPath, "alpha\n");
+  const resolved = resolvedPlugin(
+    directory,
+    [],
+    [
+      {
+        key: "beta",
+        content: "Beta body",
+        origin: "manifest",
+        description: "Beta.",
+        argumentHint: "<target>",
+        model: "opus",
+      },
+      { key: "alpha", source: "cmds/alpha.md", origin: "manifest", model: "haiku" },
+      { key: "gamma", content: "Gamma body", origin: "manifest" },
+    ],
+  );
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      {
+        kind: "inline",
+        sourceName: "beta",
+        generatedName: "acme:beta",
+        content: "Beta body",
+        overrides: { description: "Beta.", argumentHint: "<target>", model: "opus" },
+      },
+      {
+        kind: "file",
+        sourceName: "alpha",
+        generatedName: "acme:alpha",
+        commandFile: commandPath,
+        overrides: { model: "haiku" },
+      },
+      { kind: "inline", sourceName: "gamma", generatedName: "acme:gamma", content: "Gamma body" },
+    ],
+    warnings: [],
+  });
+});
+
+test("D-CF3-04 drops a marketplace entry's inline command map entry with a warning", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-map-entry-inline-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const commandPath = path.join(directory, "extra", "gamma.md");
+  await mkdir(path.dirname(commandPath), { recursive: true });
+  await writeFile(commandPath, "gamma\n");
+  const resolved = resolvedPlugin(
+    directory,
+    [],
+    [
+      { key: "gamma", source: "extra/gamma.md", origin: "entry" },
+      { key: "delta", content: "Delta body", origin: "entry" },
+    ],
+  );
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      { kind: "file", sourceName: "gamma", generatedName: "acme:gamma", commandFile: commandPath },
+    ],
+    warnings: [
+      'command map entry "delta" sets "content", which a marketplace entry cannot declare; skipping entry.',
+    ],
+  });
+});
+
+test("D-CF3-03 skips an inline command map entry whose key cannot name a command", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-map-inline-key-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const resolved = resolvedPlugin(
+    directory,
+    [],
+    [{ key: "has space", content: "Body", origin: "manifest" }],
+  );
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [],
+    warnings: ['command map entry "has space" holds whitespace; skipping entry.'],
+  });
+});
+
+test("D-CF3-03 keeps the first of two inline commands that elide to one name", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-map-inline-clash-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const resolved = resolvedPlugin(
+    directory,
+    [],
+    [
+      { key: "lint", content: "First body", origin: "manifest" },
+      { key: "acme-lint", content: "Second body", origin: "manifest" },
+    ],
+  );
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      { kind: "inline", sourceName: "lint", generatedName: "acme:lint", content: "First body" },
+    ],
+    warnings: [
+      'command map entry "acme-lint" elides to generated name "acme:lint", already produced by command source "lint"; skipping entry.',
+    ],
+  });
+});
+
+test("D-CF3-03 ignores the overrides of a command map directory source", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-map-dir-overrides-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const commandPath = path.join(directory, "more", "b.md");
+  await mkdir(path.dirname(commandPath), { recursive: true });
+  await writeFile(commandPath, "b\n");
+  const resolved = resolvedPlugin(
+    directory,
+    [],
+    [{ key: "tools", source: "more", origin: "manifest", description: "Tools.", model: "opus" }],
+  );
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      { kind: "file", sourceName: "b", generatedName: "acme:b", commandFile: commandPath },
+    ],
+    warnings: [],
+  });
 });

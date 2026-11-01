@@ -4,14 +4,24 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
+import { mock, verify } from "strong-mock";
+
 import { unstagePluginCommands } from "../../../extensions/pi-claude-marketplace/bridges/commands/unstage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   PathContainmentError,
   SymlinkRefusedError,
 } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
+import type {
+  ProjectCommandChange,
+  ProjectCommandLedger,
+} from "../../../extensions/pi-claude-marketplace/bridges/commands/project-ledger.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+
+/** A ledger that accepts every change; the cases about the ledger build their own. */
+const projectLedger = { update: () => Promise.resolve() } satisfies ProjectCommandLedger;
 
 interface CommandScope {
   readonly directory: string;
@@ -44,6 +54,7 @@ test("removes the recorded prompts in order and preserves foreign prompt bytes",
   const unstagedCommands = await unstagePluginCommands({
     locations,
     previousCommandNames: ["acme:status", "acme:deploy"],
+    ledger: projectLedger,
   });
 
   // assert
@@ -64,6 +75,7 @@ test("returns an empty result when no prompt names were recorded", async (t) => 
   const unstagedCommands = await unstagePluginCommands({
     locations,
     previousCommandNames: [],
+    ledger: projectLedger,
   });
 
   // assert
@@ -82,10 +94,12 @@ test("makes repeated unstaging a missing-file fixed point", async (t) => {
   const firstUnstage = await unstagePluginCommands({
     locations,
     previousCommandNames: ["acme:once"],
+    ledger: projectLedger,
   });
   const replayedUnstage = await unstagePluginCommands({
     locations,
     previousCommandNames: ["acme:once"],
+    ledger: projectLedger,
   });
 
   // assert
@@ -106,6 +120,7 @@ test("keeps removal order when missing prompt names are interleaved", async (t) 
   const unstagedCommands = await unstagePluginCommands({
     locations,
     previousCommandNames: ["acme:second", "acme:missing", "acme:first"],
+    ledger: projectLedger,
   });
 
   // assert
@@ -134,6 +149,7 @@ test("rejects a traversal name without removing the escaped prompt", async (t) =
     await unstagePluginCommands({
       locations,
       previousCommandNames: ["../escape"],
+      ledger: projectLedger,
     });
   } catch (error) {
     containmentError = error;
@@ -180,6 +196,7 @@ test("refuses a symlinked prompt path without removing foreign bytes", async (t)
     await unstagePluginCommands({
       locations,
       previousCommandNames: ["linked/deploy"],
+      ledger: projectLedger,
     });
   } catch (error) {
     symlinkError = error;
@@ -232,6 +249,7 @@ test("rethrows an unlink failure after removing only earlier prompts", async (t)
     await unstagePluginCommands({
       locations,
       previousCommandNames: ["acme:removed", "acme:blocked", "acme:retained"],
+      ledger: projectLedger,
     });
   } catch (error) {
     unstageError = error;
@@ -256,4 +274,95 @@ test("rethrows an unlink failure after removing only earlier prompts", async (t)
     "acme:retained.md",
   ]);
   assert.strictEqual(await readFile(retainedPromptPath, "utf8"), "retained bytes\n");
+});
+
+test("D-CF3-07 forgets the unstaged names in the ledger of the project", async (t) => {
+  // arrange
+  const { directory, locations } = await createCommandScope(t, "commands-unstage-forget-");
+  await writeFile(path.join(locations.promptsTargetDir, "acme:greet.md"), "greet bytes\n");
+  const changes: ProjectCommandChange[] = [];
+  const ledger = {
+    update: (change) => {
+      changes.push(change);
+      return Promise.resolve();
+    },
+  } satisfies ProjectCommandLedger;
+
+  // act
+  const unstagedCommands = await unstagePluginCommands({
+    locations,
+    previousCommandNames: ["acme:greet", "acme:missing"],
+    ledger,
+  });
+
+  // assert
+  assert.deepStrictEqual(unstagedCommands, { removedNames: ["acme:greet"], warnings: [] });
+  assert.deepStrictEqual(await readdir(locations.promptsTargetDir), []);
+  assert.deepStrictEqual(changes, [
+    { projectPath: directory, forget: ["acme:greet", "acme:missing"], remember: new Map() },
+  ]);
+});
+
+test("D-CF3-07 a user-scope unstage leaves the project ledger alone", async (t) => {
+  // arrange
+  const { agentDir } = await createHermeticEnvironment(t, "commands-unstage-user-");
+  const locations = locationsFor("user", agentDir);
+  await mkdir(locations.promptsTargetDir, { recursive: true });
+  await writeFile(path.join(locations.promptsTargetDir, "acme:greet.md"), "greet bytes\n");
+  const ledger = mock<ProjectCommandLedger>({ exactParams: true, name: "project ledger" });
+
+  // act
+  const unstagedCommands = await unstagePluginCommands({
+    locations,
+    previousCommandNames: ["acme:greet"],
+    ledger,
+  });
+
+  // assert
+  assert.deepStrictEqual(unstagedCommands, { removedNames: ["acme:greet"], warnings: [] });
+  assert.deepStrictEqual(await readdir(locations.promptsTargetDir), []);
+  verify(ledger);
+});
+
+test("D-CF3-07 an unstage of no names leaves the project ledger alone", async (t) => {
+  // arrange
+  const { locations } = await createCommandScope(t, "commands-unstage-none-");
+  const ledger = mock<ProjectCommandLedger>({ exactParams: true, name: "project ledger" });
+
+  // act
+  const unstagedCommands = await unstagePluginCommands({
+    locations,
+    previousCommandNames: [],
+    ledger,
+  });
+
+  // assert
+  assert.deepStrictEqual(unstagedCommands, { removedNames: [], warnings: [] });
+  verify(ledger);
+});
+
+test("WR-04 reports a project ledger it could not update after removing the prompts", async (t) => {
+  // arrange
+  const { locations } = await createCommandScope(t, "commands-unstage-ledger-warning-");
+  await writeFile(path.join(locations.promptsTargetDir, "acme:greet.md"), "greet bytes\n");
+  const ledger = {
+    update: () => Promise.reject(new Error("the ledger holds content this version cannot update")),
+  } satisfies ProjectCommandLedger;
+
+  // act
+  const unstagedCommands = await unstagePluginCommands({
+    locations,
+    previousCommandNames: ["acme:greet"],
+    ledger,
+  });
+
+  // assert
+  assert.deepStrictEqual(unstagedCommands, {
+    removedNames: ["acme:greet"],
+    warnings: [
+      "could not remove the commands from the project skill ledger: the ledger holds content this version cannot update",
+    ],
+  });
+  assert.strictEqual(Object.isFrozen(unstagedCommands.warnings), true);
+  assert.deepStrictEqual(await readdir(locations.promptsTargetDir), []);
 });

@@ -1934,10 +1934,13 @@ async function buildNotInstallablePathRowFields(
  * arm, which (unlike `installable` / `partially-available`) does not carry
  * `componentPaths`. The info surface re-resolves independently from the
  * marketplace entry's declared component paths plus the conventional
- * `<pluginRoot>/<kind>` locations, under the strict resolver's D-CF1-06 rule:
- * `skills` always starts from `skills/`, and `commands`, `agents`, and
- * `workflows` start from their conventional folder only when the entry's
- * declaration for that kind is falsy, so a declared path replaces the folder.
+ * `<pluginRoot>/<kind>` locations, under the strict resolver's rules:
+ * `skills` always starts from `skills/` (D-CF1-06), and so does `commands`,
+ * because a marketplace entry's `commands` adds to `commands/` (D-CF3-04;
+ * the entry holds no `plugin.json` declaration, the one that replaces the
+ * folder). `agents` and `workflows` start from their conventional folder only
+ * when the entry's declaration for that kind is falsy, so a declared path
+ * replaces the folder (D-CF1-06).
  * `composeResolvedComponents` tolerates missing directories (ENOENT -> empty),
  * so a declared-but-absent or convention-absent directory contributes nothing.
  * This keeps the `(unavailable)`/`(installed)` path-source rows enumerating
@@ -1957,7 +1960,7 @@ function deriveLenientComponentPaths(entry: MarketplaceManifest["plugins"][numbe
   };
   for (const kind of ["skills", "commands", "agents", "workflows"] as const) {
     const declared = (entry as Record<string, unknown>)[kind];
-    if (kind === "skills" || !declared) {
+    if (kind === "skills" || kind === "commands" || !declared) {
       out[kind].push(kind);
     }
 
