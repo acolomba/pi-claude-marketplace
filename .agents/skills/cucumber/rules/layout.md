@@ -56,6 +56,66 @@ When behavioral coverage is split into streams of work that run in parallel, eac
 - A stream that needs a step the foundation did not provide defines it in its own verb module, with text that names its verb (D-08). When a second stream needs the same step, the step moves to a topic module in a follow-up commit of its own, never into the other stream's module.
 - The plugin topic modules live under `features/step_definitions/plugin/` and never take a verb name. These module names belong to the streams that own those verbs: `install`, `uninstall`, `enable`, `disable`, `update`, `reinstall`, `list`, `info`, `pending`, `reconcile`, `fetch`, `prune`, `import`, `bootstrap`, `browse`, `help`, `git-source`, `rollback`, and `state-lock` under `plugin/`, and `remove` under `marketplace/`.
 
+## Component features
+
+The component-features milestone covers the six component kinds of a plugin. Phase 1 builds the harness and seeds each kind. Then six component phases run in parallel, one session and one worktree for each kind. This section applies "Parallel work" to that milestone. It copies the "File ownership" section of `.planning/ROADMAP.md`.
+
+Every scenario expects Claude Code's behavior. A scenario pins a divergence from Claude Code only when a recorded decision ID or a Pi capability gap licenses it, and the scenario names that ID or gap.
+
+### Function directories
+
+Phase 1 creates one function directory for each kind (D-CF1-08). Each starts with its seed features, one fixture writer, and one topic step module. When Phase 1 merges, all three pass to the phase of that kind. The slash-command directory is `features/slash-command/`, because `command` already names `command.steps.ts`, the steps that run any `/claude:plugin` command. The MCP directory is `features/mcp-server/`, not `features/mcp/`.
+
+| Kind           | Function directory        | Seed features                                 | Fixture writer                        | Seed step module                                           |
+| -------------- | ------------------------- | --------------------------------------------- | ------------------------------------- | ---------------------------------------------------------- |
+| Skills         | `features/skill/`         | `invocation.feature`                          | `features/lib/skill-files.ts`         | `features/step_definitions/skill/invocation.steps.ts`      |
+| Slash commands | `features/slash-command/` | `listing.feature`                             | `features/lib/slash-command-files.ts` | `features/step_definitions/slash-command/listing.steps.ts` |
+| Agents         | `features/agent/`         | `invocation.feature`, `project-trust.feature` | `features/lib/agent-files.ts`         | `features/step_definitions/agent/runs.steps.ts`            |
+| Hooks          | `features/hook/`          | `tool-use.feature`                            | `features/lib/hook-files.ts`          | `features/step_definitions/hook/runs.steps.ts`             |
+| MCP servers    | `features/mcp-server/`    | `invocation.feature`                          | `features/lib/mcp-server-files.ts`    | `features/step_definitions/mcp-server/calls.steps.ts`      |
+| Workflows      | `features/workflow/`      | `run.feature`                                 | `features/lib/workflow-files.ts`      | `features/step_definitions/workflow/runs.steps.ts`         |
+
+### Frozen after Phase 1
+
+No component phase edits these files:
+
+- `features/support/world.ts`, which holds the profile Pi, the last model turn, and the uncompared-turn check, and `features/support/pi-process.ts`.
+- The harness libraries: `features/lib/pi-process.ts`, `features/lib/pi-commands.ts`, `features/lib/run-tokens.ts`, `features/lib/published-marketplace.ts`, `features/lib/companions.ts`, `features/lib/turn-records.ts`, `features/lib/scripted-model/`, `features/lib/pi-registry-probe/`, `features/lib/hook-recorder.ts`, `features/lib/mcp-stub-server.ts`, and the generic readers that slice JSONL logs and project tables.
+- The shared step modules: `command`, `session`, `config`, `git-host`, `mcp-configuration`, `model`, `companion`, `plugin/publishing`, and `marketplace/publishing`.
+- `test/e2e/_rpc.ts`, `cucumber.json`, `scripts/check-features.mjs`, and this skill, `.agents/skills/cucumber/**`.
+- `package.json`, `package-lock.json`, `scripts/install-test-peers.mjs`, `.github/workflows/ci.yml`, and `extensions/pi-claude-marketplace/platform/pi-api.ts`. Phase 1 widens every Pi event and API type that a kind needs, such as `session_compact` and the `new` and `fork` reasons.
+- The invocation cores, under `extensions/pi-claude-marketplace/`: `domain/argument-substitution.ts`, `domain/shell-words.ts`, `domain/context-injection.ts`, `domain/description-fallback.ts`, `domain/invocation-frontmatter.ts`, and `platform/prompt-shell.ts`. A phase that needs a change in a core reports it to the parent session and does not edit the core. The parent applies the change on the milestone branch, so every phase that uses the core merges the same fix.
+
+### What each component phase owns
+
+Step module paths are relative to `features/step_definitions/`, lib paths to `features/lib/`, and product paths to `extensions/pi-claude-marketplace/`, except the paths under `docs/` and `test/`.
+
+| Phase | Kind           | Feature files                                                     | Step modules                                     | Lib                      | Product                                                                                                                         |
+| ----- | -------------- | ----------------------------------------------------------------- | ------------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| 2     | Skills         | `features/skill/**`                                               | `skill/**`                                       | `skill-files.ts`         | `bridges/skills/**`, `edge/skill-aliases.ts`                                                                                    |
+| 3     | Slash commands | `features/slash-command/**`                                       | `slash-command/**`                               | `slash-command-files.ts` | `bridges/commands/**`, `edge/command-invocation.ts`                                                                             |
+| 4     | Agents         | `features/agent/**`                                               | `agent/**`                                       | `agent-files.ts`         | `bridges/agents/**`, `persistence/agents-index-*`                                                                               |
+| 5     | Hooks          | `features/hook/**`, `features/plugin/session-start-hooks.feature` | `hook/**`, `plugin/session-start-hooks.steps.ts` | `hook-files.ts`          | `bridges/hooks/**`, `domain/components/hook*`, `test/architecture/hooks-*.test.ts`, `docs/hooks-compatibility.md`               |
+| 6     | MCP servers    | `features/mcp-server/**`                                          | `mcp-server/**`                                  | `mcp-server-files.ts`    | `bridges/mcp/**`, `platform/mcp-status.ts`, `domain/mcp-resolution.ts`, `domain/components/mcp.ts`, `docs/mcp-compatibility.md` |
+| 7     | Workflows      | `features/workflow/**`                                            | `workflow/**`                                    | `workflow-files.ts`      | `bridges/workflows/**`, `platform/workflow-home.ts`, `domain/workflow-script.ts`, `docs/workflows-compatibility.md`             |
+
+Each component phase also owns the unit tests of its kind, `test/bridges/<kind>/**`, and its integration tests, `test/integration/<kind>-*`. Phase 1 creates `edge/command-invocation.ts` as a pass-through and registers it in `index.ts`, so no component phase edits `index.ts`.
+
+### Reserved names
+
+Phase 1 takes these module names. No component phase creates a module with one of them:
+
+- The libraries `features/lib/scripted-model/`, `features/lib/pi-registry-probe/`, `features/lib/hook-recorder.ts`, `features/lib/mcp-stub-server.ts`, `features/lib/companions.ts`, and `features/lib/turn-records.ts`.
+- The step modules `model` and `companion`.
+- The six step directories `skill/`, `slash-command/`, `agent/`, `hook/`, `mcp-server/`, and `workflow/` under `features/step_definitions/`, and the six fixture writers `features/lib/<kind>-files.ts`. Each passes to its kind's phase.
+
+A parameter type that a phase adds starts with the name of its kind. A step that a phase adds names its kind in its text, so two phases never define the same step text. This is the verb rule of D-08, applied to kinds.
+
+### Parent-owned files and cross-kind scenarios
+
+- No component phase edits `CHANGELOG.md`, `README.md`, `README.es.md`, the Key Decisions table of `.planning/PROJECT.md`, or `.planning/BACKLOG.md`. Each phase lists its lines for those files in its `SUMMARY.md`, and the parent session applies them when it merges the phase.
+- A scenario that uses two kinds belongs to exactly one phase. It uses the Phase 1 stand-ins and the frozen fixture writers, such as `published-marketplace.ts`, and never the lib file of another phase. XK-01, an agent that preloads a skill, belongs to Agents. MCP-07, an agent with an MCP tool, belongs to MCP Servers. HOOK-08, a hook on an MCP tool, belongs to Hooks.
+
 ## Boundaries
 
 - The `.steps.ts` suffix is mandatory for step modules, and only step modules use it: `cucumber.json` loads step modules by that suffix, so it is also how a reader tells which files register steps. A step module lives under `features/step_definitions/` only.

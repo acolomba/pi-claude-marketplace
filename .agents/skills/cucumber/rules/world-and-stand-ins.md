@@ -35,3 +35,44 @@ Part of the `cucumber` skill: `.agents/skills/cucumber/SKILL.md`.
 - The world records the source kind of each published marketplace, and the library code dispatches on it. A new source kind changes library code only, not the steps.
 - The official marketplace is recorded like any published marketplace: a github source on the git host. So every marketplace step works on it.
 - A driver may reuse a process harness from `test/` rather than copy it.
+
+## Profile Pis and the scripted model
+
+### The profile Pi and project trust
+
+- The run's shared Pi has no model and no companions. A scenario that needs either starts a profile Pi through a `Given`, which calls the profile method of the world. The profile Pi runs in the run's sandbox and becomes the Pi that the steps talk to. The scenario's release stops it together with its process group (D-CF1-15).
+- A profile Pi loads the real extension, the scripted model, the registry probe, and the companions that the step names. The world finds each companion through the `pi.extensions` entry of its `package.json` in the optional peer cache, and checks its version against the declared floor. It never hard-codes an entry path. The profile Pi runs with `TMPDIR` inside the sandbox home.
+- The profile Pi trusts the sandbox project through a persisted entry in `<agent dir>/trust.json`, the record that Pi saves when a user answers its trust prompt. It never uses `--approve` or `defaultProjectTrust` (D-CF1-07). An untrusted scenario starts a profile Pi with no entry.
+- Pi trusts a project that holds no trust-requiring resource, whatever `trust.json` says. So an untrusted scenario also writes `<project>/.pi/settings.json`, and the trusted scenario beside it holds the same file. Then only the trust entry differs between the two.
+- Approval of project MCP servers is a separate `Given` that writes the user-level `projectServers` setting of pi-mcp-adapter. It is never part of the default profile.
+
+### The scripted model
+
+- The scripted model is Pi's faux provider, loaded as a Pi extension from `features/lib/scripted-model/` (D-CF1-17). It reads the scenario's script from a file in the sandbox home. It counts the records in its own call log to find the next step, so the Pi of a child agent reads the same script. The script, the call log, and the count reset with the sandbox.
+- The scripted model records every call whole: the messages, the tools, and the system prompt.
+- The scripted model has no fallback reply. A call past the end of the script fails the turn, and a step that no call used fails the scenario.
+- A feature file writes the whole script as literals. A `Then` reads the call log, never the script, because a step that reads the script back proves nothing.
+
+### The model turn
+
+- The model-turn `When` sends the prompt. If Pi reports the `handled` disposition, no turn runs. Otherwise the step waits for `agent_settled` with `aborted: false` until a named deadline. It never sleeps for a fixed time.
+- The step keeps every record that the turn produced: RPC events, tool events, custom entries, notifies, and extension errors. It also keeps every line that the stand-ins logged during the turn.
+- A `Then` that reads the turn marks it compared. The world fails a scenario that otherwise passes when no step compared its last turn.
+- Pi queues a prompt sent during a turn as a follow-up. So a step never sends a second prompt before the first turn settles.
+
+### Stand-ins of the profile Pi
+
+- The registry probe is a Pi extension under `features/lib/pi-registry-probe/`. It reports Pi's tools, all of them and the active ones, and Pi's commands, as a custom entry.
+- The hook recorder, `features/lib/hook-recorder.ts`, runs as a hook command. It logs the event, the stdin, the arguments, and the `CLAUDE_*` environment of each run.
+- The MCP stub, `features/lib/mcp-stub-server.ts`, is a stdio JSON-RPC server with no dependencies. It logs every request, writes a pid file, and exits when its stdin closes.
+- These stand-ins are `.ts` files under `features/lib/`, never under `features/support/`, because cucumber imports `features/support/` into every worker (D-CF1-17). A Pi extension under `features/lib/` carries `// fallow-ignore-next-line unused-export -- Pi's --extension loader reads this default.` above its default export.
+- No step filters or deduplicates records. Since pi-mcp-adapter 6.0, a call through the `mcp` proxy runs the real tool as a nested Pi tool call. So a step lists both the `mcp` event and the event of the real tool.
+
+### Reset and CI
+
+- The reset asserts a clean baseline. After the profile Pi stops, every pid that a stand-in recorded is dead, and the script has no unused step. The `Before()` of the next scenario empties the sandbox.
+- The behavioral CI job runs as two path shards (D-CF1-16). The lifecycle shard runs `features/marketplace` and `features/plugin`, and the components shard runs the six function directories. `npm run check:features` dry-runs every scenario, so a shard hides no unused step.
+
+### Arguments that start with `!`
+
+- In a skill or a command, an argument word that starts with `!` reaches the model as `\!`, as in Claude Code (`xM`, D-CF1-01). A scenario that types such an argument states the backslash in its expected value. This is upstream parity, not a defect.
