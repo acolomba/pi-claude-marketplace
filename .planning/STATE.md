@@ -830,6 +830,12 @@ Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
   argument substitution, `` !`cmd` `` injection, description fallback, and
   dropped-field warnings. Phase 1 built the unwired cores; Phases 2 and 3
   wire them.
+- D-CF3-01..13 (Phase 3, child session, pending parent merge): commands are
+  wired to the Phase 1 cores in `edge/command-invocation.ts`; commands stay
+  invisible to the model (Pi gap); `user-invocable: false` stays listed; the
+  object-map `commands` form installs; a marketplace entry's `commands` adds
+  to `commands/`; project commands run only with a user-scope ledger entry.
+  Rows and parent lines: `03-09-SUMMARY.md`.
 - D-CF1-06: a declared `commands`, `agents`, or `workflows` path replaces the
   conventional folder; a declared `skills` path still adds (shipped).
 - D-CF1-09..12: `user-invocable: false` keeps today's behavior (gap reported

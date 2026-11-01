@@ -449,3 +449,24 @@ entries into it. Severity and status follow the root file's rules.
   4. The fixer's two commits carry its harness's `Claude-Session` trailer
      (`session_01EDUMG8nFuockQFTkJixpie`) rather than the parent's.
   5. The `--auto` re-review was limited to the two files the fixes touched.
+
+### P3-DC-23: Phase completion and transition choices
+
+- **Phase / source:** Phase 3 orchestrator (execute-phase `update_roadmap`,
+  transition in post-completion mode).
+- **Severity:** Low. **Status:** open.
+- **Items:**
+  1. The regression gate was satisfied by the full `npm run check` on the
+     final product tree `a041d22` (seed 843376, 1453 scenarios), which runs
+     every prior phase's tests; no separate prior-phase test list was built.
+  2. `phase.complete 3` reported nine "references files not on disk"
+     warnings; all are false positives (SUMMARY paths relative to the
+     extension root, and shell commands). It also advanced STATE.md's
+     position to Phase 2, as the tool does; the parent owns STATE.md at merge.
+  3. The transition's `evolve_project` step (PROJECT.md Validated line, Key
+     Decisions rows, footer) was not run here: PROJECT.md is parent-owned, so
+     those edits are parent lines in `03-09-SUMMARY.md`. STATE.md got one
+     Recent Decisions bullet; graduation scan found no LEARNINGS files.
+  4. Verification passed (5/5); the verifier relied on the orchestrator's
+     full-gate measurement and ran focused suites itself (cucumber seed
+     800431).
