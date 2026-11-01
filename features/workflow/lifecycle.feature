@@ -63,3 +63,85 @@ Feature: Workflow lifecycle
     Given the user has started a new pi session
     When the user runs the workflow command "/demo:hello"
     Then the workflow run ends with the status "completed" and the result "Hello from demo."
+
+  Scenario: Updating a plugin runs the new script of its workflow at once, because the engine reads the script when the command runs
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/hello.js" with this text:
+      """
+      export const meta = {name:"hello",description:"Says hello again."};
+
+      return "Hello 2.";
+      """
+    Given the user has run "/claude:plugin update demo@fixtures --scope user"
+    When the user runs the workflow command "/demo:hello"
+    Then the workflow run ends with the status "completed" and the result "Hello 2."
+
+  Scenario: The session that ran the update still lists the old description, because pi cannot change a command it already offers
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/hello.js" with this text:
+      """
+      export const meta = {name:"hello",description:"Says hello again."};
+
+      return "Hello 2.";
+      """
+    Given the user has run "/claude:plugin update demo@fixtures --scope user"
+    When the user lists the slash commands pi offers
+    Then pi offers these workflow commands:
+      | command     | description |
+      | /demo:hello | Says hello. |
+
+  Scenario: A new session after an update lists the new description of its workflow
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/hello.js" with this text:
+      """
+      export const meta = {name:"hello",description:"Says hello again."};
+
+      return "Hello 2.";
+      """
+    Given the user has run "/claude:plugin update demo@fixtures --scope user"
+    Given the user has started a new pi session
+    When the user lists the slash commands pi offers
+    Then pi offers these workflow commands:
+      | command     | description       |
+      | /demo:hello | Says hello again. |
+
+  Scenario: Updating to a version that renames the workflow reports that the old command lingers until a new session
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/hello.js" with this text:
+      """
+      export const meta = {name:"greet",description:"Greets."};
+
+      return "Hi.";
+      """
+    When the user runs "/claude:plugin update demo@fixtures --scope user"
+    Then the command reports these results:
+      | kind    | severity | needs reload | summary                             |
+      | cascade | warning  | true         | A plugin operation needs attention. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons                | scope | from  | to    |
+      | fixtures         | user              | demo@fixtures | demo | updated | stale workflow command | user  | 1.0.0 | 1.1.0 |
+
+  Scenario: A new session after a renaming update offers only the new workflow command
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/hello.js" with this text:
+      """
+      export const meta = {name:"greet",description:"Greets."};
+
+      return "Hi.";
+      """
+    Given the user has run "/claude:plugin update demo@fixtures --scope user", which warned
+    Given the user has started a new pi session
+    When the user lists the slash commands pi offers
+    Then pi offers these workflow commands:
+      | command     | description |
+      | /demo:greet | Greets.     |
