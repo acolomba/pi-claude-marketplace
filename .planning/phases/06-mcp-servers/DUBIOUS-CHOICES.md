@@ -130,3 +130,11 @@ tooling. Status stays `open` until the user reviews it.
   14. 06-08 documents the skip rule while 06-07 builds it; 06-09 Task 1 checks the doc against merged code.
   15. 06-09's diff base is the fixed hash `3a7a707`, with a `git merge-base` fallback.
 - **Recorded in:** this file; the plans' `<assumption_delta_decision>` and task bodies.
+
+### P6-DC-09: Plan-checker warnings handled without a revision round
+
+- **Phase / source:** Phase 6 gsd-plan-checker (0 blockers, 2 warnings, 3 info).
+- **Severity:** Low. **Status:** open.
+- **Choice:** Warning 1 (MCP-07 and ROADMAP SC4 still ask for a working agent call) is fixed in place: 06-09 now carries a parent line to mark MCP-07 "gap-pinned (D-CF6-10)" and amend SC4, and its SUMMARY states SC4 is met by the pin. Warning 2 (commit trailer differs from the brief) is kept as decided in P6-DC-05. The three advisories are left as written: `calls.steps.ts` stays in both `files_modified` and `files_deleted`, the plans keep this session's scratchpad wrapper path (executors run in this session), and 06-09 Task 1 still reconciles 06-08's doc with 06-07's merged code. The checker rated MCP-07's gap a warning rather than a blocker because D-CF6-10 licenses it.
+- **Alternatives:** Re-spawn the planner for a revision round; edit REQUIREMENTS.md and ROADMAP SC4 in this phase.
+- **Recorded in:** `06-09-PLAN.md` Task 3 parent lines.
