@@ -8,8 +8,113 @@ import {
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import type { ClaudePluginVars } from "../../../extensions/pi-claude-marketplace/shared/vars.ts";
+
+const PATH_VARS = {
+  pluginRoot: "/p",
+  pluginData: "/d",
+  projectDir: "/w",
+} satisfies ClaudePluginVars;
+
+function execEntry(command: string, args: readonly unknown[]): RoutingEntry {
+  return {
+    scope: "project",
+    marketplace: "catalog",
+    pluginId: "exec-substitution",
+    resolvedSource: asAbsolutePluginRoot("/p"),
+    claudeEvent: "UserPromptSubmit",
+    matcher: { kind: "match-all" },
+    rawMatcher: "",
+    handlerDecl: { type: "command", command, args: [...args] },
+    declarationIndex: 0,
+    ifPredicate: { kind: "match-all" },
+  };
+}
 
 describe("planSpawn", () => {
+  test("fills Claude's three path variables into exec-form arguments and leaves other placeholders literal", () => {
+    // arrange
+    const entry = execEntry("/usr/bin/hook", [
+      "${CLAUDE_PLUGIN_ROOT}/bin",
+      "--data=${CLAUDE_PLUGIN_DATA}",
+      "${CLAUDE_PROJECT_DIR}",
+      "${user_config.token}",
+      "${HOME}",
+      "${CLAUDE_SKILL_DIR}",
+      7,
+    ]);
+
+    // act
+    const spawnPlan = planSpawn(entry, PATH_VARS);
+
+    // assert
+    assert.deepStrictEqual(spawnPlan, {
+      command: "/usr/bin/hook",
+      args: [
+        "/p/bin",
+        "--data=/d",
+        "/w",
+        "${user_config.token}",
+        "${HOME}",
+        "${CLAUDE_SKILL_DIR}",
+        "7",
+      ],
+      shell: false,
+    });
+  });
+
+  test("fills the path variables into an exec-form command with no arguments", () => {
+    // arrange
+    const entry = execEntry("${CLAUDE_PLUGIN_ROOT}/hooks/a.sh", []);
+
+    // act
+    const spawnPlan = planSpawn(entry, PATH_VARS);
+
+    // assert
+    assert.deepStrictEqual(spawnPlan, { command: "/p/hooks/a.sh", args: [], shell: false });
+  });
+
+  test("replaces each placeholder of one argument once and never rescans a spliced value", () => {
+    // arrange
+    const entry = execEntry("/usr/bin/hook", [
+      "${CLAUDE_PLUGIN_ROOT}:${CLAUDE_PLUGIN_DATA}",
+      "${CLAUDE_PLUGIN_ROOT}",
+      "two words",
+    ]);
+    const vars = { pluginRoot: "/root/${CLAUDE_PLUGIN_DATA}", pluginData: "/d" };
+
+    // act
+    const spawnPlan = planSpawn(entry, vars);
+
+    // assert
+    assert.deepStrictEqual(spawnPlan, {
+      command: "/usr/bin/hook",
+      args: ["/root/${CLAUDE_PLUGIN_DATA}:/d", "/root/${CLAUDE_PLUGIN_DATA}", "two words"],
+      shell: false,
+    });
+  });
+
+  test("leaves a shell-form command's placeholder text to the shell", () => {
+    // arrange
+    const entry = {
+      ...execEntry("echo ${CLAUDE_PLUGIN_ROOT} '${CLAUDE_PLUGIN_DATA}'", []),
+      handlerDecl: {
+        type: "command",
+        command: "echo ${CLAUDE_PLUGIN_ROOT} '${CLAUDE_PLUGIN_DATA}'",
+      },
+    } satisfies RoutingEntry;
+
+    // act
+    const spawnPlan = planSpawn(entry, PATH_VARS);
+
+    // assert
+    assert.deepStrictEqual(spawnPlan, {
+      command: "echo ${CLAUDE_PLUGIN_ROOT} '${CLAUDE_PLUGIN_DATA}'",
+      args: [],
+      shell: true,
+    });
+  });
+
   test("uses exec form and stringifies mixed primitive arguments when args are present", () => {
     // arrange
     const entry = {
@@ -31,7 +136,7 @@ describe("planSpawn", () => {
     } satisfies RoutingEntry;
 
     // act
-    const spawnPlan = planSpawn(entry);
+    const spawnPlan = planSpawn(entry, PATH_VARS);
 
     // assert
     assert.deepStrictEqual(spawnPlan, {
@@ -61,7 +166,7 @@ describe("planSpawn", () => {
     } satisfies RoutingEntry;
 
     // act
-    const spawnPlan = planSpawn(entry);
+    const spawnPlan = planSpawn(entry, PATH_VARS);
 
     // assert
     assert.deepStrictEqual(spawnPlan, {
@@ -90,7 +195,7 @@ describe("planSpawn", () => {
     } satisfies RoutingEntry;
 
     // act
-    const spawnPlan = planSpawn(entry);
+    const spawnPlan = planSpawn(entry, PATH_VARS);
 
     // assert
     assert.deepStrictEqual(spawnPlan, {
@@ -120,7 +225,7 @@ describe("planSpawn", () => {
     } satisfies RoutingEntry;
 
     // act
-    const spawnPlan = planSpawn(entry);
+    const spawnPlan = planSpawn(entry, PATH_VARS);
 
     // assert
     assert.deepStrictEqual(spawnPlan, {
@@ -148,7 +253,7 @@ describe("planSpawn", () => {
     } satisfies RoutingEntry;
 
     // act
-    const spawnPlan = planSpawn(entry);
+    const spawnPlan = planSpawn(entry, PATH_VARS);
 
     // assert
     assert.deepStrictEqual(spawnPlan, {
@@ -178,7 +283,7 @@ describe("planSpawn", () => {
     } satisfies RoutingEntry;
 
     // act
-    const spawnPlan = planSpawn(entry);
+    const spawnPlan = planSpawn(entry, PATH_VARS);
 
     // assert
     assert.deepStrictEqual(spawnPlan, {

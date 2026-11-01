@@ -70,7 +70,7 @@ function runRecord(
       ([key, value]) =>
         [STDIN_COLUMNS[key] ?? key.replaceAll("_", " "), cell(value, tokens, ordinals)] as const,
     ),
-    ["arguments", run.arguments.join(" ")],
+    ["arguments", projectTokens("text", run.arguments.join(" "), tokens)],
     ...Object.entries(run.environment).map(
       ([name, value]) => [name, cell(value, tokens, ordinals)] as const,
     ),

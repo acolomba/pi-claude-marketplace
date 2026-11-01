@@ -75,9 +75,15 @@ function hasExited(child: ChildLike): boolean {
  * MUST be called on the child's natural `exit` AND `error` events to
  * close the TOCTOU window against the SIGTERM/SIGKILL timers firing
  * against a recycled pid.
+ *
+ * `fired()` is `true` once the SIGTERM leg has signalled a child that was
+ * still running at its deadline, and `false` before that, after a `cancel()`
+ * that came first, and when the child had already exited. D-CF5-18 reads it to
+ * tell a hook its timeout killed from one that some other signal ended.
  */
 export interface TimerLadder {
   cancel(): void;
+  fired(): boolean;
 }
 
 /**
@@ -138,6 +144,7 @@ export function installTimerLadder(
   label: string,
 ): TimerLadder {
   const seconds = normalizeSeconds(timeoutSeconds, label);
+  let sigtermFired = false;
 
   let sigtermTimer: NodeJS.Timeout | null = setTimeout(() => {
     if (hasExited(child)) {
@@ -154,6 +161,7 @@ export function installTimerLadder(
     }
 
     hookDebugLog(`exec-timer: SIGTERM after ${seconds}s (${label})`);
+    sigtermFired = true;
     const sent = child.kill("SIGTERM");
     if (!sent) {
       hookDebugLog(`exec-timer: SIGTERM kill() returned false (${label})`);
@@ -189,6 +197,9 @@ export function installTimerLadder(
         clearTimeout(sigkillTimer);
         sigkillTimer = null;
       }
+    },
+    fired(): boolean {
+      return sigtermFired;
     },
   };
 }

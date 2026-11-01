@@ -92,6 +92,9 @@ function runtimeChildEntry(
     cancel(): void {
       calls.push(`cancel:${dispatchId}`);
     },
+    fired(): boolean {
+      return false;
+    },
   } satisfies TimerLadder;
 
   return {
