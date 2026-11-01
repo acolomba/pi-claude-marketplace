@@ -2,8 +2,8 @@
 phase: "6"
 slug: "mcp-servers"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
-status: draft
-nyquist_compliant: false
+status: validated
+nyquist_compliant: true
 wave_0_complete: true
 created: "2026-11-01"
 ---
@@ -39,14 +39,14 @@ created: "2026-11-01"
 
 | Requirement | Behavior | Test Type | Automated Command | File Exists | Status |
 |-------------|----------|-----------|-------------------|-------------|--------|
-| MCP-01 | search returns `mcp__plugin_demo_stub__echo`; negative control: call 1 lacks it | cucumber | `npx cucumber-js features/mcp-server/listing.feature` | ❌ W1 | ⬜ pending |
-| MCP-02 | proxy call args reach the stub, result returned | cucumber | `npx cucumber-js features/mcp-server/invocation.feature` | ✅ seed | ⬜ pending |
-| MCP-03 | root/data/`${VAR}` reach the stub; loopback HTTP with headers | cucumber + unit | `npx cucumber-js features/mcp-server/configuration.feature` | ❌ W2 | ⬜ pending |
-| MCP-04 | merge order, file-source malformed skipped silently, inline malformed `{malformed mcp}`, `.mcpb` `{unsupported mcp}` (red proof first) | cucumber + unit | `node --test test/domain/mcp-resolution.test.ts` | ❌ W2 | ⬜ pending |
-| MCP-05 | trusted+allow connects; trusted without allow and untrusted blocked (literal texts) | cucumber | `npx cucumber-js features/mcp-server/project-scope.feature` | ❌ W1/W2 | ⬜ pending |
-| MCP-06 | `{requires pi-mcp-adapter}`; later adapter reaches the server, no reinstall | cucumber | `npx cucumber-js features/mcp-server/companion-missing.feature` | ❌ W2 | ⬜ pending |
-| MCP-07 | foreground agent result pinned (D-CF6-10 gap); stub has no `tools/call` | cucumber | `npx cucumber-js features/mcp-server/invocation.feature` | ❌ W2 | ⬜ pending |
-| MCP-08 | disable/uninstall unreachable; update replaces; override survives | cucumber | `npx cucumber-js features/mcp-server/lifecycle.feature` | ❌ W2 | ⬜ pending |
+| MCP-01 | search returns `mcp__plugin_demo_stub__echo`; negative controls (no server, no match) | cucumber | `npx cucumber-js features/mcp-server/listing.feature` | ✅ | ✅ green |
+| MCP-02 | proxy and direct calls reach the stub; an unlisted tool is never sent | cucumber | `npx cucumber-js features/mcp-server/invocation.feature` | ✅ | ✅ green |
+| MCP-03 | env, `${VAR}`, `${VAR:-default}`, plugin path variables reach the stub; loopback HTTP headers, OAuth, unset header | cucumber + unit | `npx cucumber-js features/mcp-server/configuration.feature` | ✅ | ✅ green |
+| MCP-04 | merge order, array and entry rules, `.mcpb` `{unsupported mcp}`; file-source defects skipped silently, inline and escaping refused (red proofs recorded) | cucumber + unit | `npx cucumber-js features/mcp-server/sources.feature features/mcp-server/invalid-configs.feature`; `node --test test/domain/mcp-resolution.test.ts` | ✅ | ✅ green |
+| MCP-05 | trusted+allow connects; trusted without allow and untrusted blocked; info `pending approval` | cucumber | `npx cucumber-js features/mcp-server/project-scope.feature` | ✅ | ✅ green |
+| MCP-06 | `{requires pi-mcp-adapter}`; later adapter reaches the server with no reinstall; info status | cucumber | `npx cucumber-js features/mcp-server/companion-missing.feature` | ✅ | ✅ green |
+| MCP-07 | foreground agent result pinned (D-CF6-10 gap); stub gets no `tools/call`; no-tools agent gets no MCP tool | cucumber | `npx cucumber-js features/mcp-server/invocation.feature` | ✅ | ✅ green (gap pinned) |
+| MCP-08 | disable/uninstall remove the server; enable restores; update replaces (no-update control); user `disabled` override survives | cucumber | `npx cucumber-js features/mcp-server/lifecycle.feature` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -66,11 +66,19 @@ All phase behaviors have automated verification.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 180s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 180s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-11-01 (phase gate: `npm run check` seed 961879, `test:cucumber` seeds 512508 and 920909, all 1268 scenarios green)
+
+## Validation Audit 2026-11-01
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
