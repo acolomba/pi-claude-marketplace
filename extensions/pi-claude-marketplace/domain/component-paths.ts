@@ -41,6 +41,16 @@ export interface ComponentPathResolution {
   supported: string[];
   notes: string[];
   componentPaths: { skills: string[]; commands: string[]; agents: string[]; workflows: string[] };
+  /** D-CF1-06: kinds whose existing conventional folder a declaration leaves unread. */
+  shadowedFolders?: string[];
+}
+
+/**
+ * D-CF1-06: the warning for a conventional folder a declaration leaves
+ * unread, in Claude Code's user-facing wording.
+ */
+export function shadowedFolderWarning(kind: string): string {
+  return `Default ${kind}/ folder is ignored because the manifest sets "${kind}"`;
 }
 
 // An empty string declares nothing, as `null` does: Claude Code 2.1.316 loads
@@ -143,6 +153,16 @@ function conventionalFolderApplies(
   return kind === "skills" || (!entryRaw && !manifestRaw);
 }
 
+/**
+ * D-CF1-06: whether a collected declared path is the conventional folder or
+ * lies inside it, which Claude Code 2.1.316 counts as reading the folder.
+ */
+function declaredPathReachesFolder(declared: readonly string[], kind: ComponentPathKind): boolean {
+  return declared.some(
+    (relative) => relative === kind || relative.startsWith(`${kind}${path.sep}`),
+  );
+}
+
 async function collectStrictComponentKind(
   entry: PluginEntry,
   manifest: Record<string, unknown> | null,
@@ -162,11 +182,12 @@ async function collectStrictComponentKind(
       (await addValidatedComponentPath(resolution, kind, seenPaths, raw, pluginRoot)) || dirty;
   }
 
-  if (
-    conventionalFolderApplies(kind, entryRaw, manifestRaw) &&
-    (await statKind(path.join(pluginRoot, kind))) === "dir"
-  ) {
-    addComponentPath(resolution, kind, seenPaths, kind);
+  if ((await statKind(path.join(pluginRoot, kind))) === "dir") {
+    if (conventionalFolderApplies(kind, entryRaw, manifestRaw)) {
+      addComponentPath(resolution, kind, seenPaths, kind);
+    } else if (!declaredPathReachesFolder(resolution.componentPaths[kind], kind)) {
+      resolution.shadowedFolders = [...(resolution.shadowedFolders ?? []), kind];
+    }
   }
 
   if (resolution.componentPaths[kind].length > 0) {

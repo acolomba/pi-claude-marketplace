@@ -162,6 +162,8 @@ function materializableFields(
     unsupported: partial.unsupported,
     notes: partial.notes,
     componentPaths: partial.componentPaths,
+    // D-CF1-06: component-path collection creates the list only to add a kind.
+    ...(partial.shadowedFolders !== undefined && { shadowedFolders: partial.shadowedFolders }),
     mcpServers: partial.mcpServers,
     ...(partial.hooksConfigPath !== undefined && { hooksConfigPath: partial.hooksConfigPath }),
     ...(partial.orphanRewake !== undefined && { orphanRewake: partial.orphanRewake }),

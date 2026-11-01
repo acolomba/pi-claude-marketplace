@@ -2374,6 +2374,8 @@ for (const kind of ["commands", "agents", "workflows"] as const) {
         state: resolvedPlugin.state,
         componentPaths:
           resolvedPlugin.state === "installable" ? resolvedPlugin.componentPaths : undefined,
+        shadowedFolders:
+          resolvedPlugin.state === "installable" ? resolvedPlugin.shadowedFolders : undefined,
       },
       {
         state: "installable",
@@ -2384,10 +2386,32 @@ for (const kind of ["commands", "agents", "workflows"] as const) {
           workflows: [],
           [kind]: ["custom"],
         },
+        shadowedFolders: [kind],
       },
     );
   });
 }
+
+test("D-CF1-06 a plugin whose declarations leave no folder unread carries no shadowed folders", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "commands")]: "dir",
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      state: resolvedPlugin.state,
+      hasShadowedFolders: "shadowedFolders" in resolvedPlugin,
+    },
+    { state: "installable", hasShadowedFolders: false },
+  );
+});
 
 // ──────────────────────────────────────────────────────────────────────────
 // RESV-01: a dependencies declaration is resolved, never noted

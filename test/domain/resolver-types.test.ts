@@ -74,6 +74,11 @@ const unavailableWithExtraField = {
   pluginRoot: "/must-not-leak",
 };
 void (unavailableWithExtraField satisfies ResolvedPlugin);
+// D-CF1-06: a materializable arm may name the folders a declaration leaves unread.
+void ({ ...installableExample, shadowedFolders: ["commands"] } satisfies ResolvedPlugin);
+void ({ ...partialExample, shadowedFolders: ["agents", "workflows"] } satisfies ResolvedPlugin);
+// @ts-expect-error the shadowed folders are kind names.
+void ({ ...installableExample, shadowedFolders: [1] } satisfies ResolvedPlugin);
 // @ts-expect-error the resolver's state set is closed.
 void ({ ...unavailableExample, state: "unknown" } satisfies ResolvedPlugin);
 // @ts-expect-error installable and state discriminants must agree.

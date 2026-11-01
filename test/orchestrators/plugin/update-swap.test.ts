@@ -931,6 +931,67 @@ test("D-PL1-14: a phase-3 failure puts every handle's warnings on its failed out
   });
 });
 
+test("D-CF1-06: a swap to a version whose declared commands path leaves commands/ unread warns before the bridges", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-shadowed-folder-");
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: {
+      hello: {
+        version: "2.0.0",
+        hasSkill: false,
+        hasCommand: true,
+        agents: [
+          { sourceName: "first", frontmatterName: "helper", description: "First" },
+          { sourceName: "second", frontmatterName: "helper", description: "Second" },
+        ],
+      },
+    },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "hello", version: "2.0.0", commands: "./custom" }),
+  );
+  await mkdir(path.join(pluginRoot, "custom"), { recursive: true });
+  const agentsDir = path.join(pluginRoot, "agents");
+  const args = directSwapArgs(cwd);
+  const preflight = await preflightOf(args);
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "updated",
+    resourcesChanged: true,
+    name: "hello",
+    fromVersion: "1.0.0",
+    toVersion: "2.0.0",
+    stagedAgentNames: ["pi-claude-marketplace-hello-helper"],
+    stagedMcpServerNames: [],
+    declaresAgents: true,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+    stagingWarnings: [
+      {
+        kind: "discovery",
+        message: 'Default commands/ folder is ignored because the manifest sets "commands"',
+      },
+      {
+        kind: "discovery",
+        message: `agent source "helper" at "${path.join(agentsDir, "second.md")}" duplicates generated name "pi-claude-marketplace-hello-helper" already produced by agent source "helper" at "${path.join(agentsDir, "first.md")}"; keeping first discovered source.`,
+      },
+    ],
+  });
+});
+
 test("NREG-01: a clean swap's updated outcome has neither stagingWarnings nor notes", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "update-swap-clean-warnings-");

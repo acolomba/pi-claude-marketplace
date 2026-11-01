@@ -92,6 +92,7 @@ import {
   commitPreparedWorkflows,
   prepareStageWorkflows,
 } from "../../bridges/workflows/index.ts";
+import { shadowedFolderWarning } from "../../domain/component-paths.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -110,6 +111,7 @@ import { createRemovalOps, type RemovalOps } from "../../shared/fs-utils.ts";
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { ownValue } from "../../shared/own-key.ts";
+import { discoveryWarning } from "../../shared/staging-warnings.ts";
 import {
   withStateGuard,
   type LockedStateTransactionDeps,
@@ -476,6 +478,16 @@ function collectUpdateWarnings(handles: Partial<PrepHandles>): readonly StagingW
     handles.workflows,
   ];
   return Object.freeze(ordered.flatMap((handle) => handle?.result.warnings ?? []));
+}
+
+/**
+ * D-CF1-06: one discovery warning for each conventional folder the new
+ * version's declarations leave unread, so update and reinstall name it.
+ */
+function shadowedFolderWarnings(installable: MaterializablePlugin): readonly StagingWarning[] {
+  return (installable.shadowedFolders ?? []).map((kind) =>
+    discoveryWarning(shadowedFolderWarning(kind)),
+  );
 }
 
 async function abortPartialHandles(
@@ -1607,7 +1619,10 @@ export async function swapPluginUpdate(
     preflight.record.resources.workflows,
     handles.workflows.result.stagedNames,
   );
-  const stagingWarnings = collectUpdateWarnings(handles);
+  const stagingWarnings = [
+    ...shadowedFolderWarnings(installable),
+    ...collectUpdateWarnings(handles),
+  ];
   await dropPluginCompletionCache(args);
 
   return {
