@@ -27,7 +27,7 @@ See: `.planning/PROJECT.md` (updated 2026-11-01 after Phase 1)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 5 — Hooks
+**Current focus:** Phase 5 — Hooks complete on `features/component-features-phase-5` (awaiting the parent merge)
 
 ## Current Position
 
@@ -36,7 +36,7 @@ Plan: 7
 Status: Ready to execute
 Last activity: 2026-11-01 — Phase 5 complete, transitioned to Phase 2
 
-Progress: [███░░░░░░░] 29% (1/7 phases; 15/15 planned plans done, Phases 2-7 not yet planned)
+Progress: [███████████████████░] 30/31 plans (97%) on this branch (Phases 1 and 5 complete; Phase 5 verified 2026-11-01)
 
 Phase 1 is the only prerequisite. After it merges to `claude/quirky-planck-hhm592`,
 Phases 2-7 (Skills, Slash Commands, Agents, Hooks, MCP Servers, Workflows) run

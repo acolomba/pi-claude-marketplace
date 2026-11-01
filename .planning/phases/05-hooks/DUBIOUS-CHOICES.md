@@ -499,3 +499,22 @@ session writes this file. Each subagent ends its report with a
 - **Why dubious:** The main follow-up path is right; the edge cases lose hook
   context silently (debug line only), which D-CF5-13's intent forbids.
 - **Recorded in:** `05-REVIEW.md` (iteration 3), this entry.
+
+### P5-DC-25: Transition run without PROJECT.md edits; security audit not re-run after fixes
+
+- **Phase / source:** Phase 5 transition (post-completion mode) and verification.
+- **Severity:** Low. **Status:** open.
+- **Choices:**
+  1. `evolve_project` was skipped: the child-session rules forbid PROJECT.md
+     edits, and `05-09-SUMMARY.md` carries the PROJECT.md parent lines (the 28
+     D-CF5 rows, the line-1344 correction). STATE.md got only its focus and
+     progress lines; decisions and blockers sections are left to the parent's
+     merge to avoid conflicts with sibling phases.
+  2. `05-SECURITY.md` was audited at `b5ff1e7`, before the code-review fix
+     commits `0d877aa`..`a17639b` (overflow handling, notice escape stripping,
+     follow-up context queue). Those fixes strengthen mitigations and were
+     reviewed by three review passes, but no second security audit ran; the
+     parent's post-merge `/gsd-secure-phase` (T-05-28) can cover them.
+  3. `phase.complete` reported "files not on disk" warnings for command
+     strings in the SUMMARYs; they are parser false positives.
+- **Recorded in:** this file.
