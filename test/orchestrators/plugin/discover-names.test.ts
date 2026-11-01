@@ -84,8 +84,10 @@ test("composes generated names from every bridge in each bridge's declared order
   await writeAgent(agentsDirectory, "alpha.md");
   await writeCommand(commandsDirectory, "zeta.md");
   await writeCommand(commandsDirectory, "alpha.md");
-  await writeSkill(skillsDirectory, "zeta");
-  await writeSkill(skillsDirectory, "alpha");
+  // Skill names differ from the command names: a command keeps a name it shares with a skill
+  // of its plugin, and the skill is not staged (D-CF2-03).
+  await writeSkill(skillsDirectory, "zeta-guide");
+  await writeSkill(skillsDirectory, "alpha-guide");
   const workflowsDirectory = path.join(pluginRoot, "workflows");
   await writeWorkflow(workflowsDirectory, "zeta.js", "zeta");
   await writeWorkflow(workflowsDirectory, "alpha.js", "acme-alpha");
@@ -106,7 +108,7 @@ test("composes generated names from every bridge in each bridge's declared order
     agents: ["pi-claude-marketplace-acme-alpha", "pi-claude-marketplace-acme-zeta"],
     agentsDirs: [agentsDirectory],
     commands: ["acme:alpha", "acme:zeta"],
-    skills: ["acme-alpha", "acme-zeta"],
+    skills: ["acme-alpha-guide", "acme-zeta-guide"],
     workflows: ["acme:alpha", "acme:zeta"],
   });
 });
