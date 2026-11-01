@@ -26,10 +26,16 @@
 // The writer re-parses its own output with Pi's parser and throws when the
 // result is not the frontmatter it meant or the body Pi read from the source,
 // so a staged file Pi would read differently never reaches the target dir.
+//
+// Beside the text, the writer returns the one D-CF3-09 line that names the
+// source frontmatter fields Pi cannot honor (D-CF1-05). A command whose
+// frontmatter does not parse gets none: its CMD-01 warning already names the
+// parse failure, and the neutralized source has no frontmatter left to read.
 
 import { readFile } from "node:fs/promises";
 
 import { descriptionFallback } from "../../domain/description-fallback.ts";
+import { droppedInvocationFieldsWarning } from "../../domain/invocation-frontmatter.ts";
 import { rewriteMarkdownReferences } from "../../domain/skill-tokens.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { stripBom } from "../../shared/bom.ts";
@@ -53,13 +59,32 @@ export interface StagedCommandContext {
   readonly referenceNames: InstalledReferenceNames;
 }
 
-/** The staged text of one command, and the parse error when its source frontmatter was neutralized. */
+/** The staged text of one command, with what the install reports about its source. */
 export interface StagedCommandText {
   readonly text: string;
+  /** The parse error when the source frontmatter did not parse and was neutralized (CMD-01). */
   readonly parseError?: string;
+  /**
+   * D-CF3-09: `[<source name>] dropped fields: <fields>`, naming in frontmatter
+   * order each field Pi cannot honor; absent when there is none or when the
+   * source frontmatter did not parse.
+   */
+  readonly droppedFields?: string;
 }
 
 type Frontmatter = Readonly<Record<string, unknown>>;
+
+/** A source of one command after the PARSE-01 gate. */
+type CommandSource =
+  | { readonly content: string; readonly frontmatter: Frontmatter }
+  | { readonly content: string; readonly parseError: string };
+
+/** A parsed frontmatter as keys; a list or a scalar holds no keys Pi reads, so it counts as empty. */
+function frontmatterKeys(parsed: unknown): Frontmatter {
+  return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+    ? (parsed as Frontmatter)
+    : {};
+}
 
 /**
  * CMD-01 / D-86-07: neutralize an unparseable command source by stripping the
@@ -121,16 +146,14 @@ function neutralizeCommandFrontmatter(content: string): string {
  * PARSE-01: reads the source, drops one leading byte-order mark (FMBOM-01),
  * and parses its frontmatter before any substitution. A throw is an author
  * defect: the malformed block is neutralized and its message returned, so the
- * install reports `{malformed command}`. The parse only validates; nothing in
- * the source is evaluated (T-03-17).
+ * install reports `{malformed command}`. A parse that returns keeps the source
+ * frontmatter, which D-CF3-09 reads. The parse only validates; nothing in the
+ * source is evaluated (T-03-17).
  */
-async function readCommandSource(
-  commandFile: string,
-): Promise<{ content: string; parseError?: string }> {
+async function readCommandSource(commandFile: string): Promise<CommandSource> {
   const content = stripBom(await readFile(commandFile, "utf8"));
   try {
-    parseFrontmatter(content);
-    return { content };
+    return { content, frontmatter: frontmatterKeys(parseFrontmatter(content).frontmatter) };
   } catch (parseErr) {
     return { content: neutralizeCommandFrontmatter(content), parseError: errorMessage(parseErr) };
   }
@@ -144,10 +167,7 @@ async function readCommandSource(
  * last.
  */
 function stagedFrontmatter(parsed: unknown, body: string): Frontmatter {
-  const source: Frontmatter =
-    typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Frontmatter)
-      : {};
+  const source = frontmatterKeys(parsed);
   const declared = source.description;
   const description =
     typeof declared === "string" && declared !== ""
@@ -205,9 +225,10 @@ function assertReadsBack(
 /**
  * Builds the staged text of `command`: the PARSE-01 gate, CM-3 substitution,
  * the reference rewrite, then the rebuilt frontmatter with the D-CF3-08
- * description and the D-CF3-06 record, checked by a read-back. A parse failure of the substituted
- * text propagates: substitution produced bytes Pi rejects, the writer's own
- * defect.
+ * description and the D-CF3-06 record, checked by a read-back, plus the
+ * D-CF3-09 dropped-fields line of the source frontmatter. A parse failure of
+ * the substituted text propagates: substitution produced bytes Pi rejects, the
+ * writer's own defect.
  */
 export async function buildStagedCommand(
   command: DiscoveredCommand,
@@ -232,5 +253,10 @@ export async function buildStagedCommand(
   const frontmatter = withCommandRecord(stagedFrontmatter(parsed.frontmatter, body), record);
   const text = rebuildCommandText(substituted, frontmatter);
   assertReadsBack(command.generatedName, text, frontmatter, body);
-  return source.parseError === undefined ? { text } : { text, parseError: source.parseError };
+  if ("parseError" in source) {
+    return { text, parseError: source.parseError };
+  }
+
+  const droppedFields = droppedInvocationFieldsWarning(command.sourceName, source.frontmatter);
+  return droppedFields === undefined ? { text } : { text, droppedFields };
 }

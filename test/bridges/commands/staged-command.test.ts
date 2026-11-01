@@ -123,7 +123,7 @@ for (const { declared, frontmatter, text } of [
     const staged = await buildStagedCommand(command, context);
 
     // assert
-    assert.deepStrictEqual(staged, { text });
+    assert.deepStrictEqual(staged, { text, droppedFields: "[deploy] dropped fields: model" });
   });
 }
 
@@ -284,6 +284,102 @@ test("D-CF3-06 replaces an author's record key with the install-time record, las
   // assert
   assert.deepStrictEqual(staged, {
     text: '---\n"description": "Planted."\n' + RECORD_LINE + "---\nBody.\n",
+  });
+});
+
+test("D-CF3-09 names the fields pi cannot honor that a command sets, in frontmatter order", async (t) => {
+  // arrange
+  const command = await commandWithSource(
+    t,
+    "---\ndescription: Deploys the branch.\nmodel: opus\neffort: high\n---\nDeploy the branch.\n",
+  );
+
+  // act
+  const staged = await buildStagedCommand(command, context);
+
+  // assert
+  assert.deepStrictEqual(staged, {
+    text:
+      '---\n"description": "Deploys the branch."\n"model": "opus"\n"effort": "high"\n' +
+      RECORD_LINE +
+      "---\nDeploy the branch.\n",
+    droppedFields: "[deploy] dropped fields: model, effort",
+  });
+});
+
+test("D-CF3-09 names a nested command by its source name", async (t) => {
+  // arrange
+  const command = {
+    ...(await commandWithSource(
+      t,
+      "---\ndescription: Builds the web app.\nagent: builder\n---\nBuild.\n",
+    )),
+    sourceName: "build/web",
+    generatedName: "acme:build:web",
+  } satisfies DiscoveredCommand;
+
+  // act
+  const staged = await buildStagedCommand(command, context);
+
+  // assert
+  assert.deepStrictEqual(staged, {
+    text:
+      '---\n"description": "Builds the web app."\n"agent": "builder"\n' +
+      RECORD_LINE +
+      "---\nBuild.\n",
+    droppedFields: "[build/web] dropped fields: agent",
+  });
+});
+
+for (const { sets, source, text } of [
+  {
+    sets: "no frontmatter",
+    source: "Tidy the change.\n",
+    text: '---\n"description": "Tidy the change."\n' + RECORD_LINE + "---\nTidy the change.\n",
+  },
+  {
+    sets: "only fields pi honors or that have their own decision",
+    source:
+      "---\ndescription: Tidies.\nallowed-tools: Read\narguments: target\nshell: bash\n" +
+      "argument-hint: <target>\nuser-invocable: false\ndisable-model-invocation: true\n" +
+      "---\nTidy the change.\n",
+    text:
+      '---\n"description": "Tidies."\n"allowed-tools": "Read"\n"arguments": "target"\n' +
+      '"shell": "bash"\n"argument-hint": "<target>"\n"user-invocable": false\n' +
+      '"disable-model-invocation": true\n' +
+      RECORD_LINE +
+      "---\nTidy the change.\n",
+  },
+]) {
+  test(`D-CF3-09 reports no dropped field for a source with ${sets}`, async (t) => {
+    // arrange
+    const command = await commandWithSource(t, source);
+
+    // act
+    const staged = await buildStagedCommand(command, context);
+
+    // assert
+    assert.deepStrictEqual(staged, { text });
+  });
+}
+
+test("D-CF3-09 reports no dropped field for a source whose frontmatter does not parse", async (t) => {
+  // arrange
+  const command = await commandWithSource(
+    t,
+    "---\nmodel: opus\ntitle: Deploy: the whole thing\n---\nRun the deployment.\n",
+  );
+
+  // act
+  const staged = await buildStagedCommand(command, context);
+
+  // assert
+  assert.deepStrictEqual(staged, {
+    text:
+      '---\n"description": "Run the deployment."\n' + RECORD_LINE + "---\nRun the deployment.\n",
+    parseError:
+      "Nested mappings are not allowed in compact mappings at line 2, column 8:\n\n" +
+      "title: Deploy: the whole thing\n       ^\n",
   });
 });
 
