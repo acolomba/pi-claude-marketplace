@@ -108,3 +108,25 @@ tooling. Status stays `open` until the user reviews it.
   6. **D-CF6-11:** a fresh profile Pi stands in for `/reload` where the harness has no reload step.
   7. **Out-of-ownership test edits:** `test/domain/plugin-resolver.test.ts` (MCPR-03, WR-03, entry-wins, MM-5) changes with the resolver fix.
   8. **Doc finding for Phase 5:** since adapter 6.0 hooks do see proxied MCP calls (nested call under the real tool name); `docs/hooks-compatibility.md` reconciliation is a parent line.
+
+### P6-DC-08: Planner choices for the nine Phase 6 plans
+
+- **Phase / source:** Phase 6 gsd-planner (`06-01`..`06-09-PLAN.md`).
+- **Severity:** Medium (items 2, 3, 5, 6); the rest Low. **Status:** open.
+- **Items:**
+  1. Four waves, not three: the merge (06-03, wave 2) and the silent skip (06-07, wave 3) are split because both edit `domain/mcp-resolution.ts`; the gate is 06-09 in wave 4, and the docs plan 06-08 runs in wave 3 beside 06-07.
+  2. Array-form `mcpServers` is admitted in the owned `domain/components/mcp.ts` (`MCP_SERVERS_SCHEMA`), leaving the unowned `domain/components/plugin.ts` unchanged; its stale comment (lines 48-52) is a parent line. Three cases in `test/domain/components/plugin.test.ts` change expected outcomes only.
+  3. Out-of-ownership tests edited under CONTEXT's general clause: `test/domain/components/plugin.test.ts` and `test/orchestrators/reconcile/mcp-migration.test.ts`, each bounded by a `git diff` check.
+  4. Paired tests of owned sources treated as owned (`test/domain/mcp-resolution.test.ts`, `test/domain/components/mcp.test.ts`, and, on a measured break, `test/platform/mcp-status.test.ts`, `test/shared/concerns/soft-dep.test.ts`).
+  5. Downstream fatal-path tests keep their titles by moving the bad server inline into `plugin.json`; one commit between 06-07 Task 1 and Task 2 leaves those suites red.
+  6. I/O errors while locating an MCP file (ENOTDIR and similar) are skipped silently, read as D-CF6-02's "missing or unreadable file".
+  7. The Phase 1 `calls.steps.ts` is moved into `listing.steps.ts` and deleted.
+  8. `.mcpb` gets no extra note beyond `(partially-available) {unsupported mcp}`.
+  9. Two new libs (`features/lib/mcp-server-http.ts`, `features/lib/mcp-server-environment.ts`) beyond the single `mcp-server-files.ts` the ownership table names.
+  10. The `MCP_DIRECT_TOOLS` doc row may rest on reading adapter source if a scratch RPC measurement fails.
+  11. `COVERAGE.md` declares "No external API integration" against four detector keyword signals.
+  12. D-CF6-07 followed over ROADMAP wording ("uses Phase 1's agent fixture writer").
+  13. Conditional ownership in wave 2 (`bridges/mcp/**` to 06-02; the soft-dep adapter arm and `mcp-status.ts` to 06-05), only on a measured break; other product breaks hand over to 06-07 with no failing scenario committed.
+  14. 06-08 documents the skip rule while 06-07 builds it; 06-09 Task 1 checks the doc against merged code.
+  15. 06-09's diff base is the fixed hash `3a7a707`, with a `git merge-base` fallback.
+- **Recorded in:** this file; the plans' `<assumption_delta_decision>` and task bodies.
