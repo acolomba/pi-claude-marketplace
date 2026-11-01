@@ -369,7 +369,16 @@ Plans:
 - Wave 3: decision IDs, `docs/hooks-compatibility.md` and the `hook-events.ts` header (FG-25), the CHANGELOG line about stale `clear`/`compact`/`fork` hooks in existing installs, SUMMARY lines for the parent, and the phase gate.
 - Owns: `features/hook/**`, `features/plugin/session-start-hooks.feature`, `features/step_definitions/hook/**`, `features/step_definitions/plugin/session-start-hooks.steps.ts`, `features/lib/hook-files.ts`, `bridges/hooks/**`, `domain/components/hook-*.ts` and `hooks*`, `test/architecture/hooks-*.test.ts`, `docs/hooks-compatibility.md`, `test/bridges/hooks/**`, `test/integration/hooks-*`. HOOK-08 uses Phase 1's MCP stub and hook recorder, never a Phase 6 file.
 
-**Plans:** TBD
+**Plans:** 2/9 plans executed
+- [x] 05-01-PLAN.md
+- [x] 05-02-PLAN.md
+- [ ] 05-03-PLAN.md
+- [ ] 05-04-PLAN.md
+- [ ] 05-05-PLAN.md
+- [ ] 05-06-PLAN.md
+- [ ] 05-07-PLAN.md
+- [ ] 05-08-PLAN.md
+- [ ] 05-09-PLAN.md
 
 ### Phase 6: MCP Servers
 
@@ -427,7 +436,7 @@ Plans:
 | 2. Skills | 6/7 | In Progress | - |
 | 3. Slash Commands | 0/TBD | Not started | - |
 | 4. Agents | 0/TBD | Not started | - |
-| 5. Hooks | 0/TBD | Not started | - |
+| 5. Hooks | 2/9 | In Progress | - |
 | 6. MCP Servers | 0/TBD | Not started | - |
 | 7. Workflows | 0/TBD | Not started | - |
 
