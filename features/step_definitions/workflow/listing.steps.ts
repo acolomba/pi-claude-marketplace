@@ -107,20 +107,20 @@ Then("pi offers no workflow commands", async function (this: ScenarioWorld): Pro
   assert.deepStrictEqual(await workflowCommandRows(this), []);
 });
 
-// Every slash command of the last listing whose name holds `text`, from any
-// source: an engine command, a prompt template, a skill, or another
-// extension's command. Without the engine, a workflow must reach Pi as none
-// of them, so this step does not filter on the engine's path.
+// Every slash command of the last listing whose name holds the workflow's
+// name, from any source: an engine command, a prompt template, a skill, or
+// another extension's command. Without the engine, a workflow must reach Pi
+// as none of them, so this step does not filter on the engine's path.
 Then(
-  "pi offers no slash command whose name contains {string}",
-  function (this: ScenarioWorld, text: string): void {
+  "pi offers no slash command for the workflow {string}",
+  function (this: ScenarioWorld, workflow: string): void {
     const snapshot = this.registrySnapshot;
     if (snapshot === undefined) {
       assert.fail("no step listed the slash commands pi offers");
     }
 
     const matching = snapshot.commands
-      .filter((command) => command.name.includes(text))
+      .filter((command) => command.name.includes(workflow))
       .map((command) => [command.source, `/${command.name}`, command.path]);
     assert.deepStrictEqual(matching, []);
   },

@@ -64,13 +64,16 @@ Given(
 // The results table joins a diagnostic's lines with commas, and a note holds
 // commas of its own, so it cannot tell where one note ends. This step states
 // one line per row, in the diagnostic's order.
-Then("the diagnostic reports these lines:", function (this: ScenarioWorld, table: DataTable) {
-  const [lines, ...others] = this.resultsOf("command").flatMap((payload) =>
-    payload.kind === "diagnostic" ? [payload.lines] : [],
-  );
-  assert.deepStrictEqual(others, [], "the command reported more than one diagnostic");
-  const rows = (lines ?? assert.fail("the command reported no diagnostic")).map((line) => [
-    projectTokens("lines", line, this.tokens),
-  ]);
-  assert.deepStrictEqual([["line"], ...rows], table.raw());
-});
+Then(
+  "the workflow install diagnostic reports these lines:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const [lines, ...others] = this.resultsOf("command").flatMap((payload) =>
+      payload.kind === "diagnostic" ? [payload.lines] : [],
+    );
+    assert.deepStrictEqual(others, [], "the command reported more than one diagnostic");
+    const rows = (lines ?? assert.fail("the command reported no diagnostic")).map((line) => [
+      projectTokens("lines", line, this.tokens),
+    ]);
+    assert.deepStrictEqual([["line"], ...rows], table.raw());
+  },
+);
