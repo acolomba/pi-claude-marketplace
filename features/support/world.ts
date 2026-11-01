@@ -12,7 +12,8 @@
  * new session.
  *
  * A scenario that needs a model starts a profile Pi of its own (D-CF1-15):
- * the real extension plus the scripted model, in the run's sandbox. It takes
+ * the real extension plus the scripted model and the registry probe, in the
+ * run's sandbox. It takes
  * the place of the run's Pi until the scenario's release stops it, so the
  * run's shared Pi never gets a model. The world keeps the last model turn,
  * and a second turn fails when no step compared the first.
@@ -36,6 +37,7 @@ import { inLoadOrder, resolveCompanion } from "../lib/companions.ts";
 import { npmConfigText, NpmRegistry } from "../lib/npm-registry.ts";
 import { readSession } from "../lib/pi-commands.ts";
 import { PiProcess } from "../lib/pi-process.ts";
+import { REGISTRY_PROBE_EXTENSION } from "../lib/pi-registry-probe/snapshot.ts";
 import { PiTuiSession } from "../lib/pi-tui.ts";
 import { rowArrays } from "../lib/result-rows.ts";
 import { readModelCalls, readModelScript } from "../lib/scripted-model/script.ts";
@@ -49,6 +51,7 @@ import type { GitHostTraffic, HttpsGitHost, RequestWindow } from "../lib/https-g
 import type { NpmRegistryRequest } from "../lib/npm-registry.ts";
 import type { NotificationPayload, OfferedSkill, SessionReport } from "../lib/pi-commands.ts";
 import type { RpcGitEnvironment, RpcRecord, RpcRequest } from "../lib/pi-process.ts";
+import type { RegistrySnapshot } from "../lib/pi-registry-probe/snapshot.ts";
 import type { PluginCompletion } from "../lib/plugin-completions.ts";
 import type { PublicationSites, PublishedMarketplace } from "../lib/published-marketplace.ts";
 import type { RunTokens } from "../lib/run-tokens.ts";
@@ -59,6 +62,16 @@ import type { ScriptStep } from "../lib/scripted-model/script.ts";
 const STEP_TIMEOUT_MS = 30_000;
 
 setDefaultTimeout(STEP_TIMEOUT_MS);
+
+/**
+ * The timeout of a step that starts a profile Pi. Each worker compiles the
+ * real extension, the scripted model, the registry probe, and the companions
+ * through a cold jiti cache on its first profile Pi: 13 to 20 seconds on an
+ * idle machine, and 27 seconds or more when the parallel workers start their
+ * profile Pis at once on a loaded runner. A Pi that never answers still fails
+ * the step.
+ */
+export const PROFILE_PI_START_TIMEOUT_MS = 90_000;
 
 // The scripted model, which every profile Pi loads right after the real extension.
 const SCRIPTED_MODEL_EXTENSION = fileURLToPath(
@@ -73,7 +86,8 @@ export interface ScopeBytes {
 
 /**
  * What a scenario's profile Pi loads and trusts (D-CF1-15). It always loads
- * the real extension and the scripted model, then `companions` in the fixed
+ * the real extension, the scripted model, and the registry probe, then
+ * `companions` in the fixed
  * order pi-subagents, pi-mcp-adapter, pi-dynamic-workflows (HAR-01), then
  * `extraExtensions` in order. It trusts the sandbox project unless `trust` is
  * `untrusted` (D-CF1-07).
@@ -143,6 +157,9 @@ export class ScenarioWorld extends World {
   private scenarioPi: PiProcess | undefined = undefined;
   // The harness directory of this scenario's profile Pi, once one started.
   private profileHarnessDirectory: string | undefined = undefined;
+  // The last report of the registry probe that a `When` step read from the
+  // profile Pi: its tools and its slash commands (HAR-04).
+  registrySnapshot: RegistrySnapshot | undefined = undefined;
   private lastTurn: ModelTurn | undefined = undefined;
   // Whether a step has compared `lastTurn`; a scenario with no turn has nothing to compare.
   private lastTurnCompared = true;
@@ -509,7 +526,8 @@ export class ScenarioWorld extends World {
    * group. A scenario that needs a model must not change the run's shared Pi,
    * which every other scenario reuses, so it gets a Pi of its own in the
    * run's sandbox, with the run's git environment. The profile Pi loads the
-   * real extension, the scripted model, the companions the profile names,
+   * real extension, the scripted model, the registry probe (HAR-01), the
+   * companions the profile names,
    * each from its `pi.extensions` entry in the optional peer cache, and then
    * `profile.extraExtensions`.
    * Its `TMPDIR` and its harness directory lie inside the sandbox home, which
@@ -547,6 +565,7 @@ export class ScenarioWorld extends World {
     const pi = await PiProcess.start(sandbox, piEnvironment, {
       extensions: [
         SCRIPTED_MODEL_EXTENSION,
+        REGISTRY_PROBE_EXTENSION,
         ...companions.map((companion) => companion.entry),
         ...(profile.extraExtensions ?? []),
       ],
