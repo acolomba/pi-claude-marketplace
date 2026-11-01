@@ -1,6 +1,17 @@
 import { loadQualifiedSkillAliases } from "../orchestrators/skill-alias-state.ts";
+import { invokeBridgedSkill } from "../orchestrators/skill-invocation.ts";
 
-import type { AutocompleteProvider, ExtensionAPI, ExtensionContext } from "../platform/pi-api.ts";
+import type {
+  SkillInvocationOutcome,
+  SkillInvocationRequest,
+} from "../orchestrators/skill-invocation.ts";
+import type {
+  AutocompleteProvider,
+  ExtensionAPI,
+  ExtensionContext,
+  InputEvent,
+  InputEventResult,
+} from "../platform/pi-api.ts";
 
 type Suggestions = Awaited<ReturnType<AutocompleteProvider["getSuggestions"]>>;
 
@@ -54,13 +65,31 @@ function aliasProvider(
   };
 }
 
-/** Adds interactive plugin-qualified aliases for loaded skills. */
+/** D-CF2-06: maps an invocation outcome onto Pi's input result. */
+function inputResult(outcome: SkillInvocationOutcome, event: InputEvent): InputEventResult {
+  return outcome.kind === "ok"
+    ? {
+        action: "transform",
+        text: outcome.text,
+        ...(event.images !== undefined && { images: event.images }),
+      }
+    : { action: "continue" };
+}
+
+/**
+ * D-CF2-05 / D-CF2-06: resolves a typed `/skill:` token or plugin-qualified
+ * alias, from interactive or RPC input, and sends a bridged skill through the
+ * invocation; `extension` input passes through unchanged.
+ */
 export function registerSkillAliases(
   pi: ExtensionAPI,
   loadAliases: (
     pi: ExtensionAPI,
     cwd: string,
   ) => Promise<ReadonlyMap<string, string>> = loadQualifiedSkillAliases,
+  invokeSkill: (
+    request: SkillInvocationRequest,
+  ) => Promise<SkillInvocationOutcome> = invokeBridgedSkill,
 ): void {
   const cache = new Map<string, Promise<ReadonlyMap<string, string>>>();
   const getQualifiedAliases = (cwd: string): Promise<ReadonlyMap<string, string>> => {
@@ -79,28 +108,40 @@ export function registerSkillAliases(
   });
 
   pi.on("input", (event, ctx) => {
-    if (event.source !== "interactive") {
+    if (event.source === "extension") {
       return { action: "continue" };
     }
 
     const match = /^\/(\S+)(?=\s|$)/.exec(event.text);
-    const name = match?.[1];
-    if (!name?.includes(":")) {
+    const token = match?.[1];
+    if (!token?.includes(":")) {
       return { action: "continue" };
     }
 
     const commands = pi.getCommands();
-    if (commands.some((command) => command.source !== "skill" && command.name === name)) {
+    if (commands.some((command) => command.source !== "skill" && command.name === token)) {
       return { action: "continue" };
     }
 
+    if (token.startsWith("skill:")) {
+      return invokeSkill({
+        commands,
+        generatedName: token.slice("skill:".length),
+        typed: `/${token}`,
+        args: event.text.slice(token.length + 1).trim(),
+        cwd: ctx.cwd,
+        sessionId: ctx.sessionManager.getSessionId(),
+        thinkingLevel: pi.getThinkingLevel(),
+      }).then((outcome) => inputResult(outcome, event));
+    }
+
     return getQualifiedAliases(ctx.cwd).then((aliases) => {
-      const generatedName = aliases.get(name);
+      const generatedName = aliases.get(token);
       return generatedName === undefined
         ? { action: "continue" }
         : {
             action: "transform",
-            text: `/skill:${generatedName}${event.text.slice(name.length + 1)}`,
+            text: `/skill:${generatedName}${event.text.slice(token.length + 1)}`,
             ...(event.images !== undefined && { images: event.images }),
           };
     });
