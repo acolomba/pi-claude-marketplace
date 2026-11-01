@@ -452,3 +452,55 @@ this project.
 7. Proven only by design, no scenario: "no script armed", HAR-03 `handled` path, live-pid stand-in check, companion reordering.
 8. Companion load check uses commands, not tools (tools wait for the 01-04 registry probe).
 - Parent follow-up (01-09): the cucumber world rule should mention the jiti cache link and the literal-key registration.
+
+### DC-20: Phase 1 wave 3 executor choices
+
+- **Phase / source:** executors for plans 01-04, 01-05, 01-06, 01-07, 01-08.
+- **Severity:** Medium for 01-07 item 1 (trust observed through a run because pi-subagents lists untrusted agents) and 01-06 item 4 (new launch-environment extension outside the file list); the rest Low. **Status:** open.
+- **Cross-cutting:** profile Pi starts timed out at 30 s under heavy parallel load; 01-04 added `PROFILE_PI_START_TIMEOUT_MS = 90_000` and 01-07 a 60 s untrusted start. Hook and workflow agents saw unexplained one-off timeouts before that fix.
+
+#### 01-08 (workflow seed)
+1. Deviation: the fixture workflow returns text, not a small object (the engine's progress entry shows any object only as `Structured result`, so it could not be compared whole).
+2. The result Then also compares `error` (expected absent) and checks one run id.
+3. The run When fails on any scripted-model call (stricter than the model-turn When); Phase 7 may need to relax it for workflows that call agents.
+4. Statements reordered in the run When to clear a fallow clone match with `session.steps.ts` rather than adding a marker.
+5. Whole-suite runs ended 1160/1161 twice: a 30 s step timeout in `Given pi runs with the scripted model and these companions:` while a profile Pi started, in a different scenario each time, under load average 20-26 on 4 cores. Attributed to load, unconfirmed. Suggested fix if it repeats: a named profile-Pi start timeout above 30 s.
+6. Step texts are the agent's own wording (kind-prefixed per D-08).
+#### 01-04 (registry probe, slash-command seed)
+1. Rule 3 fix outside files_modified: `PROFILE_PI_START_TIMEOUT_MS = 90_000` exported from `world.ts` and applied to the two profile-start steps in `model.steps.ts` and `companion.steps.ts` (owned by 01-07 this wave). Cause: per-worker cold TypeScript compile took 27-30+ s under load average 20-31. Not confirmed on the base tree.
+2. Probe records also carry `path` (where Pi says a tool/command came from), beyond the plan's "name and source", for later phases.
+3. The listing Then compares only prompt-template commands (whole set), not every command.
+4. A missing description shows as an empty cell (indistinguishable from empty).
+5. Two field shapes never seen live (`null` description, empty `activeTools`); schema covers both.
+6. The probe's own command `pi-registry-probe` appears in every profile Pi's command list; later whole-list comparisons must expect it.
+7. Feature description names "a registry probe" as the stand-in.
+- Parent follow-up (01-09): add `PROFILE_PI_START_TIMEOUT_MS` and the probe steps to `.agents/skills/cucumber/rules/world-and-stand-ins.md`.
+#### 01-05 (hook recorder, hook seed)
+1. `CLAUDECODE` recorded too (plan says `CLAUDE_*` only); the bridge sets `CLAUDECODE=1` for every hook (SENV-01).
+2. Environment-variable names used as table headers (not lower-case words as the feature rules ask).
+3. Run row is 13 columns wide (one row per run, per plan).
+4. Seed expects an empty `transcript_path` (current bridge behavior; upstream always sends a path).
+5. Two of the first three two-hook runs failed unexplained (output not captured); next 18 passed; guessed load/startup timeout.
+6. The hooks Given takes a table (name/event/matcher) instead of one event and matcher.
+7. Hook names limited to `[a-z0-9-]+` (inserted unquoted into the shell command).
+8. Task 2 has no commit (checks passed).
+- Findings for the Hooks phase (not decided): empty `transcript_path` on the first turn (upstream always sends one); the bridge runs matching hooks sequentially in declared order (upstream: parallel); the bridge does not dedupe duplicate hook commands (upstream does).
+#### 01-07 (agent seed, trusted/untrusted pair)
+1. Deviation: HAR-06 trust pair observes a project-scope agent RUN, not the `subagent {action:"list"}` listing, because pi-subagents 0.84 lists an untrusted project's agents (`discoverAgentsAll` with no trust option, `src/extension/index.js:511`) while runs follow Pi's trust. Looks like a pi-subagents defect; Claude Code's behavior for agents in an untrusted project still needs research before the agents phase. Coverage D2 marked `human_judgment: true`.
+2. Both scenarios use `agentScope: "project"`, so the pair proves pi-subagents' explicit trust check, not its default discovery filter (an unscoped run's error lists built-in agents with node_modules paths and em dashes).
+3. New `{uuid}` token in model-call steps (pi-subagents mission id varies); accepts any UUID, no same-id check. 01-09 should add it to `features.md`.
+4. `UNTRUSTED_START_TIMEOUT_MS = 60 s` on the untrusted Given (timed out at 30 s under load; Pi loads extensions twice when a trust decision is needed; 12.9 s alone).
+5. The child system-prompt comparison pins pi-subagents 0.84.0's instruction text; a peer upgrade that rewords it breaks the seed.
+6. The trusted companions Given passes `trust: "trusted"` explicitly via a shared helper.
+7. HAR-06 flagged assumption carried: 01-06's approval Given covers MCP approval.
+8. No WINDOWS ledger entry (shared file across worktrees).
+#### 01-06 (MCP stub, MCP seed, project-server approval, connect-time `:-` scenario)
+1. Step order differs from the plan: install runs in the shared Pi before the profile Pi starts, with no new-session step (with the plan's order `new_session` binds the extension twice and the adapter's startup listing ran 2-3 times, so whole-log comparison was unstable).
+2. New Given waits for the adapter's startup tool listing (50 ms poll, 15 s deadline).
+3. `{tool call <n>}` projection local to the stub-log Then (Pi invents a tool call id per call); not in the cucumber skill's run-token list; 01-09 should reconcile.
+4. New file outside files_modified: `features/lib/pi-launch-environment.ts`, a Pi extension loaded via `PiProfile.extraExtensions` that copies `<home>/pi-launch-environment.json` into the profile Pi's `process.env` (world.ts passes only TMPDIR). A world-level `environment` field on `PiProfile` would be cleaner.
+5. Expected stub log includes the adapter's startup listing (two connections per call scenario); changes if a later adapter caches differently.
+6. Task 3 Given text holds `"${PI_CM_STUB_TAG:-install-default}"` literally (escaped brace) so the acceptance grep finds it.
+7. The stub logs its plugin and server names from its arguments (unrequested).
+8. FG-29 not decided.
+- Measured: A7 yes (nested call emits its own tool_execution records, id = outer id + `/1`); A5 adapter 7.0.0 reads `getAgentPath("mcp-adapter.json")` under `PI_CODING_AGENT_DIR`.
