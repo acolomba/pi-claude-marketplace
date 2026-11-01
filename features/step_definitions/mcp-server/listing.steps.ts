@@ -35,7 +35,7 @@ import {
   readRegistrySnapshot,
   REGISTRY_PROBE_COMMAND,
 } from "../../lib/pi-registry-probe/snapshot.ts";
-import { projectTokens } from "../../lib/run-tokens.ts";
+import { expandTokens, projectTokens } from "../../lib/run-tokens.ts";
 import { modelCallsOf } from "../../lib/scripted-model/script.ts";
 import { PROFILE_PI_START_TIMEOUT_MS } from "../../support/world.ts";
 
@@ -184,10 +184,13 @@ Given(
 );
 
 // Done once the stub logged a tools/list and no stub is running, which means
-// the adapter closed the listing connection.
+// the adapter closed the listing connection. The plugin is the argument the
+// stub logs, with run tokens expanded, so a stub started with
+// `${CLAUDE_PLUGIN_ROOT}` is named by `{home}/marketplaces/<name>/plugins/<plugin>`.
 Given(
   "pi-mcp-adapter has listed the tools of the stub mcp server {string} of the plugin {string}",
-  async function (this: ScenarioWorld, server: string, plugin: string) {
+  async function (this: ScenarioWorld, server: string, pluginText: string) {
+    const plugin = expandTokens(pluginText, this.tokens);
     const harness = this.profileHarness();
     const deadline = Date.now() + TOOL_LISTING_TIMEOUT_MS;
     for (;;) {
@@ -216,10 +219,12 @@ When("the user lists the mcp tools pi offers", async function (this: ScenarioWor
 
 // One row per message the stub received, in arrival order: whether it was a
 // request or a notification, its method, and its params as JSON. Every
-// message must come from the named server.
+// message must come from the named server, whose plugin argument may hold
+// run tokens, as in the listing wait.
 Then(
   "the stub mcp server {string} of the plugin {string} receives these messages:",
-  async function (this: ScenarioWorld, server: string, plugin: string, table: DataTable) {
+  async function (this: ScenarioWorld, server: string, pluginText: string, table: DataTable) {
+    const plugin = expandTokens(pluginText, this.tokens);
     const requests = await readStubRequests(this.profileHarness());
     assert.deepStrictEqual(
       requests.filter((request) => request.plugin !== plugin || request.server !== server),
