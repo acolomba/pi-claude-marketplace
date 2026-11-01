@@ -27,7 +27,7 @@ See: `.planning/PROJECT.md` (updated 2026-11-01 after Phase 1)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 2 — Skills (Phases 2-7 run in parallel from here)
+**Current focus:** Phase 2 — Skills (Phases 2-7 run one after another in this session, see DUBIOUS-CHOICES DC-23)
 
 ## Current Position
 
@@ -866,5 +866,5 @@ Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
 ## Session Continuity
 
 Last session: 2026-11-01T07:48:00Z
-Stopped at: Phase 1 complete, ready to plan Phase 2 (Phases 2-7 fan out in parallel)
+Stopped at: Phase 1 complete, ready to plan Phase 2 (Phases 2-7 run sequentially, DC-23)
 Resume file: None
