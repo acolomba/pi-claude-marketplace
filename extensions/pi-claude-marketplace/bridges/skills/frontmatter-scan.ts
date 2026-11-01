@@ -1,18 +1,25 @@
 // bridges/skills/frontmatter-scan.ts
 //
 // D-82-02: the shared LINE-BASED frontmatter scanners. Skill frontmatter is
-// read and emitted line by line rather than through a YAML library, so both
-// the degrade path and the name-rewrite path need the same two questions
-// answered about a block: where it ends, and how far one key's value spans.
+// read and emitted line by line rather than through a YAML library, so the
+// degrade path, the name rewrite, and the record writer need the same two
+// questions answered about a block: where it ends, and how far one key's value
+// spans.
 //
-// This is the single shared module for both paths, so a fix to the span rule
-// lands once instead of risking the degrade path and the name-rewrite path
-// disagreeing about the same bytes.
+// This is the single shared module for every writer of the staging pipeline,
+// so a fix to the fence or span rule lands once instead of risking two
+// writers disagreeing about the same bytes.
 
-/** Index of the closing `---` fence (frontmatter block end), or `lines.length`. */
+/**
+ * Index of the closing fence as Pi 1.4.0's `parseFrontmatter` finds it
+ * (`indexOf("\n---", 3)` in `dist/utils/frontmatter.js`): the first line after
+ * the opening one that starts with `---` at column 0, or `lines.length`. An
+ * indented `---` is block-scalar content to Pi, so no writer may stop there,
+ * and a `----` line closes the block as it does for Pi.
+ */
 export function frontmatterBlockEnd(lines: readonly string[]): number {
   for (let i = 1; i < lines.length; i++) {
-    if ((lines[i] ?? "").trim() === "---") {
+    if ((lines[i] ?? "").startsWith("---")) {
       return i;
     }
   }

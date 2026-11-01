@@ -42,6 +42,13 @@ for (const { description, skillDocument, expectedSkillDocument } of [
       "---\nname: generated-name\ndescription: Quoted scalar\n---\n\nQuoted body.\n",
   },
   {
+    description: "replaces a name that follows a block scalar holding an indented rule line",
+    skillDocument:
+      "---\ndescription: |\n  Part one.\n  ---\n  Part two.\nname: review\n---\n\nBody.\n",
+    expectedSkillDocument:
+      "---\ndescription: |\n  Part one.\n  ---\n  Part two.\nname: generated-name\n---\n\nBody.\n",
+  },
+  {
     description: "removes the complete folded name node",
     skillDocument:
       "---\nname: >-\n  old\n  folded\n\ndescription: Folded scalar\n---\n\nFolded body.\n",

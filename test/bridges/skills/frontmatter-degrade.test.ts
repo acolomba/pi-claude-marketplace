@@ -214,6 +214,13 @@ describe("setDescriptionScalar", () => {
         "---\nname: quoted\ndescription: 'first source line\n  second source line'\nversion: 4\n---\nBody.\n",
       expectedContent: '---\nname: quoted\ndescription: "new value"\nversion: 4\n---\nBody.\n',
     },
+    {
+      description: "a literal block scalar holding an indented rule line before when_to_use",
+      sourceContent:
+        "---\nname: review\ndescription: |\n  Part one.\n  ---\n  Part two.\nwhen_to_use: Reviews.\n---\nBody.\n",
+      expectedContent:
+        '---\nname: review\ndescription: "new value"\nwhen_to_use: Reviews.\n---\nBody.\n',
+    },
   ]) {
     test(`replaces ${description} across its complete node span`, () => {
       // arrange
@@ -377,6 +384,13 @@ describe("repairSingleLineScalars", () => {
       sourceContent: "---\ntags: [alpha: 1, beta]\ndescription: Use this: when reviewing\n---\n",
       expectedContent:
         '---\ntags: [alpha: 1, beta]\ndescription: "Use this: when reviewing"\n---\n',
+    },
+    {
+      description: "repairs a line after a block scalar holding an indented rule line",
+      sourceContent:
+        "---\ndescription: |\n  Part one.\n  ---\n  Part two.\nargument-hint: Use this: carefully\n---\n",
+      expectedContent:
+        '---\ndescription: |\n  Part one.\n  ---\n  Part two.\nargument-hint: "Use this: carefully"\n---\n',
     },
     {
       description: "drops the trailing carriage return of a repaired CRLF line",

@@ -25,7 +25,7 @@ import { Compile } from "typebox/compile";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { isPlainMarkdownFile, readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 
-import { keyValueEnd } from "./frontmatter-scan.ts";
+import { frontmatterBlockEnd, keyValueEnd } from "./frontmatter-scan.ts";
 
 import type { Dirent } from "node:fs";
 
@@ -165,17 +165,6 @@ export async function commandUpstreamNames(
 }
 
 /**
- * Index of the closing fence as Pi's `parseFrontmatter` finds it: the first
- * line after the opening one that starts with `---` at column 0, or
- * `lines.length`. An indented `---` is block-scalar content to Pi, so the
- * record must not be written before it.
- */
-function closingFenceIndex(lines: readonly string[]): number {
-  const index = lines.findIndex((line, i) => i > 0 && line.startsWith("---"));
-  return index === -1 ? lines.length : index;
-}
-
-/**
  * Whether the top-level node `nodeLines` holds the record key. YAML spells
  * one key in many ways (`"pi-claude-marketplace":`, `pi-claude-marketplace :`,
  * an escape inside quotes), and Pi's parser reads each as the same key, so
@@ -218,8 +207,8 @@ export function writeSkillRecord(content: string, record: StoredSkillRecord): st
     pluginData: record.pluginData,
   });
   const source = content.split("\n");
-  const lines = withoutRecordNode(source, closingFenceIndex(source));
-  const closing = closingFenceIndex(lines);
+  const lines = withoutRecordNode(source, frontmatterBlockEnd(source));
+  const closing = frontmatterBlockEnd(lines);
   const written = [
     ...lines.slice(0, closing),
     `${RECORD_KEY}: ${json}`,

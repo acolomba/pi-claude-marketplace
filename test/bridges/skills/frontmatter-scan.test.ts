@@ -38,6 +38,16 @@ describe("frontmatterBlockEnd", () => {
       lines: ["---", "name: test-skill", "---", "# Test skill", "---"],
       expectedBlockEnd: 2,
     },
+    {
+      description: "passes over an indented rule line inside a block scalar, as Pi does",
+      lines: ["---", "description: |", "  Part one.", "  ---", "  Part two.", "name: x", "---"],
+      expectedBlockEnd: 6,
+    },
+    {
+      description: "closes at a column-0 line that starts with the fence, as Pi does",
+      lines: ["---", "name: test-skill", "---- ", "description: body"],
+      expectedBlockEnd: 2,
+    },
   ]) {
     test(description, () => {
       // arrange
