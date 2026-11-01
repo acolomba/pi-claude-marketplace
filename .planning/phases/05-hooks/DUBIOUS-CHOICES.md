@@ -122,3 +122,29 @@ session writes this file. Each subagent ends its report with a
 - **Why dubious:** A hook that calls `Path(transcript_path)` in Python sees
   the current directory for `""`.
 - **Recorded in:** D-CF5-07.
+
+### P5-DC-09: UI design-contract step skipped on a false frontend match
+
+- **Severity:** Low. **Status:** open.
+- **Choice:** `check ui-plan-gate 5` answered `frontend: true` from the token
+  "form" with no frontend evidence; `ui_phase` is false. The step was skipped,
+  as DC-11 did for Phase 1.
+- **Alternatives:** Run `gsd-ai-integration-phase 5`, the only `plan:pre`
+  step hook with a skill.
+- **Recorded in:** this file.
+
+### P5-DC-10: Research open questions settled by the session
+
+- **Severity:** Medium. **Status:** open.
+- **Choice:** D-CF5-23..28 in `05-CONTEXT.md`: skip `if` hooks on tool-less
+  events (upstream); one `HookSurface` kind for every hook notice; one Stop
+  feedback message with a paragraph per reason, first deny reason wins;
+  `/reload` through the TUI driver and resume unit-tested only; a manifest
+  `hooks` string naming `hooks/hooks.json` is not partial; `tool_use_id` and
+  `mcp_server` deferred; four waves instead of three.
+- **Alternatives:** A second notice kind; one message per Stop reason; a
+  hook-owned Pi extension to trigger reload; adding the stdin extras now.
+- **Why dubious:** Upstream's choice among several deny reasons was not
+  probed; the TUI reload scenario's stability is unverified; the researcher
+  ran spike scenarios from the scratchpad (no repo edit).
+- **Recorded in:** `05-CONTEXT.md` "Planning clarifications", `05-RESEARCH.md`.

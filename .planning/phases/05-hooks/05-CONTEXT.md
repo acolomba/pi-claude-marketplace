@@ -285,6 +285,33 @@ Decision IDs are `D-CF5-NN`. Each cites its evidence (E-n) and license.
   observed through the hook recorder in a later session or turn; enable
   restores them.
 
+### Planning clarifications (after research, settled autonomously)
+
+- **D-CF5-23 (`if` on a tool-less event):** a hook whose `if` is set on an
+  event with no tool is skipped at dispatch, as upstream (05-RESEARCH.md);
+  docs row added.
+- **D-CF5-24 (hook notices):** one new `HookSurface` kind carries every hook
+  notice to the user: `systemMessage` (D-CF5-14), the blocked-UserPromptSubmit
+  notice `UserPromptSubmit operation blocked by hook:\n<reason>` (D-CF5-11),
+  and the `onFailure` block on events with no block (SessionStart,
+  SessionEnd, PostCompact), shown as upstream shows exit-2 stderr there
+  (D-CF5-18).
+- **D-CF5-25 (Stop feedback):** one custom message for the re-entry, one
+  `Stop hook feedback:\n<reason>` paragraph per blocking hook in routing order.
+  Several denies on a tool call: the first reason in routing order.
+- **D-CF5-26 (harness):** `/reload` (D-CF5-03) is driven through the TUI
+  driver (`features/lib/pi-tui.ts`, used read-only); resume is unit-tested only
+  (`switch_session` needs a session file, which `--no-session` never writes).
+  Session ids embedded in `CLAUDE_ENV_FILE` are projected to the session
+  ordinal in `runs.steps.ts`; the frozen cucumber token docs get a parent line.
+- **D-CF5-27 (manifest `hooks` naming `hooks/hooks.json`):** a manifest
+  `hooks` string that names the standard `hooks/hooks.json` is skipped, as
+  upstream, and does not make the plugin partial (refines D-CF5-20).
+- **D-CF5-28 (stdin extras):** `tool_use_id` and `mcp_server` stay out of the
+  tool payloads (BACKLOG parent line).
+- **Wave layout:** four waves (research proposal) are allowed: the template's
+  rule moves a second editor of a hot file to the next wave.
+
 ### Claude's Discretion
 
 - Split into plans and waves per the ROADMAP wave template (one
