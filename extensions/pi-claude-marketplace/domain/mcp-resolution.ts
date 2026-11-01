@@ -358,6 +358,9 @@ export async function resolveStrictMcp(
     dirty: false,
   };
 
+  // The root file is read through a link, wherever the link points, as
+  // Claude Code 2.1.316 reads it. Only a reference is held to containment
+  // (T-06-07, MCPR-04).
   await mergeServerFile(merge, path.join(merge.pluginRoot, ".mcp.json"), ".mcp.json");
   await readDeclaredMcp(
     merge,
