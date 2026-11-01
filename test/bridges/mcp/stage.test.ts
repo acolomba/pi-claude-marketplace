@@ -1973,7 +1973,7 @@ describe("prepareStageMcpServers", () => {
             "--site",
             "${PI_CM_AVAR_SITE}",
             "--level",
-            "info",
+            "${PI_CM_AVAR_LEVEL:-info}",
             "--token",
             "${PI_CM_AVAR_TOKEN}",
           ],

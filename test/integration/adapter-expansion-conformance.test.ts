@@ -230,13 +230,14 @@ const ADVERSARIAL_ALPHABETS: readonly AdversarialAlphabet[] = [
   },
 ];
 
-// A kept reference is "" or "x" when the adapter connects.
-const RUNTIME_VARIANTS = ["", "x"];
+// A kept reference is "" or "x" when the adapter connects, or unset
+// (`undefined`), so a reference with a default shows the default (D-CF1-13).
+const RUNTIME_VARIANTS: readonly (string | undefined)[] = ["", "x", undefined];
 
 // ((11 + 11^2 + ... + 11^5) + (15 + 15^2 + 15^3 + 15^4) + (12 + 12^2 + ... +
-// 12^5)) values, two variants each, through both the expanded and the literal
-// path: (177,155 + 54,240 + 271,452) x 2 x 2.
-const EXPECTED_CHECKED_VALUES = 2_011_388;
+// 12^5)) values, three variants each, through both the expanded and the
+// literal path: (177,155 + 54,240 + 271,452) x 3 x 2.
+const EXPECTED_CHECKED_VALUES = 3_017_082;
 
 const PROPERTY_INSTALL_ENV: Environment = { R: "r", K: "S" };
 
@@ -247,7 +248,7 @@ const REPORTED_MISMATCHES = 5;
 /** One value where the adapter's output differs from Claude's. */
 interface Mismatch {
   readonly raw: string;
-  readonly variant: string;
+  readonly variant: string | undefined;
   readonly written: string;
   readonly got: string;
   readonly want: string;
@@ -282,11 +283,14 @@ function sequencesOf({ tokens, maxLength }: AdversarialAlphabet): string[] {
 }
 
 // `K` is always `S`, so a literal `{env:K}` or `$env:K` that leaks shows as
-// `S`. Every other kept reference gets the variant.
-function runtimeFor(segments: readonly Segment[], variant: string): Record<string, string> {
+// `S`. Every other kept reference gets the variant, or stays unset.
+function runtimeFor(
+  segments: readonly Segment[],
+  variant: string | undefined,
+): Record<string, string> {
   const runtime: Record<string, string> = {};
   for (const segment of segments) {
-    if (segment.kind === "ref") {
+    if (segment.kind === "ref" && variant !== undefined) {
       runtime[segment.name] = variant;
     }
   }
@@ -295,13 +299,22 @@ function runtimeFor(segments: readonly Segment[], variant: string): Record<strin
   return runtime;
 }
 
+// Claude's value at connect time: a reference's runtime value, else its
+// default (D-CF1-13). A reference with neither is "", as the adapter writes
+// it; the install reports that name missing.
 function rendered(segments: readonly Segment[], runtime: Environment): string {
   return segments
-    .map((segment) => (segment.kind === "text" ? segment.text : (runtime[segment.name] ?? "")))
+    .map((segment) =>
+      segment.kind === "text" ? segment.text : (runtime[segment.name] ?? segment.fallback ?? ""),
+    )
     .join("");
 }
 
-function mismatchFor(utils: PiMcpAdapterUtils, raw: string, variant: string): Mismatch | undefined {
+function mismatchFor(
+  utils: PiMcpAdapterUtils,
+  raw: string,
+  variant: string | undefined,
+): Mismatch | undefined {
   const { segments } = expandClaudeValue(raw, "plain", PROPERTY_INSTALL_ENV, PROPERTY_BUILTINS);
   const written = serializeSegments(segments, false);
   const runtime = runtimeFor(segments, variant);
@@ -311,15 +324,16 @@ function mismatchFor(utils: PiMcpAdapterUtils, raw: string, variant: string): Mi
 }
 
 // A field Claude leaves unexpanded (an `oauth` value, for one) keeps `raw` as
-// its value. Every name the alphabets use is set at connect time, so a literal
-// reference that leaks shows as the variant or as `S`.
+// its value. Every name the alphabets use takes the variant at connect time,
+// so a literal reference that leaks shows as the variant, its default, or `S`.
 function literalMismatchFor(
   utils: PiMcpAdapterUtils,
   raw: string,
-  variant: string,
+  variant: string | undefined,
 ): Mismatch | undefined {
   const written = serializeLiteral(raw, false);
-  const runtime = { A: variant, B: variant, R: variant, K: "S" };
+  const runtime =
+    variant === undefined ? { K: "S" } : { A: variant, B: variant, R: variant, K: "S" };
   const got = utils.interpolateEnvVars(written, { [EMPTY_ENV_NAME]: "", ...runtime });
   return got === raw ? undefined : { raw, variant, written, got, want: raw };
 }
@@ -344,6 +358,23 @@ function tallyValue(tally: PropertyTally, utils: PiMcpAdapterUtils, raw: string)
   }
 }
 
+for (const { state, runtimeEnv, claudeOutput } of [
+  { state: "an unset", runtimeEnv: {}, claudeOutput: "info" },
+  { state: "an empty", runtimeEnv: { PI_CM_LEVEL: "" }, claudeOutput: "" },
+  { state: "a set", runtimeEnv: { PI_CM_LEVEL: "warn" }, claudeOutput: "warn" },
+]) {
+  test(`D-CF1-13: pi-mcp-adapter expands \${NAME:-default} as Claude does for ${state} variable`, async () => {
+    // arrange
+    const adapter = await loadAdapter();
+
+    // act
+    const output = adapter.utils.interpolateEnvVars("${PI_CM_LEVEL:-info}", runtimeEnv);
+
+    // assert
+    assert.strictEqual(output, claudeOutput);
+  });
+}
+
 test("AVAR-03: pi-mcp-adapter outputs Claude's value for every short adversarial value", async () => {
   // arrange
   const adapter = await loadAdapter();
@@ -357,6 +388,38 @@ test("AVAR-03: pi-mcp-adapter outputs Claude's value for every short adversarial
 
   // assert
   assert.deepStrictEqual(tally, { checked: EXPECTED_CHECKED_VALUES, mismatches: 0, first: [] });
+});
+
+// D-CF1-13: `${A:-` defaults that hold `$env:`, `{env`, `{env:` or a closed
+// `}`, next to literal text that could complete a marker. `A` is unset at
+// install, so a marker-free default reaches the adapter as `${A:-default}`
+// and any other default is resolved at install.
+const MARKER_DEFAULT_ALPHABET: AdversarialAlphabet = {
+  tokens: ["${A:-", "$env:", "{env", "{env:", "}", "K", ":", "$", "e", "v:", "${R}"],
+  maxLength: 5,
+};
+
+// (11 + 11^2 + ... + 11^5) values, three variants each, through both the
+// expanded and the literal path: 177,155 x 3 x 2.
+const EXPECTED_CHECKED_MARKER_DEFAULT_VALUES = 1_062_930;
+
+test("D-CF1-13: pi-mcp-adapter outputs Claude's value for every short marker-default value", async () => {
+  // arrange
+  const adapter = await loadAdapter();
+  const raws = sequencesOf(MARKER_DEFAULT_ALPHABET);
+  const tally: PropertyTally = { checked: 0, mismatches: 0, first: [] };
+
+  // act
+  for (const raw of raws) {
+    tallyValue(tally, adapter.utils, raw);
+  }
+
+  // assert
+  assert.deepStrictEqual(tally, {
+    checked: EXPECTED_CHECKED_MARKER_DEFAULT_VALUES,
+    mismatches: 0,
+    first: [],
+  });
 });
 
 // Runtime values of a kept reference that end in a partial marker or in a
@@ -401,6 +464,62 @@ test("AVAR-05: plugin text after a reference cannot complete a marker that the r
   // assert
   assert.deepStrictEqual(tally, {
     checked: EXPECTED_CHECKED_TAIL_VALUES,
+    mismatches: 0,
+    first: [],
+  });
+});
+
+// The defaults beside `${R}` that could complete, or begin, a marker with
+// R's runtime value. A default holds no `}`.
+const DEFAULT_COMPLETION_ALPHABET: AdversarialAlphabet = {
+  tokens: ["env:", "nv:", "v:", ":", "K", "$", "{", "/"],
+  maxLength: 3,
+};
+
+// Runtime values of R that complete a marker begun by a default before it.
+const REFERENCE_VALUE_COMPLETIONS = ["env:K}", "nv:K}", "v:K}", ":K}", "K}", "}", "env:K", "v:K"];
+
+// 11 tails x (8 + 8^2 + 8^3) defaults after `${R}`, plus 8 completions x
+// (8 + 8^2 + 8^3) defaults before it.
+const EXPECTED_CHECKED_DEFAULT_VALUES = 11_096;
+
+// `A` stays unset when the adapter connects, so the adapter inserts its
+// default next to R's runtime value.
+function defaultMismatchFor(
+  utils: PiMcpAdapterUtils,
+  raw: string,
+  referenceValue: string,
+): Mismatch | undefined {
+  const { segments } = expandClaudeValue(raw, "plain", PROPERTY_INSTALL_ENV, PROPERTY_BUILTINS);
+  const written = serializeSegments(segments, false);
+  const runtime = { R: referenceValue, K: "S" };
+  const want = rendered(segments, runtime);
+  const got = utils.interpolateEnvVars(written, { [EMPTY_ENV_NAME]: "", ...runtime });
+  return got === want ? undefined : { raw, variant: referenceValue, written, got, want };
+}
+
+test("D-CF1-13: a default left to the adapter cannot form a marker with a reference's value", async () => {
+  // arrange
+  const adapter = await loadAdapter();
+  const defaults = sequencesOf(DEFAULT_COMPLETION_ALPHABET);
+  const runs = [
+    ...REFERENCE_VALUE_TAILS.flatMap((tail) =>
+      defaults.map((fallback) => ({ raw: `\${R}\${A:-${fallback}}`, referenceValue: tail })),
+    ),
+    ...REFERENCE_VALUE_COMPLETIONS.flatMap((completion) =>
+      defaults.map((fallback) => ({ raw: `\${A:-${fallback}}\${R}`, referenceValue: completion })),
+    ),
+  ];
+  const tally: PropertyTally = { checked: 0, mismatches: 0, first: [] };
+
+  // act
+  for (const { raw, referenceValue } of runs) {
+    tallyCheck(tally, defaultMismatchFor(adapter.utils, raw, referenceValue));
+  }
+
+  // assert
+  assert.deepStrictEqual(tally, {
+    checked: EXPECTED_CHECKED_DEFAULT_VALUES,
     mismatches: 0,
     first: [],
   });
