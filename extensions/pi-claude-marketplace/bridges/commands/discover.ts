@@ -58,9 +58,11 @@
 // object-map `commands` declaration (`componentPaths.commandMap`) in declared
 // order. A `source` entry that names a command file is one command named
 // `<plugin>:<key>`, the key named as a source name. A directory `source` is
-// walked as a declared directory and its key is ignored. A key Claude Code
-// would refuse, a source that is missing or is not a command file, and a
-// second key on a file already loaded are skipped with a warning. Because
+// walked as a declared directory and its key is ignored. A `content` entry
+// of `plugin.json` is an inline command named the same way; a marketplace
+// entry's `content` entry is dropped with a warning (D-CF3-04). A key Claude
+// Code would refuse, a source that is missing or is not a command file, and
+// a second key on a file already loaded are skipped with a warning. Because
 // the declared paths come first, a declared file wins a name it shares with
 // a map key.
 
@@ -72,7 +74,7 @@ import { CommandNameError } from "../../shared/errors-bridges.ts";
 import { causeChainTrailer, errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { isPlainMarkdownFile, readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 
-import type { DiscoveredCommand } from "./types.ts";
+import type { CommandOverrides, DiscoveredCommand } from "./types.ts";
 import type { CommandMapEntry, MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { Dirent, Stats } from "node:fs";
 
@@ -307,7 +309,7 @@ async function collectCommandFile(args: {
     return;
   }
 
-  out.push({ sourceName, generatedName: named.name, commandFile: full });
+  out.push({ kind: "file", sourceName, generatedName: named.name, commandFile: full });
 }
 
 /**
@@ -452,7 +454,7 @@ async function discoverDeclaredPath(
     return found;
   }
 
-  found.push({ sourceName, generatedName: named.name, commandFile: declared });
+  found.push({ kind: "file", sourceName, generatedName: named.name, commandFile: declared });
   return found;
 }
 
@@ -530,26 +532,37 @@ function mapSourceRefusal(source: string, stats: Stats | undefined): string | un
 /** What one command map entry adds to the discovery. */
 interface MapEntryDiscovery {
   readonly found: readonly DiscoveredCommand[];
-  /** The key that names the found file; absent for a walked directory. */
+  /** The key that names the found command; absent for a walked directory. */
   readonly key?: string;
 }
 
+type SourceMapEntry = Extract<CommandMapEntry, { readonly source: string }>;
+type InlineMapEntry = Extract<CommandMapEntry, { readonly content: string }>;
+
+/** D-CF3-03: the overrides a map entry gives its command, when it gives any. */
+function mapEntryOverrides(mapEntry: CommandMapEntry): { readonly overrides?: CommandOverrides } {
+  const { description, argumentHint, model } = mapEntry;
+  const overrides: CommandOverrides = {
+    ...(description !== undefined && { description }),
+    ...(argumentHint !== undefined && { argumentHint }),
+    ...(model !== undefined && { model }),
+  };
+  return Object.keys(overrides).length === 0 ? {} : { overrides };
+}
+
 /**
- * D-CF3-03: the commands one map entry holds. A directory `source` is walked
- * as a declared directory, and its key is ignored, as Claude Code 2.1.316
- * does. A file `source` is one command named after its key. A bad key or a
- * source that is not a command file skips the entry with a warning.
+ * D-CF3-03: the commands a `source` entry holds. A directory is walked as a
+ * declared directory, and its key and overrides are ignored, as Claude Code
+ * 2.1.316 does. A command file is one command named after the key, carrying
+ * the overrides. A bad key or a source that is not a command file skips the
+ * entry with a warning.
  */
-async function discoverMapEntry(
-  mapEntry: CommandMapEntry,
+async function discoverMapSource(
+  mapEntry: SourceMapEntry,
   pluginRoot: string,
   pluginName: string,
   warnings: string[],
 ): Promise<MapEntryDiscovery> {
-  if (!("source" in mapEntry)) {
-    return { found: [] };
-  }
-
   const sourceFile = path.resolve(pluginRoot, mapEntry.source);
   const stats = await lstatDeclaredPath(sourceFile);
   if (stats?.isDirectory() === true) {
@@ -570,10 +583,47 @@ async function discoverMapEntry(
     return { found: [] };
   }
 
-  return {
-    found: [{ sourceName: mapEntry.key, generatedName: named.name, commandFile: sourceFile }],
-    key: mapEntry.key,
+  const command: DiscoveredCommand = {
+    kind: "file",
+    sourceName: mapEntry.key,
+    generatedName: named.name,
+    commandFile: sourceFile,
+    ...mapEntryOverrides(mapEntry),
   };
+  return { found: [command], key: mapEntry.key };
+}
+
+/**
+ * D-CF3-03: the inline command a `content` entry holds. Claude Code 2.1.316
+ * loads `content` only from `plugin.json`; a marketplace entry's is dropped,
+ * here with a warning (D-CF3-04). A bad key skips the entry with a warning.
+ */
+function discoverMapContent(
+  mapEntry: InlineMapEntry,
+  pluginName: string,
+  warnings: string[],
+): MapEntryDiscovery {
+  if (mapEntry.origin === "entry") {
+    warnings.push(
+      mapEntryWarning(mapEntry.key, 'sets "content", which a marketplace entry cannot declare'),
+    );
+    return { found: [] };
+  }
+
+  const named = nameMapKey(pluginName, mapEntry.key);
+  if (!named.ok) {
+    warnings.push(mapEntryWarning(mapEntry.key, named.reason));
+    return { found: [] };
+  }
+
+  const command: DiscoveredCommand = {
+    kind: "inline",
+    sourceName: mapEntry.key,
+    generatedName: named.name,
+    content: mapEntry.content,
+    ...mapEntryOverrides(mapEntry),
+  };
+  return { found: [command], key: mapEntry.key };
 }
 
 /** The first-wins sets of one discovery, and its warnings. */
@@ -591,11 +641,45 @@ interface DiscoveryState {
 }
 
 /**
- * Folds one found command into the first-wins sets. `where` is the declared
- * path the command came from, or the plugin root for a map entry. A file
+ * Whether `command` reads a file an earlier command already loaded. A file
  * found again is dropped silently, except when a map key names it: D-CF3-03
- * warns that the key loses to the command that loaded the file first. A
- * generated name found again warns either way (D-07).
+ * warns that the key loses to the command that loaded the file first. An
+ * inline command reads no file, so it is never a repeat.
+ */
+function repeatsLoadedFile(
+  state: DiscoveryState,
+  command: DiscoveredCommand,
+  where: string,
+  mapKey: string | undefined,
+): boolean {
+  if (command.kind === "inline") {
+    return false;
+  }
+
+  const fileWinner = state.byFile.get(command.commandFile);
+  if (fileWinner === undefined) {
+    state.byFile.set(command.commandFile, command);
+    return false;
+  }
+
+  if (mapKey !== undefined) {
+    const file = relFrom(where, command.commandFile);
+    state.warnings.push(
+      mapEntryWarning(
+        mapKey,
+        `names "${file}", already loaded as command source "${fileWinner.sourceName}"`,
+      ),
+    );
+  }
+
+  return true;
+}
+
+/**
+ * Folds one found command into the first-wins sets. `where` is the declared
+ * path the command came from, or the plugin root for a map entry. A
+ * generated name found again warns, in the map's wording for a map key
+ * (D-07).
  */
 function admitCommand(
   state: DiscoveryState,
@@ -603,22 +687,9 @@ function admitCommand(
   where: string,
   mapKey: string | undefined,
 ): void {
-  const fileWinner = state.byFile.get(command.commandFile);
-  if (fileWinner !== undefined) {
-    if (mapKey !== undefined) {
-      const file = relFrom(where, command.commandFile);
-      state.warnings.push(
-        mapEntryWarning(
-          mapKey,
-          `names "${file}", already loaded as command source "${fileWinner.sourceName}"`,
-        ),
-      );
-    }
-
+  if (repeatsLoadedFile(state, command, where, mapKey)) {
     return;
   }
-
-  state.byFile.set(command.commandFile, command);
 
   // D-07 first-wins dedup by generated command name.
   const winner = state.byGenerated.get(command.generatedName);
@@ -671,13 +742,11 @@ export async function discoverPluginCommands(input: {
   }
 
   for (const mapEntry of componentPaths.commandMap ?? []) {
-    // eslint-disable-next-line no-await-in-loop -- first-seen entry wins the shared dedup sets
-    const { found, key } = await discoverMapEntry(
-      mapEntry,
-      pluginRoot,
-      input.pluginName,
-      state.warnings,
-    );
+    const { found, key } =
+      "source" in mapEntry
+        ? // eslint-disable-next-line no-await-in-loop -- first-seen entry wins the shared dedup sets
+          await discoverMapSource(mapEntry, pluginRoot, input.pluginName, state.warnings)
+        : discoverMapContent(mapEntry, input.pluginName, state.warnings);
     for (const command of found) {
       admitCommand(state, command, pluginRoot, key);
     }

@@ -567,3 +567,175 @@ Feature: Slash command manifest forms
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+
+  Scenario: A command map entry's inline content is listed with the manifest's description
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "commands": {
+          "beta": { "content": "Beta inline body $ARGUMENTS", "description": "Beta from the manifest." }
+        }
+      }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    When the user lists the slash commands pi offers
+    Then pi offers these slash commands from prompt templates:
+      | command    | description             |
+      | /demo:beta | Beta from the manifest. |
+
+  Scenario: Inline command content keeps its own frontmatter
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "commands": {
+          "fm": { "content": "---\ndescription: FM in content\n---\nFM body $ARGUMENTS" }
+        }
+      }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    When the user lists the slash commands pi offers
+    Then pi offers these slash commands from prompt templates:
+      | command  | description   |
+      | /demo:fm | FM in content |
+
+  Scenario: Invoking an inline command sends the model its content with the arguments
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "commands": {
+          "beta": { "content": "Beta inline body $ARGUMENTS", "description": "Beta from the manifest." }
+        }
+      }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply     |
+      | Beta ran. |
+    When the user prompts "/demo:beta x"
+    Then the model receives these calls:
+      | call | role | text               |
+      | 1    | user | Beta inline body x |
+
+  Scenario: A command map entry's model is reported as a dropped field
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "commands": { "alpha": { "source": "./cmds/alpha.md", "model": "opus" } }
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "cmds/alpha.md" with this text:
+      """
+      ---
+      description: Runs alpha.
+      ---
+
+      Run alpha.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                              | lines                         |
+      | cascade    | info     | true         |                                                                     |                               |
+      | diagnostic | warning  | false        | Plugin "demo" [project] installed; 1 declared component has a note. | [alpha] dropped fields: model |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+
+  Scenario: A command map entry's argument hint is shown in pi's terminal menu
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "commands": { "alpha": { "source": "./cmds/alpha.md", "argumentHint": "<target>" } }
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "cmds/alpha.md" with this text:
+      """
+      ---
+      description: Runs alpha.
+      argument-hint: <file hint>
+      ---
+
+      Run alpha.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    When the user types the slash command prefix "/demo:al" in pi's terminal
+    Then pi's terminal menu offers these slash commands:
+      | command    | text                        |
+      | demo:alpha | <target> -- [t] Runs alpha. |
+
+  Scenario: A marketplace entry's inline command content is dropped with a warning
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {
+        "name": "fixtures",
+        "owner": { "name": "features" },
+        "plugins": [
+          {
+            "name": "demo",
+            "source": "./plugins/demo",
+            "version": "1.0.0",
+            "commands": {
+              "gamma": { "source": "./extra/gamma.md" },
+              "delta": { "content": "Delta inline body." }
+            }
+          }
+        ]
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "extra/gamma.md" with this text:
+      """
+      Run gamma.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                              | lines                                                                                               |
+      | cascade    | info     | true         |                                                                     |                                                                                                     |
+      | diagnostic | warning  | false        | Plugin "demo" [project] installed; 1 declared component has a note. | command map entry "delta" sets "content", which a marketplace entry cannot declare; skipping entry. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |

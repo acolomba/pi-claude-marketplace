@@ -24,23 +24,46 @@ import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 
-/** A single command discovered under `componentPaths.commands`. */
-export interface DiscoveredCommand {
-  /**
-   * `.md` source path relative to its `commands/` directory, minus the
-   * extension, with OS separators normalized to `/`. Flat files are bare
-   * names ("acme-deploy"); nested files are `/`-separated paths
-   * ("build/web"). See CM-4.
-   */
-  readonly sourceName: string;
-  /**
-   * `<plugin>:<command>` after CM-2 elision, with nested path segments
-   * joined by `:` (e.g. "acme:deploy", "acme:build:web").
-   */
-  readonly generatedName: string;
-  /** Absolute path to the source `.md` file. */
-  readonly commandFile: string;
+/**
+ * D-CF3-03: the fields a command map entry writes over its command's own
+ * frontmatter. `model` is not written; it only counts for the D-CF3-09
+ * dropped-fields line.
+ */
+export interface CommandOverrides {
+  readonly description?: string;
+  readonly argumentHint?: string;
+  readonly model?: string;
 }
+
+/**
+ * A single command discovered under `componentPaths.commands` or the
+ * D-CF3-03 command map. A `file` command reads its text from a source `.md`
+ * file; an `inline` command carries the text a map entry's `content` gives.
+ *
+ * `sourceName` is the `.md` source path relative to its `commands/`
+ * directory, minus the extension, with OS separators normalized to `/`:
+ * flat files are bare names ("acme-deploy"), nested files are `/`-separated
+ * paths ("build/web"), see CM-4. For a map entry it is the key.
+ * `generatedName` is `<plugin>:<command>` after CM-2 elision, with nested
+ * path segments joined by `:` (e.g. "acme:deploy", "acme:build:web").
+ */
+export type DiscoveredCommand =
+  | {
+      readonly kind: "file";
+      readonly sourceName: string;
+      readonly generatedName: string;
+      /** Absolute path to the source `.md` file. */
+      readonly commandFile: string;
+      readonly overrides?: CommandOverrides;
+    }
+  | {
+      readonly kind: "inline";
+      readonly sourceName: string;
+      readonly generatedName: string;
+      /** The command file's whole text, frontmatter included. */
+      readonly content: string;
+      readonly overrides?: CommandOverrides;
+    };
 
 /** Input bundle for `prepareStageCommands`. */
 export interface StageCommandsInput {
@@ -66,7 +89,10 @@ export interface StageCommandsInput {
 /** Per-command record returned for `state.json` population (W-05). */
 export interface StagedCommandRecord {
   readonly generatedName: string;
-  /** Absolute path to the source `.md` file (pre-substitution). */
+  /**
+   * Absolute path to the source `.md` file (pre-substitution), or
+   * `<plugin root>#commands.<key>` for an inline command (D-CF3-03).
+   */
   readonly sourcePath: string;
   /** Absolute path to the target `.md` file under `<extensionRoot>/resources/prompts/`. */
   readonly targetPath: string;

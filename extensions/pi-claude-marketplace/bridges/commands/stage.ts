@@ -51,6 +51,7 @@ import type { ProjectCommandEntry, ProjectCommandLedger } from "./project-ledger
 import type { StagedCommandContext } from "./staged-command.ts";
 import type {
   CommandDegradeRecord,
+  DiscoveredCommand,
   PreparedCommandsStaged,
   PreparedCommandsStaging,
   StageCommandsInput,
@@ -80,6 +81,18 @@ function contextualStagingError(pluginName: string, generatedName: string, err: 
     `command "${generatedName}" of plugin "${pluginName}" could not be staged`,
     { cause: err },
   );
+}
+
+/**
+ * The `sourcePath` a staged command's record names: its source file, or for
+ * an inline command of the D-CF3-03 object map, which has no file, the
+ * synthetic `<plugin root>#commands.<key>` (as MCP servers record
+ * `<plugin root>#mcpServers`).
+ */
+function commandSourcePath(command: DiscoveredCommand, pluginRoot: string): string {
+  return command.kind === "file"
+    ? command.commandFile
+    : `${pluginRoot}#commands.${command.sourceName}`;
 }
 
 /**
@@ -199,7 +212,7 @@ export async function prepareStageCommands(
 
   const recorded: StagedCommandRecord[] = discovered.map((command) => ({
     generatedName: command.generatedName,
-    sourcePath: command.commandFile,
+    sourcePath: commandSourcePath(command, pluginRoot),
     targetPath: path.join(locations.promptsTargetDir, command.generatedName + ".md"),
   }));
 

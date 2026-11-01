@@ -60,6 +60,7 @@ test("a declared command root inside the conventional folder replaces it and ins
   assert.deepStrictEqual(discovery, {
     discovered: [
       {
+        kind: "file",
         sourceName: "commit",
         generatedName: "acme:commit",
         commandFile: path.join(pluginRoot, "commands", "git", "commit.md"),

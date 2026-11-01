@@ -1272,3 +1272,74 @@ test("D-CF3-07 a failed project ledger write carries the staging cleanup leak", 
     },
   );
 });
+
+test("D-CF3-03 stages an inline command map entry and records it under the plugin root's commands key", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-stage-inline-");
+  const pluginRoot = await createPluginRoot(t, "commands-source-inline-");
+  const pluginDataDir = path.join(pluginRoot, "data");
+  const expectedBeta =
+    '---\n"description": "Beta from the manifest."\n' +
+    recordLine(pluginRoot, pluginDataDir) +
+    "---\nBeta inline body in ${CLAUDE_PLUGIN_ROOT}".replace("${CLAUDE_PLUGIN_ROOT}", pluginRoot);
+  const updates: ProjectCommandChange[] = [];
+  const ledger = {
+    update: (change: ProjectCommandChange) => {
+      updates.push(change);
+      return Promise.resolve();
+    },
+  } satisfies ProjectCommandLedger;
+  const resolved: ResolvedPluginInstallable = {
+    ...resolvedFor(pluginRoot, []),
+    supported: ["commands"],
+    componentPaths: {
+      ...resolvedFor(pluginRoot, []).componentPaths,
+      commandMap: [
+        {
+          key: "beta",
+          content: "Beta inline body in ${CLAUDE_PLUGIN_ROOT}",
+          origin: "manifest",
+          description: "Beta from the manifest.",
+        },
+      ],
+    },
+  };
+
+  // act
+  const prepared = await prepareStageCommands(createRemovalOps(), {
+    locations,
+    cwd: locations.scopeRoot,
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir,
+    resolved,
+  });
+  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared, ledger);
+
+  // assert
+  assert.deepStrictEqual(
+    { commitLeak, recorded: prepared.result.recorded, warnings: prepared.result.warnings },
+    {
+      commitLeak: undefined,
+      recorded: [
+        {
+          generatedName: "acme:beta",
+          sourcePath: `${pluginRoot}#commands.beta`,
+          targetPath: path.join(locations.promptsTargetDir, "acme:beta.md"),
+        },
+      ],
+      warnings: [],
+    },
+  );
+  assert.strictEqual(
+    await readFile(path.join(locations.promptsTargetDir, "acme:beta.md"), "utf8"),
+    expectedBeta,
+  );
+  assert.deepStrictEqual(updates, [
+    {
+      projectPath: path.dirname(locations.scopeRoot),
+      forget: [],
+      remember: new Map([["acme:beta", { plugin: "acme", sha256: sha256(expectedBeta) }]]),
+    },
+  ]);
+});
