@@ -345,11 +345,11 @@ Plans:
 - Wave 3: decision IDs, SUMMARY lines for the parent, and the phase gate.
 - Owns: `features/agent/**`, `features/step_definitions/agent/**`, `features/lib/agent-files.ts`, `bridges/agents/**`, `persistence/agents-index-*`, `test/bridges/agents/**`, `test/integration/agents-*`. XK-01 uses Phase 1's skill fixture writer and stand-ins, never a Phase 2 file.
 
-**Plans:** 6 plans in 4 waves (the template's wave 2 runs one `convert.ts` owner beside the two plans that change no product code, and invocation moves to wave 3 because it edits `convert.ts` after the frontmatter plan; the phase gate is wave 4)
+**Plans:** 1/6 plans executed in 4 waves (the template's wave 2 runs one `convert.ts` owner beside the two plans that change no product code, and invocation moves to wave 3 because it edits `convert.ts` after the frontmatter plan; the phase gate is wave 4)
 
 Plans:
 **Wave 1**
-- [ ] 04-01-PLAN.md — Wave 1 tracer: listing and naming, the shared agent steps, the description fallback, nested and declared agent files, and `advertise` (AGT-01; D-CF4-01, -02, -03, -13, -14)
+- [x] 04-01-PLAN.md — Wave 1 tracer: listing and naming, the shared agent steps, the description fallback, nested and declared agent files, and `advertise` (AGT-01; D-CF4-01, -02, -03, -13, -14)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 04-02-PLAN.md — Wave 2: frontmatter conversion, the foreground default, effort, the 5.x `--map-model` table, tool splitting, and guided fields (AGT-03, AGT-02 `--map-model`; D-CF4-05, -06, -07, -08)
@@ -441,7 +441,7 @@ Plans:
 | 1. Harness and Version Raise | 15/15 | Complete    | 2026-11-01 |
 | 2. Skills | 6/7 | In Progress | - |
 | 3. Slash Commands | 0/TBD | Not started | - |
-| 4. Agents | 0/TBD | Not started | - |
+| 4. Agents | 1/6 | In Progress | - |
 | 5. Hooks | 0/TBD | Not started | - |
 | 6. MCP Servers | 0/TBD | Not started | - |
 | 7. Workflows | 0/TBD | Not started | - |
