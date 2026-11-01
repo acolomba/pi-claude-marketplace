@@ -65,7 +65,13 @@ interface RecordWaiter {
 
 type PiChild = Awaited<ReturnType<typeof startRpcPi>>;
 
-const DIALOG_METHODS: ReadonlySet<string> = new Set(["select", "confirm", "input", "editor"]);
+// The extension UI methods that open a dialog; a step fails on any of them.
+export const DIALOG_METHODS: ReadonlySet<string> = new Set([
+  "select",
+  "confirm",
+  "input",
+  "editor",
+]);
 
 // Pi exits within a second of losing stdin; past this the group is killed.
 const STOP_GRACE_MS = 5_000;

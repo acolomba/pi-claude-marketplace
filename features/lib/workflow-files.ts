@@ -17,6 +17,7 @@ import path from "node:path";
 
 import { promptDisposition } from "../../test/e2e/_rpc.ts";
 
+import { DIALOG_METHODS } from "./pi-process.ts";
 import { writePublishedPluginFile } from "./published-marketplace.ts";
 import { modelCallsOf } from "./scripted-model/script.ts";
 import { readLogLengths, readLogLinesSince } from "./turn-records.ts";
@@ -45,8 +46,6 @@ export interface WorkflowCommandTurn {
 }
 
 const PROGRESS_ENTRY = "pi-dynamic-workflows:progress";
-
-const DIALOG_METHODS: ReadonlySet<string> = new Set(["select", "confirm", "input", "editor"]);
 
 /** Returns the text of the script of `workflow`: its `meta`, then a `return` of its value. */
 export function workflowScriptText(workflow: PluginWorkflow): string {
