@@ -4,9 +4,9 @@ milestone: component-features
 milestone_name: Component Behavioral Tests
 current_phase: 2
 current_phase_name: Skills
-status: verifying
-stopped_at: Phase 01 complete, ready to verify Phase 2
-last_updated: "2026-11-01T07:45:42.424Z"
+status: planning
+stopped_at: Phase 01 complete, ready to plan Phase 2
+last_updated: "2026-11-01T07:48:00.000Z"
 last_activity: 2026-11-01
 last_activity_desc: Phase 01 complete, transitioned to Phase 2
 state_head: 1f1d6e7ffcc107dea416ca08634653b8da8e3478
@@ -22,21 +22,21 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-31 at component-features start)
+See: `.planning/PROJECT.md` (updated 2026-11-01 after Phase 1)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 01 — Harness and Version Raise
+**Current focus:** Phase 2 — Skills (Phases 2-7 run in parallel from here)
 
 ## Current Position
 
 Phase: 2 — Skills
-Plan: 2
-Status: Phase complete — ready for verification
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-11-01 — Phase 01 complete, transitioned to Phase 2
 
-Progress: [█░░░░░░░░░] 14%
+Progress: [█░░░░░░░░░] 14% (1/7 phases; 15/15 planned plans done, Phases 2-7 not yet planned)
 
 Phase 1 is the only prerequisite. After it merges to `claude/quirky-planck-hhm592`,
 Phases 2-7 (Skills, Slash Commands, Agents, Hooks, MCP Servers, Workflows) run
@@ -817,22 +817,37 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ### Recent Decisions
 
-- D-MF-05: unscoped marketplace removal selects project before user, falls
-  back to a sole user record, and never falls through after selecting a
-  project record whose base layer does not declare the marketplace.
-- D-MF-06: marketplace info evaluates both scopes independently in
-  project-first order, keeps the shipped invalid-manifest failed row, and
-  preserves manifest declaration order for allowed dependency marketplaces.
+Full log: the D-CF1-01..17 rows in PROJECT.md Key Decisions.
+
+- D-CF1-01..05: user-invoked bridged skills and commands get Claude Code's
+  argument substitution, `` !`cmd` `` injection, description fallback, and
+  dropped-field warnings. Phase 1 built the unwired cores; Phases 2 and 3
+  wire them.
+- D-CF1-06: a declared `commands`, `agents`, or `workflows` path replaces the
+  conventional folder; a declared `skills` path still adds (shipped).
+- D-CF1-09..12: `user-invocable: false` keeps today's behavior (gap reported
+  to Pi); `new` is sent as `clear`; `compact` fires SessionStart; `clear`,
+  `compact`, and `fork` matchers are admitted. Phases 2 and 5 pin them.
+- D-CF1-13/14: under pi-mcp-adapter 7.x the bridge leaves `${NAME:-default}`
+  to the adapter; `appendStructuredContent` and `roots` are carried fields.
+- D-CF1-15..17: one profile Pi per scenario through a `Given`, two CI
+  behavioral shards, `.ts` stand-ins under `features/lib/` and a file-backed
+  model script.
 
 ### Blockers/Concerns
 
-- [component-features] Phases 2-7 must not start before Phase 1 records the
-  pre-fan-out decisions (FG-01..FG-06, FG-10, FG-14, project trust, FG-33)
-  and merges; no scenario may pin an unlicensed gap before the user decides.
-- [component-features] pi-mcp-adapter 7.0.0 expands `${NAME:-default}`, so a
-  bridge literal such as `${ANTHROPIC_API_KEY:-}` can resolve to a secret until
-  Phase 1 fixes `bridges/mcp/adapter-escape.ts` and re-proves the conformance
-  property (VER-04).
+- [component-features] No scenario may pin an unlicensed gap before the user
+  decides; the pre-fan-out decisions are recorded (D-CF1-01..17).
+- [Phase 1] `.fallowrc.json` carries `dynamicallyLoaded` and `ignoreExports`
+  entries for the six unwired invocation cores (argument substitution, shell
+  words, context injection, description fallback, and the rest); remove them
+  and rerun `npm run fallow` once Phases 2 and 3 import the cores.
+- [Phase 1] pi-subagents 0.84 lists project agents whatever the trust, so the
+  trust pair observes a project-scope run; the agents phase settles how that
+  compares with Claude Code's handling of agents in an untrusted project.
+- [Phase 1] The sandbox runs as root, which breaks the permission-injection
+  tests; run npm scripts and hook-running commits through the non-DAC shell
+  wrapper (`npm_config_script_shell`) with a 6 GB heap.
 - [component-features] Parallel phases share append-only closed sets, the
   `soft-dep.ts` arms, and reviewed clone pairs; rerun `npx fallow dupes` after
   the second merge and re-verify a phase after any merge that touches its files.
@@ -850,6 +865,6 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ## Session Continuity
 
-Last session: 2026-10-31
-Stopped at: Phase 01 complete, ready to verify Phase 2
+Last session: 2026-11-01T07:48:00Z
+Stopped at: Phase 1 complete, ready to plan Phase 2 (Phases 2-7 fan out in parallel)
 Resume file: None
