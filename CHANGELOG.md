@@ -18,6 +18,7 @@
   - Pi now gets no plugin skills or prompt templates from a project that it does not trust.
   - A project-scope skill now runs its `` !`command` `` lines only when you installed its plugin into the project on this machine. For a project skill installed earlier, run `/claude:plugin reinstall <plugin>@<marketplace> --scope project` once.
   - A load with `autoapply` on now applies only the user scope and shows the pending changes of the project scope. `/claude:plugin apply` still applies both scopes.
+  - Internal: behavioral tests now cover plugin workflows, from the command list and runs to refused scripts, a missing engine, and uninstall.
 - A plugin's `SessionStart` hook now runs once when an RPC client starts, switches, forks, or clones a session, as in Claude Code. (#294)
 - Internal: the repository now sets itself up in a Claude Code cloud session, and the tests that use `chmod` run there. (#293)
 
