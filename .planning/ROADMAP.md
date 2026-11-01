@@ -417,11 +417,11 @@ Plans:
 - Wave 3: decision IDs, `docs/workflows-compatibility.md`, SUMMARY lines for the parent, and the phase gate.
 - Owns: `features/workflow/**`, `features/step_definitions/workflow/**`, `features/lib/workflow-files.ts`, `bridges/workflows/**`, `platform/workflow-home.ts`, `domain/workflow-script.ts`, `docs/workflows-compatibility.md`, `test/bridges/workflows/**`, `test/integration/workflows-*`.
 
-**Plans:** 6 plans in 3 waves (the wave-1 tracer also seeds `lifecycle.feature` with its stale-command scenario, because `check:features` fails on a shared step that no feature file uses yet)
+**Plans:** 1/6 plans executed in 3 waves (the wave-1 tracer also seeds `lifecycle.feature` with its stale-command scenario, because `check:features` fails on a shared step that no feature file uses yet)
 
 Plans:
 **Wave 1**
-- [ ] 07-01-PLAN.md — Wave 1 tracer: listing and naming, the shared workflow steps and run helpers, and the stale-command notice (WFL-01, WFL-05; WNAM-06, WLIF-06)
+- [x] 07-01-PLAN.md — Wave 1 tracer: listing and naming, the shared workflow steps and run helpers, and the stale-command notice (WFL-01, WFL-05; WNAM-06, WLIF-06)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 07-02-PLAN.md — Wave 2: refused, skipped, and noted scripts at install and at run (WFL-03; D-CF7-03, D-CF7-04)
@@ -442,7 +442,7 @@ Plans:
 | 4. Agents | 0/TBD | Not started | - |
 | 5. Hooks | 0/TBD | Not started | - |
 | 6. MCP Servers | 0/TBD | Not started | - |
-| 7. Workflows | 0/TBD | Not started | - |
+| 7. Workflows | 1/6 | In Progress | - |
 
 ## Carried Forward
 
