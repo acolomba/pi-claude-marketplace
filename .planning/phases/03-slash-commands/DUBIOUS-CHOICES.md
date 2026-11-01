@@ -217,3 +217,42 @@ entries into it. Severity and status follow the root file's rules.
   22. 03-01's degraded-command scenario assumes that install reports only
       warnings (`, which warned`).
 - **Recorded in:** the plans.
+
+### P3-DC-11: Orchestration choices for Phase 3 execution
+
+- **Phase / source:** Phase 3 orchestrator (execute-phase).
+- **Severity:** Low. **Status:** open.
+- **Items:**
+  1. Executor prompts tell each executor to Read the GSD execution files by
+     absolute path instead of inlining them (DC-17 precedent), and add the
+     project rules and environment facts blocks.
+  2. The post-merge gate is the project's `npm run check` (AGENTS.md), not the
+     workflow's build-command sniff. When a wave's merge result has the same
+     build inputs as a tree the executor already passed `npm run check` on
+     (the wave base had not moved, only the SUMMARY was added), the passing
+     result is reused, as AGENTS.md allows. Wave 1: the executor's run at
+     `b6a3912`; the merged tree adds only `03-01-SUMMARY.md`.
+
+### P3-DC-12: Plan 03-01 executor choices (staged command writer)
+
+- **Phase / source:** 03-01 executor (`03-01-SUMMARY.md`).
+- **Severity:** Low-Medium. **Status:** open.
+- **Items:**
+  1. The read-back check can fail an install: a frontmatter key over 1024
+     characters (legal as an explicit `? key`) becomes an implicit key in the
+     JSON-flow rebuild, which Pi's parser refuses (`BridgeStagingError`, no
+     degrade).
+  2. The description fallback is computed on the body after CM-3
+     substitution and the reference rewrite (upstream: raw body).
+  3. A frontmatter that parses to a list or a scalar is dropped without a
+     warning.
+  4. Outline rows with no declared description write `description:` (YAML
+     null); scenarios cover null, `""`, and no frontmatter.
+  5. The 101-character fallback row pins a 97-character cut that ends on a
+     space, as `A2e` does.
+  6. Mocked neutralize-safeguard unit cases kept (the function moved
+     unchanged, with branches real input cannot reach).
+  7. One live marker each side keeps `dup:23c99c81` hidden; three stale
+     commands-side markers deleted. Rebuild also strips a second BOM, as
+     Pi's parser does. `P3-DC-09` is not cited in code comments (phase IDs
+     are forbidden there).

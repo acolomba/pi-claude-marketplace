@@ -321,11 +321,11 @@ Plans:
 - Wave 3: decision IDs, SUMMARY lines for the parent, and the phase gate.
 - Owns: `features/slash-command/**`, `features/step_definitions/slash-command/**`, `features/lib/slash-command-files.ts`, `bridges/commands/**`, `test/bridges/commands/**`, `test/integration/commands-*`. If FG-13 adds the object-map form, the resolver change stays inside the commands arm.
 
-**Plans:** 9 plans in 5 waves (the template's wave 2 holds its four plans; the D-CF3-07 project-command ledger adds a wave 3 writer and a wave 4 check, and the D-CF3-03 object map runs in wave 4 because it extends the files the wave 2 and wave 3 plans change; the phase gate is wave 5)
+**Plans:** 1/9 plans executed in 5 waves (the template's wave 2 holds its four plans; the D-CF3-07 project-command ledger adds a wave 3 writer and a wave 4 check, and the D-CF3-03 object map runs in wave 4 because it extends the files the wave 2 and wave 3 plans change; the phase gate is wave 5)
 
 Plans:
 **Wave 1**
-- [ ] 03-01-PLAN.md — Wave 1 tracer: listing with Claude Code's description fallback, the naming pins, the shared command steps, and the stored install-time record (CMD-01; D-CF3-08, D-CF3-12, D-CF3-06 install half)
+- [x] 03-01-PLAN.md — Wave 1 tracer: listing with Claude Code's description fallback, the naming pins, the shared command steps, and the stored install-time record (CMD-01; D-CF3-08, D-CF3-12, D-CF3-06 install half)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 03-02-PLAN.md — Wave 2: frontmatter fields, the dropped-fields warning, `user-invocable`, model invocation, and the terminal argument hint (CMD-03; D-CF3-09, D-CF3-01, D-CF3-02, D-CF3-10)
@@ -445,7 +445,7 @@ Plans:
 | --- | --- | --- | --- |
 | 1. Harness and Version Raise | 15/15 | Complete    | 2026-11-01 |
 | 2. Skills | 7/7 | In Progress | - |
-| 3. Slash Commands | 0/TBD | Not started | - |
+| 3. Slash Commands | 1/9 | In Progress | - |
 | 4. Agents | 0/TBD | Not started | - |
 | 5. Hooks | 0/TBD | Not started | - |
 | 6. MCP Servers | 0/TBD | Not started | - |
