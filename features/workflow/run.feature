@@ -44,3 +44,24 @@ Feature: Workflow run
       | /demo:echo first second who=Ada | {"who":"Ada","_":"first second","_raw":"first second who=Ada"}         |
       | /demo:echo                      | {"_":"","_raw":""}                                                     |
       | /demo:echo a=1 b= =c x=y=z tail | {"a":"1","b":"","x":"y=z","_":"=c tail","_raw":"a=1 b= =c x=y=z tail"} |
+
+  Scenario: A workflow whose script throws ends failed with the error it threw
+    Given pi runs with the scripted model and these companions:
+      | companion            |
+      | pi-dynamic-workflows |
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/nope.js" with this text:
+      """
+      export const meta = {name:"nope",description:"Always fails."};
+
+      throw new Error("Nope.");
+      return "never";
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    When the user runs the workflow command "/demo:nope"
+    Then the workflow run ends with the status "failed" and the error "Error: Nope."
