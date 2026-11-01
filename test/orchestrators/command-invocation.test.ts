@@ -11,6 +11,11 @@ import type {
   CommandInvocationRequest,
 } from "../../extensions/pi-claude-marketplace/orchestrators/command-invocation.ts";
 import type { ExtensionAPI } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type {
+  PromptShellHost,
+  PromptShellRequest,
+  PromptShellResult,
+} from "../../extensions/pi-claude-marketplace/platform/prompt-shell.ts";
 
 type PiCommand = ReturnType<ExtensionAPI["getCommands"]>[number];
 
@@ -31,7 +36,16 @@ function commandFile(body: string, frontmatter: readonly string[] = []): string 
   return ["---", "description: Greets.", ...frontmatter, "---", "", body, ""].join("\n");
 }
 
-/** Reads only the named files; any other read fails the case. */
+const host = {
+  platform: "linux",
+  env: { PATH: "/usr/bin" },
+  isFile: () => false,
+  signalGroup: () => {
+    throw new Error("an invocation must not signal a process");
+  },
+} satisfies PromptShellHost;
+
+/** Reads only the named files, and runs no shell; any other read or a shell run fails the case. */
 function dependencies(files: Readonly<Record<string, string>>): CommandInvocationDependencies {
   return {
     getAgentDir: () => AGENT_DIR,
@@ -40,6 +54,23 @@ function dependencies(files: Readonly<Record<string, string>>): CommandInvocatio
       return content === undefined
         ? Promise.reject(new Error(`unexpected read of ${file}`))
         : Promise.resolve(content);
+    },
+    host,
+    runShell: () => Promise.reject(new Error("a body without a ! command must not run a shell")),
+  };
+}
+
+/** A shell runner that records its requests and answers each with `result`. */
+function recordingShell(result: PromptShellResult): {
+  readonly requests: PromptShellRequest[];
+  readonly runShell: CommandInvocationDependencies["runShell"];
+} {
+  const requests: PromptShellRequest[] = [];
+  return {
+    requests,
+    runShell: (shellRequest) => {
+      requests.push(shellRequest);
+      return Promise.resolve(result);
     },
   };
 }
@@ -263,4 +294,175 @@ test("reads a user command from the agent directory of the running pi by default
 
   // assert
   assert.deepStrictEqual(outcome, { kind: "send", text: "Greet Ada." });
+});
+
+test("D-CF1-02: replaces a context command with its output, run by the chosen shell in the session directory", async () => {
+  // arrange
+  const files = { [PROJECT_COMMAND]: commandFile("Status: !`printf ok`", ["shell: bash"]) };
+  const shell = recordingShell({
+    kind: "exited",
+    code: 0,
+    stdout: "ok",
+    stderr: "",
+    shell: "bash",
+  });
+
+  // act
+  const outcome = await invokeStagedCommand(request({ args: "" }), {
+    ...dependencies(files),
+    runShell: shell.runShell,
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, { kind: "send", text: "Status: ok" });
+  assert.deepStrictEqual(shell.requests, [
+    { command: "printf ok", shell: "bash", cwd: CWD, env: { PATH: "/usr/bin" } },
+  ]);
+});
+
+test("T-01-22: substitutes before injection, so an argument that starts with ! runs nothing", async () => {
+  // arrange
+  const files = { [PROJECT_COMMAND]: commandFile("Echo: $ARGUMENTS") };
+
+  // act
+  const outcome = await invokeStagedCommand(
+    request({ args: "!`printf pwned`" }),
+    dependencies(files),
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, { kind: "send", text: "Echo: \\! `printf pwned`" });
+});
+
+test("T-01-24: refuses with Claude Code's message when a context command fails", async () => {
+  // arrange
+  const files = { [PROJECT_COMMAND]: commandFile("Check: !`exit 3`") };
+  const shell = recordingShell({
+    kind: "exited",
+    code: 3,
+    stdout: "partial",
+    stderr: "",
+    shell: "bash",
+  });
+
+  // act
+  const outcome = await invokeStagedCommand(request({ args: "" }), {
+    ...dependencies(files),
+    runShell: shell.runShell,
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    kind: "refuse",
+    message: 'Shell command failed for pattern "!`exit 3`": partial',
+  });
+});
+
+test("T-01-24: refuses without running a command when the frontmatter asks for a missing Bash", async () => {
+  // arrange
+  const files = { [PROJECT_COMMAND]: commandFile("Check: !`exit 3`", ["shell: bash"]) };
+  const windows = { ...host, platform: "win32", env: {} } satisfies PromptShellHost;
+
+  // act
+  const outcome = await invokeStagedCommand(request({ args: "" }), {
+    ...dependencies(files),
+    host: windows,
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    kind: "refuse",
+    message:
+      "Skill /demo:greet requires bash (`shell: bash` in frontmatter) but Git Bash was not " +
+      "found. Install Git for Windows (https://git-scm.com/downloads/win), or change the " +
+      "skill's frontmatter to `shell: powershell`.",
+  });
+});
+
+test("T-03-10: refuses with Claude Code's message when the arguments pass the size limit", async () => {
+  // arrange
+  const files = { [PROJECT_COMMAND]: commandFile("Echo: $ARGUMENTS") };
+
+  // act
+  const outcome = await invokeStagedCommand(
+    request({ args: "a".repeat(4_000_001) }),
+    dependencies(files),
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    kind: "refuse",
+    message:
+      "This skill, command or hook and the arguments filled into it add up to more than " +
+      "4,000,000 characters. Use shorter arguments or fewer placeholders such as $ARGUMENTS.",
+  });
+});
+
+test("D-CF3-06: refuses a project command in a project pi does not trust before reading its file", async () => {
+  // arrange
+  const files = {};
+
+  // act
+  const outcome = await invokeStagedCommand(
+    request({ projectTrusted: false }),
+    dependencies(files),
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    kind: "refuse",
+    message:
+      "The command /demo:greet belongs to the project /work, which Pi does not trust. " +
+      "Trust the project folder, then run /reload to use it.",
+  });
+});
+
+test("D-CF3-06: sends a user command although pi does not trust the project", async () => {
+  // arrange
+  const files = { [USER_COMMAND]: commandFile("Greet $0.") };
+  const commands = [piCommand("demo:greet", "prompt", USER_COMMAND)];
+
+  // act
+  const outcome = await invokeStagedCommand(
+    request({ commands, projectTrusted: false }),
+    dependencies(files),
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, { kind: "send", text: "Greet Ada." });
+});
+
+test("D-CF3-06: refuses a staged command whose file cannot be read", async () => {
+  // arrange
+  const files = {};
+
+  // act
+  const outcome = await invokeStagedCommand(request(), dependencies(files));
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    kind: "refuse",
+    message:
+      `Cannot read the command /demo:greet: unexpected read of ${PROJECT_COMMAND}. ` +
+      "Run /reload to load the installed commands again.",
+  });
+});
+
+test("lets a failure other than the cores' own propagate", async () => {
+  // arrange
+  const files = { [PROJECT_COMMAND]: commandFile("Status: !`printf ok`") };
+  const failure = new Error("spawn failed");
+
+  // act & assert
+  await assert.rejects(
+    () =>
+      invokeStagedCommand(request({ args: "" }), {
+        ...dependencies(files),
+        runShell: () => Promise.reject(failure),
+      }),
+    (error: unknown) => {
+      assert.strictEqual(error, failure);
+      return true;
+    },
+  );
 });

@@ -6,6 +6,13 @@
 // 2.1.316's `T2e` fills it (D-CF1-01), so Pi's own 1-based expansion never
 // runs on it.
 //
+// D-CF1-02 / T-01-22: the `!` commands run after the substitution, once, in
+// the session's working directory, so a typed argument cannot form a command
+// (the argument core escapes a word-initial `!`). T-01-24: a failed command,
+// an oversized invocation, a missing Bash, a project Pi does not trust, and a
+// staged file that cannot be read refuse the invocation, and nothing reaches
+// the model.
+//
 // D-CF1-03: only a command the user types reaches this module. A prompt
 // template outside this extension's two staged prompts directories, such as
 // the user's own, is `not-staged` and keeps Pi's expansion.
@@ -16,12 +23,24 @@ import path from "node:path";
 import { readCommandRecord } from "../bridges/commands/command-record.ts";
 import {
   claudeEffort,
+  InvocationTooLargeError,
   parseArgumentNames,
   substituteArguments,
 } from "../domain/argument-substitution.ts";
+import { ContextInjectionError, expandContextInjections } from "../domain/context-injection.ts";
 import { getAgentDir, parseFrontmatter } from "../platform/pi-api.ts";
+import {
+  bashMissingMessage,
+  createPromptShellRunner,
+  NODE_PROMPT_SHELL_HOST,
+  NODE_PROMPT_SHELL_SPAWN,
+  selectPromptShell,
+} from "../platform/prompt-shell.ts";
+import { errorMessage } from "../shared/errors.ts";
 
+import type { ShellRun } from "../domain/context-injection.ts";
 import type { ExtensionAPI } from "../platform/pi-api.ts";
+import type { PromptShellHost, PromptShellRunner } from "../platform/prompt-shell.ts";
 
 /** One typed invocation of a slash command, such as `/demo:greet Ada`. */
 export interface CommandInvocationRequest {
@@ -51,11 +70,17 @@ export type CommandInvocationOutcome =
 export interface CommandInvocationDependencies {
   readonly getAgentDir: () => string;
   readonly readFile: (file: string) => Promise<string>;
+  /** The machine facts that choose a shell and give the commands their environment. */
+  readonly host: PromptShellHost;
+  readonly runShell: PromptShellRunner;
 }
 
-/** The dependencies of a running Pi: its agent directory and the real filesystem. */
+/** The dependencies of a running Pi: its agent directory, the filesystem, and this machine's shells. */
 function nodeDependencies(): CommandInvocationDependencies {
+  const host = NODE_PROMPT_SHELL_HOST;
   return {
+    host,
+    runShell: createPromptShellRunner({ host, spawn: NODE_PROMPT_SHELL_SPAWN }),
     readFile: async (file) => readFile(file, "utf8"),
     getAgentDir,
   };
@@ -70,6 +95,16 @@ type StagingScope = "project" | "user";
 interface StagedCommand {
   readonly file: string;
   readonly scope: StagingScope;
+}
+
+/** A staged command file, split as Pi's loader splits it. */
+interface CommandFile {
+  readonly frontmatter: Readonly<Record<string, unknown>>;
+  readonly body: string;
+}
+
+function refusal(message: string): CommandInvocationOutcome {
+  return { kind: "refuse", message };
 }
 
 /**
@@ -104,7 +139,7 @@ function locateStagedCommand(
 /**
  * D-CF3-06 / D-CF3-10: the `${CLAUDE_*}` values a typed argument or the body
  * may name. Install already filled the body's path variables (CM-3, SUB-02);
- * the values here reach a typed argument that names one, as upstream. The
+ * these values reach a typed argument that names one, as upstream. The
  * plugin root and data come from the record install stored in the staged
  * frontmatter. A command has no skill directory, so `${CLAUDE_SKILL_DIR}`
  * stays literal.
@@ -132,8 +167,66 @@ function commandVariables(
 }
 
 /**
- * D-CF3-06: builds what the model receives for a typed staged command, or
- * reports that the command is not one this extension staged.
+ * Runs the `!` commands of a filled body with the shell the frontmatter
+ * `shell` chooses, in the session's directory and the host's environment.
+ * Returns `undefined` when that shell is a Bash this machine lacks.
+ */
+function contextShell(
+  request: CommandInvocationRequest,
+  frontmatter: Readonly<Record<string, unknown>>,
+  dependencies: CommandInvocationDependencies,
+): ShellRun | undefined {
+  const { host } = dependencies;
+  const choice = selectPromptShell(
+    typeof frontmatter.shell === "string" ? frontmatter.shell : undefined,
+    host,
+  );
+  if (choice.kind !== "shell") {
+    return undefined;
+  }
+
+  return async (line) =>
+    dependencies.runShell({ command: line, shell: choice.shell, cwd: request.cwd, env: host.env });
+}
+
+/**
+ * D-CF1-01 / D-CF1-02: fills the body with the typed arguments and the
+ * invocation variables, then replaces each `!` command with its output.
+ * Throws the cores' errors.
+ */
+async function renderCommand(
+  request: CommandInvocationRequest,
+  command: StagedCommand,
+  file: CommandFile,
+  dependencies: CommandInvocationDependencies,
+): Promise<CommandInvocationOutcome> {
+  const filled = substituteArguments({
+    body: file.body,
+    args: request.args,
+    argumentNames: parseArgumentNames(file.frontmatter.arguments),
+    variables: commandVariables(request, command, file.frontmatter),
+  });
+  const run = contextShell(request, file.frontmatter, dependencies);
+  return run === undefined
+    ? refusal(bashMissingMessage(request.typed))
+    : { kind: "send", text: await expandContextInjections(filled, run) };
+}
+
+/** T-01-24: the cores' own failures refuse with their message; any other propagates. */
+function refusalFor(error: unknown): CommandInvocationOutcome {
+  if (error instanceof ContextInjectionError || error instanceof InvocationTooLargeError) {
+    return refusal(error.message);
+  }
+
+  throw error;
+}
+
+/**
+ * D-CF3-06: builds what the model receives for a typed staged command,
+ * reports that the command is not one this extension staged, or refuses it
+ * with Claude Code's message (T-01-24). A project command in a project Pi
+ * does not trust, and a staged file that cannot be read or parsed, refuse
+ * too. A failure other than these propagates.
  */
 export async function invokeStagedCommand(
   request: CommandInvocationRequest,
@@ -144,12 +237,29 @@ export async function invokeStagedCommand(
     return { kind: "not-staged" };
   }
 
-  const { frontmatter, body } = parseFrontmatter(await dependencies.readFile(command.file));
-  const text = substituteArguments({
-    body,
-    args: request.args,
-    argumentNames: parseArgumentNames(frontmatter.arguments),
-    variables: commandVariables(request, command, frontmatter),
-  });
-  return { kind: "send", text };
+  // D-CF3-07: Claude Code loads no project-scope plugin before the workspace
+  // is trusted. A project command Pi still lists was discovered while the
+  // project was trusted, so it refuses until the next `/reload`.
+  if (command.scope === "project" && !request.projectTrusted) {
+    return refusal(
+      `The command ${request.typed} belongs to the project ${request.cwd}, which Pi does not trust. Trust the project folder, then run /reload to use it.`,
+    );
+  }
+
+  // A file that changed after Pi loaded it, such as one an uninstall removed
+  // before `/reload`, refuses the invocation: Pi's own expansion would send
+  // the body it cached, with its `!` commands not run.
+  const loaded = await dependencies
+    .readFile(command.file)
+    .then((content): CommandFile => parseFrontmatter(content))
+    .catch((error: unknown) =>
+      refusal(
+        `Cannot read the command ${request.typed}: ${errorMessage(error)}. Run /reload to load the installed commands again.`,
+      ),
+    );
+  if ("kind" in loaded) {
+    return loaded;
+  }
+
+  return renderCommand(request, command, loaded, dependencies).catch(refusalFor);
 }

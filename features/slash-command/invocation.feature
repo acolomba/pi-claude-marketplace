@@ -124,3 +124,88 @@ Feature: Slash command invocation
     Then the model receives these calls:
       | call | role | text                        |
       | 1    | user | First: Ada. All: Ada Grace. |
+
+  Scenario: A context command in a command runs before the model sees the command
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "status" described as "Reports the status." with this body:
+      """
+      Status: !`printf ok`
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/demo:status"
+    Then the model receives these calls:
+      | call | role | text       |
+      | 1    | user | Status: ok |
+
+  Scenario: A failing context command stops the command and reports Claude Code's message
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "check" described as "Checks the build." with this body:
+      """
+      Check: !`printf partial; exit 3`
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    When the user runs "/demo:check"
+    Then the result has these fields:
+      | kind         | usage-error                                                           |
+      | severity     | error                                                                 |
+      | needs reload | false                                                                 |
+      | message      | Shell command failed for pattern "!`printf partial; exit 3`": partial |
+      | usage        |                                                                       |
+
+  Scenario: An argument that starts with an exclamation mark reaches the model escaped and runs nothing
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "echo" described as "Echoes the arguments." with this body:
+      """
+      Echo: $ARGUMENTS
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts '/demo:echo !`printf pwned`'
+    Then the model receives these calls:
+      | call | role | text                     |
+      | 1    | user | Echo: \\! `printf pwned` |
+
+  Scenario: Invoking a command that an uninstall removed before a reload reports the missing file
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "greet" described as "Greets a person by name." with this body:
+      """
+      Greet the person named in the arguments.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the user has run "/claude:plugin uninstall demo@fixtures --scope project"
+    When the user runs "/demo:greet Ada"
+    Then the result has these fields:
+      | kind         | usage-error                                                                                                                                                                                               |
+      | severity     | error                                                                                                                                                                                                     |
+      | needs reload | false                                                                                                                                                                                                     |
+      | message      | Cannot read the command /demo:greet: ENOENT: no such file or directory, open '{project dir}/.pi/pi-claude-marketplace/resources/prompts/demo:greet.md'. Run /reload to load the installed commands again. |
+      | usage        |                                                                                                                                                                                                           |
