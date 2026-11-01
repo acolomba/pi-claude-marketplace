@@ -317,3 +317,86 @@ Feature: Hook tool use
       | 2    | user        | run the echo                                                                                                                            |
       | 2    | assistant   | tool call bash {"command":"echo from-model"}                                                                                            |
       | 2    | tool result | bash returned: from-model\n\nPostToolUse:Bash hook blocking error from command: "${CLAUDE_PLUGIN_ROOT}/hooks/post.sh": check the output |
+
+  Scenario: A PostToolUse hook's updated tool output replaces what the model reads
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event       | matcher | form   | output                                                                                                                     |
+      | replace | PostToolUse | Bash    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"content":[{"type":"text","text":"replaced"}]}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      | Done. |      |                                |
+    When the user prompts "run the echo"
+    Then the hooks record these runs:
+      | event       | session | tool name | tool input                    | tool response                            | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PostToolUse | first   | Bash      | {"command":"echo from-model"} | [{"type":"text","text":"from-model\\n"}] | {project dir} |                 | replace   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role        | text                                         |
+      | 1    | user        | run the echo                                 |
+      | 2    | user        | run the echo                                 |
+      | 2    | assistant   | tool call bash {"command":"echo from-model"} |
+      | 2    | tool result | bash returned: replaced                      |
+
+  Scenario: A tool hook's additional context reaches the model after the tool result
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name | event       | matcher | form   | output                                                                                       |
+      | ctx  | PostToolUse | Bash    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"checked by hook"}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      | Done. |      |                                |
+    When the user prompts "run the echo"
+    Then the hooks record these runs:
+      | event       | session | tool name | tool input                    | tool response                            | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PostToolUse | first   | Bash      | {"command":"echo from-model"} | [{"type":"text","text":"from-model\\n"}] | {project dir} |                 | ctx       | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role        | text                                                      |
+      | 1    | user        | run the echo                                              |
+      | 2    | user        | run the echo                                              |
+      | 2    | assistant   | tool call bash {"command":"echo from-model"}              |
+      | 2    | tool result | bash returned: from-model\n                               |
+      | 2    | user        | PostToolUse:Bash hook additional context: checked by hook |
+
+  Scenario: A denied tool call's hook context still reaches the model
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event      | matcher | form   | output                                                                                                                                                      |
+      | guard | PreToolUse | Bash    | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"no echo","additionalContext":"denied by hook"}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      | Done. |      |                                |
+    When the user prompts "run the echo"
+    Then the hooks record these runs:
+      | event      | session | tool name | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {"command":"echo from-model"} | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/demo | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role        | text                                                    |
+      | 1    | user        | run the echo                                            |
+      | 2    | user        | run the echo                                            |
+      | 2    | assistant   | tool call bash {"command":"echo from-model"}            |
+      | 2    | tool result | bash failed: PreToolUse:Bash hook error: no echo        |
+      | 2    | user        | PreToolUse:Bash hook additional context: denied by hook |

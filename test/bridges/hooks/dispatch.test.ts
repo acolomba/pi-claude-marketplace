@@ -3617,3 +3617,203 @@ function routedEntries(claudeEvent: BucketAEvent, pluginIds: readonly string[]):
     createRoutingEntry({ pluginId, claudeEvent, rawMatcher: "", declarationIndex }),
   );
 }
+
+interface SentMessage {
+  readonly message: unknown;
+  readonly options: unknown;
+}
+
+/** A Pi API that records every message a dispatch sends, or throws `failure` on a send. */
+function createMessagePi(sent: SentMessage[], failure?: Error): ExtensionAPI {
+  return {
+    getAllTools: () => [],
+    sendMessage: (message: unknown, options: unknown): void => {
+      if (failure !== undefined) {
+        throw failure;
+      }
+
+      sent.push({ message, options });
+    },
+  } as unknown as ExtensionAPI;
+}
+
+/** The message that carries a tool hook's context to the model, as Pi receives it. */
+function toolContextMessage(content: string): SentMessage {
+  return {
+    message: { customType: "claude-hook-tool-context", content, display: false },
+    options: { triggerTurn: false },
+  };
+}
+
+describe("tool hook context (HOOK-04 / D-CF5-13)", () => {
+  test("sends a PreToolUse fold's joined context to the model after the tool result", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", preToolUseEntries(["first", "quiet", "second"]));
+    const sent: SentMessage[] = [];
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      createMessagePi(sent),
+      createRecordingExecutor(
+        {
+          first: { kind: "mutate", additionalContext: "a" },
+          quiet: { kind: "noop" },
+          second: { kind: "mutate", additionalContext: "b" },
+        },
+        [],
+      ),
+    );
+
+    // act
+    const output = await handler(createToolCallEvent(), createExtensionContext("/workspace/ctx"));
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(sent, [
+      toolContextMessage("PreToolUse:Bash hook additional context: a\nb"),
+    ]);
+  });
+
+  test("sends a denied call's context and still blocks the call", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", preToolUseEntries(["guard"]));
+    const sent: SentMessage[] = [];
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      createMessagePi(sent),
+      createRecordingExecutor(
+        { guard: { kind: "block", reason: "no echo", additionalContext: "denied" } },
+        [],
+      ),
+    );
+
+    // act
+    const output = await handler(createToolCallEvent(), createExtensionContext("/workspace/deny"));
+
+    // assert
+    assert.deepStrictEqual(output, { block: true, reason: "PreToolUse:Bash hook error: no echo" });
+    assert.deepStrictEqual(sent, [
+      toolContextMessage("PreToolUse:Bash hook additional context: denied"),
+    ]);
+  });
+
+  for (const { isError, label } of [
+    { isError: false, label: "PostToolUse:Bash" },
+    { isError: true, label: "PostToolUseFailure:Bash" },
+  ]) {
+    test(`sends a ${label} fold's context to the model with its own label`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const claudeEvent = isError ? "PostToolUseFailure" : "PostToolUse";
+      runtime.setRoutingBucket(claudeEvent, routedEntries(claudeEvent, ["looker"]));
+      const sent: SentMessage[] = [];
+      const handler = toolResultCompositeHandler(
+        runtime,
+        runtime.currentGeneration(),
+        createMessagePi(sent),
+        createRecordingExecutor({ looker: { kind: "mutate", additionalContext: "seen" } }, []),
+      );
+
+      // act
+      const output = await handler(
+        createToolResultEvent(isError),
+        createExtensionContext("/workspace/post"),
+      );
+
+      // assert
+      assert.strictEqual(output, undefined);
+      assert.deepStrictEqual(sent, [toolContextMessage(`${label} hook additional context: seen`)]);
+    });
+  }
+
+  for (const { name, result } of [
+    { name: "no context", result: { kind: "mutate" } },
+    { name: "an empty context", result: { kind: "block", reason: "r", additionalContext: "" } },
+  ] satisfies ReadonlyArray<{ readonly name: string; readonly result: HookExecResult }>) {
+    test(`sends nothing for a tool fold with ${name}`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket("PostToolUse", routedEntries("PostToolUse", ["looker"]));
+      const sent: SentMessage[] = [];
+      const handler = toolResultCompositeHandler(
+        runtime,
+        runtime.currentGeneration(),
+        createMessagePi(sent),
+        createRecordingExecutor({ looker: result }, []),
+      );
+
+      // act
+      await handler(createToolResultEvent(false), createExtensionContext("/workspace/empty"));
+
+      // assert
+      assert.deepStrictEqual(sent, []);
+    });
+  }
+
+  test("sends nothing and still adapts the call when no Pi API is given", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", preToolUseEntries(["guard"]));
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor(
+        { guard: { kind: "block", reason: "no", additionalContext: "lost" } },
+        [],
+      ),
+    );
+
+    // act
+    const output = await handler(createToolCallEvent(), createExtensionContext("/workspace/no-pi"));
+
+    // assert
+    assert.deepStrictEqual(output, { block: true, reason: "PreToolUse:Bash hook error: no" });
+  });
+
+  test("debug-logs a context send that throws and still returns the tool result", async (t) => {
+    // arrange
+    const debugLines = observeHookDebug(t);
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUse", routedEntries("PostToolUse", ["looker"]));
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      createMessagePi([], new Error("session closed")),
+      createRecordingExecutor(
+        {
+          looker: {
+            kind: "mutate",
+            additionalContext: "seen",
+            updatedToolOutput: { content: [{ type: "text", text: "kept" }] },
+          },
+        },
+        [],
+      ),
+    );
+
+    // act
+    const output = await handler(
+      createToolResultEvent(false),
+      createExtensionContext("/workspace/throws"),
+    );
+
+    // assert
+    assert.deepStrictEqual(output, { content: [{ type: "text", text: "kept" }] });
+    assert.deepStrictEqual(debugLines(), [
+      "[hooks] dispatch: tool hook context failed: session closed",
+    ]);
+  });
+});
