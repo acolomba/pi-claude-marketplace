@@ -230,3 +230,37 @@ session writes this file. Each subagent ends its report with a
 - **Why dubious:** Departs from the literal build-time embed instruction; an
   executor that skipped a read would miss the contract.
 - **Recorded in:** this file.
+
+### P5-DC-15: Wave 1 executor choices (05-01 session tracer, 05-02 process)
+
+- **Phase / source:** executors of 05-01 and 05-02.
+- **Severity:** Medium. **Status:** open.
+- **05-01:**
+  1. Terminal (TUI) scenarios start a profile Pi and install to the user
+     scope through it, instead of using the shared Pi: the shared Pi kept the
+     plugin's SessionEnd hook routed and recreated `<home>/harness` in the
+     next scenario's reset.
+  2. Edited two byte cases in `test/bridges/hooks/dispatch-exec.test.ts`
+     (05-02's file); the merge was clean.
+  3. A failed compaction SessionStart leg logs and still runs PostCompact; a
+     stale generation stops both.
+  4. The terminal Given polls the hook log every 50 ms (30 s cap) for the
+     `startup` run.
+  5. The `compact_summary` literal is Pi's own split-turn summary text, so it
+     changes if Pi changes that text.
+  6. The session-id projection applies to every cell, not only
+     `CLAUDE_ENV_FILE`.
+  7. Task 3's red run restored base sources temporarily (not committed).
+- **05-02:**
+  1. Edited one line of `runs.steps.ts` (05-01's file) so the `arguments`
+     cell gets run-token projection; also `test/bridges/hooks/runtime.test.ts`
+     (outside its file list) for the new `TimerLadder.fired()`.
+  2. The `onFailure` message drops `\n<stderr>` when stderr is empty; broken
+     JSON reports the hook's stderr; the `onFailure` check runs before the
+     parse, so exit 1 with valid deny JSON blocks with the `onFailure`
+     message (upstream order unprobed).
+  3. The "ignored" debug line for Stop/async `onFailure` fires on every run.
+  4. `TimerLadder.fired()` is true only when SIGTERM reaches a child still
+     running at its deadline (HKDR-01 grandchild case not counted).
+  5. Script hooks need a `dir` or `file` publication (mode bit).
+- **Recorded in:** `05-01-SUMMARY.md`, `05-02-SUMMARY.md`.
