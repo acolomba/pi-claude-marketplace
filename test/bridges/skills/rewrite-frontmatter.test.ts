@@ -48,6 +48,16 @@ for (const { description, skillDocument, expectedSkillDocument } of [
     expectedSkillDocument:
       "---\ndescription: |\n  Part one.\n  ---\n  Part two.\nname: generated-name\n---\n\nBody.\n",
   },
+  ...['"name": review', "'name': review", "name : review"].map((keyLine) => ({
+    description: `replaces the name spelled as ${keyLine}`,
+    skillDocument: `---\n${keyLine}\ndescription: Spelled key\n---\n\nBody.\n`,
+    expectedSkillDocument: "---\nname: generated-name\ndescription: Spelled key\n---\n\nBody.\n",
+  })),
+  {
+    description: "replaces a name whose value is an alias of another node's anchor",
+    skillDocument: "---\nlabel: &n review\nname: *n\n---\n\nBody.\n",
+    expectedSkillDocument: "---\nlabel: &n review\nname: generated-name\n---\n\nBody.\n",
+  },
   {
     description: "removes the complete folded name node",
     skillDocument:

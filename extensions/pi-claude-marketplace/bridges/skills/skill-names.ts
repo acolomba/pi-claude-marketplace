@@ -25,7 +25,7 @@ import { Compile } from "typebox/compile";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { isPlainMarkdownFile, readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 
-import { frontmatterBlockEnd, keyValueEnd } from "./frontmatter-scan.ts";
+import { frontmatterBlockEnd, keyValueEnd, topLevelNodeIndex } from "./frontmatter-scan.ts";
 
 import type { Dirent } from "node:fs";
 
@@ -164,34 +164,12 @@ export async function commandUpstreamNames(
   return new Set(basenames.flat().map((basename) => `${pluginName}:${basename}`));
 }
 
-/**
- * Whether the top-level node `nodeLines` holds the record key. YAML spells
- * one key in many ways (`"pi-claude-marketplace":`, `pi-claude-marketplace :`,
- * an escape inside quotes), and Pi's parser reads each as the same key, so
- * the node is parsed rather than matched as text. A node that does not parse
- * alone, such as an alias of an anchor in another node, is not the record.
- */
-function isRecordNode(nodeLines: readonly string[]): boolean {
-  try {
-    const { frontmatter } = parseFrontmatter(["---", ...nodeLines, "---"].join("\n"));
-    return Object.hasOwn(frontmatter, RECORD_KEY);
-  } catch {
-    return false;
-  }
-}
-
 /** `lines` without the node of the record key inside the block that ends at `blockEnd`. */
 function withoutRecordNode(lines: readonly string[], blockEnd: number): readonly string[] {
-  // Every column-0 line of the block starts a top-level node, because a
-  // node's continuation lines are indented (`keyValueEnd`).
-  const nodeEnd = (first: number): number => keyValueEnd(lines, first, blockEnd) + 1;
-  const first = lines
-    .slice(0, blockEnd)
-    .findIndex(
-      (line, index) =>
-        index > 0 && /^\S/.test(line) && isRecordNode(lines.slice(index, nodeEnd(index))),
-    );
-  return first === -1 ? lines : [...lines.slice(0, first), ...lines.slice(nodeEnd(first))];
+  const first = topLevelNodeIndex(lines, blockEnd, RECORD_KEY);
+  return first === -1
+    ? lines
+    : [...lines.slice(0, first), ...lines.slice(keyValueEnd(lines, first, blockEnd) + 1)];
 }
 
 /**

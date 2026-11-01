@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   frontmatterBlockEnd,
   keyValueEnd,
+  topLevelNodeIndex,
 } from "../../../extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts";
 
 describe("frontmatterBlockEnd", () => {
@@ -185,5 +186,77 @@ describe("keyValueEnd", () => {
 
     // assert
     assert.strictEqual(keyEnd, expectedFrontmatterKeyValueEnd);
+  });
+});
+
+describe("topLevelNodeIndex", () => {
+  for (const { description, lines, expectedIndex } of [
+    {
+      description: "finds the plain spelling of the key",
+      lines: ["---", "description: d", "name: review", "---"],
+      expectedIndex: 2,
+    },
+    ...['"name": review', "'name': review", "name : review", '"n\\x61me": review'].map(
+      (keyLine) => ({
+        description: `finds the key spelled as ${keyLine}`,
+        lines: ["---", "description: d", keyLine, "---"],
+        expectedIndex: 2,
+      }),
+    ),
+    {
+      description: "finds a node whose value is an alias of another node's anchor",
+      lines: ["---", "label: &n review", "name: *n", "---"],
+      expectedIndex: 2,
+    },
+    {
+      description: "skips a key that only starts with the key",
+      lines: ["---", "name-note: kept", "---"],
+      expectedIndex: -1,
+    },
+    {
+      description: "skips an alias node of another key",
+      lines: ["---", "label: &n review", "title: *n", "---"],
+      expectedIndex: -1,
+    },
+    {
+      description: "skips a nested key and an indented line of a block scalar",
+      lines: ["---", "meta:", "  name: nested", "description: |", "  name: text", "---"],
+      expectedIndex: -1,
+    },
+    {
+      description: "skips a comment line",
+      lines: ["---", "# name: commented", "---"],
+      expectedIndex: -1,
+    },
+    {
+      description: "finds nothing after the block end",
+      lines: ["---", "description: d", "---", "name: body"],
+      expectedIndex: -1,
+    },
+  ]) {
+    test(description, () => {
+      // arrange
+      const blockEnd = frontmatterBlockEnd(lines);
+
+      // act
+      const index = topLevelNodeIndex(lines, blockEnd, "name");
+
+      // assert
+      assert.strictEqual(index, expectedIndex);
+    });
+  }
+
+  test("skips a missing array slot", () => {
+    // arrange
+    const frontmatterLines = new Array<string>(4);
+    frontmatterLines[0] = "---";
+    frontmatterLines[2] = "name: review";
+    frontmatterLines[3] = "---";
+
+    // act
+    const index = topLevelNodeIndex(frontmatterLines, 3, "name");
+
+    // assert
+    assert.strictEqual(index, 2);
   });
 });

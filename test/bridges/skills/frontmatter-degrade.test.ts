@@ -214,6 +214,14 @@ describe("setDescriptionScalar", () => {
         "---\nname: quoted\ndescription: 'first source line\n  second source line'\nversion: 4\n---\nBody.\n",
       expectedContent: '---\nname: quoted\ndescription: "new value"\nversion: 4\n---\nBody.\n',
     },
+    ...['"description": old value', "'description': old value", "description : old value"].map(
+      (keyLine) => ({
+        description: `a description spelled as ${keyLine}`,
+        sourceContent: `---\nname: spelled\n${keyLine}\nwhen_to_use: Reviews.\n---\nBody.\n`,
+        expectedContent:
+          '---\nname: spelled\ndescription: "new value"\nwhen_to_use: Reviews.\n---\nBody.\n',
+      }),
+    ),
     {
       description: "a literal block scalar holding an indented rule line before when_to_use",
       sourceContent:

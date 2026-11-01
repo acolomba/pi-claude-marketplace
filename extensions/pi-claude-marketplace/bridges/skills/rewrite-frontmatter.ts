@@ -9,10 +9,7 @@
 
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 
-import { frontmatterBlockEnd, keyValueEnd } from "./frontmatter-scan.ts";
-
-/** The top-level frontmatter `name` key token (including its colon). */
-const NAME_KEY = "name:";
+import { frontmatterBlockEnd, keyValueEnd, topLevelNodeIndex } from "./frontmatter-scan.ts";
 
 /** A fresh `name`-only frontmatter block prepended ahead of `content`. */
 function freshBlock(newName: string, content: string): string {
@@ -21,25 +18,18 @@ function freshBlock(newName: string, content: string): string {
 
 /**
  * Replace (or insert) the `name` field inside a frontmatter block that opens on
- * `lines[0]` and closes at the next `---`. Replaces the FULL `name` node span --
- * including any multi-line scalar (block `>` / `|`, multi-line plain, or
- * multi-line quoted) spanning several lines -- with a single inline
- * `name: <newName>`, leaving every sibling key untouched.
- * When no `name:` key exists it is inserted as the first frontmatter line.
+ * `lines[0]` and closes at Pi's closing fence. Replaces the FULL `name` node
+ * span -- including any multi-line scalar (block `>` / `|`, multi-line plain,
+ * or multi-line quoted) spanning several lines -- with a single inline
+ * `name: <newName>`, leaving every sibling key untouched. The node is found in
+ * any YAML spelling of its key (`"name":`, `name :`), as Pi reads it.
+ * When no `name` key exists it is inserted as the first frontmatter line.
  */
 function rewriteNameNode(content: string, newName: string): string {
   const lines = content.split("\n");
   const blockEnd = frontmatterBlockEnd(lines);
-
-  let keyIndex = -1;
-  for (let i = 1; i < blockEnd; i++) {
-    if ((lines[i] ?? "").startsWith(NAME_KEY)) {
-      keyIndex = i;
-      break;
-    }
-  }
-
-  const replacement = `${NAME_KEY} ${newName}`;
+  const keyIndex = topLevelNodeIndex(lines, blockEnd, "name");
+  const replacement = `name: ${newName}`;
   if (keyIndex === -1) {
     return [lines[0], replacement, ...lines.slice(1)].join("\n");
   }

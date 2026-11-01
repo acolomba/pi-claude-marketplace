@@ -7,8 +7,10 @@
 // spans.
 //
 // This is the single shared module for every writer of the staging pipeline,
-// so a fix to the fence or span rule lands once instead of risking two
+// so a fix to the fence, span, or key rule lands once instead of risking two
 // writers disagreeing about the same bytes.
+
+import { parseFrontmatter } from "../../platform/pi-api.ts";
 
 /**
  * Index of the closing fence as Pi 1.4.0's `parseFrontmatter` finds it
@@ -66,4 +68,40 @@ export function keyValueEnd(lines: readonly string[], keyIndex: number, blockEnd
   }
 
   return lastReplaced;
+}
+
+/**
+ * Whether the top-level node `nodeLines`, whose first line is `firstLine`,
+ * holds `key`. YAML spells one key in many ways (`"name":`, `'name':`,
+ * `name :`, an escape inside quotes), and Pi's parser reads each as the same
+ * key, so the node is parsed rather than matched as text. A node that does not
+ * parse alone, such as one whose value is an alias of an anchor in another
+ * node, holds `key` only in its plain spelling `<key>:`.
+ */
+function nodeHoldsKey(firstLine: string, nodeLines: readonly string[], key: string): boolean {
+  try {
+    const { frontmatter } = parseFrontmatter(["---", ...nodeLines, "---"].join("\n"));
+    return Object.hasOwn(frontmatter, key);
+  } catch {
+    return firstLine.startsWith(`${key}:`);
+  }
+}
+
+/**
+ * Index of the first top-level node of `key` inside the block that ends at
+ * `blockEnd`, or `-1`. Every column-0 line of the block starts a top-level
+ * node, because a node's continuation lines are indented (`keyValueEnd`).
+ */
+export function topLevelNodeIndex(lines: readonly string[], blockEnd: number, key: string): number {
+  for (let i = 1; i < blockEnd; i++) {
+    const line = lines[i] ?? "";
+    if (
+      /^\S/.test(line) &&
+      nodeHoldsKey(line, lines.slice(i, keyValueEnd(lines, i, blockEnd) + 1), key)
+    ) {
+      return i;
+    }
+  }
+
+  return -1;
 }
