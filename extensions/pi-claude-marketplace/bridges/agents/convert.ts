@@ -19,8 +19,16 @@ import { substituteClaudeVars } from "../../shared/vars.ts";
 import { emitGeneratedAgentFile } from "./frontmatter.ts";
 
 import type { GeneratedToolsFields } from "./frontmatter.ts";
-import type { ConvertedAgent, DiscoveredAgent, RawAgentFrontmatter } from "./types.ts";
-import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
+import type {
+  ConvertedAgent,
+  DiscoveredAgent,
+  RawAgentFrontmatter,
+  SkillPreload,
+} from "./types.ts";
+import type {
+  InstalledReferenceNames,
+  SkillReferenceResolution,
+} from "../../domain/skill-tokens.ts";
 
 /**
  * Source frontmatter fields the converter actively consumes. Anything else
@@ -60,17 +68,18 @@ const LONG_CONTEXT_SUFFIX = "[1m]";
 
 /**
  * AG-7 user contract: Claude tool name -> Pi tool name. Tokens not present
- * here are dropped.
+ * here are dropped. A `Map`, so a token such as `constructor` cannot find an
+ * `Object.prototype` member.
  */
-const TOOL_MAP: Readonly<Record<string, string>> = Object.freeze({
-  Read: "read",
-  Bash: "bash",
-  Edit: "edit",
-  Write: "write",
-  Grep: "grep",
-  Glob: "find",
-  LS: "ls",
-});
+const TOOL_MAP: ReadonlyMap<string, string> = new Map([
+  ["Read", "read"],
+  ["Bash", "bash"],
+  ["Edit", "edit"],
+  ["Write", "write"],
+  ["Grep", "grep"],
+  ["Glob", "find"],
+  ["LS", "ls"],
+]);
 
 /**
  * ANAME-02: one MCP server this install writes. `key` is the server's
@@ -355,7 +364,7 @@ function mcpEntry(match: McpGrantMatch): string {
 
 /** A TOOL_MAP name, or the `mcp:` entry of a written server's MCP name. */
 function mapToolName(token: string, grants: readonly McpGrant[]): string | undefined {
-  const piName = TOOL_MAP[toolNameOf(token)];
+  const piName = TOOL_MAP.get(toolNameOf(token));
   if (piName !== undefined) {
     return piName;
   }
@@ -530,7 +539,7 @@ function omittedToolMapping(
       continue;
     }
 
-    const name = TOOL_MAP[toolNameOf(token)] ?? perToolMcpName(token, grants);
+    const name = TOOL_MAP.get(toolNameOf(token)) ?? perToolMcpName(token, grants);
     if (name === undefined) {
       unmapped.push(token);
     } else {
@@ -628,39 +637,126 @@ function mapEffort(rawEffort: string | undefined): {
   };
 }
 
+/**
+ * D-CF4-04: the deduped generated names of the skills of this plugin that an
+ * agent's `skills:` value names, in `skills:` order. The stage reads the
+ * preloads of exactly these names.
+ */
+export function preloadedSkillNames(
+  rawSkills: string | undefined,
+  pluginName: string,
+  knownSkills: readonly string[],
+): readonly string[] {
+  const known = new Set(knownSkills);
+  const names = splitToolList(rawSkills).flatMap((token) => {
+    const resolution = resolveSkillReference(pluginName, token, known);
+    return resolution.kind === "known" ? [resolution.generatedName] : [];
+  });
+  return dedupePreservingOrder(names);
+}
+
+/** The converted `skills:` entries, the inlined skill texts, and the warnings. */
+interface SkillsMapping {
+  readonly emit: string[];
+  readonly inline: string[];
+  readonly warnings: string[];
+}
+
+/**
+ * Converts the agent's `skills:` value. A known reference with an inline
+ * preload is written after the body and left out of `skills:`, one with a
+ * skip preload is left out with a warning, and one with no preload stays a
+ * `skills:` entry (D-CF4-04). Each generated name counts once, as in
+ * mapTools, so a bare token and its same-plugin self-qualified form
+ * (AGSK-02) converge on one entry.
+ */
 function mapSkills(
   rawSkills: string | undefined,
   pluginName: string,
   knownSkills: readonly string[],
-): { emit: string[]; warnings: string[] } {
-  const tokens = splitToolList(rawSkills);
-  if (tokens.length === 0) {
-    return { emit: [], warnings: [] };
-  }
-
+  preloads: ReadonlyMap<string, SkillPreload>,
+): SkillsMapping {
   const known = new Set(knownSkills);
-  const emit: string[] = [];
-  const warnings: string[] = [];
-  for (const token of tokens) {
+  const seen = new Set<string>();
+  const mapping: SkillsMapping = { emit: [], inline: [], warnings: [] };
+  for (const token of splitToolList(rawSkills)) {
     const resolution = resolveSkillReference(pluginName, token, known);
-    if (resolution.kind === "known") {
-      emit.push(resolution.generatedName);
-    } else if (resolution.kind === "malformed") {
-      hookDebugLog(`generatedSkillName rejected skill token "${token}": ${resolution.reason}`);
-      warnings.push(`malformed skill reference "${token}" -- dropped`);
-    } else if (resolution.kind === "foreign") {
-      warnings.push(
-        `skill reference "${token}" is qualified with a different plugin -- dropped (only this plugin's skills can be preloaded)`,
+    if (resolution.kind !== "known") {
+      mapping.warnings.push(unresolvedSkillWarning(token, resolution));
+    } else if (!seen.has(resolution.generatedName)) {
+      seen.add(resolution.generatedName);
+      addKnownSkill(
+        mapping,
+        token,
+        resolution.generatedName,
+        preloads.get(resolution.generatedName),
       );
-    } else {
-      warnings.push(`unknown skill reference "${token}" -- dropped`);
     }
   }
 
-  // Mirror mapTools: collapse duplicate generated skill names so the emitter
-  // never renders a repeated `skills:` entry. A bare token and its same-plugin
-  // self-qualified form (AGSK-02) converge on one generated name.
-  return { emit: dedupePreservingOrder(emit), warnings };
+  return mapping;
+}
+
+function addKnownSkill(
+  mapping: SkillsMapping,
+  token: string,
+  generatedName: string,
+  preload: SkillPreload | undefined,
+): void {
+  if (preload === undefined) {
+    mapping.emit.push(generatedName);
+  } else if (preload.kind === "inline") {
+    mapping.inline.push(preload.text);
+  } else {
+    mapping.warnings.push(skippedPreloadWarning(token, preload.reason));
+  }
+}
+
+/**
+ * D-CF4-04: the warning of a preload that is skipped. Claude Code keeps a
+ * skill the model cannot invoke, or a plugin skill with no description, out
+ * of the pool it preloads from.
+ */
+function skippedPreloadWarning(
+  token: string,
+  reason: Extract<SkillPreload, { kind: "skip" }>["reason"],
+): string {
+  switch (reason) {
+    case "disable-model-invocation":
+      return `skill reference "${token}" names a skill with disable-model-invocation: true -- not preloaded (Claude Code skips it too)`;
+    case "no-description":
+      return `skill reference "${token}" names a skill with no description -- not preloaded (Claude Code skips it too)`;
+    case "unparseable":
+      return `skill reference "${token}" names a skill whose frontmatter does not parse -- not preloaded`;
+  }
+}
+
+function unresolvedSkillWarning(
+  token: string,
+  resolution: Exclude<SkillReferenceResolution, { kind: "known" }>,
+): string {
+  if (resolution.kind === "malformed") {
+    hookDebugLog(`generatedSkillName rejected skill token "${token}": ${resolution.reason}`);
+    return `malformed skill reference "${token}" -- dropped`;
+  }
+
+  if (resolution.kind === "foreign") {
+    return `skill reference "${token}" is qualified with a different plugin -- dropped (only this plugin's skills can be preloaded)`;
+  }
+
+  return `unknown skill reference "${token}" -- dropped`;
+}
+
+/**
+ * D-CF4-04: the converted body, then each inlined skill text after one blank
+ * line, in `skills:` order. Residuals: the texts sit in the system prompt,
+ * not in Claude Code's first user message, because pi-subagents has no hook
+ * on a child's first message; `$ARGUMENTS` and inline `!` commands stay
+ * literal; the cross-plugin fallback and the frontmatter-name alias lookup
+ * are not modeled.
+ */
+function bodyWithPreloads(body: string, inline: readonly string[]): string {
+  return inline.length === 0 ? body : [body.trimEnd(), ...inline].join("\n\n");
 }
 
 // A frontmatter value trimmed, or undefined when it is not a string or is
@@ -721,6 +817,11 @@ export interface ConvertAgentInput {
    * entries; every other `mcp__` name is dropped.
    */
   mcpServerNames?: readonly string[] | undefined;
+  /**
+   * D-CF4-04: the preloads the stage read, keyed by generated skill name. A
+   * known `skills:` reference with no entry stays a `skills:` entry.
+   */
+  skillPreloads?: ReadonlyMap<string, SkillPreload> | undefined;
 }
 
 /**
@@ -794,8 +895,13 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
     warnings.push(thinkingResult.warning);
   }
 
-  // 5. Skills mapping
-  const skillsResult = mapSkills(raw.skills, pluginName, knownSkills);
+  // 5. Skills mapping (D-CF4-04: preloaded skills are inlined or skipped)
+  const skillsResult = mapSkills(
+    raw.skills,
+    pluginName,
+    knownSkills,
+    input.skillPreloads ?? new Map(),
+  );
   warnings.push(...skillsResult.warnings);
 
   // 6. Dropped fields (anything in source frontmatter that isn't supported).
@@ -851,7 +957,7 @@ export function convertAgent(input: ConvertAgentInput): ConvertedAgent {
       droppedTools: toolsResult.dropped,
       warnings,
     },
-    body: convertedBody,
+    body: bodyWithPreloads(convertedBody, skillsResult.inline),
   });
 
   const result: ConvertedAgent = {

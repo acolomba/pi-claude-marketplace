@@ -469,6 +469,137 @@ Read \${CLAUDE_PROJECT_DIR} and ${pluginRoot}.
     assert.strictEqual(await abortPreparedAgents(createRemovalOps(), prepared), undefined);
   });
 
+  test("D-CF4-04: stages an agent that preloads a staged skill with the skill's content", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-stage-preload-",
+    );
+    const sourcePath = path.join(agentsSourceDir, "bot.md");
+    await writeFile(
+      sourcePath,
+      "---\nname: bot\ndescription: Bot\ntools: Read\nskills: rules\n---\n\nBot body.\n",
+    );
+    const skillSource = path.join(pluginRoot, "skills", "rules");
+    await mkdir(skillSource, { recursive: true });
+    await writeFile(
+      path.join(skillSource, "SKILL.md"),
+      "---\ndescription: The rules.\n---\nWork in ${CLAUDE_PROJECT_DIR}; see acme:rules.\n",
+    );
+    const skillTarget = path.join(locations.skillsTargetDir, "acme-rules");
+
+    // act
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: "/work/app",
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+      knownSkills: ["acme-rules"],
+      referenceNames: { skills: ["acme-rules"], commands: [], workflows: [] },
+      skillSources: [
+        { generatedName: "acme-rules", sourcePath: skillSource, targetPath: skillTarget },
+      ],
+    });
+
+    // assert
+    assert.strictEqual(prepared.kind, "staged");
+    assert.strictEqual(
+      await readFile(path.join(prepared.stagingDir, "pi-claude-marketplace-acme-bot.md"), "utf8"),
+      `---
+name: acme:bot
+description: Bot
+aliases: pi-claude-marketplace-acme-bot
+tools: read
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+advertise: true
+async: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: ${sourcePath}
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Bot body.
+
+Base directory for this skill: ${skillTarget}
+
+Work in /work/app; see /skill:acme-rules.
+`,
+    );
+    assert.strictEqual(await abortPreparedAgents(createRemovalOps(), prepared), undefined);
+  });
+
+  test("D-CF4-04: stages without reading a skill source when no agent declares skills", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-stage-no-preload-",
+    );
+    const sourcePath = path.join(agentsSourceDir, "bot.md");
+    await writeFile(
+      sourcePath,
+      "---\nname: bot\ndescription: Bot\ntools: Read\n---\n\nBot body.\n",
+    );
+    const missingSource = path.join(pluginRoot, "skills", "missing");
+
+    // act
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+      knownSkills: ["acme-missing"],
+      skillSources: [
+        {
+          generatedName: "acme-missing",
+          sourcePath: missingSource,
+          targetPath: path.join(locations.skillsTargetDir, "acme-missing"),
+        },
+      ],
+    });
+
+    // assert
+    assert.strictEqual(prepared.kind, "staged");
+    assert.strictEqual(
+      await readFile(path.join(prepared.stagingDir, "pi-claude-marketplace-acme-bot.md"), "utf8"),
+      `---
+name: acme:bot
+description: Bot
+aliases: pi-claude-marketplace-acme-bot
+tools: read
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+advertise: true
+async: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: ${sourcePath}
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Bot body.
+`,
+    );
+    assert.strictEqual(await abortPreparedAgents(createRemovalOps(), prepared), undefined);
+  });
+
   test("D-PL1-02: tags index and conversion warnings hygiene and duplicates discovery, in stable order", async (t) => {
     // arrange
     const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(

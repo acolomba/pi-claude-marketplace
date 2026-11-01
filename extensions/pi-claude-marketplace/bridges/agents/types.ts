@@ -97,6 +97,12 @@ export interface StageAgentsInput {
    */
   readonly mcpServerNames?: readonly string[] | undefined;
   /**
+   * D-CF4-04: the skills phase's recorded rows. The stage reads each row's
+   * source `SKILL.md` for the skills an agent preloads. Absent leaves every
+   * preload as a `skills:` entry.
+   */
+  readonly skillSources?: readonly AgentSkillSource[] | undefined;
+  /**
    * Install cwd (the project root for project-scope installs), substituted for
    * `${CLAUDE_PROJECT_DIR}` in agent bodies (SUB-02). Required so a
    * project-scope caller cannot silently omit it and ship the token literal.
@@ -106,6 +112,31 @@ export interface StageAgentsInput {
    */
   readonly cwd: string;
 }
+
+/**
+ * D-CF4-04: one skill the skills phase staged, as its recorded row. The
+ * agents bridge declares this shape itself, because it does not import the
+ * skills bridge.
+ */
+export interface AgentSkillSource {
+  readonly generatedName: string;
+  /** Absolute source skill folder under the resolved plugin. */
+  readonly sourcePath: string;
+  /** Absolute staged skill folder, `<extensionRoot>/resources/skills/<name>`. */
+  readonly targetPath: string;
+}
+
+/**
+ * D-CF4-04: what an agent's preload of one skill becomes. `inline` is the
+ * text written after the agent body; `skip` names why Claude Code would not
+ * preload the skill.
+ */
+export type SkillPreload =
+  | { readonly kind: "inline"; readonly text: string }
+  | {
+      readonly kind: "skip";
+      readonly reason: "disable-model-invocation" | "no-description" | "unparseable";
+    };
 
 /**
  * Per-agent stage record. Read to populate state.json.installs.
