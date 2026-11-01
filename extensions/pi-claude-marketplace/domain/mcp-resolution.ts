@@ -1,3 +1,13 @@
+// domain/mcp-resolution.ts
+//
+// D-CF6-01: a plugin's MCP servers are the ordered union of its sources, as
+// Claude Code 2.1.316 merges them. `<pluginRoot>/.mcp.json` comes first, then
+// the declared `mcpServers` value: the plugin manifest's, or the marketplace
+// entry's when the plugin has no `plugin.json`. A declared value is a
+// reference string, an inline server map, or an array of both, read in
+// order. A server name that a later source declares replaces the earlier
+// server and keeps its position, as object spread does upstream.
+
 import path from "node:path";
 
 import { errorMessage } from "../shared/errors.ts";
@@ -6,7 +16,7 @@ import { resolveContainedComponentPath } from "./component-paths.ts";
 import { MCP_SERVERS_VALIDATOR } from "./components/mcp.ts";
 import { classifyMcpServer } from "./mcp-server-features.ts";
 
-import type { DroppedMcpServer } from "./mcp-server-features.ts";
+import type { DroppedMcpServer, McpUnsupportedFeature } from "./mcp-server-features.ts";
 import type { StatKindReader } from "./resolver-types.ts";
 
 /** Mutable resolver fields owned by MCP resolution. */
@@ -22,83 +32,104 @@ interface McpResolutionDependencies {
   readonly readFileText: (path: string) => Promise<string>;
 }
 
-/**
- * Keeps the supported servers in declared order and leaves out each blocked
- * one whole. The typed `mcpServers` kind is the only reason a blocked server
- * gets, as `hooks` is for a dropped hook handler. A malformed server adds a
- * note and reports a structural defect, which wins over any blocked server
- * (ANAME-07, D-64-07).
- */
-function recordMcpServers(
-  resolution: McpResolution,
-  servers: Readonly<Record<string, unknown>>,
-): boolean {
-  const supported: [string, unknown][] = [];
-  const dropped: DroppedMcpServer[] = [];
-  let malformed = false;
-  for (const [server, config] of Object.entries(servers)) {
-    const verdict = classifyMcpServer(config);
-    if (verdict.kind === "supported") {
-      supported.push([server, config]);
-    } else if (verdict.kind === "blocked") {
-      dropped.push({ server, feature: verdict.feature });
-    } else {
-      resolution.notes.push(`malformed mcp server "${server}": ${verdict.detail}`);
-      malformed = true;
-    }
-  }
-
-  // `Object.fromEntries` defines own properties, so a server named
-  // `__proto__` stays a server.
-  resolution.mcpServers = Object.fromEntries(supported);
-  if (dropped.length > 0) {
-    resolution.unsupported.push("mcpServers");
-    resolution.droppedMcpServers = dropped;
-  }
-
-  return malformed;
+// A merged server and the feature that blocks it, if one does.
+interface MergedServer {
+  readonly config: unknown;
+  readonly blockedBy?: McpUnsupportedFeature;
 }
 
-function applyMcpValue(resolution: McpResolution, mcp: unknown): boolean {
-  if (mcp === undefined) {
-    return false;
+// The merge in progress: `servers` keeps the first position of each name,
+// because `Map.set` replaces a value in place.
+interface McpMerge {
+  readonly pluginRoot: string;
+  readonly resolution: McpResolution;
+  readonly dependencies: McpResolutionDependencies;
+  readonly servers: Map<string, MergedServer>;
+  bundle: boolean;
+  dirty: boolean;
+}
+
+function isPlainObject(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// D-CF6-01: Claude Code bundles MCP servers as `.mcpb` (or legacy `.dxt`)
+// archives that it unpacks and runs. pi-mcp-adapter has no bundle runner.
+function isMcpBundle(reference: string): boolean {
+  return reference.endsWith(".mcpb") || reference.endsWith(".dxt");
+}
+
+function addDefect(merge: McpMerge, note: string): void {
+  merge.resolution.notes.push(note);
+  merge.dirty = true;
+}
+
+/**
+ * Merges each server of one source map. A malformed server adds a note and
+ * reports a structural defect (ANAME-07, D-64-07). A blocked server stays in
+ * the merge, so a later source can replace it with a supported one.
+ */
+function mergeServers(merge: McpMerge, servers: Readonly<Record<string, unknown>>): void {
+  for (const [server, config] of Object.entries(servers)) {
+    const verdict = classifyMcpServer(config);
+    if (verdict.kind === "malformed") {
+      addDefect(merge, `malformed mcp server "${server}": ${verdict.detail}`);
+    } else {
+      merge.servers.set(
+        server,
+        verdict.kind === "blocked" ? { config, blockedBy: verdict.feature } : { config },
+      );
+    }
+  }
+}
+
+function mergeServerMap(merge: McpMerge, value: unknown): void {
+  if (MCP_SERVERS_VALIDATOR.Check(value)) {
+    mergeServers(merge, value);
+    return;
   }
 
-  if (MCP_SERVERS_VALIDATOR.Check(mcp)) {
-    return recordMcpServers(resolution, mcp);
-  }
-
-  const errorDetail = MCP_SERVERS_VALIDATOR.Errors(mcp)
+  const errorDetail = MCP_SERVERS_VALIDATOR.Errors(value)
     .slice(0, 1)
     .map((error) => error.message)
     .join("");
-  resolution.notes.push(`malformed mcpServers: ${errorDetail}`);
-
-  return true;
+  addDefect(merge, `malformed mcpServers: ${errorDetail}`);
 }
 
-async function readStandaloneMcp(
-  pluginRoot: string,
-  dependencies: McpResolutionDependencies,
-): Promise<{ ok: true; value: unknown } | { ok: false; reason: string }> {
-  const mcpPath = path.join(pluginRoot, ".mcp.json");
-  if ((await dependencies.statKind(mcpPath)) !== "file") {
-    return { ok: true, value: undefined };
-  }
+// D-CF6-01: a file holds its server map under `mcpServers` or as the whole
+// document, for `.mcp.json` and a referenced file alike.
+function fileServerMap(document: unknown): unknown {
+  return isPlainObject(document) && Object.hasOwn(document, "mcpServers")
+    ? document.mcpServers
+    : document;
+}
 
-  // Read failures (e.g. EACCES) retain their identity for the outer probe
-  // classifier -- only JSON.parse below is a real "malformed mcpServers".
-  const raw = await dependencies.readFileText(mcpPath);
-
+// Read failures (e.g. EACCES) retain their identity for the outer probe
+// classifier; only JSON.parse failing is a malformed source.
+async function readJsonFile(
+  merge: McpMerge,
+  absolutePath: string,
+  invalidJsonNote: (detail: string) => string,
+): Promise<void> {
+  const text = await merge.dependencies.readFileText(absolutePath);
+  let document: unknown;
   try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    return { ok: true, value: "mcpServers" in parsed ? parsed.mcpServers : parsed };
+    document = JSON.parse(text);
   } catch (error: unknown) {
-    return {
-      ok: false,
-      reason: `malformed mcpServers (.mcp.json): ${errorMessage(error)}`,
-    };
+    addDefect(merge, invalidJsonNote(errorMessage(error)));
+    return;
   }
+
+  mergeServerMap(merge, fileServerMap(document));
+}
+
+async function readStandaloneMcp(merge: McpMerge): Promise<void> {
+  const mcpPath = path.join(merge.pluginRoot, ".mcp.json");
+  if ((await merge.dependencies.statKind(mcpPath)) !== "file") {
+    return;
+  }
+
+  await readJsonFile(merge, mcpPath, (detail) => `malformed mcpServers (.mcp.json): ${detail}`);
 }
 
 async function validateReferencePath(
@@ -120,40 +151,112 @@ async function validateReferencePath(
   return contained;
 }
 
-async function readReferencedMcp(
-  pluginRoot: string,
-  raw: string,
-  dependencies: McpResolutionDependencies,
-): Promise<{ ok: true; value: unknown } | { ok: false; reason: string }> {
-  const validated = await validateReferencePath(raw, pluginRoot);
+/**
+ * Reads a reference string. Containment runs before any read, so an absolute
+ * or escaping reference is never read (T-06-07). A bundle is never read
+ * either: it makes the plugin partially available. A reference without a
+ * leading `./` still resolves from the plugin root, where Claude Code
+ * refuses the manifest (a residual kept under D-CF6-01).
+ */
+async function readReferencedMcp(merge: McpMerge, raw: string): Promise<void> {
+  const validated = await validateReferencePath(raw, merge.pluginRoot);
   if (!validated.ok) {
-    return validated;
+    addDefect(merge, validated.reason);
+    return;
   }
 
-  if ((await dependencies.statKind(validated.absolutePath)) !== "file") {
-    return { ok: false, reason: `malformed mcp reference: file not found: "${raw}"` };
+  if (isMcpBundle(raw)) {
+    merge.bundle = true;
+    return;
   }
 
-  const text = await dependencies.readFileText(validated.absolutePath);
-  try {
-    const parsed = JSON.parse(text) as Record<string, unknown>;
-    if (!("mcpServers" in parsed)) {
-      return {
-        ok: false,
-        reason: `malformed mcp reference: missing top-level "mcpServers": "${raw}"`,
-      };
+  if ((await merge.dependencies.statKind(validated.absolutePath)) !== "file") {
+    addDefect(merge, `malformed mcp reference: file not found: "${raw}"`);
+    return;
+  }
+
+  await readJsonFile(
+    merge,
+    validated.absolutePath,
+    (detail) => `malformed mcp reference: invalid JSON in "${raw}": ${detail}`,
+  );
+}
+
+// An array is read element by element in order. An element that is neither
+// a reference string nor a server map refuses the whole array with one note.
+async function readMcpArray(merge: McpMerge, sources: readonly unknown[]): Promise<void> {
+  const invalid = sources.findIndex(
+    (source) => typeof source !== "string" && !MCP_SERVERS_VALIDATOR.Check(source),
+  );
+  if (invalid !== -1) {
+    mergeServerMap(merge, sources[invalid]);
+    return;
+  }
+
+  for (const source of sources) {
+    if (typeof source === "string") {
+      // eslint-disable-next-line no-await-in-loop -- D-CF6-01: a later source replaces an earlier one, so the sources merge in order
+      await readReferencedMcp(merge, source);
+    } else {
+      mergeServerMap(merge, source);
     }
-
-    return { ok: true, value: parsed.mcpServers };
-  } catch (error: unknown) {
-    return {
-      ok: false,
-      reason: `malformed mcp reference: invalid JSON in "${raw}": ${errorMessage(error)}`,
-    };
   }
 }
 
-/** Resolves strict inline, referenced, manifest, or standalone MCP declarations. */
+async function readDeclaredMcp(merge: McpMerge, declared: unknown): Promise<void> {
+  if (declared === undefined) {
+    return;
+  }
+
+  if (typeof declared === "string") {
+    await readReferencedMcp(merge, declared);
+    return;
+  }
+
+  if (Array.isArray(declared)) {
+    await readMcpArray(merge, declared);
+    return;
+  }
+
+  mergeServerMap(merge, declared);
+}
+
+/**
+ * Keeps the supported merged servers in merge order and leaves out each
+ * blocked one whole. The typed `mcpServers` kind is the only reason a blocked
+ * server or a bundle gets, as `hooks` is for a dropped hook handler
+ * (ANAME-07).
+ */
+function recordMergedServers(merge: McpMerge): void {
+  const supported: [string, unknown][] = [];
+  const dropped: DroppedMcpServer[] = [];
+  for (const [server, { config, blockedBy }] of merge.servers) {
+    if (blockedBy === undefined) {
+      supported.push([server, config]);
+    } else {
+      dropped.push({ server, feature: blockedBy });
+    }
+  }
+
+  // `Object.fromEntries` defines own properties, so a server named
+  // `__proto__` stays a server.
+  merge.resolution.mcpServers = Object.fromEntries(supported);
+  if (dropped.length > 0 || merge.bundle) {
+    merge.resolution.unsupported.push("mcpServers");
+  }
+
+  if (dropped.length > 0) {
+    merge.resolution.droppedMcpServers = dropped;
+  }
+}
+
+/**
+ * Resolves a plugin's MCP servers as the ordered union of its sources
+ * (D-CF6-01), and reports whether any source has a structural defect. The
+ * entry's `mcpServers` counts only when the plugin has no `plugin.json`
+ * (`manifest` is `null`), because Claude Code then reads the entry as the
+ * manifest.
+ */
 export async function resolveStrictMcp(
   input: {
     readonly entry: { readonly mcpServers?: unknown };
@@ -166,24 +269,21 @@ export async function resolveStrictMcp(
     readonly readFileText: (path: string) => Promise<string>;
   },
 ): Promise<boolean> {
-  const declaredMcp = input.entry.mcpServers ?? input.manifest?.mcpServers;
+  const merge: McpMerge = {
+    pluginRoot: input.pluginRoot,
+    resolution: input.resolution,
+    dependencies,
+    servers: new Map(),
+    bundle: false,
+    dirty: false,
+  };
 
-  if (typeof declaredMcp === "string") {
-    const referenced = await readReferencedMcp(input.pluginRoot, declaredMcp, dependencies);
-    if (!referenced.ok) {
-      input.resolution.notes.push(referenced.reason);
-      return true;
-    }
+  await readStandaloneMcp(merge);
+  await readDeclaredMcp(
+    merge,
+    input.manifest === null ? input.entry.mcpServers : input.manifest.mcpServers,
+  );
+  recordMergedServers(merge);
 
-    return applyMcpValue(input.resolution, referenced.value);
-  }
-
-  const standalone =
-    declaredMcp === undefined ? await readStandaloneMcp(input.pluginRoot, dependencies) : undefined;
-  if (standalone?.ok === false) {
-    input.resolution.notes.push(standalone.reason);
-    return true;
-  }
-
-  return applyMcpValue(input.resolution, declaredMcp ?? standalone?.value);
+  return merge.dirty;
 }
