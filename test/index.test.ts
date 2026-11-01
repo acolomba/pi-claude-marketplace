@@ -885,13 +885,17 @@ async function seedEnabledPlugin(cwd: string, resolvedSource: string): Promise<v
 }
 
 /**
- * MISS-01: record project-scope plugin "plug" (enabled), whose manifest
- * declares a dependency on "helper" -- also declared and on disk in the same
- * marketplace, but never recorded. Config declares "plug@mp" (kept out of
- * the uninstall bucket) and says nothing about "helper" (D-04-02).
+ * MISS-01: record plugin "plug" (enabled) in the scope rooted at `scopeRoot`,
+ * the project scope unless a case names the user's agent directory. Its
+ * manifest declares a dependency on "helper" -- also declared and on disk in
+ * the same marketplace, but never recorded. Config declares "plug@mp" (kept
+ * out of the uninstall bucket) and says nothing about "helper" (D-04-02).
  */
-async function seedEnabledPluginWithMissingDependency(cwd: string): Promise<void> {
-  const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
+async function seedEnabledPluginWithMissingDependency(
+  cwd: string,
+  scopeRoot: string = path.join(cwd, ".pi"),
+): Promise<void> {
+  const extensionRoot = path.join(scopeRoot, "pi-claude-marketplace");
   const marketplaceRoot = path.join(cwd, "mp-src");
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
   await mkdir(path.dirname(manifestPath), { recursive: true });
@@ -928,7 +932,7 @@ async function seedEnabledPluginWithMissingDependency(cwd: string): Promise<void
       marketplaces: {
         mp: {
           name: "mp",
-          scope: "project",
+          scope: scopeRoot === path.join(cwd, ".pi") ? "project" : "user",
           source: { kind: "path", raw: marketplaceRoot },
           addedFromCwd: cwd,
           manifestPath,
@@ -950,9 +954,9 @@ async function seedEnabledPluginWithMissingDependency(cwd: string): Promise<void
     }),
     "utf8",
   );
-  await mkdir(path.join(cwd, ".pi"), { recursive: true });
+  await mkdir(scopeRoot, { recursive: true });
   await writeFile(
-    path.join(cwd, ".pi", "claude-plugins.json"),
+    path.join(scopeRoot, "claude-plugins.json"),
     JSON.stringify({
       schemaVersion: 1,
       marketplaces: { mp: { source: marketplaceRoot } },
@@ -1408,17 +1412,17 @@ test("APL-03 / D-05 / D-21: a reload event lists the missing dependency's instal
   verifyBoundary();
 });
 
-/** AAP-02: turn autoapply on in the project base config that a seed wrote. */
-async function turnAutoapplyOn(cwd: string): Promise<void> {
-  const configPath = path.join(cwd, ".pi", "claude-plugins.json");
+/** AAP-02: turn autoapply on in the base config that a seed wrote under `scopeRoot`. */
+async function turnAutoapplyOn(scopeRoot: string): Promise<void> {
+  const configPath = path.join(scopeRoot, "claude-plugins.json");
   const config = JSON.parse(await readFile(configPath, "utf8")) as object;
   await writeFile(configPath, JSON.stringify({ ...config, autoapply: true }), "utf8");
 }
 
-test("AAP-02 / D-06: an autoapply reload installs the missing dependency and the same discover returns its skill", async (t) => {
+test("AAP-02 / D-06: an autoapply reload installs a user plugin's missing dependency and the same discover returns its skill", async (t) => {
   // arrange
   const scope = await createHermeticScope(t, "autoapply-reload");
-  await seedEnabledPluginWithMissingDependency(scope.cwd);
+  await seedEnabledPluginWithMissingDependency(scope.cwd, scope.agentDir);
   const skillSource = path.join(scope.cwd, "mp-src", "plugins", "helper", "skills", "assist");
   await mkdir(skillSource, { recursive: true });
   await writeFile(
@@ -1426,8 +1430,8 @@ test("AAP-02 / D-06: an autoapply reload installs the missing dependency and the
     "---\nname: assist\ndescription: Assists.\n---\n# assist\n",
     "utf8",
   );
-  await turnAutoapplyOn(scope.cwd);
-  const extensionRoot = path.join(scope.cwd, ".pi", "pi-claude-marketplace");
+  await turnAutoapplyOn(scope.agentDir);
+  const extensionRoot = path.join(scope.agentDir, "pi-claude-marketplace");
   const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
     1,
     PROBES_PER_DISCOVER,
@@ -1440,7 +1444,7 @@ test("AAP-02 / D-06: an autoapply reload installs the missing dependency and the
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [project]\n  ● helper v1.0.0 (installed) {dependency installed}\n\n" +
+        "● mp [user]\n  ● helper v1.0.0 (installed) {dependency installed}\n\n" +
         "Reconcile: 1 success\n\n/reload to pick up changes",
     },
   ]);
@@ -1461,9 +1465,9 @@ test("AAP-03 / NFR-2: an autoapply load whose apply throws reports the abort and
     restoreEnv("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", previousBase);
   });
   process.env.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL = "not a url";
-  await mkdir(path.join(scope.cwd, ".pi"), { recursive: true });
+  await mkdir(scope.agentDir, { recursive: true });
   await writeFile(
-    path.join(scope.cwd, ".pi", "claude-plugins.json"),
+    path.join(scope.agentDir, "claude-plugins.json"),
     JSON.stringify({ marketplaces: { tools: { source: "acme/tools" } }, autoapply: true }),
     "utf8",
   );
