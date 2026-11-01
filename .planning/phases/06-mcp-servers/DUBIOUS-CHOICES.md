@@ -280,3 +280,16 @@ tooling. Status stays `open` until the user reviews it.
   5. T-06-14 was checked at L1 depth (the three lifecycle scenarios); the D-08-02 field carry-over was not traced.
   6. The root `.mcp.json` is read through symlink-following `stat`/`readFile` without containment (predates Phase 6); recorded as an observation, not a threat.
 - **Recorded in:** `06-VALIDATION.md`, `06-SECURITY.md`.
+
+### P6-DC-21: Code review fix choices
+
+- **Phase / source:** Phase 6 code review (`06-REVIEW.md`, 0 critical, 8 warnings, 8 info) and gsd-code-fixer (`06-REVIEW-FIX.md`).
+- **Severity:** Medium (items 1, 2); the rest Low. **Status:** open.
+- **Items:**
+  1. WR-03: the MCP file-source skip now skips any Error carrying a Node `code` (EMFILE and EIO included, as upstream's loader skips every `readFile` failure) and rethrows errors without a code and non-Error values; a pre-Phase-6 plugin-resolver test was restored to its "propagates" form. The rethrow in `locateReference` has no dedicated test.
+  2. WR-01/WR-02: no resolver change. A probe of Claude Code 2.1.316 shows upstream reads `.mcp.json` and named server files through symlinks wherever they point; the root file already matches, and the refusal of every symlinked reference (MCPR-04, D-14) is now a documented divergence. Whether to follow in-root links is left as a parent line for the user. Evidence covers a directory marketplace and `file://` url plugins only.
+  3. WR-04: the reconcile move's "no longer declares it." wording for a skipped malformed server is kept (product code Phase 6 does not own) with a test comment and a parent line.
+  4. WR-05: the WLIF-01 test was retitled to what it proves instead of adding a mock; an existing case already reaches the branch.
+  5. WR-06: a bad POST to the HTTP stand-in is answered 400 and logged but does not fail the release; an append or answer failure does.
+  6. The orchestrator scoped the fix to warnings plus IN-06 and wrote `06-REVIEW-DISPOSITION.md` by hand (the other info items `deferred`) instead of running the disposition script.
+- **Recorded in:** `06-REVIEW-FIX.md`, `06-REVIEW-DISPOSITION.md`.
