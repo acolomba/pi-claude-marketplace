@@ -148,3 +148,18 @@ session writes this file. Each subagent ends its report with a
   probed; the TUI reload scenario's stability is unverified; the researcher
   ran spike scenarios from the scratchpad (no repo edit).
 - **Recorded in:** `05-CONTEXT.md` "Planning clarifications", `05-RESEARCH.md`.
+
+### P5-DC-11: Project-scope hook provenance check (D-CF2-13) deferred to the merge
+
+- **Phase / source:** parent note to the Hooks phase (2026-11-01).
+- **Severity:** High. **Status:** open.
+- **Choice:** Phase 5 does not add the D-CF2-13 provenance check to
+  project-scope hooks, because the ledger module
+  (`bridges/skills/project-installs.ts`) is not on this branch yet. A parent
+  line in the last plan's SUMMARY asks for the hydrate of project-scope hooks
+  to consult the generalized ledger (kind `hooks`) after the merge.
+- **Alternatives:** Build a hooks-only ledger now (a second file the parent
+  would need to reconcile); wait for the parent to merge Phase 2 first.
+- **Why dubious:** Until then, project-scope hooks from repository-controlled
+  state can run commands with no provenance check (pre-existing exposure).
+- **Recorded in:** the last plan's SUMMARY "Parent lines".
