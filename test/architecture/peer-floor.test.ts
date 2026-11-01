@@ -18,8 +18,12 @@ interface PackageLockJson {
 }
 
 const PEER = "@earendil-works/pi-coding-agent";
+const TUI = "@earendil-works/pi-tui";
+const AI = "@earendil-works/pi-ai";
 const SUBAGENTS_PEER = "pi-subagents";
 const MCP_ADAPTER_PEER = "pi-mcp-adapter";
+const WORKFLOWS_PEER = "@quintinshaw/pi-dynamic-workflows";
+const COMPANION_PEERS = [MCP_ADAPTER_PEER, SUBAGENTS_PEER, WORKFLOWS_PEER] as const;
 
 async function readPackageJson(): Promise<PackageJson> {
   return JSON.parse(await readFile(path.join(REPO_ROOT, PACKAGE_JSON_REL), "utf8")) as PackageJson;
@@ -31,7 +35,7 @@ async function readPackageLock(): Promise<PackageLockJson> {
   ) as PackageLockJson;
 }
 
-test("package.json peerDependencies pins the pi-coding-agent floor at >=1.0.0 (FLOOR-01)", async () => {
+test("package.json peerDependencies pins the pi-coding-agent floor at >=1.4.0 (FLOOR-01, VER-01)", async () => {
   // arrange
   const pkg = await readPackageJson();
 
@@ -40,7 +44,7 @@ test("package.json peerDependencies pins the pi-coding-agent floor at >=1.0.0 (F
 
   // assert
   assert.ok(range, `peerDependencies["${PEER}"] is missing`);
-  assert.equal(range, ">=1.0.0", `FLOOR-01 violation: expected floor ">=1.0.0", got "${range}"`);
+  assert.equal(range, ">=1.4.0", `FLOOR-01 violation: expected floor ">=1.4.0", got "${range}"`);
 });
 
 test("package-lock.json root peerDependencies stays in sync with package.json for pi-coding-agent (FLOOR-01)", async () => {
@@ -67,7 +71,27 @@ test("package-lock.json root peerDependencies stays in sync with package.json fo
   );
 });
 
-test("package.json declares the optional pi-subagents peer at >=0.74.0 and the lock root mirrors it (PIFL-02)", async () => {
+test("devDependencies pins pi-coding-agent and pi-tui at ^1.4.0 and pi-ai at exactly 1.4.0 (VER-01)", async () => {
+  // arrange
+  const pkg = await readPackageJson();
+  const devDependencies = pkg.devDependencies ?? {};
+
+  // act
+  const piDevDependencies = {
+    [PEER]: devDependencies[PEER],
+    [TUI]: devDependencies[TUI],
+    [AI]: devDependencies[AI],
+  };
+
+  // assert
+  assert.deepStrictEqual(piDevDependencies, {
+    "@earendil-works/pi-coding-agent": "^1.4.0",
+    "@earendil-works/pi-tui": "^1.4.0",
+    "@earendil-works/pi-ai": "1.4.0",
+  });
+});
+
+test("package.json declares the optional pi-subagents peer at >=0.84.0 and the lock root mirrors it (PIFL-02, VER-02)", async () => {
   // arrange
   const [pkg, lock] = await Promise.all([readPackageJson(), readPackageLock()]);
 
@@ -77,12 +101,12 @@ test("package.json declares the optional pi-subagents peer at >=0.74.0 and the l
   const meta = pkg.peerDependenciesMeta?.[SUBAGENTS_PEER];
 
   // assert
-  assert.equal(pkgRange, ">=0.74.0");
+  assert.equal(pkgRange, ">=0.84.0");
   assert.equal(lockRange, pkgRange);
   assert.deepStrictEqual(meta, { optional: true });
 });
 
-test("package.json declares pi-mcp-adapter as an optional peer at >=5.2.0 <6 (PIFL-03)", async () => {
+test("package.json declares pi-mcp-adapter as an optional peer at >=7.0.0 <8 (PIFL-03, VER-02)", async () => {
   // arrange
   const pkg = await readPackageJson();
 
@@ -91,24 +115,8 @@ test("package.json declares pi-mcp-adapter as an optional peer at >=5.2.0 <6 (PI
   const meta = pkg.peerDependenciesMeta?.[MCP_ADAPTER_PEER];
 
   // assert
-  assert.equal(range, ">=5.2.0 <6");
+  assert.equal(range, ">=7.0.0 <8");
   assert.deepStrictEqual(meta, { optional: true });
-});
-
-test("pi-mcp-adapter is never installed as a dependency, a devDependency, or a lock package (PIFL-03)", async () => {
-  // arrange
-  const [pkg, lock] = await Promise.all([readPackageJson(), readPackageLock()]);
-
-  // act
-  const declaredAsDependency = Object.hasOwn(pkg.dependencies ?? {}, MCP_ADAPTER_PEER);
-  const declaredAsDevDependency = Object.hasOwn(pkg.devDependencies ?? {}, MCP_ADAPTER_PEER);
-  const lockedAsPackage = Object.hasOwn(lock.packages ?? {}, `node_modules/${MCP_ADAPTER_PEER}`);
-
-  // assert
-  assert.deepStrictEqual(
-    { declaredAsDependency, declaredAsDevDependency, lockedAsPackage },
-    { declaredAsDependency: false, declaredAsDevDependency: false, lockedAsPackage: false },
-  );
 });
 
 test("package-lock.json root peerDependencies mirrors package.json for pi-mcp-adapter (PIFL-03)", async () => {
@@ -120,6 +128,39 @@ test("package-lock.json root peerDependencies mirrors package.json for pi-mcp-ad
   const lockRange = lock.packages?.[""]?.peerDependencies?.[MCP_ADAPTER_PEER];
 
   // assert
-  assert.equal(pkgRange, ">=5.2.0 <6");
+  assert.equal(pkgRange, ">=7.0.0 <8");
   assert.equal(lockRange, pkgRange);
 });
+
+test("package.json declares the optional pi-dynamic-workflows peer at >=3.15.0 <4 and the lock root mirrors it (PIFL-02, VER-02)", async () => {
+  // arrange
+  const [pkg, lock] = await Promise.all([readPackageJson(), readPackageLock()]);
+
+  // act
+  const pkgRange = pkg.peerDependencies?.[WORKFLOWS_PEER];
+  const lockRange = lock.packages?.[""]?.peerDependencies?.[WORKFLOWS_PEER];
+  const meta = pkg.peerDependenciesMeta?.[WORKFLOWS_PEER];
+
+  // assert
+  assert.equal(pkgRange, ">=3.15.0 <4");
+  assert.equal(lockRange, pkgRange);
+  assert.deepStrictEqual(meta, { optional: true });
+});
+
+for (const companion of COMPANION_PEERS) {
+  test(`${companion} is never installed as a dependency, a devDependency, or a lock package (PIFL-03)`, async () => {
+    // arrange
+    const [pkg, lock] = await Promise.all([readPackageJson(), readPackageLock()]);
+
+    // act
+    const declaredAsDependency = Object.hasOwn(pkg.dependencies ?? {}, companion);
+    const declaredAsDevDependency = Object.hasOwn(pkg.devDependencies ?? {}, companion);
+    const lockedAsPackage = Object.hasOwn(lock.packages ?? {}, `node_modules/${companion}`);
+
+    // assert
+    assert.deepStrictEqual(
+      { declaredAsDependency, declaredAsDevDependency, lockedAsPackage },
+      { declaredAsDependency: false, declaredAsDevDependency: false, lockedAsPackage: false },
+    );
+  });
+}
