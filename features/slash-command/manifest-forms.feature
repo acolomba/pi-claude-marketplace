@@ -29,3 +29,117 @@ Feature: Slash command manifest forms
     Then pi offers these slash commands from prompt templates:
       | command | description |
       | /demo:a | Runs a.     |
+
+  Scenario: A commands path a marketplace entry declares adds to the commands folder
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {
+        "name": "fixtures",
+        "owner": { "name": "features" },
+        "plugins": [
+          { "name": "demo", "source": "./plugins/demo", "version": "1.0.0", "commands": "./more" }
+        ]
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "other" with this command file:
+      """
+      ---
+      description: Runs other.
+      ---
+
+      Run other.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "more/b.md" with this text:
+      """
+      ---
+      description: Runs b.
+      ---
+
+      Run b.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    When the user lists the slash commands pi offers
+    Then pi offers these slash commands from prompt templates:
+      | command     | description |
+      | /demo:b     | Runs b.     |
+      | /demo:other | Runs other. |
+
+  Scenario: Installing a plugin whose marketplace entry declares a commands path reports no folder note
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {
+        "name": "fixtures",
+        "owner": { "name": "features" },
+        "plugins": [
+          { "name": "demo", "source": "./plugins/demo", "version": "1.0.0", "commands": "./more" }
+        ]
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "other" with this command file:
+      """
+      Run other.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "more/b.md" with this text:
+      """
+      Run b.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+
+  Scenario: A commands path the plugin manifest declares replaces the commands folder
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      { "name": "demo", "version": "1.0.0", "commands": "./custom" }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "custom/hello.md" with this text:
+      """
+      ---
+      description: Says hello.
+      ---
+
+      Say hello.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "old" with this command file:
+      """
+      ---
+      description: Runs old.
+      ---
+
+      Run old.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                              | lines                                                                    |
+      | cascade    | info     | true         |                                                                     |                                                                          |
+      | diagnostic | warning  | false        | Plugin "demo" [project] installed; 1 declared component has a note. | Default commands/ folder is ignored because the manifest sets "commands" |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    When the user starts a new pi session
+    When the user lists the slash commands pi offers
+    Then pi offers these slash commands from prompt templates:
+      | command     | description |
+      | /demo:hello | Says hello. |
