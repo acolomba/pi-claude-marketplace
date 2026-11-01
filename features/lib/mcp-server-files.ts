@@ -14,15 +14,32 @@ import { writePublishedPluginFile } from "./published-marketplace.ts";
 
 import type { PublishedMarketplace } from "./published-marketplace.ts";
 
-/** A stub server of a plugin: its name in the plugin's `.mcp.json`. */
+/**
+ * The `env` of a stub server whose `STUB_TAG` comes from `PI_CM_STUB_TAG`,
+ * with a default for when that variable is unset (D-CF1-13). Claude Code
+ * expands the reference when it starts the server, not at install.
+ */
+export const LATE_TAG_ENVIRONMENT: Readonly<Record<string, string>> = {
+  STUB_TAG: "${PI_CM_STUB_TAG:-install-default}",
+};
+
+/**
+ * A stub server of a plugin: its name in the plugin's `.mcp.json`, and the
+ * `env` it declares, if any.
+ */
 export interface StubMcpServer {
   readonly plugin: string;
   readonly server: string;
+  readonly env?: Readonly<Record<string, string>>;
 }
 
 /** Returns the text of the `.mcp.json` that declares `stub` and nothing else. */
 export function stubMcpFileText(stub: StubMcpServer): string {
-  const entry = { command: process.execPath, args: [MCP_STUB_SERVER, stub.plugin, stub.server] };
+  const entry = {
+    command: process.execPath,
+    args: [MCP_STUB_SERVER, stub.plugin, stub.server],
+    ...(stub.env === undefined ? {} : { env: stub.env }),
+  };
   return `${JSON.stringify({ mcpServers: { [stub.server]: entry } }, null, 2)}\n`;
 }
 

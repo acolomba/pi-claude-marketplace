@@ -1,7 +1,8 @@
 /**
  * @fileoverview Steps about calling the MCP servers of a plugin: the stub
- * servers a published plugin holds, pi-mcp-adapter's first listing of their
- * tools, and the messages a stub receives (HAR-04, HAR-07).
+ * servers a published plugin holds, a profile Pi started with a variable the
+ * user set, pi-mcp-adapter's first listing of the servers' tools, and the
+ * messages a stub receives (HAR-04, HAR-07).
  *
  * When a session starts, pi-mcp-adapter connects to a server whose tools it
  * has not cached, lists them, and disconnects, in the background. A model
@@ -11,13 +12,22 @@
  */
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
-import { publishStubMcpServer, stubMcpFileText } from "../../lib/mcp-server-files.ts";
+import {
+  LATE_TAG_ENVIRONMENT,
+  publishStubMcpServer,
+  stubMcpFileText,
+} from "../../lib/mcp-server-files.ts";
 import { readStubRequests, stubPidFiles } from "../../lib/mcp-stub-server.ts";
+import {
+  PI_LAUNCH_ENVIRONMENT_EXTENSION,
+  readAppliedLaunchEnvironments,
+  writeLaunchEnvironment,
+} from "../../lib/pi-launch-environment.ts";
 import { projectTokens } from "../../lib/run-tokens.ts";
 import { modelCallsOf } from "../../lib/scripted-model/script.ts";
 
@@ -76,6 +86,35 @@ Given(
     const stub = { plugin, server };
     const file = await publishStubMcpServer(this.requirePublished(name), stub);
     assert.strictEqual(await readFile(file, "utf8"), stubMcpFileText(stub));
+  },
+);
+
+// D-CF1-13: the server's env holds a `${NAME:-default}` reference, which
+// Claude Code expands when it starts the server.
+Given(
+  'the published plugin {string} of the marketplace {string} has the stub mcp server {string} with "STUB_TAG" set to "$\\{PI_CM_STUB_TAG:-install-default}"',
+  async function (this: ScenarioWorld, plugin: string, name: string, server: string) {
+    const stub = { plugin, server, env: LATE_TAG_ENVIRONMENT };
+    const file = await publishStubMcpServer(this.requirePublished(name), stub);
+    assert.strictEqual(await readFile(file, "utf8"), stubMcpFileText(stub));
+  },
+);
+
+// A profile Pi's environment is fixed when it starts, so a variable the user
+// sets after an install reaches only a Pi started after it. The variable is
+// never set in this worker's own environment.
+Given(
+  "pi runs with the scripted model, pi-mcp-adapter, and the environment variable {string} set to {string}",
+  async function (this: ScenarioWorld, variable: string, value: string) {
+    const file = await writeLaunchEnvironment(this.tokens.home, { [variable]: value });
+    this.onRelease(() => rm(file, { force: true }));
+    await this.usePiWithProfile({
+      companions: ["pi-mcp-adapter"],
+      extraExtensions: [PI_LAUNCH_ENVIRONMENT_EXTENSION],
+    });
+    assert.deepStrictEqual(await readAppliedLaunchEnvironments(this.profileHarness()), [
+      { [variable]: value },
+    ]);
   },
 );
 

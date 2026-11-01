@@ -4,8 +4,9 @@
  *
  * pi-mcp-adapter starts it with Node and talks newline-delimited JSON-RPC
  * over its stdin and stdout. It answers `initialize`, lists one `echo` tool,
- * and answers a `tools/call` with `echo:<text>`. Any other request gets an
- * empty result, and a notification gets no reply. It appends every message
+ * and answers a `tools/call` with `echo:<text>`, or `<tag>:echo:<text>` when
+ * its environment sets `STUB_TAG`. Any other request gets an empty result,
+ * and a notification gets no reply. It appends every message
  * it receives to `<harness dir>/mcp-stub-requests.jsonl`, with the plugin and
  * server names it was started for, writes its pid to
  * `<harness dir>/mcp-stub-<pid>.pid`, and exits when its stdin closes. The
@@ -125,10 +126,14 @@ const ECHO_TOOL = {
   },
 };
 
+// A non-empty `STUB_TAG` in the stub's environment prefixes the echo, so a
+// scenario sees the value the adapter passed when it started the stub.
 function callResult(params: unknown): unknown {
   const args = isRecord(params) && isRecord(params.arguments) ? params.arguments : {};
   const text = typeof args.text === "string" ? args.text : "";
-  return { content: [{ type: "text", text: `echo:${text}` }] };
+  const tag = process.env.STUB_TAG;
+  const echoed = tag === undefined || tag === "" ? `echo:${text}` : `${tag}:echo:${text}`;
+  return { content: [{ type: "text", text: echoed }] };
 }
 
 function resultFor(method: unknown, params: unknown): unknown {

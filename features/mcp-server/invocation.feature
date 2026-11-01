@@ -71,3 +71,25 @@ Feature: MCP server invocation
       | 2    | user        | call the stub                                                               |
       | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}} |
       | 2    | tool result | mcp returned: echo:ping                                                     |
+
+  Scenario: A variable set after install reaches the plugin's server when it connects
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub" with "STUB_TAG" set to "${PI_CM_STUB_TAG:-install-default}"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given pi runs with the scripted model, pi-mcp-adapter, and the environment variable "PI_CM_STUB_TAG" set to "late"
+    Given pi-mcp-adapter has listed the tools of the stub mcp server "stub" of the plugin "demo"
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                                          |
+      |       | mcp  | {"tool": "mcp__plugin_demo_stub__echo", "args": {"text": "ping"}} |
+      | Done. |      |                                                                    |
+    When the user prompts "call the stub"
+    Then the model receives these calls:
+      | call | role        | text                                                                        |
+      | 1    | user        | call the stub                                                               |
+      | 2    | user        | call the stub                                                               |
+      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}} |
+      | 2    | tool result | mcp returned: late:echo:ping                                                |
