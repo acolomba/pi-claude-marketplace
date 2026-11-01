@@ -23,9 +23,10 @@ import { PROFILE_PI_START_TIMEOUT_MS } from "../support/world.ts";
 import type { ScenarioWorld } from "../support/world.ts";
 
 // Pi loads every extension twice in a project that needs a trust decision,
-// once to ask the extensions and once with the decision. With a cold compile
-// cache and a loaded runner, that start overran the 30-second default.
-const UNTRUSTED_START_TIMEOUT_MS = 60_000;
+// once to ask the extensions and once with the decision, so this start gets
+// two trusted starts' budget. With a cold compile cache and a loaded runner,
+// it overran the 30-second default.
+const UNTRUSTED_START_TIMEOUT_MS = 2 * PROFILE_PI_START_TIMEOUT_MS;
 
 // Starts the profile Pi with the companions `table` names, trusting the
 // project or not, and asserts that each companion loaded. The world loads
