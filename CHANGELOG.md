@@ -8,6 +8,16 @@
   - Plugin workflows now need `@quintinshaw/pi-dynamic-workflows` 3.15.0 or a later 3.x release, which the package now declares as an optional peer.
   - A declared `commands`, `agents`, or `workflows` path now replaces the conventional folder, as in Claude Code, and install and update warn when that folder exists.
   - A `${NAME:-default}` in a plugin's MCP settings now reads a variable set after install, as in Claude Code, without a reinstall.
+  - A skill with no `description` is now listed with Claude Code's text: the first line of its body, or `Plugin skill` for an empty body.
+  - Install now warns about the skill frontmatter fields that Pi cannot honor, such as `model` or `effort`, with one line for each skill.
+  - Typed skills now fill in arguments, `${CLAUDE_*}` variables, and `` !`command` `` output as Claude Code does, in the terminal UI and over RPC.
+  - A failing `` !`command` `` now stops its skill with Claude Code's message, and the model gets nothing.
+  - Skill aliases now match Claude Code: `/<plugin>:<skill folder>`, `/<plugin>:<frontmatter name>`, and the bare `/<frontmatter name>`, without the old shortened alias. Update or reinstall a plugin to get them for skills installed earlier.
+  - A command now keeps a name that a skill of its plugin also has, as in Claude Code, and install skips that skill with a warning.
+  - A skill in `skills/` now wins over a skill of the same name in a declared skills path, as in Claude Code.
+  - Pi now gets no plugin skills or prompt templates from a project that it does not trust.
+  - A project-scope skill now runs its `` !`command` `` lines only when you installed its plugin into the project on this machine. For a project skill installed earlier, run `/claude:plugin reinstall <plugin>@<marketplace> --scope project` once.
+  - A load with `autoapply` on now applies only the user scope and shows the pending changes of the project scope. `/claude:plugin apply` still applies both scopes.
 - A plugin's `SessionStart` hook now runs once when an RPC client starts, switches, forks, or clones a session, as in Claude Code. (#294)
 - Internal: the repository now sets itself up in a Claude Code cloud session, and the tests that use `chmod` run there. (#293)
 
