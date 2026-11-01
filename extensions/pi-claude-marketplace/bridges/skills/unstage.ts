@@ -86,7 +86,6 @@ export function createUnstagePluginSkills(
       try {
         // eslint-disable-next-line no-await-in-loop -- the first containment or removal failure stops the rest
         await remover.removeTree(dir);
-        // fallow-ignore-next-line code-duplication -- reviewed: the commands and skills bridges keep the same shape on purpose, and the fallow boundary zones forbid one bridge from importing the other
         removed.push(name);
       } catch (err) {
         // force:true silences ENOENT, but a TOCTOU race could land us here
