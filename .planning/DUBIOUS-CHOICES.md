@@ -348,3 +348,51 @@ this project.
      forbids extra gate-override text, and the block contains none.
   3. The repo has no `CLAUDE.md`; prompts point executors at `AGENTS.md`.
 - **Recorded in:** this log only.
+
+### DC-18: Phase 1 wave 1 executor choices
+
+- **Phase / source:** executors for plans 01-01, 01-02, 01-10, 01-15.
+- **Severity:** Medium (the root-permission workaround and the mislabeled commit); the rest Low. **Status:** open.
+- **Cross-cutting:**
+  - **Root sandbox.** This session runs as root, which ignores the `chmod` tricks the permission-injection tests use: 128 unit cases, 38 cucumber scenarios, and 1 integration case fail on any tree. Executors and the parent run npm scripts with `npm_config_script_shell` pointing at a `setpriv` wrapper that drops `dac_override` and `dac_read_search`. No hook or check is skipped. A repository-level fix (for example, skipping those cases when `process.getuid() === 0`) is not made.
+  - **ESLint heap.** Cold-cache ESLint runs ran out of the default heap under parallel load; commits and gates use `NODE_OPTIONS=--max-old-space-size=6144`.
+  - **Shared scratchpad collision.** Commit `8b191cb` holds the Pi 1.4.0 e2e fixture files but carries the dependency-raise commit message. It was not amended (no history rewrites). Later executor prompts get a per-agent scratch folder.
+
+#### 01-02 (cucumber rules and decision records)
+1. D-CF1-14..17 rows cite DC-01, which lists only pre-fan-out items; a Phase 1 decisions entry may be wanted and those labels updated.
+2. The layout rule section in `.agents/skills/cucumber/rules/layout.md` uses "Phase 1" and phase numbers (milestone-scoped, copies ROADMAP; key link greps "Frozen after Phase 1"), although process names are kept out of durable files.
+3. Seed feature and step names written before the harness exists; 01-09 must correct the table if the built names differ.
+4. New PROJECT.md Key Decisions rows padded to the table's column widths (~7,700 chars per row).
+5. D-CF1-03 rationale (upstream applies T2e/HRe when its Skill tool loads a plugin skill) inferred from research, not re-grepped in the binary.
+6. HAR-08 prohibition (pin a divergence only with a decision ID or Pi gap) placed in `layout.md`, not `features.md` (not in the file list).
+7. Cross-kind wording follows ROADMAP ("frozen fixture writers such as published-marketplace.ts").
+8. Flagged assumptions stay open: one Key Decisions row per decision (DEC-01); the contradicting bullet is "Custom component-path arrays as supplemental" (DEC-02).
+#### 01-10 (command-invocation seed, frontmatter cores, fallow registration)
+1. The pass-through `input` handler in `edge/command-invocation.ts` is not recorded as a stub in the WINDOWS ledger (it is specified behavior until the D-CF1-01/02 transforms land).
+2. One-line comments on the D-CF1-05 dropped-field table describe upstream fields from Claude Code docs, not from the binary.
+3. Environment: a commit hook failed when ESLint ran out of memory under parallel load; the agent re-ran it with `NODE_OPTIONS=--max-old-space-size=6144` (no `--no-verify`). A heap flag in the `lint` script may be worth considering.
+4. Ran `SKIP=npm-check pre-commit ...` (the worktree guard refused `${SKIP:+,$SKIP}`; SKIP was empty).
+5. Extra test row (heading over 100 chars) and a D-CF1-01/02 comment at the registration call site explaining ordering.
+- Parent follow-up: remove the six `.fallowrc.json` `dynamicallyLoaded`/`ignoreExports` entries after Phases 2 and 3 merge.
+#### 01-15 (Pi 1.4.0 floor fixture, Pi types, version docs)
+1. Running as root, two chmod-based tests (`test/bridges/agents/stage.test.ts`, `test/bridges/agents/discover.test.ts`) fail in the full-pairs commit hook regardless of the change; the agent committed through an `npm_config_script_shell` wrapper that turns off root's permission override for npm scripts (hook still ran in full, no `--no-verify`). A repository-level fix may be preferable.
+2. Commit 8b191cb holds 01-15 Task 1 files but carries 01-01's message (`build(deps): raise Pi to 1.4.0 and the companion floors`) after a shared-scratchpad file collision; not amended (history rewrites forbidden).
+3. Added `fallow-ignore-next-line unused-type` markers on `ThinkingLevel` and `InputSource` in `platform/pi-api.ts` (unused until Phase 2); CONVENTIONS.md marker count (41) is now stale (43).
+4. `docs/env-vars.md` line 164 keeps its 5.2.0 measurement plus a note that the `resolveEnv` call site was re-read in 7.0.0 (only that path re-checked).
+5. `docs/env-vars.md` line 3 names 7.0.0 relying on 01-01's conformance test, which ran in parallel.
+6. Unrequested rename of the canary scratch folder `/var/tmp/mcp-adapter-520` → `/var/tmp/mcp-adapter-700`.
+7. `workflow-home.ts` line 15 left unchanged (still true).
+8. Canary's refusal of a Pi below 1.0.0 left as is (not raised to 1.4.0).
+9. `InputSource` comment cites D-CF1-01, not D-CF1-02.
+10. TDD red step not committed separately (red state is a typecheck error the hook rejects); failure output is in the SUMMARY.
+- Parent follow-ups: CHANGELOG `[Unreleased]` line needs ` (#NNN)` when the PR opens; CONVENTIONS.md fallow-ignore count.
+#### 01-01 (Pi and companion version raise, adapter 7.x escape)
+1. Running as root, 128 unit cases, 38 cucumber scenarios and 1 integration case (AMIG-02) fail on any tree (permission-injection tests); commits ran npm test scripts through an `npm_config_script_shell` wrapper using `setpriv` to drop `dac_override`/`dac_read_search` (no hook skipped).
+2. Commits ran with `NODE_OPTIONS=--max-old-space-size=6144` (ESLint out of memory on a cold cache).
+3. Conformance alphabet raised to 5 tokens (nested `${B:-${A:-x}}` needs 5); ~5 s.
+4. In the literal-path check every alphabet name is set so any leaked reference shows as a mismatch.
+5. Stale-cache case tested by editing the cached adapter version to 5.2.0 rather than installing 5.2.0.
+6. Only `TRIGGER` changed in `adapter-escape.ts` (zero mismatches remained).
+7. `test/live-uat/mcp-adapter-canary.mjs` still pins pi-mcp-adapter 5.2.0 (outside the file list; no gate runs it).
+8. VER-01 "lockfile matches" read as: the lock root mirrors manifest peer ranges and dev dependencies, e2e fixture lock excluded (flagged for the verifier).
+9. GSD commit tool not used, so commit titles carry no plan IDs (project rule).
