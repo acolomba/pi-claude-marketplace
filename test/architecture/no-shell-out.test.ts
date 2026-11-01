@@ -120,13 +120,21 @@ for (const { importer, violations } of [
  * `npm ci` or `bun install` for a plugin's own packages, the package install
  * Claude Code runs. No pure-JS equivalent exists. It spawns with `shell: false`
  * and an argv from the closed lockfile table in
- * orchestrators/plugin/package-install.ts. Adding a FIFTH file requires the
- * same edit-here + edit-sibling-assertion discipline.
+ * orchestrators/plugin/package-install.ts.
+ *
+ * D-CF1-02 fifth sanctioned site:
+ * extensions/pi-claude-marketplace/platform/prompt-shell.ts runs the `!`
+ * commands in the body of a user-invoked skill or command, as Claude Code's
+ * dynamic context injection does. The commands are arbitrary and come from the
+ * installed plugin, so no pure-JS equivalent exists. It spawns with
+ * `shell: false` and an argv: `bash -c <command>`, or PowerShell's
+ * `-NoProfile -Command <command>`. Adding a SIXTH file requires the same
+ * edit-here + edit-sibling-assertion discipline.
  *
  * The ALLOWED_CHILD_PROCESS_FILES whitelist below is the SOLE permitted use
- * of node:child_process in the extension tree. Adding a fifth file MUST
- * require an explicit edit here AND an update to the sibling
- * "exactly four files" assertion below, so silent widening is caught in CI.
+ * of node:child_process in the extension tree. Adding a sixth file MUST
+ * require an explicit edit here AND an update to the sibling whitelist
+ * assertion below, so silent widening is caught in CI.
  */
 
 const ALLOWED_CHILD_PROCESS_FILES: ReadonlySet<string> = new Set(SHELL_OUT_EXEMPT_TARGETS);
@@ -155,7 +163,7 @@ const FORBIDDEN_PATTERNS: ReadonlyArray<RegExp> = [
 test("no child_process imports outside the platform/git-credential whitelist (D-21)", async () => {
   assert.ok(
     SHELL_OUT_EXEMPT_TARGETS.length > 0,
-    "D-07-03: an empty SHELL_OUT_EXEMPT_TARGETS empties the whitelist, so this walk would flag the four sanctioned sites and prove nothing about the rest of the tree.",
+    "D-07-03: an empty SHELL_OUT_EXEMPT_TARGETS empties the whitelist, so this walk would flag the five sanctioned sites and prove nothing about the rest of the tree.",
   );
 
   const offenders: string[] = [];
@@ -186,15 +194,15 @@ test("no child_process imports outside the platform/git-credential whitelist (D-
   );
 });
 
-// AUTH-06/08/09 + EXEC-01..04 + EXEC-05 / HOOK-06 + D-PL9-11 assertion: the
-// whitelist is exactly the four load-bearing sites named below -- nobody silently
+// AUTH-06/08/09 + EXEC-01..04 + EXEC-05 / HOOK-06 + D-PL9-11 + D-CF1-02 assertion:
+// the whitelist is exactly the five load-bearing sites named below -- nobody silently
 // widened it. If a future change needs another file with node:child_process,
 // it MUST update both SHELL_OUT_EXEMPT_TARGETS in the registry AND this
 // assertion's expected array in the same commit, with a justification recorded
 // in the docstring header. The expectation is spelled relative to the extension
 // root because the full paths are owned by the registry (D-07-05); comparing
 // the whitelist against the same group it was built from would pin nothing.
-test("whitelist: exactly four files may import node:child_process", () => {
+test("whitelist: exactly five files may import node:child_process", () => {
   assert.deepEqual(
     [...ALLOWED_CHILD_PROCESS_FILES].map((rel) => path.relative(EXTENSION_ROOT_REL, rel)).sort(),
     [
@@ -202,6 +210,7 @@ test("whitelist: exactly four files may import node:child_process", () => {
       "bridges/hooks/dispatch-exec.ts",
       "platform/git-credential.ts",
       "platform/package-manager.ts",
+      "platform/prompt-shell.ts",
     ],
   );
 });

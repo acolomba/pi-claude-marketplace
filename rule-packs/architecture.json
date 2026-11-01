@@ -116,9 +116,10 @@
         "extensions/pi-claude-marketplace/platform/git-credential.ts",
         "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts",
         "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
-        "extensions/pi-claude-marketplace/platform/package-manager.ts"
+        "extensions/pi-claude-marketplace/platform/package-manager.ts",
+        "extensions/pi-claude-marketplace/platform/prompt-shell.ts"
       ],
-      "message": "D-21 / D-PL9-11: only the four sanctioned spawn sites import node:child_process: the git credential helper, the two hook executors, and the plugin package manager runner. test/architecture/no-shell-out.test.ts also rejects dynamic import() and require."
+      "message": "D-21 / D-PL9-11 / D-CF1-02: only the five sanctioned spawn sites import node:child_process: the git credential helper, the two hook executors, the plugin package manager runner, and the ! prompt shell of user-invoked skills and commands. test/architecture/no-shell-out.test.ts also rejects dynamic import() and require."
     },
     {
       "id": "proper-lockfile-chokepoint",
