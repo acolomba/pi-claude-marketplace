@@ -55,3 +55,61 @@ Feature: MCP server companion missing
       | 2    | user        | call the stub                                                               |
       | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_stub__echo","args":{"text":"ping"}} |
       | 2    | tool result | mcp returned: echo:ping                                                     |
+
+  Scenario: Plugin info names pi-mcp-adapter as a missing companion
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    When the user runs "/claude:plugin info demo@fixtures --scope user"
+    Then the result has these fields:
+      | kind                           | plugin-info                                              |
+      | marketplace details autoupdate | false                                                    |
+      | marketplace name               | fixtures                                                 |
+      | marketplace scope              | user                                                     |
+      | needs reload                   | false                                                    |
+      | plugin components mcp          | [{"name":"plugin:demo:stub","status":"status unknown"}] |
+      | plugin components resolved     | true                                                     |
+      | plugin components skills       | demo-skill                                               |
+      | plugin id                      | demo@fixtures                                            |
+      | plugin name                    | demo                                                     |
+      | plugin reasons                 |                                                          |
+      | plugin requires                | [{"companion":"pi-mcp-adapter","missing":true}]          |
+      | plugin scope                   | user                                                     |
+      | plugin status                  | installed                                                |
+      | plugin version                 | 1.0.0                                                    |
+      | severity                       | info                                                     |
+
+  Scenario: Plugin info names no missing companion once pi loads pi-mcp-adapter
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which warned
+    Given pi runs with the scripted model and these companions:
+      | companion      |
+      | pi-mcp-adapter |
+    Given pi-mcp-adapter has listed the tools of the stub mcp server "stub" of the plugin "demo"
+    When the user runs "/claude:plugin info demo@fixtures --scope user"
+    Then the result has these fields:
+      | kind                           | plugin-info                                                             |
+      | marketplace details autoupdate | false                                                                   |
+      | marketplace name               | fixtures                                                                |
+      | marketplace scope              | user                                                                    |
+      | needs reload                   | false                                                                   |
+      | plugin components mcp          | [{"name":"plugin:demo:stub","status":"cached, connects on first use"}] |
+      | plugin components resolved     | true                                                                    |
+      | plugin components skills       | demo-skill                                                              |
+      | plugin id                      | demo@fixtures                                                           |
+      | plugin name                    | demo                                                                    |
+      | plugin reasons                 |                                                                         |
+      | plugin requires                | [{"companion":"pi-mcp-adapter","missing":false}]                        |
+      | plugin scope                   | user                                                                    |
+      | plugin status                  | installed                                                               |
+      | plugin version                 | 1.0.0                                                                   |
+      | severity                       | info                                                                    |
