@@ -129,3 +129,37 @@ theirs under `## Dubious Choices` and the orchestrator copies them here.
      notices:`) instead of RESEARCH's `pi shows these notices:`, per
      `layout.md`'s rule that a new step names its kind.
 - **Recorded in:** `07-PATTERNS.md`.
+
+### P7-DC-08: Phase 7 planning choices
+
+- **Phase / source:** Phase 7 planner (`07-01..07-06-PLAN.md`).
+- **Severity:** Medium. **Status:** open.
+- **Choices:**
+  1. Wave 1 also creates `features/workflow/lifecycle.feature` with one
+     scenario (the stale notice after uninstall), so the no-run `When` and the
+     notices `Then` that 07-02 and 07-05 share are used in wave 1 and
+     `check:features` stays green in every wave-2 worktree.
+  2. `runs.steps.ts` keeps the three seed run steps; only the four new shared
+     steps go to `listing.steps.ts` (Phase 2 instead moved every shared step to
+     `listing.steps.ts`).
+  3. 07-03 rewrites the `run.feature` description to name D-CF7-01 and keeps
+     the seed scenario byte-identical.
+  4. `sendWorkflowCommand` in `features/lib/workflow-files.ts` imports
+     `promptDisposition` from `test/e2e/_rpc.ts`, using `layout.md`'s exception
+     for a driver that reuses a process harness.
+  5. T-07-07 (no run approval) is rated medium with disposition `transfer`,
+     not high: the user consented at install and typed the command, and the
+     missing hook belongs to the engine and Pi. P7-DC-03 still rates the
+     decision High for review.
+  6. 07-03's negative control is a script that throws, with a new failed-run
+     `Then`.
+  7. 07-02's caveat-run Outline puts each script on one line in an `Examples:`
+     cell substituted into a doc string.
+  8. The fixture `nope.js` ends with an unreachable `return "never";` to honor
+     "every fixture script ends in a return".
+  9. 07-04 runs its install-rows and list scenarios on the shared Pi, with no
+     profile Pi.
+  10. The listing `Then` compares the registry snapshot's command `path` with
+      `resolveCompanion(...).entry`, which assumes each worktree runs
+      `node scripts/install-test-peers.mjs`.
+- **Recorded in:** `07-01..07-06-PLAN.md`.
