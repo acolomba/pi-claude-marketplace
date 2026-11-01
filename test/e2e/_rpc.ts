@@ -11,7 +11,11 @@
 // not an extension command falls through to Pi's model path, and inherited
 // provider credentials would let it reach a real provider over the network.
 // The cucumber run adds a typed git and trust environment, plus the background
-// update delay for a scenario's own Pi, and nothing else.
+// update delay for a scenario's own Pi, and nothing else. A scenario's profile
+// Pi (D-CF1-15) also loads the scripted model and the companions after the
+// real extension, and gets a typed `TMPDIR` inside the sandbox home, so the
+// temporary files of Pi and its companions stay in the sandbox (HAR-05). The
+// shell's `TMPDIR` is never inherited.
 // `--no-extensions` is never passed, because it also removes `builtin:mcp`.
 import { spawn } from "node:child_process";
 import { realpath } from "node:fs/promises";
@@ -60,6 +64,22 @@ export interface RpcGitEnvironment {
    * keeps the ten-minute maximum and a new session cancels it.
    */
   readonly PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS?: string;
+}
+
+/** The one variable a profile Pi adds to the allowlist: its temporary directory (HAR-05). */
+export interface RpcProfileEnvironment {
+  readonly TMPDIR: string;
+}
+
+/**
+ * What a scenario's profile Pi adds to the run's Pi (D-CF1-15): the
+ * extensions it loads after the real one, in load order, and its temporary
+ * directory.
+ */
+export interface RpcProfile {
+  /** Absolute paths of the extensions loaded after the real one, in this order. */
+  readonly extensions: readonly string[];
+  readonly environment: RpcProfileEnvironment;
 }
 
 /** What one RPC session runs: the sandbox, the steps in order, and extra extensions. */
@@ -186,10 +206,14 @@ export async function resolveRpcSandbox(sandbox: RpcSandbox): Promise<RpcSandbox
   };
 }
 
-/** Returns the allowlist environment of every Pi child, plus `git` when given. */
+/**
+ * Returns the allowlist environment of every Pi child, plus `git` and the
+ * profile's `TMPDIR` when given.
+ */
 export function rpcChildEnvironment(
   sandbox: RpcSandbox,
   git?: RpcGitEnvironment,
+  profileEnvironment?: RpcProfileEnvironment,
 ): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {
     HOME: sandbox.home,
@@ -206,6 +230,10 @@ export function rpcChildEnvironment(
       environment.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS =
         git.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS;
     }
+  }
+
+  if (profileEnvironment !== undefined) {
+    environment.TMPDIR = profileEnvironment.TMPDIR;
   }
 
   return environment;
@@ -390,13 +418,14 @@ function spawnPi(
   sandbox: RpcSandbox,
   extraExtensions: readonly string[],
   git?: RpcGitEnvironment,
+  profileEnvironment?: RpcProfileEnvironment,
 ): ChildProcessByStdio<Writable, Readable, Readable> {
   return spawn(process.execPath, piArguments("rpc", extraExtensions), {
     cwd: sandbox.cwd,
     // Its own process group, so the stops can kill Pi's children too. A dead
     // parent closes stdin, and Pi exits on that.
     detached: true,
-    env: rpcChildEnvironment(sandbox, git),
+    env: rpcChildEnvironment(sandbox, git, profileEnvironment),
     stdio: ["pipe", "pipe", "pipe"],
   });
 }
@@ -435,15 +464,22 @@ export async function runRpcSession(options: RpcSessionOptions): Promise<RpcSess
 /**
  * Starts the repository's own Pi CLI in RPC mode in `sandbox` and returns the
  * child, which stays up until its stdin closes. The child also gets `git` on
- * top of the allowlist. The caller owns the JSONL exchange and the stop.
- * Rejects as `runRpcSession` does for a sandbox location outside the temp
- * directory or inside the repository.
+ * top of the allowlist, and a profile Pi gets the extensions and `TMPDIR` of
+ * `profile`. The caller owns the JSONL exchange and the stop. Rejects as
+ * `runRpcSession` does for a sandbox location outside the temp directory or
+ * inside the repository.
  */
 export async function startRpcPi(
   sandbox: RpcSandbox,
   git: RpcGitEnvironment,
+  profile?: RpcProfile,
 ): Promise<ChildProcessByStdio<Writable, Readable, Readable>> {
-  return spawnPi(await resolveRpcSandbox(sandbox), [], git);
+  return spawnPi(
+    await resolveRpcSandbox(sandbox),
+    profile?.extensions ?? [],
+    git,
+    profile?.environment,
+  );
 }
 
 /** Returns `data.disposition` of a successful prompt response. */

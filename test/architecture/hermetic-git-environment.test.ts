@@ -3,7 +3,8 @@
  * scratch, so no inherited `GIT_*` variable reaches Pi, the git host, or a
  * fixture (DRV-03). Pi gets the run's GitHub base override, never the
  * shell's (GHB-01). The background update variables also stay in the shell:
- * Pi gets the update delay only from the run (D-PL8-09).
+ * Pi gets the update delay only from the run (D-PL8-09). A profile Pi gets
+ * the run's `TMPDIR`, inside the sandbox home, never the shell's (HAR-05).
  */
 
 import assert from "node:assert/strict";
@@ -12,7 +13,7 @@ import { describe, test } from "node:test";
 import { hermeticGitEnvironment } from "../../features/lib/hermetic-git.ts";
 import { rpcChildEnvironment } from "../e2e/_rpc.ts";
 
-import type { RpcGitEnvironment, RpcSandbox } from "../e2e/_rpc.ts";
+import type { RpcGitEnvironment, RpcProfileEnvironment, RpcSandbox } from "../e2e/_rpc.ts";
 import type { TestContext } from "node:test";
 
 const INHERITED_VARIABLES = {
@@ -27,6 +28,7 @@ const INHERITED_VARIABLES = {
   DISABLE_AUTOUPDATER: "true",
   CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
   FORCE_AUTOUPDATE_PLUGINS: "1",
+  TMPDIR: "/shell/tmp",
 } as const;
 
 /** Sets the inherited variables in `process.env` until the case `t` ends. */
@@ -128,6 +130,34 @@ describe("rpcChildEnvironment", () => {
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
       PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: "https://127.0.0.1:8443",
       PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS: "0",
+    });
+  });
+
+  test("adds the profile's TMPDIR, not the shell's, to the git environment", (t) => {
+    // arrange
+    inheritVariables(t);
+    const git = {
+      NODE_EXTRA_CA_CERTS: "/run/cert.pem",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: "https://127.0.0.1:8443",
+    } satisfies RpcGitEnvironment;
+    const profile = { TMPDIR: "/sandbox/home/tmp" } satisfies RpcProfileEnvironment;
+
+    // act
+    const environment = rpcChildEnvironment(sandbox, git, profile);
+
+    // assert
+    assert.deepStrictEqual(environment, {
+      HOME: "/sandbox/home",
+      PI_CODING_AGENT_DIR: "/sandbox/agent",
+      PI_OFFLINE: "1",
+      PATH: process.env.PATH ?? "",
+      NODE_EXTRA_CA_CERTS: "/run/cert.pem",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: "https://127.0.0.1:8443",
+      TMPDIR: "/sandbox/home/tmp",
     });
   });
 
