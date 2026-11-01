@@ -273,6 +273,10 @@ None. No external service configuration is required.
 - The skills phase can wire `substituteArguments` into `edge/skill-aliases.ts`. The commands phase can wire it into `edge/command-invocation.ts`. Both build `variables` from the Pi session id and `claudeEffort(pi.getThinkingLevel())`.
 - Plan 01-10's `ignoreExports` entries can be removed once both phases import these modules.
 
+## Self-Check: PASSED
+
+All four created files exist. Commits `f2612fb`, `4ff6602`, `53d81ec`, and the SUMMARY commit are on the branch. Every task's acceptance greps print the expected counts.
+
 ---
 *Phase: 01-harness-and-version-raise*
 *Completed: 2026-11-01*
