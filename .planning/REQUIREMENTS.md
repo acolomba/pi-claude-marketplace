@@ -91,15 +91,15 @@ the parent applies them at merge.
 
 ### Hooks
 
-- [ ] **HOOK-01**: SessionStart sends `source: "clear"` for Pi `new`, fires with `source: "compact"` after a compaction, and admits `clear`, `compact`, and `fork` matchers; `features/plugin/session-start-hooks.feature` is migrated
-- [ ] **HOOK-02**: SessionEnd sends `reason: "clear"` for Pi `new`, and its other reasons and matchers, and SessionStart on Pi `reload`, behave as decided under FG-20 and FG-21
-- [ ] **HOOK-03**: Two compactions in one session give two SessionStart `compact` runs, while Pi's duplicate session bind (pi#10470) still gives one
-- [ ] **HOOK-04**: Tool-use hooks (PreToolUse, PostToolUse, PostToolUseFailure) fire on scripted tool calls with Claude's tool names and stdin, matchers select them, and exit codes and JSON decisions block or allow as upstream
-- [ ] **HOOK-05**: UserPromptSubmit, Stop, and the other admitted events fire with Claude's stdin, and their outputs (`additionalContext`, block, `systemMessage` per FG-26) behave as upstream or a recorded divergence
-- [ ] **HOOK-06**: Exec-form hooks substitute `${CLAUDE_PLUGIN_ROOT}` and `${CLAUDE_PLUGIN_DATA}` in `command` and each `args` element (FG-19 fix), and the hook environment matches upstream
-- [ ] **HOOK-07**: `if` conditions, `once`, `onFailure`, the manifest `hooks` field, and unsupported events behave as decided under FG-22..FG-24, never silently
-- [ ] **HOOK-08**: A hook on a plugin MCP tool fires once per call under the real tool name, with the `mcp` proxy's outer event handled as decided
-- [ ] **HOOK-09**: Disable, uninstall, and update stop or replace the hooks, and `docs/hooks-compatibility.md` matches the tested behavior (FG-25)
+- [x] **HOOK-01**: SessionStart sends `source: "clear"` for Pi `new`, fires with `source: "compact"` after a compaction, and admits `clear`, `compact`, and `fork` matchers; `features/plugin/session-start-hooks.feature` is migrated
+- [x] **HOOK-02**: SessionEnd sends `reason: "clear"` for Pi `new`, and its other reasons and matchers, and SessionStart on Pi `reload`, behave as decided under FG-20 and FG-21
+- [x] **HOOK-03**: Two compactions in one session give two SessionStart `compact` runs, while Pi's duplicate session bind (pi#10470) still gives one
+- [x] **HOOK-04**: Tool-use hooks (PreToolUse, PostToolUse, PostToolUseFailure) fire on scripted tool calls with Claude's tool names and stdin, matchers select them, and exit codes and JSON decisions block or allow as upstream
+- [x] **HOOK-05**: UserPromptSubmit, Stop, and the other admitted events fire with Claude's stdin, and their outputs (`additionalContext`, block, `systemMessage` per FG-26) behave as upstream or a recorded divergence
+- [x] **HOOK-06**: Exec-form hooks substitute `${CLAUDE_PLUGIN_ROOT}` and `${CLAUDE_PLUGIN_DATA}` in `command` and each `args` element (FG-19 fix), and the hook environment matches upstream
+- [x] **HOOK-07**: `if` conditions, `once`, `onFailure`, the manifest `hooks` field, and unsupported events behave as decided under FG-22..FG-24, never silently
+- [x] **HOOK-08**: A hook on a plugin MCP tool fires once per call under the real tool name, with the `mcp` proxy's outer event handled as decided
+- [x] **HOOK-09**: Disable, uninstall, and update stop or replace the hooks, and `docs/hooks-compatibility.md` matches the tested behavior (FG-25)
 
 ### MCP servers
 
@@ -183,15 +183,15 @@ Deferred to a milestone with a real model provider.
 | AGT-05 | Phase 4 | Pending |
 | AGT-06 | Phase 4 | Pending |
 | AGT-07 | Phase 4 | Pending |
-| HOOK-01 | Phase 5 | Pending |
-| HOOK-02 | Phase 5 | Pending |
-| HOOK-03 | Phase 5 | Pending |
-| HOOK-04 | Phase 5 | Pending |
-| HOOK-05 | Phase 5 | Pending |
-| HOOK-06 | Phase 5 | Pending |
-| HOOK-07 | Phase 5 | Pending |
-| HOOK-08 | Phase 5 | Pending |
-| HOOK-09 | Phase 5 | Pending |
+| HOOK-01 | Phase 5 | Complete |
+| HOOK-02 | Phase 5 | Complete |
+| HOOK-03 | Phase 5 | Complete |
+| HOOK-04 | Phase 5 | Complete |
+| HOOK-05 | Phase 5 | Complete |
+| HOOK-06 | Phase 5 | Complete |
+| HOOK-07 | Phase 5 | Complete |
+| HOOK-08 | Phase 5 | Complete |
+| HOOK-09 | Phase 5 | Complete |
 | MCP-01 | Phase 6 | Pending |
 | MCP-02 | Phase 6 | Pending |
 | MCP-03 | Phase 6 | Pending |
