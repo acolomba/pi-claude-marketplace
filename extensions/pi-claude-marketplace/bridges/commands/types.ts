@@ -6,7 +6,7 @@
 // "staged"`. The "noop" branch carries no staging-dir state because the
 // short-circuit (no commands AND no previous names) avoids creating one.
 // The "staged" branch carries the absolute `stagingRoot` plus the
-// per-file `_renamePairs` and `_previousNames` consumed by
+// per-file `_renamePairs`, `_previousNames`, and `_pluginName` consumed by
 // `commitPreparedCommands`. Underscore-prefixed fields are bridge-internal
 // commit state -- the naming convention marks them as not-for-external-use,
 // but TS gives no runtime or type-level privacy: this type is itself
@@ -112,6 +112,8 @@ export interface PreparedCommandsStaged {
   readonly result: StageCommandsCommitResult;
   /** Bridge-internal -- previous names to remove on commit (re-stage path). */
   readonly _previousNames: readonly string[];
+  /** Bridge-internal -- the plugin the commit names in the project ledger (D-CF3-07). */
+  readonly _pluginName: string;
   /** Bridge-internal -- per-file rename pairs applied at commit. */
   readonly _renamePairs: readonly { from: string; to: string }[];
 }
