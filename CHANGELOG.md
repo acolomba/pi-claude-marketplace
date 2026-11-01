@@ -8,6 +8,11 @@
   - Plugin workflows now need `@quintinshaw/pi-dynamic-workflows` 3.15.0 or a later 3.x release, which the package now declares as an optional peer.
   - A declared `commands`, `agents`, or `workflows` path now replaces the conventional folder, as in Claude Code, and install and update warn when that folder exists.
   - A `${NAME:-default}` in a plugin's MCP settings now reads a variable set after install, as in Claude Code, without a reinstall.
+  - A plugin's MCP servers from `.mcp.json` and from `plugin.json` now both install, as in Claude Code, and the later of two servers with one name wins.
+  - A plugin's `mcpServers` can now be an array of server maps and file paths, and an MCP file can hold its servers without the `mcpServers` wrapper.
+  - The marketplace entry's `mcpServers` now counts only for a plugin without a `plugin.json`, as in Claude Code.
+  - A broken `.mcp.json` or MCP file, or a bad server in one, is now skipped with no message, and the rest of the plugin installs, as in Claude Code.
+  - A plugin that names an `.mcpb` or `.dxt` MCP bundle is now partially available, because pi-mcp-adapter cannot run a bundle.
   - A skill with no `description` is now listed with Claude Code's text: the first line of its body, or `Plugin skill` for an empty body.
   - Install now warns about the skill frontmatter fields that Pi cannot honor, such as `model` or `effort`, with one line for each skill.
   - Typed skills now fill in arguments, `${CLAUDE_*}` variables, and `` !`command` `` output as Claude Code does, in the terminal UI and over RPC.
@@ -18,6 +23,16 @@
   - Pi now gets no plugin skills or prompt templates from a project that it does not trust.
   - A project-scope skill now runs its `` !`command` `` lines only when you installed its plugin into the project on this machine. For a project skill installed earlier, run `/claude:plugin reinstall <plugin>@<marketplace> --scope project` once.
   - A load with `autoapply` on now applies only the user scope and shows the pending changes of the project scope. `/claude:plugin apply` still applies both scopes.
+  - Agents in subfolders now install under their folder names, such as `demo:review:security`, and hidden agent files, `.MD` files, and declared agent files install too.
+  - An agent with no description now gets Claude Code's text: its `when_to_use` text, or `Agent from <plugin> plugin`.
+  - Plugin agents now run in the foreground unless they set `background: true`, as in Claude Code.
+  - The main model now sees every plugin agent in its system prompt, as in Claude Code.
+  - Agent `effort` now accepts `max`, `med`, and any case.
+  - `--map-model` now maps `sonnet`, `opus`, `haiku`, `fable`, `best`, and `opusplan`, with or without `[1m]`, to the current Claude models, and keeps full `claude-` model IDs.
+  - Agent tool lists now split on spaces as well as commas, accept `Tool(spec)` entries, and treat `*` as every tool.
+  - Install now warns that Claude Code also ignores `initialPrompt`, `observer`, `observerMessage`, and `observeSubagents` in plugin agents.
+  - An agent now gets the content of each plugin skill it preloads, except a skill that the model cannot invoke, which install skips with a warning.
+  - Agents installed before this release keep their old files until their plugin is installed, updated, reinstalled, or enabled again. Run `/claude:plugin reinstall <plugin>@<marketplace>` to update them now.
   - Internal: behavioral tests now cover plugin workflows, from the command list and runs to refused scripts, a missing engine, and uninstall.
 - A plugin's `SessionStart` hook now runs once when an RPC client starts, switches, forks, or clones a session, as in Claude Code. (#294)
 - Internal: the repository now sets itself up in a Claude Code cloud session, and the tests that use `chmod` run there. (#293)
