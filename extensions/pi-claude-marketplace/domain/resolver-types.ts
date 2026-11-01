@@ -3,11 +3,38 @@ import type { DroppedMcpServer } from "./mcp-server-features.ts";
 import type { GitHubSource, GitSubdirSource, PathSource, UrlSource } from "./source.ts";
 import type Type from "typebox";
 
+// D-CF3-03: the fields every command map entry may carry beside its body.
+// `origin` says which manifest declared the map: `plugin.json` or the
+// marketplace entry (D-CF3-04).
+interface CommandMapEntryFields {
+  key: Type.TString;
+  description: Type.TOptional<Type.TString>;
+  argumentHint: Type.TOptional<Type.TString>;
+  model: Type.TOptional<Type.TString>;
+  origin: Type.TUnion<[Type.TLiteral<"manifest">, Type.TLiteral<"entry">]>;
+}
+
+// TypeBox requires a mapped property record; an interface has no implicit index signature.
+type CommandMapEntryProperties = {
+  [Field in keyof CommandMapEntryFields]: CommandMapEntryFields[Field];
+};
+
+// D-CF3-03: an entry sets exactly one of `source` (a contained path relative
+// to the plugin root) and `content` (the inline command file).
+type CommandMapEntrySchema = Type.TUnion<
+  [
+    Type.TObject<CommandMapEntryProperties & { source: Type.TString }>,
+    Type.TObject<CommandMapEntryProperties & { content: Type.TString }>,
+  ]
+>;
+
 type ComponentPathsSchema = Type.TObject<{
   skills: Type.TArray<Type.TString>;
   commands: Type.TArray<Type.TString>;
   agents: Type.TArray<Type.TString>;
   workflows: Type.TArray<Type.TString>;
+  // D-CF3-03: present only when a manifest declares `commands` as an object map.
+  commandMap: Type.TOptional<Type.TArray<CommandMapEntrySchema>>;
 }>;
 
 type McpServersFieldSchema = ReturnType<typeof Type.Record<Type.TString, Type.TUnknown>>;
@@ -175,6 +202,11 @@ export type ResolvedPluginUnavailable = Extract<ResolvedPlugin, { state: "unavai
 
 /** Resolver results that own a safe materialization root. */
 export type MaterializablePlugin = ResolvedPluginInstallable | ResolvedPluginPartiallyAvailable;
+
+/** D-CF3-03: one validated entry of an object-map `commands` declaration. */
+export type CommandMapEntry = NonNullable<
+  MaterializablePlugin["componentPaths"]["commandMap"]
+>[number];
 
 /** Filesystem shape read by the resolver. */
 export type StatKind = "file" | "dir" | null;

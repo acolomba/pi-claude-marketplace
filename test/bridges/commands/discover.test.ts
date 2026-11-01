@@ -10,18 +10,22 @@ import { test } from "node:test";
 
 import { discoverPluginCommands } from "../../../extensions/pi-claude-marketplace/bridges/commands/discover.ts";
 
-import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
+import type {
+  CommandMapEntry,
+  ResolvedPluginInstallable,
+} from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
 function resolvedPlugin(
   pluginRoot: string,
   commands: readonly string[],
+  commandMap?: readonly CommandMapEntry[],
 ): ResolvedPluginInstallable {
   return {
     installable: true,
     state: "installable",
     name: "acme",
     pluginRoot,
-    supported: commands.length === 0 ? [] : ["commands"],
+    supported: commands.length === 0 && commandMap === undefined ? [] : ["commands"],
     unsupported: [],
     notes: [],
     componentPaths: {
@@ -29,10 +33,15 @@ function resolvedPlugin(
       commands: [...commands],
       agents: [],
       workflows: [],
+      ...(commandMap !== undefined && { commandMap: [...commandMap] }),
     },
     mcpServers: {},
     defaultEnabled: true,
   };
+}
+
+function sourceEntry(key: string, source: string): CommandMapEntry {
+  return { key, source, origin: "manifest" };
 }
 
 test("discovers recursive commands in deterministic depth-first order with complete records", async (t) => {
@@ -770,4 +779,236 @@ test("propagates a non-tolerated error when a discovered file gains a looping pa
       return true;
     },
   );
+});
+
+test("D-CF3-03 names each command map source file after its key", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-map-names-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const cmds = path.join(directory, "cmds");
+  await mkdir(cmds, { recursive: true });
+  await writeFile(path.join(cmds, "alpha.md"), "alpha\n");
+  await writeFile(path.join(cmds, "web.md"), "web\n");
+  await writeFile(path.join(cmds, "deploy.md"), "deploy\n");
+  await writeFile(path.join(cmds, "lint.md"), "lint\n");
+  const resolved = resolvedPlugin(
+    directory,
+    [],
+    [
+      sourceEntry("alpha", "cmds/alpha.md"),
+      sourceEntry("build/web", "cmds/web.md"),
+      sourceEntry("Deploy", "cmds/deploy.md"),
+      sourceEntry("acme-lint", "cmds/lint.md"),
+    ],
+  );
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      {
+        sourceName: "alpha",
+        generatedName: "acme:alpha",
+        commandFile: path.join(cmds, "alpha.md"),
+      },
+      {
+        sourceName: "build/web",
+        generatedName: "acme:build:web",
+        commandFile: path.join(cmds, "web.md"),
+      },
+      {
+        sourceName: "Deploy",
+        generatedName: "acme:Deploy",
+        commandFile: path.join(cmds, "deploy.md"),
+      },
+      {
+        sourceName: "acme-lint",
+        generatedName: "acme:lint",
+        commandFile: path.join(cmds, "lint.md"),
+      },
+    ],
+    warnings: [],
+  });
+});
+
+for (const { key, shownKey, reason } of [
+  { key: "trail:", shownKey: "trail:", reason: 'ends with ":"' },
+  { key: "<angle>", shownKey: "<angle>", reason: 'holds "<" or ">"' },
+  { key: "right>", shownKey: "right>", reason: 'holds "<" or ">"' },
+  { key: "has space", shownKey: "has space", reason: "holds whitespace" },
+  { key: "tab\tkey", shownKey: String.raw`tab\u{9}key`, reason: "holds whitespace" },
+  {
+    key: `zero${String.fromCodePoint(0x200b)}width`,
+    shownKey: String.raw`zero\u{200B}width`,
+    reason: "holds a hidden or direction-changing character",
+  },
+  {
+    key: `bidi${String.fromCodePoint(0x202e)}flip`,
+    shownKey: String.raw`bidi\u{202E}flip`,
+    reason: "holds a hidden or direction-changing character",
+  },
+  {
+    key: "a/../b",
+    shownKey: "a/../b",
+    reason: 'cannot name a command (command path segment in "a/../b" must not be "." or "..")',
+  },
+  {
+    key: "bell\u0007",
+    shownKey: String.raw`bell\u{7}`,
+    reason: String.raw`cannot name a command (command path segment in "bell\u{7}" "bell\u{7}" must not contain ASCII control characters)`,
+  },
+]) {
+  test(`D-CF3-03 skips the command map key ${shownKey} with a warning`, async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(tmpdir(), "command-discover-map-key-"));
+    t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+    const commandPath = path.join(directory, "cmds", "a.md");
+    await mkdir(path.dirname(commandPath), { recursive: true });
+    await writeFile(commandPath, "a\n");
+    const resolved = resolvedPlugin(directory, [], [sourceEntry(key, "cmds/a.md")]);
+
+    // act
+    const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+    // assert
+    assert.deepStrictEqual(discovery, {
+      discovered: [],
+      warnings: [`command map entry "${shownKey}" in "${directory}" ${reason}; skipping entry.`],
+    });
+  });
+}
+
+test("D-CF3-03 skips each command map source that is not a command file with a warning", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-map-source-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const cmds = path.join(directory, "cmds");
+  await mkdir(cmds, { recursive: true });
+  await writeFile(path.join(cmds, "notes.txt"), "notes\n");
+  await writeFile(path.join(cmds, ".hidden.md"), "hidden\n");
+  await writeFile(path.join(directory, "real.md"), "real\n");
+  await symlink(path.join(directory, "real.md"), path.join(cmds, "linked.md"));
+  const resolved = resolvedPlugin(
+    directory,
+    [],
+    [
+      sourceEntry("missing", "cmds/missing.md"),
+      sourceEntry("text", "cmds/notes.txt"),
+      sourceEntry("hidden", "cmds/.hidden.md"),
+      sourceEntry("linked", "cmds/linked.md"),
+      sourceEntry("under-file", "real.md/child.md"),
+    ],
+  );
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [],
+    warnings: [
+      `command map entry "missing" in "${directory}" names "cmds/missing.md", which does not exist; skipping entry.`,
+      `command map entry "text" in "${directory}" names "cmds/notes.txt", which is not a markdown file; skipping entry.`,
+      `command map entry "hidden" in "${directory}" names "cmds/.hidden.md", which is dotfile-prefixed; skipping entry.`,
+      `command map entry "linked" in "${directory}" names "cmds/linked.md", which is a symlink; skipping entry.`,
+      `command map entry "under-file" in "${directory}" names "real.md/child.md", which does not exist; skipping entry.`,
+    ],
+  });
+});
+
+test("D-CF3-03 walks a command map directory source and ignores its key", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-map-dir-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const topPath = path.join(directory, "more", "b.md");
+  const nestedPath = path.join(directory, "more", "sub", "x.md");
+  await mkdir(path.dirname(nestedPath), { recursive: true });
+  await writeFile(topPath, "b\n");
+  await writeFile(nestedPath, "x\n");
+  const resolved = resolvedPlugin(directory, [], [sourceEntry("trail:", "more")]);
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      { sourceName: "b", generatedName: "acme:b", commandFile: topPath },
+      { sourceName: "sub/x", generatedName: "acme:sub:x", commandFile: nestedPath },
+    ],
+    warnings: [],
+  });
+});
+
+test("D-CF3-03 skips a second command map key on one file with a warning naming the first", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-map-same-file-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const commandPath = path.join(directory, "cmds", "a.md");
+  await mkdir(path.dirname(commandPath), { recursive: true });
+  await writeFile(commandPath, "a\n");
+  const resolved = resolvedPlugin(
+    directory,
+    [],
+    [sourceEntry("one", "cmds/a.md"), sourceEntry("two", "./cmds/a.md")],
+  );
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [{ sourceName: "one", generatedName: "acme:one", commandFile: commandPath }],
+    warnings: [
+      `command map entry "two" in "${directory}" names "cmds/a.md", already loaded as command source "one"; skipping entry.`,
+    ],
+  });
+});
+
+test("D-CF3-03 gives a declared path's command precedence over a command map key", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-map-order-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const folderPath = path.join(directory, "commands", "alpha.md");
+  const mappedPath = path.join(directory, "cmds", "other.md");
+  await mkdir(path.dirname(folderPath), { recursive: true });
+  await mkdir(path.dirname(mappedPath), { recursive: true });
+  await writeFile(folderPath, "alpha\n");
+  await writeFile(mappedPath, "other\n");
+  const resolved = resolvedPlugin(
+    directory,
+    ["commands"],
+    [sourceEntry("alpha", "cmds/other.md"), sourceEntry("again", "commands/alpha.md")],
+  );
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [{ sourceName: "alpha", generatedName: "acme:alpha", commandFile: folderPath }],
+    warnings: [
+      `command source "alpha" in "${directory}" elides to generated name "acme:alpha", already produced by command source "alpha"; ignoring duplicate.`,
+      `command map entry "again" in "${directory}" names "commands/alpha.md", already loaded as command source "alpha"; skipping entry.`,
+    ],
+  });
+});
+
+test("D-CF3-03 discovers no file command for an inline command map entry", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-map-inline-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const resolved = resolvedPlugin(
+    directory,
+    [],
+    [{ key: "beta", content: "Beta body", origin: "manifest" }],
+  );
+
+  // act
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, { discovered: [], warnings: [] });
 });

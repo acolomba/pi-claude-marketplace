@@ -53,6 +53,16 @@
 // silent. The resolver already refuses a declared path that passes through
 // a link, so the symlink check here guards only a path that changed after
 // resolving, as the walk's PS-1 rule does for the entries it lists.
+//
+// D-CF3-03: after the declared paths, the walk reads the entries of an
+// object-map `commands` declaration (`componentPaths.commandMap`) in declared
+// order. A `source` entry that names a command file is one command named
+// `<plugin>:<key>`, the key named as a source name. A directory `source` is
+// walked as a declared directory and its key is ignored. A key Claude Code
+// would refuse, a source that is missing or is not a command file, and a
+// second key on a file already loaded are skipped with a warning. Because
+// the declared paths come first, a declared file wins a name it shares with
+// a map key.
 
 import { lstat, readdir, stat } from "node:fs/promises";
 import path from "node:path";
@@ -63,7 +73,7 @@ import { causeChainTrailer, errorMessage, isErrnoException } from "../../shared/
 import { isPlainMarkdownFile, readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 
 import type { DiscoveredCommand } from "./types.ts";
-import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
+import type { CommandMapEntry, MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { Dirent, Stats } from "node:fs";
 
 /** D-07 return shape: `{ discovered, warnings }`. */
@@ -446,6 +456,185 @@ async function discoverDeclaredPath(
   return found;
 }
 
+/**
+ * T-03-25: a control or format character of a map key is shown as its code
+ * point, so a warning never carries a character that hides text or turns
+ * its direction around.
+ */
+function showHiddenCharacters(text: string): string {
+  return text.replace(
+    /[\p{Cc}\p{Cf}]/gu,
+    (character) => `\\u{${Number(character.codePointAt(0)).toString(16).toUpperCase()}}`,
+  );
+}
+
+/**
+ * D-CF3-03: the warning for a command map entry the walk skips. It names the
+ * key and the plugin root, in the walk's wording.
+ */
+function mapEntryWarning(key: string, pluginRoot: string, reason: string): string {
+  return showHiddenCharacters(
+    `command map entry "${key}" in "${pluginRoot}" ${reason}; skipping entry.`,
+  );
+}
+
+// D-CF3-03: Claude Code 2.1.316 refuses a command name that ends in `:` or
+// holds `<`, `>`, a blank, or a hidden or direction-changing character
+// (03-UPSTREAM-EVIDENCE Q3.11). `\p{Cf}` is the Unicode class of those
+// format characters.
+const MAP_KEY_RULES: readonly { readonly pattern: RegExp; readonly reason: string }[] = [
+  { pattern: /:$/u, reason: 'ends with ":"' },
+  { pattern: /[<>]/u, reason: 'holds "<" or ">"' },
+  { pattern: /\s/u, reason: "holds whitespace" },
+  { pattern: /\p{Cf}/u, reason: "holds a hidden or direction-changing character" },
+];
+
+/**
+ * D-CF3-03: the generated name of a map key, or why the key cannot name a
+ * command. The key is a source name, so CM-2 elision applies and a `/` opens
+ * a `:` segment, as for a nested file.
+ */
+function nameMapKey(
+  pluginName: string,
+  key: string,
+): { readonly ok: true; readonly name: string } | { readonly ok: false; readonly reason: string } {
+  const rule = MAP_KEY_RULES.find(({ pattern }) => pattern.test(key));
+  if (rule !== undefined) {
+    return { ok: false, reason: rule.reason };
+  }
+
+  try {
+    return { ok: true, name: generatedCommandName(pluginName, key) };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: `cannot name a command (${errorMessage(err).replace(/\.$/u, "")})`,
+    };
+  }
+}
+
+/**
+ * D-CF3-03: why the file a map entry's `source` names is not a command file,
+ * or `undefined` when it is one. A missing file is skipped too, as Claude
+ * Code 2.1.316 loads the plugin without it.
+ */
+function mapSourceRefusal(source: string, stats: Stats | undefined): string | undefined {
+  if (stats === undefined) {
+    return `names "${source}", which does not exist`;
+  }
+
+  const refusal = declaredFileRefusal(source, stats);
+  return refusal === undefined ? undefined : `names "${source}", which ${refusal}`;
+}
+
+/** What one command map entry adds to the discovery. */
+interface MapEntryDiscovery {
+  readonly found: readonly DiscoveredCommand[];
+  /** The key that names the found file; absent for a walked directory. */
+  readonly key?: string;
+}
+
+/**
+ * D-CF3-03: the commands one map entry holds. A directory `source` is walked
+ * as a declared directory, and its key is ignored, as Claude Code 2.1.316
+ * does. A file `source` is one command named after its key. A bad key or a
+ * source that is not a command file skips the entry with a warning.
+ */
+async function discoverMapEntry(
+  mapEntry: CommandMapEntry,
+  pluginRoot: string,
+  pluginName: string,
+  warnings: string[],
+): Promise<MapEntryDiscovery> {
+  if (!("source" in mapEntry)) {
+    return { found: [] };
+  }
+
+  const sourceFile = path.resolve(pluginRoot, mapEntry.source);
+  const stats = await lstatDeclaredPath(sourceFile);
+  if (stats?.isDirectory() === true) {
+    const walked: DiscoveredCommand[] = [];
+    await walkCommandsDir(sourceFile, sourceFile, pluginName, walked, warnings);
+    return { found: walked };
+  }
+
+  const named = nameMapKey(pluginName, mapEntry.key);
+  if (!named.ok) {
+    warnings.push(mapEntryWarning(mapEntry.key, pluginRoot, named.reason));
+    return { found: [] };
+  }
+
+  const refusal = mapSourceRefusal(relFrom(pluginRoot, sourceFile), stats);
+  if (refusal !== undefined) {
+    warnings.push(mapEntryWarning(mapEntry.key, pluginRoot, refusal));
+    return { found: [] };
+  }
+
+  return {
+    found: [{ sourceName: mapEntry.key, generatedName: named.name, commandFile: sourceFile }],
+    key: mapEntry.key,
+  };
+}
+
+/** The first-wins sets of one discovery, and its warnings. */
+interface DiscoveryState {
+  readonly byGenerated: Map<string, DiscoveredCommand>;
+  /**
+   * Keyed on the absolute source file. Two componentPaths.commands entries
+   * that overlap -- "commands" and "commands/build", say -- reach the same
+   * file at two different depths, so it generates two DIFFERENT names and
+   * generated-name dedup cannot see it. Keep the first discovery silently;
+   * distinct files that generate the same name still produce a warning.
+   */
+  readonly byFile: Map<string, DiscoveredCommand>;
+  readonly warnings: string[];
+}
+
+/**
+ * Folds one found command into the first-wins sets. A file found again is
+ * dropped silently, except when a map key names it: D-CF3-03 warns that the
+ * key loses to the command that loaded the file first.
+ */
+function admitCommand(
+  state: DiscoveryState,
+  command: DiscoveredCommand,
+  where: string,
+  mapKey: string | undefined,
+): void {
+  const fileWinner = state.byFile.get(command.commandFile);
+  if (fileWinner !== undefined) {
+    if (mapKey !== undefined) {
+      state.warnings.push(
+        mapEntryWarning(
+          mapKey,
+          where,
+          `names "${relFrom(where, command.commandFile)}", already loaded as command source "${fileWinner.sourceName}"`,
+        ),
+      );
+    }
+
+    return;
+  }
+
+  state.byFile.set(command.commandFile, command);
+
+  // D-07 first-wins dedup by generated command name.
+  const winner = state.byGenerated.get(command.generatedName);
+  if (winner !== undefined) {
+    state.warnings.push(
+      duplicateWarning(command.sourceName, where, command.generatedName, winner.sourceName),
+    );
+    return;
+  }
+
+  state.byGenerated.set(command.generatedName, command);
+}
+
+/**
+ * Discovers the plugin's commands: each declared `componentPaths.commands`
+ * entry in order, then each entry of the D-CF3-03 object map in declared
+ * order, so a declared path's file wins a name it shares with a map key.
+ */
 export async function discoverPluginCommands(input: {
   pluginName: string;
   resolved: MaterializablePlugin;
@@ -454,57 +643,41 @@ export async function discoverPluginCommands(input: {
   // declared (or implicit-by-convention) commands directory or, under
   // D-CF3-05, declared command file. Empty array means the plugin has no
   // commands -- return the empty discovered + no warnings.
-  const commandsDirs = input.resolved.componentPaths.commands;
+  const { pluginRoot, componentPaths } = input.resolved;
+  const state: DiscoveryState = { byGenerated: new Map(), byFile: new Map(), warnings: [] };
 
-  const seenByGenerated = new Map<string, DiscoveredCommand>();
-  // Keyed on the absolute source file. Two componentPaths.commands entries
-  // that overlap -- "commands" and "commands/build", say -- reach the same
-  // file at two different depths, so it generates two DIFFERENT names and
-  // generated-name dedup cannot see it. Keep the first discovery silently;
-  // distinct files that generate the same name still produce a warning.
-  const seenByFile = new Set<string>();
-  const warnings: string[] = [];
-
-  for (const commandsRel of commandsDirs) {
+  for (const commandsRel of componentPaths.commands) {
     const commandsDir = path.isAbsolute(commandsRel)
       ? commandsRel
-      : path.resolve(input.resolved.pluginRoot, commandsRel);
+      : path.resolve(pluginRoot, commandsRel);
 
     // eslint-disable-next-line no-await-in-loop -- first-seen path wins the shared dedup sets
     const found = await discoverDeclaredPath(
       commandsDir,
-      input.resolved.pluginRoot,
+      pluginRoot,
       input.pluginName,
-      warnings,
+      state.warnings,
     );
-
     for (const command of found) {
-      if (seenByFile.has(command.commandFile)) {
-        continue;
-      }
+      admitCommand(state, command, commandsDir, undefined);
+    }
+  }
 
-      seenByFile.add(command.commandFile);
-
-      // D-07 first-wins dedup by generated command name.
-      const winner = seenByGenerated.get(command.generatedName);
-      if (winner !== undefined) {
-        warnings.push(
-          duplicateWarning(
-            command.sourceName,
-            commandsDir,
-            command.generatedName,
-            winner.sourceName,
-          ),
-        );
-        continue;
-      }
-
-      seenByGenerated.set(command.generatedName, command);
+  for (const mapEntry of componentPaths.commandMap ?? []) {
+    // eslint-disable-next-line no-await-in-loop -- first-seen entry wins the shared dedup sets
+    const { found, key } = await discoverMapEntry(
+      mapEntry,
+      pluginRoot,
+      input.pluginName,
+      state.warnings,
+    );
+    for (const command of found) {
+      admitCommand(state, command, pluginRoot, key);
     }
   }
 
   return {
-    discovered: Object.freeze([...seenByGenerated.values()]),
-    warnings: Object.freeze(warnings),
+    discovered: Object.freeze([...state.byGenerated.values()]),
+    warnings: Object.freeze(state.warnings),
   };
 }

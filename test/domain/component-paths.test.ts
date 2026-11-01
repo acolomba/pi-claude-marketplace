@@ -12,16 +12,11 @@ function preserveDirectOwnerType(owner: OwnerShape): void {
   void owner;
 }
 
-function emptyResolution() {
+function emptyResolution(): ComponentPathsOwner.ComponentPathResolution {
   return {
-    supported: [] as string[],
-    notes: [] as string[],
-    componentPaths: {
-      skills: [] as string[],
-      commands: [] as string[],
-      agents: [] as string[],
-      workflows: [] as string[],
-    },
+    supported: [],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
   };
 }
 
@@ -587,6 +582,195 @@ for (const {
     );
   });
 }
+
+test("D-CF3-03 a plugin manifest's object map of commands becomes the command map", async () => {
+  // arrange
+  const { collectStrictComponentPaths } =
+    await import("../../extensions/pi-claude-marketplace/domain/component-paths.ts");
+  const resolution = emptyResolution();
+
+  // act
+  const dirty = await collectStrictComponentPaths(
+    {
+      entry: { name: "alpha", source: "./alpha" },
+      manifest: {
+        commands: {
+          alpha: { source: "./cmds/alpha.md" },
+          beta: { source: "cmds/../cmds/beta.md" },
+        },
+      },
+      pluginRoot: "/plugins/alpha",
+      resolution,
+    },
+    () => Promise.resolve(null),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    { dirty, resolution },
+    {
+      dirty: false,
+      resolution: {
+        supported: ["commands"],
+        notes: [],
+        componentPaths: {
+          skills: [],
+          commands: [],
+          agents: [],
+          workflows: [],
+          commandMap: [
+            { key: "alpha", source: "cmds/alpha.md", origin: "manifest" },
+            { key: "beta", source: "cmds/beta.md", origin: "manifest" },
+          ],
+        },
+      },
+    },
+  );
+});
+
+test("D-CF3-03 a command map entry keeps its inline content and its non-empty overrides", async () => {
+  // arrange
+  const { collectStrictComponentPaths } =
+    await import("../../extensions/pi-claude-marketplace/domain/component-paths.ts");
+  const resolution = emptyResolution();
+
+  // act
+  const dirty = await collectStrictComponentPaths(
+    {
+      entry: { name: "alpha", source: "./alpha" },
+      manifest: {
+        commands: {
+          beta: {
+            content: "Beta body",
+            description: "Beta from the manifest.",
+            argumentHint: "<target>",
+            model: "opus",
+          },
+          gamma: { source: "./g.md", description: "", argumentHint: "", model: "" },
+        },
+      },
+      pluginRoot: "/plugins/alpha",
+      resolution,
+    },
+    () => Promise.resolve(null),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    { dirty, commandMap: resolution.componentPaths.commandMap },
+    {
+      dirty: false,
+      commandMap: [
+        {
+          key: "beta",
+          content: "Beta body",
+          origin: "manifest",
+          description: "Beta from the manifest.",
+          argumentHint: "<target>",
+          model: "opus",
+        },
+        { key: "gamma", source: "g.md", origin: "manifest" },
+      ],
+    },
+  );
+});
+
+for (const { title, commands, reason } of [
+  {
+    title: "an object whose first value is a string",
+    commands: { alpha: "./cmds/alpha.md" },
+    reason: 'component path for "commands" is not a string (got object)',
+  },
+  {
+    title: "an object whose first value names neither source nor content",
+    commands: { alpha: { path: "./cmds/alpha.md" }, beta: { source: "./b.md" } },
+    reason: 'component path for "commands" is not a string (got object)',
+  },
+  {
+    title: "an empty object",
+    commands: {},
+    reason: 'component path for "commands" is not a string (got object)',
+  },
+]) {
+  test(`D-CF3-03 refuses ${title} as a commands path and keeps no command map`, async () => {
+    // arrange
+    const { collectStrictComponentPaths } =
+      await import("../../extensions/pi-claude-marketplace/domain/component-paths.ts");
+    const resolution = emptyResolution();
+
+    // act
+    const dirty = await collectStrictComponentPaths(
+      {
+        entry: { name: "alpha", source: "./alpha" },
+        manifest: { commands },
+        pluginRoot: "/plugins/alpha",
+        resolution,
+      },
+      () => Promise.resolve(null),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      { dirty, resolution },
+      { dirty: true, resolution: { ...emptyResolution(), notes: [reason] } },
+    );
+  });
+}
+
+test("D-CF3-03 refuses a command map source that escapes the plugin root with a note naming its key", async () => {
+  // arrange
+  const { collectStrictComponentPaths } =
+    await import("../../extensions/pi-claude-marketplace/domain/component-paths.ts");
+  const resolution = emptyResolution();
+
+  // act
+  const dirty = await collectStrictComponentPaths(
+    {
+      entry: { name: "alpha", source: "./alpha" },
+      manifest: { commands: { alpha: { source: "./a.md" }, out: { source: "../out.md" } } },
+      pluginRoot: "/plugins/alpha",
+      resolution,
+    },
+    () => Promise.resolve(null),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    { dirty, notes: resolution.notes, commandMap: resolution.componentPaths.commandMap },
+    {
+      dirty: true,
+      notes: ['source of command map entry "out" escapes plugin root: "../out.md"'],
+      commandMap: [{ key: "alpha", source: "a.md", origin: "manifest" }],
+    },
+  );
+});
+
+test("D-CF3-03 refuses a command map entry that is not an object with a note naming its key", async () => {
+  // arrange
+  const { collectStrictComponentPaths } =
+    await import("../../extensions/pi-claude-marketplace/domain/component-paths.ts");
+  const resolution = emptyResolution();
+
+  // act
+  const dirty = await collectStrictComponentPaths(
+    {
+      entry: { name: "alpha", source: "./alpha" },
+      manifest: { commands: { alpha: { source: "./a.md" }, beta: 5 } },
+      pluginRoot: "/plugins/alpha",
+      resolution,
+    },
+    () => Promise.resolve(null),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    { dirty, notes: resolution.notes },
+    {
+      dirty: true,
+      notes: ['source of command map entry "beta" is not a string (got undefined)'],
+    },
+  );
+});
 
 test("D-CF1-06 the shadowed-folder warning names the folder and the field that hides it", async () => {
   // arrange

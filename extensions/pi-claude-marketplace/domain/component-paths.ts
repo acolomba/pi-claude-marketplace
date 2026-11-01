@@ -3,7 +3,7 @@ import path from "node:path";
 import { PathContainmentError, assertPathInside } from "../shared/path-safety.ts";
 
 import type { PluginEntry } from "./components/plugin.ts";
-import type { StatKindReader } from "./resolver-types.ts";
+import type { CommandMapEntry, StatKindReader } from "./resolver-types.ts";
 
 const COMPONENT_PATH_KINDS = ["skills", "commands", "agents", "workflows"] as const;
 type ComponentPathKind = (typeof COMPONENT_PATH_KINDS)[number];
@@ -40,7 +40,14 @@ export async function resolveContainedComponentPath(
 export interface ComponentPathResolution {
   supported: string[];
   notes: string[];
-  componentPaths: { skills: string[]; commands: string[]; agents: string[]; workflows: string[] };
+  componentPaths: {
+    skills: string[];
+    commands: string[];
+    agents: string[];
+    workflows: string[];
+    /** D-CF3-03: the entries of an object-map `commands` declaration, in declared order. */
+    commandMap?: CommandMapEntry[];
+  };
   /** D-CF1-06: kinds whose existing conventional folder a declaration leaves unread. */
   shadowedFolders?: string[];
 }
@@ -67,22 +74,27 @@ function readPathOrArray(value: unknown): readonly unknown[] {
   return [value];
 }
 
+/**
+ * Validates one declared path of `kind`. `subject` opens each refusal note;
+ * a command map entry's source names its key there (D-CF3-03).
+ */
 async function validateComponentPath(
   kind: ComponentPathKind,
   raw: unknown,
   pluginRoot: string,
+  subject = `component path for "${kind}"`,
 ): Promise<{ ok: true; relative: string } | { ok: false; reason: string }> {
   if (Array.isArray(raw)) {
     return {
       ok: false,
-      reason: `component path for "${kind}" contains nested array element; must be a string`,
+      reason: `${subject} contains nested array element; must be a string`,
     };
   }
 
   if (typeof raw !== "string") {
     return {
       ok: false,
-      reason: `component path for "${kind}" is not a string (got ${typeof raw})`,
+      reason: `${subject} is not a string (got ${typeof raw})`,
     };
   }
 
@@ -94,12 +106,12 @@ async function validateComponentPath(
   if (!contained.ok && contained.cause === "absolute") {
     return {
       ok: false,
-      reason: `component path for "${kind}" must be relative (got absolute "${raw}")`,
+      reason: `${subject} must be relative (got absolute "${raw}")`,
     };
   }
 
   if (!contained.ok) {
-    return { ok: false, reason: `component path for "${kind}" escapes plugin root: "${raw}"` };
+    return { ok: false, reason: `${subject} escapes plugin root: "${raw}"` };
   }
 
   // Deduplicate equivalent spellings only after enforcing containment.
@@ -179,6 +191,121 @@ function markSupportedWhenCollected(
   }
 }
 
+function isPlainObject(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * D-CF3-03: whether a `commands` value is an object map, by Claude Code
+ * 2.1.316's `IKn` rule: an object whose FIRST value is an object holding
+ * `source` or `content`. Any other object stays a path declaration, which
+ * the path checks refuse as not a string.
+ */
+function isCommandMap(value: unknown): value is Readonly<Record<string, unknown>> {
+  if (!isPlainObject(value)) {
+    return false;
+  }
+
+  const first = Object.values(value)[0];
+  return (
+    isPlainObject(first) && (Object.hasOwn(first, "source") || Object.hasOwn(first, "content"))
+  );
+}
+
+/** A `commands` declaration split into its paths and its object map. */
+interface CommandsDeclaration {
+  readonly paths: readonly unknown[];
+  readonly map: Readonly<Record<string, unknown>> | undefined;
+}
+
+function readCommandsDeclaration(value: unknown): CommandsDeclaration {
+  return isCommandMap(value)
+    ? { paths: [], map: value }
+    : { paths: readPathOrArray(value), map: undefined };
+}
+
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value !== "";
+}
+
+/**
+ * D-CF3-03: the manifest fields an entry writes over its command file's
+ * frontmatter. An empty string overrides nothing, as Claude Code 2.1.316's
+ * merge skips a falsy field.
+ */
+function commandMapOverrides(
+  raw: Readonly<Record<string, unknown>>,
+): Pick<CommandMapEntry, "description" | "argumentHint" | "model"> {
+  const { description, argumentHint, model } = raw;
+  return {
+    ...(nonEmptyString(description) && { description }),
+    ...(nonEmptyString(argumentHint) && { argumentHint }),
+    ...(nonEmptyString(model) && { model }),
+  };
+}
+
+/**
+ * D-CF3-03: one map entry as the commands bridge reads it, or the note that
+ * refuses it. A `source` passes the same containment check as a declared
+ * path; its key names it in the note.
+ */
+async function validateCommandMapEntry(
+  key: string,
+  raw: unknown,
+  origin: CommandMapEntry["origin"],
+  pluginRoot: string,
+): Promise<{ ok: true; entry: CommandMapEntry } | { ok: false; reason: string }> {
+  const value = isPlainObject(raw) ? raw : {};
+  const overrides = commandMapOverrides(value);
+  if (typeof value.content === "string") {
+    return { ok: true, entry: { key, content: value.content, origin, ...overrides } };
+  }
+
+  const validated = await validateComponentPath(
+    "commands",
+    value.source,
+    pluginRoot,
+    `source of command map entry "${key}"`,
+  );
+  if (!validated.ok) {
+    return validated;
+  }
+
+  return { ok: true, entry: { key, source: validated.relative, origin, ...overrides } };
+}
+
+/**
+ * D-CF3-03: appends the validated entries of one object map to
+ * `componentPaths.commandMap`, which exists only once a map is declared.
+ * Returns whether any entry was refused with a note.
+ */
+async function collectCommandMap(
+  resolution: ComponentPathResolution,
+  map: Readonly<Record<string, unknown>> | undefined,
+  origin: CommandMapEntry["origin"],
+  pluginRoot: string,
+): Promise<boolean> {
+  if (map === undefined) {
+    return false;
+  }
+
+  const entries = resolution.componentPaths.commandMap ?? [];
+  resolution.componentPaths.commandMap = entries;
+  let dirty = false;
+  for (const [key, raw] of Object.entries(map)) {
+    // eslint-disable-next-line no-await-in-loop -- the entries keep their declared order
+    const validated = await validateCommandMapEntry(key, raw, origin, pluginRoot);
+    if (validated.ok) {
+      entries.push(validated.entry);
+    } else {
+      resolution.notes.push(validated.reason);
+      dirty = true;
+    }
+  }
+
+  return dirty;
+}
+
 /**
  * D-CF3-04 (E4): the commands kind's own collection. Claude Code 2.1.316
  * reads `commands/` unless `plugin.json` declares `commands` (a truthy
@@ -187,6 +314,10 @@ function markSupportedWhenCollected(
  * `plugin.json` paths, then the entry paths; it decides only which file wins
  * when two name the same command. The folder is reported unread only when
  * `plugin.json` declares, the folder exists, and no collected path reaches it.
+ *
+ * D-CF3-03: a `plugin.json` object map is a declaration too. Its entries go
+ * to `componentPaths.commandMap` rather than to the paths, and a plugin whose
+ * only commands come from a map still supports `commands`.
  */
 async function collectStrictCommandPaths(
   entry: PluginEntry,
@@ -198,25 +329,32 @@ async function collectStrictCommandPaths(
   const seenPaths = new Set<string>();
   const manifestRaw = manifest?.commands;
   const manifestDeclares = Boolean(manifestRaw);
+  const declared = readCommandsDeclaration(manifestRaw);
   const folderExists = (await statKind(path.join(pluginRoot, "commands"))) === "dir";
   if (folderExists && !manifestDeclares) {
     addComponentPath(resolution, "commands", seenPaths, "commands");
   }
 
-  const dirty = await addValidatedComponentPaths(
+  const pathsDirty = await addValidatedComponentPaths(
     resolution,
     "commands",
     seenPaths,
-    [...readPathOrArray(manifestRaw), ...readPathOrArray(entry.commands)],
+    [...declared.paths, ...readPathOrArray(entry.commands)],
     pluginRoot,
   );
+  const mapDirty = await collectCommandMap(resolution, declared.map, "manifest", pluginRoot);
 
   if (folderExists && manifestDeclares) {
     recordShadowedFolder(resolution, "commands");
   }
 
-  markSupportedWhenCollected(resolution, "commands");
-  return dirty;
+  if (resolution.componentPaths.commandMap !== undefined) {
+    resolution.supported.push("commands");
+  } else {
+    markSupportedWhenCollected(resolution, "commands");
+  }
+
+  return pathsDirty || mapDirty;
 }
 
 /**
