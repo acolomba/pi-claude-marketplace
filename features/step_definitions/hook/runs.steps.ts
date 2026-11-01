@@ -10,7 +10,8 @@
  * before it compares them whole; sorting drops no row (D-CF5-09). A session
  * id differs on every run, so a cell that holds one names the session by the
  * order it first appears in, and a session id inside a cell, such as the one
- * `CLAUDE_ENV_FILE` names, reads as that ordinal too (D-CF5-26).
+ * `CLAUDE_ENV_FILE` names, reads as that ordinal too (D-CF5-26). A turn that
+ * ran no hook is stated by the no-runs step.
  */
 
 import assert from "node:assert/strict";
@@ -136,5 +137,12 @@ Then("the hooks record these runs:", function (this: ScenarioWorld, table: DataT
 
 Then("the hooks record these runs in any order:", function (this: ScenarioWorld, table: DataTable) {
   assert.deepStrictEqual(sortedRows(runsTable(this, table)), sortedRows(table.raw()));
+  this.markTurnCompared();
+});
+
+// A table with only a header cannot be compared, so a turn that ran no hook
+// has a step of its own.
+Then("the hooks record no runs", function (this: ScenarioWorld) {
+  assert.deepStrictEqual(this.requireTurn().logs.get(HOOK_RUNS_LOG) ?? [], []);
   this.markTurnCompared();
 });
