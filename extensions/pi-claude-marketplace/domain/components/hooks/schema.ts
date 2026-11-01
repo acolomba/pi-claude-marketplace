@@ -11,6 +11,12 @@ export interface HookHandlerEntry {
   asyncRewake?: unknown;
   rewakeMessage?: unknown;
   rewakeSummary?: unknown;
+  // D-CF5-17: Claude Code honors `once` only for hooks in skill frontmatter,
+  // so a plugin hook keeps the field and the bridge ignores it.
+  once?: unknown;
+  // D-CF5-18: dispatch reads `onFailure` to turn a failed command hook into
+  // a block.
+  onFailure?: unknown;
   [fieldName: string]: unknown;
 }
 
@@ -25,6 +31,8 @@ const HOOK_HANDLER_SCHEMA = Type.Unsafe<HookHandlerEntry>({
     asyncRewake: {},
     rewakeMessage: {},
     rewakeSummary: {},
+    once: {},
+    onFailure: {},
   },
   if: {
     type: "object",

@@ -10,6 +10,12 @@ import {
 void ({ type: "command", command: "/bin/true" } satisfies HookHandlerEntry);
 void ({ type: "future-handler", futureHandlerField: true } satisfies HookHandlerEntry);
 void ({
+  type: "command",
+  command: "/bin/true",
+  once: true,
+  onFailure: "block",
+} satisfies HookHandlerEntry);
+void ({
   PreToolUse: [
     {
       matcher: "Edit",
@@ -40,6 +46,17 @@ describe("HOOKS_VALIDATOR", () => {
           {
             matcher: "Edit",
             hooks: [{ type: "command", command: "/bin/true" }],
+          },
+        ],
+      },
+    },
+    {
+      role: "a command handler with once and onFailure",
+      config: {
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [{ type: "command", command: "/bin/true", once: true, onFailure: "block" }],
           },
         ],
       },
@@ -173,4 +190,31 @@ test("HOOK-03: the live hook validator schema carries NO `additionalProperties: 
     [],
     `HOOK-03 lenient stance violated -- strict gates found at: ${offenders.join(", ")}`,
   );
+});
+
+test("D-CF5-17 / D-CF5-18: the handler schema lists once and onFailure without constraining them", () => {
+  // arrange
+  const schema = JSON.parse(JSON.stringify(HOOKS_VALIDATOR.Type())) as {
+    patternProperties: Record<
+      string,
+      { items: { properties: { hooks: { items: { properties: Record<string, unknown> } } } } }
+    >;
+  };
+
+  // act
+  const handlerProperties = Object.values(schema.patternProperties)[0]?.items.properties.hooks.items
+    .properties;
+
+  // assert
+  assert.deepStrictEqual(handlerProperties, {
+    type: { type: "string" },
+    command: { type: "string" },
+    if: { type: "string" },
+    timeout: {},
+    asyncRewake: {},
+    rewakeMessage: {},
+    rewakeSummary: {},
+    once: {},
+    onFailure: {},
+  });
 });
