@@ -17,11 +17,11 @@ provides:
 affects: [parent merge of features/component-features-phase-5, PROJECT.md Key Decisions, BACKLOG.md, CHANGELOG.md]
 
 actuals:
-  tokens: 0
+  tokens: 35000
   tasks: 3
-  commits: 1
+  commits: 3
 plan_head_before: df1a1fbcb6d39d58b5410f80d0bea84e330d43a2
-plan_head_after: pending
+plan_head_after: 565aaf53e2406dd7f183bd25953450f174e165dc
 
 tech-stack:
   added: []
@@ -66,24 +66,24 @@ coverage:
     requirement: HOOK-01
     verification:
       - kind: other
-        ref: "pending (Task 3)"
-        status: unknown
+        ref: "npm run check (exit 0, cucumber seed 31696); npm run test:modules (exit 0); npm run test:cucumber twice (exit 0, seeds 616824 and 972519) on e3f0676, Node v24.22.1"
+        status: pass
     human_judgment: false
 
-duration: pending
+duration: 45min
 completed: 2026-11-01
 status: complete
 ---
 
 # Phase 5 Plan 09: Hook docs, decision records, and the phase gate Summary
 
-**`docs/hooks-compatibility.md` and the `hook-events.ts` header now state the tested Phase 5 hook behavior with its decision IDs, the parent has 28 Key Decisions rows and every parent line the phase could not apply, and the combined tree goes through the phase gate (Task 3).**
+**`docs/hooks-compatibility.md` and the `hook-events.ts` header now state the tested Phase 5 hook behavior with its decision IDs, the parent has 28 Key Decisions rows and every parent line the phase could not apply, and the combined tree passes `npm run check`, `npm run test:modules`, and `npm run test:cucumber` twice (seeds 616824 and 972519, plus 31696 inside the check).**
 
 ## Performance
 
-- **Duration:** pending
+- **Duration:** 45min
 - **Started:** 2026-11-01T19:05Z (approximate)
-- **Completed:** pending
+- **Completed:** 2026-11-01T19:50Z
 - **Tasks:** 3
 - **Files modified:** 4 (1 created, 3 modified)
 
@@ -96,8 +96,8 @@ status: complete
 ## Task Commits
 
 1. **Task 1: Make the hook compatibility docs and the event header match the tested behavior** - `e3f0676` (docs)
-2. **Task 2: Write the decision records and collect the parent lines** - this SUMMARY's first commit (docs)
-3. **Task 3: Pass the phase gate on the combined tree** - the gate evidence commit of this SUMMARY (docs)
+2. **Task 2: Write the decision records and collect the parent lines** - `565aaf5` (docs)
+3. **Task 3: Pass the phase gate on the combined tree** - the commit that adds the gate evidence to this SUMMARY (docs; no gate fix was needed)
 
 Tracer gate after Task 1: no `blocking-human` gate, `human_verify_mode` end-of-phase, automated-only `<verify>`. Its commands passed (8/8 unit cases, Prettier clean, 60 `D-CF5-` mentions), and `npm run check:static` passed before the commit, so Task 2 went ahead.
 
@@ -110,7 +110,21 @@ Tracer gate after Task 1: no `blocking-human` gate, `human_verify_mode` end-of-p
 
 ## Phase gate
 
-Pending: the Task 3 commit records the gate evidence here.
+Run in this worktree on commit `e3f067635cf6c7e0cb5475b678c809ece745b7a0` (the Task 1 commit; every later commit changes only `.planning/**/*.md`, and `git diff --quiet e3f0676 -- . ':(exclude,glob).planning/**/*.md'` exits 0), Node `v24.22.1`, with `npm_config_script_shell=<scratchpad>/nondac-sh NODE_OPTIONS=--max-old-space-size=6144`, run in sequence by one scratchpad script after a lone `npm run lint` warm-up.
+
+| Command | Exit | Result |
+| --- | --- | --- |
+| `npm run lint` (warm-up, alone) | 0 | no finding |
+| `npm run check` | 0 | `check:static` all passed (typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, check:features); `test:unpaired` and `test:integration` passed; its `test:cucumber` stage: seed 31696, 1283 scenarios (1283 passed), 13388 steps (13388 passed); `test:coverage:direct:all`: no shortfall line, `Merged LCOV: coverage/direct.lcov (320 records)`. 19:31:52Z to 19:39:16Z |
+| `npm run test:modules` | 0 | whole unit suite, no failing test. 19:39:16Z to 19:42:08Z |
+| `npm run test:cucumber` #1 | 0 | seed 616824, 1283 scenarios (1283 passed), 13388 steps (13388 passed) |
+| `npm run test:cucumber` #2 | 0 | seed 972519, 1283 scenarios (1283 passed), 13388 steps (13388 passed) |
+| `npx fallow dupes --fail-on-issues --format human --quiet` | 0 | no clone group |
+| the same, with both `code-duplication` markers removed for one run | 1 | one group, `dup:47665ee9`, `async-rewake/registry.ts:360-371` and `dispatch-exec.ts:426-438`, the lines right under the two markers. Restored with `git checkout --`; the rerun exits 0 |
+| `npx cucumber-js features/hook --dry-run` | 0 | 65 scenarios in `additional-context`, `configuration`, `failures`, `lifecycle`, `messages`, `process`, `prompt-and-stop`, `session`, `tool-use` |
+| `git diff --quiet 74829438..HEAD -- CHANGELOG.md README.md README.es.md .planning/BACKLOG.md .fallowrc.json package.json package-lock.json .agents/skills/cucumber features/support` | 0 | no forbidden file changed (`74829438` is the commit before the phase's first plan commit) |
+
+The Legacy marketplace migration `console.warn` lines in the logs are the expected IL-3 output of existing persistence tests. No gate fix was needed, so no test or product file changed in Task 3.
 
 ## Decision records
 
@@ -284,7 +298,12 @@ None - no external service configuration required.
 
 Phase complete, ready for verification and the parent merge. The parent applies the parent lines above and appends P5-DC-19 to `DUBIOUS-CHOICES.md`.
 
+## Self-Check: PASSED
 
+- FOUND: `docs/hooks-compatibility.md`, `extensions/pi-claude-marketplace/domain/components/hook-events.ts`, `extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts`, `.planning/phases/05-hooks/05-09-SUMMARY.md`.
+- FOUND commits: `e3f0676` (Task 1) and `565aaf5` (Task 2) are ancestors of HEAD; this gate-evidence commit is the third, so `git rev-list --count df1a1fbc..HEAD` is 3 after it.
+- Acceptance re-run: 27 distinct D-CF5 IDs in the docs, `DirectoryAdded` 3, `sequential` 0, `threshold` 4 in `hook-events.ts`; 28 distinct D-CF5 IDs, the provenance line, the `deferred from Phase 5 ...` text, and `tryHydrateOnePlugin` (3) in this SUMMARY; funnel counts 3 / 2 / 3; `DUBIOUS-CHOICES.md` tops out at P5-DC-18, so the new item is P5-DC-19.
+- No change to `STATE.md` or `ROADMAP.md`.
 
 ---
 *Phase: 05-hooks*
