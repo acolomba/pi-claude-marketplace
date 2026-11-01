@@ -340,3 +340,23 @@ session writes this file. Each subagent ends its report with a
   5. A manual TruffleHog run flags existing fake `ghp_` fixtures as verified
      through the proxy; commits ran without any skip.
 - **Recorded in:** `05-06-SUMMARY.md`, `05-07-SUMMARY.md`.
+
+### P5-DC-18: Wave 4 executor choices (05-08 tool context and Stop feedback)
+
+- **Phase / source:** executor of 05-08.
+- **Severity:** Low. **Status:** open.
+- **Choices:**
+  1. A Stop block with no reason still re-enters with an empty
+     `Stop hook feedback:\n` part (upstream requires `reason`; not probed).
+  2. A Stop hook that blocks and gives `additionalContext` sends two parts,
+     reason first (not probed).
+  3. The re-entry's `details.pluginId` and the STOP-07 cap notice name the
+     first hook that sends feedback (before: the first blocking hook).
+  4. Tool context uses its own custom type `claude-hook-tool-context`, not
+     05-06's `claude-hook-additional-context` (that constant lives in
+     `event-router.ts`, not owned by 05-08).
+  5. Tool context is sent even after a PreToolUse `continue:false`; Stop
+     notices show before the re-entry decision, so also under `continue:false`.
+  6. The new When requires the prompt disposition `started`; the routed
+     `updatedToolOutput` scenario is its own test-only commit.
+- **Recorded in:** `05-08-SUMMARY.md`.
