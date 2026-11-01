@@ -138,3 +138,12 @@ tooling. Status stays `open` until the user reviews it.
 - **Choice:** Warning 1 (MCP-07 and ROADMAP SC4 still ask for a working agent call) is fixed in place: 06-09 now carries a parent line to mark MCP-07 "gap-pinned (D-CF6-10)" and amend SC4, and its SUMMARY states SC4 is met by the pin. Warning 2 (commit trailer differs from the brief) is kept as decided in P6-DC-05. The three advisories are left as written: `calls.steps.ts` stays in both `files_modified` and `files_deleted`, the plans keep this session's scratchpad wrapper path (executors run in this session), and 06-09 Task 1 still reconciles 06-08's doc with 06-07's merged code. The checker rated MCP-07's gap a warning rather than a blocker because D-CF6-10 licenses it.
 - **Alternatives:** Re-spawn the planner for a revision round; edit REQUIREMENTS.md and ROADMAP SC4 in this phase.
 - **Recorded in:** `06-09-PLAN.md` Task 3 parent lines.
+
+### P6-DC-10: Executor prompts load the GSD procedure files by Read, not inline
+
+- **Phase / source:** Phase 6 execute-phase orchestration (step 3 dispatch).
+- **Severity:** Low. **Status:** open.
+- **Choice:** Each executor prompt tells the executor to Read `execute-plan.md`, `summary.md`, `checkpoints.md`, `worktree-path-safety.md`, and `executor-examples.md` in full before any work, instead of the orchestrator pasting their ~130 KB verbatim into every prompt. The small `worktree_branch_check` guard is still embedded verbatim with the base SHA substituted. The prompts also carry the brief's git, project, and environment rules and the dubious-choices protocol.
+- **Alternatives:** Inline the five files verbatim in every dispatch, as the workflow's build-time-embed note asks.
+- **Why dubious:** The workflow's note forbids leaving the content to the executor; the reason it gives (an `@path` line never expands) does not apply to an explicit Read instruction, but an executor that skips the Read would run without the procedure.
+- **Recorded in:** this file.
