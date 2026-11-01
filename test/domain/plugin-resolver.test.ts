@@ -1741,7 +1741,7 @@ test("MCPR-02 plugin.json string mcpServers reference resolves at parity (via re
   }
 });
 
-test("MCPR-03 missing reference file -> unavailable + malformed mcp reference note", async () => {
+test("MCPR-03 missing reference file is skipped silently -> installable with no servers (D-CF6-02)", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
 
@@ -1752,14 +1752,21 @@ test("MCPR-03 missing reference file -> unavailable + malformed mcp reference no
   );
 
   // assert
-  assert.strictEqual(resolvedPlugin.state, "unavailable");
-  assert.ok(
-    resolvedPlugin.notes.some((n) => n.includes("malformed mcp reference")),
-    `notes: ${resolvedPlugin.notes.join(" / ")}`,
-  );
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "installable",
+    installable: true,
+    name: "p1",
+    pluginRoot: pathUnderMarketplace("./local"),
+    supported: [],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  });
 });
 
-test("MCPR-03 malformed-JSON reference file -> unavailable + malformed mcp reference note", async () => {
+test("MCPR-03 malformed-JSON reference file is skipped silently -> installable with no servers (D-CF6-02)", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
   const context = resolveContext(marketplaceRoot, {
@@ -1774,11 +1781,18 @@ test("MCPR-03 malformed-JSON reference file -> unavailable + malformed mcp refer
   );
 
   // assert
-  assert.strictEqual(resolvedPlugin.state, "unavailable");
-  assert.ok(
-    resolvedPlugin.notes.some((n) => n.includes("malformed mcp reference")),
-    `notes: ${resolvedPlugin.notes.join(" / ")}`,
-  );
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "installable",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  });
 });
 
 test("MCPR-03 wrapper-less reference file (bare map) resolves installable with its server (D-CF6-01)", async () => {
@@ -1809,14 +1823,13 @@ test("MCPR-03 wrapper-less reference file (bare map) resolves installable with i
   }
 });
 
-test("WR-03: unreadable reference file (EACCES) propagates out of resolveStrict (not swallowed as malformed mcp)", async () => {
+test("WR-03: unreadable reference file (EACCES) is skipped silently -> installable with no servers (D-CF6-02)", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
   const refPath = path.join(localRoot, "x.mcp.json");
   // statKind reports the reference file exists, but readFileText throws EACCES
-  // (readable to stat, not to read). The read sits OUTSIDE the malformed-note
-  // try, so the I/O error must propagate for narrowProbeError to classify it as
-  // {permission denied} -- NOT be conflated into a `malformed mcp reference` note.
+  // (readable to stat, not to read). Claude Code's loader loads no servers
+  // from a file it cannot read, so the plugin installs without them.
   const context: ResolveContext = {
     marketplaceRoot: marketplaceRoot,
     marketplaceName: "third-party",
@@ -1841,19 +1854,25 @@ test("WR-03: unreadable reference file (EACCES) propagates out of resolveStrict 
     },
   };
 
-  // act & assert
-  await assert.rejects(
-    () => resolveStrict(pluginEntry({ source: "./local", mcpServers: "x.mcp.json" }), context),
-    (error: unknown) => {
-      assert.ok(error instanceof Error, "rejection must be an Error");
-      assert.strictEqual(
-        (error as NodeJS.ErrnoException).code,
-        "EACCES",
-        "EACCES must propagate unchanged for narrowProbeError to classify",
-      );
-      return true;
-    },
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./local", mcpServers: "x.mcp.json" }),
+    context,
   );
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "installable",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  });
 });
 
 test("MCPR-04 ../ traversal reference -> unavailable + escape note (no read outside pluginRoot)", async () => {
@@ -1915,7 +1934,7 @@ test("MCPR-04 symlink reference (D-14) -> unavailable + note; never reads outsid
   }
 });
 
-test("MCPR-04 reference path traversing a non-directory (ENOTDIR) propagates out of resolveStrict", async () => {
+test("MCPR-04 reference path traversing a non-directory (ENOTDIR) is skipped silently -> installable with no servers (D-CF6-02)", async () => {
   // arrange
   const mpRoot = await mkdtemp(path.join(os.tmpdir(), "pi-cm-mcpref-notdir-"));
   try {
@@ -1923,8 +1942,8 @@ test("MCPR-04 reference path traversing a non-directory (ENOTDIR) propagates out
     await mkdir(pluginRoot, { recursive: true });
     // A regular file sits where the reference path expects a directory, so the
     // per-segment lstat in assertPathInside throws ENOTDIR (not a
-    // PathContainmentError). validateReferencePath re-throws it, and it must
-    // propagate for the outer probe classifier to key on `.code`.
+    // PathContainmentError). The reference names a file the loader cannot
+    // read, so it contributes no servers.
     await writeFile(path.join(pluginRoot, "afile"), "x", "utf8");
     const context: ResolveContext = {
       marketplaceRoot: mpRoot,
@@ -1932,22 +1951,31 @@ test("MCPR-04 reference path traversing a non-directory (ENOTDIR) propagates out
       marketplaceSource: undefined,
     };
 
-    // act & assert
-    await assert.rejects(
-      () =>
-        resolveStrict(pluginEntry({ source: "./local", mcpServers: "afile/x.mcp.json" }), context),
-      (error: unknown) => {
-        assert.ok(error instanceof Error, "rejection must be an Error");
-        assert.strictEqual((error as NodeJS.ErrnoException).code, "ENOTDIR");
-        return true;
-      },
+    // act
+    const resolvedPlugin = await resolveStrict(
+      pluginEntry({ source: "./local", mcpServers: "afile/x.mcp.json" }),
+      context,
     );
+
+    // assert
+    assert.deepStrictEqual(resolvedPlugin, {
+      state: "installable",
+      installable: true,
+      name: "p1",
+      pluginRoot,
+      supported: [],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    });
   } finally {
     await rm(mpRoot, { recursive: true, force: true });
   }
 });
 
-test("MCPR malformed standalone .mcp.json (no entry mcpServers) -> unavailable + malformed mcpServers note", async () => {
+test("MCPR malformed standalone .mcp.json (no entry mcpServers) is skipped silently -> installable with no servers (D-CF6-02)", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
   const context = resolveContext(marketplaceRoot, {
@@ -1959,11 +1987,18 @@ test("MCPR malformed standalone .mcp.json (no entry mcpServers) -> unavailable +
   const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
 
   // assert
-  assert.strictEqual(resolvedPlugin.state, "unavailable");
-  assert.ok(
-    resolvedPlugin.notes.some((n) => n.includes("malformed mcpServers")),
-    `notes: ${resolvedPlugin.notes.join(" / ")}`,
-  );
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "installable",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  });
 });
 
 test("MCPR-04 absolute-path reference -> unavailable + malformed mcp reference note (no read)", async () => {
@@ -1986,12 +2021,11 @@ test("MCPR-04 absolute-path reference -> unavailable + malformed mcp reference n
   );
 });
 
-test("MCPR-03 wrapped reference with malformed INNER map -> unavailable (inline parity)", async () => {
+test("MCPR-03 wrapped reference with malformed INNER map is skipped silently -> installable with no servers (D-CF6-02)", async () => {
   // arrange
   // Valid JSON with a present `mcpServers` wrapper but an inner map that fails
-  // the server-map schema: `readReferencedMcp` succeeds (wrapper present) and
-  // delegates to the inline `applyMcpValue`, which emits `malformed mcpServers`
-  // (NOT `malformed mcp reference`) -- the intended inline-parity boundary.
+  // the server-map schema. Claude Code's loader loads no servers from such a
+  // file, unlike the same value written inline, which refuses the plugin.
   const localRoot = pathUnderMarketplace("./local");
   const context = resolveContext(marketplaceRoot, {
     [localRoot]: "dir",
@@ -2007,15 +2041,18 @@ test("MCPR-03 wrapped reference with malformed INNER map -> unavailable (inline 
   );
 
   // assert
-  assert.strictEqual(resolvedPlugin.state, "unavailable");
-  assert.ok(
-    resolvedPlugin.notes.some((n) => n.includes("malformed mcpServers")),
-    `notes: ${resolvedPlugin.notes.join(" / ")}`,
-  );
-  assert.ok(
-    !resolvedPlugin.notes.some((n) => n.includes("malformed mcp reference")),
-    `notes: ${resolvedPlugin.notes.join(" / ")}`,
-  );
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "installable",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  });
 });
 
 // Criterion 5 regression: an UNDECLARED conventional <pluginRoot>/.mcp.json in
@@ -4518,7 +4555,7 @@ test("resolveStrict unwraps a standalone mcpServers document", async () => {
   });
 });
 
-test("resolveStrict propagates a non-Error standalone mcp read rejection (not wrapped as malformed)", async () => {
+test("resolveStrict skips a standalone .mcp.json whose read rejects with a non-Error -> installable with no servers (D-CF6-02)", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./mcp-read-rejection");
   const mcpPath = path.join(localRoot, ".mcp.json");
@@ -4545,11 +4582,25 @@ test("resolveStrict propagates a non-Error standalone mcp read rejection (not wr
     },
   };
 
-  // act & assert
-  await assert.rejects(
-    () => resolveStrict(pluginEntry({ source: "./mcp-read-rejection" }), context),
-    (error: unknown) => error === mcpReadFailure,
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./mcp-read-rejection" }),
+    context,
   );
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "installable",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  });
 });
 
 test("requireInstallable classifies an update of the partial true arm", async () => {

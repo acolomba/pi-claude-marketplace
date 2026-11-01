@@ -7,9 +7,15 @@
 // reference string, an inline server map, or an array of both, read in
 // order. A server name that a later source declares replaces the earlier
 // server and keeps its position, as object spread does upstream.
+//
+// D-CF6-02: a defect in a file source makes that file, or that one server,
+// contribute nothing, silently, as Claude Code's loader drops it. A defect
+// written inline, or a reference that is absolute or leaves the plugin root,
+// refuses the plugin, as Claude Code refuses that manifest.
 
 import path from "node:path";
 
+import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
 
 import { resolveContainedComponentPath } from "./component-paths.ts";
@@ -64,16 +70,28 @@ function addDefect(merge: McpMerge, note: string): void {
   merge.dirty = true;
 }
 
+// D-CF6-02: Claude Code's loader logs what it skips in a file at debug level
+// only, so a skip reaches the env-gated debug channel and no notification.
+function logFileSkip(merge: McpMerge, file: string, detail: string): void {
+  hookDebugLog(`${file} of ${merge.pluginRoot}: skipped ${detail}`, "mcp");
+}
+
+type MalformedServerHandler = (server: string, detail: string) => void;
+
 /**
- * Merges each server of one source map. A malformed server adds a note and
- * reports a structural defect (ANAME-07, D-64-07). A blocked server stays in
- * the merge, so a later source can replace it with a supported one.
+ * Merges each server of one source map. `onMalformed` decides what a
+ * malformed server means for its source. A blocked server stays in the
+ * merge, so a later source can replace it with a supported one (ANAME-07).
  */
-function mergeServers(merge: McpMerge, servers: Readonly<Record<string, unknown>>): void {
+function mergeServers(
+  merge: McpMerge,
+  servers: Readonly<Record<string, unknown>>,
+  onMalformed: MalformedServerHandler,
+): void {
   for (const [server, config] of Object.entries(servers)) {
     const verdict = classifyMcpServer(config);
     if (verdict.kind === "malformed") {
-      addDefect(merge, `malformed mcp server "${server}": ${verdict.detail}`);
+      onMalformed(server, verdict.detail);
     } else {
       merge.servers.set(
         server,
@@ -83,9 +101,17 @@ function mergeServers(merge: McpMerge, servers: Readonly<Record<string, unknown>
   }
 }
 
+/**
+ * Merges a server map written inline in the manifest or the marketplace
+ * entry. Claude Code refuses a manifest whose inline map, or any server in
+ * it, fails its schema, so each defect adds a note and reports a structural
+ * defect (D-CF6-02, D-64-07).
+ */
 function mergeServerMap(merge: McpMerge, value: unknown): void {
   if (MCP_SERVER_MAP_VALIDATOR.Check(value)) {
-    mergeServers(merge, value);
+    mergeServers(merge, value, (server, detail) => {
+      addDefect(merge, `malformed mcp server "${server}": ${detail}`);
+    });
     return;
   }
 
@@ -104,51 +130,66 @@ function fileServerMap(document: unknown): unknown {
     : document;
 }
 
-// Read failures (e.g. EACCES) retain their identity for the outer probe
-// classifier; only JSON.parse failing is a malformed source.
-async function readJsonFile(
-  merge: McpMerge,
-  absolutePath: string,
-  invalidJsonNote: (detail: string) => string,
-): Promise<void> {
-  const text = await merge.dependencies.readFileText(absolutePath);
+/**
+ * Merges the servers of one file, `.mcp.json` or a referenced one, as
+ * Claude Code's loader reads it (D-CF6-02). A missing file contributes no
+ * servers. So does a file that cannot be read or parsed, or that holds no
+ * server map, and a malformed server inside a file is dropped before the
+ * merge, so it never replaces an earlier server of its name. None of these
+ * adds a note.
+ */
+async function mergeServerFile(merge: McpMerge, absolutePath: string, file: string): Promise<void> {
   let document: unknown;
   try {
-    document = JSON.parse(text);
+    if ((await merge.dependencies.statKind(absolutePath)) !== "file") {
+      return;
+    }
+
+    document = JSON.parse(await merge.dependencies.readFileText(absolutePath));
   } catch (error: unknown) {
-    addDefect(merge, invalidJsonNote(errorMessage(error)));
+    logFileSkip(merge, file, `the file: ${errorMessage(error)}`);
     return;
   }
 
-  mergeServerMap(merge, fileServerMap(document));
-}
-
-async function readStandaloneMcp(merge: McpMerge): Promise<void> {
-  const mcpPath = path.join(merge.pluginRoot, ".mcp.json");
-  if ((await merge.dependencies.statKind(mcpPath)) !== "file") {
+  const servers = fileServerMap(document);
+  if (!MCP_SERVER_MAP_VALIDATOR.Check(servers)) {
+    logFileSkip(merge, file, "the file: it holds no server map");
     return;
   }
 
-  await readJsonFile(merge, mcpPath, (detail) => `malformed mcpServers (.mcp.json): ${detail}`);
+  mergeServers(merge, servers, (server, detail) => {
+    logFileSkip(merge, file, `the server "${server}": ${detail}`);
+  });
 }
 
-async function validateReferencePath(
-  raw: string,
-  pluginRoot: string,
-): Promise<{ ok: true; absolutePath: string } | { ok: false; reason: string }> {
-  const contained = await resolveContainedComponentPath(pluginRoot, raw, "mcpServers reference");
-  if (!contained.ok && contained.cause === "absolute") {
-    return {
-      ok: false,
-      reason: `malformed mcp reference: must be relative (got absolute "${raw}")`,
-    };
+// Where a reference string points. Claude Code refuses a manifest whose
+// reference is absolute or leaves the plugin root (D-CF6-02). A reference
+// whose path cannot be walked, such as one through a regular file, names a
+// file the loader cannot read.
+type LocatedReference =
+  | { readonly kind: "inside"; readonly absolutePath: string }
+  | { readonly kind: "refused"; readonly note: string }
+  | { readonly kind: "unreachable"; readonly detail: string };
+
+async function locateReference(raw: string, pluginRoot: string): Promise<LocatedReference> {
+  let contained: Awaited<ReturnType<typeof resolveContainedComponentPath>>;
+  try {
+    contained = await resolveContainedComponentPath(pluginRoot, raw, "mcpServers reference");
+  } catch (error: unknown) {
+    return { kind: "unreachable", detail: errorMessage(error) };
   }
 
-  if (!contained.ok) {
-    return { ok: false, reason: `malformed mcp reference: escapes plugin root: "${raw}"` };
+  if (contained.ok) {
+    return { kind: "inside", absolutePath: contained.absolutePath };
   }
 
-  return contained;
+  return {
+    kind: "refused",
+    note:
+      contained.cause === "absolute"
+        ? `malformed mcp reference: must be relative (got absolute "${raw}")`
+        : `malformed mcp reference: escapes plugin root: "${raw}"`,
+  };
 }
 
 /**
@@ -159,9 +200,14 @@ async function validateReferencePath(
  * refuses the manifest (a residual kept under D-CF6-01).
  */
 async function readReferencedMcp(merge: McpMerge, raw: string): Promise<void> {
-  const validated = await validateReferencePath(raw, merge.pluginRoot);
-  if (!validated.ok) {
-    addDefect(merge, validated.reason);
+  const located = await locateReference(raw, merge.pluginRoot);
+  if (located.kind === "refused") {
+    addDefect(merge, located.note);
+    return;
+  }
+
+  if (located.kind === "unreachable") {
+    logFileSkip(merge, raw, `the file: ${located.detail}`);
     return;
   }
 
@@ -170,16 +216,7 @@ async function readReferencedMcp(merge: McpMerge, raw: string): Promise<void> {
     return;
   }
 
-  if ((await merge.dependencies.statKind(validated.absolutePath)) !== "file") {
-    addDefect(merge, `malformed mcp reference: file not found: "${raw}"`);
-    return;
-  }
-
-  await readJsonFile(
-    merge,
-    validated.absolutePath,
-    (detail) => `malformed mcp reference: invalid JSON in "${raw}": ${detail}`,
-  );
+  await mergeServerFile(merge, located.absolutePath, raw);
 }
 
 // An array is read element by element in order. An element that is neither
@@ -252,7 +289,9 @@ function recordMergedServers(merge: McpMerge): void {
 
 /**
  * Resolves a plugin's MCP servers as the ordered union of its sources
- * (D-CF6-01), and reports whether any source has a structural defect. The
+ * (D-CF6-01), and reports whether an inline declaration or a reference path
+ * has a structural defect; a file source's defect is no such defect
+ * (D-CF6-02). The
  * entry's `mcpServers` counts only when the plugin has no `plugin.json`
  * (`manifest` is `null`), because Claude Code then reads the entry as the
  * manifest.
@@ -278,7 +317,7 @@ export async function resolveStrictMcp(
     dirty: false,
   };
 
-  await readStandaloneMcp(merge);
+  await mergeServerFile(merge, path.join(merge.pluginRoot, ".mcp.json"), ".mcp.json");
   await readDeclaredMcp(
     merge,
     input.manifest === null ? input.entry.mcpServers : input.manifest.mcpServers,
