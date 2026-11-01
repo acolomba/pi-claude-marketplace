@@ -176,29 +176,44 @@ async function readAndCachePluginHooksWith(
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// SessionStart additionalContext bridge
+// Hook additionalContext bridge (D-CF5-13)
 // ──────────────────────────────────────────────────────────────────────────
+
+// The custom type of the message that carries hook context to the model.
+const HOOK_CONTEXT_MESSAGE_TYPE = "claude-hook-additional-context";
+
+// HOOK-05: one `<Event> hook additional context: <values>` text part, the
+// values joined by `\n` in buffer order, as Claude Code 2.1.316 words it. A
+// value that is empty or only whitespace adds nothing, so a buffer without
+// text gives no part.
+function contextPart(
+  claudeEvent: "SessionStart" | "UserPromptSubmit",
+  entries: readonly { readonly context: string }[],
+): { readonly type: "text"; readonly text: string } | undefined {
+  const values = entries.map((entry) => entry.context).filter((text) => text.trim().length > 0);
+  if (values.length === 0) {
+    return undefined;
+  }
+
+  return { type: "text", text: `${claudeEvent} hook additional context: ${values.join("\n")}` };
+}
 
 /**
  * Factory: build the `before_agent_start` handler closure registered on
  * Pi at `registerHooksBridge` time. The registration wrapper checks its
  * captured generation and live mode before invoking this closure. A stale
- * registration or rejected mode leaves the live context buffer intact.
+ * registration or rejected mode leaves the live context buffers intact.
  *
- * Drain semantics:
- *   - empty buffer -> returns undefined (no systemPrompt mutation, no
- *     `messages` push). Pi's runner emits `before_agent_start` on every
- *     agent turn, not just the first one, so a noop return after the
- *     first drain is the correct path for all subsequent turns.
- *   - non-empty buffer -> joins entries with `"\n\n"` separators between
- *     each entry AND between `event.systemPrompt` and the buffered
- *     block. Returns `{ systemPrompt: <joined> }` and clears the buffer
- *     in the same call (one-shot drain).
- *
- * Each plugin's additionalContext is a one-shot turn primer, not a
- * permanent system-prompt addition; the drain pattern matches upstream
- * Claude Code's SessionStart semantics where the injected text is added
- * to the session prompt once at session boot.
+ * Drain semantics (each drain clears its buffer in the same call):
+ *   - SessionStart buffer -> joins entries with `"\n\n"` and appends them to
+ *     `event.systemPrompt`.
+ *   - prompt buffer (D-CF5-13) -> one persisted custom message, which Pi
+ *     places after the prompt and sends to the model as a user message; the
+ *     prompt itself is not changed. `display: false` keeps it out of the
+ *     transcript the user reads.
+ *   - nothing buffered -> returns undefined. Pi's runner emits
+ *     `before_agent_start` on every agent turn, so a noop return after the
+ *     drain is the path for every later turn.
  */
 function createBeforeAgentStartHandler(
   runtime: HooksRuntime,
@@ -207,13 +222,19 @@ function createBeforeAgentStartHandler(
   ctx: ExtensionContext,
 ) => Promise<BeforeAgentStartEventResult | undefined> {
   return (event) => {
-    const pendingContext = runtime.drainPendingSessionStartContext();
-    if (pendingContext.length === 0) {
-      return Promise.resolve(undefined);
+    const sessionStart = runtime.drainPendingSessionStartContext();
+    const prompt = contextPart("UserPromptSubmit", runtime.drainPendingPromptContext());
+    const update: BeforeAgentStartEventResult = {};
+    if (sessionStart.length > 0) {
+      const buffered = sessionStart.map((entry) => entry.context).join("\n\n");
+      update.systemPrompt = `${event.systemPrompt}\n\n${buffered}`;
     }
 
-    const buffered = pendingContext.map((entry) => entry.context).join("\n\n");
-    return Promise.resolve({ systemPrompt: `${event.systemPrompt}\n\n${buffered}` });
+    if (prompt !== undefined) {
+      update.message = { customType: HOOK_CONTEXT_MESSAGE_TYPE, content: [prompt], display: false };
+    }
+
+    return Promise.resolve(Object.keys(update).length === 0 ? undefined : update);
   };
 }
 

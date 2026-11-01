@@ -28,9 +28,10 @@
 //
 //   - adaptInputResult           -> Pi `input` (UserPromptSubmit).
 //     `block` -> `{ action: "handled" }`; `stop` -> `{ action: "handled" }`,
-//     so the prompt stops; `mutate.additionalContext` (when defined) ->
-//     `{ action: "transform", text }`; `mutate` without an
-//     `additionalContext` field -> `undefined`; `noop` returns `undefined`.
+//     so the prompt stops; `mutate.additionalContext` is buffered in the
+//     runtime's prompt-context buffer and the prompt continues unchanged
+//     (`undefined`); the `before_agent_start` handler sends the context as a
+//     message after the prompt (D-CF5-13); `noop` returns `undefined`.
 //
 //   - adaptObservationResultForEvent -> Pi `session_start` /
 //     `session_shutdown` / `session_before_compact` / `session_compact`
@@ -58,7 +59,7 @@ import { hookDebugLog } from "../../shared/debug-log.ts";
 import { hookBlockingErrorText, hookErrorText, hookEventLabel } from "./hook-labels.ts";
 
 import type { HookExecResult } from "./exec-result.ts";
-import type { RoutingEntry } from "./routing-state.ts";
+import type { PendingPromptContext, RoutingEntry } from "./routing-state.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type {
@@ -86,14 +87,26 @@ export interface HookAdapterContext {
   readonly attributedTo: RoutingEntry | undefined;
 }
 
-// The provenance a SessionStart context carries when the fold attributes it
-// to no entry. A fold of mutations always names one, so only a hand-built
+// The provenance a buffered context carries when the fold attributes it to
+// no entry. A fold of mutations always names one, so only a hand-built
 // result reaches it.
 const UNATTRIBUTED = { scope: "user", marketplace: "", pluginId: "" } as const satisfies {
   readonly scope: Scope;
   readonly marketplace: string;
   readonly pluginId: string;
 };
+
+// A context to buffer, with the provenance of the entry the fold attributes
+// it to. Both pending buffers take this shape.
+function bufferedContext(text: string, context: HookAdapterContext): PendingPromptContext {
+  const provenance = context.attributedTo ?? UNATTRIBUTED;
+  return {
+    context: text,
+    scope: provenance.scope,
+    marketplace: provenance.marketplace,
+    pluginId: provenance.pluginId,
+  };
+}
 
 // The declared command of the entry a folded result is attributed to.
 function attributedCommand(context: HookAdapterContext): string {
@@ -323,13 +336,18 @@ export function adaptToolResultResult(
  * D-60-03: convert a folded `HookExecResult` to the Pi `input` handler
  * return shape (`InputEventResult | undefined`).
  *
- * The `_event` and `_context` parameters keep the adapter signature uniform;
- * this adapter reads neither.
+ * D-CF5-13 / HOOK-05: a hook's `additionalContext` never replaces the
+ * prompt. The adapter buffers it with the provenance of the attributed entry
+ * and lets the prompt continue; the `before_agent_start` handler of the same
+ * turn sends it as a message after the prompt. A block or stop buffers
+ * nothing, so a stopped prompt sends no context to any turn. The `_event`
+ * parameter keeps the adapter signature uniform; this adapter does not read
+ * it.
  */
 export function adaptInputResult(
   result: HookExecResult,
   _event: InputEvent,
-  _context: HookAdapterContext,
+  context: HookAdapterContext,
 ): InputEventResult | undefined {
   switch (result.kind) {
     case "block":
@@ -337,7 +355,9 @@ export function adaptInputResult(
 
     case "mutate":
       if (result.additionalContext !== undefined) {
-        return { action: "transform", text: result.additionalContext };
+        context.runtime.appendPendingPromptContext(
+          bufferedContext(result.additionalContext, context),
+        );
       }
 
       return undefined;
@@ -408,13 +428,9 @@ export function adaptObservationResultForEvent(
         // drained one-shot by beforeAgentStartHandlerFor and cleared on
         // registerHooksBridge entry (so /reload does not leak stale
         // context across sessions).
-        const provenance = context.attributedTo ?? UNATTRIBUTED;
-        context.runtime.appendPendingSessionStartContext({
-          context: result.additionalContext,
-          scope: provenance.scope,
-          marketplace: provenance.marketplace,
-          pluginId: provenance.pluginId,
-        });
+        context.runtime.appendPendingSessionStartContext(
+          bufferedContext(result.additionalContext, context),
+        );
       }
 
       // SessionEnd / PreCompact / PostCompact: no logical drain point for

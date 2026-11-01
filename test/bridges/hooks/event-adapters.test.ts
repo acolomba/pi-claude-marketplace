@@ -805,32 +805,48 @@ describe("adaptInputResult", () => {
     });
   });
 
-  test("transforms input with the exact additional context", () => {
+  test("buffers the additional context with its plugin and lets the prompt continue (D-CF5-13)", () => {
     // arrange
+    const runtime = createHooksRuntime();
     const event = {
       type: "input",
       text: "original prompt",
       source: "extension",
     } satisfies InputEvent;
+    const context = provenanceContext(runtime, {
+      scope: "user",
+      marketplace: "owner-marketplace",
+      pluginId: "owner-plugin",
+    });
 
     // act
     const adaptation = adaptInputResult(
-      { kind: "mutate", additionalContext: "added context" },
+      { kind: "mutate", additionalContext: "ctx-a\nctx-b" },
       event,
-      adapterContext(guardEntry()),
+      context,
     );
 
     // assert
-    assert.deepStrictEqual(adaptation, { action: "transform", text: "added context" });
+    assert.strictEqual(adaptation, undefined);
     assert.deepStrictEqual(event, {
       type: "input",
       text: "original prompt",
       source: "extension",
     });
+    assert.deepStrictEqual(runtime.pendingPromptContextEntries(), [
+      {
+        context: "ctx-a\nctx-b",
+        scope: "user",
+        marketplace: "owner-marketplace",
+        pluginId: "owner-plugin",
+      },
+    ]);
+    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
   });
 
-  test("preserves an explicitly empty additional context", () => {
+  test("buffers no empty additional context and lets the prompt continue", () => {
     // arrange
+    const runtime = createHooksRuntime();
     const event = {
       type: "input",
       text: "original prompt",
@@ -838,15 +854,46 @@ describe("adaptInputResult", () => {
     } satisfies InputEvent;
 
     // act
-    const adaptation = adaptInputResult(
-      { kind: "mutate", additionalContext: "" },
-      event,
-      adapterContext(guardEntry()),
-    );
+    const adaptation = adaptInputResult({ kind: "mutate", additionalContext: "" }, event, {
+      ...adapterContext(guardEntry()),
+      runtime,
+    });
 
     // assert
-    assert.deepStrictEqual(adaptation, { action: "transform", text: "" });
+    assert.strictEqual(adaptation, undefined);
+    assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
   });
+
+  for (const { name, hookOutcome } of [
+    {
+      name: "block",
+      hookOutcome: { kind: "block", reason: "policy denied", additionalContext: "ctx" } as const,
+    },
+    {
+      name: "continue false",
+      hookOutcome: { kind: "stop", stopReason: "halt", additionalContext: "ctx" } as const,
+    },
+  ]) {
+    test(`buffers no additional context of a ${name} that stops the prompt (HOOK-05)`, () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      const event = {
+        type: "input",
+        text: "original prompt",
+        source: "interactive",
+      } satisfies InputEvent;
+
+      // act
+      const adaptation = adaptInputResult(hookOutcome, event, {
+        ...adapterContext(guardEntry()),
+        runtime,
+      });
+
+      // assert
+      assert.deepStrictEqual(adaptation, { action: "handled" });
+      assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
+    });
+  }
 
   test("returns undefined when additional context is truly absent", () => {
     // arrange

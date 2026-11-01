@@ -35,9 +35,9 @@ import { type HooksRuntime } from "./runtime.ts";
 
 /**
  * Flattened (event, group, handler) routing slot. The dispatch core walks
- * the per-event bucket and fires `dispatchHookExec(entry, event, ctx)`
- * sequentially against each entry whose matcher fires for the incoming Pi
- * event (DISP-04 sequential awaited fan-out).
+ * the per-event bucket, runs `dispatchHookExec(entry, event, ctx)` in
+ * parallel for every entry whose matcher fires for the incoming Pi event,
+ * and folds the results in bucket order (D-CF5-09).
  *
  * `rawMatcher` carries the pre-parse string verbatim so dispatch-time
  * filtering against non-tool events (SessionStart filters on
@@ -134,6 +134,20 @@ export interface CacheEntry {
  * reaches `before_agent_start.systemPrompt`.
  */
 export interface PendingSessionStartContext {
+  readonly context: string;
+  readonly pluginId: string;
+  readonly marketplace: string;
+  readonly scope: Scope;
+}
+
+/**
+ * D-CF5-13: a UserPromptSubmit hook's folded `additionalContext`, buffered by
+ * the `input` adapter and drained by the `before_agent_start` handler of the
+ * same prompt's turn into a message after the prompt. The prompt itself
+ * reaches the model unchanged. Provenance is the entry the fold attributes
+ * the context to, as for `PendingSessionStartContext`.
+ */
+export interface PendingPromptContext {
   readonly context: string;
   readonly pluginId: string;
   readonly marketplace: string;
