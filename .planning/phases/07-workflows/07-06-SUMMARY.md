@@ -15,11 +15,11 @@ provides:
 affects: [parent-merge]
 
 actuals:
-  tokens: GATE_TOKENS
+  tokens: 17000
   tasks: 3
-  commits: GATE_COMMITS
+  commits: 2
 plan_head_before: af6799c5aa76c7d607b16bc10ce39c0930b17acf
-plan_head_after: GATE_HEAD_AFTER
+plan_head_after: 3042c06bf4aafb8e177492d47f155fa9969caa15
 
 tech-stack:
   added: []
@@ -41,7 +41,7 @@ key-decisions:
 
 requirements-completed: [WFL-01, WFL-02, WFL-03, WFL-04, WFL-05]
 
-duration: GATE_DURATION
+duration: 28min
 completed: 2026-11-01
 ---
 
@@ -51,7 +51,7 @@ The workflows compatibility doc now records D-CF7-01 (no run approval, a Pi gap)
 
 ## Performance
 
-- Duration: GATE_DURATION_TEXT
+- Duration: about 28 min (from about 14:45Z to 15:13Z on 2026-11-01; the gate took 17 min of it)
 - Tasks: 3 of 3
 - Files: 1 modified, 1 created
 
@@ -74,7 +74,21 @@ The plan asked for the `export let` / `export var` and second-declarator rows to
 
 ## Gate evidence
 
-GATE_EVIDENCE
+Run on the combined Phase 7 tree at commit `76edb52` (Task 1's commit; Task 2's commit `3042c06` added only this SUMMARY under `.planning/`, which no gate reads), in the executor worktree, as root through the `nondac-sh` wrapper with `NODE_OPTIONS=--max-old-space-size=6144`. `node --version`: `v24.22.1`. ESLint was warmed first with a lone `npm run lint` (exit 0). Each command ran alone, in this order; logs are in the executor scratch folder `exec-07-06/gate-*.log`.
+
+| Command | Exit | Time | Result |
+| --- | --- | --- | --- |
+| `npm run lint` (warm-up) | 0 | -- | clean |
+| `npm run check` | 0 | 510 s | `check:static` passed (typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, check:features); `test:unpaired` and `test:integration` passed; `test:cucumber`: `Random order using seed: 486945`, 1250 scenarios (1250 passed), 12996 steps (12996 passed), 16 hooks passed; `test:coverage:direct:all` passed and merged `coverage/direct.lcov` (318 records) |
+| `npm run test:modules` | 0 | 177 s | the whole unit suite; the quiet reporter prints only failures, and it printed none |
+| `npm run test:cucumber` | 0 | 172 s | `Random order using seed: 38213`, 1250 scenarios (1250 passed), 12996 steps (12996 passed) |
+| `npx cucumber-js features/workflow` (run 1) | 0 | 50 s | `Random order using seed: 245657`, 32 scenarios (32 passed), 386 steps (386 passed) |
+| `npx cucumber-js features/workflow` (run 2) | 0 | 49 s | `Random order using seed: 674263`, 32 scenarios (32 passed), 386 steps (386 passed) |
+| `npx cucumber-js features/workflow` (run 3) | 0 | 49 s | `Random order using seed: 117957`, 32 scenarios (32 passed), 386 steps (386 passed) |
+| `npx fallow dupes --fail-on-issues --format human --quiet` | 0 | 1 s | no clone group |
+| `npx cucumber-js features/workflow --dry-run` | 0 | 6 s | `Random order using seed: 347564`, 32 scenarios (32 skipped); five features: `lifecycle` 11, `refusals` 8, `companion-missing` 4, `listing` 4, `run` 5 |
+
+The test output also holds the sanctioned IL-3 `Legacy marketplace migration could not be persisted ...` lines, which unit tests provoke on purpose; they are not failures. No test failed in any run, so no fix and no pre-existing-failure analysis was needed. No test was skipped or disabled.
 
 ## Decision records
 
@@ -151,7 +165,13 @@ The phase log is `.planning/phases/07-workflows/DUBIOUS-CHOICES.md` (P7-DC-01..P
 
 ## Task Commits
 
-GATE_COMMITS_LIST
+1. Task 1 (tracer), the compatibility doc: `76edb52` docs(workflows): record the workflow divergences from Claude Code
+2. Task 2, decision rows and parent lines: `3042c06` docs: hand over the workflow decision rows and parent lines
+3. Task 3, the phase gate: the commit that adds the gate evidence to this SUMMARY (`docs: record the workflow phase gate results`)
+
+`commits: 2` is measured with `git rev-list --count af6799c..3042c06` before the Task 3 commit, which carries this SUMMARY's final text.
+
+Tracer gate (Task 1): auto mode off and `human_verify_mode` at its `end-of-phase` default with an automated-only `<verify>`, so the gate re-ran the verify (the four IDs present; `pre-commit run --files docs/workflows-compatibility.md` passed with no fixer change) and continued.
 
 ## Decisions Made
 
@@ -162,7 +182,10 @@ GATE_COMMITS_LIST
 
 ## Deviations from Plan
 
-GATE_DEVIATIONS
+None - plan executed exactly as written. Two notes, not deviations:
+
+- The plan's scratch folder name was `07-06/`; the orchestrator's prompt named `exec-07-06/`, which this plan used.
+- The doc's quotes of the engine's stale-command notice and Claude Code's skip warning write `--` where the real text holds U+2014, because the commit hook rewrites that character outside `.planning/`; the doc already quoted the skip warning that way.
 
 ## Known Stubs
 
@@ -175,3 +198,9 @@ None -- no security-relevant surface outside the plan's `<threat_model>` was int
 ## Next Phase Readiness
 
 Phase 7 is ready for verification and the merge: the parent applies the lines above. ROADMAP Phase 7 criteria 1-5 are each proven by a feature file under `features/workflow/` (listing, run, refusals, companion-missing, lifecycle).
+
+## Self-Check: PASSED
+
+- FOUND: docs/workflows-compatibility.md, .planning/phases/07-workflows/07-06-SUMMARY.md
+- FOUND commits: 76edb52, 3042c06 (ancestors of HEAD)
+- `git diff --name-only af6799c..3042c06` lists only the two plan files; `git diff --quiet af6799c..HEAD -- CHANGELOG.md README.md README.es.md .planning/BACKLOG.md .fallowrc.json` exits 0
