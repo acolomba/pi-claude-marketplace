@@ -272,6 +272,50 @@ Input handlers run before `_expandSkillCommand` (`agent-session.js:1594,
   `domain/name.ts` (D-CF2-01 leaves `generatedSkillName` as it is),
   `bridges/commands/**`, or the frozen Phase 1 cores.
 
+### Review-fix decisions (taken by the parent, pending user review)
+
+These two decisions came from code review rounds 2 and 3, after planning.
+The parent took them without the user (DUBIOUS-CHOICES DC-29, DC-30). The
+user has not reviewed them yet.
+
+- **D-CF2-13 (provenance ledger of project skill installs; parent, pending
+  user review):** A project-scope skill runs its `` !`command` `` lines and
+  claims an alias only when a user-scope ledger lists it with a digest of its
+  staged skill directory. The ledger is one file per project,
+  `<agentDir>/pi-claude-marketplace/project-installs/<sha256(real project
+  path)>/skills.json`, holding `{ version: 1, project, skills }`. The digest
+  covers every regular file by its bytes and every symbolic link by its
+  target string. Install, update, reinstall, and enable write the ledger
+  under the project's state lock. Uninstall, disable, and `marketplace
+  remove` drop the entries and show a ledger they cannot update as a cleanup
+  warning. A project skill with no matching entry gets no alias, and its
+  invocation aborts before any command runs and names
+  `/claude:plugin reinstall <plugin>@<marketplace> --scope project`.
+  Rationale: a cloned repository can ship its own staged skills and its own
+  `state.json` under `.pi/pi-claude-marketplace/`, and Pi 1.4.0 trusts a
+  project with no trust-requiring files on its own. Upstream parity: Claude
+  Code records its installs in the user-owned `installed_plugins.json`, keyed
+  by project path, and skips a project plugin that it lists for another path
+  as `not_installed_here`. A repository cannot write that file. Residual
+  (AR-02-05 in 02-SECURITY.md): plugin-root files outside the staged skill
+  directory and the targets of symbolic links are not hashed.
+- **D-CF2-14 (load-time autoapply applies only the user scope; parent,
+  pending user review):** A load with `autoapply` on applies the user scope
+  only, whichever config file turned the setting on. The project scope gets
+  the read-only pass and the same pending block that `pending` prints, ending
+  with the `/claude:plugin apply` trailer. An explicit `/claude:plugin apply`
+  still applies both scopes and writes the D-CF2-13 ledger, because a command
+  that the user types is consent. Rationale: with project autoapply, a
+  repository's own config could install a plugin and write the ledger at
+  load, so its skills' commands ran in the next session. Pi 1.4.0 gives the
+  extension only `isProjectTrusted()`, which is also true for an auto-trusted
+  project, and `platform/pi-api.ts` does not re-export `ProjectTrustStore`.
+  So a load cannot tell explicit trust apart, and it never changes the
+  project scope. Upstream parity: Claude Code reads repository-declared
+  plugins and marketplaces only after the workspace trust dialog, and it asks
+  the user before it installs them. It never installs them silently. This
+  changes AAP-01 behavior for the project scope.
+
 ### Claude's Discretion
 
 - How the alias loader learns each skill's source directory name and

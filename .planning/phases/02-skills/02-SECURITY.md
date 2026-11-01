@@ -12,7 +12,7 @@ created: "2026-11-01"
 
 > Per-phase security contract: threat register, accepted risks, and audit trail.
 
-The register comes from the `<threat_model>` blocks of the 7 plans (`02-01-PLAN.md` to `02-07-PLAN.md`), written at plan time. Each mitigation was checked against the merged tree at ASVS level 1 (the code or test the plan names exists and does what the plan promised). Block threshold: `high`. Every `## Threat Flags` section of the 7 summaries reads "None".
+The register comes from the `<threat_model>` blocks of the 7 plans (`02-01-PLAN.md` to `02-07-PLAN.md`), written at plan time. T-02-21 to T-02-23 came later, from code review rounds 2 and 3 (`02-REVIEW-FIX.md`). Each mitigation was checked against the merged tree at ASVS level 1 (the code or test the plan names exists and does what the plan promised). Block threshold: `high`. Every `## Threat Flags` section of the 7 summaries reads "None".
 
 ---
 
@@ -58,6 +58,9 @@ The register comes from the `<threat_model>` blocks of the 7 plans (`02-01-PLAN.
 | T-02-18 | Denial of service | TUI process outliving its scenario or writing outside the sandbox | low | mitigate | `this.onRelease(() => tui.stop())` right after start (`features/support/world.ts` l.663, `features/step_definitions/skill/aliases.steps.ts` l.69); `features/lib/pi-tui.ts` l.193-194 spawns `detached` with `rpcChildEnvironment(sandbox, git)` (allowlist, git keys, sandbox `TMPDIR`, `PI_OFFLINE=1`) | closed |
 | T-02-19 | Repudiation | posting the Pi report on the user's behalf | low | mitigate | The D-CF2-10 report is drafted in `02-07-SUMMARY.md` and marked not filed | closed |
 | T-02-20 | Tampering | a gate fix weakening a test | medium | mitigate | `02-07-SUMMARY.md` records that the gate passed with no fix, so no test changed | closed |
+| T-02-21 | Elevation of privilege | `bridges/skills/project-installs.ts` (a cloned repository ships staged project skills and its own `state.json`, and Pi auto-trusts it) | high | mitigate | D-CF2-13: a project skill runs its `!` commands and claims an alias only when the user-scope ledger `<agentDir>/pi-claude-marketplace/project-installs/<sha256>/skills.json` lists it with the digest of its staged directory (`provenProjectSkills`, `skillTreeDigest`); `orchestrators/skill-invocation.ts::isInstalledHere` and `skill-alias-state.ts` check it again at use time and fail closed; `stage.ts::recordProjectSkills` writes it under the project state lock, `unstage.ts::forgetProjectSkills` drops entries; an unreadable or unknown ledger throws `ProjectSkillLedgerError`; `features/skill/project-provenance.feature` (missing ledger, changed `SKILL.md`, helper, and added file, alias, reinstall, refused write, removal warnings) | closed |
+| T-02-22 | Elevation of privilege | `orchestrators/reconcile/load.ts` (a repository's project config turns on autoapply and installs its own plugin at load, which writes the T-02-21 ledger) | high | mitigate | D-CF2-14: `autoapplyUserScope` runs the apply step with `scope: "user"` only, and the project scope gets the read-only pending pass; an explicit `/claude:plugin apply` is the user's consent; unit "D-CF2-14: ..." (`test/orchestrators/reconcile/load.test.ts`); `features/skill/project-autoapply.feature` l.33, l.43; `features/plugin/autoapply.feature` (project rows stay pending) | closed |
+| T-02-23 | Tampering | files that a project skill's `!` command reads outside its staged directory | medium | accept | see Accepted Risks Log | closed |
 | T-02-SC | Tampering | package installs (all 7 plans) | low | accept | see Accepted Risks Log | closed |
 
 *Status: open · closed · open — below high threshold (non-blocking)*
@@ -88,6 +91,7 @@ Commands are still open on this carry-forward until Phase 3 wires the command in
 | AR-02-02 | T-02-10 | Same trust as interactive input and as Claude Code's print mode; the plugin was installed by the user; recorded under D-CF2-05 and DC-24 item 3 | plan 02-03 threat model (D-CF2-05) | 2026-11-01 |
 | AR-02-03 | T-02-17 | The staged file sits under the user's own scope root; editing it is the same trust as editing the skill itself, and the invocation still requires the staged path | plan 02-06 threat model | 2026-11-01 |
 | AR-02-04 | T-02-SC (plans 02-01 to 02-07) | No plan installs a package; `package.json` and `package-lock.json` have no commit since the Phase 1 dependency raise | plan threat models | 2026-11-01 |
+| AR-02-05 | T-02-23 | The D-CF2-13 digest covers the staged skill directory only. Files under `${CLAUDE_PLUGIN_ROOT}` outside it (a project install's clone under `<cwd>/.pi/pi-claude-marketplace/`, in the repository tree) and the bytes behind a symbolic link (only the link's target string is hashed) are not hashed, so a `!` command that runs such a file runs it as the repository holds it now. Hashing the whole plugin root on every invocation was not taken in review round 3 (WR-03) | parent, review round 3 (02-REVIEW-FIX.md WR-03), pending user review | 2026-11-01 |
 
 *Accepted risks do not resurface in future audit runs.*
 
@@ -98,6 +102,7 @@ Commands are still open on this carry-forward until Phase 3 wires the command in
 | Audit Date | Threats Total | Closed | Open | Run By |
 |------------|---------------|--------|------|--------|
 | 2026-11-01 | 21 | 21 | 0 | gsd-secure-phase (ASVS L1, inline verification) |
+| 2026-11-01 | 24 | 24 | 0 | parent, after code review rounds 2 and 3 (T-02-21..23 added from 02-REVIEW-FIX.md, D-CF2-13, D-CF2-14) |
 
 ---
 
