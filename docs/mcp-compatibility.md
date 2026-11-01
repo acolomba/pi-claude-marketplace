@@ -8,7 +8,7 @@ The Claude Code column reflects the MCP reference at [code.claude.com/docs/en/mc
 
 This extension does not run MCP servers itself. It writes one entry for each plugin server into the `mcp-adapter.json` file of the install scope: `~/.pi/agent/mcp-adapter.json` for the user scope, `<project>/.pi/mcp-adapter.json` for the project scope. pi-mcp-adapter reads that file and runs the servers. Earlier releases of this extension wrote these entries into the `mcp.json` file of the scope. `/reload` moves them into `mcp-adapter.json`. See [Upgrading](#upgrading).
 
-This extension needs pi-mcp-adapter 5.2.0 or a later 5.x release. pi-mcp-adapter 5.2.0 moves the MCP SDK from 2.0.0 to 2.3.1, which fixes the security advisory GHSA-6qxp-vccf-f47h. With the SDK 2.0.0, a malicious or compromised MCP server could point a sign-in at its own authorization server. It then received the refresh token and the client secret that an earlier sign-in saved. Since 5.2.0, pi-mcp-adapter does not follow a server URL that redirects to another host, so a plugin server with such a URL does not connect. A redirect from `http` to `https` on the same host still works.
+This extension needs pi-mcp-adapter 7.0.0 or a later 7.x release. pi-mcp-adapter 5.2.0 moves the MCP SDK from 2.0.0 to 2.3.1, which fixes the security advisory GHSA-6qxp-vccf-f47h. With the SDK 2.0.0, a malicious or compromised MCP server could point a sign-in at its own authorization server. It then received the refresh token and the client secret that an earlier sign-in saved. Since 5.2.0, pi-mcp-adapter does not follow a server URL that redirects to another host, so a plugin server with such a URL does not connect. A redirect from `http` to `https` on the same host still works.
 
 ## Server and tool names
 
@@ -303,7 +303,7 @@ Each command that writes the entries of a plugin shows the two warnings after it
 
 ### Proof against pi-mcp-adapter
 
-The rewrite depends on how pi-mcp-adapter expands values. A conformance test runs each expansion case through the functions of pi-mcp-adapter 5.2.0 and compares the output with the value of Claude Code. CI installs that exact version and runs the test with no skipped cases. The peer range of this extension for pi-mcp-adapter is `>=5.2.0 <6`.
+The rewrite depends on how pi-mcp-adapter expands values. A conformance test runs each expansion case through the functions of pi-mcp-adapter 7.0.0 and compares the output with the value of Claude Code. CI installs that exact version and runs the test with no skipped cases. The peer range of this extension for pi-mcp-adapter is `>=7.0.0 <8`.
 
 ## Upgrading
 
