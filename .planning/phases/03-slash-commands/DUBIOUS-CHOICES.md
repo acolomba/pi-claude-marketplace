@@ -123,3 +123,46 @@ entries into it. Severity and status follow the root file's rules.
 - **Alternatives:** Prepend upstream's tag block.
 - **Why dubious:** The model sees different framing than in Claude Code.
 - **Recorded in:** `03-CONTEXT.md` D-CF3-06.
+
+### P3-DC-09: Phase 3 research choices (accepted by the orchestrator)
+
+- **Phase / source:** Phase 3 researcher (`03-RESEARCH.md`); the orchestrator
+  accepted each item for planning and answered the open questions.
+- **Severity:** Medium (items 1-4); the rest Low. **Status:** open.
+- **Items:**
+  1. **Staged command frontmatter rebuilt as one `"key": <JSON>` line per
+     key** (Pi's YAML refuses duplicate keys, so appending `description:`
+     breaks a file with `description: ""`; the rebuild avoids copying Phase 2's
+     line scanner). Every staged command's bytes change.
+  2. **Ledger writer passed in:** `commitPreparedCommands` and
+     `UnstageCommandsInput` take a required `ledger`; the four orchestrator call
+     sites (`install-outcome.ts` twice, `update-swap.ts`,
+     `marketplace/shared.ts`) pass Phase 2's `NODE_PROJECT_SKILL_LEDGER`, whose
+     name says "skill" (rename is a parent line). Project commands installed
+     before this phase abort until updated or reinstalled (CHANGELOG line).
+  3. **E8 residual:** a returned body that starts with `/<template>` is
+     expanded again by Pi; resending through `sendUserMessage` would turn the
+     RPC response into `handled` and change error routing. Pinned by a unit
+     test.
+  4. **Four waves, not three:** the staged-file writer is touched by the
+     frontmatter (wave 2) and manifest-forms (wave 3) plans.
+  5. Object-map entries ride on `componentPaths.commandMap` (optional field);
+     `componentPaths.commands` stays `string[]` for Phase 2's shadow check.
+  6. Abort origin `{kind: "command", commandId: <typed name without "/">}`
+     (open string, no closed-set edit; a `docs/json-output.md` parent line).
+  7. First-wins order: `commands/`, then `plugin.json` paths, then
+     marketplace-entry paths (inferred from upstream's listing order).
+  8. The lenient `info` mirror always includes `commands/` because it cannot
+     see `plugin.json`.
+  9. A map `source` that escapes the plugin root or is a symlink makes the
+     plugin unavailable, like any escaping component path.
+  10. Phase 3 features reuse two Phase 2 step texts (system-prompt skill list,
+      "the user's pi directory records no plugin install for the project").
+  11. An untrusted project keeps its own abort text, as skills do.
+- **Open questions answered by the orchestrator (recommended options):**
+  map keys with hidden or direction-changing characters (`\p{Cf}`) are
+  skipped with a warning, as upstream refuses them; a plugin whose only
+  commands come from a map counts `commands` as supported; the collision
+  order is item 7; the TUI source tag is spiked before the expected value is
+  written.
+- **Recorded in:** `03-RESEARCH.md`, `03-VALIDATION.md`.
