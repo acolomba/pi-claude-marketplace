@@ -315,6 +315,23 @@ user has not reviewed them yet.
   plugins and marketplaces only after the workspace trust dialog, and it asks
   the user before it installs them. It never installs them silently. This
   changes AAP-01 behavior for the project scope.
+- **D-CF2-15 (the background autoupdate pass changes only the user scope;
+  parent, pending user review):** The D-PL8-01 background pass, which the
+  first message of a tui session arms, refreshes and updates only user-scope
+  marketplaces and their plugins. It never reads or changes the project
+  scope: not its marketplaces, not its plugins, not their dependency
+  settlement, and so never the D-CF2-13 ledger. Rationale: the project's
+  config, which can turn autoupdate on, and its `state.json`, which names the
+  installed plugins, both sit in the repository. Through `update-swap.ts` the
+  pass wrote the ledger for skills, commands, and hooks, so a cloned
+  repository could get its own plugin recorded as this user's install with no
+  command typed. This is the D-CF2-14 rule applied to the other automatic
+  route that changes installs. An explicit `/claude:plugin update`,
+  `marketplace update`, or `apply` still changes the project scope, and the
+  load's pending block lists the project moves the pass leaves. Upstream
+  parity: Claude Code never acts on a repository's plugin settings before the
+  trust dialog and the install consent. This changes D-PL8-01 behavior for
+  the project scope.
 
 ### Claude's Discretion
 
