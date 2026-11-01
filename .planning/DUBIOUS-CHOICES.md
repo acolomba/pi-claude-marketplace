@@ -567,3 +567,15 @@ this project.
   5. **D-CF2-06:** the Phase 1 cores are wired into `edge/skill-aliases.ts`; Pi's `<skill>` block framing is kept instead of upstream's `Base directory for this skill:` text.
   6. **D-CF2-12:** Phase 2 ownership widened to `orchestrators/skill-alias-state.ts` (+ test) and an optional, backward-compatible profile in `features/lib/pi-tui.ts` (a frozen-list file? `pi-tui.ts` is not in the frozen list).
   7. **D-CF2-04, 07, 08, 09, 11** pin earlier decisions (first-wins with `skills/` copy winning, upstream `A2e` description fallback, dropped-field warnings, `user-invocable: false` stays listed under D-CF1-09, lifecycle in a new session after `/reload`).
+
+### DC-25: Phase 2 research open questions and pattern-map choices
+
+- **Phase / source:** Phase 2 researcher (`02-RESEARCH.md`) and pattern mapper (`02-PATTERNS.md`); parent answered the open questions with the recommended option.
+- **Severity:** Low-Medium. **Status:** open.
+- **Open questions answered by the parent (planner told to follow these):**
+  1. Skills staged by older installs carry no names key: they keep today's elided-suffix alias as a fallback until re-staged (a non-upstream alias kept for compatibility).
+  2. Within one plugin, a skill's identity alias (`<plugin>:<dir>`) wins over another skill's frontmatter alias with the same text (not probed upstream).
+  3. A bare alias that equals a Pi built-in command name is recorded as a residual (Pi exports no built-in list).
+  4. Autocomplete keeps offering qualified aliases only, not bare ones.
+- **Research choices:** stored alias names live in a JSON-valued frontmatter key of the staged `SKILL.md`, written after `rewriteMarkdownReferences` (not a sidecar file); this changes expected values in three tests outside Phase 2 ownership (`test/edge/register.test.ts`, `test/orchestrators/plugin/materialize-latest.test.ts`, `test/orchestrators/plugin/reinstall-flow.test.ts`). The D-CF2-04 `skills/`-first fix goes in `bridges/skills/discover.ts`, not the resolver. Aborted invocations report as `usage-error` with origin `{kind:"command", commandId:"skill"}` (stretching an existing kind to avoid closed-set edits). The TUI scenario holds its session inside one `When` step and edits `features/lib/pi-tui.ts` (not on the ROADMAP frozen list; D-CF2-12). `[ASSUMED]`: `${CLAUDE_EFFORT}` reads `low` in the profile Pi; upstream does not normalize command names; upstream trims typed arguments.
+- **Pattern-map suggestions:** `skill-invocation.ts` returns a discriminated `{ok|abort}` result instead of throwing; `loadQualifiedSkillAliases` widens its return type to carry `pluginRoot`/`pluginData`.
